@@ -1,0 +1,9 @@
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<suite name="PetEndpoint" parallel="false">
+
+    <test name="PetEndpointTest">
+        <classes>
+            <class name="test.PetEndpointTest" />
+        </classes>
+    </test>
+</suite>
