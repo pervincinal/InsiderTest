@@ -13,10 +13,8 @@ Priority = order within a section. Producer moves items; anyone may add to Bugs 
 - [ ] MM-1 Verify the Android debug APK from CI on a real phone; fix any WebView issue (safe areas, audio unlock, back button = pause) — mobile-engineer + qa
 - [ ] MM-2 Capacitor plugins: StatusBar (hidden), ScreenOrientation lock portrait, Haptics on capture, App back-button handler — mobile-engineer
 - [ ] MM-3 Signed release builds once keystore / Apple signing secrets exist (see docs/MOBILE.md) — mobile-engineer
-- [ ] PUB-1 Store listing texts EN + AZ (title, short/long description, keywords) and privacy policy — publisher
-- [ ] PUB-2 Store screenshots (6 per platform, captioned) + feature graphic rendered from the game — publisher
-- [ ] PUB-3 Launch checklist with account/secret status; release notes v0.1.0; version bump — publisher
-- [ ] PUB-4 Public README with play link, GIF and install instructions — publisher
+
+- [ ] PUB-5 App Store exact-size screenshots (1290×2796, 1284×2778) and native version codes aligned to 0.1.0 (with mobile-engineer) — publisher
 - [ ] MM-5 GitHub Pages deploy of the web build so the PWA has a public install URL — qa-engineer
 
 ## Later (M2 — content & feel)
@@ -68,4 +66,5 @@ Priority = order within a section. Producer moves items; anyone may add to Bugs 
 - 2026-09-13 M3-4 PWA manifest + service worker + icons (pulled forward)
 - 2026-09-13 M1-9/M2-6 Tower War-style visual overhaul: terrain, 3D towers, soldiers, particles, toy HUD (stakeholder request)
 - 2026-09-13 M1-8 WebAudio sfx (M key mutes)
+- 2026-09-13 PUB-1..4 Store listing EN/AZ, privacy policy, launch checklist, release notes v0.1.0, captioned store screenshots + feature graphic, public README
 - 2026-09-13 MM-0 Capacitor Android + iOS projects, icons/splash, APK + iOS simulator CI, docs/MOBILE.md
