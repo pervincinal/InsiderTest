@@ -2,51 +2,30 @@
 
 Priority = order within a section. Producer moves items; anyone may add to Bugs / Icebox.
 
-## In progress (today, sprint 2)
-- [ ] M2-5 Levels 16–40 + M1-10 star-time tuning — level-designer
-- [ ] M3-1 Boosters UI, M3-3 Settings, M1-8b/ART-3 mute button — frontend-engineer
-- [ ] ART-1 shadow perf, ART-2 dust, M2-7 shake + button sfx, bridge/mine/barrier/tank visuals check — tech-artist
-- [ ] MM-2 Capacitor plugins, PUB-5 version codes — mobile-engineer
-- [ ] MM-5/M4-1 GitHub Pages workflow, e2e for new content — qa-engineer
-- [ ] PUB-5 App Store screenshots, release notes v0.2.0 — publisher
+## In progress (today)
+(empty — next sprint picks from "Next")
 
-## Next (M1 — vertical slice)
-- [ ] M1-8b Mute button glyph in the HUD/pause menu (audio exists, toggled with M key) — frontend-engineer
-- [ ] M1-10 Balance review of levels 1–15 with the reference bot on 5 seeds; adjust star times so the bot gets 2★, a good human 3★ — game-designer
-
-## Next (ART — polish after v2)
-- [ ] ART-1 `ctx.shadowBlur` in widgets is the main CPU cost on software raster; replace with pre-rendered shadow sprites or layered alpha ellipses — tech-artist
-- [ ] ART-2 Sand/snow/volcanic biomes are only visible from level 17+; add dust puffs on sand columns when band 17–24 ships — tech-artist
-- [ ] ART-3 Mute button glyph in HUD (M key and title toggle exist) — frontend-engineer
+## Next
+- [ ] LV-1 Levels 27 and 31 are seed-sensitive for the bot (up to 127 s / 112 s); re-tune so the bot median < 80 s — level-designer
+- [ ] LV-2 Now that the bot handles tank factories, re-open 27/31/37 so enemy tanks march (currently leaf factories) — level-designer + ai-engineer
+- [ ] M3-2 Skins (2 tower roof shapes, 2 unit shapes) bought with coins — frontend-engineer + tech-artist
+- [ ] M3-5 Perf on a real mid phone: measure, then object pooling if needed — qa-engineer
+- [ ] M4-3 Tag `tower-clash-v0.2.0` after the stakeholder enables GitHub Pages and the first Pages deploy is green — producer
+- [ ] PUB-6 Privacy policy hosted on the Pages site (`/privacy.html`) — publisher + frontend-engineer
+- [ ] QA-1 Hardware-level run on a real Android phone (APK from CI): safe areas, audio unlock, back button, haptics — needs stakeholder's phone; until then a WebView-profile Playwright run — qa-engineer
 
 ## Next (M-mobile — iOS/Android)
 - [ ] MM-1 Verify the Android debug APK from CI on a real phone; fix any WebView issue (safe areas, audio unlock, back button = pause) — mobile-engineer + qa
-- [ ] MM-2 Capacitor plugins: StatusBar (hidden), ScreenOrientation lock portrait, Haptics on capture, App back-button handler — mobile-engineer
 - [ ] MM-3 Signed release builds once keystore / Apple signing secrets exist (see docs/MOBILE.md) — mobile-engineer
 
-- [ ] PUB-5 App Store exact-size screenshots (1290×2796, 1284×2778) and native version codes aligned to 0.1.0 (with mobile-engineer) — publisher
-- [ ] MM-5 GitHub Pages deploy of the web build so the PWA has a public install URL — qa-engineer
 
 ## Later (M2 — content & feel)
-- [ ] M2-1 Tank factory + tank unit (weight 5)
-- [ ] M2-2 Mines and barriers on roads
-- [ ] M2-3 Bridges: cut with long-press
-- [ ] M2-4 Two and three simultaneous enemies; enemies fight each other
-- [ ] M2-5 Levels 16–40 per bands
-- [ ] M2-7 Subtle screen shake on capture; button click sfx wired in screens — tech-artist
-- [ ] M2-8 Balance pass with playtest table in report
 
 ## Later (M3 — meta & polish)
-- [ ] M3-1 Boosters: overdrive, freeze, airstrike (coins)
 - [ ] M3-2 Skins (2 tower shapes, 2 unit shapes) bought with coins
-- [ ] M3-3 Settings: sound, colour-blind palette, reduced motion, send ratio
-- [ ] M3-4 PWA manifest + service worker (offline)
 - [ ] M3-5 Performance: 400 units at 60 fps on mid phone (object pooling, dirty rects if needed)
-- [ ] M3-6 Pause menu, speed ×2 option
 
 ## Later (M4 — release)
-- [ ] M4-1 GitHub Pages deploy workflow
-- [ ] M4-2 README (EN + AZ) with play link and GIF
 - [ ] M4-3 Release notes 1.0, post-launch backlog
 
 ## Bugs
@@ -61,6 +40,7 @@ Priority = order within a section. Producer moves items; anyone may add to Bugs 
 - Local 2-player on one screen
 
 ## Done
+- 2026-09-13 Sprint 2: levels 16–40 with all mechanics + star tuning (M2-1..5, M2-8, M1-10); boosters UI (M3-1); settings (M3-3); mute (M1-8b/ART-3); Capacitor plugins + version sync + release signing path (MM-2, PUB-5); GitHub Pages workflow + DEPLOY.md (MM-5/M4-1); content/perf e2e + replay tests; cheap shadows (ART-1), dust/biomes (ART-2), shake + button sfx (M2-7); App Store screenshots; release notes v0.2.0; reference-bot tank-factory loop fix
 - 2026-09-13 M0-1 Scaffold `tower-clash/` (Vite + TS strict + Vitest + Playwright + ESLint)
 - 2026-09-13 M0-2 Sim core with 60 unit tests (all GDD §2 mechanics incl. fortress, artillery, tanks, mines, barriers, bridges, boosters)
 - 2026-09-13 M0-3 Canvas renderer, pointer input, game loop, HUD, win/lose overlay
