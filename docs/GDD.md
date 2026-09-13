@@ -29,7 +29,7 @@ Design pillars:
 - Generation (owned, non-neutral): barracks L1/L2/L3 produce 1 unit every **1.0 / 0.7 / 0.5 s** up to capacity **30 / 50 / 80**. Neutral towers never generate.
 - Upgrade: player taps an already-selected own tower (or the UI "▲" button). Cost **10** (L1→2), **20** (L2→3) units, paid from the garrison; refused if garrison < cost. Upgrading is instant.
 - Capture keeps the tower's level.
-- `fortress`: capacity ×1.5, and every arriving hostile unit removes only **1 defender per 2 attackers** (defence ×2). Cannot be upgraded past L2.
+- `fortress`: capacity ×1.5, and hostile weight is halved through a defence accumulator (**2 attackers remove 1 defender**; a 5-weight tank removes 2.5, the half carries over). Cannot be upgraded past L2.
 - `artillery`: generates at half rate; every **0.8 s** kills 1 hostile unit within **140 px**. Capacity 40.
 - `tankFactory`: produces a **tank** (weight 5, speed ×0.7) every 4 s instead of infantry; capacity counted in weight (max 40).
 
@@ -37,10 +37,10 @@ Design pillars:
 - Interaction: tap own tower (select, highlight), tap a road-connected tower (target). Sends **all** garrisoned units (Tower War feel). A UI toggle can switch to 50 %. Tapping the same tower again upgrades it.
 - Units leave the tower one every **0.12 s**, walk at **120 px/s** along the road. Each unit has `weight` (infantry 1, tank 5).
 - Arrival at friendly tower: `units += weight` (capped at capacity; overflow lost).
-- Arrival at hostile tower: `units -= weight` (fortress: `weight/2`, rounded up). If garrison would go below 0 the tower flips: `owner = attacker`, `units = remaining weight`.
+- Arrival at hostile tower: `units -= weight` (fortress: `weight/2` via the accumulator). If damage exceeds the garrison (strictly greater) the tower flips: `owner = attacker`, `units = remaining weight` (fortress remainder = `weight − 2×defenders`). Equal damage leaves the tower at 0 under the old owner.
 - Two units of different owners on the same road: when they cross, the lighter dies and the heavier loses that weight (equal weights: both die).
-- Mine on a road kills the first `mine.charges` weight passing, then disappears.
-- Barrier on a road: `hp` must be reduced to 0 by units walking into it (each unit spends its weight) before anyone can pass.
+- Mine on a road (at its midpoint) kills the first `mine.charges` weight passing, then disappears; a unit heavier than the remaining charges survives and spends the mine.
+- Barrier on a road (at its midpoint): `hp` must be reduced to 0 by units walking into it (each unit spends its weight and dies); a unit heavier than the remaining hp breaks through and continues with `weight − hp`.
 - Bridge road: an owner of an endpoint tower may **cut** it (long-press road). Units in transit on it die. Cannot be rebuilt.
 
 ### 2.4 Win / lose
@@ -53,7 +53,7 @@ Personalities: `rusher` (attacks weakest adjacent target when garrison ≥ targe
 
 ### 2.6 Boosters (meta, spent coins)
 - **Overdrive**: ×3 production for 10 s (cost 30 coins).
-- **Freeze**: enemy towers stop generating for 5 s (40 coins).
+- **Freeze**: every owner except the caster stops generating for 5 s (40 coins).
 - **Airstrike**: remove 10 units from one enemy tower (50 coins).
 Coins: 10 per star earned, first-clear only.
 
