@@ -108,3 +108,36 @@ export function formatTime(ms: number): string {
   const s = total % 60;
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 }
+
+/** Gold coin glyph centred at (cx, cy). */
+export function drawCoin(ctx: CanvasRenderingContext2D, pal: Palette, cx: number, cy: number, r: number): void {
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = pal.star;
+  ctx.fill();
+  ctx.lineWidth = Math.max(2, r * 0.18);
+  ctx.strokeStyle = 'rgba(2, 6, 23, 0.6)';
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.58, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+/** Padlock glyph centred at (cx, cy); `size` is the body width. */
+export function drawLock(ctx: CanvasRenderingContext2D, color: string, cx: number, cy: number, size: number): void {
+  const bodyH = size * 0.78;
+  const bodyY = cy - bodyH / 2 + size * 0.22;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = Math.max(3, size * 0.14);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.arc(cx, bodyY, size * 0.3, Math.PI, 0);
+  ctx.stroke();
+  ctx.fillStyle = color;
+  roundRect(ctx, { x: cx - size / 2, y: bodyY, w: size, h: bodyH }, size * 0.16);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(2, 6, 23, 0.7)';
+  ctx.beginPath();
+  ctx.arc(cx, bodyY + bodyH * 0.45, size * 0.11, 0, Math.PI * 2);
+  ctx.fill();
+}

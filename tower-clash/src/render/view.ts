@@ -1,9 +1,18 @@
 import { C } from '../sim/constants';
 
+/** Device safe-area insets in CSS px (notch / home indicator / rounded corners). */
+export interface SafeInsets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
 /**
  * Letterbox fit of the 720×1280 logical map into the canvas.
  * Everything is drawn in logical units; `applyTransform` sets the canvas matrix so that
- * (0,0)-(720,1280) maps to the centred, aspect-preserving rectangle inside the canvas.
+ * (0,0)-(720,1280) maps to the centred, aspect-preserving rectangle inside the canvas,
+ * *excluding* the safe-area insets so the HUD never sits under a notch or the home indicator.
  */
 export interface View {
   canvas: HTMLCanvasElement;
@@ -14,14 +23,47 @@ export interface View {
   scale: number; // CSS px per logical px
   offsetX: number; // CSS px, left edge of the logical map
   offsetY: number;
+  insets: SafeInsets;
 }
 
 export function createView(canvas: HTMLCanvasElement): View {
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('2D canvas context not available');
-  const view: View = { canvas, ctx, dpr: 1, cssW: 1, cssH: 1, scale: 1, offsetX: 0, offsetY: 0 };
+  const view: View = {
+    canvas,
+    ctx,
+    dpr: 1,
+    cssW: 1,
+    cssH: 1,
+    scale: 1,
+    offsetX: 0,
+    offsetY: 0,
+    insets: { top: 0, right: 0, bottom: 0, left: 0 },
+  };
   resize(view);
   return view;
+}
+
+const INSET_VARS: Record<keyof SafeInsets, string> = {
+  top: '--safe-top',
+  right: '--safe-right',
+  bottom: '--safe-bottom',
+  left: '--safe-left',
+};
+
+/**
+ * Read `env(safe-area-inset-*)` through the custom properties index.html sets on the canvas'
+ * parent (`#app`). Browsers without env() support (or desktop) resolve them to 0px.
+ */
+export function readSafeInsets(el: Element | null): SafeInsets {
+  const out: SafeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
+  if (!el || typeof getComputedStyle !== 'function') return out;
+  const style = getComputedStyle(el);
+  for (const key of Object.keys(INSET_VARS) as (keyof SafeInsets)[]) {
+    const v = parseFloat(style.getPropertyValue(INSET_VARS[key]));
+    if (Number.isFinite(v) && v > 0) out[key] = v;
+  }
+  return out;
 }
 
 /** Re-measure the window and re-fit the logical map. Call on load, resize and orientation change. */
@@ -29,12 +71,17 @@ export function resize(view: View): void {
   const cssW = Math.max(1, window.innerWidth);
   const cssH = Math.max(1, window.innerHeight);
   const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+  const insets = readSafeInsets(view.canvas.parentElement);
+  // Never let insets eat more than half the viewport (defensive against bogus values).
+  const usableW = Math.max(cssW / 2, cssW - insets.left - insets.right);
+  const usableH = Math.max(cssH / 2, cssH - insets.top - insets.bottom);
   view.cssW = cssW;
   view.cssH = cssH;
   view.dpr = dpr;
-  view.scale = Math.min(cssW / C.MAP_W, cssH / C.MAP_H);
-  view.offsetX = (cssW - C.MAP_W * view.scale) / 2;
-  view.offsetY = (cssH - C.MAP_H * view.scale) / 2;
+  view.insets = insets;
+  view.scale = Math.min(usableW / C.MAP_W, usableH / C.MAP_H);
+  view.offsetX = Math.min(insets.left, cssW - usableW) + (usableW - C.MAP_W * view.scale) / 2;
+  view.offsetY = Math.min(insets.top, cssH - usableH) + (usableH - C.MAP_H * view.scale) / 2;
   const pxW = Math.round(cssW * dpr);
   const pxH = Math.round(cssH * dpr);
   if (view.canvas.width !== pxW) view.canvas.width = pxW;

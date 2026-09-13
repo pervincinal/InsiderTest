@@ -75,3 +75,14 @@ export function recordWin(data: SaveData, levelId: number, stars: number, coinsP
   writeSave(data);
   return earned;
 }
+
+/**
+ * Level locking (M1-3b): the first level is always open; level N+1 opens once level N has ≥1 star.
+ * `levels` is the ordered level list (only `id` is read) and `index` the position in it.
+ */
+export function isLevelUnlocked(data: SaveData, levels: readonly { id: number }[], index: number): boolean {
+  if (index <= 0) return index === 0 && levels.length > 0;
+  const prev = levels[index - 1];
+  if (!prev) return false;
+  return (data.stars[String(prev.id)] ?? 0) >= 1;
+}

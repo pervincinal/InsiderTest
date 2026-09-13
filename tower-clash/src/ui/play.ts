@@ -9,7 +9,7 @@ import type { View } from '../render/view';
 import { applyTransform, clipToMap } from '../render/view';
 import type { PlayUi } from '../render/draw';
 import { drawGame } from '../render/draw';
-import { HUD, RESULT } from '../render/layout';
+import { HUD, PAUSE } from '../render/layout';
 import { inRect } from '../render/widgets';
 import type { PointerPoint } from '../input/pointer';
 import { PlayGestures } from '../input/pointer';
@@ -17,6 +17,8 @@ import { GameLoop } from './loop';
 import { recordWin, starsFor, writeSave } from './save';
 import type { App, Screen } from './screens';
 import { ResultScreen } from './screens';
+import type { Tutorial, TutorialStep } from './tutorial';
+import { drawTutorial, tutorialFor } from './tutorial';
 
 
 /** Transient visual effect driven by sim events (capture flash / death puff). */
@@ -39,6 +41,8 @@ export class PlayScreen implements Screen {
   private autoplay = false;
   private finishedHandled = false;
   private nowMs = 0;
+  private coinsEarned = 0;
+  private readonly tutorial: Tutorial | null;
 
   constructor(
     private readonly app: App,
@@ -54,11 +58,21 @@ export class PlayScreen implements Screen {
     this.loop.load(createState(level, seed));
     this.playerRng = new Rng((seed ^ 0x9e3779b9) >>> 0);
     level.enemies.forEach((e, i) => this.enemyRngs.set(e.owner, new Rng((seed + 1013904223 * (i + 1)) >>> 0)));
+    this.tutorial = tutorialFor(level.id, app.save.stars[String(level.id)] ?? 0);
     this.gestures = new PlayGestures({
       getState: () => (this.loop.finished ? null : this.loop.state),
       getSendRatio: () => this.app.save.settings.sendRatio,
-      onCommand: (cmd) => this.loop.enqueue(cmd),
+      onCommand: (cmd) => {
+        this.tutorial?.onCommand(cmd, this.state);
+        this.loop.enqueue(cmd);
+      },
     });
+  }
+
+  /** The tutorial step currently on screen (null when none / paused / finished). */
+  tutorialStep(): TutorialStep | null {
+    if (!this.tutorial || this.loop.paused || this.loop.finished) return null;
+    return this.tutorial.current(this.state);
   }
 
   get state(): GameState {
@@ -104,6 +118,7 @@ export class PlayScreen implements Screen {
   update(dtMs: number, nowMs: number): void {
     this.nowMs = nowMs;
     this.gestures.tick(nowMs);
+    this.tutorial?.onSelect(this.gestures.selectedTowerId, this.state);
     this.loop.advance(dtMs);
     if (this.loop.finished && !this.finishedHandled) {
       this.finishedHandled = true;
@@ -128,12 +143,17 @@ export class PlayScreen implements Screen {
       stars: outcome === 'won' ? starsFor(this.level, this.state.time) : 0,
       hasNext: idx >= 0 && idx + 1 < LEVELS.length,
       speed: this.loop.speed,
+      coinsEarned: this.coinsEarned,
+      coinsTotal: this.app.save.coins,
     };
   }
 
   private finish(): void {
-    const ui = this.buildUi();
-    if (ui.outcome === 'won') recordWin(this.app.save, this.level.id, ui.stars, C.COINS_PER_STAR);
+    if (getOutcome(this.state) === 'won') {
+      const stars = starsFor(this.level, this.state.time);
+      this.coinsEarned = recordWin(this.app.save, this.level.id, stars, C.COINS_PER_STAR);
+    }
+    const ui = this.buildUi(); // after recordWin so the coin totals are final
     this.gestures.reset();
     this.app.go(new ResultScreen(this.app, { state: this.state, level: this.level, ui }));
   }
@@ -142,6 +162,15 @@ export class PlayScreen implements Screen {
     const ui = this.buildUi();
     drawGame(view.ctx, this.state, view, ui);
     this.drawEffects(view, nowMs);
+    const step = this.tutorialStep();
+    if (step) {
+      const ctx = view.ctx;
+      ctx.save();
+      applyTransform(view);
+      clipToMap(view);
+      drawTutorial(ctx, ui.palette, this.state, step, nowMs);
+      ctx.restore();
+    }
   }
 
   private drawEffects(view: View, nowMs: number): void {
@@ -198,6 +227,17 @@ export class PlayScreen implements Screen {
     this.gestures.cancel();
   }
 
+  /** ×1 ↔ ×2 (any other speed, e.g. the debug ×10, drops back to ×1). Persists via the app. */
+  toggleSpeed(): void {
+    this.app.setSpeed(this.loop.speed === 1 ? 2 : 1);
+  }
+
+  /** Pause if the game is still running (app went to background). */
+  pause(): void {
+    if (this.loop.paused || this.loop.finished) return;
+    this.togglePause();
+  }
+
   down(p: PointerPoint): void {
     if (this.loop.paused) return;
     if (p.y < HUD.mapTop || p.y > HUD.mapBottom) return;
@@ -211,9 +251,10 @@ export class PlayScreen implements Screen {
 
   up(p: PointerPoint): void {
     if (this.loop.paused) {
-      if (inRect(RESULT.resume, p.x, p.y) || inRect(HUD.pause, p.x, p.y)) this.togglePause();
-      else if (inRect(RESULT.retry, p.x, p.y)) this.app.startLevel(this.level.id);
-      else if (inRect(RESULT.menu, p.x, p.y) || inRect(HUD.menu, p.x, p.y)) this.app.goLevels();
+      if (inRect(PAUSE.resume, p.x, p.y) || inRect(HUD.pause, p.x, p.y)) this.togglePause();
+      else if (inRect(PAUSE.speed, p.x, p.y)) this.toggleSpeed();
+      else if (inRect(PAUSE.retry, p.x, p.y)) this.app.startLevel(this.level.id);
+      else if (inRect(PAUSE.menu, p.x, p.y) || inRect(HUD.menu, p.x, p.y)) this.app.goLevels();
       return;
     }
     if (this.hudHit(p)) {

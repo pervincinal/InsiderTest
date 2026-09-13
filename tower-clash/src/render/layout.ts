@@ -15,7 +15,14 @@ export const RESULT = Object.freeze({
   next: { x: 84, y: 780, w: 170, h: 72 } as Rect,
   retry: { x: 275, y: 780, w: 170, h: 72 } as Rect,
   menu: { x: 466, y: 780, w: 170, h: 72 } as Rect,
-  resume: { x: 210, y: 700, w: 300, h: 76 } as Rect,
+});
+
+/** Pause menu (M1-11): resume, speed toggle ×1/×2, retry, menu. */
+export const PAUSE = Object.freeze({
+  resume: { x: 210, y: 620, w: 300, h: 76 } as Rect,
+  speed: { x: 210, y: 716, w: 300, h: 64 } as Rect,
+  retry: { x: 180, y: 820, w: 170, h: 72 } as Rect,
+  menu: { x: 370, y: 820, w: 170, h: 72 } as Rect,
 });
 
 export const TOWER_RADIUS = 34;

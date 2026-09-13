@@ -7,12 +7,12 @@ import type { View } from '../render/view';
 import { applyDeviceTransform, applyTransform, clipToMap } from '../render/view';
 import { RESULT } from '../render/layout';
 import type { Rect } from '../render/widgets';
-import { drawButton, drawStars, font, inRect } from '../render/widgets';
+import { drawButton, drawCoin, drawLock, drawStars, font, inRect } from '../render/widgets';
 import type { PointerPoint } from '../input/pointer';
 import type { PlayUi } from '../render/draw';
 import { drawGame } from '../render/draw';
 import type { SaveData } from './save';
-import { writeSave } from './save';
+import { isLevelUnlocked, writeSave } from './save';
 
 /** A screen owns drawing and input while it is current. */
 export interface Screen {
@@ -37,6 +37,8 @@ export interface App {
   goLevels(): void;
   startLevel(levelId: number): void;
   go(screen: Screen): void;
+  /** Sim speed multiplier for this and future levels (pause-menu toggle, debug). */
+  setSpeed(n: number): void;
 }
 
 /** Fill the letterbox and the map background, and leave the context in logical units + clipped. */
@@ -185,9 +187,21 @@ export class LevelSelectScreen implements Screen {
     LEVELS.forEach((level, i) => {
       const r = levelCardRect(i);
       const stars = this.app.save.stars[String(level.id)] ?? 0;
-      drawButton(ctx, pal, r, '', { border: stars > 0 ? shade(pal.owners.player, 0.2) : undefined });
+      const unlocked = isLevelUnlocked(this.app.save, LEVELS, i);
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
+      if (!unlocked) {
+        // Locked: greyed card, number dimmed, padlock instead of name/stars.
+        drawButton(ctx, pal, r, '', { disabled: true });
+        ctx.globalAlpha = 0.45;
+        ctx.fillStyle = pal.textDim;
+        ctx.font = font(56, '900');
+        ctx.fillText(String(level.id), r.x + r.w / 2, r.y + 62);
+        ctx.globalAlpha = 1;
+        drawLock(ctx, pal.textDim, r.x + r.w / 2, r.y + 140, 34);
+        return;
+      }
+      drawButton(ctx, pal, r, '', { border: stars > 0 ? shade(pal.owners.player, 0.2) : undefined });
       ctx.fillStyle = pal.text;
       ctx.font = font(56, '900');
       ctx.fillText(String(level.id), r.x + r.w / 2, r.y + 62);
@@ -207,6 +221,13 @@ export class LevelSelectScreen implements Screen {
     ctx.font = font(48, '900');
     ctx.fillText('SELECT LEVEL', 360, 130);
     drawButton(ctx, pal, BACK, 'BACK', { fontPx: 24 });
+    // Coin total, top-right (opposite BACK).
+    ctx.font = font(26);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = pal.star;
+    const coins = String(this.app.save.coins);
+    ctx.fillText(coins, 702, 48);
+    drawCoin(ctx, pal, 702 - ctx.measureText(coins).width - 24, 48, 15);
     endMapFrame(view);
   }
 
@@ -232,8 +253,8 @@ export class LevelSelectScreen implements Screen {
     for (let i = 0; i < LEVELS.length; i++) {
       const level = LEVELS[i];
       if (level && inRect(levelCardRect(i), p.x, y)) {
-        this.app.startLevel(level.id);
-        return;
+        if (isLevelUnlocked(this.app.save, LEVELS, i)) this.app.startLevel(level.id);
+        return; // locked: the tap does nothing
       }
     }
   }
@@ -260,7 +281,7 @@ export class ResultScreen implements Screen {
   readonly name = 'result' as const;
   constructor(
     private readonly app: App,
-    private readonly info: ResultInfo,
+    readonly info: ResultInfo,
   ) {}
 
   draw(view: View): void {

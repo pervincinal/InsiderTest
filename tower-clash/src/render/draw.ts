@@ -5,8 +5,13 @@ import type { Palette } from './palette';
 import { shade } from './palette';
 import type { View } from './view';
 import { applyDeviceTransform, applyTransform, clipToMap } from './view';
-import { HUD, RESULT, TANK_RADIUS, TOWER_RADIUS, UNIT_RADIUS } from './layout';
-import { drawButton, drawStars, font, formatTime, outlinedText, roundRect } from './widgets';
+import { HUD, PAUSE, RESULT, TANK_RADIUS, TOWER_RADIUS, UNIT_RADIUS } from './layout';
+import { drawButton, drawCoin, drawStars, font, formatTime, outlinedText, roundRect } from './widgets';
+
+function coinLabelWidth(ctx: CanvasRenderingContext2D, coins: number): number {
+  ctx.font = font(30);
+  return ctx.measureText(`+${coins} coins`).width;
+}
 
 /** Everything the renderer needs beyond the sim state. Owned by the play screen; read-only here. */
 export interface PlayUi {
@@ -25,6 +30,9 @@ export interface PlayUi {
   stars: number; // only meaningful when outcome === 'won'
   hasNext: boolean;
   speed: number;
+  /** Coins awarded by this clear (first-clear stars × COINS_PER_STAR) and the save total. */
+  coinsEarned: number;
+  coinsTotal: number;
 }
 
 /* ---------- roads ---------- */
@@ -329,30 +337,43 @@ function drawOverlay(ctx: CanvasRenderingContext2D, pal: Palette, state: GameSta
   ctx.textBaseline = 'middle';
 
   if (ui.outcome === 'playing') {
-    // Paused
+    // Pause menu
     ctx.fillStyle = pal.text;
     ctx.font = font(72, '900');
-    ctx.fillText('PAUSED', 360, 560);
-    drawButton(ctx, pal, RESULT.resume, 'RESUME', { fill: pal.owners.player, border: shade(pal.owners.player, 0.3) });
-    drawButton(ctx, pal, RESULT.retry, 'RETRY');
-    drawButton(ctx, pal, RESULT.menu, 'MENU');
+    ctx.fillText('PAUSED', 360, 470);
+    ctx.fillStyle = pal.textDim;
+    ctx.font = font(24, 'normal');
+    ctx.fillText(`Level ${ui.level.id} · ${formatTime(state.time)}`, 360, 536);
+    drawButton(ctx, pal, PAUSE.resume, 'RESUME', { fill: pal.owners.player, border: shade(pal.owners.player, 0.3) });
+    const fast = ui.speed !== 1;
+    drawButton(ctx, pal, PAUSE.speed, `SPEED ×${ui.speed}`, { fontPx: 24, border: fast ? pal.accent : undefined, text: fast ? pal.accent : undefined });
+    drawButton(ctx, pal, PAUSE.retry, 'RETRY');
+    drawButton(ctx, pal, PAUSE.menu, 'MENU');
     return;
   }
 
   const won = ui.outcome === 'won';
   ctx.fillStyle = won ? pal.star : pal.mine;
   ctx.font = font(84, '900');
-  ctx.fillText(won ? 'VICTORY' : 'DEFEAT', 360, 470);
+  ctx.fillText(won ? 'VICTORY' : 'DEFEAT', 360, 430);
   ctx.fillStyle = pal.text;
   ctx.font = font(32);
-  ctx.fillText(`Time ${formatTime(state.time)}`, 360, 560);
-  drawStars(ctx, pal, 360, 660, won ? ui.stars : 0, 34);
+  ctx.fillText(`Time ${formatTime(state.time)}`, 360, 508);
+  drawStars(ctx, pal, 360, 584, won ? ui.stars : 0, 34);
   if (won) {
     ctx.fillStyle = pal.textDim;
     ctx.font = font(20, 'normal');
     const s3 = formatTime(ui.level.star3);
     const s2 = formatTime(ui.level.star2);
-    ctx.fillText(`3★ under ${s3} · 2★ under ${s2}`, 360, 722);
+    ctx.fillText(`3★ under ${s3} · 2★ under ${s2}`, 360, 640);
+    drawCoin(ctx, pal, 360 - coinLabelWidth(ctx, ui.coinsEarned) / 2 - 22, 692, 14);
+    ctx.fillStyle = pal.star;
+    ctx.font = font(30);
+    ctx.textAlign = 'center';
+    ctx.fillText(`+${ui.coinsEarned} coins`, 360 + 6, 692);
+    ctx.fillStyle = pal.textDim;
+    ctx.font = font(20, 'normal');
+    ctx.fillText(ui.coinsEarned > 0 ? `${ui.coinsTotal} coins total` : `already cleared · ${ui.coinsTotal} coins total`, 360, 738);
   }
   drawButton(ctx, pal, RESULT.next, 'NEXT', {
     fill: won ? pal.owners.player : undefined,
