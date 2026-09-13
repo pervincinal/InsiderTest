@@ -6,13 +6,16 @@ Priority = order within a section. Producer moves items; anyone may add to Bugs 
 (empty — next sprint picks from "Next")
 
 ## Next (M1 — vertical slice)
-- [ ] M1-4 Levels 6–15 (introduce fortress at 9, artillery at 12); mechanics already exist in the sim — level-designer, then playtest table in the report
-- [ ] M1-7 Tutorial overlay for levels 1–3 (tap-tap hint, upgrade hint, dismiss on first action) — frontend-engineer
-- [ ] M1-3b Show coins earned and total on the result screen; level select shows locked levels (unlock = previous level has ≥1 star) — frontend-engineer
 - [ ] M1-8 Sim events → audio hook: WebAudio sfx for send/capture/upgrade/win/lose with mute in HUD — tech-artist
 - [ ] M1-9 Particles: capture flash, unit death puff, upgrade pulse — tech-artist
 - [ ] M1-10 Balance review of levels 1–15 with the reference bot on 5 seeds; adjust star times so the bot gets 2★, a good human 3★ — game-designer
-- [ ] M1-11 Pause menu (resume / retry / menu) and speed ×2 toggle — frontend-engineer
+
+## Next (M-mobile — iOS/Android)
+- [ ] MM-1 Verify the Android debug APK from CI on a real phone; fix any WebView issue (safe areas, audio unlock, back button = pause) — mobile-engineer + qa
+- [ ] MM-2 Capacitor plugins: StatusBar (hidden), ScreenOrientation lock portrait, Haptics on capture, App back-button handler — mobile-engineer
+- [ ] MM-3 Signed release builds once keystore / Apple signing secrets exist (see docs/MOBILE.md) — mobile-engineer
+- [ ] MM-4 Store listing assets: 6 screenshots per platform via Playwright, feature graphic, privacy policy page — tech-artist + producer
+- [ ] MM-5 GitHub Pages deploy of the web build so the PWA has a public install URL — qa-engineer
 
 ## Later (M2 — content & feel)
 - [ ] M2-1 Tank factory + tank unit (weight 5)
@@ -57,3 +60,9 @@ Priority = order within a section. Producer moves items; anyone may add to Bugs 
 - 2026-09-13 M1-3 Stars by time, coins on first clear (save logic; result-screen display pending M1-3b)
 - 2026-09-13 M1-5 Send-ratio toggle (100 % / 50 %)
 - 2026-09-13 M1-6 GitHub Actions CI: check + playtest + build + e2e
+- 2026-09-13 M1-4 Levels 6–15 (fortress at 9, artillery at 12), all seeds green
+- 2026-09-13 M1-7 Tutorial overlay levels 1–3
+- 2026-09-13 M1-3b Coins on result screen, level locking
+- 2026-09-13 M1-11 Pause menu + speed ×2
+- 2026-09-13 M3-4 PWA manifest + service worker + icons (pulled forward)
+- 2026-09-13 MM-0 Capacitor Android + iOS projects, icons/splash, APK + iOS simulator CI, docs/MOBILE.md
