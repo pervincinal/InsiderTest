@@ -2,8 +2,13 @@
 
 Priority = order within a section. Producer moves items; anyone may add to Bugs / Icebox.
 
-## In progress (today)
-(empty — next sprint picks from "Next")
+## In progress (today, sprint 2)
+- [ ] M2-5 Levels 16–40 + M1-10 star-time tuning — level-designer
+- [ ] M3-1 Boosters UI, M3-3 Settings, M1-8b/ART-3 mute button — frontend-engineer
+- [ ] ART-1 shadow perf, ART-2 dust, M2-7 shake + button sfx, bridge/mine/barrier/tank visuals check — tech-artist
+- [ ] MM-2 Capacitor plugins, PUB-5 version codes — mobile-engineer
+- [ ] MM-5/M4-1 GitHub Pages workflow, e2e for new content — qa-engineer
+- [ ] PUB-5 App Store screenshots, release notes v0.2.0 — publisher
 
 ## Next (M1 — vertical slice)
 - [ ] M1-8b Mute button glyph in the HUD/pause menu (audio exists, toggled with M key) — frontend-engineer
