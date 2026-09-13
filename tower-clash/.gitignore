@@ -2,3 +2,21 @@ node_modules
 dist
 test-results
 playwright-report
+
+# Capacitor native build outputs (android/ and ios/ project files ARE committed)
+android/.gradle
+android/build
+android/app/build
+android/local.properties
+android/.idea
+android/*.iml
+android/app/*.iml
+ios/App/Pods
+ios/App/build
+ios/App/App.xcworkspace/xcuserdata
+ios/App/App.xcodeproj/xcuserdata
+ios/App/App.xcodeproj/project.xcworkspace/xcuserdata
+ios/App/App/public
+ios/App/App/capacitor.config.json
+ios/App/App/config.xml
+**/DerivedData

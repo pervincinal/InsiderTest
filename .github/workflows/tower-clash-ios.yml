@@ -1,0 +1,70 @@
+name: tower-clash-ios
+
+# Builds the Capacitor iOS shell for the iOS Simulator, unsigned (no Apple Developer
+# account needed). Runs on demand, or when the iOS project itself changes.
+on:
+  push:
+    paths:
+      - 'tower-clash/ios/**'
+      - '.github/workflows/tower-clash-ios.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  simulator:
+    name: simulator build (unsigned)
+    runs-on: macos-latest
+    timeout-minutes: 45
+    env:
+      CI: true
+    defaults:
+      run:
+        working-directory: tower-clash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tower-clash/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web app
+        run: npm run build
+
+      - name: Sync web build into the iOS project
+        run: npx cap sync ios
+
+      # Capacitor 8 generates a Swift Package Manager project (ios/App/CapApp-SPM), so there is
+      # normally no Podfile. The step is kept for the case where a CocoaPods-only plugin is added.
+      - name: pod install (only if a Podfile exists)
+        run: |
+          cd ios/App
+          if [ -f Podfile ]; then pod install; else echo "No Podfile - SPM project, skipping pod install"; fi
+
+      - name: Build for iOS Simulator
+        run: |
+          cd ios/App
+          if [ -d App.xcworkspace ]; then CONTAINER="-workspace App.xcworkspace"; else CONTAINER="-project App.xcodeproj"; fi
+          xcodebuild $CONTAINER \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Upload simulator .app
+        uses: actions/upload-artifact@v4
+        with:
+          name: tower-clash-ios-simulator
+          path: tower-clash/ios/App/build/DerivedData/Build/Products/Debug-iphonesimulator/App.app
+          if-no-files-found: error
+          retention-days: 30

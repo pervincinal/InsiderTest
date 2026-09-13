@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Tower Clash app icon: dark navy rounded square, blue player tower with troop count "1" and a small yellow crown. -->
+  <rect x="0" y="0" width="1024" height="1024" rx="224" ry="224" fill="#0f172a"/>
+  <!-- soft glow behind the tower -->
+  <circle cx="512" cy="560" r="330" fill="#3b82f6" opacity="0.12"/>
+  <!-- tower body -->
+  <circle cx="512" cy="560" r="270" fill="#3b82f6"/>
+  <circle cx="512" cy="560" r="270" fill="none" stroke="#1d4ed8" stroke-width="28"/>
+  <!-- troop count -->
+  <text x="512" y="672" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="330" fill="#ffffff">1</text>
+  <!-- crown -->
+  <g transform="translate(512 190)">
+    <path d="M-120 60 L-90 -30 L-36 30 L0 -60 L36 30 L90 -30 L120 60 Z" fill="#facc15" stroke="#ca8a04" stroke-width="10" stroke-linejoin="round"/>
+    <rect x="-120" y="60" width="240" height="40" rx="8" fill="#facc15" stroke="#ca8a04" stroke-width="10"/>
+    <circle cx="-90" cy="-30" r="16" fill="#fde68a"/>
+    <circle cx="0" cy="-60" r="18" fill="#fde68a"/>
+    <circle cx="90" cy="-30" r="16" fill="#fde68a"/>
+  </g>
+</svg>
