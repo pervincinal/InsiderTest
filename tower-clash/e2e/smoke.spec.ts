@@ -169,11 +169,15 @@ test.describe('Tower Clash smoke', () => {
       })
       .toBeGreaterThan(0);
 
-    // (d) reference player at ×10 wins within 60 s wall-clock.
+    // (d) reference player at ×10 wins within 60 s wall-clock. Restart the level first so the bot plays
+    // from the authored opening state: the manual send above depends on wall-clock timing (a slow CI
+    // runner can let the rusher take the emptied home tower before autoplay starts).
     await page.evaluate(() => {
+      window.__towerclash.loadLevel(1);
       window.__towerclash.setSpeed(10);
       window.__towerclash.autoplay();
     });
+    await expect.poll(() => levelId(page)).toBe(1);
     await expect.poll(() => screen(page), { timeout: 60_000, intervals: [250] }).toBe('result');
     const finalState = await page.evaluate(() => window.__towerclash.getState());
     expect(finalState).not.toBeNull();
