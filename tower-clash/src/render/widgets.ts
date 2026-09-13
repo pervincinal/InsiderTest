@@ -1,6 +1,12 @@
 import type { Palette } from './palette';
 import { shade } from './palette';
 
+/*
+ * Claymorphic UI primitives (ART_DIRECTION §4): paper faces with an inner top highlight, a soft
+ * blue-ink drop shadow to the lower right (key light upper-left) and a coloured bottom edge.
+ * Everything is canvas primitives; the only text face is Fredoka (index.html @font-face).
+ */
+
 /** Axis-aligned rectangle in logical units. Shared between drawing and hit-testing. */
 export interface Rect {
   x: number;
@@ -9,10 +15,17 @@ export interface Rect {
   h: number;
 }
 
-export const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+export const FONT = "'Fredoka', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 
-export function font(px: number, weight: 'normal' | 'bold' | '900' = 'bold'): string {
-  return `${weight} ${px}px ${FONT}`;
+export type FontWeight = 'normal' | 'bold' | '900' | '500' | '700';
+
+/** Fredoka ships as 500 (labels) and 700 (numerals, headings); legacy names map onto those two. */
+function weightOf(weight: FontWeight): 500 | 700 {
+  return weight === 'normal' || weight === '500' ? 500 : 700;
+}
+
+export function font(px: number, weight: FontWeight = 'bold'): string {
+  return `${weightOf(weight)} ${px}px ${FONT}`;
 }
 
 export function inRect(r: Rect, x: number, y: number): boolean {
@@ -20,7 +33,7 @@ export function inRect(r: Rect, x: number, y: number): boolean {
 }
 
 export function roundRect(ctx: CanvasRenderingContext2D, r: Rect, radius: number): void {
-  const rad = Math.min(radius, r.w / 2, r.h / 2);
+  const rad = Math.max(0, Math.min(radius, r.w / 2, r.h / 2));
   ctx.beginPath();
   ctx.moveTo(r.x + rad, r.y);
   ctx.lineTo(r.x + r.w - rad, r.y);
@@ -34,22 +47,58 @@ export function roundRect(ctx: CanvasRenderingContext2D, r: Rect, radius: number
   ctx.closePath();
 }
 
+/** Ink used for every soft shadow (§2 "shadow": blue-ink, never black). */
+export const SHADOW_INK = '26, 58, 90';
+
+/**
+ * Run `paint` with a soft drop shadow. Canvas shadow offsets/blur ignore the current transform,
+ * so they are scaled by the active matrix to stay consistent across device sizes.
+ */
+export function withShadow(ctx: CanvasRenderingContext2D, paint: () => void, dy = 6, blur = 12, alpha = 0.12): void {
+  const k = ctx.getTransform().a || 1;
+  ctx.save();
+  ctx.shadowColor = `rgba(${SHADOW_INK}, ${alpha})`;
+  ctx.shadowBlur = blur * k;
+  ctx.shadowOffsetX = dy * 0.35 * k;
+  ctx.shadowOffsetY = dy * k;
+  paint();
+  ctx.restore();
+}
+
+/** Thin lighter line just inside the top of a rounded shape: the clay "inner highlight". */
+export function innerHighlight(ctx: CanvasRenderingContext2D, r: Rect, radius: number, alpha = 0.6, width = 2): void {
+  ctx.save();
+  roundRect(ctx, r, radius);
+  ctx.clip();
+  ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+  ctx.lineWidth = width;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(r.x + radius * 0.8, r.y + width * 0.75);
+  ctx.lineTo(r.x + r.w - radius * 0.8, r.y + width * 0.75);
+  ctx.stroke();
+  ctx.restore();
+}
+
 export interface ButtonStyle {
-  /** Face colour (default white). A coloured face gets white text automatically. */
+  /** Face colour (default paper). A coloured face gets paper text automatically. */
   fill?: string;
   /** Outline ring drawn around the face (used for "active" states). */
   border?: string;
-  /** Bottom "3D" edge colour (default derived from the face). */
+  /** Bottom edge colour (default: derived from the face; ink shade on paper). */
   edge?: string;
   text?: string;
   fontPx?: number;
   disabled?: boolean;
-  /** Pressed look: face drops onto the edge. */
+  /** Pressed look: face drops 3 px onto a shrunken edge. */
   pressed?: boolean;
+  /** Skip the drop shadow (e.g. many small buttons in a list). */
+  flat?: boolean;
 }
 
-/** Depth of the 3D bottom edge below a button face. */
-export const BUTTON_EDGE = 6;
+/** Height of the coloured bottom edge below a button face (§4: 4 px). */
+export const BUTTON_EDGE = 4;
+const PRESS_DROP = 3;
 
 /** True when the colour is light enough for dark text. */
 export function isLight(hex: string): boolean {
@@ -62,8 +111,8 @@ export function isLight(hex: string): boolean {
 }
 
 /**
- * Chunky toy button: rounded white (or coloured) face standing on a darker bottom edge, bold navy
- * text. `r` is the hit rectangle; the edge is drawn inside it so hit-testing stays unchanged.
+ * Clay button: paper (or coloured) face, inner top highlight, soft outer shadow and a coloured
+ * 4 px bottom edge. `r` is the hit rectangle; the edge is drawn inside it so hit-testing is stable.
  */
 export function drawButton(
   ctx: CanvasRenderingContext2D,
@@ -73,33 +122,36 @@ export function drawButton(
   style: ButtonStyle = {},
 ): void {
   const fill = style.fill ?? pal.panel;
-  const edge = style.edge ?? (style.fill ? shade(fill, -0.38) : pal.panelBorder);
-  const press = style.pressed ? BUTTON_EDGE - 2 : 0;
+  const light = isLight(fill);
+  const edge = style.edge ?? (style.fill ? shade(fill, -0.38) : shade(pal.panel, -0.22));
+  const press = style.pressed ? PRESS_DROP : 0;
   const radius = Math.min(18, r.h / 2 - 2);
+  const face: Rect = { x: r.x, y: r.y + press, w: r.w, h: r.h - BUTTON_EDGE };
   ctx.save();
   ctx.globalAlpha = style.disabled ? 0.45 : 1;
-  // bottom edge
-  roundRect(ctx, { x: r.x, y: r.y + BUTTON_EDGE, w: r.w, h: r.h - BUTTON_EDGE }, radius);
-  ctx.fillStyle = edge;
-  ctx.fill();
-  // face
-  const face: Rect = { x: r.x, y: r.y + press, w: r.w, h: r.h - BUTTON_EDGE };
+  // shadow + edge (one shape so the shadow reads as a single object)
+  const paintEdge = (): void => {
+    roundRect(ctx, { x: r.x, y: r.y + press, w: r.w, h: r.h - press }, radius);
+    ctx.fillStyle = edge;
+    ctx.fill();
+  };
+  if (style.flat || style.pressed) paintEdge();
+  else withShadow(ctx, paintEdge, 6, 12, 0.14);
+  // face with a gentle lit→mid gradient (clay, not plastic)
   roundRect(ctx, face, radius);
-  ctx.fillStyle = fill;
+  const g = ctx.createLinearGradient(0, face.y, 0, face.y + face.h);
+  g.addColorStop(0, shade(fill, light ? 0.1 : 0.16));
+  g.addColorStop(1, fill);
+  ctx.fillStyle = g;
   ctx.fill();
   if (style.border) {
     ctx.lineWidth = 4;
     ctx.strokeStyle = style.border;
     ctx.stroke();
   }
-  // soft top highlight
-  ctx.globalAlpha *= 0.35;
-  roundRect(ctx, { x: face.x + 6, y: face.y + 4, w: face.w - 12, h: Math.max(4, face.h * 0.28) }, radius * 0.7);
-  ctx.fillStyle = '#ffffff';
-  ctx.fill();
-  ctx.globalAlpha = style.disabled ? 0.45 : 1;
+  innerHighlight(ctx, face, radius, light ? 0.9 : 0.45);
   if (label) {
-    ctx.fillStyle = style.text ?? (isLight(fill) ? pal.text : '#ffffff');
+    ctx.fillStyle = style.text ?? (light ? pal.text : pal.panel);
     ctx.font = font(style.fontPx ?? 28);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -108,21 +160,125 @@ export function drawButton(
   ctx.restore();
 }
 
-/** Rounded pill panel (HUD chips, hints). */
+/** Rounded clay pill (HUD chips, hints): soft shadow, fill, inner highlight, optional stroke. */
 export function drawPill(ctx: CanvasRenderingContext2D, r: Rect, fill: string, stroke?: string, lineWidth = 3): void {
-  roundRect(ctx, r, r.h / 2);
-  ctx.fillStyle = fill;
-  ctx.fill();
+  const radius = r.h / 2;
+  withShadow(
+    ctx,
+    () => {
+      roundRect(ctx, r, radius);
+      ctx.fillStyle = fill;
+      ctx.fill();
+    },
+    4,
+    8,
+    0.12,
+  );
   if (stroke) {
+    roundRect(ctx, r, radius);
     ctx.lineWidth = lineWidth;
     ctx.strokeStyle = stroke;
     ctx.stroke();
   }
+  innerHighlight(ctx, r, radius, 0.7);
+}
+
+export interface CardStyle {
+  fill?: string;
+  radius?: number;
+  /** Bottom edge height (default 6). */
+  edge?: number;
+}
+
+/** Clay card: big radius, soft shadow, paper face, inner top highlight, shaded bottom edge. */
+export function drawCard(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, style: CardStyle = {}): void {
+  const fill = style.fill ?? pal.panel;
+  const radius = style.radius ?? 28;
+  const edge = style.edge ?? 6;
+  withShadow(
+    ctx,
+    () => {
+      roundRect(ctx, r, radius);
+      ctx.fillStyle = shade(fill, -0.18);
+      ctx.fill();
+    },
+    12,
+    24,
+    0.2,
+  );
+  roundRect(ctx, { x: r.x, y: r.y, w: r.w, h: r.h - edge }, radius);
+  ctx.fillStyle = fill;
+  ctx.fill();
+  innerHighlight(ctx, { x: r.x, y: r.y, w: r.w, h: r.h - edge }, radius, 0.95, 3);
+}
+
+/** Translucent paper band with a lighter top edge: the "glass" HUD strip that reads over any biome. */
+export function drawGlassBand(ctx: CanvasRenderingContext2D, r: Rect, radius = 0): void {
+  roundRect(ctx, r, radius);
+  const g = ctx.createLinearGradient(0, r.y, 0, r.y + r.h);
+  g.addColorStop(0, 'rgba(255, 250, 240, 0.82)');
+  g.addColorStop(1, 'rgba(255, 250, 240, 0.62)');
+  ctx.fillStyle = g;
+  ctx.fill();
+  ctx.fillStyle = `rgba(${SHADOW_INK}, 0.1)`;
+  ctx.fillRect(r.x, r.y + r.h - 3, r.w, 3);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+  ctx.fillRect(r.x, r.y, r.w, 2);
+}
+
+export interface ExtrudeStyle {
+  /** Face colour (default paper). */
+  face: string;
+  /** Side (extrusion) colour. */
+  side: string;
+  /** Contour colour (default ink). */
+  outline?: string;
+  /** Extrusion depth in px (default 6). */
+  depth?: number;
+  /** Extrusion direction (default lower-right, matching the key light). */
+  dx?: number;
+  dy?: number;
+  weight?: FontWeight;
+  /** Outline width as a fraction of px (default 0.12). */
+  outlineFrac?: number;
+}
+
+/**
+ * 3D clay lettering: the text is stacked `depth` times towards the lower-right in the side colour,
+ * each layer contoured, then capped with the face (lit→mid gradient) and an ink outline.
+ */
+export function drawExtrudedText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, px: number, s: ExtrudeStyle): void {
+  const depth = s.depth ?? 6;
+  const dx = s.dx ?? 1;
+  const dy = s.dy ?? 1;
+  const outline = s.outline ?? '#1e2a44';
+  ctx.save();
+  ctx.font = font(px, s.weight ?? '700');
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = Math.max(3, px * (s.outlineFrac ?? 0.12));
+  ctx.strokeStyle = outline;
+  for (let i = depth; i >= 1; i--) {
+    const ox = x + dx * i;
+    const oy = y + dy * i;
+    ctx.strokeText(text, ox, oy);
+    ctx.fillStyle = s.side;
+    ctx.fillText(text, ox, oy);
+  }
+  ctx.strokeText(text, x, y);
+  const g = ctx.createLinearGradient(0, y - px * 0.5, 0, y + px * 0.45);
+  g.addColorStop(0, shade(s.face, 0.22));
+  g.addColorStop(0.55, s.face);
+  g.addColorStop(1, shade(s.face, -0.08));
+  ctx.fillStyle = g;
+  ctx.fillText(text, x, y);
+  ctx.restore();
 }
 
 /** Five-point star centred at (cx, cy). */
 export function starPath(ctx: CanvasRenderingContext2D, cx: number, cy: number, outer: number): void {
-  const inner = outer * 0.45;
+  const inner = outer * 0.47;
   ctx.beginPath();
   for (let i = 0; i < 10; i++) {
     const rad = i % 2 === 0 ? outer : inner;
@@ -135,24 +291,36 @@ export function starPath(ctx: CanvasRenderingContext2D, cx: number, cy: number, 
   ctx.closePath();
 }
 
-/** One gold (or grey, when off) star with a dark outline; `scale` lets the result screen pop them in. */
+/** One clay star (gold, or grey when off) with a shaded underside; `scale` lets result screens pop them in. */
 export function drawStar(ctx: CanvasRenderingContext2D, pal: Palette, cx: number, cy: number, size: number, on: boolean, scale = 1): void {
   if (scale <= 0) return;
   const s = size * scale;
-  starPath(ctx, cx, cy, s);
+  const base = on ? pal.star : pal.starOff;
+  ctx.save();
   ctx.lineJoin = 'round';
-  ctx.lineWidth = Math.max(2, s * 0.16);
-  ctx.strokeStyle = on ? shade(pal.star, -0.5) : shade(pal.starOff, -0.3);
+  ctx.lineWidth = Math.max(2, s * 0.14);
+  ctx.strokeStyle = on ? shade(pal.star, -0.55) : shade(pal.starOff, -0.35);
+  // extruded underside
+  starPath(ctx, cx + s * 0.06, cy + s * 0.12, s);
   ctx.stroke();
-  ctx.fillStyle = on ? pal.star : pal.starOff;
+  ctx.fillStyle = shade(base, -0.3);
+  ctx.fill();
+  // face
+  starPath(ctx, cx, cy, s);
+  ctx.stroke();
+  const g = ctx.createLinearGradient(cx - s, cy - s, cx + s * 0.6, cy + s);
+  g.addColorStop(0, shade(base, 0.35));
+  g.addColorStop(0.5, base);
+  g.addColorStop(1, shade(base, -0.12));
+  ctx.fillStyle = g;
   ctx.fill();
   if (on) {
-    // small highlight
-    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
     ctx.beginPath();
-    ctx.arc(cx - s * 0.2, cy - s * 0.25, s * 0.16, 0, Math.PI * 2);
+    ctx.ellipse(cx - s * 0.22, cy - s * 0.22, s * 0.16, s * 0.1, -0.6, 0, Math.PI * 2);
     ctx.fill();
   }
+  ctx.restore();
 }
 
 export function drawStars(ctx: CanvasRenderingContext2D, pal: Palette, cx: number, cy: number, count: number, size: number, scales?: readonly number[]): void {
@@ -160,7 +328,39 @@ export function drawStars(ctx: CanvasRenderingContext2D, pal: Palette, cx: numbe
   for (let i = 0; i < 3; i++) drawStar(ctx, pal, cx + (i - 1) * gap, cy, size, i < count, scales?.[i] ?? 1);
 }
 
-/** Text with an outline so numerals stay legible on any colour. Default outline is dark navy. */
+/**
+ * Star pop-in: `t` is the animation progress (0 = not started, ≥1 = settled). The star scales in
+ * with overshoot while a gold glow burst expands and fades behind it.
+ */
+export function drawStarPop(ctx: CanvasRenderingContext2D, pal: Palette, cx: number, cy: number, size: number, on: boolean, t: number): void {
+  if (t <= 0) return;
+  const u = Math.min(1, t);
+  if (on && u < 1) {
+    const burst = 1 - u;
+    ctx.save();
+    ctx.globalAlpha = burst * 0.55;
+    ctx.fillStyle = pal.star;
+    ctx.beginPath();
+    ctx.arc(cx, cy, size * (1.2 + u * 1.6), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = burst * 0.9;
+    ctx.strokeStyle = shade(pal.star, 0.4);
+    ctx.lineWidth = 3;
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 + 0.3;
+      const r0 = size * (1.3 + u * 1.2);
+      const r1 = r0 + size * 0.45 * (1 - u);
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
+      ctx.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  drawStar(ctx, pal, cx, cy, size, on, easeOutBack(u));
+}
+
+/** Text with an outline so numerals stay legible on any colour. Default outline is ink. */
 export function outlinedText(
   ctx: CanvasRenderingContext2D,
   text: string,
@@ -168,8 +368,8 @@ export function outlinedText(
   y: number,
   fill: string,
   px: number,
-  outline = 'rgba(20, 30, 55, 0.9)',
-  weight: 'bold' | '900' = '900',
+  outline = 'rgba(30, 42, 68, 0.9)',
+  weight: FontWeight = '700',
 ): void {
   ctx.font = font(px, weight);
   ctx.textAlign = 'center';
@@ -209,37 +409,89 @@ export function formatTime(ms: number): string {
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 }
 
-/** Gold coin glyph centred at (cx, cy). */
+/** Clay gold coin centred at (cx, cy): shaded rim, lit face, inner ring, top-left glint. */
 export function drawCoin(ctx: CanvasRenderingContext2D, pal: Palette, cx: number, cy: number, r: number): void {
+  const gold = pal.star;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx + r * 0.08, cy + r * 0.16, r, 0, Math.PI * 2);
+  ctx.fillStyle = shade(gold, -0.45);
+  ctx.fill();
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fillStyle = pal.star;
+  const g = ctx.createLinearGradient(cx - r, cy - r, cx + r, cy + r);
+  g.addColorStop(0, shade(gold, 0.35));
+  g.addColorStop(0.55, gold);
+  g.addColorStop(1, shade(gold, -0.18));
+  ctx.fillStyle = g;
   ctx.fill();
-  ctx.lineWidth = Math.max(2, r * 0.18);
-  ctx.strokeStyle = shade(pal.star, -0.5);
+  ctx.lineWidth = Math.max(1.5, r * 0.12);
+  ctx.strokeStyle = shade(gold, -0.45);
   ctx.stroke();
   ctx.beginPath();
-  ctx.arc(cx, cy, r * 0.58, 0, Math.PI * 2);
+  ctx.arc(cx, cy, r * 0.62, 0, Math.PI * 2);
+  ctx.strokeStyle = shade(gold, -0.3);
   ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.beginPath();
+  ctx.ellipse(cx - r * 0.35, cy - r * 0.38, r * 0.22, r * 0.13, -0.7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
 
-/** Padlock glyph centred at (cx, cy); `size` is the body width. */
+/** Clay padlock centred at (cx, cy); `size` is the body width. */
 export function drawLock(ctx: CanvasRenderingContext2D, color: string, cx: number, cy: number, size: number): void {
   const bodyH = size * 0.78;
   const bodyY = cy - bodyH / 2 + size * 0.22;
-  ctx.strokeStyle = color;
-  ctx.lineWidth = Math.max(3, size * 0.14);
+  ctx.save();
+  ctx.strokeStyle = shade(color, -0.25);
+  ctx.lineWidth = Math.max(3, size * 0.15);
   ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.arc(cx, bodyY, size * 0.3, Math.PI, 0);
   ctx.stroke();
+  roundRect(ctx, { x: cx - size / 2, y: bodyY + size * 0.06, w: size, h: bodyH }, size * 0.18);
+  ctx.fillStyle = shade(color, -0.3);
+  ctx.fill();
+  roundRect(ctx, { x: cx - size / 2, y: bodyY, w: size, h: bodyH }, size * 0.18);
   ctx.fillStyle = color;
-  roundRect(ctx, { x: cx - size / 2, y: bodyY, w: size, h: bodyH }, size * 0.16);
   ctx.fill();
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+  innerHighlight(ctx, { x: cx - size / 2, y: bodyY, w: size, h: bodyH }, size * 0.18, 0.5);
+  ctx.fillStyle = shade(color, -0.45);
   ctx.beginPath();
-  ctx.arc(cx, bodyY + bodyH * 0.45, size * 0.11, 0, Math.PI * 2);
+  ctx.arc(cx, bodyY + bodyH * 0.42, size * 0.12, 0, Math.PI * 2);
   ctx.fill();
+  ctx.fillRect(cx - size * 0.05, bodyY + bodyH * 0.45, size * 0.1, bodyH * 0.25);
+  ctx.restore();
+}
+
+/** Small triangular pennant on a pole (level-select "you are here", HUD flourishes). */
+export function drawFlag(ctx: CanvasRenderingContext2D, color: string, x: number, y: number, h: number, wave = 0): void {
+  ctx.save();
+  ctx.strokeStyle = '#6b5a45';
+  ctx.lineWidth = Math.max(2, h * 0.09);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x, y - h);
+  ctx.stroke();
+  const w = h * 0.7;
+  const fh = h * 0.42;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(x, y - h);
+  ctx.quadraticCurveTo(x + w * 0.5, y - h + wave, x + w, y - h + fh * 0.5 + wave);
+  ctx.quadraticCurveTo(x + w * 0.5, y - h + fh + wave, x, y - h + fh);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.beginPath();
+  ctx.moveTo(x, y - h);
+  ctx.quadraticCurveTo(x + w * 0.5, y - h + wave, x + w, y - h + fh * 0.5 + wave);
+  ctx.lineTo(x + w * 0.5, y - h + fh * 0.35 + wave * 0.5);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
 }
 
 /** Ease-out with overshoot, for pop-in animations. t in 0..1. */
@@ -248,4 +500,10 @@ export function easeOutBack(t: number): number {
   const c3 = c1 + 1;
   const u = Math.max(0, Math.min(1, t)) - 1;
   return 1 + c3 * u * u * u + c1 * u * u;
+}
+
+/** Smooth ease-out (cubic). t in 0..1. */
+export function easeOutCubic(t: number): number {
+  const u = 1 - Math.max(0, Math.min(1, t));
+  return 1 - u * u * u;
 }

@@ -28,6 +28,9 @@ export interface TowerClashDebug {
   getResult(): { outcome: string; stars: number; coinsEarned: number; coinsTotal: number } | null;
   /** Level-select lock state for a level id (undefined id → false). */
   isLevelUnlocked(id: number): boolean;
+  /** Level-select path map scroll (logical px); setting is a no-op on other screens. */
+  setLevelSelectScroll(y: number): void;
+  getLevelSelectScroll(): number;
   aiAvailable: boolean;
 }
 
@@ -61,6 +64,15 @@ class TowerClashApp implements App {
     // WebAudio may only start inside a user gesture (iOS/Android WebView): unlock on the first
     // pointer/key, and keep trying on later gestures in case the context was suspended again.
     canvas.addEventListener('pointerdown', () => unlockAudio());
+    canvas.addEventListener(
+      'wheel',
+      (e) => {
+        e.preventDefault();
+        const lines = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? window.innerHeight : 1;
+        this.current.wheel?.((e.deltaY * lines) / this.view.scale);
+      },
+      { passive: false },
+    );
     window.addEventListener('keydown', (e) => {
       unlockAudio();
       if (e.key === ' ') e.preventDefault();
@@ -144,6 +156,10 @@ class TowerClashApp implements App {
         return { outcome, stars, coinsEarned, coinsTotal };
       },
       isLevelUnlocked: (id) => isLevelUnlocked(this.save, LEVELS, LEVELS.findIndex((l) => l.id === id)),
+      setLevelSelectScroll: (y) => {
+        if (this.current instanceof LevelSelectScreen) this.current.setScroll(y);
+      },
+      getLevelSelectScroll: () => (this.current instanceof LevelSelectScreen ? this.current.getScroll() : 0),
       aiAvailable: true,
     };
   }
@@ -164,12 +180,25 @@ function registerServiceWorker(): void {
   });
 }
 
-function boot(): void {
+/**
+ * Wait for the bundled Fredoka faces (index.html @font-face) so the first canvas frame is not
+ * painted in the fallback face. Bounded by a timeout: a missing/slow font must never block the game.
+ */
+async function waitForFonts(timeoutMs = 1500): Promise<void> {
+  const fonts = (document as { fonts?: FontFaceSet }).fonts;
+  if (!fonts || typeof fonts.load !== 'function') return;
+  const load = Promise.all([fonts.load('700 32px Fredoka'), fonts.load('500 32px Fredoka')]).then(() => undefined);
+  const timeout = new Promise<void>((resolve) => setTimeout(resolve, timeoutMs));
+  await Promise.race([load, timeout]).catch(() => undefined);
+}
+
+async function boot(): Promise<void> {
   const canvas = document.getElementById('game');
   if (!(canvas instanceof HTMLCanvasElement)) throw new Error('#game canvas missing');
+  await waitForFonts();
   const app = new TowerClashApp(canvas);
   window.__towerclash = app.debug();
   registerServiceWorker();
 }
 
-boot();
+void boot();

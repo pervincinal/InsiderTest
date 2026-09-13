@@ -1,13 +1,13 @@
 /*
  * Tower Clash service worker.
- * - Precaches the app shell (index, manifest, icons) on install.
+ * - Precaches the app shell (index, manifest, icons, Fredoka font subsets) on install.
  * - Cache-first for same-origin static files (./assets/* are content-hashed by Vite, so a cached
  *   copy is always correct); the response is stored on first use.
  * - Navigations go network-first with the cached shell as offline fallback, so a new deploy is
  *   picked up on the next launch while the game still opens with no connection.
  * Bump CACHE_VERSION when the shell files change shape; old caches are deleted on activate.
  */
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const CACHE_NAME = `towerclash-${CACHE_VERSION}`;
 const PRECACHE = [
   './',
@@ -17,6 +17,10 @@ const PRECACHE = [
   './icons/icon-512.png',
   './icons/icon-maskable-512.png',
   './icons/apple-touch-icon.png',
+  './fonts/fredoka-500-latin.woff2',
+  './fonts/fredoka-500-latin-ext.woff2',
+  './fonts/fredoka-700-latin.woff2',
+  './fonts/fredoka-700-latin-ext.woff2',
 ];
 
 self.addEventListener('install', (event) => {

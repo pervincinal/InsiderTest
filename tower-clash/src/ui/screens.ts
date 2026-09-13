@@ -4,7 +4,7 @@ import { LEVELS } from '../levels/index';
 import type { Palette } from '../render/palette';
 import type { View } from '../render/view';
 import { applyDeviceTransform, applyTransform, clipToMap } from '../render/view';
-import { RESULT } from '../render/layout';
+import { LEVEL_MAP, RESULT, levelMapMaxScroll, levelNodeCentre, levelNodeRect } from '../render/layout';
 import type { Rect } from '../render/widgets';
 import { inRect } from '../render/widgets';
 import { drawLevelSelect, drawTitle } from '../render/menus';
@@ -13,6 +13,7 @@ import type { PlayUi } from '../render/draw';
 import { drawGame } from '../render/draw';
 import type { SaveData } from './save';
 import { isLevelUnlocked, writeSave } from './save';
+import { isMuted, toggleMuted } from '../audio/index';
 
 /** A screen owns drawing and input while it is current. */
 export interface Screen {
@@ -26,6 +27,8 @@ export interface Screen {
   up?(p: PointerPoint): void;
   cancel?(): void;
   key?(e: KeyboardEvent): void;
+  /** Mouse wheel / trackpad scroll in logical px (positive = content moves up). */
+  wheel?(dy: number): void;
 }
 
 /** What screens may ask of the application shell. */
@@ -60,11 +63,13 @@ export function endMapFrame(view: View): void {
 
 /* ---------- Title ---------- */
 
-const TITLE_PLAY: Rect = { x: 180, y: 640, w: 360, h: 96 };
-const TITLE_CB: Rect = { x: 180, y: 780, w: 360, h: 64 };
+export const TITLE_PLAY: Rect = { x: 180, y: 640, w: 360, h: 96 };
+export const TITLE_CB: Rect = { x: 180, y: 780, w: 172, h: 64 };
+export const TITLE_SOUND: Rect = { x: 368, y: 780, w: 172, h: 64 };
 
 export class TitleScreen implements Screen {
   readonly name = 'title' as const;
+  private pressed: Rect | null = null;
   constructor(private readonly app: App) {}
 
   draw(view: View, nowMs: number): void {
@@ -72,19 +77,40 @@ export class TitleScreen implements Screen {
     drawTitle(view, this.app.palette(), {
       playRect: TITLE_PLAY,
       cbRect: TITLE_CB,
+      soundRect: TITLE_SOUND,
       colorBlind: this.app.save.settings.colorBlind,
+      soundOn: !isMuted(),
       totalStars: total,
       coins: this.app.save.coins,
       nowMs,
+      pressed: this.pressed,
     });
   }
 
+  private hit(p: PointerPoint): Rect | null {
+    for (const r of [TITLE_PLAY, TITLE_CB, TITLE_SOUND]) if (inRect(r, p.x, p.y)) return r;
+    return null;
+  }
+
+  down(p: PointerPoint): void {
+    this.pressed = this.hit(p);
+  }
+
+  move(p: PointerPoint): void {
+    if (this.pressed && !inRect(this.pressed, p.x, p.y)) this.pressed = null;
+  }
+
   up(p: PointerPoint): void {
+    this.pressed = null;
     if (inRect(TITLE_PLAY, p.x, p.y)) this.app.goLevels();
     else if (inRect(TITLE_CB, p.x, p.y)) {
       this.app.save.settings.colorBlind = !this.app.save.settings.colorBlind;
       writeSave(this.app.save);
-    }
+    } else if (inRect(TITLE_SOUND, p.x, p.y)) toggleMuted(); // persists settings.sound via the audio facade
+  }
+
+  cancel(): void {
+    this.pressed = null;
   }
 
   key(e: KeyboardEvent): void {
@@ -92,19 +118,17 @@ export class TitleScreen implements Screen {
   }
 }
 
-/* ---------- Level select ---------- */
+/* ---------- Level select: winding path map ---------- */
 
-const GRID_COLS = 3;
-const CARD = 200;
-const GAP = 20;
-const GRID_TOP = 250;
-const GRID_LEFT = (C.MAP_W - GRID_COLS * CARD - (GRID_COLS - 1) * GAP) / 2;
-const BACK: Rect = { x: 18, y: 18, w: 140, h: 60 };
+const BACK = LEVEL_MAP.back;
 
-export function levelCardRect(index: number): Rect {
-  const col = index % GRID_COLS;
-  const row = Math.floor(index / GRID_COLS);
-  return { x: GRID_LEFT + col * (CARD + GAP), y: GRID_TOP + row * (CARD + GAP), w: CARD, h: CARD };
+/** Index of the level the player is "on": first unlocked level without a clear, else the last. */
+export function currentLevelIndex(save: SaveData): number {
+  for (let i = 0; i < LEVELS.length; i++) {
+    const level = LEVELS[i]!;
+    if (isLevelUnlocked(save, LEVELS, i) && (save.stars[String(level.id)] ?? 0) === 0) return i;
+  }
+  return Math.max(0, LEVELS.length - 1);
 }
 
 export class LevelSelectScreen implements Screen {
@@ -112,67 +136,98 @@ export class LevelSelectScreen implements Screen {
   private scroll = 0;
   private downY = 0;
   private scrollAtDown = 0;
+  /** Pointer currently held (mouse hover also produces move events; those must not scroll). */
+  private held = false;
   private dragging = false;
+  private pressed: Rect | null = null;
+  private readonly current: number;
 
-  constructor(private readonly app: App) {}
+  constructor(private readonly app: App) {
+    this.current = currentLevelIndex(app.save);
+    // open centred on the current level
+    this.setScroll(levelNodeCentre(this.current).y - C.MAP_H * 0.5);
+  }
 
   private maxScroll(): number {
-    const rows = Math.ceil(LEVELS.length / GRID_COLS);
-    const contentBottom = GRID_TOP + rows * (CARD + GAP) + 40;
-    return Math.max(0, contentBottom - C.MAP_H);
+    return levelMapMaxScroll(LEVELS.length, C.MAP_H);
+  }
+
+  setScroll(y: number): void {
+    this.scroll = Math.max(0, Math.min(this.maxScroll(), y));
+  }
+
+  getScroll(): number {
+    return this.scroll;
   }
 
   draw(view: View, nowMs: number): void {
     drawLevelSelect(view, this.app.palette(), {
-      cards: LEVELS.map((level, i) => ({
-        rect: levelCardRect(i),
+      nodes: LEVELS.map((level, i) => ({
         id: level.id,
         name: level.name,
         stars: this.app.save.stars[String(level.id)] ?? 0,
         unlocked: isLevelUnlocked(this.app.save, LEVELS, i),
       })),
+      current: this.current,
       scroll: this.scroll,
       backRect: BACK,
       coins: this.app.save.coins,
       nowMs,
-      headerH: 200,
+      pressed: this.pressed,
     });
   }
 
   down(p: PointerPoint): void {
+    this.held = true;
     this.downY = p.y;
     this.scrollAtDown = this.scroll;
     this.dragging = false;
+    this.pressed = inRect(BACK, p.x, p.y) ? BACK : null;
   }
 
   move(p: PointerPoint): void {
-    if (Math.abs(p.y - this.downY) > 14) this.dragging = true;
-    if (this.dragging) this.scroll = Math.max(0, Math.min(this.maxScroll(), this.scrollAtDown - (p.y - this.downY)));
+    if (!this.held) return;
+    if (Math.abs(p.y - this.downY) > 14) {
+      this.dragging = true;
+      this.pressed = null;
+    }
+    if (this.dragging) this.setScroll(this.scrollAtDown - (p.y - this.downY));
   }
 
   up(p: PointerPoint): void {
-    if (this.dragging) return;
+    this.pressed = null;
+    const wasDrag = this.dragging;
+    this.held = false;
+    this.dragging = false;
+    if (wasDrag) return;
     if (inRect(BACK, p.x, p.y)) {
       this.app.goTitle();
       return;
     }
-    if (p.y < 200) return;
-    const y = p.y + this.scroll;
+    if (p.y < LEVEL_MAP.headerH) return;
     for (let i = 0; i < LEVELS.length; i++) {
       const level = LEVELS[i];
-      if (level && inRect(levelCardRect(i), p.x, y)) {
+      if (level && inRect(levelNodeRect(i, this.scroll), p.x, p.y)) {
         if (isLevelUnlocked(this.app.save, LEVELS, i)) this.app.startLevel(level.id);
         return; // locked: the tap does nothing
       }
     }
   }
 
+  wheel(dy: number): void {
+    this.setScroll(this.scroll + dy);
+  }
+
   cancel(): void {
+    this.held = false;
     this.dragging = false;
+    this.pressed = null;
   }
 
   key(e: KeyboardEvent): void {
     if (e.key === 'Escape') this.app.goTitle();
+    else if (e.key === 'ArrowDown') this.setScroll(this.scroll + LEVEL_MAP.step);
+    else if (e.key === 'ArrowUp') this.setScroll(this.scroll - LEVEL_MAP.step);
   }
 }
 

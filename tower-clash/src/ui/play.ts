@@ -191,7 +191,8 @@ export class PlayScreen implements Screen {
       return true;
     }
     if (inRect(HUD.ratio, p.x, p.y)) {
-      this.app.save.settings.sendRatio = this.app.save.settings.sendRatio === 1 ? 0.5 : 1;
+      // segmented control: left half = 100 %, right half = 50 %
+      this.app.save.settings.sendRatio = p.x < HUD.ratio.x + HUD.ratio.w / 2 ? 1 : 0.5;
       writeSave(this.app.save);
       return true;
     }

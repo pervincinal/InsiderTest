@@ -18,14 +18,14 @@ import type { Page } from '@playwright/test';
 
 // src/ui/screens.ts
 const TITLE_PLAY = { x: 180, y: 640, w: 360, h: 96 };
-const GRID = { cols: 3, card: 200, gap: 20, top: 250 };
-function levelCardRect(index: number): { x: number; y: number; w: number; h: number } {
-  const left = (720 - GRID.cols * GRID.card - (GRID.cols - 1) * GRID.gap) / 2;
-  const col = index % GRID.cols;
-  const row = Math.floor(index / GRID.cols);
-  return { x: left + col * (GRID.card + GRID.gap), y: GRID.top + row * (GRID.card + GRID.gap), w: GRID.card, h: GRID.card };
+// src/render/layout.ts — LEVEL_MAP + levelNodeRect (winding path map; the test scrolls the map to 0 first)
+const LEVEL_MAP = { nodeR: 46, top: 260, step: 150, amp: 185, period: 5 };
+function levelNodeRect(index: number, scroll = 0): { x: number; y: number; w: number; h: number } {
+  const cx = 360 + LEVEL_MAP.amp * Math.sin((index * Math.PI * 2) / LEVEL_MAP.period);
+  const cy = LEVEL_MAP.top + index * LEVEL_MAP.step - scroll;
+  const r = LEVEL_MAP.nodeR;
+  return { x: cx - r, y: cy - r, w: r * 2, h: r * 2 };
 }
-// src/render/layout.ts
 const HUD = { mapTop: 96, mapBottom: 1180, pause: { x: 636, y: 18, w: 66, h: 60 } };
 const RESULT = { next: { x: 84, y: 780, w: 170, h: 72 } };
 const PAUSE = { resume: { x: 210, y: 620, w: 300, h: 76 }, speed: { x: 210, y: 716, w: 300, h: 64 } };
@@ -117,27 +117,29 @@ test.describe('Tower Clash smoke', () => {
     await page.waitForTimeout(250);
     await shot(page, 'title');
 
-    // (b) PLAY → level select: authored levels present, first three cards reachable without scrolling,
-    //     only level 1 unlocked on a fresh save and a tap on a locked card does nothing.
+    // (b) PLAY → level select (winding path map): authored levels present, the map opens on the
+    //     current level (level 1 on a fresh save → scroll 0), first three nodes reachable without
+    //     scrolling, only level 1 unlocked and a tap on a locked node does nothing.
     await tapRect(page, TITLE_PLAY);
     await expect.poll(() => screen(page)).toBe('levelSelect');
     expect(LEVEL_FILES.length).toBeGreaterThanOrEqual(5);
+    expect(await page.evaluate(() => window.__towerclash.getLevelSelectScroll())).toBe(0);
     for (let i = 0; i < 3; i++) {
-      const r = levelCardRect(i);
+      const r = levelNodeRect(i);
       expect(r.y + r.h).toBeLessThanOrEqual(1280);
       expect(r.x + r.w).toBeLessThanOrEqual(720);
     }
     expect(await unlocked(page, [1, 2, 3])).toEqual([true, false, false]);
     await shot(page, 'levelselect');
-    await tapRect(page, levelCardRect(2)); // level 3: locked
+    await tapRect(page, levelNodeRect(2)); // level 3: locked
     await page.waitForTimeout(150);
     expect(await screen(page)).toBe('levelSelect');
-    await tapRect(page, levelCardRect(1)); // level 2: locked
+    await tapRect(page, levelNodeRect(1)); // level 2: locked
     await page.waitForTimeout(150);
     expect(await screen(page)).toBe('levelSelect');
 
     // (c) tap level 1 → play screen, sim time advances, tutorial hint shown on a fresh save.
-    await tapRect(page, levelCardRect(0));
+    await tapRect(page, levelNodeRect(0));
     await expect.poll(() => screen(page)).toBe('play');
     expect(await levelId(page)).toBe(1);
     const t0 = await simTime(page);
@@ -206,11 +208,13 @@ test.describe('Tower Clash smoke', () => {
     await page.keyboard.press('Escape');
     await expect.poll(() => screen(page)).toBe('levelSelect');
     expect(await unlocked(page, [1, 2, 3])).toEqual([true, true, false]);
+    // the map opens on the current level (2); pin the scroll so the mirrored node rects apply
+    await page.evaluate(() => window.__towerclash.setLevelSelectScroll(0));
     await shot(page, 'levelselect-unlocked');
-    await tapRect(page, levelCardRect(2));
+    await tapRect(page, levelNodeRect(2));
     await page.waitForTimeout(150);
     expect(await screen(page)).toBe('levelSelect');
-    await tapRect(page, levelCardRect(1));
+    await tapRect(page, levelNodeRect(1));
     await expect.poll(() => screen(page)).toBe('play');
     expect(await levelId(page)).toBe(2);
 
