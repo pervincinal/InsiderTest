@@ -1,10 +1,14 @@
 /**
- * Persistence (GDD §4). Schema v2 adds `settings.reducedMotion`; v1 saves (key `towerclash.save.v1`)
- * are read once, migrated and written back under the v2 key so older installs keep their progress.
+ * Persistence (GDD §4). Schema v3 (ECONOMY.md §8, Phase A) adds the economy: `gold` (the v2
+ * `coins`), `crystals`, entitlements, commander upgrades, skins, booster charges, the daily streak,
+ * ad counters and the list of granted store transactions. v1 (`towerclash.save.v1`) and v2
+ * (`towerclash.save.v2`) saves are read once, migrated and written back under the v3 key; the old
+ * entries are left in place so a downgrade still finds them.
  */
-export const SAVE_KEY = 'towerclash.save.v2';
+export const SAVE_KEY = 'towerclash.save.v3';
+export const SAVE_KEY_V2 = 'towerclash.save.v2';
 export const SAVE_KEY_V1 = 'towerclash.save.v1';
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 /** Reduced-motion preference: `auto` follows the OS (`prefers-reduced-motion`), `on`/`off` override it. */
 export type MotionPref = 'auto' | 'on' | 'off';
@@ -16,10 +20,65 @@ export interface Settings {
   reducedMotion: MotionPref;
 }
 
+/** One-time purchases the player owns (ECONOMY.md §4). */
+export interface Entitlements {
+  /** `remove_ads` or `premium_bundle`: no interstitials. */
+  noAds: boolean;
+  /** `premium_bundle` or `premium_upgrade`: exclusive skins + −10 % booster gold price. */
+  premium: boolean;
+  starterPack: boolean;
+}
+
+export interface SkinState {
+  /** Catalog skin ids (`SKINS[].id`). */
+  owned: string[];
+  /** Equipped catalog skin id per family, or null for the default look. */
+  equipped: { roof: string | null; helmet: string | null };
+}
+
+export interface DailyState {
+  /** Local calendar day (`YYYY-MM-DD`) of the last streak claim, or null. */
+  lastClaimDay: string | null;
+  /** 1..7 day reached by the last claim (0 before the first claim). */
+  streak: number;
+}
+
+export interface AdCounters {
+  /** Calendar day the rewarded counters belong to; a new day resets them. */
+  day: string;
+  /** Rewarded videos watched today per placement id. */
+  rewardedByPlacement: Record<string, number>;
+  /** Results seen (won or lost) — the interstitial gate (INTERSTITIAL_RULES.minLevelsCompleted). */
+  levelsCompleted: number;
+}
+
+/** Pre-paid booster uses, consumed before gold (ECONOMY.md §3.1). */
+export type BoosterCharges = { overdrive: number; freeze: number; airstrike: number };
+
 export interface SaveData {
   version: number;
   stars: Record<string, number>; // levelId → 0..3
-  coins: number;
+  /** Soft currency (v2 `coins`). */
+  gold: number;
+  /** Hard currency. */
+  crystals: number;
+  entitlements: Entitlements;
+  /** Commander upgrade tier per track id (0..5). */
+  upgrades: Record<string, number>;
+  skins: SkinState;
+  charges: BoosterCharges;
+  daily: DailyState;
+  adCounters: AdCounters;
+  /** Store transaction ids (and `owned:<productId>` markers) already granted — never grant twice. */
+  purchases: string[];
+  /** Crystal milestones already paid (`levels_10`, `band_0` …). */
+  milestones: string[];
+  /** Replay "drill pay" earned today (daily cap). */
+  replayGold: { day: string; earned: number };
+  /** Consecutive defeats per level id (reset by a win); unlocks the level-skip offer. */
+  defeats: Record<string, number>;
+  /** Band indices (0..4) where the level skip was already used. */
+  skips: number[];
   settings: Settings;
 }
 
@@ -27,7 +86,19 @@ export function defaultSave(): SaveData {
   return {
     version: SAVE_VERSION,
     stars: {},
-    coins: 0,
+    gold: 0,
+    crystals: 0,
+    entitlements: { noAds: false, premium: false, starterPack: false },
+    upgrades: {},
+    skins: { owned: [], equipped: { roof: null, helmet: null } },
+    charges: { overdrive: 0, freeze: 0, airstrike: 0 },
+    daily: { lastClaimDay: null, streak: 0 },
+    adCounters: { day: '', rewardedByPlacement: {}, levelsCompleted: 0 },
+    purchases: [],
+    milestones: [],
+    replayGold: { day: '', earned: 0 },
+    defeats: {},
+    skips: [],
     settings: { sendRatio: 1, colorBlind: false, sound: true, reducedMotion: 'auto' },
   };
 }
@@ -36,19 +107,70 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null;
 }
 
+function nonNegInt(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) ? Math.max(0, Math.floor(v)) : null;
+}
+
+function stringList(v: unknown): string[] {
+  return Array.isArray(v) ? [...new Set(v.filter((x): x is string => typeof x === 'string'))] : [];
+}
+
+function countMap(v: unknown, max = Infinity): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (!isRecord(v)) return out;
+  for (const [k, raw] of Object.entries(v)) {
+    const n = nonNegInt(raw);
+    if (n !== null) out[k] = Math.min(max, n);
+  }
+  return out;
+}
+
+function dayString(v: unknown): string {
+  return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : '';
+}
+
 /**
- * Parse untrusted JSON (any schema version) into a well-formed v2 SaveData, filling gaps with
- * defaults. v1 had no `version` and no `reducedMotion`; both simply take the defaults.
+ * Parse untrusted JSON (any schema version) into a well-formed v3 SaveData, filling gaps with
+ * defaults. v1 had no `version` and no `reducedMotion`; v2 stored gold as `coins`; every economy
+ * field simply takes its default when missing.
  */
 export function normalizeSave(raw: unknown): SaveData {
   const out = defaultSave();
   if (!isRecord(raw)) return out;
-  if (isRecord(raw.stars)) {
-    for (const [k, v] of Object.entries(raw.stars)) {
-      if (typeof v === 'number' && Number.isFinite(v)) out.stars[k] = Math.max(0, Math.min(3, Math.floor(v)));
+  out.stars = countMap(raw.stars, 3);
+  out.gold = nonNegInt(raw.gold) ?? nonNegInt(raw.coins) ?? 0;
+  out.crystals = nonNegInt(raw.crystals) ?? 0;
+  if (isRecord(raw.entitlements)) {
+    const e = raw.entitlements;
+    out.entitlements = { noAds: e.noAds === true, premium: e.premium === true, starterPack: e.starterPack === true };
+  }
+  out.upgrades = countMap(raw.upgrades, 5);
+  if (isRecord(raw.skins)) {
+    out.skins.owned = stringList(raw.skins.owned);
+    if (isRecord(raw.skins.equipped)) {
+      const eq = raw.skins.equipped;
+      out.skins.equipped.roof = typeof eq.roof === 'string' && out.skins.owned.includes(eq.roof) ? eq.roof : null;
+      out.skins.equipped.helmet = typeof eq.helmet === 'string' && out.skins.owned.includes(eq.helmet) ? eq.helmet : null;
     }
   }
-  if (typeof raw.coins === 'number' && Number.isFinite(raw.coins)) out.coins = Math.max(0, Math.floor(raw.coins));
+  if (isRecord(raw.charges)) {
+    const c = raw.charges;
+    out.charges = { overdrive: nonNegInt(c.overdrive) ?? 0, freeze: nonNegInt(c.freeze) ?? 0, airstrike: nonNegInt(c.airstrike) ?? 0 };
+  }
+  if (isRecord(raw.daily)) {
+    const d = raw.daily;
+    const day = dayString(d.lastClaimDay);
+    out.daily = { lastClaimDay: day || null, streak: Math.min(7, nonNegInt(d.streak) ?? 0) };
+  }
+  if (isRecord(raw.adCounters)) {
+    const a = raw.adCounters;
+    out.adCounters = { day: dayString(a.day), rewardedByPlacement: countMap(a.rewardedByPlacement), levelsCompleted: nonNegInt(a.levelsCompleted) ?? 0 };
+  }
+  out.purchases = stringList(raw.purchases);
+  out.milestones = stringList(raw.milestones);
+  if (isRecord(raw.replayGold)) out.replayGold = { day: dayString(raw.replayGold.day), earned: nonNegInt(raw.replayGold.earned) ?? 0 };
+  out.defeats = countMap(raw.defeats);
+  out.skips = Array.isArray(raw.skips) ? [...new Set(raw.skips.map(nonNegInt).filter((n): n is number => n !== null))] : [];
   if (isRecord(raw.settings)) {
     const s = raw.settings;
     if (s.sendRatio === 0.5 || s.sendRatio === 1) out.settings.sendRatio = s.sendRatio;
@@ -74,18 +196,26 @@ function storage(): SaveStorage | null {
   }
 }
 
+/** The storage every `writeSave` goes to (tests inject a memory store). */
+let activeStorage: SaveStorage | null | undefined;
+
+/** Test hook: route `writeSave` to a memory store (`null` = no persistence, `undefined` = localStorage). */
+export function setSaveStorageForTests(store: SaveStorage | null | undefined): void {
+  activeStorage = store;
+}
+
 /**
- * Load the v2 save, or migrate a v1 save (written back under the v2 key; the v1 entry is left
- * untouched so a downgrade still finds it). Corrupt JSON falls back to a fresh save.
+ * Load the v3 save, or migrate a v2 / v1 save (written back under the v3 key; the older entry is
+ * left untouched so a downgrade still finds it). Corrupt JSON falls back to a fresh save.
  */
 export function loadSaveFrom(store: SaveStorage | null): SaveData {
   if (!store) return defaultSave();
   try {
-    const v2 = store.getItem(SAVE_KEY);
-    if (v2) return normalizeSave(JSON.parse(v2));
-    const v1 = store.getItem(SAVE_KEY_V1);
-    if (!v1) return defaultSave();
-    const migrated = normalizeSave(JSON.parse(v1));
+    const v3 = store.getItem(SAVE_KEY);
+    if (v3) return normalizeSave(JSON.parse(v3));
+    const older = store.getItem(SAVE_KEY_V2) ?? store.getItem(SAVE_KEY_V1);
+    if (!older) return defaultSave();
+    const migrated = normalizeSave(JSON.parse(older));
     try {
       store.setItem(SAVE_KEY, JSON.stringify(migrated));
     } catch {
@@ -98,29 +228,39 @@ export function loadSaveFrom(store: SaveStorage | null): SaveData {
 }
 
 export function loadSave(): SaveData {
-  return loadSaveFrom(storage());
+  return loadSaveFrom(activeStorage === undefined ? storage() : activeStorage);
 }
 
 export function writeSave(data: SaveData): void {
   try {
     data.version = SAVE_VERSION;
-    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+    const store = activeStorage === undefined ? storage() : activeStorage;
+    store?.setItem(SAVE_KEY, JSON.stringify(data));
   } catch {
     /* private mode / quota: play on without persistence */
   }
 }
 
-/** Wipe stars and coins (settings survive) and persist. */
+/** Wipe progress and the economy (settings and purchases survive) and persist. */
 export function resetProgress(data: SaveData): void {
-  data.stars = {};
-  data.coins = 0;
+  const fresh = defaultSave();
+  fresh.settings = data.settings;
+  fresh.purchases = data.purchases;
+  fresh.entitlements = data.entitlements;
+  // pack-exclusive skins come from store purchases (not progress) and stay owned; crystal skins are wiped
+  fresh.skins.owned = data.skins.owned.filter(isExclusiveSkin);
+  Object.assign(data, fresh);
   writeSave(data);
 }
 
-/** Spend coins on a booster. Returns false (and changes nothing) when unaffordable. */
+function isExclusiveSkin(id: string): boolean {
+  return id === 'roof_gold' || id === 'helmet_royal' || id === 'helmet_bronze';
+}
+
+/** Spend gold on a booster. Returns false (and changes nothing) when unaffordable. */
 export function spendCoins(data: SaveData, amount: number): boolean {
-  if (amount < 0 || data.coins < amount) return false;
-  data.coins -= amount;
+  if (amount < 0 || data.gold < amount) return false;
+  data.gold -= amount;
   writeSave(data);
   return true;
 }
@@ -132,14 +272,14 @@ export function starsFor(level: { star3: number; star2: number }, timeMs: number
   return 1;
 }
 
-/** Record a win. Returns coins earned (10 per *new* star, first-clear semantics per star). */
+/** Record a win. Returns gold earned (10 per *new* star, first-clear semantics per star). */
 export function recordWin(data: SaveData, levelId: number, stars: number, coinsPerStar: number): number {
   const key = String(levelId);
   const before = data.stars[key] ?? 0;
   const after = Math.max(before, stars);
   const earned = Math.max(0, after - before) * coinsPerStar;
   data.stars[key] = after;
-  data.coins += earned;
+  data.gold += earned;
   writeSave(data);
   return earned;
 }

@@ -1,6 +1,6 @@
 # Tower Clash
 
-**Capture every tower.** A one-thumb, capture-the-towers real-time strategy game for phones and browsers. Tap one of your towers, tap a target, and your soldiers march; when an enemy garrison hits zero the tower is yours. 40 hand-made levels, fortresses, artillery, tanks, mines, barriers, bridges you can cut, up to three enemies at once, three-star timers — fully offline, no ads, no purchases, no account.
+**Capture every tower.** A one-thumb, capture-the-towers real-time strategy game for phones and browsers. Tap one of your towers, tap a target, and your soldiers march; when an enemy garrison hits zero the tower is yours. 40 hand-made levels, fortresses, artillery, tanks, mines, barriers, bridges you can cut, up to three enemies at once, three-star timers — plays offline, no account. The web version has no ads and no purchases; the Google Play / App Store apps (in preparation) will offer optional in-app purchases and ads that a one-time purchase removes — see [`../docs/publishing/PRIVACY_POLICY.md`](../docs/publishing/PRIVACY_POLICY.md).
 
 Play in the browser: **https://pervincinal.github.io/InsiderTest/** (active once GitHub Pages is enabled in repo settings — see [`../docs/DEPLOY.md`](../docs/DEPLOY.md))
 
@@ -68,7 +68,7 @@ License: All rights reserved (placeholder).
 
 # Tower Clash (Azərbaycanca)
 
-**Bütün qüllələri tut.** Telefon və brauzer üçün bir barmaqla oynanan qüllə tutma real vaxt strategiya oyunu. Öz qüllənə toxun, hədəfə toxun — əsgərlərin yola düşür; düşmən qarnizonu sıfıra düşəndə qüllə sənindir. 40 əl ilə hazırlanmış səviyyə, qalalar, toplar, tanklar, minalar, sədlər, kəsilə bilən körpülər, eyni anda üçə qədər rəqib, üç ulduzlu vaxt limiti — tam oflayn, reklamsız, alışsız, hesabsız.
+**Bütün qüllələri tut.** Telefon və brauzer üçün bir barmaqla oynanan qüllə tutma real vaxt strategiya oyunu. Öz qüllənə toxun, hədəfə toxun — əsgərlərin yola düşür; düşmən qarnizonu sıfıra düşəndə qüllə sənindir. 40 əl ilə hazırlanmış səviyyə, qalalar, toplar, tanklar, minalar, sədlər, kəsilə bilən körpülər, eyni anda üçə qədər rəqib, üç ulduzlu vaxt limiti — oflayn oynanır, hesabsız. Veb versiyada reklam və alış yoxdur; hazırlanan Google Play / App Store tətbiqlərində könüllü tətbiqdaxili alışlar və bir alışla silinən reklamlar olacaq — bax [`../docs/publishing/PRIVACY_POLICY.md`](../docs/publishing/PRIVACY_POLICY.md).
 
 Brauzerdə oyna: **https://pervincinal.github.io/InsiderTest/** (repo parametrlərində GitHub Pages aktivləşdirilən kimi işləyir — bax [`../docs/DEPLOY.md`](../docs/DEPLOY.md))
 

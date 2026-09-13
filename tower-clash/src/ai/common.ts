@@ -3,8 +3,15 @@
  * tower owners/garrisons/levels, roads (cut, barrier, mine), and units walking the roads.
  * Nothing mutates state.
  */
-import type { Command, EnemyDef, GameState, Owner, Road, Tower } from '../sim/index';
-import { C, Rng, capacityOf } from '../sim/index';
+import type { Command, EnemyDef, GameState, Owner, Road, Tower, UnitKind } from '../sim/index';
+import { C, Rng, capacityOf, modifiersFor } from '../sim/index';
+
+/**
+ * A snapshot the AI reasons about: the towers/roads/units it can see plus the player's permanent
+ * modifiers. `state.modifiers` is public information (the player bought them), so both sides may
+ * read it: the enemy planners estimate a boosted player, the reference player its own boosted towers.
+ */
+export type Visible = Pick<GameState, 'modifiers'>;
 
 /** A tower reachable from a source tower over one uncut road. */
 export interface Neighbour {
@@ -14,8 +21,21 @@ export interface Neighbour {
   roadCost: number;
   /** Weight of hostile units currently walking this road toward the source tower (they clash 1:1 with anything sent). */
   oncoming: number;
-  /** Infantry travel time along the road, ms. */
+  /** Infantry travel time along the road for a column the *source's* owner sends, ms (its march bonus applied). */
   travelMs: number;
+  /** Infantry travel time for a column the *neighbour's* owner sends back to the source, ms. */
+  theirTravelMs: number;
+}
+
+/** Speed of a freshly spawned unit of `kind` owned by `owner`, px/s — exactly what the sim gives it. */
+export function unitSpeedFor(state: Visible, owner: Owner, kind: UnitKind): number {
+  const base = kind === 'tank' ? C.UNIT_SPEED * C.TANK_SPEED_MUL : C.UNIT_SPEED;
+  return base * modifiersFor(owner, state).unitSpeedMul;
+}
+
+/** Time for a unit of `kind` owned by `owner` to walk the whole road, ms. */
+export function travelMsFor(state: Visible, road: Road, owner: Owner, kind: UnitKind = 'infantry'): number {
+  return (road.length * 1000) / unitSpeedFor(state, owner, kind);
 }
 
 export function isEnemyOwner(owner: Owner): boolean {
@@ -53,7 +73,8 @@ export function neighbours(state: GameState, towerId: string): Neighbour[] {
       road,
       roadCost: road.barrier + road.mine,
       oncoming,
-      travelMs: (road.length / C.UNIT_SPEED) * 1000,
+      travelMs: travelMsFor(state, road, source.owner),
+      theirTravelMs: travelMsFor(state, road, tower.owner),
     });
   }
   return out;
@@ -126,27 +147,34 @@ export function weightToCapture(tower: Tower): number {
   return effectiveDefenders(tower) + defenceMultiplier(tower);
 }
 
-/** Production of the tower in weight per second (0 for neutral). */
-export function genPerSecond(tower: Tower): number {
+/**
+ * Production of the tower in weight per second (0 for neutral), by its *current* owner: a player tower
+ * includes the player's production bonus, so does an enemy tower once the player has captured it.
+ */
+export function genPerSecond(tower: Tower, state: Visible): number {
   if (tower.owner === 'neutral') return 0;
+  let base: number;
   switch (tower.kind) {
     case 'tankFactory':
-      return (C.TANK_WEIGHT * 1000) / C.TANK_GEN_MS;
+      base = (C.TANK_WEIGHT * 1000) / C.TANK_GEN_MS;
+      break;
     case 'artillery':
-      return 1000 / (C.GEN_MS[tower.level] * C.ARTILLERY_GEN_MUL);
+      base = 1000 / (C.GEN_MS[tower.level] * C.ARTILLERY_GEN_MUL);
+      break;
     default:
-      return 1000 / C.GEN_MS[tower.level];
+      base = 1000 / C.GEN_MS[tower.level];
   }
+  return base * modifiersFor(tower.owner, state).productionMul;
 }
 
-/** Garrison the tower will have after `afterMs` of generation (capped), as raw units. */
-export function projectedUnits(tower: Tower, afterMs: number): number {
-  return Math.min(capacityOf(tower), tower.units + Math.floor((genPerSecond(tower) * afterMs) / 1000));
+/** Garrison the tower will have after `afterMs` of generation (capped at its owner's capacity), as raw units. */
+export function projectedUnits(tower: Tower, afterMs: number, state: Visible): number {
+  return Math.min(capacityOf(tower, state), tower.units + Math.floor((genPerSecond(tower, state) * afterMs) / 1000));
 }
 
 /** Projected garrison in attacker weight (fortress-aware). */
-export function projectedDefenders(tower: Tower, afterMs: number): number {
-  return projectedUnits(tower, afterMs) * defenceMultiplier(tower);
+export function projectedDefenders(tower: Tower, afterMs: number, state: Visible): number {
+  return projectedUnits(tower, afterMs, state) * defenceMultiplier(tower);
 }
 
 /** Highest level this tower can reach. */

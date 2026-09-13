@@ -20,12 +20,32 @@ import {
   drawStars,
   drawToggle,
   font,
+  roundRect,
   withShadow,
 } from './widgets';
-import { LEVEL_MAP, SETTINGS, levelNodeCentre, levelNodeRect } from './layout';
+import type { ShopTab } from './layout';
+import { LEVEL_MAP, SETTINGS, SHOP, SHOP_TABS, levelNodeCentre, levelNodeRect, shopBuyRect, shopRowBuyRect } from './layout';
 import type { TerrainSpec } from './terrain';
 import { drawTerrain } from './terrain';
-import { badgeY, drawBadge, drawTowerShadow, drawTowerSprite, drawUnitSprite } from './sprites';
+import type { UpgradeKind } from './sprites';
+import type { ToastOpts } from './economyWidgets';
+import { drawSpinner, drawToast, drawWallet, formatAmount } from './economyWidgets';
+import {
+  badgeY,
+  drawBadge,
+  drawCrownBadge,
+  drawCrystal,
+  drawCrystalCluster,
+  drawGoldCoin,
+  drawNoAdsBadge,
+  drawSkinPreview,
+  drawTowerShadow,
+  drawTowerSprite,
+  drawTreasureChest,
+  drawUnitSprite,
+  drawUpgradeGlyph,
+  drawVideoGlyph,
+} from './sprites';
 import { roadPoseAt } from './draw';
 import { prefersReducedMotion } from './particles';
 import { reducedMotionOverride } from '../ui/motion';
@@ -151,16 +171,33 @@ function paletteGlyph(ctx: CanvasRenderingContext2D, pal: Palette, cx: number, c
 
 /* ---------- Title ---------- */
 
+export interface DailyChestOpts {
+  /** Streak reward not yet claimed today. */
+  claimable: boolean;
+  /** Day 1..7 of the reward on offer (or claimed today). */
+  day: number;
+  gold: number;
+  crystals: number;
+  /** Streak claimed; a rewarded video for the crystal chest is on offer instead. */
+  adChest: boolean;
+}
+
 export interface TitleOpts {
   playRect: Rect;
   settingsRect: Rect;
   soundRect: Rect;
+  shopRect: Rect;
+  dailyRect: Rect;
+  walletRect: Rect;
   soundOn: boolean;
   totalStars: number;
-  coins: number;
+  gold: number;
+  crystals: number;
+  daily: DailyChestOpts;
   nowMs: number;
   /** Rect currently held down (pressed look), if any. */
   pressed?: Rect | null;
+  toast?: ToastOpts | null;
 }
 
 export function drawTitle(view: View, pal: Palette, o: TitleOpts): void {
@@ -212,19 +249,54 @@ export function drawTitle(view: View, pal: Palette, o: TitleOpts): void {
   ctx.font = font(19);
   ctx.fillText(o.soundOn ? 'Sound on' : 'Sound off', o.soundRect.x + 68, o.soundRect.y + o.soundRect.h / 2 - 1, o.soundRect.w - 78);
 
-  // progress footer
-  ctx.textAlign = 'center';
-  ctx.font = font(21);
-  const label = `${o.totalStars}   ·   ${o.coins}`;
-  const w = ctx.measureText(label).width + 110;
-  const foot: Rect = { x: 360 - w / 2, y: 1176, w, h: 48 };
-  drawPill(ctx, foot, pal.paper);
+  // shop: crystal glyph + label
+  drawButton(ctx, pal, o.shopRect, '', { pressed: o.pressed === o.shopRect });
+  drawCrystal(ctx, pal, o.shopRect.x + 40, o.shopRect.y + o.shopRect.h / 2 - 1, 15);
   ctx.fillStyle = pal.ink;
-  ctx.fillText(label, 360 + 8, foot.y + foot.h / 2 + 1);
-  const starX = 360 + 8 - ctx.measureText(label).width / 2 - 20;
-  drawStars(ctx, pal, starX, foot.y + foot.h / 2, 1, 11, [1, 0, 0]);
-  drawCoin(ctx, pal, 360 + 8 + ctx.measureText(label).width / 2 + 22, foot.y + foot.h / 2, 12);
+  ctx.font = font(24);
+  ctx.textAlign = 'center';
+  ctx.fillText('SHOP', o.shopRect.x + o.shopRect.w / 2 + 12, o.shopRect.y + o.shopRect.h / 2 - 1);
+
+  // daily reward chest (top-right): open + pulsing when claimable, closed once claimed
+  drawDailyChest(ctx, pal, o.dailyRect, o.daily, o.nowMs, o.pressed === o.dailyRect);
+
+  // wallet footer: stars · gold · crystals (tap → shop)
+  drawWallet(ctx, pal, o.walletRect, o.gold, o.crystals, { stars: o.totalStars, pressed: o.pressed === o.walletRect });
+  if (o.toast) drawToast(ctx, pal, o.toast);
   ctx.restore();
+}
+
+/** Treasure chest button with a "DAY n" tag and the reward on offer underneath. */
+function drawDailyChest(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, d: DailyChestOpts, nowMs: number, pressed: boolean): void {
+  const anim = motion();
+  const hot = d.claimable || d.adChest;
+  const bob = hot && anim ? Math.sin(nowMs / 320) * 3 : 0;
+  const cx = r.x + r.w / 2;
+  if (hot) {
+    // gold pulse halo behind the chest
+    const pulse = anim ? (Math.sin(nowMs / 300) + 1) / 2 : 0.5;
+    ctx.save();
+    ctx.globalAlpha = 0.25 + 0.2 * pulse;
+    ctx.fillStyle = pal.gold;
+    ctx.beginPath();
+    ctx.arc(cx, r.y + 58, 46 + pulse * 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.save();
+  if (pressed) ctx.translate(0, 3);
+  drawTreasureChest(ctx, pal, cx, r.y + 58 + bob, 84, d.claimable);
+  if (d.adChest) drawVideoGlyph(ctx, pal, cx + 30, r.y + 26 + bob, 14);
+  ctx.restore();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const tag: Rect = { x: r.x + 14, y: r.y + r.h - 34, w: r.w - 28, h: 30 };
+  drawPill(ctx, tag, hot ? pal.gold : pal.paper, hot ? pal.goldShade : undefined, 2);
+  ctx.fillStyle = pal.ink;
+  ctx.font = font(15);
+  const label = d.adChest ? `+${d.crystals}` : d.claimable ? `DAY ${d.day}` : 'DONE';
+  ctx.fillText(label, tag.x + tag.w / 2 + (d.adChest ? 8 : 0), tag.y + tag.h / 2 + 1, tag.w - 8);
+  if (d.adChest) drawCrystal(ctx, pal, tag.x + tag.w / 2 - 18, tag.y + tag.h / 2, 8);
 }
 
 /* ---------- Level select: winding path map ---------- */
@@ -242,7 +314,12 @@ export interface LevelSelectOpts {
   current: number;
   scroll: number;
   backRect: Rect;
-  coins: number;
+  walletRect: Rect;
+  commanderRect: Rect;
+  gold: number;
+  crystals: number;
+  /** One-line commander summary, or null when no upgrade is owned. */
+  commander: string | null;
   nowMs: number;
   pressed?: Rect | null;
 }
@@ -507,20 +584,23 @@ export function drawLevelSelect(view: View, pal: Palette, o: LevelSelectOpts): v
   });
   ctx.restore();
 
-  // fixed header: glass band, back, title, coins
+  // fixed header: glass band, back, title, wallet
   drawGlassBand(ctx, { x: 0, y: 0, w: C.MAP_W, h: LEVEL_MAP.headerH });
   drawButton(ctx, pal, o.backRect, 'BACK', { fontPx: 24, pressed: o.pressed === o.backRect });
-  drawExtrudedText(ctx, 'LEVELS', 360, 50, 40, { face: pal.paper, side: shade(pal.owners.player, -0.25), outline: pal.ink, depth: 4 });
-  ctx.font = font(26);
-  const coins = String(o.coins);
-  const w = ctx.measureText(coins).width + 72;
-  const pill: Rect = { x: 702 - w, y: 26, w, h: 48 };
-  drawPill(ctx, pill, pal.paper);
-  ctx.textAlign = 'right';
+  drawExtrudedText(ctx, 'LEVELS', 290, 50, 40, { face: pal.paper, side: shade(pal.owners.player, -0.25), outline: pal.ink, depth: 4 });
+  drawWallet(ctx, pal, o.walletRect, o.gold, o.crystals, { pressed: o.pressed === o.walletRect });
+  // commander summary chip (tap → upgrades)
+  const cr = o.commanderRect;
+  drawButton(ctx, pal, cr, '', { fontPx: 18, pressed: o.pressed === cr, flat: true });
+  drawUpgradeGlyph(ctx, pal, cr.x + 30, cr.y + (cr.h - 4) / 2, 17, 'production');
+  ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = pal.ink;
-  ctx.fillText(coins, 686, pill.y + pill.h / 2 + 1);
-  drawCoin(ctx, pal, pill.x + 26, pill.y + pill.h / 2, 14);
+  ctx.font = font(18);
+  ctx.fillText('COMMANDER', cr.x + 58, cr.y + (cr.h - 4) / 2 + 1);
+  ctx.fillStyle = o.commander ? pal.ink : pal.textDim;
+  ctx.font = font(17, '500');
+  ctx.fillText(o.commander ?? 'No upgrades yet · tap to train', cr.x + 190, cr.y + (cr.h - 4) / 2 + 1, cr.w - 204);
   ctx.restore();
 }
 
@@ -614,5 +694,326 @@ export function drawSettings(view: View, pal: Palette, o: SettingsOpts): void {
     drawButton(ctx, pal, c.yes, 'RESET', { fill: pal.owners.enemy1, fontPx: 26, pressed: o.pressed === c.yes });
     drawButton(ctx, pal, c.no, 'CANCEL', { fontPx: 26, pressed: o.pressed === c.no });
   }
+  ctx.restore();
+}
+
+/* ---------- Shop (ECONOMY.md §4, Phase A) ---------- */
+
+export interface ShopPackCard {
+  id: string;
+  rect: Rect;
+  crystals: number;
+  bonusPct: number;
+  price: string;
+  /** Cluster size 1..5. */
+  count: number;
+}
+
+export interface ShopBundleCard {
+  id: string;
+  rect: Rect;
+  title: string;
+  lines: string[];
+  price: string;
+  owned: boolean;
+  glyph: 'chest' | 'noads' | 'crown';
+}
+
+export interface ShopSkinCard {
+  id: string;
+  rect: Rect;
+  label: string;
+  /** Sprite skin id for `drawSkinPreview`. */
+  spriteId: string;
+  /** 0 = pack exclusive. */
+  cost: number;
+  owned: boolean;
+  equipped: boolean;
+  /** Exclusive to a pack the player does not own. */
+  locked: boolean;
+}
+
+export interface ShopUpgradeCard {
+  id: string;
+  rect: Rect;
+  label: string;
+  glyph: UpgradeKind;
+  tier: number;
+  maxTier: number;
+  /** Gold for the next tier, null when maxed. */
+  cost: number | null;
+  effectNow: string;
+  effectNext: string;
+  affordable: boolean;
+}
+
+export interface ShopOpts {
+  tab: ShopTab;
+  tabsRect: Rect;
+  backRect: Rect;
+  walletRect: Rect;
+  scroll: number;
+  gold: number;
+  crystals: number;
+  packs: ShopPackCard[];
+  bundles: ShopBundleCard[];
+  skinHeaders: { label: string; y: number }[];
+  skins: ShopSkinCard[];
+  upgrades: ShopUpgradeCard[];
+  /** Restore-purchases button (content space), on the store tabs. */
+  restoreRect: Rect | null;
+  storeAvailable: boolean;
+  /** Card / button id with the spinner (purchase in flight). */
+  pending: string | null;
+  /** Rect (content space) held down. */
+  pressed: Rect | null;
+  nowMs: number;
+  toast?: ToastOpts | null;
+  /** Painted after the content in logical space (coin / crystal bursts). */
+  particles?: { draw(ctx: CanvasRenderingContext2D, nowMs: number): void };
+}
+
+const TAB_LABELS: Record<ShopTab, string> = { crystals: 'CRYSTALS', bundles: 'BUNDLES', skins: 'SKINS', upgrades: 'UPGRADES' };
+
+/** Price / action button: label with an optional currency glyph; spinner when pending. */
+function drawBuyButton(
+  ctx: CanvasRenderingContext2D,
+  pal: Palette,
+  r: Rect,
+  label: string,
+  o: { glyph?: 'gold' | 'crystal'; fill?: string; disabled?: boolean; pressed?: boolean; pending?: boolean; fontPx?: number; nowMs?: number },
+): void {
+  drawButton(ctx, pal, r, '', { fill: o.fill, disabled: o.disabled, pressed: o.pressed, fontPx: o.fontPx, flat: true });
+  const cy = r.y + (r.h - 4) / 2 + (o.pressed ? 3 : 0);
+  const onColour = o.fill !== undefined && !o.disabled;
+  const text = o.disabled ? pal.textDim : onColour ? pal.paper : pal.ink;
+  if (o.pending) {
+    drawSpinner(ctx, text, r.x + r.w / 2, cy, Math.min(12, r.h * 0.25), o.nowMs ?? 0);
+    return;
+  }
+  ctx.font = font(o.fontPx ?? 22);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const tw = ctx.measureText(label).width;
+  const glyphR = o.glyph ? Math.min(11, r.h * 0.2) : 0;
+  const total = tw + (o.glyph ? glyphR * 2 + 8 : 0);
+  const x0 = r.x + r.w / 2 - total / 2;
+  if (o.glyph === 'gold') drawGoldCoin(ctx, pal, x0 + glyphR, cy, glyphR);
+  else if (o.glyph === 'crystal') drawCrystal(ctx, pal, x0 + glyphR, cy, glyphR * 1.05);
+  ctx.fillStyle = text;
+  ctx.font = font(o.fontPx ?? 22);
+  ctx.textAlign = 'left';
+  ctx.fillText(label, x0 + (o.glyph ? glyphR * 2 + 8 : 0), cy + 1, r.w - 16);
+}
+
+function drawPackCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopPackCard, o: ShopOpts): void {
+  const r = c.rect;
+  drawCard(ctx, pal, r, { radius: 22, edge: 5 });
+  drawCrystalCluster(ctx, pal, r.x + r.w / 2, r.y + 78, 96, c.count);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = pal.ink;
+  ctx.font = font(34);
+  ctx.fillText(formatAmount(c.crystals), r.x + r.w / 2 + 10, r.y + 154);
+  drawCrystal(ctx, pal, r.x + r.w / 2 - ctx.measureText(formatAmount(c.crystals)).width / 2 - 10, r.y + 154, 13);
+  if (c.bonusPct > 0) {
+    // bonus ribbon, top-right corner
+    const label = `+${Math.round(c.bonusPct * 100)}%`;
+    ctx.font = font(16);
+    const w = ctx.measureText(label).width + 22;
+    const tag: Rect = { x: r.x + r.w - w - 12, y: r.y + 12, w, h: 30 };
+    drawPill(ctx, tag, pal.owners.enemy2, shade(pal.owners.enemy2, -0.35), 2);
+    ctx.fillStyle = pal.paper;
+    ctx.fillText(label, tag.x + tag.w / 2, tag.y + tag.h / 2 + 1);
+  }
+  const buy = shopBuyRect(r);
+  drawBuyButton(ctx, pal, buy, c.price, {
+    fill: pal.owners.player,
+    disabled: !o.storeAvailable,
+    pressed: rectEq(o.pressed, buy) || rectEq(o.pressed, r),
+    pending: o.pending === c.id,
+    fontPx: 24,
+    nowMs: o.nowMs,
+  });
+}
+
+/** Pressed rects are rebuilt every frame by the shop screen, so compare by value. */
+function rectEq(a: Rect | null, b: Rect): boolean {
+  return a !== null && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
+}
+
+function bundleGlyph(ctx: CanvasRenderingContext2D, pal: Palette, kind: ShopBundleCard['glyph'], x: number, y: number): void {
+  if (kind === 'chest') drawTreasureChest(ctx, pal, x, y + 4, 92, true);
+  else if (kind === 'noads') drawNoAdsBadge(ctx, pal, x, y, 40);
+  else drawCrownBadge(ctx, pal, x, y, 40);
+}
+
+function drawBundleCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopBundleCard, o: ShopOpts): void {
+  const r = c.rect;
+  drawCard(ctx, pal, r, { radius: 22, edge: 5 });
+  bundleGlyph(ctx, pal, c.glyph, r.x + 70, r.y + r.h / 2 - 2);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = pal.ink;
+  ctx.font = font(26);
+  const textX = r.x + 136;
+  const textW = r.w - 136 - SHOP.buyW - 40;
+  ctx.fillText(c.title, textX, r.y + 40, textW);
+  ctx.fillStyle = pal.textDim;
+  ctx.font = font(17, '500');
+  c.lines.slice(0, 4).forEach((line, i) => ctx.fillText(line, textX, r.y + 72 + i * 24, textW));
+  const buy = shopRowBuyRect(r);
+  if (c.owned) {
+    drawBuyButton(ctx, pal, buy, 'OWNED', { fill: pal.owners.enemy2, fontPx: 22 });
+  } else {
+    drawBuyButton(ctx, pal, buy, c.price, {
+      fill: pal.owners.player,
+      disabled: !o.storeAvailable,
+      pressed: rectEq(o.pressed, buy) || rectEq(o.pressed, r),
+      pending: o.pending === c.id,
+      fontPx: 24,
+      nowMs: o.nowMs,
+    });
+  }
+}
+
+function drawSkinCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopSkinCard, o: ShopOpts): void {
+  const r = c.rect;
+  drawCard(ctx, pal, r, { radius: 20, edge: 5 });
+  if (c.equipped) {
+    ctx.save();
+    roundRect(ctx, { x: r.x + 3, y: r.y + 3, w: r.w - 6, h: r.h - 12 }, 18);
+    ctx.strokeStyle = pal.selection;
+    ctx.lineWidth = 5;
+    ctx.stroke();
+    ctx.restore();
+  }
+  ctx.save();
+  roundRect(ctx, { x: r.x + 4, y: r.y + 4, w: r.w - 8, h: r.h - 14 }, 18);
+  ctx.clip();
+  drawSkinPreview(ctx, pal, r.x + r.w / 2, r.y + 68, 110, c.spriteId);
+  ctx.restore();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = pal.ink;
+  ctx.font = font(19);
+  ctx.fillText(c.label, r.x + r.w / 2, r.y + 142, r.w - 20);
+  const buy = shopBuyRect(r, r.w - 36, 54);
+  const pressed = rectEq(o.pressed, buy) || rectEq(o.pressed, r);
+  if (c.equipped) drawBuyButton(ctx, pal, buy, 'EQUIPPED', { fill: pal.owners.enemy2, pressed, fontPx: 18 });
+  else if (c.owned) drawBuyButton(ctx, pal, buy, 'EQUIP', { pressed, fontPx: 20 });
+  else if (c.locked) {
+    drawBuyButton(ctx, pal, buy, 'PACK ONLY', { disabled: true, fontPx: 17 });
+  } else {
+    drawBuyButton(ctx, pal, buy, String(c.cost), { glyph: 'crystal', fill: pal.owners.player, disabled: o.crystals < c.cost, pressed, fontPx: 22 });
+  }
+}
+
+/** Five tier pips: filled up to `tier`. */
+function drawTierPips(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, tier: number, max: number): void {
+  for (let i = 0; i < max; i++) {
+    const px = x + i * 24;
+    const on = i < tier;
+    ctx.fillStyle = on ? shade(pal.gold, -0.35) : shade(pal.panelBorder, -0.1);
+    ctx.beginPath();
+    ctx.arc(px + 1, y + 2, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = on ? pal.gold : pal.paper;
+    ctx.beginPath();
+    ctx.arc(px, y, 8, 0, Math.PI * 2);
+    ctx.fill();
+    if (on) {
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.beginPath();
+      ctx.arc(px - 2.5, y - 2.5, 2.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+function drawUpgradeCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopUpgradeCard, o: ShopOpts): void {
+  const r = c.rect;
+  drawCard(ctx, pal, r, { radius: 22, edge: 5 });
+  drawUpgradeGlyph(ctx, pal, r.x + 66, r.y + r.h / 2 - 2, 42, c.glyph);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = pal.ink;
+  ctx.font = font(25);
+  const textX = r.x + 130;
+  const textW = r.w - 130 - SHOP.buyW - 36;
+  ctx.fillText(c.label, textX, r.y + 36, textW);
+  drawTierPips(ctx, pal, textX + 10, r.y + 70, c.tier, c.maxTier);
+  ctx.fillStyle = pal.textDim;
+  ctx.font = font(16, '500');
+  ctx.fillText(`Tier ${c.tier}/${c.maxTier}`, textX + c.maxTier * 24 + 8, r.y + 70, 90);
+  ctx.fillStyle = pal.ink;
+  ctx.font = font(18, '500');
+  ctx.fillText(c.tier > 0 ? `Now ${c.effectNow}` : 'Not trained yet', textX, r.y + 104, textW);
+  ctx.fillStyle = c.cost === null ? pal.textDim : shade(pal.owners.enemy2, -0.25);
+  ctx.font = font(17, '500');
+  ctx.fillText(c.cost === null ? 'Fully trained' : `Next ${c.effectNext}`, textX, r.y + 132, textW);
+  const buy = shopRowBuyRect(r);
+  const pressed = rectEq(o.pressed, buy) || rectEq(o.pressed, r);
+  if (c.cost === null) drawBuyButton(ctx, pal, buy, 'MAX', { fill: pal.owners.enemy2, fontPx: 22 });
+  else drawBuyButton(ctx, pal, buy, String(c.cost), { glyph: 'gold', fill: pal.owners.player, disabled: !c.affordable, pressed, fontPx: 24 });
+}
+
+export function drawShop(view: View, pal: Palette, o: ShopOpts): void {
+  const ctx = beginFrame(view, pal);
+  drawWater(ctx, pal, o.nowMs, o.scroll * 0.4);
+
+  // scrolled content, clipped under the tab row
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, SHOP.contentTop, C.MAP_W, SHOP.contentBottom - SHOP.contentTop);
+  ctx.clip();
+  ctx.translate(0, -o.scroll);
+  for (const c of o.packs) drawPackCard(ctx, pal, c, o);
+  for (const c of o.bundles) drawBundleCard(ctx, pal, c, o);
+  for (const h of o.skinHeaders) {
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.font = font(22);
+    const w = ctx.measureText(h.label).width + 40;
+    const pill: Rect = { x: SHOP.skin.x0, y: h.y, w, h: 36 };
+    drawPill(ctx, pill, pal.paper);
+    ctx.fillStyle = pal.ink;
+    ctx.fillText(h.label, pill.x + 20, pill.y + pill.h / 2 + 1);
+  }
+  for (const c of o.skins) drawSkinCard(ctx, pal, c, o);
+  for (const c of o.upgrades) drawUpgradeCard(ctx, pal, c, o);
+  if (o.restoreRect) {
+    const rr = o.restoreRect;
+    drawButton(ctx, pal, rr, o.pending === 'restore' ? '' : 'RESTORE PURCHASES', { fontPx: 20, flat: true, pressed: rectEq(o.pressed, rr), disabled: !o.storeAvailable });
+    if (o.pending === 'restore') drawSpinner(ctx, pal.ink, rr.x + rr.w / 2, rr.y + (rr.h - 4) / 2, 11, o.nowMs);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = pal.textDim;
+    ctx.font = font(15, '500');
+    ctx.fillText(
+      o.storeAvailable ? 'Test store: purchases are free and local to this device.' : 'Store unavailable on this platform.',
+      360,
+      rr.y + rr.h + 22,
+      640,
+    );
+  }
+  if (o.tab === 'upgrades') {
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = pal.textDim;
+    ctx.font = font(15, '500');
+    const last = o.upgrades[o.upgrades.length - 1];
+    if (last) ctx.fillText('Permanent bonuses for your towers and soldiers · paid with gold', 360, last.rect.y + last.rect.h + 26, 640);
+  }
+  o.particles?.draw(ctx, o.nowMs);
+  ctx.restore();
+
+  // fixed chrome: header + tabs
+  drawGlassBand(ctx, { x: 0, y: 0, w: C.MAP_W, h: SHOP.tabs.y + SHOP.tabs.h + 12 });
+  drawButton(ctx, pal, o.backRect, 'BACK', { fontPx: 24, pressed: o.pressed === o.backRect });
+  drawExtrudedText(ctx, 'SHOP', 280, 50, 40, { face: pal.paper, side: shade(pal.owners.player, -0.25), outline: pal.ink, depth: 4 });
+  drawWallet(ctx, pal, o.walletRect, o.gold, o.crystals);
+  drawSegmented(ctx, pal, o.tabsRect, SHOP_TABS.map((t) => ({ label: TAB_LABELS[t], value: t })), SHOP_TABS.indexOf(o.tab), 19);
+  if (o.toast) drawToast(ctx, pal, { ...o.toast, y: o.toast.y ?? 1210 });
   ctx.restore();
 }

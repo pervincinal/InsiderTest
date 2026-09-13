@@ -2,9 +2,11 @@ import type { GameState } from '../sim/types';
 import { C } from '../sim/constants';
 
 /*
- * Booster bar model (M3-1, GDD §2.6). Pure helpers over the sim state and the coin balance; the
- * HUD draws from `BoosterStatus`, the play screen decides with `canUseBooster`. Boosters are bought
- * per use with save coins; at most one of each timed type may be active at a time.
+ * Booster bar model (M3-1, GDD §2.6; ECONOMY.md §3.1). Pure helpers over the sim state and the
+ * wallet; the HUD draws from `BoosterStatus`, the play screen decides with `canUseBooster`.
+ * Boosters are bought per use with gold (discounted by the commander track / premium) or paid with
+ * a pre-paid charge (crate, rewarded video) which is consumed first. At most one of each timed
+ * type may be active at a time.
  */
 
 export const BOOSTER_KINDS = ['overdrive', 'freeze', 'airstrike'] as const;
@@ -16,10 +18,25 @@ export const BOOSTER_INFO: Record<BoosterKind, { label: string; hint: string; du
   airstrike: { label: 'AIRSTRIKE', hint: `−${C.AIRSTRIKE_DAMAGE} units on one enemy tower`, durationMs: 0 },
 };
 
+/** What the player can pay with: gold balance, discounted prices, pre-paid charges, rewarded offer. */
+export interface BoosterWallet {
+  gold: number;
+  prices?: Partial<Record<BoosterKind, number>>;
+  charges?: Partial<Record<BoosterKind, number>>;
+  /** A rewarded video for a free charge is available (shown only on unaffordable boosters). */
+  adOffer?: boolean;
+}
+
 export interface BoosterStatus {
   kind: BoosterKind;
+  /** Gold price after discounts. */
   cost: number;
+  /** Pre-paid charges (consumed before gold). */
+  charges: number;
+  /** Payable: a charge or enough gold. */
   affordable: boolean;
+  /** Unaffordable and a rewarded video would give a free charge. */
+  adOffer: boolean;
   /** Timed booster still running for the player. */
   active: boolean;
   /** Sim ms left (0 when inactive) and the full duration, for the cooldown ring. */
@@ -27,8 +44,14 @@ export interface BoosterStatus {
   durationMs: number;
 }
 
-export function boosterStatus(state: Pick<GameState, 'boosters' | 'time'>, kind: BoosterKind, coins: number): BoosterStatus {
-  const cost = C.BOOSTER_COST[kind];
+function walletOf(w: number | BoosterWallet): BoosterWallet {
+  return typeof w === 'number' ? { gold: w } : w;
+}
+
+export function boosterStatus(state: Pick<GameState, 'boosters' | 'time'>, kind: BoosterKind, wallet: number | BoosterWallet): BoosterStatus {
+  const w = walletOf(wallet);
+  const cost = w.prices?.[kind] ?? C.BOOSTER_COST[kind];
+  const charges = Math.max(0, w.charges?.[kind] ?? 0);
   const durationMs = BOOSTER_INFO[kind].durationMs;
   let remainingMs = 0;
   if (kind !== 'airstrike') {
@@ -36,15 +59,16 @@ export function boosterStatus(state: Pick<GameState, 'boosters' | 'time'>, kind:
       if (b.type === kind && b.owner === 'player') remainingMs = Math.max(remainingMs, b.untilMs - state.time);
     }
   }
-  return { kind, cost, affordable: coins >= cost, active: remainingMs > 0, remainingMs, durationMs };
+  const affordable = charges > 0 || w.gold >= cost;
+  return { kind, cost, charges, affordable, adOffer: !affordable && w.adOffer === true, active: remainingMs > 0, remainingMs, durationMs };
 }
 
-export function allBoosterStatus(state: Pick<GameState, 'boosters' | 'time'>, coins: number): BoosterStatus[] {
-  return BOOSTER_KINDS.map((k) => boosterStatus(state, k, coins));
+export function allBoosterStatus(state: Pick<GameState, 'boosters' | 'time'>, wallet: number | BoosterWallet): BoosterStatus[] {
+  return BOOSTER_KINDS.map((k) => boosterStatus(state, k, wallet));
 }
 
 /** A booster may be bought when affordable and no instance of it is still running. */
-export function canUseBooster(state: Pick<GameState, 'boosters' | 'time'>, kind: BoosterKind, coins: number): boolean {
-  const s = boosterStatus(state, kind, coins);
+export function canUseBooster(state: Pick<GameState, 'boosters' | 'time'>, kind: BoosterKind, wallet: number | BoosterWallet): boolean {
+  const s = boosterStatus(state, kind, wallet);
   return s.affordable && !s.active;
 }

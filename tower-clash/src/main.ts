@@ -8,12 +8,22 @@ import { attachPointer } from './input/pointer';
 import type { PointerPoint } from './input/pointer';
 import type { SaveData } from './ui/save';
 import { isLevelUnlocked, loadSave } from './ui/save';
-import type { App, Screen } from './ui/screens';
+import type { App, Screen, StartOptions } from './ui/screens';
 import { LevelSelectScreen, ResultScreen, SettingsScreen, TitleScreen } from './ui/screens';
 import { PlayScreen } from './ui/play';
+import { ShopScreen } from './ui/shop';
 import { applyMotionPref } from './ui/motion';
 import { initAudio, toggleMuted, unlockAudio } from './audio/index';
 import { initNative } from './native/index';
+import type { ShopTab } from './render/layout';
+import type { AdSession, FakeAdsProvider } from './economy/adsFlow';
+import { createAdSession, createFakeAds, setAdsProvider } from './economy/adsFlow';
+import { getStore } from './economy/store';
+import { getAds } from './economy/ads';
+import type { FakeStoreOptions } from './economy/providers/fakeStore';
+import { configureFakeStore } from './economy/providers/fakeStore';
+import { grantProduct } from './economy/wallet';
+import type { GrantResult } from './economy/wallet';
 
 /** Test/debug surface for Playwright. */
 export interface TowerClashDebug {
@@ -28,7 +38,7 @@ export interface TowerClashDebug {
   /** Text of the tutorial hint on screen, or null. */
   getTutorialHint(): string | null;
   /** Result screen numbers, or null when not on the result screen. */
-  getResult(): { outcome: string; stars: number; coinsEarned: number; coinsTotal: number } | null;
+  getResult(): { outcome: string; stars: number; coinsEarned: number; coinsTotal: number; crystalsEarned: number } | null;
   /** Level-select lock state for a level id (undefined id → false). */
   isLevelUnlocked(id: number): boolean;
   /** Level-select path map scroll (logical px); setting is a no-op on other screens. */
@@ -38,7 +48,26 @@ export interface TowerClashDebug {
   getCoins(): number;
   /** Simulate the platform back button (Android); true when a screen handled it. */
   back(): boolean;
+  /** Open the shop (default tab: crystals) from the current screen; perf/e2e hook. */
+  openShop(tab?: ShopTab): void;
   aiAvailable: boolean;
+  /** Economy test surface (Phase A): the live save, direct grants, fake ads, fake-store knobs. */
+  economy: {
+    getSave(): SaveData;
+    /** Apply a catalog product's grants as if bought (dedupes like a real transaction). */
+    grant(productId: string): GrantResult | null;
+    /** Install (true) or remove (false) an always-available fake ads provider that rewards at once. */
+    setAdsAvailable(on: boolean): void;
+    configureFakeStore(opts: FakeStoreOptions): void;
+    /** Session ad counters + what the fake provider showed. */
+    getAdStats(): { interstitialsShown: number; rewardedShown: number; fakeInterstitials: number; fakeRewarded: number };
+    /** Open the shop on a tab (from the current screen). */
+    openShop(tab: ShopTab): void;
+    /** Lose the running level as fast as the sim allows (every garrison marches into the enemy). */
+    autoLose(): boolean;
+    /** Tap-equivalents on the result screen (economy offers). */
+    resultAction(action: 'doubleGold' | 'continueCrystals' | 'continueAd' | 'skip'): boolean;
+  };
 }
 
 declare global {
@@ -50,10 +79,12 @@ declare global {
 class TowerClashApp implements App {
   readonly view: View;
   readonly save: SaveData;
+  readonly ads: AdSession = createAdSession();
   private current: Screen;
   private lastFrame = 0;
   private speed = 1;
   private play: PlayScreen | null = null;
+  private fakeAds: FakeAdsProvider | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.view = createView(canvas);
@@ -61,6 +92,10 @@ class TowerClashApp implements App {
     this.current = new TitleScreen(this);
     initAudio(this.save);
     applyMotionPref(this.save.settings.reducedMotion);
+    // Store / ads providers (fake store on the web; `?fakeads=1` installs the dev ads provider).
+    void getStore().init();
+    void getAds().init();
+    if (new URLSearchParams(window.location.search).get('fakeads') === '1') this.setFakeAds(true, 1000);
     void initNative({ onBack: () => this.onBack(), isTitleScreen: () => this.current.name === 'title' });
 
     const forward = <K extends 'down' | 'move' | 'up'>(k: K) => (p: PointerPoint) => this.current[k]?.(p);
@@ -134,7 +169,7 @@ class TowerClashApp implements App {
       else this.goLevels();
       return true;
     }
-    if (cur instanceof SettingsScreen || cur instanceof ResultScreen || cur instanceof LevelSelectScreen) {
+    if (cur instanceof SettingsScreen || cur instanceof ResultScreen || cur instanceof LevelSelectScreen || cur instanceof ShopScreen) {
       cur.key(new KeyboardEvent('keydown', { key: 'Escape' }));
       return true;
     }
@@ -146,18 +181,36 @@ class TowerClashApp implements App {
     this.go(new LevelSelectScreen(this));
   }
 
+  goShop(tab: ShopTab = 'crystals', back: () => void = () => this.goTitle()): void {
+    this.go(new ShopScreen(this, tab, back));
+  }
+
   setSpeed(n: number): void {
     this.speed = Math.max(0.1, Math.min(20, n));
     this.play?.setSpeed(this.speed);
   }
 
-  startLevel(levelId: number, seed?: number): boolean {
+  startLevel(levelId: number, seed?: number, opts?: StartOptions): boolean {
     const level = getLevel(levelId);
     if (!level) return false;
-    const play = new PlayScreen(this, level, seed, this.speed);
+    const play = new PlayScreen(this, level, seed, this.speed, opts);
     this.play = play;
     this.go(play);
     return true;
+  }
+
+  private setFakeAds(on: boolean, delayMs = 0): void {
+    this.fakeAds = on ? createFakeAds(delayMs) : null;
+    setAdsProvider(this.fakeAds);
+  }
+
+  /** The shop returns to the screen that opened it (result screens stay alive underneath). */
+  private backFromShop(): () => void {
+    const from = this.current;
+    if (from instanceof ShopScreen) return () => this.goTitle();
+    if (from instanceof ResultScreen) return () => this.go(from);
+    if (from instanceof LevelSelectScreen) return () => this.goLevels();
+    return () => this.goTitle();
   }
 
   private frame(now: number): void {
@@ -184,16 +237,44 @@ class TowerClashApp implements App {
       getResult: () => {
         if (!(this.current instanceof ResultScreen)) return null;
         const { outcome, stars, coinsEarned, coinsTotal } = this.current.info.ui;
-        return { outcome, stars, coinsEarned, coinsTotal };
+        return { outcome, stars, coinsEarned, coinsTotal, crystalsEarned: this.current.info.earnings.crystals };
       },
       isLevelUnlocked: (id) => isLevelUnlocked(this.save, LEVELS, LEVELS.findIndex((l) => l.id === id)),
       setLevelSelectScroll: (y) => {
         if (this.current instanceof LevelSelectScreen) this.current.setScroll(y);
       },
       getLevelSelectScroll: () => (this.current instanceof LevelSelectScreen ? this.current.getScroll() : 0),
-      getCoins: () => this.save.coins,
+      getCoins: () => this.save.gold,
       back: () => this.onBack(),
+      openShop: (tab = 'crystals') => this.goShop(tab, this.backFromShop()),
       aiAvailable: true,
+      economy: {
+        getSave: () => this.save,
+        grant: (productId) => grantProduct(this.save, productId, `debug-${Date.now()}-${Math.random()}`),
+        setAdsAvailable: (on) => this.setFakeAds(on),
+        configureFakeStore: (opts) => configureFakeStore(opts),
+        getAdStats: () => ({
+          interstitialsShown: this.ads.interstitialsShown,
+          rewardedShown: this.ads.rewardedShown,
+          fakeInterstitials: this.fakeAds?.interstitials ?? 0,
+          fakeRewarded: this.fakeAds?.rewarded ?? 0,
+        }),
+        openShop: (tab) => this.goShop(tab, this.backFromShop()),
+        autoLose: () => {
+          if (!this.play || this.current !== this.play) return false;
+          this.play.setSuicide(true);
+          return true;
+        },
+        resultAction: (action) => {
+          const cur = this.current;
+          if (!(cur instanceof ResultScreen)) return false;
+          if (action === 'doubleGold') cur.doubleGold();
+          else if (action === 'continueCrystals') cur.continueWithCrystals();
+          else if (action === 'continueAd') cur.continueWithAd();
+          else cur.skipLevel();
+          return true;
+        },
+      },
     };
   }
 }

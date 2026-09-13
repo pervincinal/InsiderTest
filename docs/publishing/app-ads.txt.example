@@ -1,0 +1,23 @@
+# app-ads.txt for Tower Clash (IAB Tech Lab Authorized Sellers for Apps, spec 1.0)
+#
+# WHAT: tells ad buyers which ad networks may sell Tower Clash's inventory. AdMob serves ads
+#       without it, but some demand sources skip apps whose developer site has no app-ads.txt,
+#       so fill rates and eCPM drop. Google flags the app in AdMob ("app-ads.txt: not found").
+#
+# WHERE: the file must be served as plain text at the ROOT of the developer website that is
+#       entered in the store listings, i.e. https://<domain>/app-ads.txt (www. is also crawled).
+#       A path such as https://pervincinal.github.io/InsiderTest/app-ads.txt does NOT qualify
+#       (sub-paths are not crawled). Options:
+#         1. a user site repository named `pervincinal.github.io` -> https://pervincinal.github.io/app-ads.txt
+#         2. a custom domain (LAUNCH_CHECKLIST W7) pointed at the Pages site
+#       Google also lets you "search for app-ads.txt" only after the stores list the developer
+#       website and the crawl runs (up to 24 h). The website URL in Play Console (Store settings ->
+#       Developer page / website) and in App Store Connect (Marketing URL) must be that domain.
+#
+# HOW: copy this file to the web root as `app-ads.txt` (no `.example`), replace the publisher id
+#       with the one shown at AdMob -> Settings -> Account information -> Publisher ID
+#       (format pub-0000000000000000, 16 digits). The last field is Google's TAG certification id
+#       and is the same for every AdMob publisher. Add one line per mediation partner later.
+#
+# TODO(stakeholder): replace pub-0000000000000000 with the real AdMob publisher id.
+google.com, pub-0000000000000000, DIRECT, f08c47fec0942fa0

@@ -115,7 +115,7 @@ describe('economy catalog (docs/ECONOMY.md)', () => {
   it('conversion is crystals → gold only and the currencies map to save fields', () => {
     expect(CONVERSION.goldPerCrystal).toBeGreaterThan(0);
     expect('crystalsPerGold' in CONVERSION).toBe(false);
-    expect(CURRENCIES.gold.saveField).toBe('coins');
+    expect(CURRENCIES.gold.saveField).toBe('gold');
     expect(CURRENCIES.crystals.kind).toBe('hard');
     expect(ENERGY_SYSTEM).toBeNull();
   });

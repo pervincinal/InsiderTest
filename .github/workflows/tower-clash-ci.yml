@@ -14,6 +14,8 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# This workflow must never need repository secrets: it runs on forks / pull requests and the web
+# build needs no store keys (the fake store and the no-op ads provider are used on the web).
 jobs:
   verify:
     name: check + playtest + build + e2e
@@ -39,11 +41,22 @@ jobs:
       - name: Typecheck, lint, unit tests, level validation
         run: npm run check
 
+      # Fails when package.json version / buildNumber were bumped without `npm run version:sync`
+      # (android/app/build.gradle and ios/App/App.xcodeproj/project.pbxproj must match).
+      - name: Native version numbers match package.json
+        run: npm run version:check
+
       - name: Headless playtest (reference player on every level)
         run: npm run playtest
 
       - name: Build
         run: npm run build
+
+      # Web bundle guard: the entry chunk (and its modulepreloads) must not contain the native
+      # store/ads plugins (they are dynamic imports used only inside the Capacitor shells) and must
+      # stay under the gzip budget. `--no-build` reuses the dist/ from the step above.
+      - name: Bundle check (no native plugins in the entry chunk, gzip budget)
+        run: node scripts/checkBundle.mjs --no-build
 
       # playwright.config.ts only pins the sandbox binary when /opt/pw-browsers exists,
       # so CI uses the browser matching @playwright/test's own version.

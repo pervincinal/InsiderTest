@@ -33,8 +33,14 @@ const HUD = { mapTop: 96, mapBottom: 1180, pause: { x: 636, y: 18, w: 66, h: 60 
 const BOOSTERS = { overdrive: { x: 232, y: 1186, w: 66, h: 88 } };
 const RESULT = { next: { x: 84, y: 780, w: 170, h: 72 } };
 const PAUSE = { resume: { x: 210, y: 566, w: 300, h: 76 }, speed: { x: 210, y: 662, w: 300, h: 64 } };
-// src/ui/save.ts — v2 is current; the test seeds a v1 save to exercise the migration
-const SAVE_KEY = 'towerclash.save.v2';
+// src/render/layout.ts — TITLE.wallet (tap → shop), SHOP (header back, crystal pack cards, restore button)
+const TITLE_WALLET = { x: 120, y: 1172, w: 480, h: 52 };
+const SHOP_BACK = { x: 18, y: 20, w: 140, h: 60 };
+const SHOP_PACK_0 = { x: 34, y: 200, w: 316, h: 262 };
+// restore button sits 24 px under the last pack row (3 rows of 262 + 18 gap): y = 200 + 3*280 - 18 + 24
+const SHOP_RESTORE = { x: 160, y: 1046, w: 400, h: 60 };
+// src/ui/save.ts — v3 is current; the test seeds a v1 save to exercise the v1 → v3 migration
+const SAVE_KEY = 'towerclash.save.v3';
 const SAVE_KEY_V1 = 'towerclash.save.v1';
 const SEEDED_COINS = 100;
 // src/sim/constants.ts
@@ -76,7 +82,14 @@ const readSave = (page: Page) =>
   page.evaluate((key) => {
     const raw = localStorage.getItem(key);
     return raw
-      ? (JSON.parse(raw) as { version?: number; stars: Record<string, number>; coins: number; settings: { sound: boolean; reducedMotion?: string } })
+      ? (JSON.parse(raw) as {
+          version?: number;
+          stars: Record<string, number>;
+          gold: number;
+          crystals: number;
+          entitlements: { noAds: boolean };
+          settings: { sound: boolean; reducedMotion?: string };
+        })
       : null;
   }, SAVE_KEY);
 const coins = (page: Page) => page.evaluate(() => window.__towerclash.getCoins());
@@ -99,7 +112,7 @@ test.describe('Tower Clash smoke', () => {
     // v1 → v2 migration runs on boot.
     await page.addInitScript(
       ([key, seeded]) => {
-        if (!localStorage.getItem('towerclash.save.v2'))
+        if (!localStorage.getItem('towerclash.save.v3'))
           localStorage.setItem(key, JSON.stringify({ stars: {}, coins: seeded, settings: { sendRatio: 1, colorBlind: false, sound: true } }));
       },
       [SAVE_KEY_V1, SEEDED_COINS] as const,
@@ -133,15 +146,33 @@ test.describe('Tower Clash smoke', () => {
     expect((await page.request.get('/sw.js')).status()).toBe(200);
     expect(await page.locator('meta[name="apple-mobile-web-app-capable"]').getAttribute('content')).toBe('yes');
     expect(await page.locator('meta[name="viewport"]').getAttribute('content')).toContain('viewport-fit=cover');
-    // the v1 save was migrated: v2 key present, coins kept, reducedMotion defaulted
+    // the v1 save was migrated: v3 key present, coins → gold, crystals 0, reducedMotion defaulted
     const migrated = await readSave(page);
-    expect(migrated?.version).toBe(2);
-    expect(migrated?.coins).toBe(SEEDED_COINS);
+    expect(migrated?.version).toBe(3);
+    expect(migrated?.gold).toBe(SEEDED_COINS);
+    expect(migrated?.crystals).toBe(0);
     expect(migrated?.settings.reducedMotion).toBe('auto');
     expect(await coins(page)).toBe(SEEDED_COINS);
     // let the title frame animate once before shooting it
     await page.waitForTimeout(250);
     await shot(page, 'title');
+
+    // (a4) economy: the wallet pills open the shop; a fake-store purchase of the 100-crystal pack
+    //      lands in the save after the store resolves; RESTORE grants a store-reported non-consumable.
+    await tapRect(page, TITLE_WALLET);
+    await expect.poll(() => screen(page)).toBe('shop');
+    await tapRect(page, SHOP_PACK_0);
+    await expect.poll(async () => (await readSave(page))?.crystals, { timeout: 5000 }).toBe(100);
+    await page.evaluate(() => window.__towerclash.economy.configureFakeStore({ owned: ['remove_ads'] }));
+    await tapRect(page, SHOP_RESTORE);
+    await expect.poll(async () => (await readSave(page))?.entitlements.noAds, { timeout: 5000 }).toBe(true);
+    expect((await readSave(page))?.crystals).toBe(150); // remove_ads grants 50 crystals, once
+    await tapRect(page, SHOP_RESTORE);
+    await page.waitForTimeout(400);
+    expect((await readSave(page))?.crystals).toBe(150);
+    await shot(page, 'shop');
+    await tapRect(page, SHOP_BACK);
+    await expect.poll(() => screen(page)).toBe('title');
 
     // (a3) settings: gear → settings screen, sound toggle persists, BACK returns to the title.
     await tapRect(page, TITLE_SETTINGS);
@@ -213,7 +244,7 @@ test.describe('Tower Clash smoke', () => {
     await tapRect(page, BOOSTERS.overdrive);
     await expect.poll(() => coins(page)).toBe(SEEDED_COINS - OVERDRIVE_COST);
     await expect.poll(async () => (await boosters(page)).map((b) => b.type)).toEqual(['overdrive']);
-    expect((await readSave(page))?.coins).toBe(SEEDED_COINS - OVERDRIVE_COST);
+    expect((await readSave(page))?.gold).toBe(SEEDED_COINS - OVERDRIVE_COST);
     await tapRect(page, BOOSTERS.overdrive);
     await page.waitForTimeout(150);
     expect(await coins(page)).toBe(SEEDED_COINS - OVERDRIVE_COST);
@@ -246,8 +277,8 @@ test.describe('Tower Clash smoke', () => {
     expect(saveAfterWin?.stars['1']).toBe(stars);
     // result screen shows the coins of this (first) clear and the running total
     const result = await page.evaluate(() => window.__towerclash.getResult());
-    expect(result).toEqual({ outcome: 'won', stars, coinsEarned: stars * COINS_PER_STAR, coinsTotal: coinsBeforeWin + stars * COINS_PER_STAR });
-    expect(saveAfterWin?.coins).toBe(result!.coinsTotal);
+    expect(result).toEqual({ outcome: 'won', stars, coinsEarned: stars * COINS_PER_STAR, coinsTotal: coinsBeforeWin + stars * COINS_PER_STAR, crystalsEarned: 0 });
+    expect(saveAfterWin?.gold).toBe(result!.coinsTotal);
     await page.waitForTimeout(250); // let capture effects fade so the shot shows the overlay
     await shot(page, 'result');
 
@@ -299,7 +330,7 @@ test.describe('Tower Clash smoke', () => {
     expect(save).not.toBeNull();
     expect(save!.stars['1']).toBeGreaterThanOrEqual(1);
     expect(save!.stars['1']).toBe(stars);
-    expect(save!.coins).toBe(coinsBeforeWin + stars * COINS_PER_STAR);
+    expect(save!.gold).toBe(coinsBeforeWin + stars * COINS_PER_STAR);
 
     // whole flow must be free of console errors and uncaught exceptions
     expect(pageErrors).toEqual([]);

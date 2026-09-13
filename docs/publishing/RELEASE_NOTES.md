@@ -4,6 +4,68 @@ Semantic versioning. The version lives in `tower-clash/package.json`; native ver
 
 ---
 
+## v0.3.0 — (in progress, not tagged)
+
+Proposed tag: `tower-clash-v0.3.0` — **not before the Producer confirms** every line below against `docs/BACKLOG.md` "Done". Scope per `docs/ECONOMY.md` §8 Phase A: the economy and shop on all builds, web-safe (no store/ad SDK on the web). Native version at the tag: `0.3.0` / build 3 (`npm run version:sync`).
+
+**Status on 2026-09-13 18:32 (Publisher check of the tree).** Committed: `src/economy/catalog.ts` (currencies, earn rules, achievements, Commander upgrades, skins, crystal services, IAP catalog, ad placements), `src/economy/store.ts` + `ads.ts` with the RevenueCat / AdMob / fake / no-op providers, `PlayerModifiers` in the sim, currency and shop glyphs plus skin hooks in the renderer, AdMob / RevenueCat plugins and native config placeholders. **Uncommitted, in progress (Frontend Engineer):** `wallet.ts`, `entitlements.ts`, `adsFlow.ts` (interstitial gate, rewarded caps), `ui/upgrades.ts`, save schema v3, shop rendering with a Restore-purchases button, wallet and result widgets. **Not seen yet:** screen wiring, daily reward, achievements UI, level skip / continue. Every line below is therefore **planned** until the Producer moves it to "Done".
+
+### English
+
+**Gold and crystals (planned)**
+- Coins become **gold** (same save value); a second currency, **crystals**, is earned from level milestones (10 / 20 / 30 / 40 levels cleared), a full band at three stars, ten achievements and days 4 and 7 of the daily streak.
+- Gold from replays (3 per star, 100 per day) and star improvements, plus a 7-day daily reward.
+- Crystals convert to gold (1 : 5, packs of 20 / 100 / 500); gold never converts to crystals.
+
+**Commander upgrades (planned)**
+- Five permanent tracks bought with gold, five tiers each: production +4 %/tier, capacity +5 %, starting garrison +1, booster cost −5 %, march speed +3 %. Costs 60 / 120 / 200 / 300 / 420 gold per tier.
+- Capped so the reference bot still wins every level with zero upgrades and averages ≤ 2.5 stars with everything maxed (`npm run playtest -- --upgrades max`).
+
+**Shop and skins (planned)**
+- Shop screen: gold, crystals, upgrades, skins, booster crate (60 crystals → 5 Overdrive + 3 Freeze + 2 Airstrike charges).
+- Cosmetic skins for crystals: Slate / Pagoda / Onion-dome roofs, Viking / Knight / Samurai helmets, Dusk / Winter night / Neon islands. Skins never change readability or team colours.
+- Level skip (30 crystals, offered after three defeats, one per band) and "Reinforcements" continue after a defeat (10 crystals, or a rewarded video in the native apps): the battle rewinds 20 s, one free Freeze, +15 infantry.
+
+**Web build (planned)**
+- No ads, no real purchases: the ad layer is a no-op and the store is a demo provider. Nothing in the web version asks for payment.
+
+**Native apps — groundwork (in the tree, inactive without keys)**
+- RevenueCat and AdMob providers behind the `StoreProvider` / `AdsProvider` interfaces; with no keys configured the store reports "unavailable" and AdMob serves Google test ads only. Real purchases and ads are **v1.0 native** (Phase B), not v0.3.0.
+
+**Publishing (done in this tree)**
+- Privacy policy v2.0 with a web part and a mobile-app part (AdMob, RevenueCat, consent, children, rights); store listing with in-app purchase list, Play Ads / Data safety answers and Apple privacy labels; launch checklist §6 (payments profile, Paid Applications agreement, RevenueCat, AdMob, `app-ads.txt`); `ACCOUNTS.md` §5 on receiving money.
+
+Known limitations at the time of writing: the shop and wallet are not implemented; the web listing claims in `README.md` still describe the web version (ad-free, purchase-free) and stay true.
+
+### Azərbaycanca
+
+**Qızıl və kristallar (planlaşdırılıb)**
+- Sikkələr **qızıl** olur (eyni yaddaş dəyəri); ikinci valyuta **kristallar** səviyyə mərhələlərindən (10 / 20 / 30 / 40 səviyyə), bir zonanın hamısını üç ulduzla keçməkdən, on nailiyyətdən və gündəlik seriyanın 4 və 7-ci günlərindən qazanılır.
+- Təkrar oyunlardan (hər ulduza 3, gündə 100) və ulduz yaxşılaşdırmalarından qızıl, üstəgəl 7 günlük gündəlik mükafat.
+- Kristal qızıla çevrilir (1 : 5, 20 / 100 / 500 paketlərlə); qızıl heç vaxt kristala çevrilmir.
+
+**Komandir təkmilləşdirmələri (planlaşdırılıb)**
+- Qızılla alınan beş daimi xətt, hər biri beş pillə: istehsal +4 %/pillə, tutum +5 %, başlanğıc qarnizon +1, gücləndirici qiyməti −5 %, yürüş sürəti +3 %. Pillə qiymətləri 60 / 120 / 200 / 300 / 420 qızıl.
+- Məhdudlaşdırılıb ki, istinad botu təkmilləşdirməsiz hər səviyyəni keçsin və hər şey maksimumda olanda orta ≤ 2.5 ulduz alsın (`npm run playtest -- --upgrades max`).
+
+**Mağaza və görünüşlər (planlaşdırılıb)**
+- Mağaza ekranı: qızıl, kristal, təkmilləşdirmələr, görünüşlər, gücləndirici sandığı (60 kristal → 5 Overdrive + 3 Freeze + 2 Airstrike).
+- Kristalla alınan kosmetik görünüşlər: Slate / Pagoda / Soğan günbəz damları, Vikinq / Cəngavər / Samuray dəbilqələri, Alaqaranlıq / Qış gecəsi / Neon adaları. Görünüşlər oxunaqlılığı və komanda rənglərini dəyişmir.
+- Səviyyəni keçmək (30 kristal, üç məğlubiyyətdən sonra təklif olunur, hər zonada bir dəfə) və məğlubiyyətdən sonra "Əlavə qüvvə" ilə davam (10 kristal və ya native tətbiqlərdə mükafatlı video): döyüş 20 saniyə geri qayıdır, bir pulsuz Freeze, +15 piyada.
+
+**Veb build (planlaşdırılıb)**
+- Reklam və real alış yoxdur: reklam qatı boşdur, mağaza demo təminatçısıdır. Veb versiyada heç nə ödəniş istəmir.
+
+**Native tətbiqlər — hazırlıq (ağacdadır, açarsız qeyri-aktiv)**
+- `StoreProvider` / `AdsProvider` interfeyslərinin arxasında RevenueCat və AdMob təminatçıları; açar konfiqurasiya olunmayanda mağaza "əlçatmaz" deyir, AdMob yalnız Google test reklamları göstərir. Real alış və reklam **v1.0 native** (B mərhələsi) üçündür, v0.3.0 üçün yox.
+
+**Nəşr (bu ağacda hazırdır)**
+- Məxfilik siyasəti v2.0 — veb hissəsi və mobil tətbiq hissəsi (AdMob, RevenueCat, razılıq, uşaqlar, hüquqlar); tətbiqdaxili alış siyahısı, Play reklam / məlumat təhlükəsizliyi cavabları və Apple məxfilik etiketləri ilə mağaza mətni; buraxılış siyahısı §6 (ödəniş profili, Paid Applications müqaviləsi, RevenueCat, AdMob, `app-ads.txt`); pul almaq haqqında `ACCOUNTS.md` §5.
+
+Yazılan vaxt məlum məhdudiyyətlər: mağaza və cüzdan hələ yazılmayıb; `README.md`-dəki iddialar veb versiyanı (reklamsız, alışsız) təsvir edir və doğru qalır.
+
+---
+
 ## v0.2.0 — 2026-09-13
 
 Proposed tag: `tower-clash-v0.2.0` (on branch `claude/tower-war-game-plan-weqwpb`).

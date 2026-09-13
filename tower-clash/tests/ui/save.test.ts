@@ -31,12 +31,12 @@ describe('recordWin coins (GDD §2.6: 10 per star, first clear only)', () => {
   it('pays 10 per new star and nothing on a repeat with the same stars', () => {
     const save = defaultSave();
     expect(recordWin(save, 1, 2, 10)).toBe(20);
-    expect(save.coins).toBe(20);
+    expect(save.gold).toBe(20);
     expect(recordWin(save, 1, 2, 10)).toBe(0);
     expect(recordWin(save, 1, 1, 10)).toBe(0); // worse run keeps the best stars
     expect(save.stars['1']).toBe(2);
     expect(recordWin(save, 1, 3, 10)).toBe(10); // one extra star
-    expect(save.coins).toBe(30);
+    expect(save.gold).toBe(30);
   });
 
   it('starsFor uses the level thresholds', () => {
@@ -49,12 +49,12 @@ describe('recordWin coins (GDD §2.6: 10 per star, first clear only)', () => {
   it('normalizeSave clamps hostile input', () => {
     const s = normalizeSave({ stars: { '1': 9, '2': -1, '3': 'x' }, coins: -5, settings: { sendRatio: 0.3 } });
     expect(s.stars).toEqual({ '1': 3, '2': 0 });
-    expect(s.coins).toBe(0);
+    expect(s.gold).toBe(0);
     expect(s.settings.sendRatio).toBe(1);
   });
 });
 
-describe('save schema v2 (M3-3)', () => {
+describe('save schema v3 (M3-3 + economy Phase A)', () => {
   function memStore(initial: Record<string, string> = {}) {
     const m = new Map(Object.entries(initial));
     return {
@@ -71,32 +71,36 @@ describe('save schema v2 (M3-3)', () => {
     expect(s.settings.reducedMotion).toBe('auto');
   });
 
-  it('reads a v1 save, keeps stars/coins/settings and writes the v2 copy', async () => {
+  it('reads a v1 save, keeps stars/coins/settings and writes the v3 copy', async () => {
     const { loadSaveFrom, SAVE_KEY, SAVE_KEY_V1 } = await import('../../src/ui/save');
     const v1 = { stars: { '1': 3, '2': 1 }, coins: 40, settings: { sendRatio: 0.5, colorBlind: true, sound: false } };
     const store = memStore({ [SAVE_KEY_V1]: JSON.stringify(v1) });
     const s = loadSaveFrom(store);
-    expect(s.version).toBe(2);
+    expect(s.version).toBe(3);
     expect(s.stars).toEqual({ '1': 3, '2': 1 });
-    expect(s.coins).toBe(40);
+    expect(s.gold).toBe(40);
+    expect(s.crystals).toBe(0);
     expect(s.settings).toEqual({ sendRatio: 0.5, colorBlind: true, sound: false, reducedMotion: 'auto' });
-    const written = JSON.parse(store.dump()[SAVE_KEY]!) as { version: number; coins: number };
-    expect(written.version).toBe(2);
-    expect(written.coins).toBe(40);
+    const written = JSON.parse(store.dump()[SAVE_KEY]!) as { version: number; gold: number };
+    expect(written.version).toBe(3);
+    expect(written.gold).toBe(40);
     expect(store.dump()[SAVE_KEY_V1]).toBe(JSON.stringify(v1)); // the v1 entry is left in place
   });
 
-  it('prefers the v2 entry when both exist and survives corrupt JSON', async () => {
-    const { loadSaveFrom, SAVE_KEY, SAVE_KEY_V1 } = await import('../../src/ui/save');
+  it('prefers the v3 entry, then v2 (coins → gold), and survives corrupt JSON', async () => {
+    const { loadSaveFrom, SAVE_KEY, SAVE_KEY_V1, SAVE_KEY_V2 } = await import('../../src/ui/save');
     const store = memStore({
       [SAVE_KEY_V1]: JSON.stringify({ coins: 5 }),
-      [SAVE_KEY]: JSON.stringify({ version: 2, coins: 99, settings: { reducedMotion: 'on' } }),
+      [SAVE_KEY_V2]: JSON.stringify({ version: 2, coins: 50 }),
+      [SAVE_KEY]: JSON.stringify({ version: 3, gold: 99, settings: { reducedMotion: 'on' } }),
     });
     const s = loadSaveFrom(store);
-    expect(s.coins).toBe(99);
+    expect(s.gold).toBe(99);
     expect(s.settings.reducedMotion).toBe('on');
-    expect(loadSaveFrom(memStore({ [SAVE_KEY]: '{not json' })).coins).toBe(0);
-    expect(loadSaveFrom(null).version).toBe(2);
+    const v2only = memStore({ [SAVE_KEY_V1]: JSON.stringify({ coins: 5 }), [SAVE_KEY_V2]: JSON.stringify({ version: 2, coins: 50 }) });
+    expect(loadSaveFrom(v2only).gold).toBe(50);
+    expect(loadSaveFrom(memStore({ [SAVE_KEY]: '{not json' })).gold).toBe(0);
+    expect(loadSaveFrom(null).version).toBe(3);
   });
 
   it('normalizeSave rejects an unknown reducedMotion value', () => {
@@ -107,11 +111,11 @@ describe('save schema v2 (M3-3)', () => {
   it('spendCoins only deducts what is affordable', async () => {
     const { spendCoins } = await import('../../src/ui/save');
     const s = defaultSave();
-    s.coins = 40;
+    s.gold = 40;
     expect(spendCoins(s, 50)).toBe(false);
-    expect(s.coins).toBe(40);
+    expect(s.gold).toBe(40);
     expect(spendCoins(s, 40)).toBe(true);
-    expect(s.coins).toBe(0);
+    expect(s.gold).toBe(0);
     expect(spendCoins(s, -1)).toBe(false);
   });
 });

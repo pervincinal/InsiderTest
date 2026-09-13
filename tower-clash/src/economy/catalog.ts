@@ -24,11 +24,11 @@ export interface CurrencyDef {
   readonly kind: 'soft' | 'hard';
   readonly label: string;
   /** Save field that stores the balance (`coins` is the historical name of gold). */
-  readonly saveField: 'coins' | 'crystals';
+  readonly saveField: 'gold' | 'crystals';
 }
 
 export const CURRENCIES = {
-  gold: { id: 'gold', kind: 'soft', label: 'Gold', saveField: 'coins' },
+  gold: { id: 'gold', kind: 'soft', label: 'Gold', saveField: 'gold' },
   crystals: { id: 'crystals', kind: 'hard', label: 'Crystals', saveField: 'crystals' },
 } as const satisfies Record<CurrencyId, CurrencyDef>;
 

@@ -1,10 +1,10 @@
-# Tower Clash — store listing (v0.2.0)
+# Tower Clash — store listing (native v1.0 with in-app purchases and ads)
 
-Owner: Publisher. Every claim below is true of build v0.2.0 (see `RELEASE_NOTES.md`). When a feature ships, update the text here first, then the store consoles. Character counts are verified with `node -e` (see the bottom of this file); limits are the stricter of Google Play and App Store.
+Owner: Publisher. This is the listing for the **first store submission**, which per `docs/ECONOMY.md` §8 is the native build with RevenueCat purchases and AdMob ads (Phase B, "v1.0 native"). The web/PWA build keeps no ads and no purchases and has no store listing. Character counts are verified with `node -e` (§5); limits are the stricter of Google Play and App Store.
 
-What exists and may be claimed (verified in the tree on 2026-09-13 16:22, `npm run build` and `npm run levels:check` green): 40 levels, one to three enemies per level (enemies also fight each other), barracks / fortress / artillery / tank factory towers, tanks, mines, barriers, bridges that can be cut, boosters bought with earned coins (overdrive / freeze / airstrike), tutorial on levels 1–3, a one-line lesson per level, three-star timer per level, coins on first clear, level unlocking, send 100 % / 50 % toggle, pause menu with ×2 speed, settings screen (sound, colour-blind palette, reduced motion, send ratio, reset), mute button in the HUD, WebAudio sound effects, "Sunlit Clay Islands" look with five biomes, offline PWA, Android debug APK from CI, haptics / hidden status bar in the native apps, no ads, no purchases, no network calls, no accounts. The game UI is in English only.
+**Status of the claims (2026-09-13 18:32).** Everything from v0.2.0 is committed (40 levels, all mechanics, boosters, settings, PWA, native shell). The economy is committed in part: `src/economy/catalog.ts` (all prices and grants), the store/ads providers (`src/economy/store.ts`, `ads.ts`, `providers/*` incl. RevenueCat and AdMob), sim player modifiers and skin/currency glyphs in the renderer. **Uncommitted in the Frontend Engineer's working tree at 18:32:** `wallet.ts`, `entitlements.ts`, `adsFlow.ts`, `ui/upgrades.ts`, save schema v3 (`crystals`, `entitlements`, `upgrades`, …), shop rendering in `render/menus.ts` including a Restore-purchases button, wallet/result widgets. Not verified: screen wiring (shop reachable from the map), rewarded/interstitial calls from the result/defeat screens, daily reward, level skip / continue. Lines below marked **[v0.3+]** describe that work and must be re-verified against `docs/BACKLOG.md` "Done" before the text is pasted into a console. If a build is submitted *without* the economy, use the v0.2.0 wording kept in §1.4.
 
-What must NOT be claimed: skins, leaderboards, multiplayer, cloud save, more than 40 levels, tablet support (phone-only listing).
+What must NOT be claimed: leaderboards, multiplayer, cloud save, more than 40 levels, subscriptions, loot boxes, tablet support (phone-only listing), "no ads" / "no purchases" for the store builds.
 
 ---
 
@@ -13,11 +13,12 @@ What must NOT be claimed: skins, leaderboards, multiplayer, cloud save, more tha
 | Field | Limit | EN | AZ |
 |---|---|---|---|
 | App name | 30 | `Tower Clash` (11) | `Tower Clash` (11) |
-| Short description | 80 | `Capture every tower. One-thumb real-time strategy, 40 levels, offline, no ads.` (78) | `Bütün qüllələri tut. Bir barmaqla real vaxt strategiya, 40 səviyyə, reklamsız.` (78) |
+| Short description | 80 | `Capture every tower. One-thumb real-time strategy, 40 levels, plays offline.` (76) | `Bütün qüllələri tut. Bir barmaqla real vaxt strategiya, 40 səviyyə, oflayn.` (75) |
 | Category | — | Games › Strategy | Oyunlar › Strategiya |
 | Tags | — | Strategy, Casual, Single player, Offline, Stylised | — |
 | Contact e-mail | — | `[developer e-mail]` | — |
-| Privacy policy URL | — | `[URL of PRIVACY_POLICY.md on GitHub Pages — planned: https://pervincinal.github.io/InsiderTest/privacy.html]` | — |
+| Privacy policy URL | — | `[URL of PRIVACY_POLICY.md on GitHub Pages — planned: https://pervincinal.github.io/InsiderTest/privacy.html]` (must be v2.0 of the policy, which has the ads/purchases section) | — |
+| Store labels (automatic) | — | **Contains ads** (from the Ads declaration) · **In-app purchases** (from the product list) — Google adds both badges; nothing to type | — |
 
 ### 1.1 Full description — English (≤ 4000)
 
@@ -38,10 +39,12 @@ HOW IT PLAYS
 • Mines that take out the first soldiers to cross a road, and barriers that must be worn down or walked around.
 • Tank factories (from level 25): a tank weighs five soldiers but crawls — send it first and let the infantry catch up.
 • Bridges you can cut with a long press: the column on it drowns and the enemy behind it is stranded.
-• Beat every level for three stars: the faster you win, the more stars you earn. Stars unlock the next level and pay coins.
+• Beat every level for three stars: the faster you win, the more stars you earn. Stars unlock the next level and pay gold.
 
-BOOSTERS
-• Spend the coins you earn on Overdrive (×3 production for 10 s), Freeze (enemies stop producing for 5 s) or Airstrike (−10 soldiers on one enemy tower). Coins come only from play — never from purchases.
+GOLD, CRYSTALS AND UPGRADES
+• Gold is earned by playing — stars, replays and daily rewards — and buys Overdrive (×3 production for 10 s), Freeze (enemies stop producing for 5 s), Airstrike (−10 soldiers on one enemy tower) and permanent Commander upgrades (production, capacity, starting garrison, march speed, cheaper boosters).
+• Crystals come from milestones, achievements, the daily chest and optional purchases; they buy tower, helmet and island skins, a booster crate, or a second chance after a defeat.
+• Every level is winnable without spending anything — upgrades are a shortcut, never a requirement.
 
 FIVE ISLANDS
 • Grass, autumn, sand, snow and volcanic islands, drawn in a soft clay style with sunlit shadows.
@@ -50,14 +53,14 @@ BUILT FOR PHONES
 • Portrait, one hand, every level under three minutes.
 • Pause menu with a ×2 speed switch for when you are already winning.
 • Settings: sound, colour-blind palette, reduced motion, send ratio; mute button right in the HUD.
-• Works fully offline.
+• Plays offline: the campaign needs no connection (ads and purchases do).
 
 HONEST BY DESIGN
-• No ads.
-• No in-app purchases.
-• No account, no sign-in, no tracking — your progress is stored only on your device.
+• No account, no sign-in — your progress is stored only on your device.
+• Optional purchases only: crystal packs, a Starter Pack, Remove Ads and a Premium Bundle. No subscriptions, no loot boxes.
+• A short ad between levels at most every third level, never during a battle, and never in the first five levels. Rewarded videos are always your choice. One purchase removes the between-level ads for good.
 
-Tower Clash version 0.2.0: the complete 40-level campaign. The UI is in English.
+The UI is in English.
 ```
 
 ### 1.2 Full description — Azerbaijani (≤ 4000)
@@ -79,10 +82,12 @@ NECƏ OYNANIR
 • Yoldan ilk keçən əsgərləri məhv edən minalar və aşındırılmalı ya da yan keçilməli sədlər.
 • Tank zavodları (25-ci səviyyədən): tank beş əsgər ağırlığındadır, amma yavaş gedir — əvvəl onu göndər, piyada arxadan çatsın.
 • Uzun basışla kəsilə bilən körpülər: körpüdəki kolon batır, arxadakı düşmən ilişib qalır.
-• Hər səviyyədə üç ulduz qazan: nə qədər tez qalib gəlsən, o qədər çox ulduz. Ulduzlar növbəti səviyyəni açır və sikkə qazandırır.
+• Hər səviyyədə üç ulduz qazan: nə qədər tez qalib gəlsən, o qədər çox ulduz. Ulduzlar növbəti səviyyəni açır və qızıl qazandırır.
 
-GÜCLƏNDİRİCİLƏR
-• Qazandığın sikkələri Overdrive (10 saniyə ×3 istehsal), Freeze (rəqiblər 5 saniyə istehsal etmir) və ya Airstrike (bir düşmən qülləsindən −10 əsgər) üçün xərclə. Sikkələr yalnız oyundan gəlir — heç vaxt alışdan yox.
+QIZIL, KRİSTAL VƏ TƏKMİLLƏŞDİRMƏLƏR
+• Qızıl oyunla qazanılır — ulduzlar, təkrar oyunlar və gündəlik mükafatlar — və Overdrive (10 saniyə ×3 istehsal), Freeze (rəqiblər 5 saniyə istehsal etmir), Airstrike (bir düşmən qülləsindən −10 əsgər) və daimi Komandir təkmilləşdirmələri (istehsal, tutum, başlanğıc qarnizon, yürüş sürəti, ucuz gücləndiricilər) üçün xərclənir.
+• Kristallar mərhələlərdən, nailiyyətlərdən, gündəlik sandıqdan və könüllü alışlardan gəlir; qüllə, dəbilqə və ada görünüşləri, gücləndirici sandığı və ya məğlubiyyətdən sonra ikinci şans alır.
+• Hər səviyyə heç nə xərcləmədən keçilə bilər — təkmilləşdirmələr qısa yoldur, tələb deyil.
 
 BEŞ ADA
 • Çəmən, payız, qum, qar və vulkan adaları — günəşli kölgələrlə yumşaq gil üslubunda.
@@ -91,16 +96,14 @@ TELEFON ÜÇÜN HAZIRLANIB
 • Şaquli ekran, bir əl, hər səviyyə üç dəqiqədən qısa.
 • Pauza menyusunda ×2 sürət düyməsi.
 • Parametrlər: səs, rəng korluğu palitrası, azaldılmış hərəkət, göndərmə nisbəti; səssiz düyməsi birbaşa HUD-da.
-• Tam oflayn işləyir.
+• Oflayn oynanır: kampaniya üçün internet lazım deyil (reklam və alışlar üçün lazımdır).
 
 DÜRÜST OYUN
-• Reklam yoxdur.
-• Tətbiqdaxili alış yoxdur.
-• Hesab, giriş və izləmə yoxdur — irəliləyişin yalnız öz cihazında saxlanılır.
+• Hesab, giriş yoxdur — irəliləyişin yalnız öz cihazında saxlanılır.
+• Yalnız könüllü alışlar: kristal paketləri, Başlanğıc paketi, Reklamları sil və Premium paket. Abunəlik yoxdur, loot box yoxdur.
+• Səviyyələr arasında qısa reklam ən çox hər üçüncü səviyyədə, heç vaxt döyüş zamanı və heç vaxt ilk beş səviyyədə. Mükafatlı videolar həmişə sənin seçimindir. Bir alış səviyyələr arası reklamları həmişəlik silir.
 
 Qeyd: oyunun interfeysi ingilis dilindədir (menyular: PLAY, SEND, MENU, VICTORY).
-
-Tower Clash versiya 0.2.0: tam 40 səviyyəlik kampaniya.
 ```
 
 ### 1.3 Graphic assets (all rendered from the game by `tower-clash/store/tools/renderStoreShots.mjs`)
@@ -122,7 +125,19 @@ Screenshot order and captions (same frames in every set):
 | 05 | Level 15 (artillery citadel) | Silence the guns | Topları susdur |
 | 06 | Result screen, 3 stars | Three-star every level | Hər səviyyədə üç ulduz |
 
-Follow-up (PUB-6): add frames from levels 17+ (two enemies, mines, a cut bridge, three enemies) once the level-designer's star times are final, so the store shows the new mechanics.
+Follow-ups: (PUB-6) add frames from levels 17+ (two enemies, mines, a cut bridge, three enemies); **[v0.3+]** add one shop frame (skins / Commander upgrades) once the shop screen exists — it doubles as the App Store Connect "review screenshot" for the in-app purchases (§6.1). Screenshots never show a price in a fixed currency (the store SDK localises prices; a hard-coded "$0.99" in a screenshot is a consumer-law problem in the EU).
+
+### 1.4 Alternative wording for an ad-free / purchase-free build
+
+If the Producer decides to submit a build **without** the economy (the v0.2.0 state), replace the "GOLD, CRYSTALS AND UPGRADES" block with the v0.2.0 "BOOSTERS" block, the "Plays offline" line with "Works fully offline.", and the "HONEST BY DESIGN" block with:
+
+```
+HONEST BY DESIGN
+• No ads.
+• No in-app purchases.
+• No account, no sign-in, no tracking — your progress is stored only on your device.
+```
+(AZ: "Reklam yoxdur. / Tətbiqdaxili alış yoxdur. / Hesab, giriş və izləmə yoxdur — irəliləyişin yalnız öz cihazında saxlanılır.") and answer the declarations in §6 as "no ads / no purchases / no data collected" (the v1.0 answers in the git history of this file). The privacy policy v2.0 Part A already covers that case.
 
 ---
 
@@ -132,7 +147,7 @@ Follow-up (PUB-6): add frames from levels 17+ (two enemies, mines, a cut bridge,
 |---|---|---|---|
 | Name | 30 | `Tower Clash` (11) | `Tower Clash` (11) |
 | Subtitle | 30 | `Capture every tower` (19) | `Bütün qüllələri tut` (19) |
-| Promotional text | 170 | `Tap, send, conquer. 40 levels of one-thumb real-time strategy: fortresses, artillery, tanks, mines and bridges. Fully offline — no ads, no purchases, no account.` (161) | `Toxun, göndər, fəth et. Qalalar, toplar, tanklar, minalar və körpülərlə 40 səviyyəlik bir barmaq real vaxt strategiya. Tam oflayn — reklamsız, alışsız, hesabsız.` (161) |
+| Promotional text | 170 | `Tap, send, conquer. 40 levels of one-thumb real-time strategy: fortresses, artillery, tanks, mines, bridges. Plays offline, no account. Ads removable.` (150) | `Toxun, göndər, fəth et. Qalalar, toplar, tanklar, minalar, körpülərlə 40 səviyyəlik bir barmaq real vaxt strategiya. Oflayn, hesabsız. Reklamlar silinə bilər.` (158) |
 | Keywords | 100 | `tower,war,strategy,rts,capture,conquer,castle,army,offline,tap,casual,defense,attack,soldiers` (93) | `qüllə,strategiya,qala,ordu,oflayn,müharibə,fəth,döyüş,əsgər,tower,war,rts,casual` (80) |
 | Primary category | — | Games | — |
 | Subcategories | — | Strategy, Casual | — |
@@ -140,10 +155,11 @@ Follow-up (PUB-6): add frames from levels 17+ (two enemies, mines, a cut bridge,
 | Marketing URL | — | `https://pervincinal.github.io/InsiderTest/` (active once GitHub Pages is enabled in the repository settings) | — |
 | Privacy policy URL | — | `[URL of PRIVACY_POLICY.md on GitHub Pages — planned: https://pervincinal.github.io/InsiderTest/privacy.html]` | — |
 | Copyright | — | `© 2026 [developer name]` | — |
+| In-App Purchases (automatic) | — | App Store shows an "In-App Purchases" line with the products from §6.1 once they are attached to the version; nothing to type in the description | — |
 
 Description (≤ 4000): reuse §1.1 (EN) and §1.2 (AZ) verbatim — they are under the limit and contain no Google-specific wording.
 
-What's New (v0.2.0, ≤ 4000): use the EN block from `RELEASE_NOTES.md`.
+What's New (≤ 4000): use the EN block of the relevant version from `RELEASE_NOTES.md`.
 
 App Store screenshots (exact device sizes, rendered by `node store/tools/renderStoreShots.mjs --apple`):
 
@@ -152,7 +168,9 @@ App Store screenshots (exact device sizes, rendered by `node store/tools/renderS
 | iPhone 6.7" | 1290×2796 | `tower-clash/store/screenshots/apple-6.7/en/01..06.png` |
 | iPhone 6.5" | 1284×2778 | `tower-clash/store/screenshots/apple-6.5/en/01..06.png` |
 
-Same six frames and captions as the Google set (English only — Azerbaijani is not an App Store locale). iPad screenshots are not needed if the app is marked iPhone-only in App Store Connect (recommended for v0.2.0; the game is portrait phone-first).
+Same six frames and captions as the Google set (English only — Azerbaijani is not an App Store locale). iPad screenshots are not needed if the app is marked iPhone-only in App Store Connect (recommended; the game is portrait phone-first).
+
+Review notes for App Review (paste into "Notes"): *Single-player offline game, no account needed. In-app purchases are one-time products handled by StoreKit through RevenueCat; "Restore Purchases" is in the shop screen. Ads are Google AdMob; the app requests App Tracking Transparency only if configured to (see §6.4) and serves non-personalised ads when declined. Sandbox tester: none required — all content is available without purchase.*
 
 ---
 
@@ -160,9 +178,11 @@ Same six frames and captions as the Google set (English only — Azerbaijani is 
 
 Primary (in title / subtitle / first lines): tower clash, capture every tower, real-time strategy.
 
-Secondary (descriptions, keyword field): tower war, tower conquest, castle capture, army strategy, rts, one-thumb strategy, offline strategy game, no ads strategy, casual strategy, tap to attack, fortress, artillery, tanks, mines, bridges, three stars, short levels, 40 levels.
+Secondary (descriptions, keyword field): tower war, tower conquest, castle capture, army strategy, rts, one-thumb strategy, offline strategy game, casual strategy, tap to attack, fortress, artillery, tanks, mines, bridges, three stars, short levels, 40 levels, commander upgrades, skins.
 
-Azerbaijani: qüllə oyunu, strategiya oyunu, qala tutmaq, ordu, real vaxt strategiya, oflayn oyun, reklamsız oyun, bir barmaqla oyun, tank, körpü.
+Azerbaijani: qüllə oyunu, strategiya oyunu, qala tutmaq, ordu, real vaxt strategiya, oflayn oyun, bir barmaqla oyun, tank, körpü.
+
+Removed from the list since v0.2.0: "no ads strategy", "reklamsız oyun" — no longer true for the store builds.
 
 Do not use competitor names ("Tower War", "State.io", etc.) in the keyword field or title — both stores reject trademarked names of other apps; "Tower War–style" stays in internal docs only.
 
@@ -178,13 +198,15 @@ Facts to answer with:
 | Fear / horror | None | — |
 | Sexual content, nudity | None | — |
 | Language | None | UI text only (PLAY, SEND, MENU, VICTORY). |
-| Controlled substances, gambling | None | No simulated gambling, no loot boxes, no randomness the player pays for. |
+| Controlled substances, gambling | None | No simulated gambling. |
 | User interaction | None | No chat, no user-generated content, no sharing, no multiplayer. |
-| Shares location | No | — |
-| Purchases of digital goods | No | No in-app purchases, no ads, no external store links. Coins (spent on boosters) are earned in play only. |
-| Personal information | Not collected | Progress in local storage only. |
+| Shares location | No | The app requests no location permission (Google may derive a coarse location from the IP address for ad delivery; IARC's "shares location" question is about the app sharing the user's location with other users / third parties as a feature — answer No). |
+| Purchases of digital goods | **Yes** | Crystal packs, Starter Pack, Remove Ads, Premium Bundle / Upgrade via Play Billing / StoreKit. |
+| … includes random items (loot boxes)? | **No** | Every product grants a fixed, listed content; no paid randomness (`docs/ECONOMY.md` §1.4). |
+| Contains ads | **Yes** (Play Ads declaration, separate from IARC) | AdMob interstitial + rewarded, see §6.2. |
+| Personal information | Not collected by the app | Advertising id / purchase receipts go to Google / RevenueCat, declared in §6.3 / §6.4; no name, e-mail or account. |
 
-Expected results: Google Play / IARC **Everyone (ESRB E), PEGI 3, USK 0**; App Store **9+** if "Infrequent/Mild Cartoon or Fantasy Violence" is declared (recommended, it is the honest answer), **4+** if "None" is chosen. Google Play "Ads" declaration: **No, this app does not contain ads**. Google Play Data safety: **No data collected, no data shared** (see `PRIVACY_POLICY.md`). Apple App Privacy: **Data Not Collected**; App Tracking Transparency not used.
+Expected results: Google Play / IARC **Everyone (ESRB E), PEGI 3, USK 0** with the interactive elements **"In-Game Purchases"** (and no "Users Interact" / "Shares Location") — ads and purchases do not change the age rating, only the interactive-element labels. App Store **9+** with "Infrequent/Mild Cartoon or Fantasy Violence"; in Apple's 2025 age-rating questionnaire answer **"Unrestricted Web Access": No** (the app has no browser; ad click-throughs open in the ad SDK's own overlay / App Store, not a general web view), **"Gambling and Contests": No / None** (no contests, sweepstakes or simulated gambling), **"Loot boxes": No**, "Advertising"/"In-app purchases" are informational and do not raise the rating. Keep 9+.
 
 ---
 
@@ -193,12 +215,92 @@ Expected results: Google Play / IARC **Everyone (ESRB E), PEGI 3, USK 0**; App S
 ```bash
 node -e '
 const c = (s) => [...s].length;
-console.log("gp short EN", c("Capture every tower. One-thumb real-time strategy, 40 levels, offline, no ads."));
-console.log("gp short AZ", c("Bütün qüllələri tut. Bir barmaqla real vaxt strategiya, 40 səviyyə, reklamsız."));
-console.log("promo EN", c("Tap, send, conquer. 40 levels of one-thumb real-time strategy: fortresses, artillery, tanks, mines and bridges. Fully offline — no ads, no purchases, no account."));
-console.log("promo AZ", c("Toxun, göndər, fəth et. Qalalar, toplar, tanklar, minalar və körpülərlə 40 səviyyəlik bir barmaq real vaxt strategiya. Tam oflayn — reklamsız, alışsız, hesabsız."));
+console.log("gp short EN", c("Capture every tower. One-thumb real-time strategy, 40 levels, plays offline."));
+console.log("gp short AZ", c("Bütün qüllələri tut. Bir barmaqla real vaxt strategiya, 40 səviyyə, oflayn."));
+console.log("promo EN", c("Tap, send, conquer. 40 levels of one-thumb real-time strategy: fortresses, artillery, tanks, mines, bridges. Plays offline, no account. Ads removable."));
+console.log("promo AZ", c("Toxun, göndər, fəth et. Qalalar, toplar, tanklar, minalar, körpülərlə 40 səviyyəlik bir barmaq real vaxt strategiya. Oflayn, hesabsız. Reklamlar silinə bilər."));
 console.log("subtitle AZ", c("Bütün qüllələri tut"));
 console.log("keywords EN", c("tower,war,strategy,rts,capture,conquer,castle,army,offline,tap,casual,defense,attack,soldiers"));
 '
 ```
+Results on 2026-09-13: 76 / 75 / 150 / 158 / 19 / 93. IAP names and descriptions in §6.1 were counted the same way (≤ 30 / ≤ 45).
 
+---
+
+## 6. Monetization disclosures (in-app purchases, ads, data)
+
+Source of truth for prices and grants: `tower-clash/src/economy/catalog.ts` (`IAP_PRODUCTS`, `AD_PLACEMENTS`, `INTERSTITIAL_RULES`); rationale in `docs/ECONOMY.md` §4–5; console setup steps in `docs/MOBILE.md` §8.2. Product ids are typed **identically** in App Store Connect, Google Play Console and RevenueCat.
+
+### 6.1 In-app purchase list (both stores)
+
+USD is the base price; Apple converts by price tier, Google by exchange rate (review IN/BR/TR prices by hand, `docs/ECONOMY.md` §4). Apple: *Reference Name* is internal (≤ 64 chars, use the product id); *Display Name* ≤ 30; *Description* ≤ 45 — both counted below. Google: *Product ID* = catalog id, *Name* ≤ 55, *Description* ≤ 200 — reuse the Apple strings.
+
+| Product id (Apple + Google) | Type (Apple / Google) | USD | Apple tier | Display name (≤ 30) | Description (≤ 45) | Grants (from `catalog.ts`) |
+|---|---|---|---|---|---|---|
+| `crystals_100` | Consumable / one-time (consumed by RevenueCat) | 0.99 | 1 | `Handful of crystals` (19) | `100 crystals` (12) | 100 crystals |
+| `crystals_550` | Consumable | 4.99 | 5 | `Pouch of crystals` (17) | `550 crystals (10% bonus)` (24) | 550 crystals |
+| `crystals_1200` | Consumable | 9.99 | 10 | `Chest of crystals` (17) | `1,200 crystals (20% bonus)` (26) | 1 200 crystals |
+| `crystals_2600` | Consumable | 19.99 | 20 | `Crate of crystals` (17) | `2,600 crystals (30% bonus)` (26) | 2 600 crystals |
+| `crystals_7000` | Consumable | 49.99 | 50 | `Vault of crystals` (17) | `7,000 crystals (40% bonus)` (26) | 7 000 crystals |
+| `starter_pack` | Non-Consumable | 2.99 | 3 | `Starter Pack` (12) | `400 crystals, 400 gold and the Bronze helmet` (44) | 400 crystals + 400 gold + `helmet_bronze`; offered once |
+| `remove_ads` | Non-Consumable | 3.99 | 4 | `Remove Ads` (10) | `No more interstitial ads, plus 50 crystals` (42) | no interstitials + 50 crystals |
+| `premium_bundle` | Non-Consumable | 9.99 | 10 | `Premium Bundle` (14) | `No ads, 600 crystals, 2 skins, -10% boosters` (44) | no interstitials + 600 crystals + `roof_gold` + `helmet_royal` + −10 % booster gold cost |
+| `premium_upgrade` | Non-Consumable | 4.99 | 5 | `Premium Upgrade` (15) | `550 crystals, 2 skins, -10% booster cost` (40) | 550 crystals + the two Premium skins + −10 %; shown only to owners of `remove_ads` |
+| `weekend_pack` | Consumable — **Phase C only**, do not create until LiveOps ships | 1.99 | 2 | `Weekend Pack` (12) | `250 crystals and 250 gold, once per weekend` (43) | 250 crystals + 250 gold |
+
+Rules that follow from the list (Apple 3.1.1 / 3.1.2, Play Payments policy, EU consumer law): every product goes through StoreKit / Play Billing (RevenueCat wraps both; no external checkout links); a **Restore Purchases** button is mandatory in the shop for the non-consumables; the shop shows the **store-localised price string**, never a hard-coded "$"; the Starter Pack "×2 value" badge must be computed from the `crystals_100` rate; no subscriptions, so no subscription terms text is needed. Display names are the catalog `title` strings so the shop UI and the store sheets say the same thing (RevenueCat returns the store title).
+
+Apple additionally needs, per product: a **review screenshot** (any shop screenshot ≥ 640×920 showing the product — one image can be reused for all), and the first products must be submitted **with the app version** (they appear in the version's "In-App Purchases and Subscriptions" section). Google needs the AAB uploaded to a testing track before products can be created.
+
+### 6.2 Google Play — Ads declaration and ad policy facts
+
+| Play Console question | Answer | Notes |
+|---|---|---|
+| Does your app contain ads? | **Yes** | Google AdMob (Google Mobile Ads SDK via `@capacitor-community/admob`) |
+| Ad formats (for the reviewer / policy record) | **Interstitial** (full-screen, between levels) and **Rewarded video** (user-initiated) | No banners, no app-open ads, no native ads, no notification ads |
+| Ads SDK is Families self-certified? | Not applicable | Target audience 13+ (§6.5); if the listing ever targets children this becomes mandatory |
+| Advertising ID declaration (App content → Advertising ID) | **Yes, the app uses advertising ID** — purposes: *Advertising or marketing*, *Analytics* (ad measurement), *Fraud prevention, security and compliance* | AdMob declares the `com.google.android.gms.permission.AD_ID` permission (Android 13+) |
+| Better Ads / interstitial policy | compliant by design | Interstitials only after the result screen (a natural break), never at app start, never during play, never in the first 5 levels, ≥ 120 s apart, ≤ 4 per session, always dismissible (`INTERSTITIAL_RULES`) |
+| Rewarded ads | compliant | Buttons name the reward ("Watch → +20 gold"), hidden when no ad is loaded, never shown disabled |
+
+### 6.3 Google Play — Data safety form answers
+
+Answer "Yes" to *Does your app collect or share any of the required user data types?* Encryption in transit: **Yes** (HTTPS for AdMob and RevenueCat). Deletion mechanism: **No in-app account deletion** — data is tied to an anonymous id; deletion is by uninstalling plus the e-mail request described in the privacy policy B.7 (answer "Yes, users can request deletion" only if the stakeholder commits to honouring the e-mail requests; otherwise "No"). Independent security review: No.
+
+| Data type | Collected | Shared | Ephemeral | Required / optional | Purpose | Who / why |
+|---|---|---|---|---|---|---|
+| Device or other IDs (advertising ID; RevenueCat anonymous app user id) | Yes | Yes | No | Required (ads); the anonymous id is required for purchases to restore | Advertising or marketing; Analytics; Fraud prevention, security and compliance; App functionality (RevenueCat) | Google AdMob, RevenueCat |
+| Purchase history (in-app purchases: product ids, transaction ids, dates) | Yes | Yes | No | Optional (only if the user buys) | App functionality (entitlements, restore), Fraud prevention | RevenueCat (receipt validation), Google Play Billing itself is exempt but RevenueCat is a third party |
+| Location → Approximate location (derived from IP by Google's ad SDK) | Yes | Yes | Yes | Required (ads) | Advertising or marketing | Google AdMob — declare it: Google's own SDK data-disclosure guidance lists coarse location from IP (**verify against Google's current "Google Mobile Ads SDK data disclosure" page before submitting; the sandbox could not fetch it**) |
+| App info and performance → Crash logs, Diagnostics | Yes | Yes | No | Required | Analytics | AdMob SDK reports its own diagnostics to Google (per Google's SDK disclosure page — verify as above) |
+| App activity → App interactions (ad impressions/clicks) | Yes | Yes | No | Required | Advertising or marketing; Analytics | Google AdMob (ad interaction only; the game sends no gameplay analytics) |
+| Personal info, financial info (card), precise location, contacts, photos, messages, health, files, audio, calendar | **No** | — | — | — | — | Payment cards are handled by Google Play, never seen by the app |
+
+Everything is answered "not linked to the user's identity" — there is no account. The SDK rows are what Google's and RevenueCat's SDK disclosure pages recommend as of my last knowledge; **the Mobile Engineer / stakeholder must re-check those two pages on submission day** (Google: "Play data disclosure requirements for the Google Mobile Ads SDK"; RevenueCat: "Google Play Data Safety" docs page).
+
+### 6.4 Apple — App Privacy ("nutrition labels") and App Tracking Transparency
+
+Two options; the answer depends on **one line of code** in `tower-clash/src/economy/providers/admob.ts` (`runConsentFlow` currently calls `AdMob.requestTrackingAuthorization()` on iOS, i.e. option B is what the tree does today).
+
+**Option A — recommended: do not track, do not show the ATT prompt.** Remove the `requestTrackingAuthorization` call (keep the UMP form), leave `NSUserTrackingUsageDescription` in `Info.plist` (harmless) and serve non-personalised ads on iOS. Why: (1) ATT opt-in rates for casual games are typically 20–35 %, so personalised-ad revenue on iOS is small while the prompt costs first-session goodwill; (2) "Data Used to Track You" on the store page is the single most negative privacy label for a family-friendly casual game; (3) with no ATT the review question *"Does this app use the Advertising Identifier (IDFA)?"* is answered honestly with **Yes, to serve advertisements within the app** only (no attribution, no tracking), which Apple accepts without the prompt when the SDK respects the ATT status (Google's SDK does); (4) no SKAdNetwork-attribution campaigns are planned. Labels for option A:
+
+| App Privacy section | Data type | Purposes | Linked to user | Used for tracking |
+|---|---|---|---|---|
+| Identifiers | Device ID (IDFV / SDK-generated ids; IDFA is all zeros without ATT) | Third-Party Advertising, App Functionality | No | **No** |
+| Purchases | Purchase History | App Functionality | No | No |
+| Usage Data | Advertising Data (ad impressions/interactions), Product Interaction (ad SDK only) | Third-Party Advertising, Analytics | No | No |
+| Diagnostics | Crash Data, Performance Data (AdMob SDK) | App Functionality, Analytics | No | No |
+| Location | Coarse Location (from IP, by Google) | Third-Party Advertising | No | No |
+
+Summary shown on the store: **"Data Not Linked to You"** only; "Data Used to Track You" absent. App Store Connect → App Privacy → *Tracking*: "No, we do not use data for tracking purposes".
+
+**Option B — as the tree is today: ATT prompt shown, IDFA used for personalised ads when granted.** Same rows, but *Identifiers → Device ID* and *Usage Data → Advertising Data* get **Used for tracking: Yes**, the store page shows "Data Used to Track You", and the *Tracking* question is answered "Yes". `NSUserTrackingUsageDescription` (already in `Info.plist`) must describe the purpose — the current text does.
+
+Either way: *Contact Info, User Content, Health, Financial Info, Browsing History, Search History* → not collected. Export compliance stays "uses only standard HTTPS" (`ITSAppUsesNonExemptEncryption = NO` remains correct). The Publisher's recommendation is **A**; this is a decision for the Producer + Mobile Engineer, recorded in `LAUNCH_CHECKLIST.md` row MZ9.
+
+### 6.5 Age rating and audience impact
+
+- **Google Play — Target audience and content:** *13 and over* (or 18+) — **not** "designed for children / Families". Reason: AdMob would then require a Families self-certified SDK configuration, `tagForChildDirectedTreatment`, no personalised ads and a Teacher Approved review; the game does not implement that. AdMob app settings: *Not child-directed*; **Max ad content rating: G**.
+- **Google Play — IARC:** interactive elements **"In-Game Purchases"**; *"Does the game include purchases of random items (loot boxes)?"* → **No**. Expected rating unchanged (Everyone / PEGI 3).
+- **Apple — Age rating:** stays **9+**. Questionnaire deltas caused by monetization: *Unrestricted Web Access* **No**; *Gambling and Contests* **No**; *Loot boxes* **No**; ads and IAP are disclosed through the Ads/IAP metadata, not the rating. If option 6.4-B is kept, Apple's *"Made for Kids"* is out of the question anyway (kids apps may not use third-party ad SDKs that track).
+- **Both stores:** the privacy policy (v2.0, Part B) must be live at the URL before submission; both consoles reject a listing whose policy URL contradicts the Data safety / App Privacy answers.

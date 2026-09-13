@@ -18,6 +18,10 @@
  * column that could reach it — an adjacent enemy garrison, or an enemy column about to take an adjacent
  * neutral — counting what the tower produces before that column lands. A tower is never emptied while
  * such a column exists, and a wave already on its way is not fed one unit at a time.
+ *
+ * Commander upgrades (`state.modifiers`) are part of what the bot sees: its own capacities, production
+ * and march times include them (via `capacityOf` / `modifiersFor` through the shared helpers), enemy
+ * towers and columns never do.
  */
 import type { Command, GameState, Owner, Tower, Unit } from '../sim/index';
 import { C, Rng, capacityOf } from '../sim/index';
@@ -38,6 +42,7 @@ import {
   projectedUnits,
   sendCommand,
   threatReserve,
+  unitSpeedFor,
   upgradeCost,
   wholeUnits,
   type Neighbour,
@@ -128,7 +133,7 @@ function inboundByOwner(state: GameState, towerId: string): Map<Owner, Inbound> 
     const road = state.roads[q.roadId];
     if (!road) continue;
     const tank = q.unitKind === 'tank';
-    const speed = tank ? C.UNIT_SPEED * C.TANK_SPEED_MUL : C.UNIT_SPEED;
+    const speed = unitSpeedFor(state, q.owner, q.unitKind);
     add(q.owner, q.remaining * (tank ? C.TANK_WEIGHT : C.INFANTRY_WEIGHT), (road.length * 1000) / speed);
   }
   return out;
@@ -154,8 +159,8 @@ interface ThreatSource {
  * The column neighbour `n` could throw at `tower`: an enemy garrison as it will be at now + `atMs` (plus
  * its reinforcements on the way, minus what is already attacking it), or an enemy column that is about
  * to flip the neighbour — neutral or another enemy's — and carry on from there. The column is timed as
- * if it left right now (a racing enemy does not wait for us to land). `undefined` when nothing could
- * come from that side.
+ * if it left right now (a racing enemy does not wait for us to land) at *its* owner's speed, never at
+ * ours. `undefined` when nothing could come from that side.
  */
 function threatFrom(state: GameState, n: Neighbour, atMs = 0): ThreatSource | undefined {
   const from = n.tower;
@@ -170,7 +175,7 @@ function threatFrom(state: GameState, n: Neighbour, atMs = 0): ThreatSource | un
       if (owner === from.owner) support += v.weight;
       else hostile += v.weight;
     }
-    attackers = projectedUnits(from, atMs) + support - Math.ceil(hostile / defenceMultiplier(from));
+    attackers = projectedUnits(from, atMs, state) + support - Math.ceil(hostile / defenceMultiplier(from));
   }
   // A column of another enemy bigger than the garrison flips the neighbour and keeps the remainder.
   for (const [owner, v] of inbound) {
@@ -183,7 +188,7 @@ function threatFrom(state: GameState, n: Neighbour, atMs = 0): ThreatSource | un
   }
   attackers -= n.roadCost;
   if (attackers <= 0) return undefined;
-  return { from, attackers, etaMs: landMs + arrivalMs(n.travelMs, attackers) };
+  return { from, attackers, etaMs: landMs + arrivalMs(n.theirTravelMs, attackers) };
 }
 
 /** Every column that could be sent at `tower`, one per hostile neighbour (excluding `exclude`). */
@@ -207,10 +212,10 @@ function reserveFor(state: GameState, as: Tower, sources: ThreatSource[]): numbe
   const mult = defenceMultiplier(as);
   const threat = incomingThreat(state, as.id);
   let reserve = threatReserve(state, as);
-  const cap = capacityOf(as);
+  const cap = capacityOf(as, state);
   for (const src of sources) {
     const need = Math.ceil((src.attackers + threat) / mult) + HOLD_MARGIN;
-    const grown = Math.floor((genPerSecond(as) * src.etaMs) / 1000);
+    const grown = Math.floor((genPerSecond(as, state) * src.etaMs) / 1000);
     if (need - grown > cap) continue;
     reserve = Math.max(reserve, need - grown);
   }
@@ -268,7 +273,7 @@ function reinforce(ctx: Ctx, mine: Tower[]): void {
     if (threat <= 0) continue;
     const mult = defenceMultiplier(tower);
     const eta = threatEtaMs(state, tower);
-    const atLanding = projectedUnits(tower, eta);
+    const atLanding = projectedUnits(tower, eta, state);
     let deficit = Math.ceil(threat / mult) + 1 - atLanding - incomingSupport(state, tower.id);
     if (deficit <= 0) continue;
     // The garrison absorbs the stream one unit per LEAVE_INTERVAL_MS: help landing within that window still counts.
@@ -351,7 +356,7 @@ function upgradeRear(ctx: Ctx, mine: Tower[]): void {
     const cost = upgradeCost(tower);
     if (cost === undefined || tower.units < cost + UPGRADE_SLACK) continue;
     if (incomingThreat(state, tower.id) > 0) continue;
-    if (tower.level >= REAR_UPGRADE_LEVEL && tower.units < capacityOf(tower) * REAR_FULL_FRACTION) continue;
+    if (tower.level >= REAR_UPGRADE_LEVEL && tower.units < capacityOf(tower, state) * REAR_FULL_FRACTION) continue;
     push(ctx, tower, { type: 'upgrade', owner: OWNER, towerId: tower.id });
   }
 }
@@ -364,13 +369,13 @@ function supplyForward(ctx: Ctx, mine: Tower[]): void {
     const myHops = ctx.hops.get(tower.id);
     if (myHops === undefined || myHops < 2) continue;
     if (incomingThreat(state, tower.id) > 0) continue;
-    if (tower.units < capacityOf(tower) * SUPPLY_FILL) continue;
+    if (tower.units < capacityOf(tower, state) * SUPPLY_FILL) continue;
     const cost = upgradeCost(tower);
     if (cost !== undefined && tower.level < REAR_UPGRADE_LEVEL && tower.units < cost + UPGRADE_SLACK) continue;
     const forward = friendlyNeighbours(state, tower.id).filter((n) => (ctx.hops.get(n.tower.id) ?? Infinity) < myHops);
     const target = pick(ctx, forward, (n) => n.tower.units);
     if (!target) continue;
-    const room = capacityOf(target.tower) - target.tower.units - incomingSupport(state, target.tower.id);
+    const room = capacityOf(target.tower, state) - target.tower.units - incomingSupport(state, target.tower.id);
     const amount = Math.min(tower.units - SUPPLY_KEEP, spare(state, tower), Math.max(0, room));
     push(ctx, tower, sendCommand(tower, target.tower.id, amount));
   }
@@ -380,8 +385,8 @@ function supplyForward(ctx: Ctx, mine: Tower[]): void {
  * Is a wave of `inbound` weight enough to flip the neighbour by `margin`, counting what it grows before a
  * unit sent now lands?
  */
-function waveSuffices(inbound: number, n: Neighbour, margin = 0): boolean {
-  return inbound > projectedDefenders(n.tower, n.travelMs) + costToTake(n) + margin;
+function waveSuffices(state: GameState, inbound: number, n: Neighbour, margin = 0): boolean {
+  return inbound > projectedDefenders(n.tower, n.travelMs, state) + costToTake(n) + margin;
 }
 
 /**
@@ -394,8 +399,8 @@ function sustain(ctx: Ctx, mine: Tower[]): void {
     if (!free(ctx, tower)) continue;
     const targets = enemyNeighbours(state, tower.id).filter((n) => {
       const inbound = incomingWeight(state, n.tower.id, OWNER);
-      if (inbound <= 0 || waveSuffices(inbound, n)) return false;
-      return waveSuffices(inbound + spare(state, tower, n.tower.id), n, ATTACK_SLACK);
+      if (inbound <= 0 || waveSuffices(state, inbound, n)) return false;
+      return waveSuffices(state, inbound + spare(state, tower, n.tower.id), n, ATTACK_SLACK);
     });
     const target = pick(ctx, targets, (n) => effectiveDefenders(n.tower));
     if (target) push(ctx, tower, sendCommand(tower, target.tower.id, spare(state, tower, target.tower.id)));
@@ -417,12 +422,12 @@ interface Plan {
  */
 function holdNeed(state: GameState, target: Tower, landingMs: number): number {
   const asOurs: Tower = { ...target, owner: OWNER };
-  const cap = capacityOf(asOurs);
+  const cap = capacityOf(asOurs, state);
   let need = 0;
   for (const n of neighbours(state, target.id)) {
     const src = threatFrom(state, n, landingMs);
     if (!src || src.attackers > cap) continue;
-    const grown = Math.floor((genPerSecond(asOurs) * Math.max(0, src.etaMs - landingMs)) / 1000);
+    const grown = Math.floor((genPerSecond(asOurs, state) * Math.max(0, src.etaMs - landingMs)) / 1000);
     need = Math.max(need, Math.ceil(src.attackers / defenceMultiplier(asOurs)) - grown);
   }
   return Math.max(0, need);
@@ -430,9 +435,10 @@ function holdNeed(state: GameState, target: Tower, landingMs: number): number {
 
 /**
  * Extra weight a wave landing at `landingMs` with `surplus` left over must bring so the captured target
- * can be held: `holdNeed` minus the spare units of own towers next to the target that are not part of
- * the wave (they can walk over right after). Positive means the wave would be the last units thrown at
- * a tower we cannot keep — a gift to the enemy.
+ * can be held: `holdNeed` minus the spare units of own *rear* towers next to the target that are not
+ * part of the wave (they can walk over right after). A neighbour that borders an enemy tower does not
+ * count: it has its own fight and the attack rule will spend it there. Positive means the wave would be
+ * the last units thrown at a tower we cannot keep — a gift to the enemy.
  */
 function holdShortfall(ctx: Ctx, target: Tower, surplus: number, landingMs: number, waveIds: Set<string>): number {
   const need = holdNeed(ctx.state, target, landingMs);
@@ -440,6 +446,7 @@ function holdShortfall(ctx: Ctx, target: Tower, surplus: number, landingMs: numb
   let support = 0;
   for (const n of neighbours(ctx.state, target.id)) {
     if (n.tower.owner !== OWNER || waveIds.has(n.tower.id) || !free(ctx, n.tower)) continue;
+    if (enemyNeighbours(ctx.state, n.tower.id).length > 0) continue;
     support += spare(ctx.state, n.tower);
   }
   return Math.max(0, need - surplus - support);
@@ -464,7 +471,7 @@ function attack(ctx: Ctx, mine: Tower[]): void {
       const n = neighbours(state, tower.id).find((x) => x.tower.id === target.id);
       if (!n) continue;
       // A wave that is still enough on its own needs no company: keep the garrison at home.
-      if (inbound > 0 && waveSuffices(inbound, n)) continue;
+      if (inbound > 0 && waveSuffices(state, inbound, n)) continue;
       const force = spare(state, tower, target.id);
       sources.push({ tower, n, force });
       losses += costToTake(n);
@@ -487,9 +494,9 @@ function attack(ctx: Ctx, mine: Tower[]): void {
     for (const s of sources) force += s.force;
     for (const r of relays) force += r.force;
     const streamMs = Math.min(MAX_STREAM_MS, force * C.LEAVE_INTERVAL_MS);
-    for (const s of sources) force += Math.floor((genPerSecond(s.tower) * streamMs) / 1000);
-    const firstHit = projectedDefenders(target, slowest);
-    const regenDuringStream = Math.ceil((genPerSecond(target) * streamMs) / 1000) * defenceMultiplier(target);
+    for (const s of sources) force += Math.floor((genPerSecond(s.tower, state) * streamMs) / 1000);
+    const firstHit = projectedDefenders(target, slowest, state);
+    const regenDuringStream = Math.ceil((genPerSecond(target, state) * streamMs) / 1000) * defenceMultiplier(target);
     const toFlip = firstHit + regenDuringStream + losses;
     let needed = firstHit * ATTACK_FACTOR + ATTACK_SLACK + regenDuringStream + losses;
     // The captured tower must be holdable with what is left of the wave (the remainder becomes the

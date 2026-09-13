@@ -31,6 +31,10 @@ import type { PlayUi } from './draw';
 import { prefersReducedMotion } from './particles';
 import { reducedMotionOverride } from '../ui/motion';
 import type { BoosterKind, BoosterStatus } from '../ui/boosters';
+import type { Palette } from './palette';
+import { drawCrystal, drawGoldCoin, drawVideoGlyph } from './sprites';
+import type { ToastOpts } from './economyWidgets';
+import { drawSpinner, drawToast, drawWallet } from './economyWidgets';
 
 /*
  * In-game HUD (ART_DIRECTION §4): glass paper bands top and bottom, level chip, timer pill, pause
@@ -59,6 +63,33 @@ export interface HudExtras {
   muted: boolean;
   /** Booster currently held down (pressed look). */
   pressedBooster?: BoosterKind | null;
+  /** Gold + crystal balances (drawn over the booster bar once the level is over; tap → shop). */
+  wallet?: { gold: number; crystals: number };
+  /** Economy rows on the result card (ECONOMY.md §3.4, §3.5, §5.2). */
+  result?: ResultExtras;
+  /** Result-card rect currently held down. */
+  pressed?: Rect | null;
+  toast?: ToastOpts | null;
+}
+
+export interface ResultExtras {
+  crystalsEarned: number;
+  /** Reasons for the crystals ("10 levels cleared"). */
+  notes: readonly string[];
+  /** Replay gold withheld by the daily cap. */
+  replayCapped: boolean;
+  /** Gold a rewarded video would add (null = button hidden). */
+  doubleGold: number | null;
+  /** The ×2 video was already watched for this result. */
+  doubled: boolean;
+  /** Crystal price of "Reinforcements" (null = not offered). */
+  continueCrystals: number | null;
+  /** Rewarded-video continue on offer. */
+  continueAd: boolean;
+  /** Crystal price of the level skip (null = not offered). */
+  skipCrystals: number | null;
+  /** An ad / purchase is in flight: buttons show a spinner and ignore taps. */
+  pending: boolean;
 }
 
 export type HudPlayUi = PlayUi & { hud?: HudExtras };
@@ -162,20 +193,33 @@ function drawBoosterBar(ctx: CanvasRenderingContext2D, ui: PlayUi, hud: HudExtra
       drawCooldownRing(ctx, cx, cy, r + 2, st.remainingMs / st.durationMs, color);
       ctx.restore();
     }
-    // cost chip: tiny coin + number under the disc
+    // cost chip under the disc: charges ("×2" on gold), a video glyph when a free charge is on offer,
+    // otherwise the gold price
     const chip: Rect = { x: rect.x + 6, y: rect.y + BOOSTERS.disc + 4, w: rect.w - 12, h: BOOSTERS.chipH };
     roundRect(ctx, chip, chip.h / 2);
-    ctx.fillStyle = st.affordable ? pal.paper : shade(pal.panel, -0.1);
+    const chipFill = st.charges > 0 ? pal.gold : st.adOffer ? pal.owners.player : st.affordable ? pal.paper : shade(pal.panel, -0.1);
+    ctx.fillStyle = chipFill;
     ctx.fill();
     ctx.lineWidth = 2;
-    ctx.strokeStyle = st.affordable ? shade(pal.gold, -0.2) : pal.textDim;
+    ctx.strokeStyle = st.charges > 0 ? pal.goldShade : st.adOffer ? shade(pal.owners.player, -0.35) : st.affordable ? shade(pal.gold, -0.2) : pal.textDim;
     ctx.stroke();
-    drawCoin(ctx, pal, chip.x + 12, chip.y + chip.h / 2, 7);
-    ctx.fillStyle = st.affordable ? pal.ink : pal.textDim;
     ctx.font = font(16);
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(String(st.cost), chip.x + 23, chip.y + chip.h / 2 + 1);
+    if (st.charges > 0) {
+      ctx.fillStyle = pal.ink;
+      ctx.textAlign = 'center';
+      ctx.fillText(`×${st.charges}`, chip.x + chip.w / 2, chip.y + chip.h / 2 + 1);
+    } else if (st.adOffer) {
+      drawVideoGlyph(ctx, pal, chip.x + 13, chip.y + chip.h / 2, 7);
+      ctx.fillStyle = pal.paper;
+      ctx.font = font(14);
+      ctx.fillText('FREE', chip.x + 24, chip.y + chip.h / 2 + 1, chip.w - 26);
+    } else {
+      drawCoin(ctx, pal, chip.x + 12, chip.y + chip.h / 2, 7);
+      ctx.fillStyle = st.affordable ? pal.ink : pal.textDim;
+      ctx.fillText(String(st.cost), chip.x + 23, chip.y + chip.h / 2 + 1);
+    }
   }
 }
 
@@ -282,10 +326,14 @@ export function drawHud(ctx: CanvasRenderingContext2D, state: GameState, _view: 
     lines.forEach((l, i) => ctx.fillText(l, 360, 108 + 20 + i * 26));
   }
 
-  // bottom bar: send ratio · boosters · coins · menu
+  // bottom bar: send ratio · boosters · coins · menu (wallet replaces boosters + coins once the level is over)
   drawSendToggle(ctx, ui);
-  if (hud) drawBoosterBar(ctx, ui, hud, nowMs);
-  drawCoinPill(ctx, ui);
+  if (ui.outcome !== 'playing' && hud?.wallet) {
+    drawWallet(ctx, pal, HUD.wallet, hud.wallet.gold, hud.wallet.crystals, { pressed: hud.pressed === HUD.wallet });
+  } else {
+    if (hud) drawBoosterBar(ctx, ui, hud, nowMs);
+    drawCoinPill(ctx, ui);
+  }
   drawButton(ctx, pal, HUD.menu, 'MENU', { fontPx: 22 });
 
   if (hud?.targeting && ui.outcome === 'playing' && !ui.paused) drawTargeting(ctx, state, ui, nowMs);
@@ -392,37 +440,120 @@ function drawResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: Pla
     drawStarPop(ctx, pal, 360 + (i - 1) * 100, starY, 38, won && i < ui.stars, t);
   }
 
+  const hud = extrasOf(ui);
+  const ex = hud?.result;
+  const pressed = hud?.pressed ?? null;
   if (won) {
     ctx.fillStyle = pal.textDim;
     ctx.font = font(20, '500');
-    ctx.fillText(`3 stars under ${formatTime(ui.level.star3)} · 2 under ${formatTime(ui.level.star2)}`, 360, card.y + 328);
-    // coins count up
+    ctx.fillText(`3 stars under ${formatTime(ui.level.star3)} · 2 under ${formatTime(ui.level.star2)}`, 360, card.y + 326);
+    // gold counts up (a crystal reward sits beside it)
     const countT = easeOutCubic((since - 900) / 800);
     const shown = Math.round(ui.coinsEarned * countT);
     const pop = 1 + 0.12 * Math.max(0, 1 - Math.abs((since - 1700) / 180));
     ctx.font = font(34);
     const label = `+${shown}`;
     const labelW = ctx.measureText(label).width;
+    const crystals = ex?.crystalsEarned ?? 0;
+    const cx = crystals > 0 ? 260 : 360;
     ctx.save();
-    ctx.translate(360, card.y + 382);
+    ctx.translate(cx, card.y + 376);
     ctx.scale(pop, pop);
-    drawCoin(ctx, pal, -labelW / 2 - 24, 0, 17);
+    drawGoldCoin(ctx, pal, -labelW / 2 - 24, 0, 17);
     ctx.fillStyle = pal.ink;
     ctx.font = font(34);
     ctx.fillText(label, 8, 1);
     ctx.restore();
+    if (crystals > 0) {
+      const cl = `+${Math.round(crystals * countT)}`;
+      ctx.font = font(34);
+      const clw = ctx.measureText(cl).width;
+      ctx.save();
+      ctx.translate(470, card.y + 376);
+      ctx.scale(pop, pop);
+      drawCrystal(ctx, pal, -clw / 2 - 22, 0, 17);
+      ctx.fillStyle = pal.ink;
+      ctx.fillText(cl, 8, 1);
+      ctx.restore();
+    }
     ctx.fillStyle = pal.textDim;
-    ctx.font = font(20, '500');
-    ctx.fillText(ui.coinsEarned > 0 ? `${ui.coinsTotal} coins total` : `already cleared · ${ui.coinsTotal} coins total`, 360, card.y + 422);
+    ctx.font = font(18, '500');
+    const note = ex?.notes.length ? ex.notes.join(' · ') : ex?.replayCapped ? 'daily replay gold cap reached' : ui.coinsEarned > 0 ? `${ui.coinsTotal} gold total` : `already cleared · ${ui.coinsTotal} gold total`;
+    ctx.fillText(note, 360, card.y + 416, card.w - 60);
   } else {
     ctx.fillStyle = pal.textDim;
     ctx.font = font(22, '500');
-    ctx.fillText('Every tower was lost. Try again!', 360, card.y + 360);
+    ctx.fillText('Every tower was lost.', 360, card.y + 318);
+    // Reinforcements: crystals and / or a rewarded video (ECONOMY.md §3.5)
+    if (ex && (ex.continueCrystals !== null || ex.continueAd)) {
+      const both = ex.continueCrystals !== null && ex.continueAd;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = pal.textDim;
+      ctx.font = font(16, '500');
+      ctx.fillText('Reinforcements: restart with +15 troops on every tower', 360, RESULT.continueSolo.y - 18, card.w - 60);
+      if (ex.continueCrystals !== null) {
+        const r = both ? RESULT.continueCrystals : RESULT.continueSolo;
+        drawOfferButton(ctx, pal, r, 'CONTINUE', String(ex.continueCrystals), 'crystal', { pressed: pressed === r, pending: ex.pending, nowMs: since });
+      }
+      if (ex.continueAd) {
+        const r = both ? RESULT.continueAd : RESULT.continueSolo;
+        drawOfferButton(ctx, pal, r, 'CONTINUE', 'WATCH', 'video', { pressed: pressed === r, pending: ex.pending, nowMs: since });
+      }
+      ctx.textAlign = 'center';
+    }
   }
-  drawButton(ctx, pal, RESULT.next, 'NEXT', { fill: won ? pal.owners.player : undefined, disabled: !won || !ui.hasNext, fontPx: 26 });
-  drawButton(ctx, pal, RESULT.retry, 'RETRY', { fontPx: 26 });
-  drawButton(ctx, pal, RESULT.menu, 'MENU', { fontPx: 26 });
+  drawButton(ctx, pal, RESULT.next, 'NEXT', { fill: won ? pal.owners.player : undefined, disabled: !won || !ui.hasNext, fontPx: 26, pressed: pressed === RESULT.next });
+  drawButton(ctx, pal, RESULT.retry, 'RETRY', { fontPx: 26, pressed: pressed === RESULT.retry });
+  drawButton(ctx, pal, RESULT.menu, 'MENU', { fontPx: 26, pressed: pressed === RESULT.menu });
+  if (ex) {
+    if (won && ex.doubleGold !== null && !ex.doubled) {
+      drawOfferButton(ctx, pal, RESULT.extra, `×2 GOLD  (+${ex.doubleGold})`, 'WATCH', 'video', { pressed: pressed === RESULT.extra, pending: ex.pending, nowMs: since });
+    } else if (won && ex.doubled) {
+      ctx.fillStyle = pal.textDim;
+      ctx.font = font(18, '500');
+      ctx.fillText('Gold doubled', 360, RESULT.extra.y + RESULT.extra.h / 2);
+    } else if (!won && ex.skipCrystals !== null) {
+      drawOfferButton(ctx, pal, RESULT.extra, 'SKIP LEVEL', String(ex.skipCrystals), 'crystal', { pressed: pressed === RESULT.extra, pending: ex.pending, nowMs: since, outline: true });
+    }
+  }
   ctx.restore();
+}
+
+/**
+ * Offer button: label left, a price tag right (crystal glyph + amount, or a video glyph + WATCH).
+ * `outline` draws the paper variant (secondary offer).
+ */
+function drawOfferButton(
+  ctx: CanvasRenderingContext2D,
+  pal: Palette,
+  r: Rect,
+  label: string,
+  tag: string,
+  glyph: 'crystal' | 'video',
+  o: { pressed: boolean; pending: boolean; nowMs: number; outline?: boolean },
+): void {
+  const fill = o.outline ? undefined : glyph === 'video' ? pal.owners.enemy2 : pal.owners.player;
+  drawButton(ctx, pal, r, '', { fill, pressed: o.pressed, flat: true });
+  const cy = r.y + (r.h - 4) / 2 + (o.pressed ? 3 : 0);
+  const text = fill ? pal.paper : pal.ink;
+  ctx.textBaseline = 'middle';
+  if (o.pending) {
+    drawSpinner(ctx, text, r.x + r.w / 2, cy, 11, o.nowMs);
+    return;
+  }
+  ctx.fillStyle = text;
+  ctx.font = font(21);
+  ctx.textAlign = 'left';
+  ctx.fillText(label, r.x + 18, cy + 1, r.w * 0.55);
+  ctx.font = font(19);
+  const tw = ctx.measureText(tag).width;
+  const gx = r.x + r.w - 18 - tw - 28;
+  if (glyph === 'crystal') drawCrystal(ctx, pal, gx + 6, cy, 11);
+  else drawVideoGlyph(ctx, pal, gx + 8, cy, 10);
+  ctx.textAlign = 'left';
+  ctx.fillStyle = text;
+  ctx.fillText(tag, gx + 26, cy + 1);
+  ctx.textAlign = 'center';
 }
 
 /** Pause menu (while playing and paused) or the result card (won / lost). Call only when one applies. */
@@ -444,5 +575,7 @@ export function drawOverlays(ctx: CanvasRenderingContext2D, state: GameState, _v
   }
   const since = nowMs > 0 && motionAllowed() ? nowMs - shown : 10_000;
   drawResultCard(ctx, state, ui, since);
+  const toast = extrasOf(ui)?.toast;
+  if (toast) drawToast(ctx, ui.palette, toast);
   ctx.restore();
 }

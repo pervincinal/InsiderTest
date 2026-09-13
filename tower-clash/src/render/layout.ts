@@ -15,6 +15,8 @@ export const HUD = Object.freeze({
   ratio: { x: 18, y: 1196, w: 200, h: 64 } as Rect,
   /** Coin balance pill, right of the booster bar. */
   coins: { x: 474, y: 1204, w: 98, h: 46 } as Rect,
+  /** Gold + crystal wallet drawn over the booster bar once the level is over (tap → shop). */
+  wallet: { x: 232, y: 1200, w: 340, h: 54 } as Rect,
   menu: { x: 586, y: 1196, w: 116, h: 64 } as Rect,
   /** Vertical band reserved for play; input outside is treated as HUD. */
   mapTop: 96,
@@ -33,12 +35,22 @@ export const BOOSTERS = Object.freeze({
   chipH: 22,
 });
 
-/** Result card (slides up to rest at `card`); the buttons row sits inside it. */
+/**
+ * Result card (slides up to rest at `card`); the buttons row sits inside it. Economy rows
+ * (ECONOMY.md §3.4, §3.5, §5.2): defeat → CONTINUE (crystals) · WATCH → CONTINUE (rewarded) above
+ * the buttons; win → WATCH → ×2 GOLD below them; SKIP LEVEL (crystals) in the same slot on defeat.
+ */
 export const RESULT = Object.freeze({
-  card: { x: 60, y: 330, w: 600, h: 560 } as Rect,
+  card: { x: 60, y: 330, w: 600, h: 640 } as Rect,
   next: { x: 84, y: 780, w: 170, h: 72 } as Rect,
   retry: { x: 275, y: 780, w: 170, h: 72 } as Rect,
   menu: { x: 466, y: 780, w: 170, h: 72 } as Rect,
+  continueCrystals: { x: 84, y: 700, w: 268, h: 62 } as Rect,
+  continueAd: { x: 368, y: 700, w: 268, h: 62 } as Rect,
+  /** Single centred continue button when only the crystal offer exists. */
+  continueSolo: { x: 180, y: 700, w: 360, h: 62 } as Rect,
+  /** ×2 gold (win) or skip level (defeat). */
+  extra: { x: 150, y: 874, w: 420, h: 62 } as Rect,
 });
 
 /** Pause menu (M1-11 + M3-3): resume, speed toggle ×1/×2, sound + settings, retry, menu. */
@@ -52,11 +64,18 @@ export const PAUSE = Object.freeze({
   menu: { x: 370, y: 872, w: 170, h: 72 } as Rect,
 });
 
-/** Title screen buttons: big PLAY, then a settings (gear) · sound row. */
+/**
+ * Title screen buttons: big PLAY, a settings (gear) · sound row, SHOP, the daily-reward chest
+ * (bottom-right) and the wallet footer (stars · gold · crystals; tap → shop).
+ */
 export const TITLE = Object.freeze({
   play: { x: 180, y: 640, w: 360, h: 96 } as Rect,
   settings: { x: 180, y: 780, w: 172, h: 64 } as Rect,
   sound: { x: 368, y: 780, w: 172, h: 64 } as Rect,
+  shop: { x: 180, y: 864, w: 360, h: 64 } as Rect,
+  /** Daily chest sits bottom-right, clear of the demo towers' unit badges. */
+  daily: { x: 574, y: 990, w: 128, h: 132 } as Rect,
+  wallet: { x: 120, y: 1172, w: 480, h: 52 } as Rect,
 });
 
 /**
@@ -88,6 +107,10 @@ export const SETTINGS = Object.freeze({
 export const LEVEL_MAP = Object.freeze({
   headerH: 100,
   back: { x: 18, y: 20, w: 140, h: 60 } as Rect,
+  /** Gold + crystal pills in the header (tap → shop). */
+  wallet: { x: 402, y: 24, w: 300, h: 52 } as Rect,
+  /** Commander summary chip at the bottom (tap → shop, upgrades tab). */
+  commander: { x: 60, y: 1206, w: 600, h: 54 } as Rect,
   /** Node radius (hit rect is the 2r square). */
   nodeR: 46,
   /** Content-space y of the first node and the vertical step between nodes. */
@@ -127,3 +150,61 @@ export const TOWER_HIT_RADIUS = 44;
 export const ROAD_HIT_RADIUS = 30;
 export const UNIT_RADIUS = 6;
 export const TANK_RADIUS = 11;
+
+/* ---------- shop (ECONOMY.md §4, Phase A) ---------- */
+
+export const SHOP_TABS = ['crystals', 'bundles', 'skins', 'upgrades'] as const;
+export type ShopTab = (typeof SHOP_TABS)[number];
+
+/**
+ * Shop: glass header (BACK · SHOP · wallet), a segmented tab row and a scrollable content area
+ * whose cards are laid out by the helpers below (content space; the screen subtracts its scroll).
+ */
+export const SHOP = Object.freeze({
+  headerH: 100,
+  back: { x: 18, y: 20, w: 140, h: 60 } as Rect,
+  wallet: { x: 402, y: 24, w: 300, h: 52 } as Rect,
+  tabs: { x: 30, y: 112, w: 660, h: 60 } as Rect,
+  /** Content viewport (below the tabs, above the bottom margin). */
+  contentTop: 192,
+  contentBottom: 1262,
+  /** Crystal packs: two columns. */
+  pack: { w: 316, h: 262, gapX: 20, gapY: 18, x0: 34, y0: 200 },
+  /** Bundles, upgrades: full-width rows. */
+  row: { x: 34, w: 652, h: 168, gap: 16, y0: 200 },
+  /** Skins: three columns under a category header. */
+  skin: { w: 208, h: 236, gapX: 14, gapY: 16, x0: 34, headerH: 46 },
+  restoreH: 60,
+  /** Buy button inside a card (relative to the card's bottom-right). */
+  buyW: 150,
+  buyH: 54,
+});
+
+export function shopPackRect(i: number): Rect {
+  const p = SHOP.pack;
+  const col = i % 2;
+  const row = Math.floor(i / 2);
+  return { x: p.x0 + col * (p.w + p.gapX), y: p.y0 + row * (p.h + p.gapY), w: p.w, h: p.h };
+}
+
+export function shopRowRect(i: number, h: number = SHOP.row.h): Rect {
+  return { x: SHOP.row.x, y: SHOP.row.y0 + i * (h + SHOP.row.gap), w: SHOP.row.w, h };
+}
+
+/** Skin card `i` of a category whose header starts at content-space `top`. */
+export function shopSkinRect(top: number, i: number): Rect {
+  const s = SHOP.skin;
+  const col = i % 3;
+  const row = Math.floor(i / 3);
+  return { x: s.x0 + col * (s.w + s.gapX), y: top + s.headerH + row * (s.h + s.gapY), w: s.w, h: s.h };
+}
+
+/** Buy / equip button docked bottom-centre inside a card. */
+export function shopBuyRect(card: Rect, w: number = SHOP.buyW, h: number = SHOP.buyH): Rect {
+  return { x: card.x + card.w / 2 - w / 2, y: card.y + card.h - h - 16, w, h };
+}
+
+/** Buy button docked at the right of a full-width row. */
+export function shopRowBuyRect(row: Rect): Rect {
+  return { x: row.x + row.w - SHOP.buyW - 18, y: row.y + row.h / 2 - SHOP.buyH / 2, w: SHOP.buyW, h: SHOP.buyH };
+}

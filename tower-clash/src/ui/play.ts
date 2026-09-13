@@ -1,5 +1,4 @@
 import type { Command, GameState, LevelDef, SimEvent } from '../sim/types';
-import { C } from '../sim/constants';
 import { Rng } from '../sim/rng';
 import { createState } from '../sim/create';
 import { getOutcome } from '../sim/outcome';
@@ -16,13 +15,19 @@ import { boosterColor } from '../render/hud';
 import type { PointerPoint } from '../input/pointer';
 import { PlayGestures, hitTower } from '../input/pointer';
 import { GameLoop } from './loop';
-import { recordWin, spendCoins, starsFor, writeSave } from './save';
-import type { App, Screen } from './screens';
-import { ResultScreen } from './screens';
+import { starsFor, writeSave } from './save';
+import type { App, Screen, StartOptions } from './screens';
+import { ResultScreen, Toast } from './screens';
 import type { Tutorial, TutorialStep } from './tutorial';
 import { drawTutorial, tutorialFor } from './tutorial';
-import type { BoosterKind } from './boosters';
-import { BOOSTER_KINDS, allBoosterStatus, canUseBooster } from './boosters';
+import type { BoosterKind, BoosterWallet } from './boosters';
+import { BOOSTER_KINDS, allBoosterStatus, boosterStatus, canUseBooster } from './boosters';
+import { modifiersFromSave } from './upgrades';
+import { boosterPrice, equippedSkin } from '../economy/entitlements';
+import { canShowRewarded, showRewarded } from '../economy/adsFlow';
+import type { ResultEarnings } from '../economy/wallet';
+import { recordResult, spendGold } from '../economy/wallet';
+import { CRYSTAL_SERVICES } from '../economy/catalog';
 import { isMuted, onPlayerCommand, onSimEvents, onSimFrame, playSfx, resetAudioLevel, toggleMuted } from '../audio/index';
 import { hapticCapture } from '../native/index';
 
@@ -48,18 +53,27 @@ export class PlayScreen implements Screen {
   private autoplay = false;
   private finishedHandled = false;
   private nowMs = 0;
-  private coinsEarned = 0;
+  private earnings: ResultEarnings = { stars: 0, gold: 0, crystals: 0, notes: [], replayCapped: false };
   private readonly tutorial: Tutorial | null;
   /** Airstrike targeting mode (M3-1): the next tap on an enemy tower fires, anywhere else cancels. */
   targeting = false;
   private pressedBooster: BoosterKind | null = null;
+  /** This attempt is a "Reinforcements" continue (ECONOMY.md §3.5) — offered once per attempt. */
+  readonly reinforced: boolean;
+  /** A rewarded video for a free booster charge is in flight (sim paused meanwhile). */
+  private adPending = false;
+  private readonly toast = new Toast();
+  /** Debug (e2e): throw every garrison at the enemy each AI tick so the level is lost quickly. */
+  private suicide = false;
 
   constructor(
     private readonly app: App,
     readonly level: LevelDef,
     seed: number = (Date.now() >>> 0) || 1,
     speed = 1,
+    opts: StartOptions = {},
   ) {
+    this.reinforced = opts.reinforcements === true;
     this.loop = new GameLoop({
       beforeTick: (s) => this.runAi(s),
       onEvents: (ev) => {
@@ -68,7 +82,9 @@ export class PlayScreen implements Screen {
       },
     });
     this.loop.speed = speed;
-    this.loop.load(createState(level, seed));
+    // Commander upgrades (+ the one-off continue bonus) are sim input, fixed for the whole match.
+    const modifiers = modifiersFromSave(app.save, this.reinforced ? CRYSTAL_SERVICES.continue.bonusInfantry : 0);
+    this.loop.load(createState(level, seed, modifiers));
     resetAudioLevel();
     const rngs = rngsFor(seed, level.enemies);
     this.playerRng = rngs.player;
@@ -104,11 +120,40 @@ export class PlayScreen implements Screen {
       if (rng) cmds.push(...enemyCommands(state, enemy, rng));
     }
     if (this.autoplay) cmds.push(...referencePlayerCommands(state, this.playerRng));
+    if (this.suicide) cmds.push(...this.suicideCommands(state));
+    return cmds;
+  }
+
+  /**
+   * Debug helper: every player tower trickles two units per AI tick into the strongest connected
+   * enemy tower (else any non-player tower). Units die on arrival without capturing, the garrison
+   * drains faster than it grows, and the enemy walks into the empty tower.
+   */
+  private suicideCommands(state: GameState): Command[] {
+    const cmds: Command[] = [];
+    for (const t of Object.values(state.towers)) {
+      if (t.owner !== 'player' || t.units <= 0) continue;
+      let best: { to: string; score: number } | null = null;
+      for (const r of Object.values(state.roads)) {
+        if (r.cut) continue;
+        const otherId = r.a === t.id ? r.b : r.b === t.id ? r.a : null;
+        const other = otherId ? state.towers[otherId] : undefined;
+        if (!other || other.owner === 'player') continue;
+        const score = (other.owner === 'neutral' ? 0 : 1000) + other.units;
+        if (!best || score > best.score) best = { to: other.id, score };
+      }
+      if (best) cmds.push({ type: 'sendUnits', owner: 'player', from: t.id, to: best.to, ratio: Math.min(1, 2 / t.units) });
+    }
     return cmds;
   }
 
   setAutoplay(on: boolean): void {
     this.autoplay = on;
+  }
+
+  /** Debug (e2e): lose the level as fast as the sim allows. */
+  setSuicide(on: boolean): void {
+    this.suicide = on;
   }
 
   setSpeed(n: number): void {
@@ -144,16 +189,30 @@ export class PlayScreen implements Screen {
     }
   }
 
+  /** Gold, discounted prices, pre-paid charges and the free-charge video offer for the booster bar. */
+  private wallet(): BoosterWallet {
+    const save = this.app.save;
+    return {
+      gold: save.gold,
+      prices: { overdrive: boosterPrice(save, 'overdrive'), freeze: boosterPrice(save, 'freeze'), airstrike: boosterPrice(save, 'airstrike') },
+      charges: save.charges,
+      adOffer: !this.adPending && canShowRewarded(this.app.ads, save, 'rv_free_booster'),
+    };
+  }
+
   private buildUi(): HudPlayUi {
     const outcome = getOutcome(this.state);
     const idx = LEVELS.findIndex((l) => l.id === this.level.id);
     return {
       hud: {
-        boosters: allBoosterStatus(this.state, this.app.save.coins),
+        boosters: allBoosterStatus(this.state, this.wallet()),
         targeting: this.targeting,
         muted: isMuted(),
         pressedBooster: this.pressedBooster,
+        wallet: { gold: this.app.save.gold, crystals: this.app.save.crystals },
+        toast: this.toast.opts(this.nowMs),
       },
+      skin: equippedSkin(this.app.save),
       level: this.level,
       palette: this.app.palette(),
       alpha: this.loop.alpha,
@@ -167,20 +226,19 @@ export class PlayScreen implements Screen {
       stars: outcome === 'won' ? starsFor(this.level, this.state.time) : 0,
       hasNext: idx >= 0 && idx + 1 < LEVELS.length,
       speed: this.loop.speed,
-      coinsEarned: this.coinsEarned,
-      coinsTotal: this.app.save.coins,
+      coinsEarned: this.earnings.gold,
+      coinsTotal: this.app.save.gold,
       particles: this.particles,
     };
   }
 
   private finish(): void {
-    if (getOutcome(this.state) === 'won') {
-      const stars = starsFor(this.level, this.state.time);
-      this.coinsEarned = recordWin(this.app.save, this.level.id, stars, C.COINS_PER_STAR);
-    }
-    const ui = this.buildUi(); // after recordWin so the coin totals are final
+    const outcome = getOutcome(this.state);
+    if (outcome === 'playing') return;
+    this.earnings = recordResult(this.app.save, this.level, outcome, this.state.time);
+    const ui = this.buildUi(); // after recordResult so the totals are final
     this.gestures.reset();
-    this.app.go(new ResultScreen(this.app, { state: this.state, level: this.level, ui }));
+    this.app.go(new ResultScreen(this.app, { state: this.state, level: this.level, ui, earnings: this.earnings, continued: this.reinforced }));
   }
 
   draw(view: View, nowMs: number): void {
@@ -205,13 +263,30 @@ export class PlayScreen implements Screen {
     return null;
   }
 
+  /** Pay for one booster use: a pre-paid charge first, else the discounted gold price. */
+  private payBooster(kind: BoosterKind): boolean {
+    const save = this.app.save;
+    if (save.charges[kind] > 0) {
+      save.charges[kind] -= 1;
+      writeSave(save);
+      return true;
+    }
+    return spendGold(save, boosterPrice(save, kind));
+  }
+
   /**
    * Buy and fire a booster. Overdrive/freeze apply at once; airstrike only enters targeting mode
-   * (the coins are spent when a tower is hit). Returns false when unaffordable / already active.
+   * (paid when a tower is hit). Returns false when unaffordable / already active. An unaffordable
+   * booster with a rewarded video on offer starts the "free charge" flow instead (ECONOMY.md §5.2).
    */
   useBooster(kind: BoosterKind): boolean {
     if (this.loop.paused || this.loop.finished) return false;
-    if (!canUseBooster(this.state, kind, this.app.save.coins)) return false;
+    const status = boosterStatus(this.state, kind, this.wallet());
+    if (status.adOffer && !status.active) {
+      void this.freeCharge(kind);
+      return false;
+    }
+    if (!canUseBooster(this.state, kind, this.wallet())) return false;
     if (kind === 'airstrike') {
       this.targeting = !this.targeting;
       this.gestures.reset();
@@ -219,18 +294,36 @@ export class PlayScreen implements Screen {
       return this.targeting;
     }
     this.targeting = false;
-    if (!spendCoins(this.app.save, C.BOOSTER_COST[kind])) return false;
+    if (!this.payBooster(kind)) return false;
     this.loop.enqueue({ type: 'booster', owner: 'player', booster: kind });
     playSfx('upgrade');
     return true;
   }
 
-  /** Airstrike on `towerId` (must be enemy-owned). Spends the coins and leaves targeting mode. */
+  /** Rewarded video → +1 charge of `kind`. The sim pauses while the video plays. */
+  async freeCharge(kind: BoosterKind): Promise<boolean> {
+    if (this.adPending || this.loop.finished) return false;
+    this.adPending = true;
+    const wasPaused = this.loop.paused;
+    this.loop.paused = true;
+    const ok = await showRewarded(this.app.ads, this.app.save, 'rv_free_booster');
+    this.loop.paused = wasPaused;
+    this.adPending = false;
+    if (ok) {
+      this.app.save.charges[kind] += 1;
+      writeSave(this.app.save);
+      playSfx('upgrade');
+      this.toast.show(`Free ${kind} charge added`, 'ok', this.nowMs);
+    }
+    return ok;
+  }
+
+  /** Airstrike on `towerId` (must be enemy-owned). Spends the charge / gold and leaves targeting mode. */
   airstrike(towerId: string): boolean {
     const t = this.state.towers[towerId];
     if (!t || t.owner === 'player' || t.owner === 'neutral') return false;
-    if (!canUseBooster(this.state, 'airstrike', this.app.save.coins)) return false;
-    if (!spendCoins(this.app.save, C.BOOSTER_COST.airstrike)) return false;
+    if (!canUseBooster(this.state, 'airstrike', this.wallet())) return false;
+    if (!this.payBooster('airstrike')) return false;
     this.loop.enqueue({ type: 'booster', owner: 'player', booster: 'airstrike', towerId });
     this.targeting = false;
     const color = boosterColor(this.app.palette(), 'airstrike');

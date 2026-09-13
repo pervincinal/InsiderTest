@@ -2,6 +2,11 @@ name: tower-clash-android
 
 # Builds an unsigned debug APK of the Capacitor Android shell on every push that touches
 # the game (iOS-only changes are skipped). Download it from the run's "Artifacts" section.
+#
+# Toolchain notes: @capacitor-community/admob and @revenuecat/purchases-capacitor are Kotlin
+# modules compiled for Java 21 (kotlin-gradle-plugin 2.2.x on their own buildscript classpath),
+# so the job needs JDK 21 (setup-java below); gradle/actions/setup-gradle caches the Gradle
+# distribution and dependency cache between runs. Secrets are optional (see the .env step).
 on:
   push:
     paths:
@@ -44,6 +49,42 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # Monetization ids (docs/MOBILE.md §8.3). These are PUBLIC ids that ship inside the APK, but
+      # they are kept out of the repository so test builds never show real ads. Vite reads
+      # .env.production at `vite build` time; when no secret is configured the step is skipped and
+      # the build falls back to "store unavailable" + Google's AdMob TEST ad units.
+      - name: Write .env.production from repository secrets
+        if: ${{ secrets.RC_ANDROID_KEY != '' || secrets.ADMOB_ANDROID_INTERSTITIAL != '' || secrets.ADMOB_ANDROID_REWARDED != '' }}
+        env:
+          VITE_RC_ANDROID_KEY: ${{ secrets.RC_ANDROID_KEY }}
+          VITE_ADMOB_ANDROID_INTERSTITIAL: ${{ secrets.ADMOB_ANDROID_INTERSTITIAL }}
+          VITE_ADMOB_ANDROID_REWARDED: ${{ secrets.ADMOB_ANDROID_REWARDED }}
+        run: |
+          : > .env.production
+          for name in VITE_RC_ANDROID_KEY VITE_ADMOB_ANDROID_INTERSTITIAL VITE_ADMOB_ANDROID_REWARDED; do
+            value="${!name}"
+            if [ -n "$value" ]; then
+              printf '%s=%s\n' "$name" "$value" >> .env.production
+              echo "$name: set"
+            else
+              echo "$name: not configured (safe default)"
+            fi
+          done
+
+      # The AdMob APP id (ca-app-pub-…~…, not an ad unit) lives in strings.xml; a wrong value
+      # crashes the app at startup, so only replace it when the secret is set.
+      - name: Set AdMob app id (Android)
+        if: ${{ secrets.ADMOB_ANDROID_APP_ID != '' }}
+        env:
+          ADMOB_ANDROID_APP_ID: ${{ secrets.ADMOB_ANDROID_APP_ID }}
+        run: |
+          case "$ADMOB_ANDROID_APP_ID" in
+            ca-app-pub-*~*) ;;
+            *) echo "ADMOB_ANDROID_APP_ID must look like ca-app-pub-XXXX~YYYY (an APP id, not an ad unit)"; exit 1 ;;
+          esac
+          sed -i "s#ca-app-pub-3940256099942544~3347511713#${ADMOB_ANDROID_APP_ID}#" android/app/src/main/res/values/strings.xml
+          grep -q "$ADMOB_ANDROID_APP_ID" android/app/src/main/res/values/strings.xml
 
       - name: Build web app
         run: npm run build

@@ -35,6 +35,41 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Monetization ids (docs/MOBILE.md §8.3): public ids kept out of the repository. Vite reads
+      # .env.production at `vite build` time; skipped when no secret is configured (the build then
+      # uses "store unavailable" + Google's AdMob TEST ad units).
+      - name: Write .env.production from repository secrets
+        if: ${{ secrets.RC_IOS_KEY != '' || secrets.ADMOB_IOS_INTERSTITIAL != '' || secrets.ADMOB_IOS_REWARDED != '' }}
+        env:
+          VITE_RC_IOS_KEY: ${{ secrets.RC_IOS_KEY }}
+          VITE_ADMOB_IOS_INTERSTITIAL: ${{ secrets.ADMOB_IOS_INTERSTITIAL }}
+          VITE_ADMOB_IOS_REWARDED: ${{ secrets.ADMOB_IOS_REWARDED }}
+        run: |
+          : > .env.production
+          for name in VITE_RC_IOS_KEY VITE_ADMOB_IOS_INTERSTITIAL VITE_ADMOB_IOS_REWARDED; do
+            value="${!name}"
+            if [ -n "$value" ]; then
+              printf '%s=%s\n' "$name" "$value" >> .env.production
+              echo "$name: set"
+            else
+              echo "$name: not configured (safe default)"
+            fi
+          done
+
+      # GADApplicationIdentifier in Info.plist must be the AdMob APP id (ca-app-pub-…~…); a wrong
+      # value crashes at startup, so only replace it when the secret is set.
+      - name: Set AdMob app id (iOS)
+        if: ${{ secrets.ADMOB_IOS_APP_ID != '' }}
+        env:
+          ADMOB_IOS_APP_ID: ${{ secrets.ADMOB_IOS_APP_ID }}
+        run: |
+          case "$ADMOB_IOS_APP_ID" in
+            ca-app-pub-*~*) ;;
+            *) echo "ADMOB_IOS_APP_ID must look like ca-app-pub-XXXX~YYYY (an APP id, not an ad unit)"; exit 1 ;;
+          esac
+          plutil -replace GADApplicationIdentifier -string "$ADMOB_IOS_APP_ID" ios/App/App/Info.plist
+          plutil -extract GADApplicationIdentifier raw ios/App/App/Info.plist | grep -q "$ADMOB_IOS_APP_ID"
+
       - name: Build web app
         run: npm run build
 
