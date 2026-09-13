@@ -1,0 +1,233 @@
+/**
+ * Shared AI helpers. Everything here reads only what a human player could see on screen:
+ * tower owners/garrisons/levels, roads (cut, barrier, mine), and units walking the roads.
+ * Nothing mutates state.
+ */
+import type { Command, EnemyDef, GameState, Owner, Road, Tower } from '../sim/index';
+import { C, Rng, capacityOf } from '../sim/index';
+
+/** A tower reachable from a source tower over one uncut road. */
+export interface Neighbour {
+  tower: Tower;
+  road: Road;
+  /** Weight lost on the way before anything arrives: barrier hp + mine charges still on the road. */
+  roadCost: number;
+  /** Weight of hostile units currently walking this road toward the source tower (they clash 1:1 with anything sent). */
+  oncoming: number;
+  /** Infantry travel time along the road, ms. */
+  travelMs: number;
+}
+
+export function isEnemyOwner(owner: Owner): boolean {
+  return owner === 'enemy1' || owner === 'enemy2' || owner === 'enemy3';
+}
+
+/** Towers owned by `owner`, in level order (deterministic). */
+export function ownedTowers(state: GameState, owner: Owner): Tower[] {
+  const out: Tower[] = [];
+  for (const id in state.towers) {
+    const t = state.towers[id]!;
+    if (t.owner === owner) out.push(t);
+  }
+  return out;
+}
+
+/** Adjacent towers over roads that are not cut. Barriers/mines are reported as extra cost, not as blockers. */
+export function neighbours(state: GameState, towerId: string): Neighbour[] {
+  const source = state.towers[towerId];
+  if (!source) return [];
+  const out: Neighbour[] = [];
+  for (const id in state.roads) {
+    const road = state.roads[id]!;
+    if (road.cut) continue;
+    const otherId = road.a === towerId ? road.b : road.b === towerId ? road.a : undefined;
+    if (otherId === undefined) continue;
+    const tower = state.towers[otherId];
+    if (!tower) continue;
+    let oncoming = 0;
+    for (const u of state.units) {
+      if (u.roadId === road.id && u.to === towerId && u.owner !== source.owner) oncoming += u.weight;
+    }
+    out.push({
+      tower,
+      road,
+      roadCost: road.barrier + road.mine,
+      oncoming,
+      travelMs: (road.length / C.UNIT_SPEED) * 1000,
+    });
+  }
+  return out;
+}
+
+/** Neighbours not owned by the source tower's owner (neutral included). */
+export function hostileNeighbours(state: GameState, towerId: string): Neighbour[] {
+  const source = state.towers[towerId];
+  if (!source) return [];
+  return neighbours(state, towerId).filter((n) => n.tower.owner !== source.owner);
+}
+
+/** Neighbours owned by a player/enemy other than the source tower's owner (neutral excluded). */
+export function enemyNeighbours(state: GameState, towerId: string): Neighbour[] {
+  return hostileNeighbours(state, towerId).filter((n) => n.tower.owner !== 'neutral');
+}
+
+/** Neighbours with the same owner as the source tower. */
+export function friendlyNeighbours(state: GameState, towerId: string): Neighbour[] {
+  const source = state.towers[towerId];
+  if (!source) return [];
+  return neighbours(state, towerId).filter((n) => n.tower.owner === source.owner);
+}
+
+/** Weight of `owner`'s units heading to a tower: on the roads plus still streaming out of a queue. */
+export function incomingWeight(state: GameState, towerId: string, owner: Owner): number {
+  let sum = 0;
+  for (const u of state.units) if (u.to === towerId && u.owner === owner) sum += u.weight;
+  for (const q of state.queues) {
+    if (q.to === towerId && q.owner === owner) sum += q.remaining * (q.unitKind === 'tank' ? C.TANK_WEIGHT : 1);
+  }
+  return sum;
+}
+
+/**
+ * Sum of hostile unit weight heading to a tower (everyone but the tower's owner): units on roads plus
+ * units still streaming out of a hostile tower toward it (a human sees the column forming; the source
+ * garrison already dropped).
+ */
+export function incomingThreat(state: GameState, towerId: string): number {
+  const tower = state.towers[towerId];
+  if (!tower) return 0;
+  let sum = 0;
+  for (const u of state.units) if (u.to === towerId && u.owner !== tower.owner) sum += u.weight;
+  for (const q of state.queues) {
+    if (q.to === towerId && q.owner !== tower.owner) sum += q.remaining * (q.unitKind === 'tank' ? C.TANK_WEIGHT : 1);
+  }
+  return sum;
+}
+
+/** Friendly weight heading to a tower (reinforcements already on the way). */
+export function incomingSupport(state: GameState, towerId: string): number {
+  const tower = state.towers[towerId];
+  if (!tower) return 0;
+  return incomingWeight(state, towerId, tower.owner);
+}
+
+/** Attackers needed per defender: 2 for a fortress, 1 otherwise. */
+export function defenceMultiplier(tower: Tower): number {
+  return tower.kind === 'fortress' ? C.FORTRESS_DEFENCE : 1;
+}
+
+/** Garrison expressed in attacker weight: fortress defenders count double. */
+export function effectiveDefenders(tower: Tower): number {
+  return tower.units * defenceMultiplier(tower);
+}
+
+/** Smallest arriving weight that flips the tower right now (damage must exceed the garrison). */
+export function weightToCapture(tower: Tower): number {
+  return effectiveDefenders(tower) + defenceMultiplier(tower);
+}
+
+/** Production of the tower in weight per second (0 for neutral). */
+export function genPerSecond(tower: Tower): number {
+  if (tower.owner === 'neutral') return 0;
+  switch (tower.kind) {
+    case 'tankFactory':
+      return (C.TANK_WEIGHT * 1000) / C.TANK_GEN_MS;
+    case 'artillery':
+      return 1000 / (C.GEN_MS[tower.level] * C.ARTILLERY_GEN_MUL);
+    default:
+      return 1000 / C.GEN_MS[tower.level];
+  }
+}
+
+/** Garrison the tower will have after `afterMs` of generation (capped), as raw units. */
+export function projectedUnits(tower: Tower, afterMs: number): number {
+  return Math.min(capacityOf(tower), tower.units + Math.floor((genPerSecond(tower) * afterMs) / 1000));
+}
+
+/** Projected garrison in attacker weight (fortress-aware). */
+export function projectedDefenders(tower: Tower, afterMs: number): number {
+  return projectedUnits(tower, afterMs) * defenceMultiplier(tower);
+}
+
+/** Highest level this tower can reach. */
+export function maxLevelOf(tower: Tower): number {
+  return tower.kind === 'fortress' ? C.FORTRESS_MAX_LEVEL : C.MAX_LEVEL;
+}
+
+/** Units needed for the next upgrade, or undefined when already at max. */
+export function upgradeCost(tower: Tower): number | undefined {
+  if (tower.level >= maxLevelOf(tower)) return undefined;
+  return (C.UPGRADE_COST as readonly number[])[tower.level];
+}
+
+/**
+ * Units the tower must keep to survive the hostile weight already heading its way, plus a small
+ * margin. 0 when nothing is incoming.
+ */
+export function threatReserve(state: GameState, tower: Tower, margin = 2): number {
+  const threat = incomingThreat(state, tower.id);
+  if (threat <= 0) return 0;
+  return Math.ceil(threat / defenceMultiplier(tower)) + margin;
+}
+
+/** Units the tower can send without being captured by what is already incoming. */
+export function spendable(state: GameState, tower: Tower, margin = 2): number {
+  return Math.max(0, tower.units - threatReserve(state, tower, margin));
+}
+
+/** Ratio that makes the sim send exactly `count` weight from the tower (1 when sending everything). */
+export function sendRatio(tower: Tower, count: number): number {
+  if (count >= tower.units) return 1;
+  if (count <= 0) return 0;
+  return (count + 0.5) / tower.units;
+}
+
+/** Build a sendUnits command for `count` weight; `undefined` when nothing would be sent. */
+export function sendCommand(tower: Tower, to: string, count: number): Command | undefined {
+  const weightPerUnit = tower.kind === 'tankFactory' ? C.TANK_WEIGHT : C.INFANTRY_WEIGHT;
+  const whole = Math.floor(Math.min(count, tower.units) / weightPerUnit) * weightPerUnit;
+  if (whole <= 0) return undefined;
+  return { type: 'sendUnits', owner: tower.owner, from: tower.id, to, ratio: sendRatio(tower, whole) };
+}
+
+/**
+ * Road hops from every tower to the nearest tower owned by an opponent of `owner` (neutral towers are
+ * not opponents). Unreachable towers are absent from the map.
+ */
+export function hopsToOpponent(state: GameState, owner: Owner): Map<string, number> {
+  const hops = new Map<string, number>();
+  const queue: string[] = [];
+  for (const id in state.towers) {
+    const t = state.towers[id]!;
+    if (t.owner !== owner && t.owner !== 'neutral') {
+      hops.set(id, 0);
+      queue.push(id);
+    }
+  }
+  for (let i = 0; i < queue.length; i++) {
+    const id = queue[i]!;
+    const d = hops.get(id)!;
+    for (const n of neighbours(state, id)) {
+      if (!hops.has(n.tower.id)) {
+        hops.set(n.tower.id, d + 1);
+        queue.push(n.tower.id);
+      }
+    }
+  }
+  return hops;
+}
+
+/** Aggression gate: an enemy tower skips its action this tick with probability (1 - aggression) * 0.5. */
+export function skipsAction(enemy: EnemyDef, rng: Rng): boolean {
+  const p = (1 - clamp01(enemy.aggression)) * 0.5;
+  return rng.next() < p;
+}
+
+export function clamp01(x: number): number {
+  return Number.isFinite(x) ? Math.min(1, Math.max(0, x)) : 0;
+}
+
+/** Whether sim time is on an AI tick boundary (every C.AI_TICK_MS). */
+export function isAiTick(state: GameState): boolean {
+  return state.time % C.AI_TICK_MS === 0;
+}
