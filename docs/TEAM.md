@@ -11,6 +11,7 @@ All members are Claude agents defined in `.claude/agents/`. The Producer is the 
 | AI Engineer | `ai-engineer.md` | `src/ai/` | Enemy personalities, difficulty scaling, reference player bot |
 | Level Designer | `level-designer.md` | `src/levels/` | Authoring & validating levels with `level-authoring` |
 | QA Engineer | `qa-engineer.md` | `tests/`, CI, bug reports | Vitest, Playwright smoke/screenshots, regression triage |
+| Mobile Engineer | `mobile-engineer.md` | `capacitor.config.ts`, `android/`, `ios/`, mobile CI, `docs/MOBILE.md` | Native shells, APK/IPA builds, store prep |
 | Tech Artist | `tech-artist.md` | Visual style, particles, WebAudio sfx | Juice, palette, colour-blind mode |
 
 Working agreements:

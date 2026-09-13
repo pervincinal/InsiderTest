@@ -10,6 +10,7 @@ Owner: the autonomous team (see `docs/TEAM.md`). The human stakeholder reads `re
 | M1 | Vertical slice | Day 5 | Enemy AI with 3 personalities, fortress + artillery, win/lose/stars, level select + save, 15 levels, Playwright smoke test, CI workflow |
 | M2 | Content & feel | Day 12 | Tank factory, mines, barriers, bridges, 2–3 enemies, 40 levels, tutorial overlays, juice (particles, WebAudio sfx), balance pass with the reference player bot |
 | M3 | Meta & polish | Day 19 | Coins, boosters, skins, settings, PWA manifest + offline, performance budget met, accessibility (colour-blind palette, reduced motion) |
+| M-mobile | iOS/Android app | Day 2 → ongoing | PWA installable; Capacitor Android + iOS projects; CI builds a debug APK on every push and an unsigned iOS simulator app; `docs/MOBILE.md` explains signing and store submission |
 | M4 | Release 1.0 | Day 26 | GitHub Pages deploy, README with play link, release notes, post-launch backlog |
 
 ## Daily cadence (fully autonomous)
