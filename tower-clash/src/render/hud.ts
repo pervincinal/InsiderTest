@@ -2,15 +2,22 @@ import type { GameState } from '../sim/types';
 import { C } from '../sim/constants';
 import { shade } from './palette';
 import type { View } from './view';
-import { HUD, PAUSE, RESULT } from './layout';
+import { BOOSTERS, HUD, PAUSE, RESULT } from './layout';
 import type { Rect } from './widgets';
 import {
+  drawBoltGlyph,
   drawButton,
   drawCard,
   drawCoin,
+  drawCooldownRing,
+  drawCrosshairGlyph,
   drawExtrudedText,
+  drawGearGlyph,
   drawGlassBand,
   drawPill,
+  drawRoundButton,
+  drawSnowflakeGlyph,
+  drawSpeakerGlyph,
   drawStarPop,
   easeOutBack,
   easeOutCubic,
@@ -22,6 +29,8 @@ import {
 } from './widgets';
 import type { PlayUi } from './draw';
 import { prefersReducedMotion } from './particles';
+import { reducedMotionOverride } from '../ui/motion';
+import type { BoosterKind, BoosterStatus } from '../ui/boosters';
 
 /*
  * In-game HUD (ART_DIRECTION §4): glass paper bands top and bottom, level chip, timer pill, pause
@@ -32,8 +41,35 @@ import { prefersReducedMotion } from './particles';
 
 let reducedMotion: boolean | null = null;
 function motionAllowed(): boolean {
+  const override = reducedMotionOverride();
+  if (override !== null) return !override;
   if (reducedMotion === null) reducedMotion = prefersReducedMotion();
   return !reducedMotion;
+}
+
+/**
+ * Extra HUD inputs that the play screen attaches to the frame's PlayUi (booster bar, airstrike
+ * targeting, mute). Optional so menus/tests can draw a plain PlayUi; the cast in `extrasOf` is the
+ * only place that reads it. (Producer: lift `hud?: HudExtras` into PlayUi in draw.ts when convenient.)
+ */
+export interface HudExtras {
+  boosters: readonly BoosterStatus[];
+  /** Airstrike targeting mode: tap an enemy tower, tap elsewhere to cancel. */
+  targeting: boolean;
+  muted: boolean;
+  /** Booster currently held down (pressed look). */
+  pressedBooster?: BoosterKind | null;
+}
+
+export type HudPlayUi = PlayUi & { hud?: HudExtras };
+
+function extrasOf(ui: PlayUi): HudExtras | undefined {
+  return (ui as HudPlayUi).hud;
+}
+
+/** Booster accent colours: gold bolt, ice snowflake, red crosshair (all from the active palette). */
+export function boosterColor(pal: PlayUi['palette'], kind: BoosterKind): string {
+  return kind === 'overdrive' ? pal.gold : kind === 'freeze' ? pal.sky : pal.owners.enemy1;
 }
 
 /* ---------- HUD ---------- */
@@ -60,11 +96,11 @@ function drawSendToggle(ctx: CanvasRenderingContext2D, ui: PlayUi): void {
   const pal = ui.palette;
   const r = HUD.ratio;
   drawButton(ctx, pal, r, '');
-  const labelW = 64;
+  const labelW = 56;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = pal.textDim;
-  ctx.font = font(15);
+  ctx.font = font(14);
   ctx.fillText('SEND', r.x + labelW / 2 + 2, r.y + (r.h - 4) / 2 + 1);
   const segW = (r.w - labelW - 8) / 2;
   const segs: { label: string; ratio: number }[] = [
@@ -84,13 +120,114 @@ function drawSendToggle(ctx: CanvasRenderingContext2D, ui: PlayUi): void {
       innerHighlight(ctx, sr, 12, 0.45);
     }
     ctx.fillStyle = active ? pal.paper : pal.textDim;
-    ctx.font = font(22);
-    ctx.fillText(seg.label, sr.x + sr.w / 2, sr.y + sr.h / 2 + 1);
+    ctx.font = font(21);
+    ctx.fillText(seg.label, sr.x + sr.w / 2, sr.y + sr.h / 2 + 1, sr.w - 4);
   });
 }
 
-export function drawHud(ctx: CanvasRenderingContext2D, state: GameState, _view: View, ui: PlayUi, _nowMs: number): void {
+function boosterGlyph(ctx: CanvasRenderingContext2D, kind: BoosterKind, color: string, cx: number, cy: number, s: number, outline: string): void {
+  if (kind === 'overdrive') drawBoltGlyph(ctx, color, cx, cy, s, outline);
+  else if (kind === 'freeze') drawSnowflakeGlyph(ctx, color, cx, cy, s);
+  else drawCrosshairGlyph(ctx, color, cx, cy, s);
+}
+
+/**
+ * Booster bar (M3-1): round clay buttons with an icon, a coin cost chip underneath, a cooldown
+ * ring while the timed booster runs and a dimmed face when unaffordable / active.
+ */
+function drawBoosterBar(ctx: CanvasRenderingContext2D, ui: PlayUi, hud: HudExtras, nowMs: number): void {
   const pal = ui.palette;
+  const r = BOOSTERS.disc / 2;
+  for (const st of hud.boosters) {
+    const rect = BOOSTERS[st.kind];
+    const cx = rect.x + rect.w / 2;
+    const cy = rect.y + r;
+    const color = boosterColor(pal, st.kind);
+    const targeting = st.kind === 'airstrike' && hud.targeting;
+    const usable = st.affordable && !st.active;
+    const pressed = hud.pressedBooster === st.kind;
+    drawRoundButton(ctx, pal, cx, cy, r - 2, {
+      fill: targeting ? color : undefined,
+      border: targeting ? shade(color, -0.35) : undefined,
+      disabled: !usable && !targeting,
+      pressed,
+    });
+    const gy = cy + (pressed ? 3 : 0);
+    const face = targeting ? pal.paper : usable ? color : shade(pal.panel, -0.45);
+    boosterGlyph(ctx, st.kind, face, cx, gy, 17, targeting ? 'rgba(0,0,0,0)' : shade(color, -0.45));
+    if (st.active && st.durationMs > 0) {
+      const pulse = motionAllowed() ? 0.85 + 0.15 * Math.sin(nowMs / 160) : 1;
+      ctx.save();
+      ctx.globalAlpha = pulse;
+      drawCooldownRing(ctx, cx, cy, r + 2, st.remainingMs / st.durationMs, color);
+      ctx.restore();
+    }
+    // cost chip: tiny coin + number under the disc
+    const chip: Rect = { x: rect.x + 6, y: rect.y + BOOSTERS.disc + 4, w: rect.w - 12, h: BOOSTERS.chipH };
+    roundRect(ctx, chip, chip.h / 2);
+    ctx.fillStyle = st.affordable ? pal.paper : shade(pal.panel, -0.1);
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = st.affordable ? shade(pal.gold, -0.2) : pal.textDim;
+    ctx.stroke();
+    drawCoin(ctx, pal, chip.x + 12, chip.y + chip.h / 2, 7);
+    ctx.fillStyle = st.affordable ? pal.ink : pal.textDim;
+    ctx.font = font(16);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(st.cost), chip.x + 23, chip.y + chip.h / 2 + 1);
+  }
+}
+
+/** Coin balance pill (bottom band, right of the boosters). */
+function drawCoinPill(ctx: CanvasRenderingContext2D, ui: PlayUi): void {
+  const pal = ui.palette;
+  const r = HUD.coins;
+  drawPill(ctx, r, pal.paper);
+  drawCoin(ctx, pal, r.x + 22, r.y + r.h / 2, 13);
+  ctx.fillStyle = pal.ink;
+  ctx.font = font(24);
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(String(ui.coinsTotal), r.x + r.w - 14, r.y + r.h / 2 + 1, r.w - 50);
+}
+
+/** Airstrike targeting: pulsing crosshair rings on every enemy tower and an instruction pill. */
+function drawTargeting(ctx: CanvasRenderingContext2D, state: GameState, ui: PlayUi, nowMs: number): void {
+  const pal = ui.palette;
+  const color = boosterColor(pal, 'airstrike');
+  const pulse = motionAllowed() ? (Math.sin(nowMs / 200) + 1) / 2 : 0.5;
+  ctx.save();
+  for (const id in state.towers) {
+    const t = state.towers[id]!;
+    if (t.owner === 'player' || t.owner === 'neutral') continue;
+    ctx.globalAlpha = 0.55 + 0.45 * (1 - pulse);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 5;
+    ctx.setLineDash([14, 10]);
+    ctx.lineDashOffset = motionAllowed() ? -(nowMs / 30) % 24 : 0;
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, 52 + pulse * 6, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+    drawCrosshairGlyph(ctx, color, t.x, t.y - 70, 14);
+  }
+  ctx.restore();
+  ctx.font = font(20, '500');
+  const text = 'AIRSTRIKE · tap an enemy tower · tap elsewhere to cancel';
+  const w = ctx.measureText(text).width + 44;
+  const pill: Rect = { x: 360 - w / 2, y: 1126, w, h: 42 };
+  drawPill(ctx, pill, color, shade(color, -0.35));
+  ctx.fillStyle = pal.paper;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, 360, pill.y + pill.h / 2 + 1, w - 20);
+}
+
+export function drawHud(ctx: CanvasRenderingContext2D, state: GameState, _view: View, ui: PlayUi, nowMs: number): void {
+  const pal = ui.palette;
+  const hud = extrasOf(ui);
   ctx.save();
   // glass bands
   drawGlassBand(ctx, HUD.topBar);
@@ -116,14 +253,18 @@ export function drawHud(ctx: CanvasRenderingContext2D, state: GameState, _view: 
   ctx.font = font(34);
   ctx.fillText(formatTime(state.time), timer.x + timer.w / 2, timer.y + timer.h / 2 + 2);
   if (ui.speed !== 1) {
-    const tag: Rect = { x: 444, y: 30, w: 82, h: 36 };
+    const tag = HUD.speedTag;
     drawPill(ctx, tag, pal.accent);
     ctx.fillStyle = pal.paper;
     ctx.font = font(20);
     ctx.fillText(`×${ui.speed}`, tag.x + tag.w / 2, tag.y + tag.h / 2 + 1);
   }
 
-  // pause button
+  // mute + pause buttons
+  const mb = HUD.mute;
+  const muted = hud?.muted ?? false;
+  drawButton(ctx, pal, mb, '');
+  drawSpeakerGlyph(ctx, muted ? pal.textDim : pal.ink, mb.x + mb.w / 2 - 2, mb.y + (mb.h - 4) / 2, 15, !muted);
   const pb = HUD.pause;
   drawButton(ctx, pal, pb, '');
   pauseGlyph(ctx, pal.ink, pb.x + pb.w / 2, pb.y + (pb.h - 4) / 2, ui.paused);
@@ -141,16 +282,19 @@ export function drawHud(ctx: CanvasRenderingContext2D, state: GameState, _view: 
     lines.forEach((l, i) => ctx.fillText(l, 360, 108 + 20 + i * 26));
   }
 
-  // bottom bar: send ratio + menu
+  // bottom bar: send ratio · boosters · coins · menu
   drawSendToggle(ctx, ui);
-  drawButton(ctx, pal, HUD.menu, 'MENU', { fontPx: 24 });
+  if (hud) drawBoosterBar(ctx, ui, hud, nowMs);
+  drawCoinPill(ctx, ui);
+  drawButton(ctx, pal, HUD.menu, 'MENU', { fontPx: 22 });
 
+  if (hud?.targeting && ui.outcome === 'playing' && !ui.paused) drawTargeting(ctx, state, ui, nowMs);
   // selection hint (just above the bottom band)
-  if (ui.selectedTowerId && ui.outcome === 'playing') {
+  else if (ui.selectedTowerId && ui.outcome === 'playing') {
     ctx.font = font(19, '500');
     const text = 'Tap a connected tower to send · tap again to upgrade';
     const w = ctx.measureText(text).width + 40;
-    const pill: Rect = { x: 360 - w / 2, y: 1134, w, h: 38 };
+    const pill: Rect = { x: 360 - w / 2, y: 1128, w, h: 38 };
     drawPill(ctx, pill, pal.paper);
     ctx.fillStyle = pal.ink;
     ctx.textAlign = 'center';
@@ -171,16 +315,34 @@ function dimWorld(ctx: CanvasRenderingContext2D, lost: boolean): void {
 
 function drawPauseCard(ctx: CanvasRenderingContext2D, state: GameState, ui: PlayUi): void {
   const pal = ui.palette;
-  drawCard(ctx, pal, PAUSE.card);
-  drawExtrudedText(ctx, 'PAUSED', 360, 492, 60, { face: pal.paper, side: shade(pal.owners.player, -0.3), outline: pal.ink, depth: 5 });
+  const hud = extrasOf(ui);
+  const card = PAUSE.card;
+  drawCard(ctx, pal, card);
+  drawExtrudedText(ctx, 'PAUSED', 360, card.y + 72, 60, { face: pal.paper, side: shade(pal.owners.player, -0.3), outline: pal.ink, depth: 5 });
   ctx.fillStyle = pal.textDim;
   ctx.font = font(24, '500');
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(`Level ${ui.level.id} · ${formatTime(state.time)}`, 360, 556);
+  ctx.fillText(`Level ${ui.level.id} · ${formatTime(state.time)}`, 360, card.y + 136);
   drawButton(ctx, pal, PAUSE.resume, 'RESUME', { fill: pal.owners.player, fontPx: 30 });
   const fast = ui.speed !== 1;
   drawButton(ctx, pal, PAUSE.speed, `SPEED ×${ui.speed}`, { fontPx: 24, border: fast ? pal.accent : undefined, text: fast ? pal.accent : undefined });
+  // sound toggle (glyph + state) · settings (gear)
+  const muted = hud?.muted ?? false;
+  const sb = PAUSE.sound;
+  drawButton(ctx, pal, sb, '');
+  drawSpeakerGlyph(ctx, muted ? pal.textDim : pal.ink, sb.x + 34, sb.y + (sb.h - 4) / 2, 14, !muted);
+  ctx.fillStyle = muted ? pal.textDim : pal.ink;
+  ctx.font = font(20);
+  ctx.textAlign = 'left';
+  ctx.fillText(muted ? 'MUTED' : 'SOUND', sb.x + 62, sb.y + (sb.h - 4) / 2 + 1, sb.w - 72);
+  const gb = PAUSE.settings;
+  drawButton(ctx, pal, gb, '');
+  drawGearGlyph(ctx, pal.ink, gb.x + 32, gb.y + (gb.h - 4) / 2, 12);
+  ctx.fillStyle = pal.ink;
+  ctx.font = font(20);
+  ctx.fillText('SETTINGS', gb.x + 56, gb.y + (gb.h - 4) / 2 + 1, gb.w - 66);
+  ctx.textAlign = 'center';
   drawButton(ctx, pal, PAUSE.retry, 'RETRY', { fontPx: 26 });
   drawButton(ctx, pal, PAUSE.menu, 'MENU', { fontPx: 26 });
 }

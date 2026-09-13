@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultSave, isLevelUnlocked, normalizeSave, recordWin, starsFor } from '../../src/ui/save';
+import { SAVE_VERSION, defaultSave, isLevelUnlocked, normalizeSave, recordWin, starsFor } from '../../src/ui/save';
 
 const LEVELS = [{ id: 1 }, { id: 2 }, { id: 3 }];
 
@@ -51,5 +51,67 @@ describe('recordWin coins (GDD §2.6: 10 per star, first clear only)', () => {
     expect(s.stars).toEqual({ '1': 3, '2': 0 });
     expect(s.coins).toBe(0);
     expect(s.settings.sendRatio).toBe(1);
+  });
+});
+
+describe('save schema v2 (M3-3)', () => {
+  function memStore(initial: Record<string, string> = {}) {
+    const m = new Map(Object.entries(initial));
+    return {
+      getItem: (k: string) => m.get(k) ?? null,
+      setItem: (k: string, v: string) => void m.set(k, v),
+      removeItem: (k: string) => void m.delete(k),
+      dump: () => Object.fromEntries(m),
+    };
+  }
+
+  it('defaults carry the version and reducedMotion=auto', () => {
+    const s = defaultSave();
+    expect(s.version).toBe(SAVE_VERSION);
+    expect(s.settings.reducedMotion).toBe('auto');
+  });
+
+  it('reads a v1 save, keeps stars/coins/settings and writes the v2 copy', async () => {
+    const { loadSaveFrom, SAVE_KEY, SAVE_KEY_V1 } = await import('../../src/ui/save');
+    const v1 = { stars: { '1': 3, '2': 1 }, coins: 40, settings: { sendRatio: 0.5, colorBlind: true, sound: false } };
+    const store = memStore({ [SAVE_KEY_V1]: JSON.stringify(v1) });
+    const s = loadSaveFrom(store);
+    expect(s.version).toBe(2);
+    expect(s.stars).toEqual({ '1': 3, '2': 1 });
+    expect(s.coins).toBe(40);
+    expect(s.settings).toEqual({ sendRatio: 0.5, colorBlind: true, sound: false, reducedMotion: 'auto' });
+    const written = JSON.parse(store.dump()[SAVE_KEY]!) as { version: number; coins: number };
+    expect(written.version).toBe(2);
+    expect(written.coins).toBe(40);
+    expect(store.dump()[SAVE_KEY_V1]).toBe(JSON.stringify(v1)); // the v1 entry is left in place
+  });
+
+  it('prefers the v2 entry when both exist and survives corrupt JSON', async () => {
+    const { loadSaveFrom, SAVE_KEY, SAVE_KEY_V1 } = await import('../../src/ui/save');
+    const store = memStore({
+      [SAVE_KEY_V1]: JSON.stringify({ coins: 5 }),
+      [SAVE_KEY]: JSON.stringify({ version: 2, coins: 99, settings: { reducedMotion: 'on' } }),
+    });
+    const s = loadSaveFrom(store);
+    expect(s.coins).toBe(99);
+    expect(s.settings.reducedMotion).toBe('on');
+    expect(loadSaveFrom(memStore({ [SAVE_KEY]: '{not json' })).coins).toBe(0);
+    expect(loadSaveFrom(null).version).toBe(2);
+  });
+
+  it('normalizeSave rejects an unknown reducedMotion value', () => {
+    expect(normalizeSave({ settings: { reducedMotion: 'sometimes' } }).settings.reducedMotion).toBe('auto');
+    expect(normalizeSave({ settings: { reducedMotion: 'off' } }).settings.reducedMotion).toBe('off');
+  });
+
+  it('spendCoins only deducts what is affordable', async () => {
+    const { spendCoins } = await import('../../src/ui/save');
+    const s = defaultSave();
+    s.coins = 40;
+    expect(spendCoins(s, 50)).toBe(false);
+    expect(s.coins).toBe(40);
+    expect(spendCoins(s, 40)).toBe(true);
+    expect(s.coins).toBe(0);
+    expect(spendCoins(s, -1)).toBe(false);
   });
 });

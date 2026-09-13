@@ -1,0 +1,37 @@
+{
+  "id": 19,
+  "name": "Toll Road",
+  "lesson": "A mine works both ways: sit behind a mined road and let the enemy rush pay the toll before it reaches you",
+  "star3": 30000,
+  "star2": 60000,
+  "enemies": [
+    {"owner": "enemy1", "personality": "opportunist", "aggression": 0.5},
+    {"owner": "enemy2", "personality": "rusher", "aggression": 0.5}
+  ],
+  "towers": [
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "west", "x": 150, "y": 980, "owner": "neutral", "units": 5},
+    {"id": "east", "x": 570, "y": 980, "owner": "neutral", "units": 5},
+    {"id": "gate", "x": 360, "y": 820, "owner": "neutral", "units": 6},
+    {"id": "nw", "x": 150, "y": 620, "owner": "neutral", "units": 6},
+    {"id": "ne", "x": 570, "y": 620, "owner": "neutral", "units": 6},
+    {"id": "red", "x": 250, "y": 400, "owner": "enemy2", "units": 14, "level": 1, "kind": "barracks"},
+    {"id": "green", "x": 520, "y": 420, "owner": "enemy1", "units": 10, "level": 1, "kind": "barracks"},
+    {"id": "top", "x": 360, "y": 200, "owner": "neutral", "units": 8}
+  ],
+  "roads": [
+    {"a": "home", "b": "west"},
+    {"a": "home", "b": "east"},
+    {"a": "west", "b": "gate"},
+    {"a": "east", "b": "gate"},
+    {"a": "gate", "b": "red", "mine": 8},
+    {"a": "west", "b": "nw"},
+    {"a": "nw", "b": "red", "mine": 5},
+    {"a": "east", "b": "ne"},
+    {"a": "ne", "b": "green"},
+    {"a": "gate", "b": "green"},
+    {"a": "red", "b": "green"},
+    {"a": "red", "b": "top"},
+    {"a": "green", "b": "top"}
+  ]
+}

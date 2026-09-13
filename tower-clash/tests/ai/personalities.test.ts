@@ -172,6 +172,61 @@ describe('opportunist', () => {
   });
 });
 
+describe('tank factories (whole tanks only)', () => {
+  /** Enemy tank factory `e` (`units` weight, level `level`) facing player barracks `p`. */
+  function tankDuel(def: EnemyDef, units: number, playerUnits: number, level: 1 | 2 | 3 = 1): GameState {
+    return createState(
+      makeLevel({
+        enemies: [def],
+        towers: [
+          { id: 'p', x: 360, y: 1000, owner: 'player', units: playerUnits, level: 1 },
+          { id: 'e', x: 360, y: 400, owner: 'enemy1', units, level, kind: 'tankFactory' },
+        ],
+      }),
+      1,
+    );
+  }
+
+  it('rusher counts only whole tanks: 4 weight is nothing, 8 weight is one tank', () => {
+    const def = enemy('rusher', 1);
+    // 4 weight < one tank: nothing to send even though 4 ≥ 2 + 1.
+    expect(enemyCommands(tankDuel(def, 4, 2), def, new Rng(1))).toEqual([]);
+    // 8 weight vs 6: raw weight passes 6 + 1 = 7, but only one tank (5) could go — it waits.
+    expect(enemyCommands(tankDuel(def, 8, 6), def, new Rng(1))).toEqual([]);
+    // 10 weight vs 6: two tanks (10 ≥ 7) go.
+    const state = tankDuel(def, 10, 6);
+    const cmds = enemyCommands(state, def, new Rng(1));
+    expect(cmds).toEqual([{ type: 'sendUnits', owner: 'enemy1', from: 'e', to: 'p', ratio: 1 }]);
+    applyCommand(state, cmds[0]!);
+    expect(state.queues[0]).toMatchObject({ unitKind: 'tank', remaining: 2 });
+    expect(state.towers['e']!.units).toBe(0);
+  });
+
+  it('turtle at max level needs the whole-tank weight to reach its threshold', () => {
+    const def = enemy('turtle', 1); // factor 1: needs target + 1
+    // 9 weight vs 5: raw 9 ≥ 6 but one tank (5) < 6 — waits.
+    expect(enemyCommands(tankDuel(def, 9, 5, 3), def, new Rng(1))).toEqual([]);
+    const state = tankDuel(def, 10, 5, 3);
+    const cmds = enemyCommands(state, def, new Rng(1));
+    expect(sends(cmds)).toHaveLength(1);
+    applyCommand(state, cmds[0]!);
+    expect(state.queues[0]).toMatchObject({ unitKind: 'tank', remaining: 2 });
+  });
+
+  it('opportunist keeps the reserve and sends only whole tanks above it', () => {
+    const def = enemy('opportunist', 1);
+    // 9 - 5 = 4 spare < one tank: no attack; 9 < 10 + 5 + 5: no upgrade.
+    expect(enemyCommands(tankDuel(def, 9, 3), def, new Rng(1))).toEqual([]);
+    // 12 - 5 = 7 spare → one tank (5 ≥ 3 + 1); the factory keeps 7, not 5.
+    const state = tankDuel(def, 12, 3);
+    const cmds = enemyCommands(state, def, new Rng(1));
+    expect(sends(cmds)).toHaveLength(1);
+    applyCommand(state, cmds[0]!);
+    expect(state.queues[0]).toMatchObject({ unitKind: 'tank', remaining: 1 });
+    expect(state.towers['e']!.units).toBe(7);
+  });
+});
+
 describe('runAiTick', () => {
   it('is deterministic for the same state and rng seed, and returns one command per enemy owner', () => {
     const level = makeLevel({

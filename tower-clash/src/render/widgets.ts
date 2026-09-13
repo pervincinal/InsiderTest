@@ -51,18 +51,52 @@ export function roundRect(ctx: CanvasRenderingContext2D, r: Rect, radius: number
 export const SHADOW_INK = '26, 58, 90';
 
 /**
- * Run `paint` with a soft drop shadow. Canvas shadow offsets/blur ignore the current transform,
- * so they are scaled by the active matrix to stay consistent across device sizes.
+ * Run `paint` with a soft drop shadow (blue ink, lower-right). `ctx.shadowBlur` costs a full
+ * Gaussian pass per call — ≈ 26 ms of fixed raster time per frame on the play HUD alone — so the
+ * shadow is built from primitives instead: the shape is painted three times in shadow ink at
+ * growing offsets along the shadow vector with falling alpha (umbra + directional gradation), and
+ * the path `paint` leaves behind gets one wide, round-joined stroke for the penumbra. `paint`
+ * chooses its own colours, so the fill/stroke style setters are shadowed on the context instance
+ * for the ink passes and removed again before the real paint. `blur` still scales the penumbra.
  */
 export function withShadow(ctx: CanvasRenderingContext2D, paint: () => void, dy = 6, blur = 12, alpha = 0.12): void {
-  const k = ctx.getTransform().a || 1;
+  const ink = `rgba(${SHADOW_INK}, 1)`;
+  const base = ctx.globalAlpha;
+  const dx = dy * 0.35;
   ctx.save();
-  ctx.shadowColor = `rgba(${SHADOW_INK}, ${alpha})`;
-  ctx.shadowBlur = blur * k;
-  ctx.shadowOffsetX = dy * 0.35 * k;
-  ctx.shadowOffsetY = dy * k;
-  paint();
+  ctx.fillStyle = ink;
+  ctx.strokeStyle = ink;
+  const own = ctx as unknown as Record<string, unknown>;
+  for (const key of ['fillStyle', 'strokeStyle'] as const) {
+    Object.defineProperty(own, key, { configurable: true, enumerable: false, get: () => ink, set: () => undefined });
+  }
+  try {
+    // [offset factor, share of alpha]: the three copies overlap to ≈ alpha in the umbra
+    for (const [k, share] of [
+      [0.7, 0.5],
+      [1, 0.34],
+      [1.3, 0.22],
+    ] as const) {
+      ctx.save();
+      ctx.translate(dx * k, dy * k);
+      ctx.globalAlpha = base * alpha * share;
+      ctx.beginPath(); // never stroke a stale path when paint() only uses fillText
+      paint();
+      if (k === 1 && blur > 0) {
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.lineWidth = blur * 0.8;
+        ctx.globalAlpha = base * alpha * 0.25;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  } finally {
+    delete own.fillStyle;
+    delete own.strokeStyle;
+  }
   ctx.restore();
+  paint();
 }
 
 /** Thin lighter line just inside the top of a rounded shape: the clay "inner highlight". */
@@ -506,4 +540,270 @@ export function easeOutBack(t: number): number {
 export function easeOutCubic(t: number): number {
   const u = 1 - Math.max(0, Math.min(1, t));
   return 1 - u * u * u;
+}
+
+/* ---------- M3 widgets: round buttons, segmented control, toggle, cooldown ring ---------- */
+
+export interface RoundButtonStyle {
+  fill?: string;
+  border?: string;
+  disabled?: boolean;
+  pressed?: boolean;
+}
+
+/**
+ * Round clay button (booster bar): shaded underside as the "edge", lit face gradient, top-left
+ * glint. `cx, cy` is the face centre, `r` its radius; the edge hangs BUTTON_EDGE px below.
+ */
+export function drawRoundButton(ctx: CanvasRenderingContext2D, pal: Palette, cx: number, cy: number, r: number, style: RoundButtonStyle = {}): void {
+  const fill = style.fill ?? pal.panel;
+  const light = isLight(fill);
+  const press = style.pressed ? PRESS_DROP : 0;
+  ctx.save();
+  ctx.globalAlpha = style.disabled ? 0.45 : 1;
+  const paintEdge = (): void => {
+    ctx.beginPath();
+    ctx.arc(cx, cy + BUTTON_EDGE, r, 0, Math.PI * 2);
+    ctx.fillStyle = style.fill ? shade(fill, -0.38) : shade(pal.panel, -0.22);
+    ctx.fill();
+  };
+  if (style.pressed) paintEdge();
+  else withShadow(ctx, paintEdge, 6, 12, 0.14);
+  ctx.beginPath();
+  ctx.arc(cx, cy + press, r, 0, Math.PI * 2);
+  const g = ctx.createLinearGradient(cx - r, cy - r, cx + r * 0.4, cy + r);
+  g.addColorStop(0, shade(fill, light ? 0.1 : 0.2));
+  g.addColorStop(1, shade(fill, light ? 0 : -0.05));
+  ctx.fillStyle = g;
+  ctx.fill();
+  if (style.border) {
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = style.border;
+    ctx.stroke();
+  }
+  ctx.fillStyle = `rgba(255,255,255,${light ? 0.75 : 0.45})`;
+  ctx.beginPath();
+  ctx.ellipse(cx - r * 0.3, cy + press - r * 0.5, r * 0.32, r * 0.16, -0.6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+/** Ring arc around a round button showing `fraction` (0..1) of a cooldown left, clockwise from 12 o'clock. */
+export function drawCooldownRing(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, fraction: number, color: string, track = 'rgba(30,42,68,0.18)'): void {
+  const f = Math.max(0, Math.min(1, fraction));
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = track;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.stroke();
+  if (f > 0) {
+    ctx.strokeStyle = color;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * f);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+export interface Segment {
+  label: string;
+}
+
+/**
+ * Segmented control on a clay button face: `active` segment is a raised blue pill with paper
+ * text, the rest are dim labels. Segments split `r` evenly; hit-test with `segmentAt`.
+ */
+export function drawSegmented(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, segments: readonly Segment[], active: number, fontPx = 22): void {
+  drawButton(ctx, pal, r, '');
+  const segW = (r.w - 8) / segments.length;
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  segments.forEach((seg, i) => {
+    const sr: Rect = { x: r.x + 4 + i * segW, y: r.y + 6, w: segW, h: r.h - BUTTON_EDGE - 12 };
+    const on = i === active;
+    if (on) {
+      roundRect(ctx, { x: sr.x, y: sr.y + 2, w: sr.w, h: sr.h }, 12);
+      ctx.fillStyle = shade(pal.owners.player, -0.4);
+      ctx.fill();
+      roundRect(ctx, sr, 12);
+      ctx.fillStyle = pal.owners.player;
+      ctx.fill();
+      innerHighlight(ctx, sr, 12, 0.45);
+    }
+    ctx.fillStyle = on ? pal.paper : pal.textDim;
+    ctx.font = font(fontPx);
+    ctx.fillText(seg.label, sr.x + sr.w / 2, sr.y + sr.h / 2 + 1, sr.w - 6);
+  });
+  ctx.restore();
+}
+
+/** Index of the segment under logical x for a control drawn with `drawSegmented` (-1 outside). */
+export function segmentAt(r: Rect, count: number, x: number, y: number): number {
+  if (!inRect(r, x, y)) return -1;
+  return Math.max(0, Math.min(count - 1, Math.floor(((x - r.x - 4) / (r.w - 8)) * count)));
+}
+
+/** ON/OFF toggle: clay track (blue when on) with a paper knob that slides right when on. */
+export function drawToggle(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, on: boolean, pressed = false): void {
+  const track = on ? pal.owners.player : shade(pal.panel, -0.12);
+  drawButton(ctx, pal, r, '', { fill: on ? track : undefined, pressed });
+  const faceH = r.h - BUTTON_EDGE;
+  const knobR = faceH / 2 - 8;
+  const kx = on ? r.x + r.w - 8 - knobR : r.x + 8 + knobR;
+  const ky = r.y + faceH / 2 + (pressed ? PRESS_DROP : 0);
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(kx + 1, ky + 3, knobR, 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(${SHADOW_INK}, 0.25)`;
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(kx, ky, knobR, 0, Math.PI * 2);
+  ctx.fillStyle = pal.paper;
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.8)';
+  ctx.beginPath();
+  ctx.ellipse(kx - knobR * 0.25, ky - knobR * 0.4, knobR * 0.35, knobR * 0.18, -0.6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = on ? pal.paper : pal.textDim;
+  ctx.font = font(20);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const labelX = on ? r.x + (r.w - knobR * 2 - 16) / 2 : r.x + knobR * 2 + 16 + (r.w - knobR * 2 - 16) / 2;
+  ctx.fillText(on ? 'ON' : 'OFF', labelX, ky + 1);
+  ctx.restore();
+}
+
+/* ---------- glyphs (all canvas primitives, centred at cx/cy, `s` ≈ half size) ---------- */
+
+export function drawSpeakerGlyph(ctx: CanvasRenderingContext2D, color: string, cx: number, cy: number, s: number, on: boolean): void {
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = Math.max(2, s * 0.14);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(cx - s * 0.7, cy - s * 0.3);
+  ctx.lineTo(cx - s * 0.3, cy - s * 0.3);
+  ctx.lineTo(cx + s * 0.15, cy - s * 0.7);
+  ctx.lineTo(cx + s * 0.15, cy + s * 0.7);
+  ctx.lineTo(cx - s * 0.3, cy + s * 0.3);
+  ctx.lineTo(cx - s * 0.7, cy + s * 0.3);
+  ctx.closePath();
+  ctx.fill();
+  if (on) {
+    ctx.beginPath();
+    ctx.arc(cx + s * 0.2, cy, s * 0.45, -0.9, 0.9);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(cx + s * 0.2, cy, s * 0.8, -0.9, 0.9);
+    ctx.stroke();
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(cx + s * 0.4, cy - s * 0.35);
+    ctx.lineTo(cx + s * 0.95, cy + s * 0.35);
+    ctx.moveTo(cx + s * 0.95, cy - s * 0.35);
+    ctx.lineTo(cx + s * 0.4, cy + s * 0.35);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** Cog: ring with eight teeth and a hollow hub. */
+export function drawGearGlyph(ctx: CanvasRenderingContext2D, color: string, cx: number, cy: number, s: number): void {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineCap = 'round';
+  ctx.lineWidth = s * 0.28;
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(a) * s * 0.55, cy + Math.sin(a) * s * 0.55);
+    ctx.lineTo(cx + Math.cos(a) * s * 0.95, cy + Math.sin(a) * s * 0.95);
+    ctx.stroke();
+  }
+  ctx.lineWidth = s * 0.34;
+  ctx.beginPath();
+  ctx.arc(cx, cy, s * 0.52, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** Lightning bolt (overdrive). */
+export function drawBoltGlyph(ctx: CanvasRenderingContext2D, color: string, cx: number, cy: number, s: number, outline?: string): void {
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(cx + s * 0.25, cy - s);
+  ctx.lineTo(cx - s * 0.55, cy + s * 0.15);
+  ctx.lineTo(cx - s * 0.02, cy + s * 0.15);
+  ctx.lineTo(cx - s * 0.3, cy + s);
+  ctx.lineTo(cx + s * 0.55, cy - s * 0.2);
+  ctx.lineTo(cx + s * 0.02, cy - s * 0.2);
+  ctx.closePath();
+  if (outline) {
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(2, s * 0.22);
+    ctx.strokeStyle = outline;
+    ctx.stroke();
+  }
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.restore();
+}
+
+/** Six-armed snowflake with short branches (freeze). */
+export function drawSnowflakeGlyph(ctx: CanvasRenderingContext2D, color: string, cx: number, cy: number, s: number): void {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineCap = 'round';
+  ctx.lineWidth = Math.max(2, s * 0.16);
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    const dx = Math.cos(a);
+    const dy = Math.sin(a);
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + dx * s, cy + dy * s);
+    ctx.stroke();
+    // two branches at 60 % of the arm
+    const bx = cx + dx * s * 0.6;
+    const by = cy + dy * s * 0.6;
+    for (const side of [-1, 1]) {
+      const b = a + (side * Math.PI) / 3;
+      ctx.beginPath();
+      ctx.moveTo(bx, by);
+      ctx.lineTo(bx + Math.cos(b) * s * 0.3, by + Math.sin(b) * s * 0.3);
+      ctx.stroke();
+    }
+  }
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(cx, cy, s * 0.14, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+/** Crosshair: ring, four ticks, centre dot (airstrike). */
+export function drawCrosshairGlyph(ctx: CanvasRenderingContext2D, color: string, cx: number, cy: number, s: number): void {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineCap = 'round';
+  ctx.lineWidth = Math.max(2, s * 0.16);
+  ctx.beginPath();
+  ctx.arc(cx, cy, s * 0.62, 0, Math.PI * 2);
+  ctx.stroke();
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(a) * s * 0.4, cy + Math.sin(a) * s * 0.4);
+    ctx.lineTo(cx + Math.cos(a) * s, cy + Math.sin(a) * s);
+    ctx.stroke();
+  }
+  ctx.beginPath();
+  ctx.arc(cx, cy, s * 0.14, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }

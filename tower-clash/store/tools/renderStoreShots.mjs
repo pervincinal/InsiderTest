@@ -1,16 +1,32 @@
 #!/usr/bin/env node
 /**
- * Renders the store assets from the real game with Playwright (PUB-2).
+ * Renders the store assets from the real game with Playwright (PUB-2, PUB-5).
  *
- *   cd tower-clash && npm run build && node store/tools/renderStoreShots.mjs
+ *   cd tower-clash && npm run build && node store/tools/renderStoreShots.mjs [--google] [--apple] [--all] [--port=4180]
  *
- * Output (all PNG, every file kept under 600 KB):
- *   store/screenshots/raw/NN-<name>.png   – uncaptioned 1080×1920 frames (viewport 360×640 @3x)
- *   store/screenshots/en/01..06.png       – captioned phone screenshots, English
- *   store/screenshots/az/01..06.png       – captioned phone screenshots, Azerbaijani
- *   store/feature-graphic.png             – 1024×500 Google Play feature graphic (drawn on canvas)
+ * Default (no flag) = `--google`. Output (all PNG, every file kept under 600 KB):
  *
- * The script starts `vite preview` on port 4180 itself and kills it on exit. Chromium is the
+ *   --google
+ *   store/screenshots/raw/NN-<name>.png        – uncaptioned 1080×1920 frames (viewport 360×640 @3x)
+ *   store/screenshots/en/01..06.png            – captioned phone screenshots, English
+ *   store/screenshots/az/01..06.png            – captioned phone screenshots, Azerbaijani
+ *   store/feature-graphic.png                  – 1024×500 Google Play feature graphic (drawn on canvas)
+ *   Google Play accepts any 9:16 size between 320 and 3840 px, so this set may be scaled down
+ *   (1080×1920 → 945×1680 → …) until every file fits the size budget.
+ *
+ *   --apple
+ *   store/screenshots/raw-apple-6.7/NN-<name>.png – 1290×2796 frames (viewport 430×932 @3x)
+ *   store/screenshots/raw-apple-6.5/NN-<name>.png – 1284×2778 frames (viewport 428×926 @3x)
+ *   store/screenshots/apple-6.7/en/01..06.png     – captioned, exactly 1290×2796 (iPhone 6.7")
+ *   store/screenshots/apple-6.5/en/01..06.png     – captioned, exactly 1284×2778 (iPhone 6.5")
+ *   App Store Connect only accepts these exact sizes, so the Apple sets are never scaled. Every
+ *   file is first re-encoded losslessly (`pngRecompress.mjs`); when it is still over budget the
+ *   script steps down `APPLE_QUALITY_LADDER` at the same pixel size: fewer colour levels per
+ *   channel (canvas posterise) and, when the transitive `sharp` module of `@capacitor/assets`
+ *   can be imported, a dithered 256-colour palette (libimagequant). `sharp` is optional: without
+ *   it the posterise steps alone still produce a file under the limit.
+ *
+ * The script starts `vite preview` on the given port itself and kills it on exit. Chromium is the
  * preinstalled headless shell under /opt/pw-browsers (never run `playwright install` here);
  * in other environments the default Playwright browser is used.
  */
@@ -19,18 +35,27 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'no
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
+import { pngSize, recompressPng } from './pngRecompress.mjs';
+
+/** Optional palette encoder (see header). `null` when the module is not resolvable. */
+const sharp = await import('sharp').then((m) => m.default ?? m).catch(() => null);
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..'); // tower-clash/
 const STORE = join(ROOT, 'store');
-const RAW = join(STORE, 'screenshots', 'raw');
-const PORT = 4180;
-const URL = `http://localhost:${PORT}/`;
 const HEADLESS_SHELL = '/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell';
 const MAX_BYTES = 600 * 1024;
-const OUT_W = 1080;
-const OUT_H = 1920;
 
-/** Order matters: index N becomes en/0N.png and az/0N.png. */
+/* ---------- CLI ---------- */
+
+const args = process.argv.slice(2);
+const flag = (name) => args.includes(`--${name}`);
+const portArg = args.find((a) => a.startsWith('--port='));
+const PORT = portArg ? Number(portArg.slice('--port='.length)) : 4180;
+const URL = `http://localhost:${PORT}/`;
+const DO_APPLE = flag('apple') || flag('all');
+const DO_GOOGLE = flag('google') || flag('all') || !flag('apple');
+
+/** Order matters: index N becomes <lang>/0N.png. */
 const SHOTS = [
   { name: 'title', en: 'Capture every tower', az: 'Bütün qüllələri tut' },
   { name: 'level-01-tutorial', en: 'One tap to attack', az: 'Bir toxunuşla hücum' },
@@ -40,7 +65,64 @@ const SHOTS = [
   { name: 'result-win', en: 'Three-star every level', az: 'Hər səviyyədə üç ulduz' },
 ];
 
+/**
+ * One entry per store format. `exact` = the output must keep its pixel size (App Store);
+ * otherwise the set may be scaled down to meet the size budget (Google Play).
+ */
+const SETS = {
+  google: {
+    id: 'google',
+    viewport: { width: 360, height: 640 },
+    scale: 3,
+    out: { w: 1080, h: 1920 },
+    rawDir: join(STORE, 'screenshots', 'raw'),
+    outDir: (lang) => join(STORE, 'screenshots', lang),
+    langs: ['en', 'az'],
+    exact: false,
+  },
+  'apple-6.7': {
+    id: 'apple-6.7',
+    viewport: { width: 430, height: 932 },
+    scale: 3,
+    out: { w: 1290, h: 2796 },
+    rawDir: join(STORE, 'screenshots', 'raw-apple-6.7'),
+    outDir: (lang) => join(STORE, 'screenshots', 'apple-6.7', lang),
+    langs: ['en'],
+    exact: true,
+  },
+  'apple-6.5': {
+    id: 'apple-6.5',
+    viewport: { width: 428, height: 926 },
+    scale: 3,
+    out: { w: 1284, h: 2778 },
+    rawDir: join(STORE, 'screenshots', 'raw-apple-6.5'),
+    outDir: (lang) => join(STORE, 'screenshots', 'apple-6.5', lang),
+    langs: ['en'],
+    exact: true,
+  },
+};
+
+/**
+ * Re-encode steps for exact-size sets, tried in order until the file is under budget (best
+ * quality first). `bits` = colour levels kept per channel (8 = untouched, 6 = 64 levels, not
+ * visible on a phone; 5 starts to band on the water gradient); `palette` = dithered 256-colour
+ * PNG via `sharp` (skipped when `sharp` is unavailable). Softening or resampling the frame is
+ * deliberately not on the ladder: it *grows* the file (flat clay fills compress best when crisp).
+ */
+const APPLE_QUALITY_LADDER = [
+  { bits: 8, palette: false },
+  { bits: 6, palette: false },
+  { bits: 8, palette: true },
+  { bits: 6, palette: true },
+  { bits: 5, palette: false },
+  { bits: 5, palette: true },
+  { bits: 4, palette: false },
+];
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const rawFile = (set, i) => join(set.rawDir, `${String(i + 1).padStart(2, '0')}-${SHOTS[i].name}.png`);
+const outFile = (set, lang, i) => join(set.outDir(lang), `${String(i + 1).padStart(2, '0')}.png`);
+const kb = (n) => `${(n / 1024).toFixed(0)} KB`;
 
 /* ---------- preview server ---------- */
 
@@ -71,17 +153,18 @@ async function startPreview() {
 
 /* ---------- game driving ---------- */
 
-async function openGame(browser) {
+async function openGame(browser, set) {
   // Fresh context = fresh localStorage, so level 1 shows its tutorial and coins start at 0.
   const context = await browser.newContext({
-    viewport: { width: 360, height: 640 },
-    deviceScaleFactor: 3,
+    viewport: set.viewport,
+    deviceScaleFactor: set.scale,
     isMobile: true,
     hasTouch: true,
   });
   const page = await context.newPage();
   await page.goto(URL);
   await page.waitForFunction(() => typeof window.__towerclash?.getScreen === 'function');
+  await page.evaluate(() => document.fonts?.ready); // Fredoka must be in before the first frame
   await page.waitForTimeout(600); // let the title demo animate in
   return page;
 }
@@ -119,27 +202,32 @@ async function playUntil(page, id, untilMs) {
  * victory, so the last seconds run at ×1 (no "×10" tag) after a fast-forward to `fastUntilMs`.
  */
 async function playToResult(page, id, fastUntilMs) {
-  await page.evaluate((lv) => {
-    window.__towerclash.setSpeed(1);
-    window.__towerclash.loadLevel(lv);
-    window.__towerclash.setSpeed(10);
-    window.__towerclash.autoplay();
-  }, id);
-  let deadline = Date.now() + 60_000;
-  while (Date.now() < deadline && (await screen(page)) === 'play' && (await simTime(page)) < fastUntilMs) await sleep(100);
-  await page.evaluate(() => window.__towerclash.setSpeed(1));
-  deadline = Date.now() + 90_000;
-  while (Date.now() < deadline && (await screen(page)) !== 'result') await sleep(150);
-  const result = await page.evaluate(() => window.__towerclash.getResult());
+  let result = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await page.evaluate((lv) => {
+      window.__towerclash.setSpeed(1);
+      window.__towerclash.loadLevel(lv);
+      window.__towerclash.setSpeed(10);
+      window.__towerclash.autoplay();
+    }, id);
+    let deadline = Date.now() + 60_000;
+    while (Date.now() < deadline && (await screen(page)) === 'play' && (await simTime(page)) < fastUntilMs) await sleep(100);
+    await page.evaluate(() => window.__towerclash.setSpeed(1));
+    deadline = Date.now() + 90_000;
+    while (Date.now() < deadline && (await screen(page)) !== 'result') await sleep(150);
+    result = await page.evaluate(() => window.__towerclash.getResult());
+    if (result?.outcome === 'won') break;
+    console.log(`level ${id}: bot got ${JSON.stringify(result)}, retrying (timing at ×10 varies between runs)`);
+  }
   if (result?.outcome !== 'won') throw new Error(`level ${id}: expected a win, got ${JSON.stringify(result)}`);
   await page.waitForTimeout(1800); // stars pop in one by one; capture particles fade
   return result;
 }
 
-async function captureRaw(browser) {
-  mkdirSync(RAW, { recursive: true });
-  const page = await openGame(browser);
-  const out = (i) => join(RAW, `${String(i + 1).padStart(2, '0')}-${SHOTS[i].name}.png`);
+async function captureRaw(browser, set) {
+  mkdirSync(set.rawDir, { recursive: true });
+  const page = await openGame(browser, set);
+  const out = (i) => rawFile(set, i);
 
   await page.screenshot({ path: out(0) });
 
@@ -158,7 +246,15 @@ async function captureRaw(browser) {
 
   const result = await playToResult(page, 1, 12_000);
   await page.screenshot({ path: out(5) });
-  console.log(`raw frames written (level 1 result: ${result.stars} stars, ${result.coinsEarned} coins)`);
+
+  // every raw frame must be exactly viewport × scale; store it losslessly re-encoded
+  for (let i = 0; i < SHOTS.length; i++) {
+    const buf = recompressPng(readFileSync(out(i)));
+    const [w, h] = pngSize(buf);
+    if (w !== set.out.w || h !== set.out.h) throw new Error(`${out(i)} is ${w}×${h}, expected ${set.out.w}×${set.out.h}`);
+    writeFileSync(out(i), buf);
+  }
+  console.log(`[${set.id}] raw frames written (level 1 result: ${result.stars} stars, ${result.coinsEarned} coins)`);
   await page.context().close();
 }
 
@@ -166,32 +262,37 @@ async function captureRaw(browser) {
 
 const CANVAS_PAGE = `<!doctype html><meta charset="utf-8"><body style="margin:0;background:#fff"><canvas id="c"></canvas>`;
 
-/** Draws `pngBase64` under a caption band and returns the composed PNG as base64. */
-const composeInPage = async ({ png, caption, w, h, scale }) => {
+/**
+ * Draws `pngBase64` under a caption band and returns the composed PNG as base64.
+ * `scale` shrinks the whole output (Google); `bits` < 8 posterises the final pixels at the same
+ * pixel size (Apple).
+ */
+const composeInPage = async ({ png, caption, w, h, scale, bits = 8 }) => {
   const c = document.getElementById('c');
   c.width = Math.round(w * scale);
   c.height = Math.round(h * scale);
   const ctx = c.getContext('2d');
   ctx.scale(scale, scale);
   const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+  const k = w / 1080; // caption geometry was designed at 1080 wide
 
   // water backdrop (game palette) with soft wave lines
   ctx.fillStyle = '#5ec1e6';
   ctx.fillRect(0, 0, w, h);
   ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-  ctx.lineWidth = 6;
-  for (let y = 40; y < h; y += 120) {
+  ctx.lineWidth = 6 * k;
+  for (let y = 40 * k; y < h; y += 120 * k) {
     ctx.beginPath();
-    for (let x = -40; x <= w + 40; x += 20) ctx.lineTo(x, y + Math.sin((x + y) / 60) * 10);
+    for (let x = -40; x <= w + 40; x += 20) ctx.lineTo(x, y + Math.sin((x + y) / (60 * k)) * 10 * k);
     ctx.stroke();
   }
 
   // caption band
-  const bandH = 300;
-  const bandY = 40;
-  let px = 84;
+  const bandH = 300 * k;
+  const bandY = 40 * k;
+  let px = 84 * k;
   ctx.font = `900 ${px}px ${FONT}`;
-  while (ctx.measureText(caption).width > w - 120 && px > 40) ctx.font = `900 ${(px -= 2)}px ${FONT}`;
+  while (ctx.measureText(caption).width > w - 120 * k && px > 40 * k) ctx.font = `900 ${(px -= 2)}px ${FONT}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.lineJoin = 'round';
@@ -205,14 +306,14 @@ const composeInPage = async ({ png, caption, w, h, scale }) => {
   const img = new Image();
   img.src = `data:image/png;base64,${png}`;
   await img.decode();
-  const top = bandY + bandH + 10;
-  const availH = h - top - 30;
-  const s = Math.min(availH / img.height, (w - 80) / img.width);
+  const top = bandY + bandH + 10 * k;
+  const availH = h - top - 30 * k;
+  const s = Math.min(availH / img.height, (w - 80 * k) / img.width);
   const dw = img.width * s;
   const dh = img.height * s;
   const dx = (w - dw) / 2;
   const dy = top;
-  const r = 40;
+  const r = 40 * k;
   const path = () => {
     ctx.beginPath();
     ctx.moveTo(dx + r, dy);
@@ -224,8 +325,8 @@ const composeInPage = async ({ png, caption, w, h, scale }) => {
   };
   ctx.save();
   ctx.shadowColor = 'rgba(20,40,70,0.35)';
-  ctx.shadowBlur = 40;
-  ctx.shadowOffsetY = 14;
+  ctx.shadowBlur = 40 * k;
+  ctx.shadowOffsetY = 14 * k;
   ctx.fillStyle = '#1e2a44';
   path();
   ctx.fill();
@@ -233,42 +334,103 @@ const composeInPage = async ({ png, caption, w, h, scale }) => {
   ctx.save();
   path();
   ctx.clip();
+  ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(img, dx, dy, dw, dh);
   ctx.restore();
-  ctx.lineWidth = 6;
+  ctx.lineWidth = 6 * k;
   ctx.strokeStyle = '#ffffff';
   path();
   ctx.stroke();
 
+  if (bits < 8) {
+    // keep the top `bits` of every channel (rounded, so mid-tones do not darken)
+    const id = ctx.getImageData(0, 0, c.width, c.height);
+    const d = id.data;
+    const step = 1 << (8 - bits);
+    const max = 255 - (step - 1);
+    for (let i = 0; i < d.length; i += 4) {
+      for (let ch = 0; ch < 3; ch++) {
+        const v = Math.round(d[i + ch] / step) * step;
+        d[i + ch] = v > max ? max : v;
+      }
+    }
+    ctx.putImageData(id, 0, 0);
+  }
+
   return c.toDataURL('image/png').split(',')[1];
 };
 
-async function composeAll(browser) {
-  const page = await browser.newPage({ viewport: { width: 1080, height: 1920 } });
-  await page.setContent(CANVAS_PAGE);
-  const sizes = [];
-  for (const lang of ['en', 'az']) mkdirSync(join(STORE, 'screenshots', lang), { recursive: true });
+/** Dithered 256-colour palette PNG at the same size (only when `sharp` is available). */
+async function toPalette(buf) {
+  if (!sharp) return null;
+  return sharp(buf).png({ palette: true, colours: 256, dither: 1.0, compressionLevel: 9, effort: 10 }).toBuffer();
+}
 
+/** Google set: whole-image scale steps until every file fits (any 9:16 size ≥ 320 px is accepted). */
+async function composeScaled(page, set) {
+  const sizes = [];
   for (let scale = 1; scale >= 0.5; scale -= 0.125) {
     sizes.length = 0;
     for (let i = 0; i < SHOTS.length; i++) {
-      const raw = readFileSync(join(RAW, `${String(i + 1).padStart(2, '0')}-${SHOTS[i].name}.png`)).toString('base64');
-      for (const lang of ['en', 'az']) {
-        const b64 = await page.evaluate(composeInPage, { png: raw, caption: SHOTS[i][lang], w: OUT_W, h: OUT_H, scale });
-        const file = join(STORE, 'screenshots', lang, `${String(i + 1).padStart(2, '0')}.png`);
-        writeFileSync(file, Buffer.from(b64, 'base64'));
+      const raw = readFileSync(rawFile(set, i)).toString('base64');
+      for (const lang of set.langs) {
+        const b64 = await page.evaluate(composeInPage, { png: raw, caption: SHOTS[i][lang], w: set.out.w, h: set.out.h, scale });
+        const file = outFile(set, lang, i);
+        writeFileSync(file, recompressPng(Buffer.from(b64, 'base64')));
         sizes.push([file, statSync(file).size]);
       }
     }
     const largest = Math.max(...sizes.map(([, s]) => s));
     if (largest <= MAX_BYTES) {
-      console.log(`captioned shots at ${OUT_W * scale}×${OUT_H * scale}, largest ${(largest / 1024).toFixed(0)} KB`);
-      await page.close();
+      console.log(`[${set.id}] captioned shots at ${set.out.w * scale}×${set.out.h * scale}, largest ${kb(largest)}`);
       return;
     }
-    console.log(`scale ${scale}: largest ${(largest / 1024).toFixed(0)} KB > 600 KB, shrinking`);
+    console.log(`[${set.id}] scale ${scale}: largest ${kb(largest)} > 600 KB, shrinking`);
   }
-  throw new Error('could not get captioned screenshots under 600 KB');
+  throw new Error(`[${set.id}] could not get captioned screenshots under 600 KB`);
+}
+
+/** Apple sets: exact pixel size; per file, step down the quality ladder until it fits. */
+async function composeExact(page, set) {
+  for (let i = 0; i < SHOTS.length; i++) {
+    const raw = readFileSync(rawFile(set, i)).toString('base64');
+    for (const lang of set.langs) {
+      const file = outFile(set, lang, i);
+      let done = false;
+      const composed = new Map(); // bits → canvas PNG, so palette steps reuse the same pixels
+      for (const q of APPLE_QUALITY_LADDER) {
+        if (q.palette && !sharp) continue;
+        if (!composed.has(q.bits)) {
+          const b64 = await page.evaluate(composeInPage, { png: raw, caption: SHOTS[i][lang], w: set.out.w, h: set.out.h, scale: 1, bits: q.bits });
+          composed.set(q.bits, Buffer.from(b64, 'base64'));
+        }
+        const buf = q.palette ? await toPalette(composed.get(q.bits)) : recompressPng(composed.get(q.bits));
+        const [w, h] = pngSize(buf);
+        if (w !== set.out.w || h !== set.out.h) throw new Error(`${file}: composed ${w}×${h}, expected ${set.out.w}×${set.out.h}`);
+        const label = `bits ${q.bits}${q.palette ? ', 256-colour palette' : ''}`;
+        if (buf.length <= MAX_BYTES) {
+          writeFileSync(file, buf);
+          console.log(`[${set.id}] ${lang}/${String(i + 1).padStart(2, '0')}.png ${w}×${h} ${kb(buf.length)} (${label})`);
+          done = true;
+          break;
+        }
+        console.log(`[${set.id}] ${lang}/${String(i + 1).padStart(2, '0')}.png ${kb(buf.length)} at ${label} > 600 KB, reducing`);
+      }
+      if (!done) throw new Error(`[${set.id}] ${file}: could not get under 600 KB at exact size`);
+    }
+  }
+}
+
+async function composeAll(browser, set) {
+  const page = await browser.newPage({ viewport: { width: set.out.w, height: set.out.h } });
+  await page.setContent(CANVAS_PAGE);
+  for (const lang of set.langs) mkdirSync(set.outDir(lang), { recursive: true });
+  try {
+    if (set.exact) await composeExact(page, set);
+    else await composeScaled(page, set);
+  } finally {
+    await page.close();
+  }
 }
 
 /* ---------- feature graphic 1024×500 ---------- */
@@ -421,11 +583,11 @@ async function featureGraphic(browser) {
   await page.setContent(CANVAS_PAGE);
   const b64 = await page.evaluate(drawFeatureInPage);
   const file = join(STORE, 'feature-graphic.png');
-  writeFileSync(file, Buffer.from(b64, 'base64'));
+  writeFileSync(file, recompressPng(Buffer.from(b64, 'base64')));
   await page.close();
   const size = statSync(file).size;
   if (size > MAX_BYTES) throw new Error(`feature graphic is ${size} bytes (> 600 KB)`);
-  console.log(`feature graphic written (${(size / 1024).toFixed(0)} KB)`);
+  console.log(`feature graphic written (${kb(size)})`);
 }
 
 /* ---------- main ---------- */
@@ -441,9 +603,14 @@ process.on('SIGTERM', () => process.exit(143));
 try {
   const browser = await chromium.launch(existsSync(HEADLESS_SHELL) ? { executablePath: HEADLESS_SHELL } : {});
   try {
-    await captureRaw(browser);
-    await composeAll(browser);
-    await featureGraphic(browser);
+    const sets = [];
+    if (DO_GOOGLE) sets.push(SETS.google);
+    if (DO_APPLE) sets.push(SETS['apple-6.7'], SETS['apple-6.5']);
+    for (const set of sets) {
+      await captureRaw(browser, set);
+      await composeAll(browser, set);
+    }
+    if (DO_GOOGLE) await featureGraphic(browser);
   } finally {
     await browser.close();
   }

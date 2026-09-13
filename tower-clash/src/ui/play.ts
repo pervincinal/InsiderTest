@@ -7,20 +7,24 @@ import { LEVELS } from '../levels/index';
 import { enemyCommands, isAiTick, referencePlayerCommands } from '../ai/index';
 import type { View } from '../render/view';
 import { applyTransform, clipToMap } from '../render/view';
-import type { PlayUi } from '../render/draw';
 import { drawGame } from '../render/draw';
-import { HUD, PAUSE } from '../render/layout';
+import { BOOSTERS, HUD, PAUSE } from '../render/layout';
 import { inRect } from '../render/widgets';
 import { ParticleSystem } from '../render/particles';
+import type { HudPlayUi } from '../render/hud';
+import { boosterColor } from '../render/hud';
 import type { PointerPoint } from '../input/pointer';
-import { PlayGestures } from '../input/pointer';
+import { PlayGestures, hitTower } from '../input/pointer';
 import { GameLoop } from './loop';
-import { recordWin, starsFor, writeSave } from './save';
+import { recordWin, spendCoins, starsFor, writeSave } from './save';
 import type { App, Screen } from './screens';
 import { ResultScreen } from './screens';
 import type { Tutorial, TutorialStep } from './tutorial';
 import { drawTutorial, tutorialFor } from './tutorial';
-import { onPlayerCommand, onSimEvents, onSimFrame, resetAudioLevel } from '../audio/index';
+import type { BoosterKind } from './boosters';
+import { BOOSTER_KINDS, allBoosterStatus, canUseBooster } from './boosters';
+import { isMuted, onPlayerCommand, onSimEvents, onSimFrame, playSfx, resetAudioLevel, toggleMuted } from '../audio/index';
+import { hapticCapture } from '../native/index';
 
 /** Transient visual effect driven by sim events (capture flash / death puff). */
 interface Effect {
@@ -46,6 +50,9 @@ export class PlayScreen implements Screen {
   private nowMs = 0;
   private coinsEarned = 0;
   private readonly tutorial: Tutorial | null;
+  /** Airstrike targeting mode (M3-1): the next tap on an enemy tower fires, anywhere else cancels. */
+  targeting = false;
+  private pressedBooster: BoosterKind | null = null;
 
   constructor(
     private readonly app: App,
@@ -111,6 +118,7 @@ export class PlayScreen implements Screen {
     const pal = this.app.palette();
     for (const ev of events) {
       if (ev.type === 'capture') {
+        if (ev.by === 'player') hapticCapture();
         const t = this.state.towers[ev.towerId];
         if (t) this.effects.push({ x: t.x, y: t.y, color: pal.owners[ev.by], bornMs: this.nowMs, lifeMs: 450, kind: 'ring' });
       } else if (ev.type === 'unitDied') {
@@ -135,10 +143,16 @@ export class PlayScreen implements Screen {
     }
   }
 
-  private buildUi(): PlayUi {
+  private buildUi(): HudPlayUi {
     const outcome = getOutcome(this.state);
     const idx = LEVELS.findIndex((l) => l.id === this.level.id);
     return {
+      hud: {
+        boosters: allBoosterStatus(this.state, this.app.save.coins),
+        targeting: this.targeting,
+        muted: isMuted(),
+        pressedBooster: this.pressedBooster,
+      },
       level: this.level,
       palette: this.app.palette(),
       alpha: this.loop.alpha,
@@ -183,6 +197,49 @@ export class PlayScreen implements Screen {
     }
   }
 
+  /* ----- boosters (M3-1) ----- */
+
+  private boosterAt(p: PointerPoint): BoosterKind | null {
+    for (const k of BOOSTER_KINDS) if (inRect(BOOSTERS[k], p.x, p.y)) return k;
+    return null;
+  }
+
+  /**
+   * Buy and fire a booster. Overdrive/freeze apply at once; airstrike only enters targeting mode
+   * (the coins are spent when a tower is hit). Returns false when unaffordable / already active.
+   */
+  useBooster(kind: BoosterKind): boolean {
+    if (this.loop.paused || this.loop.finished) return false;
+    if (!canUseBooster(this.state, kind, this.app.save.coins)) return false;
+    if (kind === 'airstrike') {
+      this.targeting = !this.targeting;
+      this.gestures.reset();
+      playSfx('button');
+      return this.targeting;
+    }
+    this.targeting = false;
+    if (!spendCoins(this.app.save, C.BOOSTER_COST[kind])) return false;
+    this.loop.enqueue({ type: 'booster', owner: 'player', booster: kind });
+    playSfx('upgrade');
+    return true;
+  }
+
+  /** Airstrike on `towerId` (must be enemy-owned). Spends the coins and leaves targeting mode. */
+  airstrike(towerId: string): boolean {
+    const t = this.state.towers[towerId];
+    if (!t || t.owner === 'player' || t.owner === 'neutral') return false;
+    if (!canUseBooster(this.state, 'airstrike', this.app.save.coins)) return false;
+    if (!spendCoins(this.app.save, C.BOOSTER_COST.airstrike)) return false;
+    this.loop.enqueue({ type: 'booster', owner: 'player', booster: 'airstrike', towerId });
+    this.targeting = false;
+    const color = boosterColor(this.app.palette(), 'airstrike');
+    this.particles.shot(t.x + 40, t.y - 420, t.x, t.y - 30, color);
+    this.particles.shot(t.x - 30, t.y - 420, t.x + 6, t.y - 26, color);
+    for (let i = 0; i < 4; i++) this.particles.death(t.x + (i - 1.5) * 14, t.y - 10 - (i % 2) * 12);
+    playSfx('artillery');
+    return true;
+  }
+
   /* ----- input ----- */
 
   private hudHit(p: PointerPoint): boolean {
@@ -190,6 +247,16 @@ export class PlayScreen implements Screen {
       this.togglePause();
       return true;
     }
+    if (inRect(HUD.mute, p.x, p.y)) {
+      toggleMuted();
+      return true;
+    }
+    const booster = this.boosterAt(p);
+    if (booster) {
+      this.useBooster(booster);
+      return true;
+    }
+    if (inRect(HUD.coins, p.x, p.y)) return true;
     if (inRect(HUD.ratio, p.x, p.y)) {
       // segmented control: left half = 100 %, right half = 50 %
       this.app.save.settings.sendRatio = p.x < HUD.ratio.x + HUD.ratio.w / 2 ? 1 : 0.5;
@@ -205,6 +272,8 @@ export class PlayScreen implements Screen {
 
   togglePause(): void {
     this.loop.paused = !this.loop.paused;
+    this.targeting = false;
+    this.pressedBooster = null;
     this.gestures.cancel();
   }
 
@@ -221,21 +290,34 @@ export class PlayScreen implements Screen {
 
   down(p: PointerPoint): void {
     if (this.loop.paused) return;
+    this.pressedBooster = this.loop.finished ? null : this.boosterAt(p);
+    if (this.pressedBooster) return;
     if (p.y < HUD.mapTop || p.y > HUD.mapBottom) return;
+    if (this.targeting) return; // the tap resolves on up: fire or cancel
     this.gestures.down(p);
   }
 
   move(p: PointerPoint): void {
     if (this.loop.paused) return;
+    if (this.pressedBooster && !inRect(BOOSTERS[this.pressedBooster], p.x, p.y)) this.pressedBooster = null;
+    if (this.targeting) return;
     this.gestures.move(p);
   }
 
   up(p: PointerPoint): void {
+    this.pressedBooster = null;
     if (this.loop.paused) {
       if (inRect(PAUSE.resume, p.x, p.y) || inRect(HUD.pause, p.x, p.y)) this.togglePause();
       else if (inRect(PAUSE.speed, p.x, p.y)) this.toggleSpeed();
+      else if (inRect(PAUSE.sound, p.x, p.y) || inRect(HUD.mute, p.x, p.y)) toggleMuted();
+      else if (inRect(PAUSE.settings, p.x, p.y)) this.app.openSettings(this);
       else if (inRect(PAUSE.retry, p.x, p.y)) this.app.startLevel(this.level.id);
       else if (inRect(PAUSE.menu, p.x, p.y) || inRect(HUD.menu, p.x, p.y)) this.app.goLevels();
+      return;
+    }
+    if (this.targeting && p.y >= HUD.mapTop && p.y <= HUD.mapBottom) {
+      const t = hitTower(this.state, p.x, p.y);
+      if (!t || !this.airstrike(t.id)) this.targeting = false; // tap elsewhere (or a non-enemy tower) cancels
       return;
     }
     if (this.hudHit(p)) {
@@ -246,12 +328,18 @@ export class PlayScreen implements Screen {
   }
 
   cancel(): void {
+    this.pressedBooster = null;
     this.gestures.cancel();
   }
 
   key(e: KeyboardEvent): void {
-    if (e.key === 'Escape') this.app.goLevels();
-    else if (e.key === 'p' || e.key === 'P' || e.key === ' ') this.togglePause();
+    if (e.key === 'Escape') {
+      if (this.targeting) this.targeting = false;
+      else this.app.goLevels();
+    } else if (e.key === 'p' || e.key === 'P' || e.key === ' ') this.togglePause();
     else if (e.key === 'r' || e.key === 'R') this.app.startLevel(this.level.id);
+    else if (e.key === '1') this.useBooster('overdrive');
+    else if (e.key === '2') this.useBooster('freeze');
+    else if (e.key === '3') this.useBooster('airstrike');
   }
 }

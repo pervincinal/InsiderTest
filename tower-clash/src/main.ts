@@ -9,9 +9,11 @@ import type { PointerPoint } from './input/pointer';
 import type { SaveData } from './ui/save';
 import { isLevelUnlocked, loadSave } from './ui/save';
 import type { App, Screen } from './ui/screens';
-import { LevelSelectScreen, ResultScreen, TitleScreen } from './ui/screens';
+import { LevelSelectScreen, ResultScreen, SettingsScreen, TitleScreen } from './ui/screens';
 import { PlayScreen } from './ui/play';
+import { applyMotionPref } from './ui/motion';
 import { initAudio, toggleMuted, unlockAudio } from './audio/index';
+import { initNative } from './native/index';
 
 /** Test/debug surface for Playwright. */
 export interface TowerClashDebug {
@@ -31,6 +33,10 @@ export interface TowerClashDebug {
   /** Level-select path map scroll (logical px); setting is a no-op on other screens. */
   setLevelSelectScroll(y: number): void;
   getLevelSelectScroll(): number;
+  /** Coin balance of the live save. */
+  getCoins(): number;
+  /** Simulate the platform back button (Android); true when a screen handled it. */
+  back(): boolean;
   aiAvailable: boolean;
 }
 
@@ -53,6 +59,8 @@ class TowerClashApp implements App {
     this.save = loadSave();
     this.current = new TitleScreen(this);
     initAudio(this.save);
+    applyMotionPref(this.save.settings.reducedMotion);
+    void initNative({ onBack: () => this.onBack(), isTitleScreen: () => this.current.name === 'title' });
 
     const forward = <K extends 'down' | 'move' | 'up'>(k: K) => (p: PointerPoint) => this.current[k]?.(p);
     attachPointer(canvas, this.view, {
@@ -110,6 +118,28 @@ class TowerClashApp implements App {
     this.go(new TitleScreen(this));
   }
 
+  openSettings(from: Screen): void {
+    this.go(new SettingsScreen(this, () => this.go(from)));
+  }
+
+  /**
+   * Platform back button: pause during play (a second press leaves to the level map), otherwise
+   * step back one screen. False on the title so the OS may close the app.
+   */
+  onBack(): boolean {
+    const cur = this.current;
+    if (cur instanceof PlayScreen) {
+      if (!cur.loop.paused && !cur.loop.finished) cur.pause();
+      else this.goLevels();
+      return true;
+    }
+    if (cur instanceof SettingsScreen || cur instanceof ResultScreen || cur instanceof LevelSelectScreen) {
+      cur.key(new KeyboardEvent('keydown', { key: 'Escape' }));
+      return true;
+    }
+    return false;
+  }
+
   goLevels(): void {
     this.play = null;
     this.go(new LevelSelectScreen(this));
@@ -160,6 +190,8 @@ class TowerClashApp implements App {
         if (this.current instanceof LevelSelectScreen) this.current.setScroll(y);
       },
       getLevelSelectScroll: () => (this.current instanceof LevelSelectScreen ? this.current.getScroll() : 0),
+      getCoins: () => this.save.coins,
+      back: () => this.onBack(),
       aiAvailable: true,
     };
   }

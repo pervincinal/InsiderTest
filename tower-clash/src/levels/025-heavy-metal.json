@@ -1,0 +1,38 @@
+{
+  "id": 25,
+  "name": "Heavy Metal",
+  "lesson": "Tank factory: it builds one 5-weight tank every 4 s instead of infantry. A tank kills five infantry on the road or counts as five defenders, but it is slow, so ship armour early",
+  "star3": 30000,
+  "star2": 60000,
+  "enemies": [
+    {"owner": "enemy1", "personality": "rusher", "aggression": 0.4},
+    {"owner": "enemy2", "personality": "turtle", "aggression": 0.4}
+  ],
+  "towers": [
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "factory", "x": 150, "y": 1120, "owner": "player", "units": 10, "level": 1, "kind": "tankFactory"},
+    {"id": "depot", "x": 130, "y": 930, "owner": "neutral", "units": 8},
+    {"id": "e", "x": 570, "y": 1000, "owner": "neutral", "units": 5},
+    {"id": "mid", "x": 360, "y": 900, "owner": "neutral", "units": 8},
+    {"id": "nw", "x": 150, "y": 700, "owner": "neutral", "units": 6},
+    {"id": "ne", "x": 570, "y": 700, "owner": "neutral", "units": 6},
+    {"id": "red", "x": 150, "y": 460, "owner": "enemy1", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "green", "x": 570, "y": 460, "owner": "enemy2", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "top", "x": 360, "y": 300, "owner": "neutral", "units": 8}
+  ],
+  "roads": [
+    {"a": "home", "b": "factory"},
+    {"a": "factory", "b": "depot"},
+    {"a": "home", "b": "e"},
+    {"a": "home", "b": "mid"},
+    {"a": "e", "b": "mid"},
+    {"a": "mid", "b": "nw"},
+    {"a": "mid", "b": "ne"},
+    {"a": "e", "b": "ne"},
+    {"a": "nw", "b": "red"},
+    {"a": "ne", "b": "green"},
+    {"a": "red", "b": "top"},
+    {"a": "green", "b": "top"},
+    {"a": "red", "b": "green"}
+  ]
+}

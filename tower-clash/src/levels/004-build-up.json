@@ -2,8 +2,8 @@
   "id": 4,
   "name": "Build Up",
   "lesson": "Upgrade your tower first: the enemy turtles, so out-produce it instead of racing it",
-  "star3": 75000,
-  "star2": 150000,
+  "star3": 30000,
+  "star2": 60000,
   "enemies": [{ "owner": "enemy1", "personality": "turtle", "aggression": 0.3 }],
   "towers": [
     { "id": "home", "x": 360, "y": 1120, "owner": "player", "units": 15, "level": 1, "kind": "barracks" },

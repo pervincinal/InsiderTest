@@ -1,0 +1,41 @@
+{
+  "id": 23,
+  "name": "First Blood",
+  "lesson": "Kill the rusher first: a turtle sits still while it upgrades, so the restless enemy is the only one that hurts you and the softer one to take",
+  "star3": 35000,
+  "star2": 70000,
+  "enemies": [
+    {"owner": "enemy1", "personality": "rusher", "aggression": 0.75},
+    {"owner": "enemy2", "personality": "turtle", "aggression": 0.75}
+  ],
+  "towers": [
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 16, "level": 1, "kind": "barracks"},
+    {"id": "w", "x": 150, "y": 1000, "owner": "neutral", "units": 4},
+    {"id": "e", "x": 570, "y": 1000, "owner": "neutral", "units": 4},
+    {"id": "mid", "x": 360, "y": 900, "owner": "neutral", "units": 6},
+    {"id": "red1", "x": 150, "y": 760, "owner": "enemy1", "units": 6, "level": 1, "kind": "barracks"},
+    {"id": "red2", "x": 570, "y": 760, "owner": "enemy1", "units": 6, "level": 1, "kind": "barracks"},
+    {"id": "redbase", "x": 360, "y": 620, "owner": "enemy1", "units": 10, "level": 1, "kind": "barracks"},
+    {"id": "greenA", "x": 150, "y": 380, "owner": "enemy2", "units": 10, "level": 1, "kind": "barracks"},
+    {"id": "greenB", "x": 570, "y": 380, "owner": "enemy2", "units": 8, "level": 1, "kind": "fortress"},
+    {"id": "greenkeep", "x": 360, "y": 200, "owner": "enemy2", "units": 12, "level": 1, "kind": "barracks"}
+  ],
+  "roads": [
+    {"a": "home", "b": "w"},
+    {"a": "home", "b": "e"},
+    {"a": "home", "b": "mid"},
+    {"a": "w", "b": "mid"},
+    {"a": "e", "b": "mid"},
+    {"a": "w", "b": "red1"},
+    {"a": "e", "b": "red2"},
+    {"a": "mid", "b": "redbase", "barrier": 6},
+    {"a": "red1", "b": "redbase"},
+    {"a": "red2", "b": "redbase"},
+    {"a": "red1", "b": "greenA", "barrier": 8},
+    {"a": "red2", "b": "greenB", "barrier": 8},
+    {"a": "redbase", "b": "greenA"},
+    {"a": "redbase", "b": "greenB"},
+    {"a": "greenA", "b": "greenkeep"},
+    {"a": "greenB", "b": "greenkeep"}
+  ]
+}

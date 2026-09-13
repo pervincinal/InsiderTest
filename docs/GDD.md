@@ -66,7 +66,7 @@ Coins: 10 per star earned, first-clear only.
 - Flat vector look: rounded towers with crown pips for level, unit dots with owner colour, roads as light grey lines, water/void as dark blue. Font: system sans, bold numerals.
 - Juice: capture flash, unit death puff, upgrade pulse, screen-shake on capture (subtle). Sound synthesised with WebAudio (no assets).
 - Screens: Title → Level select (grid with stars) → Play (HUD: level, timer, pause, booster bar) → Result (stars, coins, next/retry).
-- Save: `localStorage` key `towerclash.save.v1` — stars per level, coins, settings.
+- Save: `localStorage` key `towerclash.save.v2` (v1 migrated on first load) — stars per level, coins, settings.
 
 ## 5. Technical
 - `sim/` is pure, deterministic, frame-rate independent (fixed 50 ms step, seeded RNG), no DOM. `render/` draws state, `input/` maps pointer events to sim commands, `ai/` produces commands. Tests: Vitest for sim/ai, Playwright (Chromium preinstalled) for smoke + screenshots.

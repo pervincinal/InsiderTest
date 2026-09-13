@@ -1,0 +1,44 @@
+{
+  "id": 32,
+  "name": "Siege Works",
+  "lesson": "Band finale: your factory, their walls and guns, and a river between. Cut what threatens you, pay the mines with a few scouts, and break the keeps one at a time",
+  "star3": 30000,
+  "star2": 60000,
+  "enemies": [
+    {"owner": "enemy1", "personality": "rusher", "aggression": 0.8},
+    {"owner": "enemy2", "personality": "opportunist", "aggression": 0.8}
+  ],
+  "towers": [
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 16, "level": 1, "kind": "barracks"},
+    {"id": "factory", "x": 570, "y": 1130, "owner": "player", "units": 10, "level": 1, "kind": "tankFactory"},
+    {"id": "w", "x": 150, "y": 1000, "owner": "neutral", "units": 5},
+    {"id": "e", "x": 570, "y": 960, "owner": "neutral", "units": 5},
+    {"id": "fort", "x": 360, "y": 800, "owner": "neutral", "units": 8, "kind": "fortress"},
+    {"id": "nw", "x": 150, "y": 780, "owner": "neutral", "units": 6},
+    {"id": "ne", "x": 570, "y": 780, "owner": "neutral", "units": 6},
+    {"id": "guns", "x": 360, "y": 600, "owner": "enemy1", "units": 4, "level": 1, "kind": "artillery"},
+    {"id": "red", "x": 150, "y": 520, "owner": "enemy1", "units": 14, "level": 1, "kind": "barracks"},
+    {"id": "green", "x": 570, "y": 520, "owner": "enemy2", "units": 14, "level": 1, "kind": "barracks"},
+    {"id": "crown", "x": 360, "y": 260, "owner": "neutral", "units": 10, "kind": "fortress"}
+  ],
+  "roads": [
+    {"a": "home", "b": "w"},
+    {"a": "home", "b": "e"},
+    {"a": "home", "b": "factory"},
+    {"a": "home", "b": "fort", "mine": 5},
+    {"a": "w", "b": "nw"},
+    {"a": "e", "b": "ne"},
+    {"a": "w", "b": "fort"},
+    {"a": "e", "b": "fort"},
+    {"a": "nw", "b": "red", "kind": "bridge"},
+    {"a": "ne", "b": "green", "kind": "bridge"},
+    {"a": "fort", "b": "guns"},
+    {"a": "nw", "b": "guns", "barrier": 6},
+    {"a": "ne", "b": "guns", "barrier": 6},
+    {"a": "guns", "b": "red"},
+    {"a": "guns", "b": "green"},
+    {"a": "red", "b": "crown", "mine": 4},
+    {"a": "green", "b": "crown", "mine": 4},
+    {"a": "red", "b": "green"}
+  ]
+}

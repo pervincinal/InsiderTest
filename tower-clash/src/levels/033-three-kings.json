@@ -1,0 +1,41 @@
+{
+  "id": 33,
+  "name": "Three Kings",
+  "lesson": "Three enemies fight each other where they touch: stay out of the middle and take neutrals while they bleed",
+  "star3": 40000,
+  "star2": 80000,
+  "enemies": [
+    {"owner": "enemy1", "personality": "rusher", "aggression": 0.4},
+    {"owner": "enemy2", "personality": "turtle", "aggression": 0.4},
+    {"owner": "enemy3", "personality": "opportunist", "aggression": 0.4}
+  ],
+  "towers": [
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 14, "level": 1, "kind": "barracks"},
+    {"id": "w", "x": 150, "y": 1000, "owner": "neutral", "units": 5},
+    {"id": "e", "x": 570, "y": 1000, "owner": "neutral", "units": 5},
+    {"id": "mid", "x": 360, "y": 860, "owner": "neutral", "units": 8},
+    {"id": "nw", "x": 150, "y": 700, "owner": "neutral", "units": 6},
+    {"id": "ne", "x": 570, "y": 700, "owner": "neutral", "units": 6},
+    {"id": "n", "x": 360, "y": 620, "owner": "neutral", "units": 8},
+    {"id": "red", "x": 130, "y": 420, "owner": "enemy1", "units": 10, "level": 1, "kind": "barracks"},
+    {"id": "yellow", "x": 360, "y": 380, "owner": "enemy3", "units": 10, "level": 1, "kind": "barracks"},
+    {"id": "green", "x": 590, "y": 420, "owner": "enemy2", "units": 10, "level": 1, "kind": "barracks"}
+  ],
+  "roads": [
+    {"a": "home", "b": "w"},
+    {"a": "home", "b": "e"},
+    {"a": "home", "b": "mid"},
+    {"a": "w", "b": "mid"},
+    {"a": "e", "b": "mid"},
+    {"a": "w", "b": "nw"},
+    {"a": "e", "b": "ne"},
+    {"a": "mid", "b": "n"},
+    {"a": "nw", "b": "red"},
+    {"a": "n", "b": "yellow"},
+    {"a": "ne", "b": "green"},
+    {"a": "red", "b": "yellow"},
+    {"a": "yellow", "b": "green"},
+    {"a": "nw", "b": "n"},
+    {"a": "ne", "b": "n"}
+  ]
+}

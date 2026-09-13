@@ -16,8 +16,11 @@ import type { Page } from '@playwright/test';
  * corresponding tap will miss and the poll below will say which screen we are stuck on.
  */
 
-// src/ui/screens.ts
+// src/render/layout.ts — TITLE
 const TITLE_PLAY = { x: 180, y: 640, w: 360, h: 96 };
+const TITLE_SETTINGS = { x: 180, y: 780, w: 172, h: 64 };
+// src/render/layout.ts — SETTINGS
+const SETTINGS = { back: { x: 18, y: 20, w: 140, h: 60 }, sound: { x: 470, y: 216, w: 160, h: 56 } };
 // src/render/layout.ts — LEVEL_MAP + levelNodeRect (winding path map; the test scrolls the map to 0 first)
 const LEVEL_MAP = { nodeR: 46, top: 260, step: 150, amp: 185, period: 5 };
 function levelNodeRect(index: number, scroll = 0): { x: number; y: number; w: number; h: number } {
@@ -26,13 +29,17 @@ function levelNodeRect(index: number, scroll = 0): { x: number; y: number; w: nu
   const r = LEVEL_MAP.nodeR;
   return { x: cx - r, y: cy - r, w: r * 2, h: r * 2 };
 }
-const HUD = { mapTop: 96, mapBottom: 1180, pause: { x: 636, y: 18, w: 66, h: 60 } };
+const HUD = { mapTop: 96, mapBottom: 1180, pause: { x: 636, y: 18, w: 66, h: 60 }, mute: { x: 560, y: 18, w: 62, h: 60 } };
+const BOOSTERS = { overdrive: { x: 232, y: 1186, w: 66, h: 88 } };
 const RESULT = { next: { x: 84, y: 780, w: 170, h: 72 } };
-const PAUSE = { resume: { x: 210, y: 620, w: 300, h: 76 }, speed: { x: 210, y: 716, w: 300, h: 64 } };
-// src/ui/save.ts
-const SAVE_KEY = 'towerclash.save.v1';
+const PAUSE = { resume: { x: 210, y: 566, w: 300, h: 76 }, speed: { x: 210, y: 662, w: 300, h: 64 } };
+// src/ui/save.ts — v2 is current; the test seeds a v1 save to exercise the migration
+const SAVE_KEY = 'towerclash.save.v2';
+const SAVE_KEY_V1 = 'towerclash.save.v1';
+const SEEDED_COINS = 100;
 // src/sim/constants.ts
 const COINS_PER_STAR = 10;
+const OVERDRIVE_COST = 30;
 
 interface LevelJson {
   id: number;
@@ -68,8 +75,12 @@ const towerUnits = (page: Page, id: string) =>
 const readSave = (page: Page) =>
   page.evaluate((key) => {
     const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as { stars: Record<string, number>; coins: number }) : null;
+    return raw
+      ? (JSON.parse(raw) as { version?: number; stars: Record<string, number>; coins: number; settings: { sound: boolean; reducedMotion?: string } })
+      : null;
   }, SAVE_KEY);
+const coins = (page: Page) => page.evaluate(() => window.__towerclash.getCoins());
+const boosters = (page: Page) => page.evaluate(() => window.__towerclash.getState()?.boosters ?? []);
 
 /** Stars by clear time, mirrors src/ui/save.ts starsFor (GDD §2.4). */
 function expectedStars(level: { star3: number; star2: number }, timeMs: number): number {
@@ -77,13 +88,22 @@ function expectedStars(level: { star3: number; star2: number }, timeMs: number):
 }
 
 test.describe('Tower Clash smoke', () => {
-  test('pwa → title → level select → tutorial level 1 → win → coins → unlock → pause menu', async ({ page }) => {
+  test('pwa → title → settings → level select → tutorial level 1 + booster → win → coins → unlock → pause menu', async ({ page }) => {
     const consoleErrors: string[] = [];
     const pageErrors: string[] = [];
     page.on('console', (msg) => {
       if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
     page.on('pageerror', (err) => pageErrors.push(String(err)));
+    // Seed an old (v1) save with coins so the booster bar has something to spend and the
+    // v1 → v2 migration runs on boot.
+    await page.addInitScript(
+      ([key, seeded]) => {
+        if (!localStorage.getItem('towerclash.save.v2'))
+          localStorage.setItem(key, JSON.stringify({ stars: {}, coins: seeded, settings: { sendRatio: 1, colorBlind: false, sound: true } }));
+      },
+      [SAVE_KEY_V1, SEEDED_COINS] as const,
+    );
 
     // (a) title renders and the debug surface is up.
     await page.goto('/');
@@ -113,9 +133,26 @@ test.describe('Tower Clash smoke', () => {
     expect((await page.request.get('/sw.js')).status()).toBe(200);
     expect(await page.locator('meta[name="apple-mobile-web-app-capable"]').getAttribute('content')).toBe('yes');
     expect(await page.locator('meta[name="viewport"]').getAttribute('content')).toContain('viewport-fit=cover');
+    // the v1 save was migrated: v2 key present, coins kept, reducedMotion defaulted
+    const migrated = await readSave(page);
+    expect(migrated?.version).toBe(2);
+    expect(migrated?.coins).toBe(SEEDED_COINS);
+    expect(migrated?.settings.reducedMotion).toBe('auto');
+    expect(await coins(page)).toBe(SEEDED_COINS);
     // let the title frame animate once before shooting it
     await page.waitForTimeout(250);
     await shot(page, 'title');
+
+    // (a3) settings: gear → settings screen, sound toggle persists, BACK returns to the title.
+    await tapRect(page, TITLE_SETTINGS);
+    await expect.poll(() => screen(page)).toBe('settings');
+    await shot(page, 'settings');
+    await tapRect(page, SETTINGS.sound);
+    await expect.poll(async () => (await readSave(page))?.settings.sound).toBe(false);
+    await tapRect(page, SETTINGS.sound);
+    await expect.poll(async () => (await readSave(page))?.settings.sound).toBe(true);
+    await tapRect(page, SETTINGS.back);
+    await expect.poll(() => screen(page)).toBe('title');
 
     // (b) PLAY → level select (winding path map): authored levels present, the map opens on the
     //     current level (level 1 on a fresh save → scroll 0), first three nodes reachable without
@@ -159,7 +196,6 @@ test.describe('Tower Clash smoke', () => {
     expect(garrisonBefore).toBeGreaterThan(0);
     await tapAt(page, home.x, home.y);
     await expect.poll(() => hint(page), { message: 'first hint should clear once home is selected' }).toBe('Now tap the grey tower');
-    await shot(page, 'play');
     await tapAt(page, camp.x, camp.y);
     await expect.poll(() => hint(page), { message: 'second hint should clear after the send' }).toBeNull();
     await expect.poll(() => towerUnits(page, 'home'), { message: 'home garrison should drop after send' }).toBeLessThan(
@@ -170,6 +206,25 @@ test.describe('Tower Clash smoke', () => {
         message: 'units should be marching on the road',
       })
       .toBeGreaterThan(0);
+
+    // (c2) booster bar: OVERDRIVE costs 30 coins, lands in state.boosters and persists the balance;
+    //      a second tap while it runs is ignored (one active per type).
+    expect(await boosters(page)).toEqual([]);
+    await tapRect(page, BOOSTERS.overdrive);
+    await expect.poll(() => coins(page)).toBe(SEEDED_COINS - OVERDRIVE_COST);
+    await expect.poll(async () => (await boosters(page)).map((b) => b.type)).toEqual(['overdrive']);
+    expect((await readSave(page))?.coins).toBe(SEEDED_COINS - OVERDRIVE_COST);
+    await tapRect(page, BOOSTERS.overdrive);
+    await page.waitForTimeout(150);
+    expect(await coins(page)).toBe(SEEDED_COINS - OVERDRIVE_COST);
+    expect((await boosters(page)).length).toBe(1);
+    await shot(page, 'play');
+    // HUD mute toggles the persisted sound setting
+    await tapRect(page, HUD.mute);
+    await expect.poll(async () => (await readSave(page))?.settings.sound).toBe(false);
+    await tapRect(page, HUD.mute);
+    await expect.poll(async () => (await readSave(page))?.settings.sound).toBe(true);
+    const coinsBeforeWin = SEEDED_COINS - OVERDRIVE_COST;
 
     // (d) reference player at ×10 wins within 60 s wall-clock. Restart the level first so the bot plays
     // from the authored opening state: the manual send above depends on wall-clock timing (a slow CI
@@ -191,7 +246,7 @@ test.describe('Tower Clash smoke', () => {
     expect(saveAfterWin?.stars['1']).toBe(stars);
     // result screen shows the coins of this (first) clear and the running total
     const result = await page.evaluate(() => window.__towerclash.getResult());
-    expect(result).toEqual({ outcome: 'won', stars, coinsEarned: stars * COINS_PER_STAR, coinsTotal: stars * COINS_PER_STAR });
+    expect(result).toEqual({ outcome: 'won', stars, coinsEarned: stars * COINS_PER_STAR, coinsTotal: coinsBeforeWin + stars * COINS_PER_STAR });
     expect(saveAfterWin?.coins).toBe(result!.coinsTotal);
     await page.waitForTimeout(250); // let capture effects fade so the shot shows the overlay
     await shot(page, 'result');
@@ -244,7 +299,7 @@ test.describe('Tower Clash smoke', () => {
     expect(save).not.toBeNull();
     expect(save!.stars['1']).toBeGreaterThanOrEqual(1);
     expect(save!.stars['1']).toBe(stars);
-    expect(save!.coins).toBe(stars * COINS_PER_STAR);
+    expect(save!.coins).toBe(coinsBeforeWin + stars * COINS_PER_STAR);
 
     // whole flow must be free of console errors and uncaught exceptions
     expect(pageErrors).toEqual([]);

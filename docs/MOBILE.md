@@ -77,8 +77,28 @@ npm run icons:generate # renders the SVGs to PNG with headless Chromium, then ru
 Project facts:
 - App id / bundle id: `com.pervincinal.towerclash`; display name: `Tower Clash`.
 - Android: minSdk 24, target/compile SDK 36, portrait only, fullscreen (no status bar), navy (#0f172a) system bars.
-- iOS: deployment target iOS 15, portrait only, status bar hidden, `contentInset: never` (the canvas draws under the notch, the web viewport uses `viewport-fit=cover`).
+- iOS: deployment target iOS 15, portrait only, status bar hidden, `contentInset: never` (the canvas draws under the notch, the web viewport uses `viewport-fit=cover`), `ITSAppUsesNonExemptEncryption = NO` in `Info.plist` (no encryption, no network).
 - The native shells only load `dist/`; there is no native game code. Web changes reach the apps through `npx cap sync`.
+
+**Native plugins** (exact pins in `package.json`, all Capacitor 8):
+
+| Package | Version | Used for |
+|---|---|---|
+| `@capacitor/status-bar` | 8.0.3 | hide the status bar and let the canvas draw under it (`setOverlaysWebView`) |
+| `@capacitor/screen-orientation` | 8.0.1 | lock portrait at runtime (in addition to the manifest / Info.plist locks) |
+| `@capacitor/haptics` | 8.0.2 | light impact on tower capture, rate-limited to one per 150 ms |
+| `@capacitor/app` | 8.1.1 | Android hardware back button: navigate back, exit only from the title screen |
+
+The bridge lives in `src/native/index.ts` (`initNative(hooks)`, `isNative()`, `hapticCapture()`). Plugins are loaded with dynamic `import()` only inside a native shell, so the web/PWA bundle does not include them. Adding a plugin = `npm install --save-exact @capacitor/<name>@<8.x>` then `npx cap sync`; the sync rewrites `android/capacitor.settings.gradle`, `android/app/capacitor.build.gradle`, `android/app/src/main/assets/capacitor.plugins.json` and `ios/App/CapApp-SPM/Package.swift` — commit those generated files.
+
+**Version numbers** live in `package.json` only and are copied into the native projects by a script:
+
+```bash
+# 1. edit package.json: "version": "0.2.0" and "config": { "buildNumber": 2 }
+npm run version:sync    # rewrites versionName/versionCode (Android) and MARKETING_VERSION/CURRENT_PROJECT_VERSION (iOS)
+npm run version:check   # exits 1 if the native files disagree with package.json (use in CI / before tagging)
+```
+`version` is the user-visible "0.2.0"; `buildNumber` is the integer both stores require to increase with **every** upload (Google Play `versionCode`, App Store build number). Bump `buildNumber` for every upload even when `version` stays the same. `node scripts/syncVersion.mjs --code 7` overrides the number once without editing package.json.
 
 ## 5. What a real store release needs
 
@@ -98,28 +118,55 @@ The game stores nothing (no accounts, no saves sent anywhere) and makes **no net
 Suggested privacy policy text (host it as a public page, e.g. GitHub Pages):
 > Tower Clash does not collect, store or transmit any personal data. The game has no accounts, no analytics, no advertising and makes no network requests.
 
-Versioning: bump `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` (iOS) and `versionName` / `versionCode` (`android/app/build.gradle`) for every store upload.
+Versioning: edit `version` / `config.buildNumber` in `package.json` and run `npm run version:sync` (section 4) for every store upload — never edit the Gradle / Xcode numbers by hand, the script overwrites them.
 
 ## 6. CI secrets for signed builds (names only)
 
-None of these exist yet; the current workflows build unsigned. When the accounts exist, add them under *Settings → Secrets and variables → Actions*:
+None of these exist yet; the current workflows build unsigned. The names below are the **authoritative** ones from `docs/publishing/LAUNCH_CHECKLIST.md` §5 — use them exactly when adding secrets under *Settings → Secrets and variables → Actions*.
 
-**Android (release AAB/APK):**
-- `ANDROID_KEYSTORE_BASE64` — the release keystore (`.jks`) encoded with `base64 -w0`
-- `ANDROID_KEYSTORE_PASSWORD`
-- `ANDROID_KEY_ALIAS`
-- `ANDROID_KEY_PASSWORD`
-- `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` — only if uploads to Play Console should be automated
+**Android (release AAB/APK, Google Play):**
 
-**iOS (device / TestFlight builds):**
-- `APPLE_TEAM_ID`
-- `IOS_DISTRIBUTION_CERT_P12_BASE64` and `IOS_DISTRIBUTION_CERT_PASSWORD`
-- `IOS_PROVISIONING_PROFILE_BASE64`
-- `KEYCHAIN_PASSWORD` — a throwaway password for the temporary CI keychain
-- `APP_STORE_CONNECT_API_KEY_ID`, `APP_STORE_CONNECT_API_ISSUER_ID`, `APP_STORE_CONNECT_API_KEY_P8_BASE64` — only for automated TestFlight/App Store uploads
+| Secret | What it is | How to create it |
+|---|---|---|
+| `ANDROID_KEYSTORE_BASE64` | the upload keystore (`.jks`) as one line of base64 | `keytool -genkeypair -v -keystore release.jks -alias towerclash -keyalg RSA -keysize 2048 -validity 10000` then `base64 -w0 release.jks` (macOS: `base64 -i release.jks`). Keep `release.jks` offline in two places; losing it means the app can never be updated. |
+| `ANDROID_KEYSTORE_PASSWORD` | the keystore password typed into `keytool` | — |
+| `ANDROID_KEY_ALIAS` | the alias given to `keytool` (`towerclash` above) | — |
+| `ANDROID_KEY_PASSWORD` | the key password (`keytool` lets it equal the keystore password) | — |
+
+`android/app/build.gradle` already contains the release signing config. It reads **environment variables**, so a CI job only has to do this before `./gradlew bundleRelease`:
+
+```yaml
+- name: Decode keystore
+  run: echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+  env:
+    ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+- name: Build signed AAB
+  working-directory: tower-clash/android
+  run: ./gradlew bundleRelease
+  env:
+    ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/release.jks
+    ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+    ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+    ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+```
+When any of the four variables is missing (local builds, forks, pull requests from outside) the release build type silently falls back to the **debug** key, prints `Tower Clash: ANDROID_KEYSTORE_* not set …` in the Gradle log, and still produces an installable but not store-uploadable `app-release.aab` / `app-release.apk`. Output: `android/app/build/outputs/bundle/release/app-release.aab`.
+
+**iOS (device / TestFlight / App Store builds):**
+
+| Secret | What it is | How to create it |
+|---|---|---|
+| `APPLE_CERTIFICATE_P12_BASE64` | Apple Distribution certificate + private key exported as `.p12`, base64 | Xcode → Settings → Accounts → Manage Certificates → "+" → Apple Distribution; then in Keychain Access right-click the certificate → Export → `.p12` with a password; `base64 -i cert.p12` |
+| `APPLE_CERTIFICATE_PASSWORD` | the password chosen while exporting the `.p12` | — |
+| `APPLE_PROVISIONING_PROFILE_BASE64` | App Store provisioning profile for `com.pervincinal.towerclash`, base64 | developer.apple.com → Profiles → "+" → App Store → select the bundle id and the certificate → download `.mobileprovision`; `base64 -i profile.mobileprovision` |
+| `APP_STORE_CONNECT_API_KEY_ID` | Key ID of an App Store Connect API key (role: App Manager) | App Store Connect → Users and Access → Integrations → App Store Connect API → "+" |
+| `APP_STORE_CONNECT_API_ISSUER_ID` | Issuer ID shown on the same page | — |
+| `APP_STORE_CONNECT_API_KEY_P8` | contents of the downloaded `AuthKey_<ID>.p8` (can be downloaded only once) | — |
+
+The iOS release job (not written yet) will import the certificate and profile into a temporary keychain, run `xcodebuild archive` + `-exportArchive`, and upload with `xcrun altool` / `notarytool` using the API key. The Xcode project itself needs no changes for that: signing is chosen at archive time with `-allowProvisioningUpdates` or an `ExportOptions.plist`.
 
 ## 7. Open items
 
 - Keep `public/icons/*` (PWA) and `resources/icon.svg` (native) visually in sync when the mark changes; `npm run icons:generate` only regenerates the native assets.
 - The iOS workflow has not yet run on a macOS runner (no Xcode in the development sandbox); the first `workflow_dispatch` run validates the SPM project build.
-- Signed builds: create the accounts and secrets above, then add release jobs to the workflows.
+- Signed builds: create the accounts and secrets above, then add the `bundleRelease` job (snippet in section 6) and the iOS archive job to the workflows. The Gradle side is already in place.
+- `npm run version:check` should run in the CI workflow so a forgotten `version:sync` fails the build.

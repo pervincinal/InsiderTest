@@ -1,0 +1,45 @@
+{
+  "id": 36,
+  "name": "Three Bridges",
+  "lesson": "Three bridges, three rivals: cut two of them and you have a one-front war",
+  "star3": 30000,
+  "star2": 60000,
+  "enemies": [
+    {"owner": "enemy1", "personality": "rusher", "aggression": 0.6},
+    {"owner": "enemy2", "personality": "opportunist", "aggression": 0.6},
+    {"owner": "enemy3", "personality": "turtle", "aggression": 0.6}
+  ],
+  "towers": [
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 18, "level": 1, "kind": "barracks"},
+    {"id": "w", "x": 150, "y": 1000, "owner": "neutral", "units": 5},
+    {"id": "e", "x": 570, "y": 1000, "owner": "neutral", "units": 5},
+    {"id": "mid", "x": 360, "y": 900, "owner": "neutral", "units": 8},
+    {"id": "nw", "x": 150, "y": 740, "owner": "neutral", "units": 8},
+    {"id": "ne", "x": 570, "y": 740, "owner": "neutral", "units": 8},
+    {"id": "n", "x": 360, "y": 660, "owner": "neutral", "units": 8},
+    {"id": "red", "x": 150, "y": 460, "owner": "enemy1", "units": 8, "level": 1, "kind": "barracks"},
+    {"id": "green", "x": 570, "y": 460, "owner": "enemy2", "units": 8, "level": 1, "kind": "barracks"},
+    {"id": "yellow", "x": 360, "y": 400, "owner": "enemy3", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "crown", "x": 360, "y": 180, "owner": "neutral", "units": 10}
+  ],
+  "roads": [
+    {"a": "home", "b": "w"},
+    {"a": "home", "b": "e"},
+    {"a": "home", "b": "mid"},
+    {"a": "w", "b": "mid"},
+    {"a": "e", "b": "mid"},
+    {"a": "w", "b": "nw"},
+    {"a": "e", "b": "ne"},
+    {"a": "mid", "b": "n"},
+    {"a": "nw", "b": "red", "kind": "bridge"},
+    {"a": "ne", "b": "green", "kind": "bridge"},
+    {"a": "n", "b": "yellow", "kind": "bridge"},
+    {"a": "nw", "b": "n"},
+    {"a": "ne", "b": "n"},
+    {"a": "red", "b": "yellow"},
+    {"a": "green", "b": "yellow"},
+    {"a": "red", "b": "crown"},
+    {"a": "green", "b": "crown"},
+    {"a": "yellow", "b": "crown"}
+  ]
+}

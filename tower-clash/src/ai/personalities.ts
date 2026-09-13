@@ -16,6 +16,7 @@ import {
   spendable,
   threatReserve,
   upgradeCost,
+  wholeUnits,
   type Neighbour,
 } from './common';
 
@@ -55,11 +56,16 @@ export function opportunistMargin(target: Tower, aggression: number): number {
   return Math.max(defenceMultiplier(target), 2 * (1 - clamp01(aggression)));
 }
 
+/** Weight a tower can actually put on the road: spendable, in whole units of its kind (whole tanks). */
+function sendableWeight(state: GameState, tower: Tower): number {
+  return wholeUnits(tower, spendable(state, tower));
+}
+
 /** Rusher: from each own tower attack the weakest adjacent non-own target when strong enough. */
 export function rusherCommands(state: GameState, enemy: EnemyDef, rng: Rng): Command[] {
   const cmds: Command[] = [];
   for (const tower of ownedTowers(state, enemy.owner)) {
-    const available = spendable(state, tower);
+    const available = sendableWeight(state, tower);
     if (available <= 0) continue;
     const target = weakest(hostileNeighbours(state, tower.id), costToTake);
     if (!target) continue;
@@ -82,7 +88,7 @@ export function turtleCommands(state: GameState, enemy: EnemyDef, rng: Rng): Com
       continue;
     }
     if (cost !== undefined) continue; // still building up: no attacks before max level
-    const available = spendable(state, tower);
+    const available = sendableWeight(state, tower);
     if (available <= 0) continue;
     const target = weakest(hostileNeighbours(state, tower.id), costToTake);
     if (!target) continue;
@@ -103,7 +109,7 @@ export function opportunistCommands(state: GameState, enemy: EnemyDef, rng: Rng)
   const cmds: Command[] = [];
   for (const tower of ownedTowers(state, enemy.owner)) {
     const reserve = Math.max(OPPORTUNIST_RESERVE, threatReserve(state, tower));
-    const available = tower.units - reserve;
+    const available = wholeUnits(tower, tower.units - reserve);
     const target = weakest(hostileNeighbours(state, tower.id), (n) => n.tower.units * 1000 + costToTake(n));
     if (target && available >= costToTake(target) + opportunistMargin(target.tower, enemy.aggression)) {
       if (skipsAction(enemy, rng)) continue;

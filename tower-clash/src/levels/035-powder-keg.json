@@ -1,0 +1,43 @@
+{
+  "id": 35,
+  "name": "Powder Keg",
+  "lesson": "Mines between rivals are free kills: leave the mined roads between two enemies alone and let their own columns trigger them",
+  "star3": 30000,
+  "star2": 60000,
+  "enemies": [
+    {"owner": "enemy1", "personality": "opportunist", "aggression": 0.5},
+    {"owner": "enemy2", "personality": "rusher", "aggression": 0.5},
+    {"owner": "enemy3", "personality": "rusher", "aggression": 0.5}
+  ],
+  "towers": [
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 16, "level": 1, "kind": "barracks"},
+    {"id": "w", "x": 150, "y": 1000, "owner": "neutral", "units": 5},
+    {"id": "e", "x": 570, "y": 1000, "owner": "neutral", "units": 5},
+    {"id": "mid", "x": 360, "y": 880, "owner": "neutral", "units": 8},
+    {"id": "nw", "x": 150, "y": 760, "owner": "neutral", "units": 6},
+    {"id": "ne", "x": 570, "y": 760, "owner": "neutral", "units": 6},
+    {"id": "red", "x": 150, "y": 520, "owner": "enemy2", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "green", "x": 570, "y": 520, "owner": "enemy3", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "yellow", "x": 360, "y": 600, "owner": "enemy1", "units": 10, "level": 1, "kind": "barracks"},
+    {"id": "crown", "x": 360, "y": 300, "owner": "neutral", "units": 10}
+  ],
+  "roads": [
+    {"a": "home", "b": "w"},
+    {"a": "home", "b": "e"},
+    {"a": "home", "b": "mid"},
+    {"a": "w", "b": "mid"},
+    {"a": "e", "b": "mid"},
+    {"a": "w", "b": "nw"},
+    {"a": "e", "b": "ne"},
+    {"a": "mid", "b": "yellow", "barrier": 8},
+    {"a": "nw", "b": "red"},
+    {"a": "ne", "b": "green"},
+    {"a": "nw", "b": "yellow", "mine": 5},
+    {"a": "ne", "b": "yellow", "mine": 5},
+    {"a": "red", "b": "yellow", "mine": 6},
+    {"a": "green", "b": "yellow", "mine": 6},
+    {"a": "red", "b": "crown", "mine": 4},
+    {"a": "green", "b": "crown", "mine": 4},
+    {"a": "yellow", "b": "crown"}
+  ]
+}

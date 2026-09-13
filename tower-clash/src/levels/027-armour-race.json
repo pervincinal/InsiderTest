@@ -1,0 +1,38 @@
+{
+  "id": 27,
+  "name": "Armour Race",
+  "lesson": "Enemy tank factory: its tanks pile up to 40 weight and never march on their own, so take it while it is still cheap, or leave it for last since it cannot hurt you",
+  "star3": 75000,
+  "star2": 150000,
+  "enemies": [
+    {"owner": "enemy1", "personality": "rusher", "aggression": 0.5},
+    {"owner": "enemy2", "personality": "opportunist", "aggression": 0.5}
+  ],
+  "towers": [
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 14, "level": 1, "kind": "barracks"},
+    {"id": "w", "x": 150, "y": 1000, "owner": "neutral", "units": 5},
+    {"id": "e", "x": 570, "y": 1000, "owner": "neutral", "units": 5},
+    {"id": "fort", "x": 360, "y": 880, "owner": "neutral", "units": 6, "kind": "fortress"},
+    {"id": "nw", "x": 150, "y": 720, "owner": "neutral", "units": 6},
+    {"id": "ne", "x": 570, "y": 720, "owner": "neutral", "units": 6},
+    {"id": "red", "x": 150, "y": 520, "owner": "enemy1", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "redfactory", "x": 250, "y": 300, "owner": "enemy1", "units": 10, "level": 1, "kind": "tankFactory"},
+    {"id": "green", "x": 570, "y": 520, "owner": "enemy2", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "greenkeep", "x": 500, "y": 300, "owner": "enemy2", "units": 6, "level": 1, "kind": "fortress"}
+  ],
+  "roads": [
+    {"a": "home", "b": "w"},
+    {"a": "home", "b": "e"},
+    {"a": "w", "b": "fort"},
+    {"a": "e", "b": "fort"},
+    {"a": "w", "b": "nw"},
+    {"a": "e", "b": "ne"},
+    {"a": "fort", "b": "red"},
+    {"a": "nw", "b": "red"},
+    {"a": "fort", "b": "green"},
+    {"a": "ne", "b": "green"},
+    {"a": "red", "b": "redfactory"},
+    {"a": "green", "b": "greenkeep"},
+    {"a": "red", "b": "green"}
+  ]
+}

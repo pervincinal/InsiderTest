@@ -3,6 +3,7 @@ import { C } from '../sim/constants';
 import { roadPointAt } from '../sim/step';
 import type { Palette } from './palette';
 import { shade } from './palette';
+import { reducedMotionOverride } from '../ui/motion';
 
 /*
  * Purely visual particles and per-tower motion state driven by sim events (ART_DIRECTION §5).
@@ -12,6 +13,8 @@ import { shade } from './palette';
  */
 
 export function prefersReducedMotion(): boolean {
+  const override = reducedMotionOverride();
+  if (override !== null) return override;
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
   try {
     return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -20,7 +23,7 @@ export function prefersReducedMotion(): boolean {
   }
 }
 
-type Kind = 'confetti' | 'ring' | 'puff' | 'spark' | 'flash' | 'tracer' | 'plank' | 'glint';
+type Kind = 'confetti' | 'ring' | 'puff' | 'dust' | 'spark' | 'flash' | 'tracer' | 'plank' | 'glint';
 
 interface Particle {
   kind: Kind;
@@ -41,7 +44,12 @@ interface Particle {
 
 const MAX_PARTICLES = 700;
 const CAPTURE_MS = 520;
-const SHAKE_MS = 260;
+/** Capture shake: peak amplitude (px, world only) and length; decays quadratically over ~3 cycles. */
+const SHAKE_PX = 6;
+const SHAKE_MS = 320;
+const SHAKE_CYCLES = 3;
+/** Marching columns on sand: at most one dust puff per column per this many ms. */
+const DUST_INTERVAL_MS = 200;
 
 /** Cheap hash → 0..1, so bursts look random without touching the sim RNG. */
 function hash(n: number): number {
@@ -63,6 +71,7 @@ export class ParticleSystem {
   private readonly pulses = new Map<string, number>();
   private readonly captures = new Map<string, { at: number; from: Owner }>();
   private readonly aims = new Map<string, number>();
+  private readonly dustAt = new Map<string, number>();
   private shakeAt = -Infinity;
   private lastMs = 0;
   private salt = 1;
@@ -126,20 +135,21 @@ export class ParticleSystem {
     return this.aims.get(towerId);
   }
 
-  /** Screen nudge after a capture (≤ 6 px, decaying over 260 ms). */
+  /** Short decaying screen shake after the player captures a tower (≤ SHAKE_PX, world only). */
   shake(nowMs: number): { dx: number; dy: number } {
     const t = (nowMs - this.shakeAt) / SHAKE_MS;
     if (t < 0 || t >= 1) return { dx: 0, dy: 0 };
-    const a = 6 * (1 - t);
-    return { dx: Math.sin(t * 31) * a, dy: Math.cos(t * 23) * a * 0.6 };
+    const a = SHAKE_PX * (1 - t) * (1 - t);
+    const w = t * Math.PI * 2 * SHAKE_CYCLES;
+    return { dx: Math.sin(w) * a, dy: Math.cos(w * 0.8) * a * 0.5 };
   }
 
   /* ----- spawners ----- */
 
-  capture(x: number, y: number, color: string, towerId?: string, from: Owner = 'neutral', nowMs = 0): void {
+  capture(x: number, y: number, color: string, towerId?: string, from: Owner = 'neutral', nowMs = 0, shake = false): void {
     if (this.reducedMotion) return;
     if (towerId) this.captures.set(towerId, { at: nowMs, from });
-    this.shakeAt = nowMs;
+    if (shake) this.shakeAt = nowMs;
     const ring = this.make('ring', x, y, color, 520, 30);
     this.push(ring);
     for (let i = 0; i < 28; i++) {
@@ -163,6 +173,21 @@ export class ParticleSystem {
       p.vy = -25 - this.rnd() * 25;
       this.push(p);
     }
+  }
+
+  /**
+   * One small dust puff behind a marching column on sand, rate-limited per column (`key`) to one
+   * every DUST_INTERVAL_MS so 400 units cost at most a couple of puffs per frame.
+   */
+  dust(key: string, x: number, y: number, color: string, nowMs: number): void {
+    if (this.reducedMotion) return;
+    const last = this.dustAt.get(key);
+    if (last !== undefined && nowMs - last < DUST_INTERVAL_MS) return;
+    this.dustAt.set(key, nowMs);
+    const p = this.make('dust', x + (this.rnd() - 0.5) * 4, y, color, 420 + this.rnd() * 160, 3 + this.rnd() * 2);
+    p.vx = (this.rnd() - 0.5) * 10;
+    p.vy = -8 - this.rnd() * 8;
+    this.push(p);
   }
 
   /** Gold gem glints, roof pulse and a rising sparkle ring. */
@@ -240,7 +265,7 @@ export class ParticleSystem {
       switch (ev.type) {
         case 'capture': {
           const t = state.towers[ev.towerId];
-          if (t) this.capture(t.x, t.y, pal.owners[ev.by], t.id, ev.from, nowMs);
+          if (t) this.capture(t.x, t.y, pal.owners[ev.by], t.id, ev.from, nowMs, ev.by === 'player');
           break;
         }
         case 'unitDied': {
@@ -323,10 +348,11 @@ export class ParticleSystem {
           break;
         }
         case 'puff':
-          ctx.globalAlpha = fade * 0.9;
+        case 'dust':
+          ctx.globalAlpha = fade * (p.kind === 'dust' ? 0.8 : 0.9);
           ctx.fillStyle = p.color;
           ctx.beginPath();
-          ctx.arc(p.x, p.y, p.size + 9 * t, 0, Math.PI * 2);
+          ctx.arc(p.x, p.y, p.size + (p.kind === 'dust' ? 7 : 9) * t, 0, Math.PI * 2);
           ctx.fill();
           break;
         case 'spark':

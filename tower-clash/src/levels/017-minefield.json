@@ -1,0 +1,35 @@
+{
+  "id": 17,
+  "name": "Minefield",
+  "lesson": "Mines: the marked road kills the first 6 units that cross it, so take the long way round or pay the toll with a few before the main column",
+  "star3": 30000,
+  "star2": 60000,
+  "enemies": [
+    {"owner": "enemy1", "personality": "rusher", "aggression": 0.4},
+    {"owner": "enemy2", "personality": "opportunist", "aggression": 0.4}
+  ],
+  "towers": [
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 16, "level": 1, "kind": "barracks"},
+    {"id": "west", "x": 150, "y": 980, "owner": "neutral", "units": 4},
+    {"id": "east", "x": 570, "y": 980, "owner": "neutral", "units": 4},
+    {"id": "mid", "x": 360, "y": 800, "owner": "neutral", "units": 6},
+    {"id": "nw", "x": 150, "y": 600, "owner": "neutral", "units": 8},
+    {"id": "ne", "x": 570, "y": 600, "owner": "neutral", "units": 8},
+    {"id": "red", "x": 200, "y": 320, "owner": "enemy1", "units": 8, "level": 1, "kind": "barracks"},
+    {"id": "green", "x": 520, "y": 320, "owner": "enemy2", "units": 8, "level": 1, "kind": "barracks"}
+  ],
+  "roads": [
+    {"a": "home", "b": "west"},
+    {"a": "home", "b": "east"},
+    {"a": "home", "b": "mid", "mine": 6},
+    {"a": "west", "b": "mid"},
+    {"a": "east", "b": "mid"},
+    {"a": "west", "b": "nw"},
+    {"a": "east", "b": "ne"},
+    {"a": "mid", "b": "red"},
+    {"a": "mid", "b": "green"},
+    {"a": "nw", "b": "red"},
+    {"a": "ne", "b": "green"},
+    {"a": "red", "b": "green"}
+  ]
+}

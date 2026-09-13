@@ -1,0 +1,39 @@
+{
+  "id": 26,
+  "name": "Steamroller",
+  "lesson": "A tank shrugs off a small mine or wall: one 5-weight tank spends a 4-charge mine and rolls on where four infantry would have died",
+  "star3": 30000,
+  "star2": 60000,
+  "enemies": [
+    {"owner": "enemy1", "personality": "opportunist", "aggression": 0.45},
+    {"owner": "enemy2", "personality": "rusher", "aggression": 0.45}
+  ],
+  "towers": [
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "factory", "x": 150, "y": 1120, "owner": "player", "units": 10, "level": 1, "kind": "tankFactory"},
+    {"id": "depot", "x": 130, "y": 930, "owner": "neutral", "units": 6},
+    {"id": "e", "x": 570, "y": 1000, "owner": "neutral", "units": 5},
+    {"id": "mid", "x": 360, "y": 880, "owner": "neutral", "units": 6},
+    {"id": "nw", "x": 150, "y": 700, "owner": "neutral", "units": 6},
+    {"id": "ne", "x": 570, "y": 700, "owner": "neutral", "units": 6},
+    {"id": "red", "x": 200, "y": 440, "owner": "enemy2", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "green", "x": 520, "y": 440, "owner": "enemy1", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "top", "x": 360, "y": 240, "owner": "neutral", "units": 8}
+  ],
+  "roads": [
+    {"a": "home", "b": "factory"},
+    {"a": "factory", "b": "depot", "mine": 4},
+    {"a": "home", "b": "e"},
+    {"a": "home", "b": "mid", "barrier": 4},
+    {"a": "e", "b": "mid"},
+    {"a": "mid", "b": "nw", "mine": 4},
+    {"a": "mid", "b": "ne"},
+    {"a": "e", "b": "ne"},
+    {"a": "nw", "b": "red"},
+    {"a": "ne", "b": "green"},
+    {"a": "mid", "b": "green", "mine": 4},
+    {"a": "red", "b": "top"},
+    {"a": "green", "b": "top"},
+    {"a": "red", "b": "green"}
+  ]
+}

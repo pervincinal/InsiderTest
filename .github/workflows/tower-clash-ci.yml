@@ -18,7 +18,7 @@ jobs:
   verify:
     name: check + playtest + build + e2e
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       CI: true
     defaults:
@@ -50,10 +50,13 @@ jobs:
       - name: Install Chromium for Playwright
         run: npx playwright install --with-deps chromium
 
-      - name: Browser smoke test
+      # Runs every spec in e2e/: smoke (title → level select → level 1 → win → result),
+      # content (every authored level loads) and perf (frame-time budget on the top level).
+      - name: Browser e2e (smoke + content + perf)
+        timeout-minutes: 15
         run: npm run e2e
 
-      - name: Upload Playwright report
+      - name: Upload Playwright report, traces and screenshots
         if: failure()
         uses: actions/upload-artifact@v4
         with:
@@ -61,5 +64,6 @@ jobs:
           path: |
             tower-clash/playwright-report
             tower-clash/test-results
+            tower-clash/e2e/__screenshots__
           if-no-files-found: ignore
           retention-days: 7

@@ -1,0 +1,66 @@
+name: tower-clash-pages
+
+# Deploys the production build of tower-clash to GitHub Pages (MM-5 / M4-1).
+# One-time manual step: repo Settings -> Pages -> Source: "GitHub Actions" (see docs/DEPLOY.md).
+# The site lives at https://pervincinal.github.io/InsiderTest/ — the Vite build uses base './'
+# and the PWA files (sw.js, manifest.webmanifest) use relative paths, so the sub-path just works.
+on:
+  push:
+    branches:
+      - claude/tower-war-game-plan-weqwpb
+      - main
+    paths:
+      - 'tower-clash/**'
+      - '.github/workflows/tower-clash-pages.yml'
+  workflow_dispatch:
+
+# Only one Pages deployment at a time; do not cancel a deploy that is already in flight.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build web app
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: true
+    defaults:
+      run:
+        working-directory: tower-clash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tower-clash/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: tower-clash/dist
+
+  deploy:
+    name: deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

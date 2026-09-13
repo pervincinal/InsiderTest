@@ -1,0 +1,38 @@
+{
+  "id": 29,
+  "name": "Island Hopping",
+  "lesson": "Cut only what you must: a cut bridge is gone for you as well, so cut the enemy approach and keep your own road forward",
+  "star3": 30000,
+  "star2": 60000,
+  "enemies": [
+    {"owner": "enemy1", "personality": "opportunist", "aggression": 0.6},
+    {"owner": "enemy2", "personality": "rusher", "aggression": 0.6}
+  ],
+  "towers": [
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 16, "level": 1, "kind": "barracks"},
+    {"id": "islandw", "x": 150, "y": 980, "owner": "neutral", "units": 4},
+    {"id": "islande", "x": 570, "y": 980, "owner": "neutral", "units": 4},
+    {"id": "mid", "x": 360, "y": 800, "owner": "neutral", "units": 8},
+    {"id": "nw", "x": 150, "y": 640, "owner": "neutral", "units": 8},
+    {"id": "ne", "x": 570, "y": 640, "owner": "neutral", "units": 8},
+    {"id": "red", "x": 150, "y": 400, "owner": "enemy2", "units": 10, "level": 1, "kind": "barracks"},
+    {"id": "green", "x": 570, "y": 400, "owner": "enemy1", "units": 10, "level": 1, "kind": "barracks"},
+    {"id": "crown", "x": 360, "y": 260, "owner": "neutral", "units": 10}
+  ],
+  "roads": [
+    {"a": "home", "b": "islandw", "kind": "bridge"},
+    {"a": "home", "b": "islande", "kind": "bridge"},
+    {"a": "home", "b": "mid"},
+    {"a": "islandw", "b": "mid"},
+    {"a": "islande", "b": "mid"},
+    {"a": "islandw", "b": "nw"},
+    {"a": "islande", "b": "ne"},
+    {"a": "nw", "b": "red", "kind": "bridge"},
+    {"a": "ne", "b": "green", "kind": "bridge"},
+    {"a": "mid", "b": "red"},
+    {"a": "mid", "b": "green"},
+    {"a": "red", "b": "crown"},
+    {"a": "green", "b": "crown"},
+    {"a": "red", "b": "green"}
+  ]
+}

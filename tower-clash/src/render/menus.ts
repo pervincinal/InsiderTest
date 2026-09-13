@@ -5,13 +5,31 @@ import { shade } from './palette';
 import type { View } from './view';
 import { applyDeviceTransform, applyTransform, clipToMap } from './view';
 import type { Rect } from './widgets';
-import { drawButton, drawCoin, drawExtrudedText, drawFlag, drawGlassBand, drawLock, drawPill, drawStars, font, withShadow } from './widgets';
-import { LEVEL_MAP, levelNodeCentre, levelNodeRect } from './layout';
+import {
+  drawButton,
+  drawCard,
+  drawCoin,
+  drawExtrudedText,
+  drawFlag,
+  drawGearGlyph,
+  drawGlassBand,
+  drawLock,
+  drawPill,
+  drawSegmented,
+  drawSpeakerGlyph,
+  drawStars,
+  drawToggle,
+  font,
+  withShadow,
+} from './widgets';
+import { LEVEL_MAP, SETTINGS, levelNodeCentre, levelNodeRect } from './layout';
 import type { TerrainSpec } from './terrain';
 import { drawTerrain } from './terrain';
 import { badgeY, drawBadge, drawTowerShadow, drawTowerSprite, drawUnitSprite } from './sprites';
 import { roadPoseAt } from './draw';
 import { prefersReducedMotion } from './particles';
+import { reducedMotionOverride } from '../ui/motion';
+import type { MotionPref } from '../ui/save';
 
 /*
  * Title and level-select visuals (ART_DIRECTION §4). Title: the game's island with three demo
@@ -74,6 +92,8 @@ const DEMO_COLUMNS: { road: number; forward: boolean; owner: Owner; count: numbe
 
 let reduced: boolean | null = null;
 function motion(): boolean {
+  const override = reducedMotionOverride();
+  if (override !== null) return !override;
   if (reduced === null) reduced = prefersReducedMotion();
   return !reduced;
 }
@@ -109,39 +129,6 @@ function drawDemoWorld(ctx: CanvasRenderingContext2D, pal: Palette, nowMs: numbe
 
 /* ---------- glyphs for the settings row ---------- */
 
-function speakerGlyph(ctx: CanvasRenderingContext2D, color: string, cx: number, cy: number, s: number, on: boolean): void {
-  ctx.save();
-  ctx.fillStyle = color;
-  ctx.strokeStyle = color;
-  ctx.lineWidth = Math.max(2, s * 0.14);
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(cx - s * 0.7, cy - s * 0.3);
-  ctx.lineTo(cx - s * 0.3, cy - s * 0.3);
-  ctx.lineTo(cx + s * 0.15, cy - s * 0.7);
-  ctx.lineTo(cx + s * 0.15, cy + s * 0.7);
-  ctx.lineTo(cx - s * 0.3, cy + s * 0.3);
-  ctx.lineTo(cx - s * 0.7, cy + s * 0.3);
-  ctx.closePath();
-  ctx.fill();
-  if (on) {
-    ctx.beginPath();
-    ctx.arc(cx + s * 0.2, cy, s * 0.45, -0.9, 0.9);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(cx + s * 0.2, cy, s * 0.8, -0.9, 0.9);
-    ctx.stroke();
-  } else {
-    ctx.beginPath();
-    ctx.moveTo(cx + s * 0.4, cy - s * 0.35);
-    ctx.lineTo(cx + s * 0.95, cy + s * 0.35);
-    ctx.moveTo(cx + s * 0.95, cy - s * 0.35);
-    ctx.lineTo(cx + s * 0.4, cy + s * 0.35);
-    ctx.stroke();
-  }
-  ctx.restore();
-}
-
 /** Three owner-coloured clay dots: the colour-blind palette toggle. */
 function paletteGlyph(ctx: CanvasRenderingContext2D, pal: Palette, cx: number, cy: number, s: number): void {
   const colours = [pal.owners.player, pal.owners.enemy1, pal.owners.enemy2];
@@ -166,9 +153,8 @@ function paletteGlyph(ctx: CanvasRenderingContext2D, pal: Palette, cx: number, c
 
 export interface TitleOpts {
   playRect: Rect;
-  cbRect: Rect;
+  settingsRect: Rect;
   soundRect: Rect;
-  colorBlind: boolean;
   soundOn: boolean;
   totalStars: number;
   coins: number;
@@ -213,16 +199,15 @@ export function drawTitle(view: View, pal: Palette, o: TitleOpts): void {
 
   drawButton(ctx, pal, o.playRect, 'PLAY', { fill: blue, fontPx: 46, pressed: o.pressed === o.playRect });
 
-  // settings row: colour-blind palette · sound
-  // colour-blind palette: blue face when on, paper when off
-  drawButton(ctx, pal, o.cbRect, '', { fill: o.colorBlind ? pal.accent : undefined, pressed: o.pressed === o.cbRect });
-  paletteGlyph(ctx, pal, o.cbRect.x + 38, o.cbRect.y + o.cbRect.h / 2 - 1, 18);
+  // settings row: gear · sound
+  drawButton(ctx, pal, o.settingsRect, '', { pressed: o.pressed === o.settingsRect });
+  drawGearGlyph(ctx, pal.ink, o.settingsRect.x + 38, o.settingsRect.y + o.settingsRect.h / 2 - 1, 14);
   ctx.textAlign = 'left';
-  ctx.fillStyle = o.colorBlind ? pal.paper : pal.ink;
+  ctx.fillStyle = pal.ink;
   ctx.font = font(19);
-  ctx.fillText(o.colorBlind ? 'CB colours' : 'Colour-blind', o.cbRect.x + 68, o.cbRect.y + o.cbRect.h / 2 - 1, o.cbRect.w - 78);
+  ctx.fillText('Settings', o.settingsRect.x + 68, o.settingsRect.y + o.settingsRect.h / 2 - 1, o.settingsRect.w - 78);
   drawButton(ctx, pal, o.soundRect, '', { pressed: o.pressed === o.soundRect });
-  speakerGlyph(ctx, o.soundOn ? pal.ink : pal.textDim, o.soundRect.x + 38, o.soundRect.y + o.soundRect.h / 2 - 1, 17, o.soundOn);
+  drawSpeakerGlyph(ctx, o.soundOn ? pal.ink : pal.textDim, o.soundRect.x + 38, o.soundRect.y + o.soundRect.h / 2 - 1, 17, o.soundOn);
   ctx.fillStyle = o.soundOn ? pal.ink : pal.textDim;
   ctx.font = font(19);
   ctx.fillText(o.soundOn ? 'Sound on' : 'Sound off', o.soundRect.x + 68, o.soundRect.y + o.soundRect.h / 2 - 1, o.soundRect.w - 78);
@@ -536,5 +521,98 @@ export function drawLevelSelect(view: View, pal: Palette, o: LevelSelectOpts): v
   ctx.fillStyle = pal.ink;
   ctx.fillText(coins, 686, pill.y + pill.h / 2 + 1);
   drawCoin(ctx, pal, pill.x + 26, pill.y + pill.h / 2, 14);
+  ctx.restore();
+}
+
+/* ---------- Settings (M3-3) ---------- */
+
+export interface SettingsOpts {
+  soundOn: boolean;
+  colorBlind: boolean;
+  reducedMotion: MotionPref;
+  sendRatio: number;
+  /** Reset-progress confirm card is open. */
+  confirming: boolean;
+  totalStars: number;
+  coins: number;
+  nowMs: number;
+  pressed?: Rect | null;
+}
+
+export const MOTION_SEGMENTS: readonly { label: string; value: MotionPref }[] = [
+  { label: 'AUTO', value: 'auto' },
+  { label: 'ON', value: 'on' },
+  { label: 'OFF', value: 'off' },
+];
+export const RATIO_SEGMENTS: readonly { label: string; value: number }[] = [
+  { label: '100%', value: 1 },
+  { label: '50%', value: 0.5 },
+];
+
+function settingsRow(ctx: CanvasRenderingContext2D, pal: Palette, control: Rect, title: string, sub: string): void {
+  const cy = control.y + (control.h - 4) / 2;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = pal.ink;
+  ctx.font = font(26);
+  ctx.fillText(title, SETTINGS.labelX, cy - 12, control.x - SETTINGS.labelX - 16);
+  ctx.fillStyle = pal.textDim;
+  ctx.font = font(17, '500');
+  ctx.fillText(sub, SETTINGS.labelX, cy + 16, control.x - SETTINGS.labelX - 16);
+  // hairline separator under the row
+  ctx.fillStyle = 'rgba(30, 42, 68, 0.1)';
+  ctx.fillRect(SETTINGS.card.x + 28, control.y + SETTINGS.rowH - 22, SETTINGS.card.w - 56, 2);
+}
+
+export function drawSettings(view: View, pal: Palette, o: SettingsOpts): void {
+  const ctx = beginFrame(view, pal);
+  drawWater(ctx, pal, o.nowMs, 0);
+  const card = SETTINGS.card;
+  drawCard(ctx, pal, card);
+  // rows
+  settingsRow(ctx, pal, SETTINGS.sound, 'Sound', 'Synth effects and jingles');
+  drawToggle(ctx, pal, SETTINGS.sound, o.soundOn, o.pressed === SETTINGS.sound);
+  settingsRow(ctx, pal, SETTINGS.colorBlind, 'Colour-blind', 'Distinct owner colours');
+  ctx.font = font(26);
+  paletteGlyph(ctx, pal, SETTINGS.labelX + ctx.measureText('Colour-blind').width + 40, SETTINGS.colorBlind.y + (SETTINGS.colorBlind.h - 4) / 2 - 13, 15);
+  drawToggle(ctx, pal, SETTINGS.colorBlind, o.colorBlind, o.pressed === SETTINGS.colorBlind);
+  settingsRow(ctx, pal, SETTINGS.motion, 'Reduced motion', 'Auto follows the system setting');
+  drawSegmented(ctx, pal, SETTINGS.motion, MOTION_SEGMENTS, MOTION_SEGMENTS.findIndex((m) => m.value === o.reducedMotion), 20);
+  settingsRow(ctx, pal, SETTINGS.sendRatio, 'Default send', 'Share of a garrison per tap');
+  drawSegmented(ctx, pal, SETTINGS.sendRatio, RATIO_SEGMENTS, RATIO_SEGMENTS.findIndex((r) => r.value === o.sendRatio), 20);
+  // progress summary + reset
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = pal.textDim;
+  ctx.font = font(20, '500');
+  const summary = `${o.totalStars} stars  ·  ${o.coins} coins`;
+  ctx.fillText(summary, 360 + 12, SETTINGS.reset.y - 44);
+  const sw = ctx.measureText(summary).width;
+  drawStars(ctx, pal, 360 + 12 - sw / 2 - 22, SETTINGS.reset.y - 44, 1, 10, [1, 0, 0]);
+  drawCoin(ctx, pal, 360 + 12 + sw / 2 + 22, SETTINGS.reset.y - 44, 11);
+  drawButton(ctx, pal, SETTINGS.reset, 'RESET PROGRESS', { fontPx: 24, border: pal.owners.enemy1, text: pal.owners.enemy1, pressed: o.pressed === SETTINGS.reset });
+
+  // header
+  drawGlassBand(ctx, { x: 0, y: 0, w: C.MAP_W, h: SETTINGS.headerH });
+  drawButton(ctx, pal, SETTINGS.back, 'BACK', { fontPx: 24, pressed: o.pressed === SETTINGS.back });
+  drawExtrudedText(ctx, 'SETTINGS', 360, 50, 40, { face: pal.paper, side: shade(pal.owners.player, -0.25), outline: pal.ink, depth: 4 });
+
+  if (o.confirming) {
+    ctx.fillStyle = 'rgba(26, 58, 90, 0.5)';
+    ctx.fillRect(0, 0, C.MAP_W, C.MAP_H);
+    const c = SETTINGS.confirm;
+    drawCard(ctx, pal, c.card);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = pal.ink;
+    ctx.font = font(34);
+    ctx.fillText('Reset progress?', 360, c.card.y + 62);
+    ctx.fillStyle = pal.textDim;
+    ctx.font = font(21, '500');
+    ctx.fillText('All stars and coins will be lost.', 360, c.card.y + 116);
+    ctx.fillText('Settings are kept.', 360, c.card.y + 146);
+    drawButton(ctx, pal, c.yes, 'RESET', { fill: pal.owners.enemy1, fontPx: 26, pressed: o.pressed === c.yes });
+    drawButton(ctx, pal, c.no, 'CANCEL', { fontPx: 26, pressed: o.pressed === c.no });
+  }
   ctx.restore();
 }

@@ -109,6 +109,10 @@ export interface Palette {
   foam: string;
   /** Wood tones (bridges). */
   woodTones: Tones;
+  /** Warm grey clay of road barriers (darker than plinth stone so the wall reads on sand and snow). */
+  barrierTones: Tones;
+  /** Dust puffs behind marching columns on sand (pale, reads on the darker sand path). */
+  dust: string;
   rope: string;
   /** Gun metal (artillery barrel, tank treads). */
   metal: Tones;
@@ -237,6 +241,8 @@ export const DEFAULT_PALETTE: Palette = Object.freeze({
   stoneTones: { lit: '#fff8e8', mid: '#efe6d2', shade: '#bfae90' },
   foam: 'rgba(255, 250, 240, 0.55)',
   woodTones: { lit: '#d29a5e', mid: '#b07a45', shade: '#7a4d27' },
+  barrierTones: { lit: '#e3d9c6', mid: '#b9ad99', shade: '#7f7566' },
+  dust: '#fff6e0',
   rope: '#e8d3a2',
   metal: { lit: '#8b94a3', mid: '#4b5361', shade: '#2d3340' },
   biomes: BIOMES,

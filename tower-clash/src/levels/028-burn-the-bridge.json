@@ -1,0 +1,37 @@
+{
+  "id": 28,
+  "name": "Burn the Bridge",
+  "lesson": "Bridges: long-press a bridge you own an end of to cut it. Units on it drown and the enemy column behind it is stranded for good",
+  "star3": 30000,
+  "star2": 60000,
+  "enemies": [
+    {"owner": "enemy1", "personality": "rusher", "aggression": 0.55},
+    {"owner": "enemy2", "personality": "turtle", "aggression": 0.55}
+  ],
+  "towers": [
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 14, "level": 1, "kind": "barracks"},
+    {"id": "w", "x": 150, "y": 1000, "owner": "neutral", "units": 4},
+    {"id": "e", "x": 570, "y": 1000, "owner": "neutral", "units": 4},
+    {"id": "bank", "x": 360, "y": 860, "owner": "neutral", "units": 8},
+    {"id": "nw", "x": 150, "y": 700, "owner": "neutral", "units": 6},
+    {"id": "ne", "x": 570, "y": 700, "owner": "neutral", "units": 6},
+    {"id": "red", "x": 250, "y": 460, "owner": "enemy1", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "green", "x": 520, "y": 460, "owner": "enemy2", "units": 10, "level": 1, "kind": "barracks"},
+    {"id": "top", "x": 360, "y": 240, "owner": "neutral", "units": 8}
+  ],
+  "roads": [
+    {"a": "home", "b": "w"},
+    {"a": "home", "b": "e"},
+    {"a": "w", "b": "bank"},
+    {"a": "e", "b": "bank"},
+    {"a": "w", "b": "nw"},
+    {"a": "e", "b": "ne"},
+    {"a": "bank", "b": "red", "kind": "bridge", "waypoints": [{"x": 300, "y": 660}]},
+    {"a": "nw", "b": "red", "kind": "bridge"},
+    {"a": "ne", "b": "green"},
+    {"a": "bank", "b": "green"},
+    {"a": "red", "b": "green"},
+    {"a": "red", "b": "top"},
+    {"a": "green", "b": "top"}
+  ]
+}

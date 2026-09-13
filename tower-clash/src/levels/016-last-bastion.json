@@ -1,0 +1,37 @@
+{
+  "id": 16,
+  "name": "Last Bastion",
+  "lesson": "Two fronts against a keep: hold the fortress in the middle so the rush breaks on your walls, silence the guns from the flank, then converge on the keep",
+  "star3": 30000,
+  "star2": 60000,
+  "enemies": [
+    {"owner": "enemy1", "personality": "rusher", "aggression": 0.8}
+  ],
+  "towers": [
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 15, "level": 1, "kind": "barracks"},
+    {"id": "west", "x": 150, "y": 960, "owner": "neutral", "units": 5},
+    {"id": "east", "x": 570, "y": 960, "owner": "neutral", "units": 5},
+    {"id": "fort", "x": 360, "y": 820, "owner": "neutral", "units": 6, "kind": "fortress"},
+    {"id": "nw", "x": 150, "y": 700, "owner": "neutral", "units": 8},
+    {"id": "ne", "x": 570, "y": 700, "owner": "neutral", "units": 8},
+    {"id": "guns", "x": 250, "y": 520, "owner": "enemy1", "units": 4, "level": 1, "kind": "artillery"},
+    {"id": "camp", "x": 470, "y": 520, "owner": "enemy1", "units": 6, "level": 1, "kind": "barracks"},
+    {"id": "keep", "x": 360, "y": 260, "owner": "enemy1", "units": 10, "level": 1, "kind": "fortress"}
+  ],
+  "roads": [
+    {"a": "home", "b": "west"},
+    {"a": "home", "b": "east"},
+    {"a": "home", "b": "fort"},
+    {"a": "west", "b": "fort"},
+    {"a": "east", "b": "fort"},
+    {"a": "west", "b": "nw"},
+    {"a": "east", "b": "ne"},
+    {"a": "nw", "b": "guns"},
+    {"a": "ne", "b": "camp"},
+    {"a": "fort", "b": "guns"},
+    {"a": "fort", "b": "camp"},
+    {"a": "guns", "b": "camp"},
+    {"a": "guns", "b": "keep"},
+    {"a": "camp", "b": "keep"}
+  ]
+}

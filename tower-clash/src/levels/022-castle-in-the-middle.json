@@ -1,0 +1,41 @@
+{
+  "id": 22,
+  "name": "Castle in the Middle",
+  "lesson": "Take the neutral fortress between two rivals: on your walls two of their attackers buy one of yours, so let both smash into it while you grow",
+  "star3": 30000,
+  "star2": 60000,
+  "enemies": [
+    {"owner": "enemy1", "personality": "rusher", "aggression": 0.7},
+    {"owner": "enemy2", "personality": "opportunist", "aggression": 0.7}
+  ],
+  "towers": [
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 15, "level": 1, "kind": "barracks"},
+    {"id": "w", "x": 150, "y": 1000, "owner": "neutral", "units": 5},
+    {"id": "e", "x": 570, "y": 1000, "owner": "neutral", "units": 5},
+    {"id": "keep", "x": 360, "y": 800, "owner": "neutral", "units": 8, "kind": "fortress"},
+    {"id": "nw", "x": 150, "y": 700, "owner": "neutral", "units": 6},
+    {"id": "ne", "x": 570, "y": 700, "owner": "neutral", "units": 6},
+    {"id": "guns", "x": 360, "y": 520, "owner": "neutral", "units": 4, "kind": "artillery"},
+    {"id": "red", "x": 150, "y": 440, "owner": "enemy1", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "green", "x": 570, "y": 440, "owner": "enemy2", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "top", "x": 360, "y": 260, "owner": "neutral", "units": 8}
+  ],
+  "roads": [
+    {"a": "home", "b": "w"},
+    {"a": "home", "b": "e"},
+    {"a": "w", "b": "keep"},
+    {"a": "e", "b": "keep"},
+    {"a": "w", "b": "nw"},
+    {"a": "e", "b": "ne"},
+    {"a": "nw", "b": "red", "mine": 4},
+    {"a": "ne", "b": "green", "barrier": 6},
+    {"a": "keep", "b": "red"},
+    {"a": "keep", "b": "green"},
+    {"a": "keep", "b": "guns"},
+    {"a": "guns", "b": "red"},
+    {"a": "guns", "b": "green"},
+    {"a": "red", "b": "top"},
+    {"a": "green", "b": "top"},
+    {"a": "red", "b": "green"}
+  ]
+}

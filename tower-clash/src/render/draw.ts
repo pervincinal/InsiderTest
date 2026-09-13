@@ -1,7 +1,7 @@
 import type { GameState, LevelDef, Outcome, Road, Unit } from '../sim/types';
 import { C } from '../sim/constants';
 import { capacityOf, roadPointAt } from '../sim/step';
-import type { Palette } from './palette';
+import type { Biome, Palette } from './palette';
 import { biomeFor, withAlpha } from './palette';
 import type { View } from './view';
 import { applyDeviceTransform, applyTransform, clipToMap } from './view';
@@ -38,9 +38,15 @@ export interface PlayUi {
   particles?: ParticleSystem;
 }
 
-let reducedMotion: boolean | null = null;
+let reducedMotion = false;
+let reducedMotionCheckedAt = -1;
+/** Re-evaluated at most every 500 ms so a settings change applies without a reload. */
 function motionAllowed(): boolean {
-  if (reducedMotion === null) reducedMotion = prefersReducedMotion();
+  const now = typeof performance !== 'undefined' ? performance.now() : 0;
+  if (now - reducedMotionCheckedAt > 500) {
+    reducedMotion = prefersReducedMotion();
+    reducedMotionCheckedAt = now;
+  }
   return !reducedMotion;
 }
 
@@ -181,6 +187,29 @@ function drawBridge(ctx: CanvasRenderingContext2D, pal: Palette, road: Road, pre
       ctx.closePath();
       ctx.fill();
     }
+    // fallen planks scattered in the gap (deterministic per road)
+    for (let i = 0; i < 4; i++) {
+      const p = roadPoseAt(road, 0.41 + i * 0.06);
+      const side = (i % 2 ? 1 : -1) * (5 + i * 3);
+      const x = p.x - p.dy * side;
+      const y = p.y + p.dx * side + 3;
+      const ang = Math.atan2(p.dy, p.dx) + (i - 1.5) * 0.75;
+      const len = 6 + (i % 3) * 2;
+      const c = Math.cos(ang) * len;
+      const sn = Math.sin(ang) * len;
+      ctx.lineCap = 'butt';
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = pal.groundShadow;
+      ctx.beginPath();
+      ctx.moveTo(x - c + 2, y - sn + 3);
+      ctx.lineTo(x + c + 2, y + sn + 3);
+      ctx.stroke();
+      ctx.strokeStyle = i % 2 ? wood.mid : wood.shade;
+      ctx.beginPath();
+      ctx.moveTo(x - c, y - sn);
+      ctx.lineTo(x + c, y + sn);
+      ctx.stroke();
+    }
     return;
   }
   if (pressing > 0) {
@@ -220,7 +249,8 @@ function drawHazards(ctx: CanvasRenderingContext2D, pal: Palette, level: LevelDe
     ctx.beginPath();
     ctx.ellipse(m.x + 8, m.y + 9, 34, 10, 0, 0, Math.PI * 2);
     ctx.fill();
-    const st = pal.stoneTones;
+    const st = pal.barrierTones;
+    ctx.lineJoin = 'round';
     for (let i = -2; i <= 2; i++) {
       const cx = m.x + nx * i * 12;
       const cy = m.y + ny * i * 12;
@@ -228,16 +258,21 @@ function drawHazards(ctx: CanvasRenderingContext2D, pal: Palette, level: LevelDe
       ctx.fillStyle = st.shade;
       roundRect(ctx, { x: cx - 6, y: cy - h + 3, w: 13, h }, 3);
       ctx.fill();
-      ctx.fillStyle = i % 2 ? st.mid : pal.barrier;
+      ctx.fillStyle = st.mid;
       roundRect(ctx, { x: cx - 7, y: cy - h, w: 13, h }, 3);
       ctx.fill();
       ctx.fillStyle = st.lit;
       roundRect(ctx, { x: cx - 6, y: cy - h + 1, w: 11, h: 4 }, 2);
       ctx.fill();
+      // ink contour so the wall reads on every ground colour
+      ctx.strokeStyle = withAlpha(pal.ink, 0.35);
+      ctx.lineWidth = 1.5;
+      roundRect(ctx, { x: cx - 7, y: cy - h, w: 13, h }, 3);
+      ctx.stroke();
       // cracks proportional to damage
       const cracks = Math.round(damage * 3);
       if (cracks > 0 && (i + 2) % Math.max(1, 4 - cracks) === 0) {
-        ctx.strokeStyle = withAlpha(pal.ink, 0.45);
+        ctx.strokeStyle = withAlpha(pal.ink, 0.6);
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.moveTo(cx - 3, cy - h + 4);
@@ -407,13 +442,28 @@ function badgePop(state: GameState, id: string, n: number, nowMs: number, motion
   return 1 + 0.18 * Math.sin(t * Math.PI);
 }
 
-function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, ui: PlayUi, nowMs: number): void {
+/** Dust behind the rearmost soldier of every marching column (sand only; rate-limited in the system). */
+function spawnDust(fx: ParticleSystem, pal: Palette, units: UnitDraw[], nowMs: number): void {
+  const rear = new Map<string, UnitDraw>();
+  for (const u of units) {
+    const key = `${u.unit.roadId}|${u.unit.from}`;
+    const prev = rear.get(key);
+    if (!prev || u.unit.progress < prev.unit.progress) rear.set(key, u);
+  }
+  for (const [key, u] of rear) {
+    if (u.scale < 1) continue; // still leaving the gate
+    fx.dust(key, u.x - u.dx * 8, u.y + 2, pal.dust, nowMs);
+  }
+}
+
+function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, ui: PlayUi, nowMs: number, biome: Biome): void {
   const motion = motionAllowed();
   const towers = Object.values(state.towers).sort((a, b) => a.y - b.y);
   for (const t of towers) drawTowerShadow(ctx, pal, t.x, t.y, t.kind);
 
   const units: UnitDraw[] = [];
   unitDraws(state, ui.alpha, units);
+  if (motion && biome === 'sand' && ui.particles && units.length) spawnDust(ui.particles, pal, units, nowMs);
   // painter's order: everything sorted by ground y so units walk in front of / behind buildings
   let ui_ = 0;
   const drawUnit = (u: UnitDraw): void =>
@@ -478,7 +528,7 @@ export function drawGame(ctx: CanvasRenderingContext2D, state: GameState, view: 
   clipToMap(view);
   const motion = motionAllowed();
   const spec = terrainSpec(state);
-  // capture nudge moves the whole world (not the HUD)
+  // capture shake moves the whole world (not the HUD)
   const shake = motion ? (ui.particles?.shake(nowMs) ?? { dx: 0, dy: 0 }) : { dx: 0, dy: 0 };
   ctx.save();
   if (shake.dx || shake.dy) ctx.translate(shake.dx, shake.dy);
@@ -490,7 +540,7 @@ export function drawGame(ctx: CanvasRenderingContext2D, state: GameState, view: 
   }
   for (const road of Object.values(state.roads)) drawHazards(ctx, pal, ui.level, road, nowMs);
   drawGroundMarks(ctx, pal, state, ui, nowMs);
-  drawWorld(ctx, pal, state, ui, nowMs);
+  drawWorld(ctx, pal, state, ui, nowMs, spec.biome ?? 'grass');
   ui.particles?.draw(ctx, nowMs);
   ctx.restore();
   if (ui.outcome === 'lost') {

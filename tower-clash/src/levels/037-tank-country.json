@@ -1,0 +1,43 @@
+{
+  "id": 37,
+  "name": "Tank Country",
+  "lesson": "Two enemy factories bank 40 weight each behind their bases: hold the fortress in the middle while the three fight, then take a base and its factory in one push before the bank fills",
+  "star3": 65000,
+  "star2": 130000,
+  "enemies": [
+    {"owner": "enemy1", "personality": "rusher", "aggression": 0.65},
+    {"owner": "enemy2", "personality": "rusher", "aggression": 0.65},
+    {"owner": "enemy3", "personality": "opportunist", "aggression": 0.65}
+  ],
+  "towers": [
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 14, "level": 1, "kind": "barracks"},
+    {"id": "factory", "x": 150, "y": 1120, "owner": "player", "units": 10, "level": 1, "kind": "tankFactory"},
+    {"id": "w", "x": 150, "y": 900, "owner": "neutral", "units": 5},
+    {"id": "e", "x": 570, "y": 900, "owner": "neutral", "units": 5},
+    {"id": "fort", "x": 360, "y": 780, "owner": "neutral", "units": 8, "kind": "fortress"},
+    {"id": "nw", "x": 150, "y": 640, "owner": "neutral", "units": 6},
+    {"id": "ne", "x": 570, "y": 640, "owner": "neutral", "units": 6},
+    {"id": "red", "x": 150, "y": 420, "owner": "enemy1", "units": 10, "level": 1, "kind": "barracks"},
+    {"id": "green", "x": 570, "y": 420, "owner": "enemy2", "units": 10, "level": 1, "kind": "barracks"},
+    {"id": "redfactory", "x": 130, "y": 220, "owner": "enemy1", "units": 10, "level": 1, "kind": "tankFactory"},
+    {"id": "greenfactory", "x": 590, "y": 220, "owner": "enemy2", "units": 10, "level": 1, "kind": "tankFactory"},
+    {"id": "yellow", "x": 360, "y": 500, "owner": "enemy3", "units": 12, "level": 1, "kind": "barracks"}
+  ],
+  "roads": [
+    {"a": "home", "b": "factory"},
+    {"a": "home", "b": "w"},
+    {"a": "home", "b": "e"},
+    {"a": "home", "b": "fort"},
+    {"a": "w", "b": "fort"},
+    {"a": "e", "b": "fort"},
+    {"a": "w", "b": "nw"},
+    {"a": "e", "b": "ne"},
+    {"a": "nw", "b": "red"},
+    {"a": "ne", "b": "green"},
+    {"a": "fort", "b": "yellow"},
+    {"a": "red", "b": "yellow"},
+    {"a": "green", "b": "yellow"},
+    {"a": "red", "b": "redfactory"},
+    {"a": "green", "b": "greenfactory"}
+  ]
+}

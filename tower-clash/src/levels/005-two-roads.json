@@ -2,8 +2,8 @@
   "id": 5,
   "name": "Two Roads",
   "lesson": "Two routes to the enemy: hold one while you push down the other",
-  "star3": 75000,
-  "star2": 150000,
+  "star3": 30000,
+  "star2": 60000,
   "enemies": [{ "owner": "enemy1", "personality": "rusher", "aggression": 0.5 }],
   "towers": [
     { "id": "home", "x": 360, "y": 1140, "owner": "player", "units": 12, "level": 1, "kind": "barracks" },

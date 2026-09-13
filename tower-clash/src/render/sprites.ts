@@ -501,7 +501,8 @@ function drawFactory(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, 
   ctx.fillStyle = tones.shade;
   ctx.fillRect(x + 14, y - 74, 16, 6);
   const drift = o.motion ? (o.nowMs / 40) % 30 : 12;
-  ctx.fillStyle = `rgba(255,250,240,${0.8 - drift / 45})`;
+  // cool grey smoke reads on cream, sand, snow and dark rock alike
+  ctx.fillStyle = `rgba(190, 200, 214, ${0.85 - drift / 45})`;
   ctx.beginPath();
   ctx.arc(x + 22, y - 78 - drift * 0.35, 4 + drift * 0.12, 0, Math.PI * 2);
   ctx.arc(x + 27 + drift * 0.25, y - 84 - drift * 0.45, 5 + drift * 0.14, 0, Math.PI * 2);

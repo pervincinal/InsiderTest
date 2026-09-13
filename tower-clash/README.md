@@ -1,8 +1,8 @@
 # Tower Clash
 
-**Capture every tower.** A one-thumb, capture-the-towers real-time strategy game for phones and browsers. Tap one of your towers, tap a target, and your soldiers march; when an enemy garrison hits zero the tower is yours. 15 hand-made levels, fortresses, artillery, three-star timers — fully offline, no ads, no purchases, no account.
+**Capture every tower.** A one-thumb, capture-the-towers real-time strategy game for phones and browsers. Tap one of your towers, tap a target, and your soldiers march; when an enemy garrison hits zero the tower is yours. 40 hand-made levels, fortresses, artillery, tanks, mines, barriers, bridges you can cut, up to three enemies at once, three-star timers — fully offline, no ads, no purchases, no account.
 
-Play in the browser: `[web link — GitHub Pages pending]`
+Play in the browser: **https://pervincinal.github.io/InsiderTest/** (active once GitHub Pages is enabled in repo settings — see [`../docs/DEPLOY.md`](../docs/DEPLOY.md))
 
 <p align="center">
   <img src="store/screenshots/en/02.png" width="30%" alt="Level 1 with the tutorial hint: One tap to attack">
@@ -17,7 +17,9 @@ Play in the browser: `[web link — GitHub Pages pending]`
 3. Tap a selected tower again to **upgrade** it (levels 1–3): faster production, bigger garrison. It costs soldiers from that tower.
 4. **SEND 100 % / 50 %** toggles how many soldiers leave on each order.
 5. **Fortresses** (level 9 onwards) halve the damage of every attack; **artillery** (level 12 onwards) shoots soldiers that walk into its range.
-6. Win faster for more stars (3 / 2 / 1). Stars unlock the next level and pay coins on the first clear.
+6. From level 17 you face **two enemies** (three from level 33) who also fight each other; **mines** kill the first soldiers to cross a road and **barriers** must be worn down or walked around.
+7. **Tank factories** (level 25 onwards) build tanks that weigh five soldiers but crawl; **bridges** can be cut with a long press — the column on it drowns and the enemy behind it is stranded.
+8. Win faster for more stars (3 / 2 / 1). Stars unlock the next level and pay coins on the first clear.
 
 Keyboard on desktop: `P` / `Space` pause, `Esc` back to the level list, `M` mute.
 
@@ -52,13 +54,13 @@ npm run e2e        # Playwright smoke test (Chromium)
 npm run cap:sync   # copy dist/ into the android/ and ios/ Capacitor projects
 ```
 
-Store screenshots and the feature graphic are rendered from the real game: `npm run build && node store/tools/renderStoreShots.mjs`.
+Store screenshots and the feature graphic are rendered from the real game: `npm run build && node store/tools/renderStoreShots.mjs` (Google Play set) or `--apple` (App Store 6.7" / 6.5" sets); `--all` renders both.
 
 No engine, no art assets: TypeScript, HTML5 Canvas 2D and WebAudio. The simulation (`src/sim/`) is deterministic and DOM-free; rendering, input and AI sit on top of it. Design rules: [`../docs/GDD.md`](../docs/GDD.md).
 
 ## Credits and license
 
-Built by an autonomous Claude agent team (producer, engineers, level designer, QA, publisher) with a human stakeholder reading daily reports. Version 0.1.0 — see [`../docs/publishing/RELEASE_NOTES.md`](../docs/publishing/RELEASE_NOTES.md).
+Built by an autonomous Claude agent team (producer, engineers, level designer, QA, publisher) with a human stakeholder reading daily reports. Version 0.2.0 — see [`../docs/publishing/RELEASE_NOTES.md`](../docs/publishing/RELEASE_NOTES.md).
 
 License: All rights reserved (placeholder).
 
@@ -66,9 +68,9 @@ License: All rights reserved (placeholder).
 
 # Tower Clash (Azərbaycanca)
 
-**Bütün qüllələri tut.** Telefon və brauzer üçün bir barmaqla oynanan qüllə tutma real vaxt strategiya oyunu. Öz qüllənə toxun, hədəfə toxun — əsgərlərin yola düşür; düşmən qarnizonu sıfıra düşəndə qüllə sənindir. 15 əl ilə hazırlanmış səviyyə, qalalar, toplar, üç ulduzlu vaxt limiti — tam oflayn, reklamsız, alışsız, hesabsız.
+**Bütün qüllələri tut.** Telefon və brauzer üçün bir barmaqla oynanan qüllə tutma real vaxt strategiya oyunu. Öz qüllənə toxun, hədəfə toxun — əsgərlərin yola düşür; düşmən qarnizonu sıfıra düşəndə qüllə sənindir. 40 əl ilə hazırlanmış səviyyə, qalalar, toplar, tanklar, minalar, sədlər, kəsilə bilən körpülər, eyni anda üçə qədər rəqib, üç ulduzlu vaxt limiti — tam oflayn, reklamsız, alışsız, hesabsız.
 
-Brauzerdə oyna: `[web link — GitHub Pages pending]`
+Brauzerdə oyna: **https://pervincinal.github.io/InsiderTest/** (repo parametrlərində GitHub Pages aktivləşdirilən kimi işləyir — bax [`../docs/DEPLOY.md`](../docs/DEPLOY.md))
 
 ## Necə oynanır
 
@@ -77,7 +79,9 @@ Brauzerdə oyna: `[web link — GitHub Pages pending]`
 3. Seçilmiş qülləyə bir daha toxun — **təkmilləşdirmə** (1–3 səviyyə): daha sürətli istehsal, daha böyük qarnizon. Həmin qüllənin əsgərləri ilə ödənilir.
 4. **SEND 100 % / 50 %** hər əmrlə neçə əsgərin çıxacağını dəyişir.
 5. **Qalalar** (9-cu səviyyədən) hər hücumun zərərini yarıya endirir; **toplar** (12-ci səviyyədən) mənzilinə girən əsgərləri vurur.
-6. Tez qalib gəl — daha çox ulduz (3 / 2 / 1). Ulduzlar növbəti səviyyəni açır və ilk keçiddə sikkə qazandırır.
+6. 17-ci səviyyədən **iki rəqib** (33-cü səviyyədən üç) — onlar bir-biri ilə də vuruşur; **minalar** yoldan ilk keçən əsgərləri məhv edir, **sədlər** aşındırılmalı və ya yan keçilməlidir.
+7. **Tank zavodları** (25-ci səviyyədən) beş əsgər ağırlığında, amma yavaş tanklar istehsal edir; **körpülər** uzun basışla kəsilir — körpüdəki kolon batır, arxadakı düşmən ilişib qalır.
+8. Tez qalib gəl — daha çox ulduz (3 / 2 / 1). Ulduzlar növbəti səviyyəni açır və ilk keçiddə sikkə qazandırır.
 
 Masaüstündə klaviatura: `P` / `Space` pauza, `Esc` səviyyə siyahısına, `M` səsi söndürür. Oyunun interfeysi ingilis dilindədir.
 
@@ -98,6 +102,6 @@ Node 22 lazımdır. `tower-clash/` qovluğunda: `npm ci`, sonra `npm run dev` (y
 
 ## Müəlliflər və lisenziya
 
-Avtonom Claude agent komandası tərəfindən hazırlanıb (prodüser, mühəndislər, səviyyə dizayneri, QA, nəşriyyatçı); insan tərəf gündəlik hesabatları oxuyur. Versiya 0.1.0 — bax [`../docs/publishing/RELEASE_NOTES.md`](../docs/publishing/RELEASE_NOTES.md).
+Avtonom Claude agent komandası tərəfindən hazırlanıb (prodüser, mühəndislər, səviyyə dizayneri, QA, nəşriyyatçı); insan tərəf gündəlik hesabatları oxuyur. Versiya 0.2.0 — bax [`../docs/publishing/RELEASE_NOTES.md`](../docs/publishing/RELEASE_NOTES.md).
 
 Lisenziya: Bütün hüquqlar qorunur (müvəqqəti qeyd).

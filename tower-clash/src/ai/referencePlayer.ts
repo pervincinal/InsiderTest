@@ -31,6 +31,7 @@ import {
   sendCommand,
   spendable,
   upgradeCost,
+  wholeUnits,
   type Neighbour,
 } from './common';
 
@@ -53,6 +54,12 @@ const MAX_STREAM_MS = 20_000;
 const UPGRADE_SAFETY = 1;
 /** Rule 5: a reinforcement counts as covering the upgrade if it lands within this of the enemy's wave. */
 const COVER_GRACE_MS = 1000;
+/**
+ * Rule 4b: hard cap on plans launched per tick. Every launched plan marks its sources used, so the loop
+ * ends after at most one iteration per own tower; the cap is a last line of defence against a plan that
+ * launches nothing (that once hung `npm run playtest` on a tank factory holding less than one tank).
+ */
+const MAX_PLANS_PER_TICK = 64;
 
 interface Ctx {
   state: GameState;
@@ -109,10 +116,18 @@ function pick<T>(ctx: Ctx, items: T[], score: (item: T) => number): T | undefine
   return best.length === 1 ? best[0] : best[ctx.rng.int(best.length)];
 }
 
+/**
+ * Record a decision for `tower`. The tower counts as used even when the command is `undefined` (nothing
+ * sendable, e.g. a tank factory with less than one tank): a rule that picked it must not pick it again.
+ */
 function push(ctx: Ctx, tower: Tower, cmd: Command | undefined): void {
-  if (!cmd) return;
-  ctx.cmds.push(cmd);
   ctx.used.add(tower.id);
+  if (cmd) ctx.cmds.push(cmd);
+}
+
+/** Weight the tower can put on the road right now, in whole units of its kind (0 for a sub-tank factory). */
+function sendable(ctx: Ctx, tower: Tower): number {
+  return wholeUnits(tower, spendable(ctx.state, tower));
 }
 
 function free(ctx: Ctx, tower: Tower): boolean {
@@ -222,7 +237,7 @@ function sustain(ctx: Ctx, mine: Tower[]): void {
   const { state } = ctx;
   for (const tower of mine) {
     if (!free(ctx, tower)) continue;
-    const force = spendable(state, tower);
+    const force = sendable(ctx, tower);
     if (force <= 0) continue;
     const targets = enemyNeighbours(state, tower.id).filter((n) => {
       const inbound = incomingWeight(state, n.tower.id, OWNER);
@@ -258,7 +273,7 @@ function attack(ctx: Ctx, mine: Tower[]): void {
       if (!free(ctx, tower)) continue;
       const n = neighbours(state, tower.id).find((x) => x.tower.id === target.id);
       if (!n) continue;
-      const force = spendable(state, tower);
+      const force = sendable(ctx, tower);
       sources.push({ tower, n, force });
       losses += costToTake(n);
       slowest = Math.max(slowest, n.travelMs);
@@ -270,7 +285,7 @@ function attack(ctx: Ctx, mine: Tower[]): void {
         const rear = r.tower;
         if (!free(ctx, rear) || relayIds.has(rear.id) || sources.some((x) => x.tower.id === rear.id)) continue;
         if (enemyNeighbours(state, rear.id).length > 0) continue;
-        const force = spendable(state, rear);
+        const force = sendable(ctx, rear);
         if (force <= 0) continue;
         relayIds.add(rear.id);
         relays.push({ tower: rear, via: s.tower, force });
@@ -287,7 +302,7 @@ function attack(ctx: Ctx, mine: Tower[]): void {
     plans.push({ target, sources, relays, needed, force });
   }
 
-  for (;;) {
+  for (let launched = 0; launched < MAX_PLANS_PER_TICK; launched++) {
     const ready = plans.filter(
       (p) =>
         p.force >= p.needed &&

@@ -1,0 +1,40 @@
+{
+  "id": 30,
+  "name": "Drawbridge",
+  "lesson": "Fight one front at a time: cut the bridge on one flank, finish the enemy on the other, then come back over the long road",
+  "star3": 40000,
+  "star2": 80000,
+  "enemies": [
+    {"owner": "enemy1", "personality": "rusher", "aggression": 0.7},
+    {"owner": "enemy2", "personality": "opportunist", "aggression": 0.7}
+  ],
+  "towers": [
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 14, "level": 1, "kind": "barracks"},
+    {"id": "factory", "x": 570, "y": 1130, "owner": "player", "units": 5, "level": 1, "kind": "tankFactory"},
+    {"id": "w", "x": 150, "y": 1000, "owner": "neutral", "units": 5},
+    {"id": "e", "x": 570, "y": 960, "owner": "neutral", "units": 5},
+    {"id": "mid", "x": 360, "y": 700, "owner": "neutral", "units": 8},
+    {"id": "nw", "x": 150, "y": 760, "owner": "neutral", "units": 6},
+    {"id": "ne", "x": 570, "y": 760, "owner": "neutral", "units": 6},
+    {"id": "red", "x": 150, "y": 520, "owner": "enemy1", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "green", "x": 570, "y": 520, "owner": "enemy2", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "redkeep", "x": 250, "y": 300, "owner": "enemy1", "units": 6, "level": 1, "kind": "fortress"},
+    {"id": "greentop", "x": 470, "y": 300, "owner": "enemy2", "units": 10, "level": 1, "kind": "barracks"}
+  ],
+  "roads": [
+    {"a": "home", "b": "factory"},
+    {"a": "home", "b": "w"},
+    {"a": "home", "b": "e"},
+    {"a": "home", "b": "mid", "waypoints": [{"x": 300, "y": 930}]},
+    {"a": "w", "b": "nw", "kind": "bridge"},
+    {"a": "e", "b": "ne", "kind": "bridge"},
+    {"a": "nw", "b": "red"},
+    {"a": "ne", "b": "green"},
+    {"a": "mid", "b": "red"},
+    {"a": "mid", "b": "green"},
+    {"a": "red", "b": "redkeep"},
+    {"a": "green", "b": "greentop"},
+    {"a": "redkeep", "b": "greentop"},
+    {"a": "red", "b": "green", "barrier": 6}
+  ]
+}

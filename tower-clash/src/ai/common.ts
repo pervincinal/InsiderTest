@@ -182,10 +182,24 @@ export function sendRatio(tower: Tower, count: number): number {
   return (count + 0.5) / tower.units;
 }
 
+/** Weight of one unit produced by this tower: a tank for a tank factory, infantry otherwise. */
+export function unitWeightOf(tower: Tower): number {
+  return tower.kind === 'tankFactory' ? C.TANK_WEIGHT : C.INFANTRY_WEIGHT;
+}
+
+/**
+ * `count` weight rounded down to whole units of the tower's kind (and to what the garrison holds):
+ * exactly what a sendUnits command would put on the road. A tank factory holding less than one tank
+ * (weight 1–4) yields 0 — decision rules must size tank sources with this, never with raw weight.
+ */
+export function wholeUnits(tower: Tower, count: number): number {
+  const w = unitWeightOf(tower);
+  return Math.floor(Math.max(0, Math.min(count, tower.units)) / w) * w;
+}
+
 /** Build a sendUnits command for `count` weight; `undefined` when nothing would be sent. */
 export function sendCommand(tower: Tower, to: string, count: number): Command | undefined {
-  const weightPerUnit = tower.kind === 'tankFactory' ? C.TANK_WEIGHT : C.INFANTRY_WEIGHT;
-  const whole = Math.floor(Math.min(count, tower.units) / weightPerUnit) * weightPerUnit;
+  const whole = wholeUnits(tower, count);
   if (whole <= 0) return undefined;
   return { type: 'sendUnits', owner: tower.owner, from: tower.id, to, ratio: sendRatio(tower, whole) };
 }

@@ -69,6 +69,14 @@ export function playSfx(name: SfxName, opts?: SfxOptions): boolean {
   return mod.player.play(name, opts);
 }
 
+/**
+ * UI click for any tapped button / level node / HUD control. Call from the pointer-up handler that
+ * confirms the tap (after `unlockAudio()` ran on pointer-down). Returns false when muted/locked.
+ */
+export function playButtonSfx(): boolean {
+  return mod.player.play('button');
+}
+
 export function isMuted(): boolean {
   return mod.synth.muted;
 }

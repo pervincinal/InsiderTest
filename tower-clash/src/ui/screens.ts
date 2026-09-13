@@ -4,20 +4,21 @@ import { LEVELS } from '../levels/index';
 import type { Palette } from '../render/palette';
 import type { View } from '../render/view';
 import { applyDeviceTransform, applyTransform, clipToMap } from '../render/view';
-import { LEVEL_MAP, RESULT, levelMapMaxScroll, levelNodeCentre, levelNodeRect } from '../render/layout';
+import { LEVEL_MAP, RESULT, SETTINGS, TITLE, levelMapMaxScroll, levelNodeCentre, levelNodeRect } from '../render/layout';
 import type { Rect } from '../render/widgets';
-import { inRect } from '../render/widgets';
-import { drawLevelSelect, drawTitle } from '../render/menus';
+import { inRect, segmentAt } from '../render/widgets';
+import { MOTION_SEGMENTS, RATIO_SEGMENTS, drawLevelSelect, drawSettings, drawTitle } from '../render/menus';
 import type { PointerPoint } from '../input/pointer';
 import type { PlayUi } from '../render/draw';
 import { drawGame } from '../render/draw';
 import type { SaveData } from './save';
-import { isLevelUnlocked, writeSave } from './save';
-import { isMuted, toggleMuted } from '../audio/index';
+import { isLevelUnlocked, resetProgress, writeSave } from './save';
+import { applyMotionPref } from './motion';
+import { isMuted, playSfx, toggleMuted } from '../audio/index';
 
 /** A screen owns drawing and input while it is current. */
 export interface Screen {
-  readonly name: 'title' | 'levelSelect' | 'play' | 'result';
+  readonly name: 'title' | 'levelSelect' | 'play' | 'result' | 'settings';
   enter?(): void;
   exit?(): void;
   update?(dtMs: number, nowMs: number): void;
@@ -40,6 +41,8 @@ export interface App {
   goLevels(): void;
   startLevel(levelId: number): void;
   go(screen: Screen): void;
+  /** Open the settings screen; BACK returns to `from` (title, or the paused play screen). */
+  openSettings(from: Screen): void;
   /** Sim speed multiplier for this and future levels (pause-menu toggle, debug). */
   setSpeed(n: number): void;
 }
@@ -63,9 +66,9 @@ export function endMapFrame(view: View): void {
 
 /* ---------- Title ---------- */
 
-export const TITLE_PLAY: Rect = { x: 180, y: 640, w: 360, h: 96 };
-export const TITLE_CB: Rect = { x: 180, y: 780, w: 172, h: 64 };
-export const TITLE_SOUND: Rect = { x: 368, y: 780, w: 172, h: 64 };
+export const TITLE_PLAY: Rect = TITLE.play;
+export const TITLE_SETTINGS: Rect = TITLE.settings;
+export const TITLE_SOUND: Rect = TITLE.sound;
 
 export class TitleScreen implements Screen {
   readonly name = 'title' as const;
@@ -76,9 +79,8 @@ export class TitleScreen implements Screen {
     const total = Object.values(this.app.save.stars).reduce((a, b) => a + b, 0);
     drawTitle(view, this.app.palette(), {
       playRect: TITLE_PLAY,
-      cbRect: TITLE_CB,
+      settingsRect: TITLE_SETTINGS,
       soundRect: TITLE_SOUND,
-      colorBlind: this.app.save.settings.colorBlind,
       soundOn: !isMuted(),
       totalStars: total,
       coins: this.app.save.coins,
@@ -88,7 +90,7 @@ export class TitleScreen implements Screen {
   }
 
   private hit(p: PointerPoint): Rect | null {
-    for (const r of [TITLE_PLAY, TITLE_CB, TITLE_SOUND]) if (inRect(r, p.x, p.y)) return r;
+    for (const r of [TITLE_PLAY, TITLE_SETTINGS, TITLE_SOUND]) if (inRect(r, p.x, p.y)) return r;
     return null;
   }
 
@@ -103,10 +105,8 @@ export class TitleScreen implements Screen {
   up(p: PointerPoint): void {
     this.pressed = null;
     if (inRect(TITLE_PLAY, p.x, p.y)) this.app.goLevels();
-    else if (inRect(TITLE_CB, p.x, p.y)) {
-      this.app.save.settings.colorBlind = !this.app.save.settings.colorBlind;
-      writeSave(this.app.save);
-    } else if (inRect(TITLE_SOUND, p.x, p.y)) toggleMuted(); // persists settings.sound via the audio facade
+    else if (inRect(TITLE_SETTINGS, p.x, p.y)) this.app.openSettings(this);
+    else if (inRect(TITLE_SOUND, p.x, p.y)) toggleMuted(); // persists settings.sound via the audio facade
   }
 
   cancel(): void {
@@ -115,6 +115,107 @@ export class TitleScreen implements Screen {
 
   key(e: KeyboardEvent): void {
     if (e.key === 'Enter' || e.key === ' ') this.app.goLevels();
+  }
+}
+
+/* ---------- Settings (M3-3) ---------- */
+
+/**
+ * Sound, colour-blind palette, reduced motion (auto/on/off override), default send ratio and a
+ * two-step reset of the progress. Every change persists immediately; BACK returns to the screen
+ * that opened it (title, or the paused play screen).
+ */
+export class SettingsScreen implements Screen {
+  readonly name = 'settings' as const;
+  private pressed: Rect | null = null;
+  private confirming = false;
+
+  constructor(
+    private readonly app: App,
+    private readonly back: () => void,
+  ) {}
+
+  get isConfirming(): boolean {
+    return this.confirming;
+  }
+
+  draw(view: View, nowMs: number): void {
+    const s = this.app.save.settings;
+    const total = Object.values(this.app.save.stars).reduce((a, b) => a + b, 0);
+    drawSettings(view, this.app.palette(), {
+      soundOn: !isMuted(),
+      colorBlind: s.colorBlind,
+      reducedMotion: s.reducedMotion,
+      sendRatio: s.sendRatio,
+      confirming: this.confirming,
+      totalStars: total,
+      coins: this.app.save.coins,
+      nowMs,
+      pressed: this.pressed,
+    });
+  }
+
+  private rects(): Rect[] {
+    if (this.confirming) return [SETTINGS.confirm.yes, SETTINGS.confirm.no];
+    return [SETTINGS.back, SETTINGS.sound, SETTINGS.colorBlind, SETTINGS.motion, SETTINGS.sendRatio, SETTINGS.reset];
+  }
+
+  down(p: PointerPoint): void {
+    this.pressed = this.rects().find((r) => inRect(r, p.x, p.y)) ?? null;
+  }
+
+  move(p: PointerPoint): void {
+    if (this.pressed && !inRect(this.pressed, p.x, p.y)) this.pressed = null;
+  }
+
+  up(p: PointerPoint): void {
+    const hit = this.pressed;
+    this.pressed = null;
+    if (!hit || !inRect(hit, p.x, p.y)) return;
+    const save = this.app.save;
+    if (this.confirming) {
+      if (hit === SETTINGS.confirm.yes) resetProgress(save);
+      this.confirming = false;
+      playSfx('button');
+      return;
+    }
+    if (hit === SETTINGS.back) {
+      this.back();
+      return;
+    }
+    if (hit === SETTINGS.sound) {
+      toggleMuted();
+      playSfx('button');
+      return;
+    }
+    playSfx('button');
+    if (hit === SETTINGS.colorBlind) {
+      save.settings.colorBlind = !save.settings.colorBlind;
+    } else if (hit === SETTINGS.motion) {
+      const seg = MOTION_SEGMENTS[segmentAt(SETTINGS.motion, MOTION_SEGMENTS.length, p.x, p.y)];
+      if (seg) {
+        save.settings.reducedMotion = seg.value;
+        applyMotionPref(seg.value);
+      }
+    } else if (hit === SETTINGS.sendRatio) {
+      const seg = RATIO_SEGMENTS[segmentAt(SETTINGS.sendRatio, RATIO_SEGMENTS.length, p.x, p.y)];
+      if (seg) save.settings.sendRatio = seg.value;
+    } else if (hit === SETTINGS.reset) {
+      this.confirming = true;
+      return;
+    }
+    writeSave(save);
+  }
+
+  cancel(): void {
+    this.pressed = null;
+  }
+
+  key(e: KeyboardEvent): void {
+    if (e.key === 'Escape') {
+      if (this.confirming) this.confirming = false;
+      else this.back();
+    }
   }
 }
 

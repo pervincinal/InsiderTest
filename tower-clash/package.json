@@ -1,6 +1,9 @@
 {
   "name": "tower-clash",
-  "version": "0.1.0",
+  "version": "0.2.0",
+  "config": {
+    "buildNumber": 2
+  },
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,6 +14,8 @@
     "lint": "eslint src tests scripts",
     "test": "vitest run",
     "levels:check": "tsx scripts/levelsCheck.ts",
+    "version:sync": "node scripts/syncVersion.mjs",
+    "version:check": "node scripts/syncVersion.mjs --check",
     "playtest": "tsx scripts/playtest.ts",
     "check": "npm run typecheck && npm run lint && npm run test && npm run levels:check",
     "e2e": "npm run build && playwright test",
@@ -34,7 +39,11 @@
   },
   "dependencies": {
     "@capacitor/android": "8.5.2",
+    "@capacitor/app": "8.1.1",
     "@capacitor/core": "8.5.2",
-    "@capacitor/ios": "8.5.2"
+    "@capacitor/haptics": "8.0.2",
+    "@capacitor/ios": "8.5.2",
+    "@capacitor/screen-orientation": "8.0.1",
+    "@capacitor/status-bar": "8.0.3"
   }
 }

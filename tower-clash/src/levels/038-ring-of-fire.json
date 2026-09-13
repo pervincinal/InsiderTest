@@ -1,0 +1,40 @@
+{
+  "id": 38,
+  "name": "Ring of Fire",
+  "lesson": "Guns you own are the best defence against three: hold the artillery posts and let the enemies march into their fire",
+  "star3": 30000,
+  "star2": 60000,
+  "enemies": [
+    {"owner": "enemy1", "personality": "rusher", "aggression": 0.7},
+    {"owner": "enemy2", "personality": "opportunist", "aggression": 0.7},
+    {"owner": "enemy3", "personality": "rusher", "aggression": 0.7}
+  ],
+  "towers": [
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 18, "level": 1, "kind": "barracks"},
+    {"id": "w", "x": 150, "y": 1000, "owner": "neutral", "units": 5},
+    {"id": "e", "x": 570, "y": 1000, "owner": "neutral", "units": 5},
+    {"id": "gunsw", "x": 200, "y": 800, "owner": "neutral", "units": 6, "kind": "artillery"},
+    {"id": "gunse", "x": 520, "y": 800, "owner": "neutral", "units": 6, "kind": "artillery"},
+    {"id": "mid", "x": 360, "y": 640, "owner": "neutral", "units": 10},
+    {"id": "red", "x": 130, "y": 540, "owner": "enemy1", "units": 8, "level": 1, "kind": "barracks"},
+    {"id": "green", "x": 590, "y": 540, "owner": "enemy2", "units": 10, "level": 1, "kind": "barracks"},
+    {"id": "yellow", "x": 360, "y": 380, "owner": "enemy3", "units": 8, "level": 1, "kind": "barracks"},
+    {"id": "crown", "x": 360, "y": 180, "owner": "neutral", "units": 8}
+  ],
+  "roads": [
+    {"a": "home", "b": "w"},
+    {"a": "home", "b": "e"},
+    {"a": "w", "b": "gunsw"},
+    {"a": "e", "b": "gunse"},
+    {"a": "gunsw", "b": "mid"},
+    {"a": "gunse", "b": "mid"},
+    {"a": "gunsw", "b": "red"},
+    {"a": "gunse", "b": "green"},
+    {"a": "mid", "b": "yellow", "barrier": 6},
+    {"a": "red", "b": "yellow"},
+    {"a": "green", "b": "yellow"},
+    {"a": "red", "b": "crown", "mine": 4},
+    {"a": "green", "b": "crown", "mine": 4},
+    {"a": "yellow", "b": "crown"}
+  ]
+}

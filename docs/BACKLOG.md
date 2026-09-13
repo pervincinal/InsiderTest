@@ -50,7 +50,10 @@ Priority = order within a section. Producer moves items; anyone may add to Bugs 
 - [ ] M4-3 Release notes 1.0, post-launch backlog
 
 ## Bugs
-(none yet)
+- [ ] BUG-1 (2026-09-13, QA) `e2e/smoke.spec.ts` fails after the save-schema v2 change — CI will go red once `src/ui/save.ts` is committed. Owner: Frontend Engineer (spec file is theirs today).
+  - Repro: `cd tower-clash && npm run e2e -- smoke.spec.ts` → `smoke.spec.ts:191` `expect(saveAfterWin?.stars['1']).toBe(stars)` — Expected 3, Received undefined.
+  - Cause: `src/ui/save.ts` now writes to `SAVE_KEY = 'towerclash.save.v2'` (v1 is only read for migration), but the spec mirrors `const SAVE_KEY = 'towerclash.save.v1'` (line 33), so `readSave` returns null. Verified the game is correct: after an autoplay win localStorage `towerclash.save.v2` = `{"version":2,"stars":{"1":3},"coins":30,...}` and `getResult()` = `{won, 3 stars, 30/30 coins}`; `tests/ui/save.test.ts` passes.
+  - Fix: bump the mirror to `towerclash.save.v2` and also assert `localStorage.getItem('towerclash.save.v1') === null` on a fresh save (regression guard for the key move). Consider exposing `getSave()` on `window.__towerclash` so e2e stops mirroring the key.
 
 ## Icebox
 - Daily challenge map with seed
