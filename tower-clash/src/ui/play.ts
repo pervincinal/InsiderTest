@@ -11,6 +11,7 @@ import type { PlayUi } from '../render/draw';
 import { drawGame } from '../render/draw';
 import { HUD, PAUSE } from '../render/layout';
 import { inRect } from '../render/widgets';
+import { ParticleSystem } from '../render/particles';
 import type { PointerPoint } from '../input/pointer';
 import { PlayGestures } from '../input/pointer';
 import { GameLoop } from './loop';
@@ -19,7 +20,7 @@ import type { App, Screen } from './screens';
 import { ResultScreen } from './screens';
 import type { Tutorial, TutorialStep } from './tutorial';
 import { drawTutorial, tutorialFor } from './tutorial';
-
+import { onPlayerCommand, onSimEvents, onSimFrame, resetAudioLevel } from '../audio/index';
 
 /** Transient visual effect driven by sim events (capture flash / death puff). */
 interface Effect {
@@ -36,6 +37,8 @@ export class PlayScreen implements Screen {
   readonly loop: GameLoop;
   readonly gestures: PlayGestures;
   private readonly effects: Effect[] = [];
+  /** Toy-look particles (render/particles.ts); fed straight from the loop's event hook. */
+  private readonly particles = new ParticleSystem();
   private enemyRngs = new Map<string, Rng>();
   private playerRng: Rng;
   private autoplay = false;
@@ -52,10 +55,14 @@ export class PlayScreen implements Screen {
   ) {
     this.loop = new GameLoop({
       beforeTick: (s) => this.runAi(s),
-      onEvents: (ev) => this.onEvents(ev),
+      onEvents: (ev) => {
+        this.particles.onEvents(ev, this.state, this.app.palette(), this.nowMs);
+        this.onEvents(ev);
+      },
     });
     this.loop.speed = speed;
     this.loop.load(createState(level, seed));
+    resetAudioLevel();
     this.playerRng = new Rng((seed ^ 0x9e3779b9) >>> 0);
     level.enemies.forEach((e, i) => this.enemyRngs.set(e.owner, new Rng((seed + 1013904223 * (i + 1)) >>> 0)));
     this.tutorial = tutorialFor(level.id, app.save.stars[String(level.id)] ?? 0);
@@ -64,6 +71,7 @@ export class PlayScreen implements Screen {
       getSendRatio: () => this.app.save.settings.sendRatio,
       onCommand: (cmd) => {
         this.tutorial?.onCommand(cmd, this.state);
+        onPlayerCommand(cmd, this.state); // `send` has no sim event, so the tick is keyed off the command
         this.loop.enqueue(cmd);
       },
     });
@@ -112,7 +120,7 @@ export class PlayScreen implements Screen {
         if (t) this.effects.push({ x: t.x, y: t.y, color: pal.star, bornMs: this.nowMs, lifeMs: 350, kind: 'ring' });
       }
     }
-    // TODO(audio): forward `events` to the WebAudio synth once src/audio exists.
+    onSimEvents(events, this.state);
   }
 
   update(dtMs: number, nowMs: number): void {
@@ -120,6 +128,7 @@ export class PlayScreen implements Screen {
     this.gestures.tick(nowMs);
     this.tutorial?.onSelect(this.gestures.selectedTowerId, this.state);
     this.loop.advance(dtMs);
+    onSimFrame(this.state); // own-unit arrivals are detected by diffing units (no sim event for them)
     if (this.loop.finished && !this.finishedHandled) {
       this.finishedHandled = true;
       this.finish();
@@ -145,6 +154,7 @@ export class PlayScreen implements Screen {
       speed: this.loop.speed,
       coinsEarned: this.coinsEarned,
       coinsTotal: this.app.save.coins,
+      particles: this.particles,
     };
   }
 
@@ -160,8 +170,8 @@ export class PlayScreen implements Screen {
 
   draw(view: View, nowMs: number): void {
     const ui = this.buildUi();
-    drawGame(view.ctx, this.state, view, ui);
-    this.drawEffects(view, nowMs);
+    drawGame(view.ctx, this.state, view, ui, nowMs);
+    this.effects.length = 0; // legacy flat ring/puff list: particles.ts renders these now
     const step = this.tutorialStep();
     if (step) {
       const ctx = view.ctx;
@@ -171,36 +181,6 @@ export class PlayScreen implements Screen {
       drawTutorial(ctx, ui.palette, this.state, step, nowMs);
       ctx.restore();
     }
-  }
-
-  private drawEffects(view: View, nowMs: number): void {
-    if (!this.effects.length) return;
-    const ctx = view.ctx;
-    ctx.save();
-    applyTransform(view);
-    clipToMap(view);
-    for (let i = this.effects.length - 1; i >= 0; i--) {
-      const fx = this.effects[i]!;
-      const t = (nowMs - fx.bornMs) / fx.lifeMs;
-      if (t >= 1) {
-        this.effects.splice(i, 1);
-        continue;
-      }
-      ctx.globalAlpha = 1 - t;
-      ctx.strokeStyle = fx.color;
-      ctx.fillStyle = fx.color;
-      if (fx.kind === 'ring') {
-        ctx.lineWidth = 6 * (1 - t) + 1;
-        ctx.beginPath();
-        ctx.arc(fx.x, fx.y, 36 + 40 * t, 0, Math.PI * 2);
-        ctx.stroke();
-      } else {
-        ctx.beginPath();
-        ctx.arc(fx.x, fx.y, 5 + 14 * t, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-    ctx.restore();
   }
 
   /* ----- input ----- */

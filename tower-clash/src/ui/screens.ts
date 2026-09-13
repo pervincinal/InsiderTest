@@ -2,12 +2,12 @@ import type { GameState, LevelDef } from '../sim/types';
 import { C } from '../sim/constants';
 import { LEVELS } from '../levels/index';
 import type { Palette } from '../render/palette';
-import { shade } from '../render/palette';
 import type { View } from '../render/view';
 import { applyDeviceTransform, applyTransform, clipToMap } from '../render/view';
 import { RESULT } from '../render/layout';
 import type { Rect } from '../render/widgets';
-import { drawButton, drawCoin, drawLock, drawStars, font, inRect } from '../render/widgets';
+import { inRect } from '../render/widgets';
+import { drawLevelSelect, drawTitle } from '../render/menus';
 import type { PointerPoint } from '../input/pointer';
 import type { PlayUi } from '../render/draw';
 import { drawGame } from '../render/draw';
@@ -58,44 +58,6 @@ export function endMapFrame(view: View): void {
   view.ctx.restore();
 }
 
-/** Decorative background: a few dim towers and roads so menus feel like the game. */
-function drawBackdropArt(ctx: CanvasRenderingContext2D, pal: Palette, nowMs: number): void {
-  const pts = [
-    { x: 120, y: 300 },
-    { x: 600, y: 240 },
-    { x: 360, y: 520 },
-    { x: 140, y: 900 },
-    { x: 580, y: 980 },
-  ];
-  ctx.strokeStyle = pal.roadDim;
-  ctx.lineWidth = 8;
-  ctx.lineCap = 'round';
-  const edges: [number, number][] = [
-    [0, 1],
-    [0, 2],
-    [1, 2],
-    [2, 3],
-    [2, 4],
-    [3, 4],
-  ];
-  for (const [a, b] of edges) {
-    const p = pts[a]!;
-    const q = pts[b]!;
-    ctx.beginPath();
-    ctx.moveTo(p.x, p.y);
-    ctx.lineTo(q.x, q.y);
-    ctx.stroke();
-  }
-  const owners: (keyof Palette['owners'])[] = ['player', 'enemy1', 'neutral', 'neutral', 'enemy1'];
-  pts.forEach((p, i) => {
-    const wob = Math.sin(nowMs / 900 + i) * 3;
-    ctx.fillStyle = shade(pal.owners[owners[i] ?? 'neutral'], -0.55);
-    ctx.beginPath();
-    ctx.arc(p.x, p.y + wob, 30, 0, Math.PI * 2);
-    ctx.fill();
-  });
-}
-
 /* ---------- Title ---------- */
 
 const TITLE_PLAY: Rect = { x: 180, y: 640, w: 360, h: 96 };
@@ -106,31 +68,15 @@ export class TitleScreen implements Screen {
   constructor(private readonly app: App) {}
 
   draw(view: View, nowMs: number): void {
-    const pal = this.app.palette();
-    const ctx = view.ctx;
-    beginMapFrame(view, pal);
-    drawBackdropArt(ctx, pal, nowMs);
-
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = pal.text;
-    ctx.font = font(92, '900');
-    ctx.fillText('TOWER', 360, 380);
-    ctx.fillStyle = pal.owners.player;
-    ctx.fillText('CLASH', 360, 470);
-    ctx.fillStyle = pal.textDim;
-    ctx.font = font(24, 'normal');
-    ctx.fillText('Capture every tower', 360, 545);
-
-    drawButton(ctx, pal, TITLE_PLAY, 'PLAY', { fill: pal.owners.player, border: shade(pal.owners.player, 0.3), fontPx: 40 });
-    const cb = this.app.save.settings.colorBlind;
-    drawButton(ctx, pal, TITLE_CB, `Colour-blind palette: ${cb ? 'ON' : 'OFF'}`, { fontPx: 22, border: cb ? pal.accent : undefined });
-
     const total = Object.values(this.app.save.stars).reduce((a, b) => a + b, 0);
-    ctx.fillStyle = pal.textDim;
-    ctx.font = font(20, 'normal');
-    ctx.fillText(`${total} ★ · ${this.app.save.coins} coins`, 360, 1200);
-    endMapFrame(view);
+    drawTitle(view, this.app.palette(), {
+      playRect: TITLE_PLAY,
+      cbRect: TITLE_CB,
+      colorBlind: this.app.save.settings.colorBlind,
+      totalStars: total,
+      coins: this.app.save.coins,
+      nowMs,
+    });
   }
 
   up(p: PointerPoint): void {
@@ -177,58 +123,20 @@ export class LevelSelectScreen implements Screen {
   }
 
   draw(view: View, nowMs: number): void {
-    const pal = this.app.palette();
-    const ctx = view.ctx;
-    beginMapFrame(view, pal);
-    drawBackdropArt(ctx, pal, nowMs);
-
-    ctx.save();
-    ctx.translate(0, -this.scroll);
-    LEVELS.forEach((level, i) => {
-      const r = levelCardRect(i);
-      const stars = this.app.save.stars[String(level.id)] ?? 0;
-      const unlocked = isLevelUnlocked(this.app.save, LEVELS, i);
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      if (!unlocked) {
-        // Locked: greyed card, number dimmed, padlock instead of name/stars.
-        drawButton(ctx, pal, r, '', { disabled: true });
-        ctx.globalAlpha = 0.45;
-        ctx.fillStyle = pal.textDim;
-        ctx.font = font(56, '900');
-        ctx.fillText(String(level.id), r.x + r.w / 2, r.y + 62);
-        ctx.globalAlpha = 1;
-        drawLock(ctx, pal.textDim, r.x + r.w / 2, r.y + 140, 34);
-        return;
-      }
-      drawButton(ctx, pal, r, '', { border: stars > 0 ? shade(pal.owners.player, 0.2) : undefined });
-      ctx.fillStyle = pal.text;
-      ctx.font = font(56, '900');
-      ctx.fillText(String(level.id), r.x + r.w / 2, r.y + 62);
-      ctx.fillStyle = pal.textDim;
-      ctx.font = font(20);
-      ctx.fillText(level.name, r.x + r.w / 2, r.y + 120, r.w - 20);
-      drawStars(ctx, pal, r.x + r.w / 2, r.y + 162, stars, 13);
+    drawLevelSelect(view, this.app.palette(), {
+      cards: LEVELS.map((level, i) => ({
+        rect: levelCardRect(i),
+        id: level.id,
+        name: level.name,
+        stars: this.app.save.stars[String(level.id)] ?? 0,
+        unlocked: isLevelUnlocked(this.app.save, LEVELS, i),
+      })),
+      scroll: this.scroll,
+      backRect: BACK,
+      coins: this.app.save.coins,
+      nowMs,
+      headerH: 200,
     });
-    ctx.restore();
-
-    // Header (on top of cards when scrolled)
-    ctx.fillStyle = pal.background;
-    ctx.fillRect(0, 0, C.MAP_W, 200);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = pal.text;
-    ctx.font = font(48, '900');
-    ctx.fillText('SELECT LEVEL', 360, 130);
-    drawButton(ctx, pal, BACK, 'BACK', { fontPx: 24 });
-    // Coin total, top-right (opposite BACK).
-    ctx.font = font(26);
-    ctx.textAlign = 'right';
-    ctx.fillStyle = pal.star;
-    const coins = String(this.app.save.coins);
-    ctx.fillText(coins, 702, 48);
-    drawCoin(ctx, pal, 702 - ctx.measureText(coins).width - 24, 48, 15);
-    endMapFrame(view);
   }
 
   down(p: PointerPoint): void {
@@ -284,8 +192,8 @@ export class ResultScreen implements Screen {
     readonly info: ResultInfo,
   ) {}
 
-  draw(view: View): void {
-    drawGame(view.ctx, this.info.state, view, this.info.ui);
+  draw(view: View, nowMs: number): void {
+    drawGame(view.ctx, this.info.state, view, this.info.ui, nowMs);
   }
 
   up(p: PointerPoint): void {

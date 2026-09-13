@@ -1,17 +1,18 @@
-import type { GameState, LevelDef, Outcome, Road, Tower, Unit } from '../sim/types';
+import type { GameState, LevelDef, Outcome, Road, Unit } from '../sim/types';
 import { C } from '../sim/constants';
 import { capacityOf, roadPointAt } from '../sim/step';
 import type { Palette } from './palette';
 import { shade } from './palette';
 import type { View } from './view';
 import { applyDeviceTransform, applyTransform, clipToMap } from './view';
-import { HUD, PAUSE, RESULT, TANK_RADIUS, TOWER_RADIUS, UNIT_RADIUS } from './layout';
-import { drawButton, drawCoin, drawStars, font, formatTime, outlinedText, roundRect } from './widgets';
-
-function coinLabelWidth(ctx: CanvasRenderingContext2D, coins: number): number {
-  ctx.font = font(30);
-  return ctx.measureText(`+${coins} coins`).width;
-}
+import { HUD, PAUSE, RESULT } from './layout';
+import type { Rect } from './widgets';
+import { drawButton, drawCoin, drawPill, drawStars, easeOutBack, font, formatTime, outlinedText, roundRect, wrapText } from './widgets';
+import type { TerrainSpec } from './terrain';
+import { drawTerrain } from './terrain';
+import { badgeY, drawBadge, drawTowerShadow, drawTowerSprite, drawUnitSprite } from './sprites';
+import type { ParticleSystem } from './particles';
+import { prefersReducedMotion } from './particles';
 
 /** Everything the renderer needs beyond the sim state. Owned by the play screen; read-only here. */
 export interface PlayUi {
@@ -33,9 +34,50 @@ export interface PlayUi {
   /** Coins awarded by this clear (first-clear stars × COINS_PER_STAR) and the save total. */
   coinsEarned: number;
   coinsTotal: number;
+  /** Visual effects fed from sim events (optional: menus / tests draw without them). */
+  particles?: ParticleSystem;
+}
+
+let reducedMotion: boolean | null = null;
+function motionAllowed(): boolean {
+  if (reducedMotion === null) reducedMotion = prefersReducedMotion();
+  return !reducedMotion;
 }
 
 /* ---------- roads ---------- */
+
+export interface Pose {
+  x: number;
+  y: number;
+  dx: number;
+  dy: number;
+}
+
+/** Point and unit tangent at fraction `t` along a road's polyline (measured from road.a). */
+export function roadPoseAt(road: Road, t: number): Pose {
+  const pts = road.points;
+  const n = pts.length;
+  if (n < 2) {
+    const p = pts[0] ?? { x: 0, y: 0 };
+    return { x: p.x, y: p.y, dx: 1, dy: 0 };
+  }
+  let remaining = Math.max(0, Math.min(1, t)) * road.length;
+  for (let i = 1; i < n; i++) {
+    const p = pts[i - 1]!;
+    const q = pts[i]!;
+    const sx = q.x - p.x;
+    const sy = q.y - p.y;
+    const seg = Math.hypot(sx, sy);
+    if (remaining <= seg || i === n - 1) {
+      const k = seg === 0 ? 0 : Math.min(1, remaining / seg);
+      const inv = seg === 0 ? 0 : 1 / seg;
+      return { x: p.x + sx * k, y: p.y + sy * k, dx: sx * inv, dy: sy * inv };
+    }
+    remaining -= seg;
+  }
+  const last = pts[n - 1]!;
+  return { x: last.x, y: last.y, dx: 1, dy: 0 };
+}
 
 function tracePolyline(ctx: CanvasRenderingContext2D, road: Road, t0: number, t1: number): void {
   const steps = Math.max(2, Math.ceil((road.length * (t1 - t0)) / 24));
@@ -46,305 +88,332 @@ function tracePolyline(ctx: CanvasRenderingContext2D, road: Road, t0: number, t1
   }
 }
 
-function drawRoad(ctx: CanvasRenderingContext2D, pal: Palette, road: Road, pressing: number): void {
-  ctx.lineCap = 'round';
+/** Wooden plank bridge (dynamic: it can be cut). Static roads live in the terrain cache. */
+function drawBridge(ctx: CanvasRenderingContext2D, pal: Palette, road: Road, pressing: number): void {
+  ctx.lineCap = 'butt';
   ctx.lineJoin = 'round';
-  if (road.kind === 'bridge' && road.cut) {
-    // Broken bridge: two dim stubs with a gap in the middle.
-    ctx.strokeStyle = pal.roadDim;
-    ctx.lineWidth = 10;
-    ctx.setLineDash([]);
+  const spans: [number, number][] = road.cut
+    ? [
+        [0, 0.36],
+        [0.64, 1],
+      ]
+    : [[0, 1]];
+  for (const [t0, t1] of spans) {
+    ctx.strokeStyle = pal.woodDark;
+    ctx.lineWidth = 28;
     ctx.beginPath();
-    tracePolyline(ctx, road, 0, 0.36);
+    tracePolyline(ctx, road, t0, t1);
     ctx.stroke();
+    ctx.strokeStyle = pal.bridge;
+    ctx.lineWidth = 22;
+    ctx.stroke();
+    // slats
+    ctx.strokeStyle = pal.woodDark;
+    ctx.lineWidth = 3;
     ctx.beginPath();
-    tracePolyline(ctx, road, 0.64, 1);
+    const count = Math.max(1, Math.floor((road.length * (t1 - t0)) / 12));
+    for (let i = 0; i <= count; i++) {
+      const p = roadPoseAt(road, t0 + ((t1 - t0) * i) / count);
+      ctx.moveTo(p.x - p.dy * 10, p.y + p.dx * 10);
+      ctx.lineTo(p.x + p.dy * 10, p.y - p.dx * 10);
+    }
     ctx.stroke();
-    const m = roadPointAt(road, 0.5);
-    ctx.strokeStyle = pal.mine;
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(m.x - 12, m.y - 12);
-    ctx.lineTo(m.x + 12, m.y + 12);
-    ctx.moveTo(m.x + 12, m.y - 12);
-    ctx.lineTo(m.x - 12, m.y + 12);
-    ctx.stroke();
+  }
+  if (road.cut) {
+    // splintered ends over the gap
+    ctx.fillStyle = pal.woodDark;
+    for (const t of [0.36, 0.64]) {
+      const p = roadPoseAt(road, t);
+      ctx.beginPath();
+      ctx.moveTo(p.x - p.dy * 11, p.y + p.dx * 11);
+      ctx.lineTo(p.x + p.dx * (t < 0.5 ? 10 : -10), p.y + p.dy * (t < 0.5 ? 10 : -10));
+      ctx.lineTo(p.x + p.dy * 11, p.y - p.dx * 11);
+      ctx.closePath();
+      ctx.fill();
+    }
     return;
   }
-  ctx.lineWidth = 10;
-  if (road.kind === 'bridge') {
-    ctx.strokeStyle = pal.bridge;
-    ctx.setLineDash([18, 12]);
-  } else {
-    ctx.strokeStyle = pal.road;
-    ctx.setLineDash([]);
-  }
-  ctx.beginPath();
-  tracePolyline(ctx, road, 0, 1);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  if (road.kind === 'bridge' && pressing > 0) {
-    // Long-press progress ring at the midpoint.
+  if (pressing > 0) {
     const m = roadPointAt(road, 0.5);
     ctx.strokeStyle = pal.mine;
     ctx.lineWidth = 6;
+    ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.arc(m.x, m.y, 26, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pressing);
     ctx.stroke();
   }
 }
 
-function drawHazards(ctx: CanvasRenderingContext2D, pal: Palette, road: Road): void {
+function drawHazards(ctx: CanvasRenderingContext2D, pal: Palette, road: Road, nowMs: number): void {
   if (road.cut) return;
-  const m = roadPointAt(road, 0.5);
-  if (road.mine > 0) {
-    ctx.fillStyle = pal.mine;
-    ctx.beginPath();
-    ctx.moveTo(m.x, m.y - 14);
-    ctx.lineTo(m.x + 14, m.y);
-    ctx.lineTo(m.x, m.y + 14);
-    ctx.lineTo(m.x - 14, m.y);
-    ctx.closePath();
-    ctx.fill();
-    outlinedText(ctx, String(road.mine), m.x, m.y + 1, pal.text, 16);
-  }
+  const m = roadPoseAt(road, 0.5);
   if (road.barrier > 0) {
-    const a = roadPointAt(road, 0.47);
-    const b = roadPointAt(road, 0.53);
-    const ang = Math.atan2(b.y - a.y, b.x - a.x) + Math.PI / 2;
-    ctx.save();
-    ctx.translate(m.x, m.y);
-    ctx.rotate(ang);
-    ctx.fillStyle = pal.barrier;
-    roundRect(ctx, { x: -26, y: -8, w: 52, h: 16 }, 5);
+    // stone wall across the path
+    const nx = -m.dy;
+    const ny = m.dx;
+    ctx.fillStyle = pal.shadow;
+    ctx.beginPath();
+    ctx.ellipse(m.x + 2, m.y + 6, 30, 9, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.restore();
-    outlinedText(ctx, String(road.barrier), m.x, m.y + 1, pal.text, 18);
-  }
-}
-
-/* ---------- towers ---------- */
-
-function drawTower(ctx: CanvasRenderingContext2D, pal: Palette, tower: Tower, ui: PlayUi): void {
-  const base = pal.owners[tower.owner];
-  const { x, y } = tower;
-  const r = TOWER_RADIUS;
-
-  // Selection / hover ring
-  if (ui.selectedTowerId === tower.id) {
-    ctx.strokeStyle = pal.selection;
-    ctx.lineWidth = 5;
-    ctx.setLineDash([]);
-    ctx.beginPath();
-    ctx.arc(x, y, r + 9, 0, Math.PI * 2);
-    ctx.stroke();
-  } else if (ui.hoverTowerId === tower.id) {
-    ctx.strokeStyle = pal.selection;
-    ctx.lineWidth = 3;
-    ctx.setLineDash([8, 8]);
-    ctx.beginPath();
-    ctx.arc(x, y, r + 9, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
-  }
-
-  // Fortress: thick outer ring
-  if (tower.kind === 'fortress') {
-    ctx.strokeStyle = shade(base, -0.35);
-    ctx.lineWidth = 9;
-    ctx.beginPath();
-    ctx.arc(x, y, r + 2, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-
-  // Body
-  ctx.fillStyle = base;
-  ctx.beginPath();
-  ctx.arc(x, y, r, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = shade(base, -0.4);
-  ctx.lineWidth = 3;
-  ctx.stroke();
-  // Highlight
-  ctx.fillStyle = 'rgba(255,255,255,0.14)';
-  ctx.beginPath();
-  ctx.arc(x, y - r * 0.35, r * 0.62, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Kind glyph (top-right of the body)
-  const gx = x + r * 0.62;
-  const gy = y - r * 0.62;
-  if (tower.kind === 'artillery') {
-    ctx.fillStyle = pal.text;
-    ctx.strokeStyle = shade(base, -0.5);
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(gx, gy - 11);
-    ctx.lineTo(gx + 10, gy + 7);
-    ctx.lineTo(gx - 10, gy + 7);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-  } else if (tower.kind === 'tankFactory') {
-    ctx.fillStyle = pal.text;
-    ctx.strokeStyle = shade(base, -0.5);
-    ctx.lineWidth = 2;
-    ctx.fillRect(gx - 9, gy - 9, 18, 18);
-    ctx.strokeRect(gx - 9, gy - 9, 18, 18);
-  }
-
-  // Garrison number
-  const cap = capacityOf(tower);
-  const numColor = tower.units >= cap ? pal.star : pal.text;
-  outlinedText(ctx, String(tower.units), x, y + 1, numColor, 30);
-
-  // Level pips above the tower: tiny crowns (triangle-topped dots)
-  const pipY = y - r - 14;
-  const pipGap = 16;
-  for (let i = 0; i < tower.level; i++) {
-    const px = x + (i - (tower.level - 1) / 2) * pipGap;
-    ctx.fillStyle = pal.star;
-    ctx.beginPath();
-    ctx.moveTo(px - 6, pipY + 5);
-    ctx.lineTo(px - 6, pipY - 3);
-    ctx.lineTo(px - 2, pipY + 1);
-    ctx.lineTo(px, pipY - 6);
-    ctx.lineTo(px + 2, pipY + 1);
-    ctx.lineTo(px + 6, pipY - 3);
-    ctx.lineTo(px + 6, pipY + 5);
-    ctx.closePath();
-    ctx.fill();
-  }
-}
-
-/* ---------- units ---------- */
-
-function unitDrawPosition(state: GameState, unit: Unit, alpha: number): { x: number; y: number } {
-  const road = state.roads[unit.roadId];
-  if (!road) return { x: 0, y: 0 };
-  const advance = road.length > 0 ? (unit.speed * alpha * C.TICK_MS) / 1000 / road.length : 0;
-  const progress = Math.min(1, unit.progress + advance);
-  const t = unit.from === road.a ? progress : 1 - progress;
-  return roadPointAt(road, t);
-}
-
-function drawUnits(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, alpha: number): void {
-  ctx.lineWidth = 2;
-  for (const unit of state.units) {
-    const p = unitDrawPosition(state, unit, alpha);
-    const color = pal.owners[unit.owner];
-    ctx.fillStyle = color;
-    ctx.strokeStyle = shade(color, -0.5);
-    if (unit.kind === 'tank') {
-      const s = TANK_RADIUS;
-      ctx.fillRect(p.x - s, p.y - s, s * 2, s * 2);
-      ctx.strokeRect(p.x - s, p.y - s, s * 2, s * 2);
-    } else {
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, UNIT_RADIUS, 0, Math.PI * 2);
+    for (let i = -2; i <= 2; i++) {
+      const cx = m.x + nx * i * 12;
+      const cy = m.y + ny * i * 12;
+      ctx.fillStyle = i % 2 ? pal.stoneDark : pal.barrier;
+      ctx.strokeStyle = 'rgba(60, 50, 40, 0.5)';
+      ctx.lineWidth = 2;
+      roundRect(ctx, { x: cx - 7, y: cy - 12, w: 14, h: 18 }, 3);
       ctx.fill();
       ctx.stroke();
+      ctx.fillStyle = pal.stoneLight;
+      ctx.fillRect(cx - 5, cy - 11, 10, 4);
     }
+    outlinedText(ctx, String(road.barrier), m.x, m.y - 24, '#ffffff', 20);
+  }
+  if (road.mine > 0) {
+    const blink = motionAllowed() ? 0.55 + 0.45 * Math.sin(nowMs / 160) : 1;
+    ctx.fillStyle = pal.shadow;
+    ctx.beginPath();
+    ctx.ellipse(m.x + 2, m.y + 5, 14, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#2f3540';
+    ctx.beginPath();
+    ctx.ellipse(m.x, m.y, 14, 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#4b5361';
+    ctx.beginPath();
+    ctx.ellipse(m.x, m.y - 3, 11, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = pal.mine;
+    ctx.globalAlpha = blink;
+    ctx.beginPath();
+    ctx.arc(m.x, m.y - 4, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    outlinedText(ctx, String(road.mine), m.x, m.y - 24, '#ffffff', 18);
   }
 }
 
-/** Small "N queued" badge near a tower that still has units waiting to leave. */
-function drawQueues(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState): void {
-  const perTower = new Map<string, number>();
-  for (const q of state.queues) perTower.set(q.from, (perTower.get(q.from) ?? 0) + q.remaining);
-  for (const [id, n] of perTower) {
-    const t = state.towers[id];
-    if (!t || n <= 0) continue;
-    outlinedText(ctx, `+${n}`, t.x + TOWER_RADIUS + 18, t.y + TOWER_RADIUS + 10, pal.textDim, 18);
+/* ---------- ground marks (under towers/units) ---------- */
+
+function groundRing(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, color: string, width: number, dash?: number[]): void {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.setLineDash(dash ?? []);
+  ctx.beginPath();
+  ctx.ellipse(x, y + 8, r, r * 0.42, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function drawGroundMarks(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, ui: PlayUi, nowMs: number): void {
+  const motion = motionAllowed();
+  // artillery ranges (the sim measures a circle in map units)
+  for (const id in state.towers) {
+    const t = state.towers[id]!;
+    if (t.kind !== 'artillery' || t.owner === 'neutral') continue;
+    ctx.globalAlpha = 0.35;
+    ctx.strokeStyle = pal.owners[t.owner];
+    ctx.lineWidth = 3;
+    ctx.setLineDash([10, 10]);
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, C.ARTILLERY_RANGE, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+  }
+  const sel = ui.selectedTowerId ? state.towers[ui.selectedTowerId] : undefined;
+  const hov = ui.hoverTowerId ? state.towers[ui.hoverTowerId] : undefined;
+  if (sel) {
+    const pulse = motion ? (Math.sin(nowMs / 180) + 1) / 2 : 0.5;
+    groundRing(ctx, sel.x, sel.y, 52 + pulse * 5, shade(pal.selection, -0.45), 9);
+    groundRing(ctx, sel.x, sel.y, 52 + pulse * 5, pal.selection, 5);
+  }
+  if (hov && sel && hov.id !== sel.id) {
+    const [a, b] = sel.id < hov.id ? [sel.id, hov.id] : [hov.id, sel.id];
+    const road = state.roads[`${a}-${b}`];
+    if (road) {
+      ctx.strokeStyle = shade(pal.selection, -0.45);
+      ctx.lineWidth = 12;
+      ctx.lineCap = 'round';
+      ctx.setLineDash([16, 14]);
+      ctx.lineDashOffset = motion ? -(nowMs / 25) % 30 : 0;
+      ctx.beginPath();
+      tracePolyline(ctx, road, 0, 1);
+      ctx.stroke();
+      ctx.strokeStyle = pal.selection;
+      ctx.lineWidth = 7;
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.lineDashOffset = 0;
+    }
+    groundRing(ctx, hov.x, hov.y, 54, pal.selection, 5, [10, 8]);
+  } else if (hov && !sel) {
+    groundRing(ctx, hov.x, hov.y, 54, pal.selection, 4, [10, 8]);
+  }
+}
+
+/* ---------- units & towers ---------- */
+
+interface UnitDraw {
+  x: number;
+  y: number;
+  dx: number;
+  dy: number;
+  unit: Unit;
+}
+
+function unitDraws(state: GameState, alpha: number, out: UnitDraw[]): void {
+  for (const unit of state.units) {
+    const road = state.roads[unit.roadId];
+    if (!road) continue;
+    const advance = road.length > 0 ? (unit.speed * alpha * C.TICK_MS) / 1000 / road.length : 0;
+    const progress = Math.min(1, unit.progress + advance);
+    const forward = unit.from === road.a;
+    const p = roadPoseAt(road, forward ? progress : 1 - progress);
+    out.push({ x: p.x, y: p.y, dx: forward ? p.dx : -p.dx, dy: forward ? p.dy : -p.dy, unit });
+  }
+  out.sort((a, b) => a.y - b.y);
+}
+
+function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, ui: PlayUi, nowMs: number): void {
+  const motion = motionAllowed();
+  const towers = Object.values(state.towers).sort((a, b) => a.y - b.y);
+  for (const t of towers) drawTowerShadow(ctx, pal, t.x, t.y, t.kind);
+
+  const units: UnitDraw[] = [];
+  unitDraws(state, ui.alpha, units);
+  // painter's order: everything sorted by ground y so units walk in front of / behind buildings
+  let ui_ = 0;
+  const drawUnit = (u: UnitDraw): void =>
+    drawUnitSprite(ctx, pal, u.x, u.y, u.unit.owner, u.unit.kind, u.dx, u.dy, u.unit.id, nowMs, motion);
+  for (const t of towers) {
+    while (ui_ < units.length && units[ui_]!.y <= t.y + 4) drawUnit(units[ui_++]!);
+    drawTowerSprite(ctx, pal, t, {
+      nowMs,
+      motion,
+      raised: ui.selectedTowerId === t.id,
+      pulse: ui.particles?.towerPulse(t.id, nowMs) ?? 0,
+    });
+  }
+  while (ui_ < units.length) drawUnit(units[ui_++]!);
+
+  // badges on top of everything in the world
+  const queued = new Map<string, number>();
+  for (const q of state.queues) queued.set(q.from, (queued.get(q.from) ?? 0) + q.remaining);
+  for (const t of towers) {
+    const raise = ui.selectedTowerId === t.id ? 4 : 0;
+    drawBadge(ctx, pal, t.x, t.y + badgeY(t.kind) - raise, String(t.units), t.units >= capacityOf(t));
+    const n = queued.get(t.id) ?? 0;
+    if (n > 0) outlinedText(ctx, `+${n}`, t.x + 44, t.y + 22, '#ffffff', 18);
   }
 }
 
 /* ---------- HUD ---------- */
 
-function drawHud(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, ui: PlayUi): void {
-  // Top bar
-  ctx.fillStyle = 'rgba(2, 6, 23, 0.55)';
-  ctx.fillRect(HUD.topBar.x, HUD.topBar.y, HUD.topBar.w, HUD.topBar.h);
+const LEVEL_CHIP: Rect = { x: 18, y: 20, w: 292, h: 58 };
+const TIMER_PILL: Rect = { x: 336, y: 24, w: 168, h: 50 };
 
-  ctx.fillStyle = pal.textDim;
-  ctx.font = font(20);
+function drawHud(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, ui: PlayUi): void {
+  const chipFill = 'rgba(255,255,255,0.9)';
+  // level chip
+  drawPill(ctx, LEVEL_CHIP, chipFill, pal.panelBorder);
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.fillText(`LEVEL ${ui.level.id}`, 20, 32);
+  ctx.fillStyle = pal.textDim;
+  ctx.font = font(15);
+  ctx.fillText(`LEVEL ${ui.level.id}`, 40, 37);
   ctx.fillStyle = pal.text;
-  ctx.font = font(26);
-  ctx.fillText(ui.level.name, 20, 64);
+  ctx.font = font(24);
+  ctx.fillText(ui.level.name, 40, 60, LEVEL_CHIP.w - 44);
 
+  // timer pill (+ speed tag)
+  drawPill(ctx, TIMER_PILL, chipFill, pal.panelBorder);
   ctx.textAlign = 'center';
-  ctx.font = font(40);
-  ctx.fillText(formatTime(state.time), 430, 48);
+  ctx.fillStyle = pal.text;
+  ctx.font = font(34, '900');
+  ctx.fillText(formatTime(state.time), TIMER_PILL.x + TIMER_PILL.w / 2, TIMER_PILL.y + TIMER_PILL.h / 2 + 1);
   if (ui.speed !== 1) {
-    ctx.font = font(18);
-    ctx.fillStyle = pal.accent;
-    ctx.fillText(`×${ui.speed}`, 430, 82);
+    const tag: Rect = { x: 522, y: 30, w: 92, h: 38 };
+    drawPill(ctx, tag, pal.accent);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = font(20);
+    ctx.fillText(`×${ui.speed}`, tag.x + tag.w / 2, tag.y + tag.h / 2 + 1);
   }
 
-  // Pause button
+  // pause button
   const pb = HUD.pause;
-  roundRect(ctx, pb, 12);
-  ctx.fillStyle = pal.panel;
-  ctx.fill();
-  ctx.strokeStyle = pal.panelBorder;
-  ctx.lineWidth = 3;
-  ctx.stroke();
+  drawButton(ctx, pal, pb, '', { edge: pal.accent });
   ctx.fillStyle = pal.text;
   const cx = pb.x + pb.w / 2;
-  const cy = pb.y + pb.h / 2;
+  const cy = pb.y + (pb.h - 6) / 2;
   if (ui.paused) {
     ctx.beginPath();
-    ctx.moveTo(cx - 9, cy - 13);
-    ctx.lineTo(cx + 13, cy);
-    ctx.lineTo(cx - 9, cy + 13);
+    ctx.moveTo(cx - 8, cy - 12);
+    ctx.lineTo(cx + 12, cy);
+    ctx.lineTo(cx - 8, cy + 12);
     ctx.closePath();
     ctx.fill();
   } else {
-    ctx.fillRect(cx - 12, cy - 13, 8, 26);
-    ctx.fillRect(cx + 4, cy - 13, 8, 26);
+    roundRect(ctx, { x: cx - 12, y: cy - 12, w: 8, h: 24 }, 2);
+    ctx.fill();
+    roundRect(ctx, { x: cx + 4, y: cy - 12, w: 8, h: 24 }, 2);
+    ctx.fill();
   }
 
-  // Lesson hint during the first seconds
+  // lesson hint during the first seconds
   if (state.time < 8000 && ui.outcome === 'playing') {
-    ctx.fillStyle = pal.textDim;
-    ctx.font = font(20, 'normal');
+    ctx.font = font(20);
+    const lines = wrapText(ctx, ui.level.lesson, 620, 3);
+    const h = lines.length * 26 + 16;
+    const w = Math.min(680, Math.max(...lines.map((l) => ctx.measureText(l).width)) + 44);
+    roundRect(ctx, { x: 360 - w / 2, y: 104, w, h }, 16);
+    ctx.fillStyle = 'rgba(255,255,255,0.88)';
+    ctx.fill();
+    ctx.fillStyle = pal.text;
     ctx.textAlign = 'center';
-    ctx.fillText(ui.level.lesson, 360, 122);
+    lines.forEach((l, i) => ctx.fillText(l, 360, 104 + 21 + i * 26));
   }
 
-  // Bottom bar: send ratio + menu
+  // bottom bar: send ratio + menu
   const ratioLabel = `SEND ${Math.round(ui.sendRatio * 100)}%`;
-  drawButton(ctx, pal, HUD.ratio, ratioLabel, { fontPx: 22, border: ui.sendRatio < 1 ? pal.accent : undefined });
+  drawButton(ctx, pal, HUD.ratio, ratioLabel, { fontPx: 22, border: ui.sendRatio < 1 ? pal.accent : undefined, edge: pal.accent });
   drawButton(ctx, pal, HUD.menu, 'MENU', { fontPx: 24 });
 
-  // Selection hint
+  // selection hint
   if (ui.selectedTowerId && ui.outcome === 'playing') {
-    ctx.fillStyle = pal.textDim;
-    ctx.font = font(20, 'normal');
-    ctx.textAlign = 'center';
-    ctx.fillText('Tap a connected tower to send · tap again to upgrade', 360, 1176);
+    outlinedText(ctx, 'Tap a connected tower to send · tap again to upgrade', 360, 1176, pal.text, 20, 'rgba(255,255,255,0.9)', 'bold');
   }
 }
 
-function drawOverlay(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, ui: PlayUi): void {
-  ctx.fillStyle = 'rgba(2, 6, 23, 0.72)';
+/* ---------- overlays ---------- */
+
+const overlayShownAt = new WeakMap<GameState, number>();
+
+function drawCard(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect): void {
+  roundRect(ctx, { x: r.x, y: r.y + 8, w: r.w, h: r.h }, 28);
+  ctx.fillStyle = pal.panelBorder;
+  ctx.fill();
+  roundRect(ctx, r, 28);
+  ctx.fillStyle = pal.panel;
+  ctx.fill();
+}
+
+function drawOverlay(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, ui: PlayUi, nowMs: number): void {
+  ctx.fillStyle = 'rgba(15, 35, 70, 0.55)';
   ctx.fillRect(0, 0, C.MAP_W, C.MAP_H);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
   if (ui.outcome === 'playing') {
     // Pause menu
+    drawCard(ctx, pal, { x: 110, y: 390, w: 500, h: 530 });
     ctx.fillStyle = pal.text;
-    ctx.font = font(72, '900');
+    ctx.font = font(64, '900');
     ctx.fillText('PAUSED', 360, 470);
     ctx.fillStyle = pal.textDim;
-    ctx.font = font(24, 'normal');
+    ctx.font = font(24);
     ctx.fillText(`Level ${ui.level.id} · ${formatTime(state.time)}`, 360, 536);
-    drawButton(ctx, pal, PAUSE.resume, 'RESUME', { fill: pal.owners.player, border: shade(pal.owners.player, 0.3) });
+    drawButton(ctx, pal, PAUSE.resume, 'RESUME', { fill: pal.owners.player });
     const fast = ui.speed !== 1;
     drawButton(ctx, pal, PAUSE.speed, `SPEED ×${ui.speed}`, { fontPx: 24, border: fast ? pal.accent : undefined, text: fast ? pal.accent : undefined });
     drawButton(ctx, pal, PAUSE.retry, 'RETRY');
@@ -353,44 +422,79 @@ function drawOverlay(ctx: CanvasRenderingContext2D, pal: Palette, state: GameSta
   }
 
   const won = ui.outcome === 'won';
-  ctx.fillStyle = won ? pal.star : pal.mine;
-  ctx.font = font(84, '900');
-  ctx.fillText(won ? 'VICTORY' : 'DEFEAT', 360, 430);
+  let shown = overlayShownAt.get(state);
+  if (shown === undefined) {
+    shown = nowMs;
+    overlayShownAt.set(state, nowMs);
+  }
+  const since = nowMs > 0 && motionAllowed() ? nowMs - shown : 10_000;
+  const cardScale = easeOutBack(Math.min(1, since / 320));
+  ctx.save();
+  ctx.translate(360, 620);
+  ctx.scale(cardScale, cardScale);
+  ctx.translate(-360, -620);
+  drawCard(ctx, pal, { x: 70, y: 350, w: 580, h: 540 });
+  // banner
+  roundRect(ctx, { x: 70, y: 350, w: 580, h: 150 }, 28);
+  ctx.fillStyle = won ? shade(pal.owners.player, 0.75) : '#fde2e2';
+  ctx.fill();
+  ctx.fillStyle = pal.panel;
+  ctx.fillRect(70, 470, 580, 40);
+  outlinedText(ctx, won ? 'VICTORY' : 'DEFEAT', 360, 430, won ? pal.star : pal.mine, 84, pal.text);
   ctx.fillStyle = pal.text;
-  ctx.font = font(32);
-  ctx.fillText(`Time ${formatTime(state.time)}`, 360, 508);
-  drawStars(ctx, pal, 360, 584, won ? ui.stars : 0, 34);
+  ctx.font = font(30);
+  ctx.textAlign = 'center';
+  ctx.fillText(`Time ${formatTime(state.time)}`, 360, 520);
+  const scales = [0, 1, 2].map((i) => easeOutBack((since - 200 - i * 220) / 360));
+  drawStars(ctx, pal, 360, 594, won ? ui.stars : 0, 38, scales);
   if (won) {
     ctx.fillStyle = pal.textDim;
-    ctx.font = font(20, 'normal');
+    ctx.font = font(20);
     const s3 = formatTime(ui.level.star3);
     const s2 = formatTime(ui.level.star2);
-    ctx.fillText(`3★ under ${s3} · 2★ under ${s2}`, 360, 640);
-    drawCoin(ctx, pal, 360 - coinLabelWidth(ctx, ui.coinsEarned) / 2 - 22, 692, 14);
-    ctx.fillStyle = pal.star;
+    ctx.fillText(`3★ under ${s3} · 2★ under ${s2}`, 360, 650);
     ctx.font = font(30);
-    ctx.textAlign = 'center';
-    ctx.fillText(`+${ui.coinsEarned} coins`, 360 + 6, 692);
+    const labelW = ctx.measureText(`+${ui.coinsEarned} coins`).width;
+    drawCoin(ctx, pal, 360 - labelW / 2 - 22, 698, 15);
+    ctx.fillStyle = shade(pal.star, -0.35);
+    ctx.font = font(30);
+    ctx.fillText(`+${ui.coinsEarned} coins`, 360 + 6, 698);
     ctx.fillStyle = pal.textDim;
-    ctx.font = font(20, 'normal');
-    ctx.fillText(ui.coinsEarned > 0 ? `${ui.coinsTotal} coins total` : `already cleared · ${ui.coinsTotal} coins total`, 360, 738);
+    ctx.font = font(20);
+    ctx.fillText(ui.coinsEarned > 0 ? `${ui.coinsTotal} coins total` : `already cleared · ${ui.coinsTotal} coins total`, 360, 742);
+  } else {
+    ctx.fillStyle = pal.textDim;
+    ctx.font = font(22);
+    ctx.fillText('Every tower was lost. Try again!', 360, 690);
   }
-  drawButton(ctx, pal, RESULT.next, 'NEXT', {
-    fill: won ? pal.owners.player : undefined,
-    border: won ? shade(pal.owners.player, 0.3) : undefined,
-    disabled: !won || !ui.hasNext,
-  });
+  drawButton(ctx, pal, RESULT.next, 'NEXT', { fill: won ? pal.owners.player : undefined, disabled: !won || !ui.hasNext });
   drawButton(ctx, pal, RESULT.retry, 'RETRY');
   drawButton(ctx, pal, RESULT.menu, 'MENU');
+  ctx.restore();
 }
 
 /* ---------- entry ---------- */
 
-/** Draw one frame. Reads state and ui; never mutates either. */
-export function drawGame(ctx: CanvasRenderingContext2D, state: GameState, view: View, ui: PlayUi): void {
+const specCache = new WeakMap<GameState, TerrainSpec>();
+
+function terrainSpec(state: GameState): TerrainSpec {
+  let spec = specCache.get(state);
+  if (spec) return spec;
+  spec = {
+    key: `level:${state.levelId}`,
+    seed: state.levelId,
+    roads: Object.values(state.roads).map((r) => ({ points: r.points, kind: r.kind })),
+    towers: Object.values(state.towers).map((t) => ({ x: t.x, y: t.y })),
+  };
+  specCache.set(state, spec);
+  return spec;
+}
+
+/** Draw one frame. Reads state and ui; never mutates either. `nowMs` drives purely visual motion. */
+export function drawGame(ctx: CanvasRenderingContext2D, state: GameState, view: View, ui: PlayUi, nowMs = 0): void {
   const pal = ui.palette;
 
-  // Letterbox bars in device space, then the map in logical space.
+  // Letterbox bars in device space (deep water), then the map in logical space.
   applyDeviceTransform(view);
   ctx.fillStyle = pal.letterbox;
   ctx.fillRect(0, 0, view.cssW, view.cssH);
@@ -398,18 +502,17 @@ export function drawGame(ctx: CanvasRenderingContext2D, state: GameState, view: 
   ctx.save();
   applyTransform(view);
   clipToMap(view);
-  ctx.fillStyle = pal.background;
-  ctx.fillRect(0, 0, C.MAP_W, C.MAP_H);
+  drawTerrain(ctx, view, pal, terrainSpec(state));
 
   for (const road of Object.values(state.roads)) {
-    drawRoad(ctx, pal, road, ui.pressRoadId === road.id ? ui.pressProgress : 0);
+    if (road.kind === 'bridge') drawBridge(ctx, pal, road, ui.pressRoadId === road.id ? ui.pressProgress : 0);
   }
-  for (const road of Object.values(state.roads)) drawHazards(ctx, pal, road);
-  drawUnits(ctx, pal, state, ui.alpha);
-  for (const tower of Object.values(state.towers)) drawTower(ctx, pal, tower, ui);
-  drawQueues(ctx, pal, state);
+  for (const road of Object.values(state.roads)) drawHazards(ctx, pal, road, nowMs);
+  drawGroundMarks(ctx, pal, state, ui, nowMs);
+  drawWorld(ctx, pal, state, ui, nowMs);
+  ui.particles?.draw(ctx, nowMs);
   drawHud(ctx, pal, state, ui);
-  if (ui.outcome !== 'playing' || ui.paused) drawOverlay(ctx, pal, state, ui);
+  if (ui.outcome !== 'playing' || ui.paused) drawOverlay(ctx, pal, state, ui, nowMs);
 
   ctx.restore();
 }

@@ -11,6 +11,7 @@ import { isLevelUnlocked, loadSave } from './ui/save';
 import type { App, Screen } from './ui/screens';
 import { LevelSelectScreen, ResultScreen, TitleScreen } from './ui/screens';
 import { PlayScreen } from './ui/play';
+import { initAudio, toggleMuted, unlockAudio } from './audio/index';
 
 /** Test/debug surface for Playwright. */
 export interface TowerClashDebug {
@@ -48,6 +49,7 @@ class TowerClashApp implements App {
     this.view = createView(canvas);
     this.save = loadSave();
     this.current = new TitleScreen(this);
+    initAudio(this.save);
 
     const forward = <K extends 'down' | 'move' | 'up'>(k: K) => (p: PointerPoint) => this.current[k]?.(p);
     attachPointer(canvas, this.view, {
@@ -56,8 +58,16 @@ class TowerClashApp implements App {
       up: forward('up'),
       cancel: () => this.current.cancel?.(),
     });
+    // WebAudio may only start inside a user gesture (iOS/Android WebView): unlock on the first
+    // pointer/key, and keep trying on later gestures in case the context was suspended again.
+    canvas.addEventListener('pointerdown', () => unlockAudio());
     window.addEventListener('keydown', (e) => {
+      unlockAudio();
       if (e.key === ' ') e.preventDefault();
+      if (e.key === 'm' || e.key === 'M') {
+        toggleMuted();
+        return;
+      }
       this.current.key?.(e);
     });
     const onResize = (): void => resize(this.view);
