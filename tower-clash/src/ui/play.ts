@@ -4,7 +4,7 @@ import { Rng } from '../sim/rng';
 import { createState } from '../sim/create';
 import { getOutcome } from '../sim/outcome';
 import { LEVELS } from '../levels/index';
-import { enemyCommands, isAiTick, referencePlayerCommands } from '../ai/index';
+import { enemyCommands, isAiTick, referencePlayerCommands, rngsFor } from '../ai/index';
 import type { View } from '../render/view';
 import { applyTransform, clipToMap } from '../render/view';
 import { drawGame } from '../render/draw';
@@ -70,8 +70,9 @@ export class PlayScreen implements Screen {
     this.loop.speed = speed;
     this.loop.load(createState(level, seed));
     resetAudioLevel();
-    this.playerRng = new Rng((seed ^ 0x9e3779b9) >>> 0);
-    level.enemies.forEach((e, i) => this.enemyRngs.set(e.owner, new Rng((seed + 1013904223 * (i + 1)) >>> 0)));
+    const rngs = rngsFor(seed, level.enemies);
+    this.playerRng = rngs.player;
+    rngs.enemies.forEach((rng, owner) => this.enemyRngs.set(owner, rng));
     this.tutorial = tutorialFor(level.id, app.save.stars[String(level.id)] ?? 0);
     this.gestures = new PlayGestures({
       getState: () => (this.loop.finished ? null : this.loop.state),

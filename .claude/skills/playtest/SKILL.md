@@ -8,6 +8,8 @@ description: Automated playtesting for Tower Clash — headless reference-player
 ```bash
 cd tower-clash && npm run playtest           # all levels
 npm run playtest -- --level 12 --seed 3      # one level
+npm run playtest -- --seeds 100              # robustness sweep: gate 100 % wins for levels 1–8, ≥ 95 % after
+# seeds reproduce the browser exactly: window.__towerclash.loadLevel(id, seed)
 ```
 Prints a table: level, result for reference player (win/lose + time), result for idle player (must not be win), enemy-vs-enemy stalemate flag. Exit code 1 if any level fails a gate. Paste the table into the daily report when levels changed.
 
