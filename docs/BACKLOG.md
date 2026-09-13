@@ -5,6 +5,17 @@ Priority = order within a section. Producer moves items; anyone may add to Bugs 
 ## In progress (today)
 (empty — next sprint picks from "Next")
 
+## Next (ECON — Phase B/C after accounts exist)
+- [ ] ECON-1 Phase B: real RevenueCat + AdMob keys (secrets `RC_*`, `ADMOB_*`), sandbox purchase test on a device, App Store Connect / Play products created with catalog ids — mobile-engineer + publisher (needs stakeholder accounts)
+- [ ] ECON-2 Settings → "Privacy options" (UMP form) and "Support ID" (RevenueCat app user id) as promised by the privacy policy — frontend-engineer + mobile-engineer
+- [ ] ECON-3 Decide ATT: recommend no tracking (remove `requestTrackingAuthorization`, non-personalised ads on iOS) — producer default: no tracking
+- [ ] ECON-4 Achievements list + booster crate + crystal→gold conversion UI (catalog has them) — frontend-engineer
+- [ ] ECON-5 Skins: draw dedicated sprites for Pagoda/Onion roofs and extra helmets; terrain themes hook — tech-artist
+- [ ] ECON-6 Continue-after-defeat: true 20 s rewind via state snapshots instead of restart+15 — gameplay-engineer + frontend
+- [ ] ECON-7 Store screenshot 07 (shop) + IAP review screenshot — publisher
+- [ ] ECON-8 `app-ads.txt` hosting needs a domain root (user-site repo or custom domain) — needs stakeholder decision
+- [ ] ECON-9 Web build: hide IAP cards or label the fake store as demo on the public site (privacy policy Part A) — frontend-engineer; default: keep "Test store" caption, hide on Pages via `import.meta.env.MODE`
+
 ## Next
 - [ ] LV-1 Level 27 Armour Race: bot 96/100 seeds (losers 4, 33, 39, 81), median 83 s; re-tune toward ≥ 99/100 and median < 60 s — level-designer
 - [ ] LV-2 Now that the bot handles tank factories, re-open 27/31/37 so enemy tanks march (currently leaf factories) — level-designer + ai-engineer
@@ -49,6 +60,7 @@ Priority = order within a section. Producer moves items; anyone may add to Bugs 
 - Local 2-player on one screen
 
 ## Done
+- 2026-09-13 Sprint 3 (monetization): market research + ECONOMY.md + catalog; gold/crystal wallet, save v3; shop (crystal packs, starter pack, remove ads, premium bundle, skins, 5 commander upgrade tracks); daily reward; rewarded/interstitial ads flow with caps; sim player modifiers; store/ads providers (RevenueCat, AdMob, fakes) + native config; modifier-aware AI + `--upgrades` playtest; privacy policy v2, IAP/ads store disclosures, accounts guide; bundle-size and secrets-aware CI
 - 2026-09-13 Sprint 2b: threat-aware reference bot (levels 1–8 100/100 seeds, `--seeds` sweep, client-identical RNG), levels 10/11/20/35 retuned to 100/100, smoke test pinned to seed 1, Pages deploy non-fatal until enabled
 - 2026-09-13 Sprint 2: levels 16–40 with all mechanics + star tuning (M2-1..5, M2-8, M1-10); boosters UI (M3-1); settings (M3-3); mute (M1-8b/ART-3); Capacitor plugins + version sync + release signing path (MM-2, PUB-5); GitHub Pages workflow + DEPLOY.md (MM-5/M4-1); content/perf e2e + replay tests; cheap shadows (ART-1), dust/biomes (ART-2), shake + button sfx (M2-7); App Store screenshots; release notes v0.2.0; reference-bot tank-factory loop fix
 - 2026-09-13 M0-1 Scaffold `tower-clash/` (Vite + TS strict + Vitest + Playwright + ESLint)
