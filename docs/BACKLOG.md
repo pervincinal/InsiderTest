@@ -6,7 +6,7 @@ Priority = order within a section. Producer moves items; anyone may add to Bugs 
 (empty — next sprint picks from "Next")
 
 ## Next
-- [ ] LV-1 Levels 27 and 31 are seed-sensitive for the bot (up to 127 s / 112 s); re-tune so the bot median < 80 s — level-designer
+- [ ] LV-1 Level 27 Armour Race: bot 96/100 seeds (losers 4, 33, 39, 81), median 83 s; re-tune toward ≥ 99/100 and median < 60 s — level-designer
 - [ ] LV-2 Now that the bot handles tank factories, re-open 27/31/37 so enemy tanks march (currently leaf factories) — level-designer + ai-engineer
 - [ ] M3-2 Skins (2 tower roof shapes, 2 unit shapes) bought with coins — frontend-engineer + tech-artist
 - [ ] M3-5 Perf on a real mid phone: measure, then object pooling if needed — qa-engineer
@@ -40,6 +40,7 @@ Priority = order within a section. Producer moves items; anyone may add to Bugs 
 - Local 2-player on one screen
 
 ## Done
+- 2026-09-13 Sprint 2b: threat-aware reference bot (levels 1–8 100/100 seeds, `--seeds` sweep, client-identical RNG), levels 10/11/20/35 retuned to 100/100, smoke test pinned to seed 1, Pages deploy non-fatal until enabled
 - 2026-09-13 Sprint 2: levels 16–40 with all mechanics + star tuning (M2-1..5, M2-8, M1-10); boosters UI (M3-1); settings (M3-3); mute (M1-8b/ART-3); Capacitor plugins + version sync + release signing path (MM-2, PUB-5); GitHub Pages workflow + DEPLOY.md (MM-5/M4-1); content/perf e2e + replay tests; cheap shadows (ART-1), dust/biomes (ART-2), shake + button sfx (M2-7); App Store screenshots; release notes v0.2.0; reference-bot tank-factory loop fix
 - 2026-09-13 M0-1 Scaffold `tower-clash/` (Vite + TS strict + Vitest + Playwright + ESLint)
 - 2026-09-13 M0-2 Sim core with 60 unit tests (all GDD §2 mechanics incl. fortress, artillery, tanks, mines, barriers, bridges, boosters)
