@@ -230,7 +230,7 @@ test.describe('Tower Clash smoke', () => {
     // from the authored opening state: the manual send above depends on wall-clock timing (a slow CI
     // runner can let the rusher take the emptied home tower before autoplay starts).
     await page.evaluate(() => {
-      window.__towerclash.loadLevel(1);
+      window.__towerclash.loadLevel(1, 1); // fixed seed: the bot's win on seed 1 is verified by `npm run playtest`
       window.__towerclash.setSpeed(10);
       window.__towerclash.autoplay();
     });

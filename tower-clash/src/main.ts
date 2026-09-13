@@ -19,7 +19,8 @@ import { initNative } from './native/index';
 export interface TowerClashDebug {
   getState(): GameState | null;
   getScreen(): Screen['name'];
-  loadLevel(id: number): boolean;
+  /** Start a level; `seed` (optional) makes the run reproducible for tests. */
+  loadLevel(id: number, seed?: number): boolean;
   autoplay(): boolean;
   setSpeed(n: number): void;
   getSpeed(): number;
@@ -150,10 +151,10 @@ class TowerClashApp implements App {
     this.play?.setSpeed(this.speed);
   }
 
-  startLevel(levelId: number): boolean {
+  startLevel(levelId: number, seed?: number): boolean {
     const level = getLevel(levelId);
     if (!level) return false;
-    const play = new PlayScreen(this, level, undefined, this.speed);
+    const play = new PlayScreen(this, level, seed, this.speed);
     this.play = play;
     this.go(play);
     return true;
@@ -171,7 +172,7 @@ class TowerClashApp implements App {
     return {
       getState: () => this.play?.state ?? null,
       getScreen: () => this.current.name,
-      loadLevel: (id) => this.startLevel(id),
+      loadLevel: (id, seed) => this.startLevel(id, seed),
       autoplay: () => {
         this.play?.setAutoplay(true);
         return this.play !== null;
