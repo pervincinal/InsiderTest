@@ -2,7 +2,7 @@ import type { Owner, TowerKind, UnitKind } from '../sim/types';
 import type { Palette, Tones } from './palette';
 import { shade } from './palette';
 import { TANK_RADIUS } from './layout';
-import { font, roundRect } from './widgets';
+import { drawBoltGlyph, font, roundRect } from './widgets';
 import { SHADOW_DX, SHADOW_DY } from './terrain';
 
 /*
@@ -34,10 +34,53 @@ export interface TowerDrawOptions {
   wipe?: { from: Owner; t: number };
   /** Artillery barrel direction (radians, screen space). Defaults to upper-right. */
   aim?: number;
+  /** Cosmetic skin ids (shop). Unknown / missing ids draw the default look. */
+  skin?: TowerSkin;
 }
+
+/** Shop skins: `roof.default | roof.gold | roof.iron | roof.tent`, `helmet.default | helmet.plume`. */
+export interface TowerSkin {
+  roof?: string;
+  helmet?: string;
+}
+
+export const ROOF_SKINS = ['roof.default', 'roof.gold', 'roof.iron', 'roof.tent'] as const;
+export const HELMET_SKINS = ['helmet.default', 'helmet.plume'] as const;
 
 const RIM = 'rgba(255, 250, 240, 0.55)';
 const INK_LINE = 'rgba(30, 42, 68, 0.18)';
+const TAU = Math.PI * 2;
+/** Cream canvas stripes of the tent skin (paper, and paper in shadow). */
+const STRIPE: Tones = { lit: '#fffaf0', mid: '#fff3dc', shade: '#e2d3b8' };
+
+/**
+ * How a skin changes the owner-coloured roof. Every non-default material keeps an owner-coloured
+ * band at the roof base (and the flag) so ownership still reads at a glance in both palettes.
+ */
+interface RoofStyle {
+  tones: Tones;
+  /** Alternate facets in these tones (tent). */
+  stripes?: Tones;
+  /** Half-dome instead of a cone (gold). */
+  dome: boolean;
+  /** Rivet dots along the eave (iron). */
+  rivets: boolean;
+  /** Owner band under the roof. */
+  band: boolean;
+}
+
+function roofStyle(pal: Palette, owner: Tones, skin?: TowerSkin): RoofStyle {
+  switch (skin?.roof) {
+    case 'roof.gold':
+      return { tones: pal.goldTones, dome: true, rivets: false, band: true };
+    case 'roof.iron':
+      return { tones: pal.metal, dome: false, rivets: true, band: true };
+    case 'roof.tent':
+      return { tones: owner, stripes: STRIPE, dome: false, rivets: false, band: false };
+    default:
+      return { tones: owner, dome: false, rivets: false, band: false };
+  }
+}
 
 /** Top of the sprite above the anchor, per kind (badge sits above this). */
 export function towerTop(kind: TowerKind): number {
@@ -157,7 +200,7 @@ function cylinder(ctx: CanvasRenderingContext2D, tones: Tones, x: number, top: n
 }
 
 /** Owner-coloured cone roof: three facets, shaded underside, rim light on the lit edge. */
-function cone(ctx: CanvasRenderingContext2D, tones: Tones, x: number, base: number, apex: number, rx: number, ry: number): void {
+function cone(ctx: CanvasRenderingContext2D, tones: Tones, x: number, base: number, apex: number, rx: number, ry: number, stripes?: Tones): void {
   // overhang underside
   ctx.fillStyle = tones.shade;
   ctx.beginPath();
@@ -175,6 +218,15 @@ function cone(ctx: CanvasRenderingContext2D, tones: Tones, x: number, base: numb
   facet(Math.PI, 0, tones.mid);
   facet(Math.PI, Math.PI * 0.68, tones.lit);
   facet(Math.PI * 0.3, 0, tones.shade);
+  if (stripes) {
+    // every other wedge of the front half in canvas, lit on the left and shaded on the right
+    const n = 6;
+    for (let i = 1; i < n; i += 2) {
+      const a0 = Math.PI - (i / n) * Math.PI;
+      const a1 = Math.PI - ((i + 1) / n) * Math.PI;
+      facet(a0, a1, a0 > Math.PI * 0.6 ? stripes.lit : a0 > Math.PI * 0.4 ? stripes.mid : stripes.shade);
+    }
+  }
   ctx.strokeStyle = RIM;
   ctx.lineWidth = 2;
   ctx.lineCap = 'round';
@@ -182,6 +234,96 @@ function cone(ctx: CanvasRenderingContext2D, tones: Tones, x: number, base: numb
   ctx.moveTo(x - 1, apex + 2);
   ctx.lineTo(x - rx + 2, base - 1);
   ctx.stroke();
+}
+
+/** Half-dome (gold skin, artillery bunker): three facets and a rim arc on the upper-left. */
+function dome(ctx: CanvasRenderingContext2D, tones: Tones, x: number, base: number, rx: number, ry: number, stripes?: Tones): void {
+  ctx.fillStyle = tones.mid;
+  ctx.beginPath();
+  ctx.ellipse(x, base, rx, ry, 0, Math.PI, 0, false);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = tones.shade;
+  ctx.beginPath();
+  ctx.ellipse(x, base, rx, ry, 0, -Math.PI * 0.35, 0, false);
+  ctx.lineTo(x, base);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = tones.lit;
+  ctx.beginPath();
+  ctx.ellipse(x, base, rx, ry, 0, Math.PI, Math.PI * 1.4, false);
+  ctx.lineTo(x, base);
+  ctx.closePath();
+  ctx.fill();
+  if (stripes) {
+    const n = 6;
+    for (let i = 1; i < n; i += 2) {
+      const a0 = Math.PI + (i / n) * Math.PI;
+      const a1 = Math.PI + ((i + 1) / n) * Math.PI;
+      ctx.fillStyle = i < 2 ? stripes.lit : i < 4 ? stripes.mid : stripes.shade;
+      ctx.beginPath();
+      ctx.moveTo(x, base);
+      ctx.ellipse(x, base, rx, ry, 0, a0, a1, false);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+  ctx.strokeStyle = RIM;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.ellipse(x, base, rx - 2, ry - 2, 0, Math.PI * 1.05, Math.PI * 1.45, false);
+  ctx.stroke();
+}
+
+/**
+ * Owner-coloured trim under a skinned roof's eave (drawn before the roof, so only its front rim
+ * shows): a shade ellipse with a mid ellipse on top and a lit sliver on the upper-left.
+ */
+function ownerBand(ctx: CanvasRenderingContext2D, tones: Tones, x: number, y: number, rx: number, ry: number): void {
+  ctx.fillStyle = tones.shade;
+  ctx.beginPath();
+  ctx.ellipse(x, y + 3, rx, ry, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = tones.mid;
+  ctx.beginPath();
+  ctx.ellipse(x, y + 1, rx, ry, 0, 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = tones.lit;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.ellipse(x, y, rx - 1, ry - 1, 0, Math.PI * 0.6, Math.PI * 1.1);
+  ctx.stroke();
+}
+
+/** Rivet dots along an eave (iron skin). */
+function rivets(ctx: CanvasRenderingContext2D, tones: Tones, x: number, y: number, rx: number, ry: number): void {
+  ctx.fillStyle = tones.lit;
+  for (let i = 0; i < 5; i++) {
+    const a = Math.PI + ((i + 0.5) / 5) * Math.PI;
+    ctx.beginPath();
+    ctx.arc(x + Math.cos(a) * rx * 0.85, y + Math.sin(a) * ry * 0.85 - 2, 1.6, 0, TAU);
+    ctx.fill();
+  }
+}
+
+/** Cone or dome roof per skin, with its owner band / rivets / finial. */
+function roof(ctx: CanvasRenderingContext2D, pal: Palette, owner: Tones, style: RoofStyle, x: number, base: number, height: number, rx: number, ry: number): void {
+  if (style.band) ownerBand(ctx, owner, x, base + 2, rx + 4, ry + 2);
+  if (style.dome) {
+    // eave in the roof material, then the dome, then a finial ball
+    ctx.fillStyle = style.tones.shade;
+    ctx.beginPath();
+    ctx.ellipse(x, base, rx + 3, ry + 1.5, 0, 0, TAU);
+    ctx.fill();
+    dome(ctx, style.tones, x, base, rx * 0.9, height * 0.95, style.stripes);
+    ctx.fillStyle = style.tones.lit;
+    ctx.beginPath();
+    ctx.arc(x, base - height * 0.95 - 2, 3.5, 0, TAU);
+    ctx.fill();
+  } else {
+    cone(ctx, style.tones, x, base, base - height, rx, ry, style.stripes);
+  }
+  if (style.rivets) rivets(ctx, style.tones, x, base, rx, ry);
 }
 
 /** Flag on a pole; the free edge waves. */
@@ -303,7 +445,7 @@ function drawBarracks(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones,
   ctx.fill();
   // roof
   const rh = 40 * pulse;
-  cone(ctx, tones, x, y - 50, y - 50 - rh, 30 * pulse, 9 * pulse);
+  roof(ctx, pal, tones, roofStyle(pal, tones, o.skin), x, y - 50, rh, 30 * pulse, 9 * pulse);
   gems(ctx, pal, x, y - 2, level, o.nowMs, o.motion);
   flag(ctx, pal, tones, x + 27, y - 76, 30, o.nowMs, o.motion);
 }
@@ -371,7 +513,7 @@ function drawFortress(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones,
   ctx.fill();
   cylinder(ctx, pal.stoneTones, x, y - 46, y - 4, 28, 10, 3);
   crenels(ctx, pal, x, y - 46, 28, 10, 6);
-  cone(ctx, tones, x, y - 50, y - 50 - 34 * pulse, 21 * pulse, 7 * pulse);
+  roof(ctx, pal, tones, roofStyle(pal, tones, o.skin), x, y - 50, 34 * pulse, 21 * pulse, 7 * pulse);
   flag(ctx, pal, tones, x + 32, y - 76, 30, o.nowMs, o.motion);
   wallRing(ctx, pal, x, y, true);
   gems(ctx, pal, x, y + 12, level, o.nowMs, o.motion);
@@ -390,32 +532,14 @@ function drawArtillery(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones
     roundRect(ctx, { x: bx + 1, y: y + 2, w: 10, h: 5 }, 3);
     ctx.fill();
   }
-  // dome in owner colour: three facets
+  // dome in owner colour (or the skin material over an owner band): three facets
   const rx = 22 * pulse;
   const ry = 17 * pulse;
   const dy = y - 20;
-  ctx.fillStyle = tones.mid;
-  ctx.beginPath();
-  ctx.ellipse(x, dy, rx, ry, 0, Math.PI, 0, false);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = tones.shade;
-  ctx.beginPath();
-  ctx.ellipse(x, dy, rx, ry, 0, -Math.PI * 0.35, 0, false);
-  ctx.lineTo(x, dy);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = tones.lit;
-  ctx.beginPath();
-  ctx.ellipse(x, dy, rx, ry, 0, Math.PI, Math.PI * 1.4, false);
-  ctx.lineTo(x, dy);
-  ctx.closePath();
-  ctx.fill();
-  ctx.strokeStyle = RIM;
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.ellipse(x, dy, rx - 2, ry - 2, 0, Math.PI * 1.05, Math.PI * 1.45, false);
-  ctx.stroke();
+  const style = roofStyle(pal, tones, o.skin);
+  if (style.band) ownerBand(ctx, tones, x, dy, rx + 2, 6);
+  dome(ctx, style.tones, x, dy, rx, ry, style.stripes);
+  if (style.rivets) rivets(ctx, style.tones, x, dy, rx, ry);
   // barrel tracks the last target
   const a = o.aim ?? -0.6;
   const bx = x + Math.cos(a) * 30;
@@ -471,19 +595,22 @@ function drawFactory(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, 
   ctx.fillStyle = 'rgba(255,255,255,0.7)';
   ctx.fillRect(x - 24, y - 32, 4, 3);
   ctx.fillRect(x + 4, y - 32, 4, 3);
-  // saw-tooth roof in owner colour
+  // saw-tooth roof in owner colour (or the skin material over an owner strip)
+  const style = roofStyle(pal, tones, o.skin);
+  const rt = style.tones;
   const teeth = 3;
   const tw = 64 / teeth;
   for (let i = 0; i < teeth; i++) {
     const sx = x - 32 + i * tw;
-    ctx.fillStyle = tones.mid;
+    const striped = style.stripes && i === 1;
+    ctx.fillStyle = striped ? style.stripes!.mid : rt.mid;
     ctx.beginPath();
     ctx.moveTo(sx, y - 40);
     ctx.lineTo(sx + tw * 0.4, y - 40 - 16 * pulse);
     ctx.lineTo(sx + tw, y - 40);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = tones.lit;
+    ctx.fillStyle = striped ? style.stripes!.lit : rt.lit;
     ctx.beginPath();
     ctx.moveTo(sx, y - 40);
     ctx.lineTo(sx + tw * 0.4, y - 40 - 16 * pulse);
@@ -491,8 +618,16 @@ function drawFactory(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, 
     ctx.closePath();
     ctx.fill();
   }
-  ctx.fillStyle = tones.shade;
+  ctx.fillStyle = style.band ? tones.mid : rt.shade;
   ctx.fillRect(x - 32, y - 41, 64, 3);
+  if (style.rivets) {
+    ctx.fillStyle = rt.lit;
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath();
+      ctx.arc(x - 24 + i * 16, y - 45, 1.6, 0, TAU);
+      ctx.fill();
+    }
+  }
   // chimney + smoke
   ctx.fillStyle = st.shade;
   ctx.fillRect(x + 16, y - 70, 12, 32);
@@ -663,6 +798,7 @@ export function drawUnitSprite(
   nowMs: number,
   motion: boolean,
   scale = 1,
+  helmet?: string,
 ): void {
   const st = unitStyle(pal, owner);
   if (kind === 'tank') {
@@ -737,4 +873,629 @@ export function drawUnitSprite(
   ctx.arc(x + lean * 0.6, hy - 0.8 * scale, 4.5 * scale, Math.PI * 0.95, Math.PI * 2.05);
   ctx.closePath();
   ctx.fill();
+  if (helmet === 'helmet.plume') {
+    // 7 cream plume trailing back from the crest (2 strokes: shade outline + paper)
+    const px = x + lean * 0.6;
+    const py = hy - 5 * scale;
+    const back = -dx * 6 * scale;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = st.shade;
+    ctx.lineWidth = 3.6 * scale;
+    ctx.beginPath();
+    ctx.moveTo(px, py);
+    ctx.quadraticCurveTo(px + back * 0.3, py - 5 * scale, px + back, py - 3 * scale);
+    ctx.stroke();
+    ctx.strokeStyle = STRIPE.lit;
+    ctx.lineWidth = 2 * scale;
+    ctx.stroke();
+  }
+}
+
+/* ---------- economy & shop glyphs ---------- */
+
+/*
+ * Currency and shop icons, same clay recipe as the buildings (three tones + rim light, key light
+ * upper-left, flat blue-ink drop shadow to the lower-right). All are centred on (x, y) and sized by
+ * a radius `r` or a tile `size`; everything scales so the same glyph works at HUD (r ≈ 7) and card
+ * (r ≈ 24–48) sizes. Text belongs to the screens (widgets / menus), not here.
+ */
+
+const GLINT = 'rgba(255, 255, 255, 0.85)';
+
+function poly(ctx: CanvasRenderingContext2D, pts: readonly (readonly [number, number])[], x: number, y: number, s: number, close = true): void {
+  ctx.beginPath();
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i]!;
+    if (i === 0) ctx.moveTo(x + p[0] * s, y + p[1] * s);
+    else ctx.lineTo(x + p[0] * s, y + p[1] * s);
+  }
+  if (close) ctx.closePath();
+}
+
+/** Flat drop shadow of a round-ish glyph (upper-left key light → lower-right). */
+function glyphShadow(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, rx: number, ry = rx): void {
+  ctx.fillStyle = pal.objectShadow;
+  ctx.beginPath();
+  ctx.ellipse(x + rx * 0.14, y + ry * 0.24, rx, ry, 0, 0, TAU);
+  ctx.fill();
+}
+
+/** Clay disc: shaded rim below, coloured face, inner top highlight. Base of the badges. */
+function clayDisc(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, r: number, tones: Tones): void {
+  glyphShadow(ctx, pal, x, y, r);
+  ctx.fillStyle = tones.shade;
+  ctx.beginPath();
+  ctx.arc(x, y + r * 0.1, r, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = tones.mid;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = tones.lit;
+  ctx.lineWidth = Math.max(1.5, r * 0.12);
+  ctx.lineCap = 'butt';
+  ctx.beginPath();
+  ctx.arc(x, y, r * 0.86, Math.PI * 0.85, Math.PI * 1.65);
+  ctx.stroke();
+}
+
+/** Gold clay coin: thick edge, lit / shade crescents, embossed inner disc, rim light and glint. */
+export function drawGoldCoin(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, r: number): void {
+  const g = pal.goldTones;
+  glyphShadow(ctx, pal, x, y, r);
+  // thickness edge
+  ctx.fillStyle = shade(g.shade, -0.3);
+  ctx.beginPath();
+  ctx.arc(x + r * 0.08, y + r * 0.14, r, 0, TAU);
+  ctx.fill();
+  // face + crescents
+  ctx.fillStyle = g.mid;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, TAU);
+  ctx.fill();
+  ctx.lineCap = 'butt';
+  ctx.lineWidth = r * 0.3;
+  ctx.strokeStyle = g.shade;
+  ctx.beginPath();
+  ctx.arc(x, y, r * 0.85, -Math.PI * 0.2, Math.PI * 0.7);
+  ctx.stroke();
+  ctx.strokeStyle = g.lit;
+  ctx.beginPath();
+  ctx.arc(x, y, r * 0.85, Math.PI * 0.8, Math.PI * 1.7);
+  ctx.stroke();
+  // embossed inner disc (shade ring under it, lit arc on top-left)
+  ctx.fillStyle = g.shade;
+  ctx.beginPath();
+  ctx.arc(x + r * 0.04, y + r * 0.07, r * 0.56, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = g.mid;
+  ctx.beginPath();
+  ctx.arc(x, y, r * 0.52, 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = g.lit;
+  ctx.lineWidth = r * 0.14;
+  ctx.beginPath();
+  ctx.arc(x, y, r * 0.4, Math.PI * 0.9, Math.PI * 1.6);
+  ctx.stroke();
+  // rim light + glint
+  ctx.strokeStyle = RIM;
+  ctx.lineWidth = Math.max(1, r * 0.08);
+  ctx.beginPath();
+  ctx.arc(x, y, r * 0.94, Math.PI * 0.95, Math.PI * 1.5);
+  ctx.stroke();
+  ctx.fillStyle = GLINT;
+  ctx.beginPath();
+  ctx.ellipse(x - r * 0.36, y - r * 0.4, r * 0.16, r * 0.1, -0.7, 0, TAU);
+  ctx.fill();
+}
+
+/** Gem outline (elongated hexagon) and its table facet, in unit coordinates. */
+const GEM_OUTER: readonly (readonly [number, number])[] = [
+  [0, -1],
+  [0.72, -0.42],
+  [0.72, 0.42],
+  [0, 1],
+  [-0.72, 0.42],
+  [-0.72, -0.42],
+];
+const GEM_TABLE: readonly (readonly [number, number])[] = GEM_OUTER.map(([a, b]) => [a * 0.48, b * 0.48] as const);
+
+/**
+ * Faceted crystal (hard currency): cyan-violet by default, or `tint` (a mid hex, or full tones).
+ * Six side facets around a lit table, violet outline so the silhouette holds on paper and on grass.
+ */
+export function drawCrystal(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, r: number, tint?: string | Tones): void {
+  const t: Tones = typeof tint === 'string' ? { lit: shade(tint, 0.5), mid: tint, shade: shade(tint, -0.35) } : (tint ?? pal.crystal);
+  const ink = tint ? shade(t.shade, -0.35) : pal.crystalInk;
+  glyphShadow(ctx, pal, x, y, r * 0.8, r);
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = ink;
+  ctx.lineWidth = Math.max(1.5, r * 0.18);
+  poly(ctx, GEM_OUTER, x, y, r);
+  ctx.stroke();
+  ctx.fillStyle = t.mid;
+  ctx.fill();
+  // side facets: lit on the upper-left, violet shade on the lower-right
+  const facetColors = [shade(t.mid, 0.25), t.shade, shade(t.shade, -0.2), t.mid, t.lit, t.lit];
+  for (let i = 0; i < 6; i++) {
+    const o0 = GEM_OUTER[i]!;
+    const o1 = GEM_OUTER[(i + 1) % 6]!;
+    const t1 = GEM_TABLE[(i + 1) % 6]!;
+    const t0 = GEM_TABLE[i]!;
+    ctx.fillStyle = facetColors[i]!;
+    poly(ctx, [o0, o1, t1, t0], x, y, r);
+    ctx.fill();
+  }
+  // table catches the light
+  ctx.fillStyle = shade(t.mid, 0.45);
+  poly(ctx, GEM_TABLE, x, y, r);
+  ctx.fill();
+  // rim light along the two upper-left edges + glint
+  ctx.strokeStyle = RIM;
+  ctx.lineWidth = Math.max(1, r * 0.09);
+  ctx.lineCap = 'round';
+  poly(ctx, [GEM_OUTER[4]!, GEM_OUTER[5]!, GEM_OUTER[0]!], x, y, r * 0.9, false);
+  ctx.stroke();
+  ctx.fillStyle = GLINT;
+  ctx.beginPath();
+  ctx.ellipse(x - r * 0.3, y - r * 0.42, r * 0.14, r * 0.09, -0.9, 0, TAU);
+  ctx.fill();
+}
+
+/** Coin positions (in coin radii) and the coin radius (in `size`) for 1–5 coins. */
+const PILE: readonly { r: number; at: readonly (readonly [number, number])[] }[] = [
+  { r: 0.5, at: [[0, 0]] },
+  { r: 0.33, at: [[0.62, -0.12], [-0.62, 0.12]] },
+  { r: 0.27, at: [[0, -0.6], [0.98, 0.55], [-0.98, 0.55]] },
+  { r: 0.22, at: [[0, -0.8], [1.95, 0.7], [0, 0.7], [-1.95, 0.7]] },
+  { r: 0.22, at: [[0.98, -0.75], [-0.98, -0.75], [1.95, 0.7], [0, 0.7], [-1.95, 0.7]] },
+];
+
+/** Pile of `count` (1–5) gold coins inside a `size` × `size` tile centred on (x, y). */
+export function drawGoldPile(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, size: number, count: number): void {
+  const spec = PILE[Math.max(1, Math.min(5, Math.round(count))) - 1]!;
+  const r = spec.r * size;
+  if (spec.at.length > 1) {
+    ctx.fillStyle = pal.groundShadow;
+    ctx.beginPath();
+    ctx.ellipse(x + size * 0.04, y + size * 0.42, size * 0.5, size * 0.13, 0, 0, TAU);
+    ctx.fill();
+  }
+  for (const [cx, cy] of spec.at) drawGoldCoin(ctx, pal, x + cx * r, y + cy * r, r);
+}
+
+/** Gem positions (in gem radii), tilt (radians) and radius (in `size`) for 1–5 gems. */
+const CLUSTER: readonly { r: number; at: readonly (readonly [number, number, number])[] }[] = [
+  { r: 0.48, at: [[0, 0, 0]] },
+  { r: 0.36, at: [[-0.6, 0.1, -0.35], [0.6, 0.05, 0.3]] },
+  { r: 0.3, at: [[-0.95, 0.45, -0.45], [0.95, 0.45, 0.45], [0, -0.35, 0]] },
+  { r: 0.26, at: [[-1.4, 0.55, -0.55], [1.4, 0.55, 0.55], [-0.45, -0.4, -0.15], [0.55, -0.35, 0.2]] },
+  { r: 0.24, at: [[-1.6, 0.7, -0.6], [1.6, 0.7, 0.6], [-0.75, 0.1, -0.3], [0.8, 0.1, 0.3], [0, -0.7, 0]] },
+];
+
+/** Cluster of `count` (1–5) crystals inside a `size` × `size` tile centred on (x, y). */
+export function drawCrystalCluster(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, size: number, count: number): void {
+  const spec = CLUSTER[Math.max(1, Math.min(5, Math.round(count))) - 1]!;
+  const r = spec.r * size;
+  if (spec.at.length > 1) {
+    ctx.fillStyle = pal.groundShadow;
+    ctx.beginPath();
+    ctx.ellipse(x + size * 0.04, y + size * 0.42, size * 0.5, size * 0.13, 0, 0, TAU);
+    ctx.fill();
+  }
+  for (const [cx, cy, tilt] of spec.at) {
+    if (tilt === 0) {
+      drawCrystal(ctx, pal, x + cx * r, y + cy * r, r);
+      continue;
+    }
+    ctx.save();
+    ctx.translate(x + cx * r, y + cy * r);
+    ctx.rotate(tilt);
+    drawCrystal(ctx, pal, 0, 0, r);
+    ctx.restore();
+  }
+}
+
+/**
+ * Wooden treasure chest with gold straps; `size` is its width. Open: the lid tips back and coins +
+ * a crystal show over the rim (starter pack / reward). The anchor (x, y) is the chest centre.
+ */
+export function drawTreasureChest(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, size: number, open: boolean): void {
+  const w = size;
+  const h = size * 0.72;
+  const wood = pal.woodTones;
+  const gold = pal.goldTones;
+  const bx = x - w / 2;
+  const by = y - h * 0.12;
+  const bh = h * 0.58;
+  const lidH = h * 0.42;
+  const rad = w * 0.08;
+  // ground shadow
+  ctx.fillStyle = pal.objectShadow;
+  ctx.beginPath();
+  ctx.ellipse(x + w * 0.08, y + bh * 0.82, w * 0.58, h * 0.16, 0, 0, TAU);
+  ctx.fill();
+  if (open) {
+    // lid tipped back: inside (shade) then its lit top edge; loot peeks over the rim
+    ctx.fillStyle = wood.shade;
+    roundRect(ctx, { x: bx + w * 0.04, y: by - lidH * 1.15, w: w * 0.92, h: lidH * 1.05 }, rad);
+    ctx.fill();
+    ctx.fillStyle = wood.mid;
+    roundRect(ctx, { x: bx + w * 0.04, y: by - lidH * 1.15, w: w * 0.92, h: lidH * 0.28 }, rad);
+    ctx.fill();
+    ctx.fillStyle = gold.shade;
+    ctx.fillRect(bx + w * 0.22, by - lidH * 1.15, w * 0.1, lidH * 1.05);
+    ctx.fillRect(bx + w * 0.68, by - lidH * 1.15, w * 0.1, lidH * 1.05);
+    const cr = w * 0.13;
+    drawGoldCoin(ctx, pal, x - w * 0.24, by - cr * 0.55, cr);
+    drawGoldCoin(ctx, pal, x + w * 0.26, by - cr * 0.45, cr);
+    drawGoldCoin(ctx, pal, x + w * 0.02, by - cr * 0.35, cr);
+    drawCrystal(ctx, pal, x - w * 0.02, by - cr * 1.25, cr * 1.05);
+  }
+  // body: shade (right side), mid front, lit left strip, rim light
+  ctx.fillStyle = wood.shade;
+  roundRect(ctx, { x: bx + w * 0.06, y: by + h * 0.05, w, h: bh }, rad);
+  ctx.fill();
+  ctx.fillStyle = wood.mid;
+  roundRect(ctx, { x: bx, y: by, w, h: bh }, rad);
+  ctx.fill();
+  ctx.fillStyle = wood.lit;
+  roundRect(ctx, { x: bx, y: by, w: w * 0.18, h: bh }, rad);
+  ctx.fill();
+  ctx.fillStyle = wood.mid;
+  ctx.fillRect(bx + w * 0.12, by, w * 0.06, bh);
+  // plank lines
+  ctx.strokeStyle = INK_LINE;
+  ctx.lineWidth = Math.max(1, w * 0.02);
+  ctx.beginPath();
+  ctx.moveTo(bx + rad, by + bh * 0.5);
+  ctx.lineTo(bx + w - rad, by + bh * 0.5);
+  ctx.stroke();
+  // rim of the body (lit lip)
+  ctx.fillStyle = wood.lit;
+  ctx.fillRect(bx, by, w, h * 0.05);
+  // gold straps + lock plate
+  const strap = (sx: number): void => {
+    ctx.fillStyle = gold.shade;
+    ctx.fillRect(sx + w * 0.02, by + h * 0.01, w * 0.1, bh - h * 0.01);
+    ctx.fillStyle = gold.mid;
+    ctx.fillRect(sx, by, w * 0.1, bh);
+    ctx.fillStyle = gold.lit;
+    ctx.fillRect(sx, by, w * 0.035, bh);
+  };
+  strap(bx + w * 0.22);
+  strap(bx + w * 0.68);
+  ctx.fillStyle = gold.shade;
+  roundRect(ctx, { x: x - w * 0.09, y: by + h * 0.02, w: w * 0.2, h: h * 0.26 }, rad * 0.6);
+  ctx.fill();
+  ctx.fillStyle = gold.mid;
+  roundRect(ctx, { x: x - w * 0.1, y: by, w: w * 0.2, h: h * 0.26 }, rad * 0.6);
+  ctx.fill();
+  ctx.fillStyle = pal.ink;
+  ctx.beginPath();
+  ctx.arc(x, by + h * 0.11, w * 0.035, 0, TAU);
+  ctx.fill();
+  ctx.fillRect(x - w * 0.015, by + h * 0.11, w * 0.03, h * 0.1);
+  if (!open) {
+    // closed lid: domed top, lit facet on the left, gold straps carried over
+    ctx.fillStyle = wood.shade;
+    roundRect(ctx, { x: bx + w * 0.04, y: by - lidH + h * 0.04, w, h: lidH }, rad * 1.8);
+    ctx.fill();
+    ctx.fillStyle = wood.mid;
+    roundRect(ctx, { x: bx, y: by - lidH, w, h: lidH + h * 0.02 }, rad * 1.8);
+    ctx.fill();
+    ctx.fillStyle = wood.lit;
+    roundRect(ctx, { x: bx, y: by - lidH, w: w * 0.36, h: lidH * 0.55 }, rad * 1.8);
+    ctx.fill();
+    ctx.fillStyle = gold.shade;
+    ctx.fillRect(bx + w * 0.24, by - lidH + h * 0.02, w * 0.1, lidH);
+    ctx.fillRect(bx + w * 0.7, by - lidH + h * 0.02, w * 0.1, lidH);
+    ctx.fillStyle = gold.mid;
+    ctx.fillRect(bx + w * 0.22, by - lidH, w * 0.1, lidH);
+    ctx.fillRect(bx + w * 0.68, by - lidH, w * 0.1, lidH);
+    ctx.fillStyle = gold.lit;
+    ctx.fillRect(bx + w * 0.22, by - lidH, w * 0.035, lidH);
+    ctx.fillRect(bx + w * 0.68, by - lidH, w * 0.035, lidH);
+    ctx.strokeStyle = RIM;
+    ctx.lineWidth = Math.max(1, w * 0.025);
+    ctx.beginPath();
+    ctx.moveTo(bx + rad * 1.8, by - lidH + 1);
+    ctx.lineTo(bx + w - rad * 1.8, by - lidH + 1);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = RIM;
+  ctx.lineWidth = Math.max(1, w * 0.025);
+  ctx.beginPath();
+  ctx.moveTo(bx + 1, by + rad);
+  ctx.lineTo(bx + 1, by + bh - rad);
+  ctx.stroke();
+}
+
+/** Paper disc with an ink television, crossed out in red: "remove ads". */
+export function drawNoAdsBadge(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, r: number): void {
+  clayDisc(ctx, pal, x, y, r, { lit: '#ffffff', mid: pal.paper, shade: pal.panelBorder });
+  // television: antenna, ink body, sky screen, feet
+  ctx.strokeStyle = pal.ink;
+  ctx.lineWidth = Math.max(1.5, r * 0.1);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x - r * 0.28, y - r * 0.62);
+  ctx.lineTo(x, y - r * 0.3);
+  ctx.lineTo(x + r * 0.28, y - r * 0.62);
+  ctx.stroke();
+  ctx.fillStyle = pal.ink;
+  roundRect(ctx, { x: x - r * 0.52, y: y - r * 0.32, w: r * 1.04, h: r * 0.78 }, r * 0.12);
+  ctx.fill();
+  ctx.fillStyle = '#bfe8ff';
+  roundRect(ctx, { x: x - r * 0.42, y: y - r * 0.22, w: r * 0.84, h: r * 0.58 }, r * 0.08);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  roundRect(ctx, { x: x - r * 0.4, y: y - r * 0.2, w: r * 0.3, h: r * 0.18 }, r * 0.05);
+  ctx.fill();
+  ctx.fillStyle = pal.ink;
+  ctx.fillRect(x - r * 0.3, y + r * 0.46, r * 0.14, r * 0.1);
+  ctx.fillRect(x + r * 0.16, y + r * 0.46, r * 0.14, r * 0.1);
+  // prohibition ring + slash (shade offset under it for the clay lift)
+  const ring = (dx: number, dy: number, color: string): void => {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = Math.max(2, r * 0.17);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(x + dx, y + dy, r * 0.78, 0, TAU);
+    ctx.moveTo(x + dx - r * 0.55, y + dy - r * 0.55);
+    ctx.lineTo(x + dx + r * 0.55, y + dy + r * 0.55);
+    ctx.stroke();
+  };
+  ring(r * 0.04, r * 0.07, shade(pal.forbid, -0.35));
+  ring(0, 0, pal.forbid);
+  ctx.strokeStyle = RIM;
+  ctx.lineWidth = Math.max(1, r * 0.06);
+  ctx.beginPath();
+  ctx.arc(x, y, r * 0.72, Math.PI * 0.95, Math.PI * 1.5);
+  ctx.stroke();
+}
+
+/** Gold clay crown on a blue disc: the premium bundle. */
+export function drawCrownBadge(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, r: number): void {
+  clayDisc(ctx, pal, x, y, r, pal.ownerTones.player);
+  const g = pal.goldTones;
+  const crown: readonly (readonly [number, number])[] = [
+    [-0.6, 0.4],
+    [-0.6, -0.35],
+    [-0.28, -0.05],
+    [0, -0.6],
+    [0.28, -0.05],
+    [0.6, -0.35],
+    [0.6, 0.4],
+  ];
+  ctx.lineJoin = 'round';
+  // shade copy offset, then mid, then the lit left third
+  ctx.fillStyle = g.shade;
+  poly(ctx, crown, x + r * 0.05, y + r * 0.1, r);
+  ctx.fill();
+  ctx.fillStyle = g.mid;
+  poly(ctx, crown, x, y, r);
+  ctx.fill();
+  ctx.fillStyle = g.lit;
+  poly(ctx, [[-0.6, 0.4], [-0.6, -0.35], [-0.28, -0.05], [-0.1, -0.4], [-0.14, 0.4]], x, y, r);
+  ctx.fill();
+  ctx.fillStyle = g.shade;
+  poly(ctx, [[0.6, 0.4], [0.6, -0.35], [0.4, -0.15], [0.42, 0.4]], x, y, r);
+  ctx.fill();
+  // base band
+  ctx.fillStyle = g.shade;
+  ctx.fillRect(x - r * 0.6, y + r * 0.22, r * 1.2, r * 0.18);
+  ctx.fillStyle = g.lit;
+  ctx.fillRect(x - r * 0.6, y + r * 0.2, r * 1.2, r * 0.05);
+  // pearls on the points and a crystal in the band
+  ctx.fillStyle = g.lit;
+  for (const px of [-0.6, 0, 0.6]) {
+    ctx.beginPath();
+    ctx.arc(x + px * r, y + (px === 0 ? -0.6 : -0.35) * r, r * 0.09, 0, TAU);
+    ctx.fill();
+  }
+  drawCrystal(ctx, pal, x, y + r * 0.03, r * 0.16);
+  ctx.strokeStyle = RIM;
+  ctx.lineWidth = Math.max(1, r * 0.06);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x - r * 0.57, y + r * 0.3);
+  ctx.lineTo(x - r * 0.57, y - r * 0.3);
+  ctx.stroke();
+}
+
+/** Film frame with a paper play triangle: "watch an ad for a reward". */
+export function drawVideoGlyph(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, r: number): void {
+  const w = r * 2;
+  const h = r * 1.5;
+  const fx = x - w / 2;
+  const fy = y - h / 2;
+  const rad = r * 0.18;
+  glyphShadow(ctx, pal, x, y, r, r * 0.75);
+  ctx.fillStyle = shade(pal.ink, -0.3);
+  roundRect(ctx, { x: fx + r * 0.05, y: fy + r * 0.1, w, h }, rad);
+  ctx.fill();
+  ctx.fillStyle = pal.ink;
+  roundRect(ctx, { x: fx, y: fy, w, h }, rad);
+  ctx.fill();
+  // sprocket holes top and bottom
+  ctx.fillStyle = pal.paper;
+  const holes = 4;
+  for (let i = 0; i < holes; i++) {
+    const hx = fx + w * ((i + 0.5) / holes) - r * 0.11;
+    ctx.fillRect(hx, fy + r * 0.08, r * 0.22, r * 0.14);
+    ctx.fillRect(hx, fy + h - r * 0.22, r * 0.22, r * 0.14);
+  }
+  // screen in player blue with a paper play button
+  const t = pal.ownerTones.player;
+  ctx.fillStyle = t.shade;
+  roundRect(ctx, { x: fx + r * 0.16, y: fy + r * 0.3, w: w - r * 0.32, h: h - r * 0.6 }, rad * 0.5);
+  ctx.fill();
+  ctx.fillStyle = t.mid;
+  roundRect(ctx, { x: fx + r * 0.16, y: fy + r * 0.3, w: w - r * 0.32, h: h - r * 0.7 }, rad * 0.5);
+  ctx.fill();
+  ctx.fillStyle = t.lit;
+  roundRect(ctx, { x: fx + r * 0.16, y: fy + r * 0.3, w: r * 0.5, h: r * 0.3 }, rad * 0.5);
+  ctx.fill();
+  ctx.lineJoin = 'round';
+  ctx.fillStyle = shade(t.shade, -0.2);
+  poly(ctx, [[-0.2, -0.32], [0.3, 0], [-0.2, 0.32]], x + r * 0.06, y + r * 0.05, r);
+  ctx.fill();
+  ctx.fillStyle = pal.paper;
+  poly(ctx, [[-0.2, -0.32], [0.3, 0], [-0.2, 0.32]], x, y, r);
+  ctx.fill();
+  ctx.strokeStyle = RIM;
+  ctx.lineWidth = Math.max(1, r * 0.06);
+  ctx.beginPath();
+  ctx.moveTo(fx + rad, fy + 1);
+  ctx.lineTo(fx + w - rad, fy + 1);
+  ctx.stroke();
+}
+
+export type UpgradeKind = 'production' | 'capacity' | 'garrison' | 'booster' | 'speed';
+
+/** Small gold "+" bubble (upper-right of an upgrade glyph). */
+function plusBubble(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, r: number): void {
+  const g = pal.goldTones;
+  ctx.fillStyle = g.shade;
+  ctx.beginPath();
+  ctx.arc(x + r * 0.08, y + r * 0.12, r, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = g.mid;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = pal.ink;
+  ctx.lineWidth = Math.max(1.5, r * 0.28);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x - r * 0.5, y);
+  ctx.lineTo(x + r * 0.5, y);
+  ctx.moveTo(x, y - r * 0.5);
+  ctx.lineTo(x, y + r * 0.5);
+  ctx.stroke();
+}
+
+/** Thick clay arrow pointing up (shade offset, mid, lit edge). */
+function upArrow(ctx: CanvasRenderingContext2D, tones: Tones, x: number, y: number, r: number): void {
+  const pts: readonly (readonly [number, number])[] = [
+    [0, -0.5],
+    [0.5, 0.05],
+    [0.2, 0.05],
+    [0.2, 0.5],
+    [-0.2, 0.5],
+    [-0.2, 0.05],
+    [-0.5, 0.05],
+  ];
+  ctx.lineJoin = 'round';
+  ctx.fillStyle = tones.shade;
+  poly(ctx, pts, x + r * 0.08, y + r * 0.12, r);
+  ctx.fill();
+  ctx.fillStyle = tones.mid;
+  poly(ctx, pts, x, y, r);
+  ctx.fill();
+  ctx.fillStyle = tones.lit;
+  poly(ctx, [[0, -0.5], [-0.5, 0.05], [-0.2, 0.05], [-0.2, 0.5], [-0.05, 0.5], [-0.05, -0.2]], x, y, r);
+  ctx.fill();
+}
+
+/**
+ * Commander upgrade icons on a paper disc: production = cog with a gold up-arrow, capacity = tower
+ * with a "+" bubble, garrison = three soldiers, booster = gold bolt, speed = double chevron.
+ */
+export function drawUpgradeGlyph(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, r: number, kind: UpgradeKind): void {
+  clayDisc(ctx, pal, x, y, r, { lit: '#ffffff', mid: pal.paper, shade: pal.panelBorder });
+  const blue = pal.ownerTones.player;
+  switch (kind) {
+    case 'production': {
+      // cog: 8 teeth as thick radial strokes, shade copy offset, then the wheel
+      const m = pal.metal;
+      const teeth = (dx: number, dy: number, color: string): void => {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = r * 0.26;
+        ctx.lineCap = 'butt';
+        ctx.beginPath();
+        for (let i = 0; i < 8; i++) {
+          const a = (i / 8) * TAU + Math.PI / 8;
+          ctx.moveTo(x + dx + Math.cos(a) * r * 0.42, y + dy + Math.sin(a) * r * 0.42);
+          ctx.lineTo(x + dx + Math.cos(a) * r * 0.66, y + dy + Math.sin(a) * r * 0.66);
+        }
+        ctx.stroke();
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(x + dx, y + dy, r * 0.5, 0, TAU);
+        ctx.fill();
+      };
+      teeth(r * 0.06, r * 0.1, m.shade);
+      teeth(0, 0, m.mid);
+      ctx.strokeStyle = m.lit;
+      ctx.lineWidth = r * 0.1;
+      ctx.beginPath();
+      ctx.arc(x, y, r * 0.42, Math.PI * 0.9, Math.PI * 1.6);
+      ctx.stroke();
+      ctx.fillStyle = pal.paper;
+      ctx.beginPath();
+      ctx.arc(x, y, r * 0.3, 0, TAU);
+      ctx.fill();
+      upArrow(ctx, pal.goldTones, x, y, r * 0.5);
+      break;
+    }
+    case 'capacity':
+      drawRoofIcon(ctx, pal, blue.mid, x - r * 0.12, y + r * 0.2, r * 0.62);
+      plusBubble(ctx, pal, x + r * 0.42, y - r * 0.4, r * 0.26);
+      break;
+    case 'garrison': {
+      const s = r / 17;
+      drawUnitSprite(ctx, pal, x - r * 0.42, y + r * 0.42, 'player', 'infantry', 1, 0, 1, 0, false, s);
+      drawUnitSprite(ctx, pal, x + r * 0.42, y + r * 0.42, 'player', 'infantry', 1, 0, 2, 0, false, s);
+      drawUnitSprite(ctx, pal, x, y + r * 0.55, 'player', 'infantry', 1, 0, 3, 0, false, s);
+      break;
+    }
+    case 'booster':
+      drawBoltGlyph(ctx, pal.gold, x + r * 0.05, y + r * 0.1, r * 0.62, pal.goldShade);
+      drawBoltGlyph(ctx, pal.gold, x, y, r * 0.62, pal.goldShade);
+      break;
+    case 'speed': {
+      // double chevron: shade copy, mid, thin lit edge
+      const chev = (dx: number, dy: number, color: string, wdt: number): void => {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = wdt;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        for (const ox of [-0.42, 0.1]) {
+          ctx.moveTo(x + dx + ox * r, y + dy - r * 0.45);
+          ctx.lineTo(x + dx + (ox + 0.4) * r, y + dy);
+          ctx.lineTo(x + dx + ox * r, y + dy + r * 0.45);
+        }
+        ctx.stroke();
+      };
+      chev(r * 0.06, r * 0.1, blue.shade, r * 0.26);
+      chev(0, 0, blue.mid, r * 0.26);
+      chev(-r * 0.04, -r * 0.05, blue.lit, r * 0.08);
+      break;
+    }
+  }
+}
+
+/**
+ * Skin card preview inside a `size` × `size` tile centred on (x, y). `roof.*` ids draw a player
+ * barracks wearing that roof; `helmet.*` ids draw a large player soldier wearing that helmet.
+ * Unknown ids fall back to the default of their family.
+ */
+export function drawSkinPreview(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, size: number, skinId: string): void {
+  ctx.save();
+  if (skinId.startsWith('helmet.')) {
+    const s = size / 30;
+    ctx.translate(x + size * 0.02, y + size * 0.36);
+    ctx.scale(s, s);
+    drawUnitSprite(ctx, pal, 0, 0, 'player', 'infantry', 1, 0, 0, 0, false, 1, skinId);
+  } else {
+    const s = size / 128;
+    ctx.translate(x + size * 0.06, y + size * 0.4);
+    ctx.scale(s, s);
+    drawTowerShadow(ctx, pal, 0, 0, 'barracks');
+    drawTowerSprite(ctx, pal, { x: 0, y: 0, owner: 'player', kind: 'barracks', level: 1 }, { nowMs: 0, motion: false, skin: { roof: skinId } });
+  }
+  ctx.restore();
 }

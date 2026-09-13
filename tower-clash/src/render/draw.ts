@@ -10,6 +10,7 @@ import { roundRect } from './widgets';
 import { drawHud, drawOverlays } from './hud';
 import type { TerrainSpec } from './terrain';
 import { drawTerrain, drawTerrainOverlay } from './terrain';
+import type { TowerSkin } from './sprites';
 import { badgeY, drawBadge, drawTowerShadow, drawTowerSprite, drawUnitSprite } from './sprites';
 import type { ParticleSystem } from './particles';
 import { prefersReducedMotion } from './particles';
@@ -36,6 +37,8 @@ export interface PlayUi {
   coinsTotal: number;
   /** Visual effects fed from sim events (optional: menus / tests draw without them). */
   particles?: ParticleSystem;
+  /** Equipped cosmetic skins; applied to the player's towers and soldiers only. */
+  skin?: TowerSkin;
 }
 
 let reducedMotion = false;
@@ -466,8 +469,9 @@ function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState
   if (motion && biome === 'sand' && ui.particles && units.length) spawnDust(ui.particles, pal, units, nowMs);
   // painter's order: everything sorted by ground y so units walk in front of / behind buildings
   let ui_ = 0;
+  const skin = ui.skin;
   const drawUnit = (u: UnitDraw): void =>
-    drawUnitSprite(ctx, pal, u.x, u.y, u.unit.owner, u.unit.kind, u.dx, u.dy, u.unit.id, nowMs, motion, u.scale);
+    drawUnitSprite(ctx, pal, u.x, u.y, u.unit.owner, u.unit.kind, u.dx, u.dy, u.unit.id, nowMs, motion, u.scale, u.unit.owner === 'player' ? skin?.helmet : undefined);
   const fx = ui.particles;
   for (const t of towers) {
     while (ui_ < units.length && units[ui_]!.y <= t.y + 4) drawUnit(units[ui_++]!);
@@ -479,6 +483,7 @@ function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState
       squash: fx?.towerSquash(t.id, nowMs) ?? 1,
       wipe: fx?.towerWipe(t.id, nowMs) ?? undefined,
       aim: fx?.aimOf(t.id),
+      skin: t.owner === 'player' ? skin : undefined,
     });
   }
   while (ui_ < units.length) drawUnit(units[ui_++]!);

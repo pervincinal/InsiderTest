@@ -100,9 +100,31 @@ export interface Booster {
   untilMs: number;
 }
 
+/**
+ * Permanent, out-of-match bonuses for the `player` owner (Commander upgrades bought with gold).
+ * Stored on the state so that a replay (level + seed + modifiers + commands) is fully reproducible.
+ * Modifiers are looked up by the *current* owner of a tower / unit, so a tower changes behaviour the
+ * moment it changes hands: a captured enemy barracks immediately produces and caps at player rates,
+ * and a lost player tower reverts to base rates for its new owner.
+ */
+export interface PlayerModifiers {
+  productionMul: number; // generation interval ÷ productionMul (multiplicative with overdrive)
+  capacityMul: number; // capacity × capacityMul, floored, min 1
+  startGarrisonBonus: number; // extra units on every player tower at createState (capped at capacity)
+  unitSpeedMul: number; // unit speed × unitSpeedMul, applied at spawn
+}
+
+export const DEFAULT_MODIFIERS: Readonly<PlayerModifiers> = Object.freeze({
+  productionMul: 1,
+  capacityMul: 1,
+  startGarrisonBonus: 0,
+  unitSpeedMul: 1,
+});
+
 export interface GameState {
   levelId: number;
   seed: number;
+  modifiers: PlayerModifiers; // player-only bonuses, fixed for the whole match
   time: number; // ms, advances by TICK_MS
   towers: Record<string, Tower>;
   roads: Record<string, Road>;

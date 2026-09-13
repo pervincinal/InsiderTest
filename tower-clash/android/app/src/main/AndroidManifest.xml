@@ -21,6 +21,12 @@
             </intent-filter>
         </activity>
 
+        <!-- AdMob application id (docs/MOBILE.md §8). Value lives in res/values/strings.xml
+             (admob_app_id); Google's TEST app id is committed, CI/you replace it for release. -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="@string/admob_app_id" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -33,4 +39,7 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- com.android.vending.BILLING (Google Play Billing, via RevenueCat) and
+         com.google.android.gms.permission.AD_ID (AdMob on Android 13+) are merged in
+         automatically from the plugin libraries' manifests; do not add them here. -->
 </manifest>

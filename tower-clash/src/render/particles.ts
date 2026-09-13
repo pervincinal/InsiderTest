@@ -2,7 +2,7 @@ import type { GameState, Owner, SimEvent, Tower } from '../sim/types';
 import { C } from '../sim/constants';
 import { roadPointAt } from '../sim/step';
 import type { Palette } from './palette';
-import { shade } from './palette';
+import { DEFAULT_PALETTE, shade } from './palette';
 import { reducedMotionOverride } from '../ui/motion';
 
 /*
@@ -23,7 +23,7 @@ export function prefersReducedMotion(): boolean {
   }
 }
 
-type Kind = 'confetti' | 'ring' | 'puff' | 'dust' | 'spark' | 'flash' | 'tracer' | 'plank' | 'glint';
+type Kind = 'confetti' | 'ring' | 'puff' | 'dust' | 'spark' | 'flash' | 'tracer' | 'plank' | 'glint' | 'coin' | 'gem';
 
 interface Particle {
   kind: Kind;
@@ -35,6 +35,8 @@ interface Particle {
   life: number;
   size: number;
   color: string;
+  /** Second tone (coin edge / gem shade); equals `color` for the other kinds. */
+  color2: string;
   rot: number;
   vrot: number;
   gravity: number;
@@ -92,7 +94,7 @@ export class ParticleSystem {
   }
 
   private make(kind: Kind, x: number, y: number, color: string, life: number, size: number): Particle {
-    return { kind, x, y, vx: 0, vy: 0, age: 0, life, size, color, rot: 0, vrot: 0, gravity: 0, x2: x, y2: y };
+    return { kind, x, y, vx: 0, vy: 0, age: 0, life, size, color, color2: color, rot: 0, vrot: 0, gravity: 0, x2: x, y2: y };
   }
 
   /* ----- per-tower tweens read by the sprites ----- */
@@ -241,6 +243,58 @@ export class ParticleSystem {
       p.gravity = 520;
       p.rot = this.rnd() * Math.PI;
       p.vrot = (this.rnd() - 0.5) * 10;
+      this.push(p);
+    }
+  }
+
+  /**
+   * Purchase / reward: `n` gold coins fountain up from (x, y), spin and fall (screen or logical
+   * space — whatever transform is active when `draw` runs). Gold is the same in both palettes.
+   */
+  coinBurst(x: number, y: number, n: number, pal: Palette = DEFAULT_PALETTE): void {
+    if (this.reducedMotion) return;
+    const g = pal.goldTones;
+    for (let i = 0; i < n; i++) {
+      const p = this.make('coin', x, y, g.mid, 850 + this.rnd() * 500, 5 + this.rnd() * 3);
+      p.color2 = g.shade;
+      const a = -Math.PI / 2 + (this.rnd() - 0.5) * 1.5;
+      const sp = 180 + this.rnd() * 260;
+      p.vx = Math.cos(a) * sp;
+      p.vy = Math.sin(a) * sp;
+      p.gravity = 560;
+      p.rot = this.rnd() * Math.PI;
+      p.vrot = 7 + this.rnd() * 9;
+      this.push(p);
+    }
+    for (let i = 0; i < Math.min(8, n); i++) {
+      const p = this.make('glint', x + (this.rnd() - 0.5) * 30, y - this.rnd() * 20, g.lit, 380 + this.rnd() * 260, 3 + this.rnd() * 3);
+      p.vy = -40 - this.rnd() * 60;
+      p.vrot = 6;
+      this.push(p);
+    }
+  }
+
+  /** Purchase / reward: `n` crystals scatter from (x, y) in a slower, floatier arc with sparkles. */
+  crystalBurst(x: number, y: number, n: number, pal: Palette = DEFAULT_PALETTE): void {
+    if (this.reducedMotion) return;
+    const c = pal.crystal;
+    for (let i = 0; i < n; i++) {
+      const p = this.make('gem', x, y, c.mid, 950 + this.rnd() * 550, 5 + this.rnd() * 4);
+      p.color2 = c.shade;
+      const a = -Math.PI / 2 + (this.rnd() - 0.5) * 1.8;
+      const sp = 150 + this.rnd() * 220;
+      p.vx = Math.cos(a) * sp;
+      p.vy = Math.sin(a) * sp;
+      p.gravity = 380;
+      p.rot = (this.rnd() - 0.5) * 0.8;
+      p.vrot = (this.rnd() - 0.5) * 6;
+      this.push(p);
+    }
+    for (let i = 0; i < Math.min(10, n + 2); i++) {
+      const p = this.make('glint', x + (this.rnd() - 0.5) * 36, y - this.rnd() * 24, i % 2 ? c.lit : '#fffaf0', 420 + this.rnd() * 300, 3 + this.rnd() * 4);
+      p.vy = -50 - this.rnd() * 70;
+      p.vx = (this.rnd() - 0.5) * 40;
+      p.vrot = 6;
       this.push(p);
     }
   }
@@ -395,6 +449,47 @@ export class ParticleSystem {
           ctx.lineTo(p.x2, p.y2);
           ctx.stroke();
           break;
+        case 'coin': {
+          // spinning coin: an ellipse whose width follows cos(rot), edge tone offset below
+          ctx.globalAlpha = Math.min(1, fade * 2.5);
+          const rx = Math.max(p.size * 0.16, Math.abs(Math.cos(p.rot)) * p.size);
+          ctx.fillStyle = p.color2;
+          ctx.beginPath();
+          ctx.ellipse(p.x + 1, p.y + 2, rx, p.size, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.ellipse(p.x, p.y, rx, p.size, 0, 0, Math.PI * 2);
+          ctx.fill();
+          break;
+        }
+        case 'gem': {
+          // tumbling gem: lit left half, violet right half (4 corners rotated by rot)
+          ctx.globalAlpha = Math.min(1, fade * 2.5);
+          const c = Math.cos(p.rot);
+          const sn = Math.sin(p.rot);
+          const w = p.size * 0.7;
+          const h = p.size;
+          const tx = p.x - sn * -h;
+          const ty = p.y + c * -h;
+          const bx = p.x - sn * h;
+          const by = p.y + c * h;
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.moveTo(tx, ty);
+          ctx.lineTo(p.x + c * -w, p.y + sn * -w);
+          ctx.lineTo(bx, by);
+          ctx.closePath();
+          ctx.fill();
+          ctx.fillStyle = p.color2;
+          ctx.beginPath();
+          ctx.moveTo(tx, ty);
+          ctx.lineTo(p.x + c * w, p.y + sn * w);
+          ctx.lineTo(bx, by);
+          ctx.closePath();
+          ctx.fill();
+          break;
+        }
       }
     }
     ctx.restore();

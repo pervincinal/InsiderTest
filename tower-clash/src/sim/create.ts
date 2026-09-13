@@ -1,5 +1,7 @@
-import type { GameState, LevelDef, Owner, Road, Tower, TowerKind } from './types';
+import type { GameState, LevelDef, Owner, PlayerModifiers, Road, Tower, TowerKind } from './types';
+import { DEFAULT_MODIFIERS } from './types';
 import { C } from './constants';
+import { capacityOf } from './step';
 
 const OWNERS: ReadonlySet<string> = new Set<Owner>(['neutral', 'player', 'enemy1', 'enemy2', 'enemy3']);
 const KINDS: ReadonlySet<string> = new Set<TowerKind>(['barracks', 'artillery', 'tankFactory', 'fortress']);
@@ -27,8 +29,31 @@ function polylineLength(points: { x: number; y: number }[]): number {
   return len;
 }
 
-/** Build the initial runtime state for a level. Throws on a malformed level. */
-export function createState(level: LevelDef, seed: number): GameState {
+/** Copy and validate player modifiers; throws on NaN / non-positive multipliers / negative bonus. */
+function normaliseModifiers(m: Readonly<PlayerModifiers>): PlayerModifiers {
+  const out: PlayerModifiers = {
+    productionMul: m.productionMul,
+    capacityMul: m.capacityMul,
+    startGarrisonBonus: m.startGarrisonBonus,
+    unitSpeedMul: m.unitSpeedMul,
+  };
+  for (const key of ['productionMul', 'capacityMul', 'unitSpeedMul'] as const) {
+    if (!isFiniteNumber(out[key]) || out[key] <= 0) throw new Error(`Invalid modifiers: ${key} must be > 0`);
+  }
+  if (!Number.isInteger(out.startGarrisonBonus) || out.startGarrisonBonus < 0) {
+    throw new Error('Invalid modifiers: startGarrisonBonus must be a non-negative integer');
+  }
+  return out;
+}
+
+/**
+ * Build the initial runtime state for a level. Throws on a malformed level.
+ * `modifiers` are the player's permanent bonuses (Commander upgrades); they are copied into the
+ * state so a replay reproduces the match, and every `player` tower starts with `startGarrisonBonus`
+ * extra units (capped at its — already modified — capacity).
+ */
+export function createState(level: LevelDef, seed: number, modifiers: Readonly<PlayerModifiers> = DEFAULT_MODIFIERS): GameState {
+  const mods = normaliseModifiers(modifiers);
   if (!Array.isArray(level.towers) || level.towers.length === 0) fail(level, 'no towers');
   if (!Array.isArray(level.roads)) fail(level, 'roads must be an array');
   if (!Array.isArray(level.enemies)) fail(level, 'enemies must be an array');
@@ -59,6 +84,10 @@ export function createState(level: LevelDef, seed: number): GameState {
       artilleryCooldownMs: 0,
       defenceAcc: 0,
     };
+    const tower = towers[def.id]!;
+    if (tower.owner === 'player' && mods.startGarrisonBonus > 0) {
+      tower.units = Math.min(capacityOf(tower, { modifiers: mods }), tower.units + mods.startGarrisonBonus);
+    }
   }
 
   const roads: Record<string, Road> = {};
@@ -100,6 +129,7 @@ export function createState(level: LevelDef, seed: number): GameState {
   return {
     levelId: level.id,
     seed,
+    modifiers: mods,
     time: 0,
     towers,
     roads,

@@ -19,7 +19,11 @@ export interface NativeHooks {
 
 interface CapacitorGlobal {
   isNativePlatform?: () => boolean;
+  getPlatform?: () => string;
 }
+
+/** Runtime platform as reported by the Capacitor bridge. */
+export type NativePlatform = 'ios' | 'android' | 'web';
 
 /** True inside a Capacitor native shell (Android/iOS), false in a browser or PWA. */
 export function isNative(): boolean {
@@ -29,6 +33,17 @@ export function isNative(): boolean {
   // The native bridge always injects `isNativePlatform`; a web-only `@capacitor/core` import
   // would also define `window.Capacitor` but report false here.
   return typeof cap.isNativePlatform === 'function' ? cap.isNativePlatform() : true;
+}
+
+/**
+ * `'ios'` / `'android'` inside the matching native shell, `'web'` everywhere else (browser, PWA,
+ * tests). Used by the economy providers to pick per-platform API keys and ad unit ids.
+ */
+export function getPlatform(): NativePlatform {
+  if (!isNative()) return 'web';
+  const cap = (window as { Capacitor?: CapacitorGlobal }).Capacitor;
+  const platform = typeof cap?.getPlatform === 'function' ? cap.getPlatform() : 'web';
+  return platform === 'ios' || platform === 'android' ? platform : 'web';
 }
 
 // Type-only imports are erased by TypeScript, so they do not pull the plugin into the web bundle.

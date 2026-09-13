@@ -1,12 +1,17 @@
-import type { GameState, Road, SimEvent, Tower, Unit } from './types';
+import type { GameState, Owner, PlayerModifiers, Road, SimEvent, Tower, Unit } from './types';
+import { DEFAULT_MODIFIERS } from './types';
 import { C } from './constants';
 import { getOutcome } from './outcome';
 
 /** Tolerance for floating-point accumulation of progress along a road. */
 const EPS = 1e-9;
 
-/** Maximum garrison (in weight) a tower can hold. */
-export function capacityOf(tower: Tower): number {
+/** Player modifiers for `owner`: the state's modifiers for `player`, defaults for everyone else. */
+export function modifiersFor(owner: Owner, state?: Pick<GameState, 'modifiers'>): Readonly<PlayerModifiers> {
+  return owner === 'player' && state ? state.modifiers : DEFAULT_MODIFIERS;
+}
+
+function baseCapacityOf(tower: Tower): number {
   switch (tower.kind) {
     case 'barracks':
       return C.CAPACITY[tower.level];
@@ -17,6 +22,17 @@ export function capacityOf(tower: Tower): number {
     case 'tankFactory':
       return C.TANK_FACTORY_CAPACITY;
   }
+}
+
+/**
+ * Maximum garrison (in weight) a tower can hold. Pass the state to include the player's
+ * `capacityMul` (floored, min 1); it is applied by the tower's *current* owner, so a tower gains or
+ * loses the bonus the moment it is captured. Without a state the base (unmodified) capacity is returned.
+ */
+export function capacityOf(tower: Tower, state?: Pick<GameState, 'modifiers'>): number {
+  const base = baseCapacityOf(tower);
+  const mul = modifiersFor(tower.owner, state).capacityMul;
+  return mul === 1 ? base : Math.max(1, Math.floor(base * mul));
 }
 
 /** Point at fraction `t` (0..1) along the road's polyline, measured from road.a. */
@@ -72,7 +88,7 @@ function generation(state: GameState, dt: number): void {
     for (const caster of freezeCasters) if (caster !== tower.owner) frozen = true;
     if (frozen) continue;
 
-    const cap = capacityOf(tower);
+    const cap = capacityOf(tower, state);
     if (tower.units >= cap) {
       tower.genAccMs = 0;
       continue;
@@ -92,6 +108,9 @@ function generation(state: GameState, dt: number): void {
         interval = C.GEN_MS[tower.level];
         weight = C.INFANTRY_WEIGHT;
     }
+    // Player production bonus, by the tower's current owner (a captured tower switches rate at once).
+    // Multiplicative with overdrive: interval ÷ productionMul, accumulation × OVERDRIVE_MUL.
+    interval /= modifiersFor(tower.owner, state).productionMul;
     const mul = overdrive.has(tower.owner) ? C.OVERDRIVE_MUL : 1;
     tower.genAccMs += dt * mul;
     while (tower.genAccMs >= interval && tower.units < cap) {
@@ -109,6 +128,8 @@ function releaseQueues(state: GameState): void {
     if (!road || road.cut) continue; // road destroyed under the queue: units are lost
     if (q.remaining > 0 && state.time >= q.nextLeaveMs) {
       const tank = q.unitKind === 'tank';
+      // Speed is fixed at spawn (player march bonus); units already on a road never change speed.
+      const speedMul = modifiersFor(q.owner, state).unitSpeedMul;
       state.units.push({
         id: state.nextUnitId++,
         owner: q.owner,
@@ -118,7 +139,7 @@ function releaseQueues(state: GameState): void {
         from: q.from,
         to: q.to,
         progress: 0,
-        speed: tank ? C.UNIT_SPEED * C.TANK_SPEED_MUL : C.UNIT_SPEED,
+        speed: (tank ? C.UNIT_SPEED * C.TANK_SPEED_MUL : C.UNIT_SPEED) * speedMul,
       });
       q.remaining -= 1;
       q.nextLeaveMs += C.LEAVE_INTERVAL_MS;
@@ -244,7 +265,7 @@ function artillery(state: GameState, dt: number): void {
 
 function arrive(state: GameState, tower: Tower, unit: Unit): void {
   if (tower.owner === unit.owner) {
-    tower.units = Math.min(capacityOf(tower), tower.units + unit.weight);
+    tower.units = Math.min(capacityOf(tower, state), tower.units + unit.weight);
     return;
   }
   let damage: number;

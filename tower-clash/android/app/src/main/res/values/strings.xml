@@ -4,4 +4,8 @@
     <string name="title_activity_main">Tower Clash</string>
     <string name="package_name">com.pervincinal.towerclash</string>
     <string name="custom_url_scheme">com.pervincinal.towerclash</string>
+    <!-- AdMob APP id (not an ad unit id). This is Google's official TEST app id; replace with the
+         real "ca-app-pub-XXXXXXXX~YYYYYYYY" from the AdMob console before a store release
+         (docs/MOBILE.md §8). CI: ADMOB_ANDROID_APP_ID secret. -->
+    <string name="admob_app_id">ca-app-pub-3940256099942544~3347511713</string>
 </resources>

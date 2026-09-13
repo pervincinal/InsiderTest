@@ -1,0 +1,151 @@
+import { describe, expect, it } from 'vitest';
+import { C } from '../../src/sim/constants';
+import {
+  ACHIEVEMENTS,
+  AD_PLACEMENTS,
+  ADVANTAGE_LIMIT,
+  COMMANDER_UPGRADES,
+  CONVERSION,
+  CRYSTAL_SERVICES,
+  CURRENCIES,
+  EARN_RULES,
+  ENERGY_SYSTEM,
+  IAP_PRODUCTS as IAP_PRODUCTS_CONST,
+  INTERSTITIAL_RULES,
+  SKINS,
+  STORE_PRICE_POINTS_USD,
+} from '../../src/economy/catalog';
+import type { IapProductDef } from '../../src/economy/catalog';
+
+/** Widened view: the `as const` literal union hides optional fields that are absent on some entries. */
+const IAP_PRODUCTS: readonly IapProductDef[] = IAP_PRODUCTS_CONST;
+
+function ids(list: readonly { id: string }[]): string[] {
+  return list.map((x) => x.id);
+}
+
+function unique(list: readonly string[]): boolean {
+  return new Set(list).size === list.length;
+}
+
+describe('economy catalog (docs/ECONOMY.md)', () => {
+  it('ids are unique within every table and skins referenced by products exist', () => {
+    expect(unique(ids(IAP_PRODUCTS))).toBe(true);
+    expect(unique(ids(COMMANDER_UPGRADES))).toBe(true);
+    expect(unique(ids(SKINS))).toBe(true);
+    expect(unique(ids(AD_PLACEMENTS))).toBe(true);
+    expect(unique(ids(ACHIEVEMENTS))).toBe(true);
+    const skinIds = new Set(ids(SKINS));
+    for (const p of IAP_PRODUCTS) for (const s of p.grants.skins ?? []) expect(skinIds.has(s)).toBe(true);
+    for (const p of IAP_PRODUCTS) {
+      for (const other of [...(p.hiddenWhenOwned ?? []), ...(p.requiresOwned ? [p.requiresOwned] : [])]) {
+        expect(ids(IAP_PRODUCTS)).toContain(other);
+      }
+    }
+  });
+
+  it('every price is a valid Apple/Google price point and the tier matches the USD price', () => {
+    for (const p of IAP_PRODUCTS) {
+      expect(STORE_PRICE_POINTS_USD).toContain(p.priceUsd);
+      expect(p.tier).toBe(Math.round(p.priceUsd + 0.01)); // Tier 1 = $0.99, Tier 5 = $4.99, Tier 50 = $49.99
+    }
+  });
+
+  it('crystal packs: bonus % is strictly increasing with price and matches the granted amount', () => {
+    const packs = IAP_PRODUCTS.filter((p) => p.bonusPct !== undefined).sort((a, b) => a.priceUsd - b.priceUsd);
+    expect(packs.length).toBe(5);
+    const base = packs[0]!;
+    expect(base.priceUsd).toBe(0.99);
+    const baseRate = base.grants.crystals! / base.priceUsd;
+    for (let i = 1; i < packs.length; i++) {
+      const prev = packs[i - 1]!;
+      const cur = packs[i]!;
+      expect(cur.bonusPct!).toBeGreaterThan(prev.bonusPct!);
+      // granted ≈ base rate × price × (1 + bonus), within 5 % (prices end in .99, amounts are round)
+      const expected = baseRate * cur.priceUsd * (1 + cur.bonusPct!);
+      expect(Math.abs(cur.grants.crystals! / expected - 1)).toBeLessThan(0.05);
+    }
+  });
+
+  it('one-time products are non-consumable and remove-ads / premium do not double-charge', () => {
+    for (const p of IAP_PRODUCTS.filter((p) => p.availability === 'once')) expect(p.kind).toBe('nonConsumable');
+    const removeAds = IAP_PRODUCTS.find((p) => p.id === 'remove_ads')!;
+    const premium = IAP_PRODUCTS.find((p) => p.id === 'premium_bundle')!;
+    const upgrade = IAP_PRODUCTS.find((p) => p.id === 'premium_upgrade')!;
+    expect(removeAds.grants.removeAds).toBe(true);
+    expect(premium.grants.removeAds).toBe(true);
+    expect(upgrade.grants.removeAds).toBeUndefined();
+    expect(upgrade.requiresOwned).toBe('remove_ads');
+    expect(premium.hiddenWhenOwned).toContain('remove_ads');
+    // remove_ads + premium_upgrade costs the same as premium_bundle and grants at least as many crystals
+    expect(removeAds.priceUsd + upgrade.priceUsd).toBeLessThanOrEqual(premium.priceUsd);
+    expect(removeAds.grants.crystals! + upgrade.grants.crystals!).toBeGreaterThanOrEqual(premium.grants.crystals!);
+    expect(INTERSTITIAL_RULES.disabledByProducts).toEqual(['remove_ads', 'premium_bundle']);
+  });
+
+  it('commander upgrades stay within the GDD advantage limit', () => {
+    for (const u of COMMANDER_UPGRADES) {
+      expect(u.costGoldByTier.length).toBe(u.maxTier);
+      for (let i = 1; i < u.costGoldByTier.length; i++) expect(u.costGoldByTier[i]!).toBeGreaterThan(u.costGoldByTier[i - 1]!);
+      const maxEffect = u.effect.perTier * u.maxTier;
+      expect(maxEffect).toBeLessThanOrEqual(ADVANTAGE_LIMIT[u.effect.kind] + 1e-9);
+    }
+    const discount = COMMANDER_UPGRADES.find((u) => u.effect.kind === 'boosterDiscount')!;
+    const premiumDiscount = Math.max(...IAP_PRODUCTS.map((p) => p.grants.boosterDiscount ?? 0));
+    expect(discount.effect.perTier * discount.maxTier + premiumDiscount).toBeGreaterThan(ADVANTAGE_LIMIT.totalBoosterDiscount); // hence the cap exists
+    expect(ADVANTAGE_LIMIT.totalBoosterDiscount).toBeLessThan(0.5);
+    // full tree = 5 tracks × 1100 gold (ECONOMY.md §3.2)
+    const total = COMMANDER_UPGRADES.reduce((s, u) => s + u.costGoldByTier.reduce((a, b) => a + b, 0), 0);
+    expect(total).toBe(5500);
+  });
+
+  it('earn rules match the GDD and the daily reward table has 7 days', () => {
+    expect(EARN_RULES.goldPerStarFirstClear).toBe(C.COINS_PER_STAR);
+    expect(EARN_RULES.dailyReward.map((d) => d.day)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    const weekGold = EARN_RULES.dailyReward.reduce((s, d) => s + d.gold, 0);
+    const weekCrystals = EARN_RULES.dailyReward.reduce((s, d) => s + d.crystals, 0);
+    expect(weekGold).toBe(330);
+    expect(weekCrystals).toBe(20);
+    expect(Object.values(EARN_RULES.crystalsPerMilestone).reduce((a, b) => a + b, 0)).toBe(150);
+    expect(EARN_RULES.bands.length).toBe(5);
+    expect(EARN_RULES.bands.at(-1)![1]).toBe(40);
+    expect(ACHIEVEMENTS.reduce((s, a) => s + a.crystals, 0)).toBe(85);
+  });
+
+  it('conversion is crystals → gold only and the currencies map to save fields', () => {
+    expect(CONVERSION.goldPerCrystal).toBeGreaterThan(0);
+    expect('crystalsPerGold' in CONVERSION).toBe(false);
+    expect(CURRENCIES.gold.saveField).toBe('coins');
+    expect(CURRENCIES.crystals.kind).toBe('hard');
+    expect(ENERGY_SYSTEM).toBeNull();
+  });
+
+  it('crystal-priced services: the booster crate is a discount, skins are cosmetic and exclusives are not sold', () => {
+    const crate = CRYSTAL_SERVICES.boosterCrate;
+    const goldValue = crate.charges.overdrive * C.BOOSTER_COST.overdrive + crate.charges.freeze * C.BOOSTER_COST.freeze + crate.charges.airstrike * C.BOOSTER_COST.airstrike;
+    expect(goldValue).toBeGreaterThan(crate.costCrystals * CONVERSION.goldPerCrystal);
+    for (const s of SKINS) {
+      if (s.source === 'shop') expect(s.costCrystals).toBeGreaterThan(0);
+      else expect(s.costCrystals).toBe(0);
+    }
+    expect(SKINS.filter((s) => s.source === 'premium').map((s) => s.id).sort()).toEqual(['helmet_royal', 'roof_gold']);
+    expect(CRYSTAL_SERVICES.levelSkip.costCrystals).toBeGreaterThan(CRYSTAL_SERVICES.continue.costCrystals);
+  });
+
+  it('ads: interstitial only on the level break with gates and cooldown; rewarded placements have daily caps', () => {
+    const interstitials = AD_PLACEMENTS.filter((p) => p.type === 'interstitial');
+    expect(interstitials.length).toBe(1);
+    expect(interstitials[0]!.where).toBe('resultScreen');
+    expect(interstitials[0]!.cooldownMs).toBeGreaterThanOrEqual(120_000);
+    expect(INTERSTITIAL_RULES.minLevelsCompleted).toBeGreaterThanOrEqual(5);
+    expect(INTERSTITIAL_RULES.everyNthCompletedLevel).toBe(3);
+    expect(INTERSTITIAL_RULES.skipAfterRewarded).toBe(true);
+    for (const p of AD_PLACEMENTS.filter((p) => p.type === 'rewarded')) {
+      expect(Number.isFinite(p.dailyCap)).toBe(true);
+      expect(p.dailyCap).toBeGreaterThan(0);
+      expect(p.cooldownMs).toBeGreaterThan(0);
+      expect(p.reward.kind).not.toBe('none');
+    }
+    expect(ids(AD_PLACEMENTS)).toEqual(['int_level_break', 'rv_double_gold', 'rv_continue', 'rv_free_booster', 'rv_daily_chest']);
+  });
+});

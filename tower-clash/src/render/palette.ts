@@ -117,6 +117,16 @@ export interface Palette {
   /** Gun metal (artillery barrel, tank treads). */
   metal: Tones;
   biomes: Record<Biome, BiomeColors>;
+
+  /* ---- economy (shop / currencies) ---- */
+  /** Gold coin clay: `goldTones.mid` === `gold`, `goldTones.shade` === `goldShade`. */
+  goldTones: Tones;
+  /** Crystal (hard currency) clay: cyan lit → sky mid → violet shade, so a gem reads as one material. */
+  crystal: Tones;
+  /** Deep violet ink for crystal outlines / drop edge (never black). */
+  crystalInk: string;
+  /** Prohibition red of the no-ads badge (shared with `mine`; kept separate so it can retune). */
+  forbid: string;
 }
 
 const BIOMES: Record<Biome, BiomeColors> = Object.freeze({
@@ -246,6 +256,11 @@ export const DEFAULT_PALETTE: Palette = Object.freeze({
   rope: '#e8d3a2',
   metal: { lit: '#8b94a3', mid: '#4b5361', shade: '#2d3340' },
   biomes: BIOMES,
+
+  goldTones: { lit: '#ffe98a', mid: '#ffcf3f', shade: '#e0a300' },
+  crystal: { lit: '#c9f7ff', mid: '#4fd1f0', shade: '#7b5cf0' },
+  crystalInk: '#4a2fb0',
+  forbid: '#ff5a5f',
 });
 
 export const COLOR_BLIND_PALETTE: Palette = Object.freeze({
