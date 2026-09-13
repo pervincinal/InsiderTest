@@ -39,7 +39,6 @@ jobs:
       # .env.production at `vite build` time; skipped when no secret is configured (the build then
       # uses "store unavailable" + Google's AdMob TEST ad units).
       - name: Write .env.production from repository secrets
-        if: ${{ secrets.RC_IOS_KEY != '' || secrets.ADMOB_IOS_INTERSTITIAL != '' || secrets.ADMOB_IOS_REWARDED != '' }}
         env:
           VITE_RC_IOS_KEY: ${{ secrets.RC_IOS_KEY }}
           VITE_ADMOB_IOS_INTERSTITIAL: ${{ secrets.ADMOB_IOS_INTERSTITIAL }}
@@ -59,10 +58,10 @@ jobs:
       # GADApplicationIdentifier in Info.plist must be the AdMob APP id (ca-app-pub-…~…); a wrong
       # value crashes at startup, so only replace it when the secret is set.
       - name: Set AdMob app id (iOS)
-        if: ${{ secrets.ADMOB_IOS_APP_ID != '' }}
         env:
           ADMOB_IOS_APP_ID: ${{ secrets.ADMOB_IOS_APP_ID }}
         run: |
+          if [ -z "$ADMOB_IOS_APP_ID" ]; then echo "ADMOB_IOS_APP_ID not configured — keeping the AdMob TEST app id"; exit 0; fi
           case "$ADMOB_IOS_APP_ID" in
             ca-app-pub-*~*) ;;
             *) echo "ADMOB_IOS_APP_ID must look like ca-app-pub-XXXX~YYYY (an APP id, not an ad unit)"; exit 1 ;;
