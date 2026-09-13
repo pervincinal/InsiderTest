@@ -1,0 +1,18 @@
+{
+  "id": 1,
+  "name": "First Taps",
+  "lesson": "Tap your tower, then tap a target to send everyone",
+  "star3": 45000,
+  "star2": 90000,
+  "enemies": [{ "owner": "enemy1", "personality": "rusher", "aggression": 0.2 }],
+  "towers": [
+    { "id": "home", "x": 200, "y": 1100, "owner": "player", "units": 12, "level": 1, "kind": "barracks" },
+    { "id": "camp", "x": 520, "y": 760, "owner": "neutral", "units": 5 },
+    { "id": "foe", "x": 200, "y": 340, "owner": "enemy1", "units": 8, "level": 1, "kind": "barracks" }
+  ],
+  "roads": [
+    { "a": "home", "b": "camp" },
+    { "a": "camp", "b": "foe" },
+    { "a": "home", "b": "foe" }
+  ]
+}

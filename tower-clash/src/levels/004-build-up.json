@@ -1,0 +1,20 @@
+{
+  "id": 4,
+  "name": "Build Up",
+  "lesson": "Upgrade your tower first: the enemy turtles, so out-produce it instead of racing it",
+  "star3": 75000,
+  "star2": 150000,
+  "enemies": [{ "owner": "enemy1", "personality": "turtle", "aggression": 0.3 }],
+  "towers": [
+    { "id": "home", "x": 360, "y": 1120, "owner": "player", "units": 15, "level": 1, "kind": "barracks" },
+    { "id": "outpost", "x": 150, "y": 900, "owner": "neutral", "units": 6 },
+    { "id": "mid", "x": 360, "y": 700, "owner": "neutral", "units": 10 },
+    { "id": "foe", "x": 360, "y": 260, "owner": "enemy1", "units": 15, "level": 1, "kind": "barracks" }
+  ],
+  "roads": [
+    { "a": "home", "b": "outpost" },
+    { "a": "home", "b": "mid" },
+    { "a": "outpost", "b": "mid" },
+    { "a": "mid", "b": "foe" }
+  ]
+}
