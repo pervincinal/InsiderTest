@@ -9,6 +9,11 @@ Priority = order within a section. Producer moves items; anyone may add to Bugs 
 - [ ] M1-8b Mute button glyph in the HUD/pause menu (audio exists, toggled with M key) — frontend-engineer
 - [ ] M1-10 Balance review of levels 1–15 with the reference bot on 5 seeds; adjust star times so the bot gets 2★, a good human 3★ — game-designer
 
+## Next (ART — polish after v2)
+- [ ] ART-1 `ctx.shadowBlur` in widgets is the main CPU cost on software raster; replace with pre-rendered shadow sprites or layered alpha ellipses — tech-artist
+- [ ] ART-2 Sand/snow/volcanic biomes are only visible from level 17+; add dust puffs on sand columns when band 17–24 ships — tech-artist
+- [ ] ART-3 Mute button glyph in HUD (M key and title toggle exist) — frontend-engineer
+
 ## Next (M-mobile — iOS/Android)
 - [ ] MM-1 Verify the Android debug APK from CI on a real phone; fix any WebView issue (safe areas, audio unlock, back button = pause) — mobile-engineer + qa
 - [ ] MM-2 Capacitor plugins: StatusBar (hidden), ScreenOrientation lock portrait, Haptics on capture, App back-button handler — mobile-engineer
@@ -64,6 +69,7 @@ Priority = order within a section. Producer moves items; anyone may add to Bugs 
 - 2026-09-13 M1-3b Coins on result screen, level locking
 - 2026-09-13 M1-11 Pause menu + speed ×2
 - 2026-09-13 M3-4 PWA manifest + service worker + icons (pulled forward)
+- 2026-09-13 ART-v2 "Sunlit Clay Islands": trend research, art direction doc, lit/shade palette, long shadows, biomes, Fredoka type, claymorphic HUD/cards, winding level map, store shots regenerated
 - 2026-09-13 M1-9/M2-6 Tower War-style visual overhaul: terrain, 3D towers, soldiers, particles, toy HUD (stakeholder request)
 - 2026-09-13 M1-8 WebAudio sfx (M key mutes)
 - 2026-09-13 PUB-1..4 Store listing EN/AZ, privacy policy, launch checklist, release notes v0.1.0, captioned store screenshots + feature graphic, public README
