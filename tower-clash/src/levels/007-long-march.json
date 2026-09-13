@@ -1,0 +1,27 @@
+{
+  "id": 7,
+  "name": "Long March",
+  "lesson": "Distance is time: stage your army at the forward tower, because a long road lets the enemy regrow before you land",
+  "star3": 75000,
+  "star2": 150000,
+  "enemies": [{ "owner": "enemy1", "personality": "turtle", "aggression": 0.4 }],
+  "towers": [
+    { "id": "home", "x": 360, "y": 1160, "owner": "player", "units": 14, "level": 1, "kind": "barracks" },
+    { "id": "sw", "x": 160, "y": 940, "owner": "neutral", "units": 5 },
+    { "id": "se", "x": 560, "y": 940, "owner": "neutral", "units": 5 },
+    { "id": "nw", "x": 200, "y": 700, "owner": "neutral", "units": 8 },
+    { "id": "ne", "x": 520, "y": 700, "owner": "neutral", "units": 8 },
+    { "id": "fwd", "x": 360, "y": 520, "owner": "neutral", "units": 10 },
+    { "id": "base", "x": 360, "y": 150, "owner": "enemy1", "units": 12, "level": 1, "kind": "barracks" }
+  ],
+  "roads": [
+    { "a": "home", "b": "sw" },
+    { "a": "home", "b": "se" },
+    { "a": "sw", "b": "nw" },
+    { "a": "se", "b": "ne" },
+    { "a": "nw", "b": "ne" },
+    { "a": "nw", "b": "fwd" },
+    { "a": "ne", "b": "fwd" },
+    { "a": "fwd", "b": "base" }
+  ]
+}

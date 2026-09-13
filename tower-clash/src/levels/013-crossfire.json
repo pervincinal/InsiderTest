@@ -1,0 +1,31 @@
+{
+  "id": 13,
+  "name": "Crossfire",
+  "lesson": "Your own guns thin every wave: hold the artillery post and make the enemy walk through its fire",
+  "star3": 75000,
+  "star2": 150000,
+  "enemies": [{ "owner": "enemy1", "personality": "turtle", "aggression": 0.5 }],
+  "towers": [
+    { "id": "home", "x": 360, "y": 1150, "owner": "player", "units": 12, "level": 1, "kind": "barracks" },
+    { "id": "west", "x": 150, "y": 940, "owner": "neutral", "units": 5 },
+    { "id": "east", "x": 570, "y": 940, "owner": "neutral", "units": 5 },
+    { "id": "mid", "x": 360, "y": 760, "owner": "neutral", "units": 8 },
+    { "id": "guns", "x": 250, "y": 620, "owner": "neutral", "units": 4, "kind": "artillery" },
+    { "id": "east2", "x": 570, "y": 560, "owner": "neutral", "units": 6 },
+    { "id": "outpost", "x": 360, "y": 480, "owner": "enemy1", "units": 8, "level": 1, "kind": "barracks" },
+    { "id": "base", "x": 360, "y": 200, "owner": "enemy1", "units": 14, "level": 1, "kind": "barracks" }
+  ],
+  "roads": [
+    { "a": "home", "b": "west" },
+    { "a": "home", "b": "east" },
+    { "a": "west", "b": "mid" },
+    { "a": "east", "b": "mid" },
+    { "a": "west", "b": "guns" },
+    { "a": "mid", "b": "guns" },
+    { "a": "mid", "b": "outpost" },
+    { "a": "east", "b": "east2" },
+    { "a": "east2", "b": "outpost" },
+    { "a": "east2", "b": "base" },
+    { "a": "outpost", "b": "base" }
+  ]
+}

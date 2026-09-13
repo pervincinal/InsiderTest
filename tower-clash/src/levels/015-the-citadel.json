@@ -1,0 +1,34 @@
+{
+  "id": 15,
+  "name": "The Citadel",
+  "lesson": "Everything together: hold your own walls, take the guns from the flank, then break the citadel with one massed wave",
+  "star3": 90000,
+  "star2": 180000,
+  "enemies": [{ "owner": "enemy1", "personality": "rusher", "aggression": 0.7 }],
+  "towers": [
+    { "id": "home", "x": 360, "y": 1170, "owner": "player", "units": 15, "level": 1, "kind": "barracks" },
+    { "id": "west", "x": 140, "y": 950, "owner": "neutral", "units": 5 },
+    { "id": "east", "x": 580, "y": 950, "owner": "neutral", "units": 5 },
+    { "id": "bastion", "x": 360, "y": 880, "owner": "neutral", "units": 5, "kind": "fortress" },
+    { "id": "nw", "x": 150, "y": 640, "owner": "neutral", "units": 10 },
+    { "id": "ne", "x": 570, "y": 640, "owner": "neutral", "units": 10 },
+    { "id": "guns", "x": 360, "y": 560, "owner": "enemy1", "units": 4, "level": 1, "kind": "artillery" },
+    { "id": "outpost", "x": 580, "y": 380, "owner": "enemy1", "units": 5, "level": 1, "kind": "barracks" },
+    { "id": "citadel", "x": 360, "y": 230, "owner": "enemy1", "units": 10, "level": 1, "kind": "fortress" }
+  ],
+  "roads": [
+    { "a": "home", "b": "west" },
+    { "a": "home", "b": "east" },
+    { "a": "home", "b": "bastion" },
+    { "a": "west", "b": "bastion" },
+    { "a": "east", "b": "bastion" },
+    { "a": "west", "b": "nw" },
+    { "a": "east", "b": "ne" },
+    { "a": "bastion", "b": "guns" },
+    { "a": "nw", "b": "guns" },
+    { "a": "ne", "b": "guns" },
+    { "a": "guns", "b": "outpost" },
+    { "a": "guns", "b": "citadel" },
+    { "a": "outpost", "b": "citadel" }
+  ]
+}

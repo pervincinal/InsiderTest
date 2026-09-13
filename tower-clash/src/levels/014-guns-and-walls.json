@@ -1,0 +1,31 @@
+{
+  "id": 14,
+  "name": "Guns and Walls",
+  "lesson": "Silence the guns before the siege: an artillery post beside a fortress shreds the very wave you need to breach it",
+  "star3": 90000,
+  "star2": 180000,
+  "enemies": [{ "owner": "enemy1", "personality": "opportunist", "aggression": 0.6 }],
+  "towers": [
+    { "id": "home", "x": 360, "y": 1160, "owner": "player", "units": 15, "level": 1, "kind": "barracks" },
+    { "id": "west", "x": 150, "y": 930, "owner": "neutral", "units": 5 },
+    { "id": "east", "x": 570, "y": 930, "owner": "neutral", "units": 5 },
+    { "id": "mid", "x": 360, "y": 740, "owner": "neutral", "units": 8 },
+    { "id": "nw", "x": 150, "y": 560, "owner": "neutral", "units": 6 },
+    { "id": "ne", "x": 600, "y": 720, "owner": "neutral", "units": 6 },
+    { "id": "guns", "x": 480, "y": 500, "owner": "enemy1", "units": 6, "level": 1, "kind": "artillery" },
+    { "id": "keep", "x": 360, "y": 260, "owner": "enemy1", "units": 10, "level": 1, "kind": "fortress" }
+  ],
+  "roads": [
+    { "a": "home", "b": "west" },
+    { "a": "home", "b": "east" },
+    { "a": "west", "b": "mid" },
+    { "a": "east", "b": "mid" },
+    { "a": "west", "b": "nw" },
+    { "a": "nw", "b": "keep" },
+    { "a": "east", "b": "ne" },
+    { "a": "ne", "b": "guns" },
+    { "a": "mid", "b": "guns" },
+    { "a": "mid", "b": "keep" },
+    { "a": "guns", "b": "keep" }
+  ]
+}
