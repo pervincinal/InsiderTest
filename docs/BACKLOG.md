@@ -6,8 +6,7 @@ Priority = order within a section. Producer moves items; anyone may add to Bugs 
 (empty — next sprint picks from "Next")
 
 ## Next (M1 — vertical slice)
-- [ ] M1-8 Sim events → audio hook: WebAudio sfx for send/capture/upgrade/win/lose with mute in HUD — tech-artist
-- [ ] M1-9 Particles: capture flash, unit death puff, upgrade pulse — tech-artist
+- [ ] M1-8b Mute button glyph in the HUD/pause menu (audio exists, toggled with M key) — frontend-engineer
 - [ ] M1-10 Balance review of levels 1–15 with the reference bot on 5 seeds; adjust star times so the bot gets 2★, a good human 3★ — game-designer
 
 ## Next (M-mobile — iOS/Android)
@@ -23,8 +22,7 @@ Priority = order within a section. Producer moves items; anyone may add to Bugs 
 - [ ] M2-3 Bridges: cut with long-press
 - [ ] M2-4 Two and three simultaneous enemies; enemies fight each other
 - [ ] M2-5 Levels 16–40 per bands
-- [ ] M2-6 Particles (capture flash, death puff, upgrade pulse), subtle shake
-- [ ] M2-7 WebAudio sfx (send, capture, upgrade, win, lose) + mute
+- [ ] M2-7 Subtle screen shake on capture; button click sfx wired in screens — tech-artist
 - [ ] M2-8 Balance pass with playtest table in report
 
 ## Later (M3 — meta & polish)
@@ -65,4 +63,6 @@ Priority = order within a section. Producer moves items; anyone may add to Bugs 
 - 2026-09-13 M1-3b Coins on result screen, level locking
 - 2026-09-13 M1-11 Pause menu + speed ×2
 - 2026-09-13 M3-4 PWA manifest + service worker + icons (pulled forward)
+- 2026-09-13 M1-9/M2-6 Tower War-style visual overhaul: terrain, 3D towers, soldiers, particles, toy HUD (stakeholder request)
+- 2026-09-13 M1-8 WebAudio sfx (M key mutes)
 - 2026-09-13 MM-0 Capacitor Android + iOS projects, icons/splash, APK + iOS simulator CI, docs/MOBILE.md
