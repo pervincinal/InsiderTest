@@ -186,30 +186,30 @@ describe('daily streak', () => {
 });
 
 describe('commander upgrades', () => {
-  it('tiers cost 60/120/200/300/420 gold and unlock in order', () => {
+  it('production tiers cost 200/350/550 gold (1100 per track) and unlock in order', () => {
     save.gold = 1100;
-    expect(upgradeCost(save, 'production')).toBe(60);
+    expect(upgradeCost(save, 'production')).toBe(200);
     expect(buyUpgrade(save, 'production')).toBe(true);
     expect(upgradeTier(save, 'production')).toBe(1);
-    expect(upgradeCost(save, 'production')).toBe(120);
-    for (let i = 0; i < 4; i++) expect(buyUpgrade(save, 'production')).toBe(true);
+    expect(upgradeCost(save, 'production')).toBe(350);
+    for (let i = 0; i < 2; i++) expect(buyUpgrade(save, 'production')).toBe(true);
     expect(save.gold).toBe(0);
     expect(upgradeCost(save, 'production')).toBeNull();
     expect(buyUpgrade(save, 'production')).toBe(false);
     expect(buyUpgrade(save, 'capacity')).toBe(false); // unaffordable
     expect(upgradeTier(save, 'capacity')).toBe(0);
-    expect(commanderSummary(save)).toBe('+20 % prod');
+    expect(commanderSummary(save)).toBe('+6 % prod');
   });
 
   it('modifiersFromSave maps tiers onto the sim modifiers (max = the advantage limit)', () => {
     expect(modifiersFromSave(save)).toEqual({ productionMul: 1, capacityMul: 1, startGarrisonBonus: 0, unitSpeedMul: 1 });
     save.upgrades = { production: 2, capacity: 3, garrison: 4, march_speed: 1, booster_cost: 5 };
-    expect(modifiersFromSave(save)).toEqual({ productionMul: 1.08, capacityMul: 1.15, startGarrisonBonus: 4, unitSpeedMul: 1.03 });
+    expect(modifiersFromSave(save)).toEqual({ productionMul: 1.04, capacityMul: 1.15, startGarrisonBonus: 2, unitSpeedMul: 1.02 });
     save.upgrades = { production: 5, capacity: 5, garrison: 5, march_speed: 5, booster_cost: 5 };
-    expect(modifiersFromSave(save)).toEqual({ productionMul: 1.2, capacityMul: 1.25, startGarrisonBonus: 5, unitSpeedMul: 1.15 });
-    expect(modifiersFromSave(save, 15).startGarrisonBonus).toBe(20); // "Reinforcements" continue
+    expect(modifiersFromSave(save)).toEqual({ productionMul: 1.06, capacityMul: 1.25, startGarrisonBonus: 2, unitSpeedMul: 1.04 });
+    expect(modifiersFromSave(save, 15).startGarrisonBonus).toBe(17); // "Reinforcements" continue
     save.upgrades = { production: 99 };
-    expect(modifiersFromSave(save).productionMul).toBe(1.2); // clamped to maxTier
+    expect(modifiersFromSave(save).productionMul).toBe(1.06); // clamped to maxTier
   });
 
   it('booster discount stacks the track and premium, capped at 30 %, and prices round up', () => {

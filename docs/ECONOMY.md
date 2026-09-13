@@ -7,7 +7,7 @@ Owner: Monetization & Economy Designer. Status: **design, not yet implemented** 
 ## Qısa xülasə (Azərbaycanca)
 
 - **İki valyuta.** *Qızıl* (gold, oyunda qazanılır: ulduzlar, gündəlik mükafat, reklam izləmə) və *Kristal* (crystals, nadir hallarda qazanılır: 10/20/30/40-cı səviyyə mərhələləri, hər zonada bütün səviyyələri 3 ulduzla keçmək, nailiyyətlər, 7 günlük giriş seriyası; həmçinin pulla alınır). Kristal → qızıl çevrilə bilər (1 kristal = 5 qızıl), qızıl → kristal **heç vaxt**.
-- **Qızıl nəyə xərclənir:** mövcud gücləndiricilər (Overdrive 30 / Freeze 40 / Airstrike 50) və daimi **Komandir təkmilləşdirmələri** — 5 xətt × 5 pillə (istehsal +4 %/pillə, tutum +5 %/pillə, başlanğıc qarnizon +1/pillə, gücləndirici qiyməti −5 %/pillə, yürüş sürəti +3 %/pillə; hər xətt cəmi 1 100 qızıl, hamısı 5 500).
+- **Qızıl nəyə xərclənir:** mövcud gücləndiricilər (Overdrive 30 / Freeze 40 / Airstrike 50) və daimi **Komandir təkmilləşdirmələri** — 5 xətt (istehsal +2 %/pillə, 3 pillə; tutum +5 %/pillə, 5 pillə; başlanğıc qarnizon +1/pillə, 2 pillə; gücləndirici qiyməti −5 %/pillə, 5 pillə; yürüş sürəti +2 %/pillə, 2 pillə; hər xətt cəmi 1 100 qızıl, hamısı 5 500 — qısa xətlərin pillələri daha bahadır, daha güclü deyil). 2026-09-13 avtomatik oyun sınağından sonra yenidən balanslaşdırılıb: köhnə hədlərlə (+20 % / +5 / +15 %) istinad botu 40 səviyyənin yarısından çoxunu 3 ulduzla keçirdi.
 - **Kristal nəyə xərclənir:** görünüş dəstləri (qüllə damları, əsgər dəbilqələri, ada mövzuları — 80–200 kristal), səviyyəni keçmək (30 kristal, yalnız 3 məğlubiyyətdən sonra), məğlubiyyətdən sonra davam etmək (10 kristal və ya pulsuz reklam), gücləndirici sandığı (60 kristal).
 - **Enerji / can sistemi yoxdur** — qəsdən rədd edilib (aşağıda səbəbi).
 - **Alışlar (ABŞ dolları, Apple/Google standart qiymətləri):** kristal paketləri $0.99 / 4.99 / 9.99 / 19.99 / 49.99 (100 / 550 / 1 200 / 2 600 / 7 000 kristal, bonus 0 → 40 %); **Başlanğıc paketi $2.99** (bir dəfə: 400 kristal + 400 qızıl + eksklüziv dəbilqə); **Reklamları sil $3.99** (bir dəfə: səviyyələr arası reklam yoxdur + 50 kristal hədiyyə); **Premium paket $9.99** (bir dəfə: reklamları sil + 600 kristal + 2 eksklüziv görünüş + gücləndiricilərə daimi −10 %). Abunəlik yoxdur.
@@ -58,19 +58,36 @@ Overdrive 30, Freeze 40, Airstrike 50 (GDD §2.6). Unchanged. New: **booster cha
 
 **Booster crate (crystals):** 60 crystals → 5 Overdrive + 3 Freeze + 2 Airstrike charges (370 gold of boosters for 300 gold-equivalent, −19 %).
 
-### 3.2 Commander upgrades (gold, permanent, 5 tracks × 5 tiers)
+### 3.2 Commander upgrades (gold, permanent, 5 tracks, 2–5 tiers each)
 
-| Track | Effect per tier | Max (tier 5) | Where it applies in the sim |
+| Track | Tiers | Effect per tier | Max | Tier costs (gold) | Where it applies in the sim |
+|---|---|---|---|---|---|
+| Production | 3 | +2 % | **+6 %** | 200 / 350 / 550 | player-owned generation interval ÷ 1.06 |
+| Capacity | 5 | +5 % | **+25 %** | 60 / 120 / 200 / 300 / 420 | player-owned tower capacity × 1.25, floor |
+| Starting garrison | 2 | +1 unit | **+2** | 400 / 700 | added to each player-owned tower at `createState` |
+| Booster cost | 5 | −5 % | **−25 %** | 60 / 120 / 200 / 300 / 420 | gold price of boosters, ceil |
+| March speed | 2 | +2 % | **+4 %** | 400 / 700 | player units' road speed × 1.04 |
+
+**Every track costs 1 100 gold** from tier 0 to its cap, so the full tree is still **5 500** and the earn/sink model in §6 is unchanged. Short tracks are *pricier per tier, not stronger*: the three tactical tracks that the playtest showed to be the dangerous ones (production, garrison, speed) got fewer tiers and the same gold folded into them, while the two tracks that cannot trivialise a level (capacity — inert for the bot; booster discount — economic) keep the cheap 5-step ladder that gives a new player something to buy after level 3. Tier N+1 unlocks only after tier N. Ladders live in `catalog.ts` as `TIER_COSTS_5 / _3 / _2`; `UPGRADE_TRACK_COST_GOLD` (1 100) is asserted per track by the catalog test.
+
+**Retune history (2026-09-13).** The v1 draft was 5 × 5 tiers with +4 % / +5 % / +1 / −5 % / +3 % per tier (caps +20 % / +25 % / +5 / −25 % / +15 %). The first `npm run playtest -- --upgrades max --seeds 20` measured a **median of 3.0★** (565 / 235 / 0 / 0 over 40 levels × 20 seeds; baseline without upgrades 2.0★, 176 / 594 / 28 / 2) — the gate below failed, and 18 levels went from a sub-80 % 3★ rate to 85–100 % purely from upgrades. Findings that drove the new caps (same harness, 20 seeds, 3★ runs out of 800; baseline 176):
+
+| Modifiers (everything else off) | 3★ runs | Median | Levels pushed above 80 % 3★ |
 |---|---|---|---|
-| Production | +4 % | **+20 %** | player-owned generation interval ÷ 1.20 |
-| Capacity | +5 % | **+25 %** | player-owned tower capacity × 1.25, floor |
-| Starting garrison | +1 unit | **+5** | added to each player-owned tower at `createState` |
-| Booster cost | −5 % | **−25 %** | gold price of boosters, ceil |
-| March speed | +3 % | **+15 %** | player units' road speed × 1.15 |
+| capacity +25 % | 173 | 2.0 | none — the bot never fills a tower before attacking |
+| production +5 % | 239 | 2.0 | 2, 28 |
+| production +10 % | 299 | 2.0 | 2, 28, 29, 37, 40 |
+| garrison +3 | 270 | 2.0 | 2 |
+| speed +10 % | 280 | 2.0 | 2, 14, 28 |
+| prod +10 % · cap +25 % · garrison +3 · speed 0 | 353 | 2.0 | 5 levels |
+| prod +10 % · cap +25 % · garrison +3 · **speed +5 %** | 399 | 2.0 (400 = 2.5) | 10 levels |
+| prod +10 % · cap +25 % · garrison +3 · speed +10 % (the proposed "+2 %/tier" retune) | 420 | **3.0** | 11 levels |
+| **prod +6 % · cap +25 % · garrison +2 · speed +4 % (shipped)** | **332** | **2.0** | 6 levels (2, 14, 28, 29, 37, 40) |
+| shipped, 40 seeds (1 600 runs, baseline 3★ 22 %) | 673 (42 %) | 2.0 | 5 levels (2, 12, 14, 28, 40) |
 
-Tier cost (every track): **60 / 120 / 200 / 300 / 420** gold → 1 100 per track, **5 500** for the full tree. Tier N+1 unlocks only after tier N.
+Two lessons. (1) The tactical tracks are **super-additive**: production +10 % and speed +5 % each pass comfortably on their own and together sit exactly on the gate, because a faster march *and* a bigger stream of units both shorten the same 3★ clock. (2) A handful of levels sit right on their star clock — **2 Supply Line** (baseline 3★ 22–40 %), **12 Gun Post** (50–55 %), **28 Burn the Bridge** (60–70 %), **40 The Crown** (45 %) — and flip to 90–100 % with *any* upgrade (even production +5 % alone flips 2 and 28). No cap that leaves upgrades meaningful can keep those under 80 %; that is a star-clock question for the Level Designer (hand-off below), not an economy knob. The shipped caps leave a margin of ≈ 8 % of runs below the gate at 40 seeds (673 of 1 600; the gate fails above 800).
 
-**Advantage cap (the "GDD advantage limit").** With everything maxed the player's edge is: +20 % throughput, +25 % capacity, +5 units per tower at start, +15 % speed. On a typical opener (one L1 barracks) that is 41 units after 30 s instead of 30 — roughly *one extra L1 barracks' worth of production during the first minute*. Booster discount is economic, not tactical. Acceptance test (owned by AI engineer + QA, Phase A): `npm run playtest -- --upgrades max` must show the reference bot's **median star count ≤ 2.5 across all 40 levels** and no level whose 3★ clock the bot beats on 100/100 seeds; if either fails, the *tier effects* shrink (never the costs). The limit is encoded as `ADVANTAGE_LIMIT` in `catalog.ts` and the unit test refuses any tier table that exceeds it. Enemy AIs never receive upgrades.
+**Advantage cap (the "GDD advantage limit").** With everything maxed the player's edge is: +6 % throughput, +25 % capacity, +2 units per tower at start, +4 % speed. On a typical opener (one L1 barracks) that is 34 units after 30 s instead of 30 — *a few seconds of head start, not an extra barracks* — and a 10 s march arrives 0.4 s earlier. Booster discount is economic, not tactical. Acceptance test (owned by AI engineer + QA, Phase A): `npm run playtest -- --upgrades max --seeds 20` must show the reference bot's **median star count ≤ 2.5 across all 40 levels** (target band 2.0–2.5 with margin), and no level should move from a sub-80 % 3★ rate to above 80 % purely from upgrades except the star-clock boundary levels listed above; if the median fails, the *tier effects* shrink (never the costs). The limit is encoded as `ADVANTAGE_LIMIT` in `catalog.ts`; the catalog test refuses any tier table that exceeds it, requires each track to land exactly on it (so the doc, the limit and the playtest headline always describe the same game), and pins the ceilings the playtest established (production ≤ +6 %, garrison ≤ +2, speed ≤ +4 %, capacity ≤ +25 %). Enemy AIs never receive upgrades. Current result: **median 2.0★**, 673 / 916 / 11 / 0 over 40 levels × 40 seeds.
 
 ### 3.3 Skins (crystals, cosmetic only)
 
@@ -150,9 +167,9 @@ Assumptions: ~4 levels per day (≈ 6 attempts), 2.2★ average on first clear, 
 
 | Free player | Gold earned (cum.) | Crystals earned (cum.) | Can afford (cumulative) |
 |---|---|---|---|
-| After 10 levels (~day 3) | ≈ 450 (220 stars, 130 ×2 ads, 90 daily, 10 replays) | ≈ 50 (20 milestone, 15 chest, 15 achievements) | 6 boosters + tiers 1–2 of one track; 1 continue + 1 skip in reserve |
-| After 20 levels (~day 6) | ≈ 970 | ≈ 135 (50 milestones, 20 band 1, 30 chest, 5 daily, 30 achievements) | 8 boosters + one track to tier 4; 1 skin (100–120) |
-| After 40 levels (~day 12) | ≈ 2 000 (880 stars, 530 ads, 480 daily, 120 replays) | ≈ 335 (150 milestones, 40 bands, 60 chest, 25 daily, 60 achievements) | 15 boosters + one track maxed + another at tier 2; 2 skins + spare continues |
+| After 10 levels (~day 3) | ≈ 450 (220 stars, 130 ×2 ads, 90 daily, 10 replays) | ≈ 50 (20 milestone, 15 chest, 15 achievements) | 6 boosters + capacity or booster-discount tiers 1–2 (180), or production tier 1 (200); 1 continue + 1 skip in reserve |
+| After 20 levels (~day 6) | ≈ 970 | ≈ 135 (50 milestones, 20 band 1, 30 chest, 5 daily, 30 achievements) | 8 boosters + production tiers 1–2 (550) or garrison / speed tier 1 (400) + a cheap 5-step track to tier 3; 1 skin (100–120) |
+| After 40 levels (~day 12) | ≈ 2 000 (880 stars, 530 ads, 480 daily, 120 replays) | ≈ 335 (150 milestones, 40 bands, 60 chest, 25 daily, 60 achievements) | 15 boosters + one track maxed (1 100) + another to tier 1–2; 2 skins + spare continues |
 | Steady state per day (3★ hunting) | ≈ 150–170 | ≈ 8–10 | full tree (5 500) ≈ 3 more weeks; every shop skin ≈ 6 weeks |
 
 | Spender | Gets | What it buys |
@@ -179,4 +196,4 @@ Assumptions: ~4 levels per day (≈ 6 attempts), 2.2★ average on first clear, 
 **Phase B — real money on native.** RevenueCat (`@revenuecat/purchases-capacitor`) + AdMob (`@capacitor-community/admob`, UMP consent) behind the same interfaces; products created in App Store Connect / Play Console with the ids above; sandbox testers; Publisher updates listing, privacy policy, declarations; Remove Ads / Premium reviewed with Apple's non-consumable guidelines. Ship as v1.0 native; web stays ad-free and purchase-free.
 **Phase C — LiveOps.** `weekend_pack` (Fri–Sun), *first-purchase double* (first crystal pack grants 2×, flagged in `OFFERS`), seasonal skin drops, band-completion "3★ challenge" bonuses. Remote-configurable ad caps (server- or JSON-driven) so frequencies change without a build.
 
-Handoffs: Game Designer — add §2.7 "Commander modifiers" and the advantage limit to the GDD, and retune star clocks only if `--upgrades max` fails; Gameplay Engineer — `PlayerModifiers` + snapshot ring buffer; Frontend — shop/result/defeat screens; AI Engineer + QA — playtest flag; Mobile Engineer — Phase B plugins; Publisher — §7.
+Handoffs: Game Designer — add §2.7 "Commander modifiers" and the advantage limit to the GDD; Level Designer — levels 2, 12, 28 and 40 sit on their 3★ clock (baseline 3★ rate 22–70 %, 90–100 % with any upgrade), so review those clocks rather than asking the economy to shrink further; AI Engineer — the `--upgrades max` run shows 11 / 1 600 1★ results that the no-upgrade run never produces (faster units change the bot's timing on a few seeds), worth a look; Gameplay Engineer — `PlayerModifiers` + snapshot ring buffer; Frontend — shop/result/defeat screens; AI Engineer + QA — playtest flag; Mobile Engineer — Phase B plugins; Publisher — §7.

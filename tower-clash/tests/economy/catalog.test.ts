@@ -14,6 +14,7 @@ import {
   INTERSTITIAL_RULES,
   SKINS,
   STORE_PRICE_POINTS_USD,
+  UPGRADE_TRACK_COST_GOLD,
 } from '../../src/economy/catalog';
 import type { IapProductDef } from '../../src/economy/catalog';
 
@@ -86,15 +87,33 @@ describe('economy catalog (docs/ECONOMY.md)', () => {
   it('commander upgrades stay within the GDD advantage limit', () => {
     for (const u of COMMANDER_UPGRADES) {
       expect(u.costGoldByTier.length).toBe(u.maxTier);
+      expect(u.maxTier).toBeGreaterThanOrEqual(2); // a one-tier "track" is a toggle, not progression
       for (let i = 1; i < u.costGoldByTier.length; i++) expect(u.costGoldByTier[i]!).toBeGreaterThan(u.costGoldByTier[i - 1]!);
-      const maxEffect = u.effect.perTier * u.maxTier;
-      expect(maxEffect).toBeLessThanOrEqual(ADVANTAGE_LIMIT[u.effect.kind] + 1e-9);
+      const maxEffect = Math.round(u.effect.perTier * u.maxTier * 1e4) / 1e4;
+      expect(maxEffect).toBeLessThanOrEqual(ADVANTAGE_LIMIT[u.effect.kind]);
+      // The limit is the measured cap, not a ceiling with slack: a track that stops short of it means
+      // the doc, the limit and the playtest headline no longer describe the same game.
+      expect(maxEffect).toBe(ADVANTAGE_LIMIT[u.effect.kind]);
+      // every track costs the same total; short tracks are pricier per tier, never stronger
+      expect(u.costGoldByTier.reduce((a, b) => a + b, 0)).toBe(UPGRADE_TRACK_COST_GOLD);
     }
+    // Retune bounds from the 2026-09-13 `--upgrades max` playtest (ECONOMY.md §3.2): production +10 %,
+    // speed +5 % or garrison +3 on their own already flip a third of the campaign to 3★, and the
+    // tactical tracks are super-additive, so the combined caps must stay under these ceilings.
+    expect(ADVANTAGE_LIMIT.productionMul).toBeLessThanOrEqual(0.06);
+    expect(ADVANTAGE_LIMIT.startingGarrison).toBeLessThanOrEqual(2);
+    expect(ADVANTAGE_LIMIT.marchSpeedMul).toBeLessThanOrEqual(0.04);
+    expect(ADVANTAGE_LIMIT.capacityMul).toBeLessThanOrEqual(0.25);
+    // …and still meaningful: every tactical track does something at max
+    expect(ADVANTAGE_LIMIT.productionMul).toBeGreaterThanOrEqual(0.04);
+    expect(ADVANTAGE_LIMIT.startingGarrison).toBeGreaterThanOrEqual(1);
+    expect(ADVANTAGE_LIMIT.marchSpeedMul).toBeGreaterThanOrEqual(0.02);
     const discount = COMMANDER_UPGRADES.find((u) => u.effect.kind === 'boosterDiscount')!;
     const premiumDiscount = Math.max(...IAP_PRODUCTS.map((p) => p.grants.boosterDiscount ?? 0));
     expect(discount.effect.perTier * discount.maxTier + premiumDiscount).toBeGreaterThan(ADVANTAGE_LIMIT.totalBoosterDiscount); // hence the cap exists
     expect(ADVANTAGE_LIMIT.totalBoosterDiscount).toBeLessThan(0.5);
-    // full tree = 5 tracks × 1100 gold (ECONOMY.md §3.2)
+    // full tree = 5 tracks × 1100 gold (ECONOMY.md §3.2) — unchanged by the retune
+    expect(UPGRADE_TRACK_COST_GOLD).toBe(1100);
     const total = COMMANDER_UPGRADES.reduce((s, u) => s + u.costGoldByTier.reduce((a, b) => a + b, 0), 0);
     expect(total).toBe(5500);
   });

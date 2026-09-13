@@ -126,27 +126,44 @@ export interface CommanderUpgradeDef {
   };
 }
 
-const UPGRADE_TIER_COSTS = [60, 120, 200, 300, 420] as const;
+/**
+ * Gold cost ladders. Every track costs 1 100 gold in total whatever its tier count: short tracks put
+ * the same gold into fewer, pricier tiers (ECONOMY.md §3.2 — "pricier, not stronger").
+ */
+const TIER_COSTS_5 = [60, 120, 200, 300, 420] as const;
+const TIER_COSTS_3 = [200, 350, 550] as const;
+const TIER_COSTS_2 = [400, 700] as const;
 
+/**
+ * Per-tier effects were retuned after the first `--upgrades max` playtest (2026-09-13): the original
+ * +20 % / +25 % / +5 / −25 % / +15 % caps put the reference bot at a median of 3.0★ (565/800 runs at
+ * 3★). Tactical tracks are super-additive — production +10 % and speed +5 % alone each pass, together
+ * they sit exactly on the 2.5★ gate — so the combined edge is held to prod +6 %, garrison +2, speed
+ * +4 % (capacity is inert for the bot and keeps its +25 %). See ECONOMY.md §3.2 for the trial table.
+ */
 export const COMMANDER_UPGRADES = [
-  { id: 'production', label: 'Production', maxTier: 5, costGoldByTier: UPGRADE_TIER_COSTS, effect: { kind: 'productionMul', perTier: 0.04 } },
-  { id: 'capacity', label: 'Capacity', maxTier: 5, costGoldByTier: UPGRADE_TIER_COSTS, effect: { kind: 'capacityMul', perTier: 0.05 } },
-  { id: 'garrison', label: 'Starting garrison', maxTier: 5, costGoldByTier: UPGRADE_TIER_COSTS, effect: { kind: 'startingGarrison', perTier: 1 } },
-  { id: 'booster_cost', label: 'Booster discount', maxTier: 5, costGoldByTier: UPGRADE_TIER_COSTS, effect: { kind: 'boosterDiscount', perTier: 0.05 } },
-  { id: 'march_speed', label: 'March speed', maxTier: 5, costGoldByTier: UPGRADE_TIER_COSTS, effect: { kind: 'marchSpeedMul', perTier: 0.03 } },
+  { id: 'production', label: 'Production', maxTier: 3, costGoldByTier: TIER_COSTS_3, effect: { kind: 'productionMul', perTier: 0.02 } },
+  { id: 'capacity', label: 'Capacity', maxTier: 5, costGoldByTier: TIER_COSTS_5, effect: { kind: 'capacityMul', perTier: 0.05 } },
+  { id: 'garrison', label: 'Starting garrison', maxTier: 2, costGoldByTier: TIER_COSTS_2, effect: { kind: 'startingGarrison', perTier: 1 } },
+  { id: 'booster_cost', label: 'Booster discount', maxTier: 5, costGoldByTier: TIER_COSTS_5, effect: { kind: 'boosterDiscount', perTier: 0.05 } },
+  { id: 'march_speed', label: 'March speed', maxTier: 2, costGoldByTier: TIER_COSTS_2, effect: { kind: 'marchSpeedMul', perTier: 0.02 } },
 ] as const satisfies readonly CommanderUpgradeDef[];
+
+/** Gold a single track costs from tier 0 to its cap; the full tree is five of these. */
+export const UPGRADE_TRACK_COST_GOLD = 1100;
 
 /**
  * GDD advantage limit (ECONOMY.md §3.2): the maximum cumulative edge any combination of permanent
  * upgrades may give the player. The reference bot with everything maxed must still land at a median
- * of ≤ 2.5★. Tier tables that would exceed these values fail the catalog test.
+ * of ≤ 2.5★ (measured 2026-09-13: 2.0★, 673/1600 runs at 3★ over 40 levels × 40 seeds). Tier tables
+ * that would exceed these values fail the catalog test.
  */
 export const ADVANTAGE_LIMIT = {
-  productionMul: 0.2,
+  productionMul: 0.06,
   capacityMul: 0.25,
-  startingGarrison: 5,
+  startingGarrison: 2,
   boosterDiscount: 0.25,
-  marchSpeedMul: 0.15,
+  marchSpeedMul: 0.04,
   /** Commander discount + premium discount together never exceed this. */
   totalBoosterDiscount: 0.3,
 } as const satisfies Record<UpgradeEffectKind, number> & { totalBoosterDiscount: number };

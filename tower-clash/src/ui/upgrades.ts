@@ -99,7 +99,7 @@ export function commanderSummary(save: SaveData): string | null {
   return parts.length ? parts.join(' · ') : null;
 }
 
-/** Total tiers bought across all tracks (0..25). */
+/** Total tiers bought across all tracks (0..17). */
 export function totalTiers(save: SaveData): number {
   return UPGRADE_DEFS.reduce((n, d) => n + upgradeTier(save, d.id), 0);
 }
