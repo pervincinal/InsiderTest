@@ -13,7 +13,10 @@ Priority = order within a section. Producer moves items; anyone may add to Bugs 
 - [ ] MM-1 Verify the Android debug APK from CI on a real phone; fix any WebView issue (safe areas, audio unlock, back button = pause) — mobile-engineer + qa
 - [ ] MM-2 Capacitor plugins: StatusBar (hidden), ScreenOrientation lock portrait, Haptics on capture, App back-button handler — mobile-engineer
 - [ ] MM-3 Signed release builds once keystore / Apple signing secrets exist (see docs/MOBILE.md) — mobile-engineer
-- [ ] MM-4 Store listing assets: 6 screenshots per platform via Playwright, feature graphic, privacy policy page — tech-artist + producer
+- [ ] PUB-1 Store listing texts EN + AZ (title, short/long description, keywords) and privacy policy — publisher
+- [ ] PUB-2 Store screenshots (6 per platform, captioned) + feature graphic rendered from the game — publisher
+- [ ] PUB-3 Launch checklist with account/secret status; release notes v0.1.0; version bump — publisher
+- [ ] PUB-4 Public README with play link, GIF and install instructions — publisher
 - [ ] MM-5 GitHub Pages deploy of the web build so the PWA has a public install URL — qa-engineer
 
 ## Later (M2 — content & feel)

@@ -7,7 +7,7 @@ Two independent projects live here:
 
 ## Tower Clash quick facts
 - Docs: `docs/GDD.md` (rules), `docs/PLAN.md` (milestones), `docs/BACKLOG.md` (work), `docs/TEAM.md` (roles), `docs/research/`.
-- Team roles: `.claude/agents/*.md`. Procedures: `.claude/skills/{daily-sprint,daily-report,game-conventions,level-authoring,playtest}`.
+- Team roles: `.claude/agents/*.md` (producer, game-designer, gameplay-engineer, frontend-engineer, ai-engineer, level-designer, qa-engineer, tech-artist, mobile-engineer, publisher). Procedures: `.claude/skills/{daily-sprint,daily-report,game-conventions,level-authoring,playtest}`.
 - Daily reports for the stakeholder (Azerbaijani): `reports/YYYY-MM-DD.md`.
 - Working branch: `claude/tower-war-game-plan-weqwpb`. Never push elsewhere.
 - Before committing game code: `cd tower-clash && npm run check` (and `npm run playtest` when sim/levels/AI changed).
