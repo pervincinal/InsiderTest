@@ -6,7 +6,7 @@
   "star2": 70000,
   "enemies": [{ "owner": "enemy1", "personality": "opportunist", "aggression": 0.4 }],
   "towers": [
-    { "id": "home", "x": 360, "y": 1160, "owner": "player", "units": 15, "level": 1, "kind": "barracks" },
+    { "id": "home", "x": 360, "y": 1160, "owner": "player", "units": 16, "level": 1, "kind": "barracks" },
     { "id": "w1", "x": 150, "y": 920, "owner": "neutral", "units": 5 },
     { "id": "e1", "x": 570, "y": 920, "owner": "neutral", "units": 5 },
     { "id": "mid", "x": 360, "y": 720, "owner": "neutral", "units": 8 },
