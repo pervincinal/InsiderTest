@@ -12,6 +12,7 @@ All members are Claude agents defined in `.claude/agents/`. The Producer is the 
 | Level Designer | `level-designer.md` | `src/levels/` | Authoring & validating levels with `level-authoring` |
 | QA Engineer | `qa-engineer.md` | `tests/`, CI, bug reports | Vitest, Playwright smoke/screenshots, regression triage |
 | Mobile Engineer | `mobile-engineer.md` | `capacitor.config.ts`, `android/`, `ios/`, mobile CI, `docs/MOBILE.md` | Native shells, APK/IPA builds, store prep |
+| Monetization Designer | `monetization-designer.md` | `docs/ECONOMY.md`, `src/economy/catalog.ts` | Currencies, IAP catalog and prices, ads strategy, offers, market research |
 | Publisher | `publisher.md` | `docs/publishing/`, `tower-clash/store/`, versioning, README | Store listings (EN/AZ), screenshots, privacy policy, release notes, launch checklist |
 | Tech Artist | `tech-artist.md` | Visual style, particles, WebAudio sfx | Juice, palette, colour-blind mode |
 
