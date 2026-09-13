@@ -13,7 +13,7 @@
     "levels:check": "tsx scripts/levelsCheck.ts",
     "playtest": "tsx scripts/playtest.ts",
     "check": "npm run typecheck && npm run lint && npm run test && npm run levels:check",
-    "e2e": "playwright test"
+    "e2e": "npm run build && playwright test"
   },
   "devDependencies": {
     "@playwright/test": "1.47.2",
