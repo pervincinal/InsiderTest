@@ -57,6 +57,7 @@ export interface Tower {
   units: number; // garrison in weight units
   genAccMs: number; // accumulated ms toward next produced unit
   artilleryCooldownMs: number;
+  defenceAcc: number; // fortress only: fractional hostile damage carried between arrivals
 }
 
 export interface Road {
@@ -117,7 +118,7 @@ export interface GameState {
 export type SimEvent =
   | { type: 'capture'; towerId: string; by: Owner; from: Owner }
   | { type: 'upgrade'; towerId: string; level: number }
-  | { type: 'unitDied'; x: number; y: number; owner: Owner; cause: 'clash' | 'artillery' | 'mine' | 'bridge' }
+  | { type: 'unitDied'; x: number; y: number; owner: Owner; cause: 'clash' | 'artillery' | 'mine' | 'barrier' | 'bridge' }
   | { type: 'bridgeCut'; roadId: string }
   | { type: 'won'; timeMs: number }
   | { type: 'lost'; timeMs: number };
