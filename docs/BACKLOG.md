@@ -7,10 +7,8 @@ Priority = order within a section. Producer moves items; anyone may add to Bugs 
 
 ## Next (ECON — Phase B/C after accounts exist)
 - [ ] ECON-1 Phase B: real RevenueCat + AdMob keys (secrets `RC_*`, `ADMOB_*`), sandbox purchase test on a device, App Store Connect / Play products created with catalog ids — mobile-engineer + publisher (needs stakeholder accounts)
-- [ ] ECON-6b Wire the sim `SnapshotRing`/`applyContinue` into the play screen (true 20 s rewind, keep original clock for stars; align catalog `snapshotEveryMs` 5000 → 1000) — frontend-engineer
-- [ ] ECON-10 Terrain theme skins: equip flow (`save.skins.equipped.theme`, shop list) now that the renderer supports `theme.*` — frontend-engineer
-- [ ] ECON-11 Level 30 seed 33 loss at 40 seeds (39/40) — level-designer
-- [ ] DOC-1 Privacy policy / store listing text still mentions the iOS tracking prompt; align with no-ATT (MOBILE.md §8.7 wording) — publisher
+- [ ] LV-3 Levels 21 (seed 33) and 23 (seed 34) are 39/40; level 6 is slow for the tutorial band (bot median 61 s) — level-designer
+- [ ] AI-1 Reference player has no `cutBridge` rule; bridge lessons (28–36) are won by fighting only — ai-engineer
 - [ ] QA-2 Real-device pass (Android APK, iPhone via TestFlight later) — needs stakeholder's phone
 - [ ] ECON-8 `app-ads.txt` hosting needs a domain root (user-site repo or custom domain) — needs stakeholder decision
 
@@ -64,6 +62,7 @@ Priority = order within a section. Producer moves items; anyone may add to Bugs 
 - Local 2-player on one screen
 
 ## Done
+- 2026-09-14 Day 2b: true 20 s rewind continue with original star clock; terrain theme skins buy/equip (title + play re-lit); level 30 → 100/100; star times recomputed for 6/9/10/11/27/31/37; privacy policy v2.1 + site pages + listing aligned with no-ATT; release notes v0.3.0 status
 - 2026-09-14 Day 2: achievements + booster crate + crystal→gold conversion; settings privacy options + support id; no ATT (non-personalised ads on iOS); dedicated skin sprites (7 roofs, 7 helmets) + terrain themes (dusk, winter night, neon); sim snapshot ring + continue API; levels 27/31/37 with marching enemy tanks (100/100 seeds, medians 53/51/71 s); Android WebView e2e project; privacy.html + support.html on the site; store shot 07 + IAP review frame; routine re-bound to the producer session
 - 2026-09-13 Sprint 3 (monetization): market research + ECONOMY.md + catalog; gold/crystal wallet, save v3; shop (crystal packs, starter pack, remove ads, premium bundle, skins, 5 commander upgrade tracks); daily reward; rewarded/interstitial ads flow with caps; sim player modifiers; store/ads providers (RevenueCat, AdMob, fakes) + native config; modifier-aware AI + `--upgrades` playtest; privacy policy v2, IAP/ads store disclosures, accounts guide; bundle-size and secrets-aware CI
 - 2026-09-13 Sprint 2b: threat-aware reference bot (levels 1–8 100/100 seeds, `--seeds` sweep, client-identical RNG), levels 10/11/20/35 retuned to 100/100, smoke test pinned to seed 1, Pages deploy non-fatal until enabled
