@@ -807,3 +807,52 @@ export function drawCrosshairGlyph(ctx: CanvasRenderingContext2D, color: string,
   ctx.fill();
   ctx.restore();
 }
+
+/** Trophy cup (achievements): bowl with two handles on a stem and base. `s` ≈ half the cup height. */
+export function drawTrophyGlyph(ctx: CanvasRenderingContext2D, color: string, cx: number, cy: number, s: number, outline?: string): void {
+  ctx.save();
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  const paint = (): void => {
+    ctx.fillStyle = color;
+    ctx.fill();
+    if (outline) {
+      ctx.strokeStyle = outline;
+      ctx.lineWidth = Math.max(2, s * 0.14);
+      ctx.stroke();
+    }
+  };
+  // bowl: flat top, rounded bottom
+  ctx.beginPath();
+  ctx.moveTo(cx - s * 0.8, cy - s);
+  ctx.lineTo(cx + s * 0.8, cy - s);
+  ctx.lineTo(cx + s * 0.62, cy + s * 0.05);
+  ctx.quadraticCurveTo(cx + s * 0.45, cy + s * 0.55, cx, cy + s * 0.6);
+  ctx.quadraticCurveTo(cx - s * 0.45, cy + s * 0.55, cx - s * 0.62, cy + s * 0.05);
+  ctx.closePath();
+  paint();
+  // handles
+  ctx.beginPath();
+  ctx.arc(cx - s * 0.85, cy - s * 0.45, s * 0.34, Math.PI * 0.5, Math.PI * 1.5);
+  ctx.arc(cx + s * 0.85, cy - s * 0.45, s * 0.34, Math.PI * 1.5, Math.PI * 0.5);
+  ctx.strokeStyle = outline ?? color;
+  ctx.lineWidth = Math.max(3, s * 0.22);
+  ctx.stroke();
+  if (outline) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = Math.max(1.5, s * 0.1);
+    ctx.stroke();
+  }
+  // stem + base
+  ctx.beginPath();
+  ctx.rect(cx - s * 0.16, cy + s * 0.55, s * 0.32, s * 0.4);
+  paint();
+  roundRect(ctx, { x: cx - s * 0.55, y: cy + s * 0.9, w: s * 1.1, h: s * 0.3 }, s * 0.1);
+  paint();
+  // glint
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.beginPath();
+  ctx.ellipse(cx - s * 0.4, cy - s * 0.55, s * 0.12, s * 0.28, -0.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}

@@ -8,8 +8,8 @@ import { attachPointer } from './input/pointer';
 import type { PointerPoint } from './input/pointer';
 import type { SaveData } from './ui/save';
 import { isLevelUnlocked, loadSave } from './ui/save';
-import type { App, Screen, StartOptions } from './ui/screens';
-import { LevelSelectScreen, ResultScreen, SettingsScreen, TitleScreen } from './ui/screens';
+import type { App, NativeInfoOverride, Screen, StartOptions } from './ui/screens';
+import { AchievementsScreen, LevelSelectScreen, ResultScreen, SettingsScreen, TitleScreen } from './ui/screens';
 import { PlayScreen } from './ui/play';
 import { ShopScreen } from './ui/shop';
 import { applyMotionPref } from './ui/motion';
@@ -38,7 +38,7 @@ export interface TowerClashDebug {
   /** Text of the tutorial hint on screen, or null. */
   getTutorialHint(): string | null;
   /** Result screen numbers, or null when not on the result screen. */
-  getResult(): { outcome: string; stars: number; coinsEarned: number; coinsTotal: number; crystalsEarned: number } | null;
+  getResult(): { outcome: string; stars: number; coinsEarned: number; coinsTotal: number; crystalsEarned: number; achievements: string[] } | null;
   /** Level-select lock state for a level id (undefined id → false). */
   isLevelUnlocked(id: number): boolean;
   /** Level-select path map scroll (logical px); setting is a no-op on other screens. */
@@ -67,6 +67,12 @@ export interface TowerClashDebug {
     autoLose(): boolean;
     /** Tap-equivalents on the result screen (economy offers). */
     resultAction(action: 'doubleGold' | 'continueCrystals' | 'continueAd' | 'skip'): boolean;
+    /** Open the achievements screen (from the current screen). */
+    openAchievements(): void;
+    /** Pretend the native providers report this support id / privacy requirement (settings → About). */
+    setNativeInfo(info: NativeInfoOverride | null): void;
+    /** What the settings About block shows, or null when not on the settings screen. */
+    getAboutInfo(): { version: string; supportId: string | null; privacyOptions: boolean } | null;
   };
 }
 
@@ -85,6 +91,7 @@ class TowerClashApp implements App {
   private speed = 1;
   private play: PlayScreen | null = null;
   private fakeAds: FakeAdsProvider | null = null;
+  nativeInfo?: NativeInfoOverride;
 
   constructor(canvas: HTMLCanvasElement) {
     this.view = createView(canvas);
@@ -169,7 +176,13 @@ class TowerClashApp implements App {
       else this.goLevels();
       return true;
     }
-    if (cur instanceof SettingsScreen || cur instanceof ResultScreen || cur instanceof LevelSelectScreen || cur instanceof ShopScreen) {
+    if (
+      cur instanceof SettingsScreen ||
+      cur instanceof ResultScreen ||
+      cur instanceof LevelSelectScreen ||
+      cur instanceof ShopScreen ||
+      cur instanceof AchievementsScreen
+    ) {
       cur.key(new KeyboardEvent('keydown', { key: 'Escape' }));
       return true;
     }
@@ -183,6 +196,10 @@ class TowerClashApp implements App {
 
   goShop(tab: ShopTab = 'crystals', back: () => void = () => this.goTitle()): void {
     this.go(new ShopScreen(this, tab, back));
+  }
+
+  goAchievements(back: () => void = () => this.goTitle()): void {
+    this.go(new AchievementsScreen(this, back));
   }
 
   setSpeed(n: number): void {
@@ -237,7 +254,8 @@ class TowerClashApp implements App {
       getResult: () => {
         if (!(this.current instanceof ResultScreen)) return null;
         const { outcome, stars, coinsEarned, coinsTotal } = this.current.info.ui;
-        return { outcome, stars, coinsEarned, coinsTotal, crystalsEarned: this.current.info.earnings.crystals };
+        const { earnings, achievements } = this.current.info;
+        return { outcome, stars, coinsEarned, coinsTotal, crystalsEarned: earnings.crystals, achievements: achievements.unlocked.map((a) => a.id) };
       },
       isLevelUnlocked: (id) => isLevelUnlocked(this.save, LEVELS, LEVELS.findIndex((l) => l.id === id)),
       setLevelSelectScroll: (y) => {
@@ -274,6 +292,11 @@ class TowerClashApp implements App {
           else cur.skipLevel();
           return true;
         },
+        openAchievements: () => this.goAchievements(this.backFromShop()),
+        setNativeInfo: (info) => {
+          this.nativeInfo = info ?? undefined;
+        },
+        getAboutInfo: () => (this.current instanceof SettingsScreen ? this.current.aboutInfo : null),
       },
     };
   }

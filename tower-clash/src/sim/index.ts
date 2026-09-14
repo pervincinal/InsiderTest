@@ -6,3 +6,4 @@ export { createState, roadIdFor } from './create';
 export { applyCommand } from './commands';
 export { step, capacityOf, modifiersFor, unitPosition, roadPointAt } from './step';
 export { getOutcome } from './outcome';
+export { SnapshotRing, applyContinue, cloneState, deepCopy } from './snapshot';

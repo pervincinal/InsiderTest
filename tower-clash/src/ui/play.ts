@@ -27,6 +27,8 @@ import { boosterPrice, equippedSkin } from '../economy/entitlements';
 import { canShowRewarded, showRewarded } from '../economy/adsFlow';
 import type { ResultEarnings } from '../economy/wallet';
 import { recordResult, spendGold } from '../economy/wallet';
+import type { MatchSummary } from '../economy/achievements';
+import { L3_LEVEL, emptyMatch, evaluateAchievements } from '../economy/achievements';
 import { CRYSTAL_SERVICES } from '../economy/catalog';
 import { isMuted, onPlayerCommand, onSimEvents, onSimFrame, playSfx, resetAudioLevel, toggleMuted } from '../audio/index';
 import { hapticCapture } from '../native/index';
@@ -65,6 +67,10 @@ export class PlayScreen implements Screen {
   private readonly toast = new Toast();
   /** Debug (e2e): throw every garrison at the enemy each AI tick so the level is lost quickly. */
   private suicide = false;
+  /** Facts about this match for the achievement rules (ECON-4), collected from sim events. */
+  readonly match: MatchSummary = emptyMatch();
+  /** Bridges the player asked to cut; a `bridgeCut` event on one of them counts as the player's. */
+  private readonly cutRequests = new Set<string>();
 
   constructor(
     private readonly app: App,
@@ -96,6 +102,7 @@ export class PlayScreen implements Screen {
       onCommand: (cmd) => {
         this.tutorial?.onCommand(cmd, this.state);
         onPlayerCommand(cmd, this.state); // `send` has no sim event, so the tick is keyed off the command
+        this.notePlayerCommand(cmd);
         this.loop.enqueue(cmd);
       },
     });
@@ -119,9 +126,17 @@ export class PlayScreen implements Screen {
       const rng = this.enemyRngs.get(enemy.owner);
       if (rng) cmds.push(...enemyCommands(state, enemy, rng));
     }
-    if (this.autoplay) cmds.push(...referencePlayerCommands(state, this.playerRng));
+    if (this.autoplay) {
+      const mine = referencePlayerCommands(state, this.playerRng);
+      for (const cmd of mine) this.notePlayerCommand(cmd);
+      cmds.push(...mine);
+    }
     if (this.suicide) cmds.push(...this.suicideCommands(state));
     return cmds;
+  }
+
+  private notePlayerCommand(cmd: Command): void {
+    if (cmd.type === 'cutBridge' && cmd.owner === 'player') this.cutRequests.add(cmd.roadId);
   }
 
   /**
@@ -162,16 +177,25 @@ export class PlayScreen implements Screen {
 
   private onEvents(events: SimEvent[]): void {
     const pal = this.app.palette();
+    const m = this.match;
     for (const ev of events) {
       if (ev.type === 'capture') {
         if (ev.by === 'player') hapticCapture();
+        if (ev.from === 'player') m.lostTower = true;
         const t = this.state.towers[ev.towerId];
+        if (t && ev.by === 'player') {
+          if (t.kind === 'fortress') m.capturedFortress = true;
+          if (t.kind === 'tankFactory') m.capturedTankFactory = true;
+        }
         if (t) this.effects.push({ x: t.x, y: t.y, color: pal.owners[ev.by], bornMs: this.nowMs, lifeMs: 450, kind: 'ring' });
       } else if (ev.type === 'unitDied') {
         this.effects.push({ x: ev.x, y: ev.y, color: pal.owners[ev.owner], bornMs: this.nowMs, lifeMs: 300, kind: 'puff' });
       } else if (ev.type === 'upgrade') {
         const t = this.state.towers[ev.towerId];
+        if (t?.owner === 'player' && ev.level >= L3_LEVEL) m.upgradedToL3 = true;
         if (t) this.effects.push({ x: t.x, y: t.y, color: pal.star, bornMs: this.nowMs, lifeMs: 350, kind: 'ring' });
+      } else if (ev.type === 'bridgeCut') {
+        if (this.cutRequests.has(ev.roadId)) m.cutBridge = true;
       }
     }
     onSimEvents(events, this.state);
@@ -236,9 +260,12 @@ export class PlayScreen implements Screen {
     const outcome = getOutcome(this.state);
     if (outcome === 'playing') return;
     this.earnings = recordResult(this.app.save, this.level, outcome, this.state.time);
+    this.match.outcome = outcome;
+    this.match.timeMs = this.state.time;
+    const achievements = evaluateAchievements(this.app.save, this.match);
     const ui = this.buildUi(); // after recordResult so the totals are final
     this.gestures.reset();
-    this.app.go(new ResultScreen(this.app, { state: this.state, level: this.level, ui, earnings: this.earnings, continued: this.reinforced }));
+    this.app.go(new ResultScreen(this.app, { state: this.state, level: this.level, ui, earnings: this.earnings, continued: this.reinforced, achievements }));
   }
 
   draw(view: View, nowMs: number): void {

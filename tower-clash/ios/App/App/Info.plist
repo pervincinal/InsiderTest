@@ -28,8 +28,11 @@
 	<string>ca-app-pub-3940256099942544~1458002511</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
-	<key>NSUserTrackingUsageDescription</key>
-	<string>Allowing tracking lets Tower Clash show ads that are more relevant to you. The game itself collects no personal data.</string>
+	<!-- No NSUserTrackingUsageDescription on purpose: the app never calls App Tracking
+	     Transparency and serves non-personalised ads (no tracking; docs/MOBILE.md §8.7,
+	     docs/publishing/STORE_LISTING.md §6.4 option A). Do not add it back without changing
+	     the App Privacy answers. SKAdNetworkItems stay: they are needed for Google's ad
+	     attribution reporting to advertisers and involve no user-level data. -->
 	<key>SKAdNetworkItems</key>
 	<!-- Google's SKAdNetwork list (https://developers.google.com/admob/ios/ios14). The first
 	     entry (cstr6suwn9) is Google's own; the rest are the mediation/buyer networks Google

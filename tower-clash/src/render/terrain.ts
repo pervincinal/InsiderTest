@@ -1,7 +1,7 @@
 import { C } from '../sim/constants';
 import { HUD } from './layout';
-import type { Biome, BiomeColors, Palette, Tones } from './palette';
-import { shade, withAlpha } from './palette';
+import type { Biome, BiomeColors, Palette, TerrainTheme, Tones } from './palette';
+import { shade, themeFor, themedBiome, withAlpha } from './palette';
 import type { View } from './view';
 
 /*
@@ -29,6 +29,8 @@ export interface TerrainSpec {
   bottom?: number;
   /** Level band look (defaults to grass). */
   biome?: Biome;
+  /** Equipped terrain theme (`THEME_IDS` in palette.ts); undefined / unknown = untinted. */
+  theme?: string;
 }
 
 interface CacheEntry {
@@ -167,14 +169,14 @@ function strokeBevel(ctx: CanvasRenderingContext2D, pts: Pt[], tones: Tones, wid
   }
 }
 
-function drawWater(ctx: CanvasRenderingContext2D, pal: Palette, rng: () => number): void {
+function drawWater(ctx: CanvasRenderingContext2D, pal: Palette, rng: () => number, theme: TerrainTheme): void {
   const g = ctx.createLinearGradient(0, 0, 0, C.MAP_H);
-  g.addColorStop(0, pal.waterTop);
-  g.addColorStop(1, pal.waterBottom);
+  g.addColorStop(0, theme.waterTop);
+  g.addColorStop(1, theme.waterBottom);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, C.MAP_W, C.MAP_H);
   // gentle wave bands, faint
-  ctx.strokeStyle = pal.waterLight;
+  ctx.strokeStyle = theme.tintAmount > 0 ? shade(theme.waterBottom, 0.35) : pal.waterLight;
   ctx.lineCap = 'round';
   ctx.globalAlpha = 0.28;
   ctx.lineWidth = 4;
@@ -374,9 +376,10 @@ function render(ctx: CanvasRenderingContext2D, pal: Palette, spec: TerrainSpec):
   const rng = makeRng(spec.seed * 104729 + 7);
   const top = spec.top ?? HUD.mapTop + 12;
   const bottom = spec.bottom ?? HUD.mapBottom + 18;
-  const biome = pal.biomes[spec.biome ?? 'grass'];
+  const theme = themeFor(spec.theme);
+  const biome = themedBiome(pal.biomes[spec.biome ?? 'grass'], theme, spec.biome ?? 'grass');
   const grass = biome.grass;
-  drawWater(ctx, pal, rng);
+  drawWater(ctx, pal, rng, theme);
 
   const outline = plateauPoints(spec.seed, top, bottom);
 
@@ -505,7 +508,7 @@ export function getTerrain(view: View, pal: Palette, spec: TerrainSpec): HTMLCan
   const s = view.dpr * view.scale;
   const pxW = Math.max(1, Math.ceil(C.MAP_W * s));
   const pxH = Math.max(1, Math.ceil(C.MAP_H * s));
-  const key = `${spec.key}|${spec.biome ?? 'grass'}|${pal.owners.enemy1}|${pxW}x${pxH}`;
+  const key = `${spec.key}|${spec.biome ?? 'grass'}|${themeFor(spec.theme).id}|${pal.owners.enemy1}|${pxW}x${pxH}`;
   const hit = cache.get(key);
   if (hit) return hit.canvas;
   const canvas = document.createElement('canvas');
@@ -549,6 +552,8 @@ interface Sparkle {
 interface Ambient {
   clouds: Cloud[];
   sparkles: Sparkle[];
+  /** Specks over the plateau, only drawn for themes with `glow`. */
+  specks: Sparkle[];
 }
 
 const ambientCache = new Map<string, Ambient>();
@@ -577,7 +582,11 @@ function ambientFor(spec: TerrainSpec): Ambient {
     if (!waterAt(x, y)) continue;
     sparkles.push({ x, y, len: 5 + rng() * 9, phase: rng() * Math.PI * 2 });
   }
-  const out = { clouds, sparkles };
+  const specks: Sparkle[] = [];
+  for (let i = 0; i < 26; i++) {
+    specks.push({ x: 40 + rng() * (C.MAP_W - 80), y: top + 30 + rng() * (bottom - top - 60), len: 1.6 + rng() * 1.4, phase: rng() * Math.PI * 2 });
+  }
+  const out = { clouds, sparkles, specks };
   ambientCache.set(spec.key, out);
   return out;
 }
@@ -588,8 +597,14 @@ function ambientFor(spec: TerrainSpec): Ambient {
  */
 export function drawTerrainOverlay(ctx: CanvasRenderingContext2D, pal: Palette, spec: TerrainSpec, nowMs: number, motion: boolean): void {
   const amb = ambientFor(spec);
+  const theme = themeFor(spec.theme);
   const t = motion ? nowMs / 1000 : 0;
-  ctx.fillStyle = pal.waterSparkle;
+  if (theme.ambient) {
+    // theme wash over the cached ground only: buildings, units and badges stay untinted
+    ctx.fillStyle = theme.ambient;
+    ctx.fillRect(0, 0, C.MAP_W, C.MAP_H);
+  }
+  ctx.fillStyle = theme.waterSparkle;
   for (let i = 0; i < amb.sparkles.length; i++) {
     const s = amb.sparkles[i]!;
     const tw = 0.5 + 0.5 * Math.sin(t * 1.6 + s.phase);
@@ -598,7 +613,22 @@ export function drawTerrainOverlay(ctx: CanvasRenderingContext2D, pal: Palette, 
     const x = ((s.x + t * 6 + i * 0.1) % (C.MAP_W + 20)) - 10;
     ctx.fillRect(x - s.len / 2, s.y, s.len, 2.5);
   }
-  ctx.globalAlpha = 0.5;
+  if (theme.glow) {
+    // fireflies / snow motes / neon dust: slow twinkle, a gentle drift when motion is allowed
+    ctx.fillStyle = theme.glow;
+    for (let i = 0; i < amb.specks.length; i++) {
+      const s = amb.specks[i]!;
+      const tw = 0.5 + 0.5 * Math.sin(t * 1.1 + s.phase);
+      if (tw < 0.2) continue;
+      ctx.globalAlpha = tw * 0.9;
+      const y = s.y + Math.sin(t * 0.7 + s.phase) * 4;
+      const x = s.x + Math.cos(t * 0.5 + s.phase * 1.3) * 5;
+      ctx.beginPath();
+      ctx.arc(x, y, s.len, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.globalAlpha = theme.cloudAlpha;
   ctx.fillStyle = pal.groundShadow;
   const span = C.MAP_W + 560;
   for (const c of amb.clouds) {
@@ -611,4 +641,101 @@ export function drawTerrainOverlay(ctx: CanvasRenderingContext2D, pal: Palette, 
     ctx.fill();
   }
   ctx.globalAlpha = 1;
+}
+
+/* ---------- shop swatch ---------- */
+
+/**
+ * Miniature island inside a rounded `size` × `size` tile centred on (x, y), coloured by a theme
+ * (`drawSkinPreview` for `theme.*` ids): water, island bevel, one road, a bush, the theme's
+ * sparkles / specks and its ambient wash. Sprites are added by the caller so they stay untinted.
+ */
+export function drawThemeSwatch(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, size: number, themeId: string): void {
+  const theme = themeFor(themeId);
+  const biome = themedBiome(pal.biomes.grass, theme, 'grass');
+  const half = size / 2;
+  const rad = size * 0.16;
+  const rng = makeRng(77);
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(x - half + rad, y - half);
+  ctx.arcTo(x + half, y - half, x + half, y + half, rad);
+  ctx.arcTo(x + half, y + half, x - half, y + half, rad);
+  ctx.arcTo(x - half, y + half, x - half, y - half, rad);
+  ctx.arcTo(x - half, y - half, x + half, y - half, rad);
+  ctx.closePath();
+  ctx.clip();
+  const g = ctx.createLinearGradient(0, y - half, 0, y + half);
+  g.addColorStop(0, theme.waterTop);
+  g.addColorStop(1, theme.waterBottom);
+  ctx.fillStyle = g;
+  ctx.fillRect(x - half, y - half, size, size);
+  // island: drop shadow, foam, cliff bands, grass lip, plateau
+  const ix = x;
+  const iy = y + size * 0.1;
+  const irx = size * 0.4;
+  const iry = size * 0.26;
+  const cliff = size * 0.07;
+  const blob = (dy: number, color: string, k = 1): void => {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.ellipse(ix, iy + dy, irx * k, iry * k, 0, 0, Math.PI * 2);
+    ctx.fill();
+  };
+  blob(cliff + size * 0.06, pal.groundShadow, 1.04);
+  ctx.strokeStyle = pal.foam;
+  ctx.lineWidth = size * 0.03;
+  ctx.beginPath();
+  ctx.ellipse(ix, iy + cliff, irx, iry, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  blob(cliff, shade(biome.cliff.shade, -0.28));
+  blob(cliff * 0.66, biome.cliff.shade);
+  blob(cliff * 0.3, biome.cliff.lit);
+  blob(size * 0.012, biome.grass.shade);
+  blob(0, biome.grass.mid);
+  ctx.fillStyle = biome.grass.lit;
+  ctx.globalAlpha = 0.35;
+  ctx.beginPath();
+  ctx.ellipse(ix - irx * 0.3, iy - iry * 0.3, irx * 0.45, iry * 0.4, -0.4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  // road across the island
+  const road: Pt[] = [
+    { x: ix - irx * 0.75, y: iy + iry * 0.35 },
+    { x: ix - irx * 0.2, y: iy - iry * 0.1 },
+    { x: ix + irx * 0.35, y: iy + iry * 0.05 },
+    { x: ix + irx * 0.8, y: iy - iry * 0.35 },
+  ];
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  road.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+  ctx.strokeStyle = biome.path.shade;
+  ctx.lineWidth = size * 0.1;
+  ctx.stroke();
+  ctx.strokeStyle = biome.path.lit;
+  ctx.lineWidth = size * 0.072;
+  ctx.stroke();
+  drawBush(ctx, pal, biome.bush, ix + irx * 0.45, iy + iry * 0.5, size * 0.07);
+  drawDots(ctx, biome.dots, ix - irx * 0.55, iy - iry * 0.3, rng);
+  // sparkles on the water, specks on the island (static: the shop never animates them)
+  ctx.fillStyle = theme.waterSparkle;
+  for (let i = 0; i < 7; i++) {
+    const sx = x - half + rng() * size;
+    const sy = y - half + (i < 4 ? rng() * size * 0.16 : size * 0.86 + rng() * size * 0.1);
+    ctx.fillRect(sx, sy, size * 0.06, size * 0.014);
+  }
+  if (theme.glow) {
+    ctx.fillStyle = theme.glow;
+    for (let i = 0; i < 9; i++) {
+      ctx.beginPath();
+      ctx.arc(ix + (rng() - 0.5) * irx * 1.5, iy + (rng() - 0.5) * iry * 1.5, size * 0.012 + rng() * size * 0.01, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  if (theme.ambient) {
+    ctx.fillStyle = theme.ambient;
+    ctx.fillRect(x - half, y - half, size, size);
+  }
+  ctx.restore();
 }

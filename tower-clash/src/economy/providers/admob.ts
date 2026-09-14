@@ -3,10 +3,21 @@
  * package.json). Loaded with a dynamic `import()` so the web bundle never contains the plugin.
  *
  * Flow (per the plugin's docs):
- *   init:  AdMob.initialize() -> UMP consent (requestConsentInfo / showConsentForm) -> iOS ATT
- *          prompt -> preload one interstitial and one rewarded ad.
+ *   init:  AdMob.initialize() -> UMP consent (requestConsentInfo / showConsentForm, EEA/UK only)
+ *          -> preload one interstitial and one rewarded ad.
  *   show:  show the preloaded ad, wait for its Dismissed / FailedToShow event, preload the next.
  *   reward: `{ rewarded: true }` only when `RewardAdPluginEvents.Rewarded` fired for this show.
+ *   privacy options: `privacyOptionsRequired()` mirrors UMP's `privacyOptionsRequirementStatus`;
+ *          `showPrivacyOptions()` reopens the consent form (`showPrivacyOptionsForm`) and
+ *          re-reads the consent state afterwards.
+ *
+ * No tracking (ECON-3, STORE_LISTING.md §6.4 option A): the iOS App Tracking Transparency prompt
+ * is never shown and `NSUserTrackingUsageDescription` is absent from Info.plist, so the IDFA is
+ * never available to the SDK. Every ad request on iOS carries `npa: 1` (non-personalised ads).
+ * On Android personalisation is decided by the UMP consent answer alone (the SDK reads the TCF
+ * string itself); outside the EEA/UK Google's defaults apply. Do not add
+ * `requestTrackingAuthorization` back without changing the App Privacy answers in
+ * docs/publishing/STORE_LISTING.md §6.4 and the privacy policy.
  *
  * Ad unit ids come from `config.ts` (Google's test units unless real ids are configured); the
  * AdMob APP ids live in AndroidManifest.xml / Info.plist (see docs/MOBILE.md §8).
@@ -23,9 +34,14 @@ const LOAD_TIMEOUT_MS = 12_000;
 /** Safety net: an ad that never reports Dismissed must not hang the game forever. */
 const SHOW_TIMEOUT_MS = 120_000;
 
+type PrivacyOptionsStatus = 'REQUIRED' | 'NOT_REQUIRED' | 'UNKNOWN';
+
 let admob: AdMobModule | null = null;
 let units: AdMobUnits | null = null;
 let canRequestAds = false;
+/** True => every ad request asks for non-personalised ads (`npa: 1`). Always true on iOS. */
+let nonPersonalised = false;
+let privacyOptionsStatus: PrivacyOptionsStatus = 'UNKNOWN';
 let initPromise: Promise<void> | null = null;
 let showing = false;
 
@@ -64,7 +80,19 @@ async function removeAll(handles: Array<Promise<ListenerHandle>>): Promise<void>
   }
 }
 
-async function runConsentFlow(mod: AdMobModule): Promise<boolean> {
+type ConsentInfo = import('@capacitor-community/admob').AdmobConsentInfo;
+
+function recordConsent(info: ConsentInfo): void {
+  canRequestAds = info.canRequestAds;
+  const s = info.privacyOptionsRequirementStatus as string | undefined;
+  privacyOptionsStatus = s === 'REQUIRED' || s === 'NOT_REQUIRED' ? s : 'UNKNOWN';
+}
+
+/**
+ * Google UMP consent (GDPR message configured in the AdMob console). Shows the form only where
+ * it is required (EEA/UK) and not yet answered. No iOS tracking prompt — see the file header.
+ */
+async function runConsentFlow(mod: AdMobModule): Promise<void> {
   const { AdmobConsentStatus } = mod;
   let info = await mod.AdMob.requestConsentInfo();
   if (info.status === AdmobConsentStatus.REQUIRED && info.isConsentFormAvailable) {
@@ -74,15 +102,7 @@ async function runConsentFlow(mod: AdMobModule): Promise<boolean> {
       warn('showConsentForm', err);
     }
   }
-  // iOS 14+: ask for tracking after the UMP form (Apple requires the prompt for personalized
-  // ads; the answer does not gate non-personalized ads). No-op on Android.
-  try {
-    const tracking = await mod.AdMob.trackingAuthorizationStatus();
-    if (tracking.status === 'notDetermined') await mod.AdMob.requestTrackingAuthorization();
-  } catch (err) {
-    warn('requestTrackingAuthorization', err);
-  }
-  return info.canRequestAds;
+  recordConsent(info);
 }
 
 function preloadInterstitial(): Promise<boolean> {
@@ -92,7 +112,12 @@ function preloadInterstitial(): Promise<boolean> {
   const mod = admob;
   const u = units;
   interstitialLoading = withTimeout(
-    mod.AdMob.prepareInterstitial({ adId: u.interstitial, isTesting: u.usesTestIds, immersiveMode: true }).then(
+    mod.AdMob.prepareInterstitial({
+      adId: u.interstitial,
+      isTesting: u.usesTestIds,
+      npa: nonPersonalised,
+      immersiveMode: true,
+    }).then(
       () => {
         interstitialReady = true;
         return true;
@@ -117,7 +142,7 @@ function preloadRewarded(unit: string): Promise<boolean> {
   const mod = admob;
   const u = units;
   rewardedLoading = withTimeout(
-    mod.AdMob.prepareRewardVideoAd({ adId: unit, isTesting: u.usesTestIds, immersiveMode: true }).then(
+    mod.AdMob.prepareRewardVideoAd({ adId: unit, isTesting: u.usesTestIds, npa: nonPersonalised, immersiveMode: true }).then(
       () => {
         rewardedReadyUnit = unit;
         return true;
@@ -141,15 +166,24 @@ async function doInit(): Promise<void> {
   try {
     const mod = await import('@capacitor-community/admob');
     units = adMobUnits(platform);
-    await mod.AdMob.initialize({ initializeForTesting: units.usesTestIds });
+    // iOS: no ATT prompt => the IDFA is never available, so ask for non-personalised ads
+    // explicitly (Apple's "no tracking" App Privacy answer, STORE_LISTING.md §6.4 option A).
+    nonPersonalised = platform === 'ios';
+    // "G"-rated creatives only, not child-directed (docs/ECONOMY.md §7, privacy policy B.6).
+    await mod.AdMob.initialize({
+      initializeForTesting: units.usesTestIds,
+      maxAdContentRating: mod.MaxAdContentRating.General,
+      tagForChildDirectedTreatment: false,
+    });
     admob = mod;
     try {
-      canRequestAds = await runConsentFlow(mod);
+      await runConsentFlow(mod);
     } catch (err) {
       warn('consent flow', err);
       // UMP unavailable (e.g. no consent message configured yet): AdMob still serves
       // non-personalized / test ads, so keep going.
       canRequestAds = true;
+      privacyOptionsStatus = 'UNKNOWN';
     }
     if (units.usesTestIds) console.info('[ads/admob] using Google TEST ad units');
     void preloadInterstitial();
@@ -169,6 +203,45 @@ export const adMobAds: AdsProvider = {
 
   isAvailable(): boolean {
     return admob !== null && canRequestAds;
+  },
+
+  async privacyOptionsRequired(): Promise<boolean> {
+    if (!admob) return false;
+    if (privacyOptionsStatus === 'UNKNOWN') {
+      // Consent info was not available at init (offline, no message configured): try once more
+      // so the Settings entry appears as soon as UMP can answer.
+      try {
+        recordConsent(await admob.AdMob.requestConsentInfo());
+      } catch (err) {
+        warn('requestConsentInfo', err);
+      }
+    }
+    return privacyOptionsStatus === 'REQUIRED';
+  },
+
+  async showPrivacyOptions(): Promise<void> {
+    if (!admob || showing) return;
+    if (!(await this.privacyOptionsRequired())) return;
+    const mod = admob;
+    try {
+      await mod.AdMob.showPrivacyOptionsForm();
+    } catch (err) {
+      warn('showPrivacyOptionsForm', err);
+      return;
+    }
+    // The answer may have changed what we are allowed to request: refresh `canRequestAds` and
+    // drop the preloaded ads so the next load honours the new consent state.
+    try {
+      recordConsent(await mod.AdMob.requestConsentInfo());
+    } catch (err) {
+      warn('requestConsentInfo', err);
+    }
+    interstitialReady = false;
+    rewardedReadyUnit = null;
+    if (canRequestAds && units) {
+      void preloadInterstitial();
+      void preloadRewarded(units.rewarded);
+    }
   },
 
   async showInterstitial(): Promise<boolean> {
@@ -249,6 +322,8 @@ export function resetAdMobForTests(): void {
   admob = null;
   units = null;
   canRequestAds = false;
+  nonPersonalised = false;
+  privacyOptionsStatus = 'UNKNOWN';
   initPromise = null;
   showing = false;
   interstitialReady = false;

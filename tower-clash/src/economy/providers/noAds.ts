@@ -18,4 +18,10 @@ export const noAds: AdsProvider = {
   async showRewarded(_placementId: string): Promise<RewardedResult> {
     return { rewarded: false };
   },
+  async privacyOptionsRequired(): Promise<boolean> {
+    return false;
+  },
+  async showPrivacyOptions(): Promise<void> {
+    /* no consent SDK on the web */
+  },
 };

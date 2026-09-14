@@ -63,11 +63,19 @@ jobs:
       - name: Install Chromium for Playwright
         run: npx playwright install --with-deps chromium
 
-      # Runs every spec in e2e/: smoke (title → level select → level 1 → win → result),
-      # content (every authored level loads) and perf (frame-time budget on the top level).
-      - name: Browser e2e (smoke + content + perf)
+      # Default Playwright project (`chromium`, Pixel 5 metrics): smoke (title → level select →
+      # level 1 → win → result), content (every authored level loads), economy and perf
+      # (frame-time budget on the top level).
+      - name: Browser e2e (smoke + content + economy + perf)
         timeout-minutes: 15
         run: npm run e2e
+
+      # Android WebView emulation (`android-webview` project: Pixel 7 metrics, `; wv)` user agent,
+      # touch input): safe-area layout, touch-tap flow with audio unlock, hardware back-button hook,
+      # background pause. Kept as its own step so a WebView-only regression is obvious in the log.
+      - name: Browser e2e (Android WebView emulation)
+        timeout-minutes: 10
+        run: npm run e2e:webview
 
       - name: Upload Playwright report, traces and screenshots
         if: failure()

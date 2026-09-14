@@ -2,7 +2,11 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { SaveData } from '../../src/ui/save';
 import { SAVE_KEY, SAVE_KEY_V2, defaultSave, loadSaveFrom, setSaveStorageForTests } from '../../src/ui/save';
 import {
+  CONVERSION_PACKS,
+  buyBoosterCrate,
   claimDaily,
+  conversionGold,
+  convertCrystals,
   dailyStatus,
   dayKey,
   earnCrystals,
@@ -16,7 +20,7 @@ import {
 } from '../../src/economy/wallet';
 import { boosterDiscount, boosterPrice, equippedSkin, interstitialsDisabled, ownsProduct, visibleProducts } from '../../src/economy/entitlements';
 import { buyUpgrade, commanderSummary, modifiersFromSave, upgradeCost, upgradeTier } from '../../src/ui/upgrades';
-import { EARN_RULES, IAP_PRODUCTS } from '../../src/economy/catalog';
+import { CONVERSION, CRYSTAL_SERVICES, EARN_RULES, IAP_PRODUCTS } from '../../src/economy/catalog';
 import type { StoreProvider } from '../../src/economy/store';
 import { makeLevel } from '../helpers';
 
@@ -57,6 +61,48 @@ describe('balances', () => {
     expect(earnGold(save, Number.NaN)).toBe(0);
     const written = JSON.parse(store.dump()[SAVE_KEY]!) as { gold: number; crystals: number; version: number };
     expect(written).toMatchObject({ gold: 0, crystals: 0, version: 3 });
+  });
+});
+
+describe('crystals → gold conversion (ECONOMY.md §2)', () => {
+  it('pays goldPerCrystal per crystal for a catalog pack, persists, and refuses odd sizes or an empty wallet', () => {
+    const [small, mid] = CONVERSION_PACKS as [number, number, ...number[]];
+    expect(CONVERSION_PACKS).toEqual(CONVERSION.packsCrystals);
+    expect(conversionGold(small)).toBe(small * CONVERSION.goldPerCrystal);
+    save.crystals = mid;
+    expect(convertCrystals(save, small + 1)).toBeNull(); // not an offered pack
+    expect(convertCrystals(save, mid + 1)).toBeNull(); // not offered either
+    expect(save).toMatchObject({ crystals: mid, gold: 0 });
+    expect(convertCrystals(save, small)).toBe(small * CONVERSION.goldPerCrystal);
+    expect(save).toMatchObject({ crystals: mid - small, gold: small * CONVERSION.goldPerCrystal });
+    expect(convertCrystals(save, mid)).toBeNull(); // unaffordable now: nothing changes
+    expect(save).toMatchObject({ crystals: mid - small, gold: small * CONVERSION.goldPerCrystal });
+    const written = JSON.parse(store.dump()[SAVE_KEY]!) as { gold: number; crystals: number };
+    expect(written).toEqual(expect.objectContaining({ gold: small * CONVERSION.goldPerCrystal, crystals: mid - small }));
+  });
+
+  it('never converts gold into crystals (no such function; balances only move one way)', () => {
+    save.gold = 10_000;
+    expect(convertCrystals(save, CONVERSION_PACKS[0]!)).toBeNull();
+    expect(save.crystals).toBe(0);
+    expect(save.gold).toBe(10_000);
+  });
+});
+
+describe('booster crate (ECONOMY.md §3.1)', () => {
+  it('60 crystals → 5 / 3 / 2 charges, stacking with owned charges; unaffordable = nothing', () => {
+    const crate = CRYSTAL_SERVICES.boosterCrate;
+    expect(buyBoosterCrate(save)).toBeNull();
+    expect(save.charges).toEqual({ overdrive: 0, freeze: 0, airstrike: 0 });
+    save.crystals = crate.costCrystals * 2 - 1;
+    save.charges.freeze = 1;
+    expect(buyBoosterCrate(save)).toEqual(crate.charges);
+    expect(save.charges).toEqual({ overdrive: 5, freeze: 4, airstrike: 2 });
+    expect(save.crystals).toBe(crate.costCrystals - 1);
+    expect(buyBoosterCrate(save)).toBeNull();
+    expect(save.charges).toEqual({ overdrive: 5, freeze: 4, airstrike: 2 });
+    const written = JSON.parse(store.dump()[SAVE_KEY]!) as { charges: typeof save.charges };
+    expect(written.charges).toEqual({ overdrive: 5, freeze: 4, airstrike: 2 });
   });
 });
 
@@ -107,6 +153,7 @@ describe('grantProduct', () => {
       purchase: async (id) => ({ ok: false, productId: id, error: 'unavailable' }),
       restore: async () => ['remove_ads', 'crystals_100', 'remove_ads'],
       isAvailable: () => true,
+      getSupportId: async () => null,
     };
     expect(await restorePurchases(save, fake)).toEqual(['remove_ads']);
     expect(save.entitlements.noAds).toBe(true);

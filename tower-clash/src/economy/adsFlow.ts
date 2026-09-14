@@ -75,6 +75,9 @@ export function createFakeAds(delayMs = 0): FakeAdsProvider {
       fake.rewarded += 1;
       return { rewarded: true };
     },
+    // No consent SDK in the fake: the Settings "Privacy options" entry stays hidden.
+    privacyOptionsRequired: async () => false,
+    showPrivacyOptions: async () => undefined,
   };
   return fake;
 }

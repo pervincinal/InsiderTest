@@ -1,38 +1,40 @@
 {
   "id": 27,
   "name": "Armour Race",
-  "lesson": "Enemy tank factory: its tanks pile up to 40 weight and never march on their own, so take it while it is still cheap, or leave it for last since it cannot hurt you",
-  "star3": 75000,
-  "star2": 150000,
+  "lesson": "Enemy tank factory: it throws its whole bank of tanks at the weakest tower next to it, and one 5-weight tank flips a garrison of four. Keep the tower facing it above the bank, and take the factory before the bank reaches 40",
+  "star3": 50000,
+  "star2": 100000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.5},
     {"owner": "enemy2", "personality": "opportunist", "aggression": 0.5}
   ],
   "towers": [
-    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 14, "level": 1, "kind": "barracks"},
-    {"id": "w", "x": 150, "y": 1000, "owner": "neutral", "units": 5},
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "factory", "x": 150, "y": 1120, "owner": "player", "units": 10, "level": 1, "kind": "tankFactory"},
+    {"id": "depot", "x": 130, "y": 930, "owner": "neutral", "units": 8},
     {"id": "e", "x": 570, "y": 1000, "owner": "neutral", "units": 5},
-    {"id": "fort", "x": 360, "y": 880, "owner": "neutral", "units": 6, "kind": "fortress"},
-    {"id": "nw", "x": 150, "y": 720, "owner": "neutral", "units": 6},
-    {"id": "ne", "x": 570, "y": 720, "owner": "neutral", "units": 6},
-    {"id": "red", "x": 150, "y": 520, "owner": "enemy1", "units": 12, "level": 1, "kind": "barracks"},
-    {"id": "redfactory", "x": 250, "y": 300, "owner": "enemy1", "units": 10, "level": 1, "kind": "tankFactory"},
-    {"id": "green", "x": 570, "y": 520, "owner": "enemy2", "units": 12, "level": 1, "kind": "barracks"},
-    {"id": "greenkeep", "x": 500, "y": 300, "owner": "enemy2", "units": 6, "level": 1, "kind": "fortress"}
+    {"id": "mid", "x": 360, "y": 900, "owner": "neutral", "units": 8},
+    {"id": "nw", "x": 150, "y": 700, "owner": "neutral", "units": 6},
+    {"id": "ne", "x": 570, "y": 700, "owner": "neutral", "units": 6},
+    {"id": "redfactory", "x": 150, "y": 460, "owner": "enemy1", "units": 10, "level": 1, "kind": "tankFactory"},
+    {"id": "red", "x": 200, "y": 270, "owner": "enemy1", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "green", "x": 570, "y": 460, "owner": "enemy2", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "top", "x": 430, "y": 290, "owner": "neutral", "units": 8}
   ],
   "roads": [
-    {"a": "home", "b": "w"},
+    {"a": "home", "b": "factory"},
+    {"a": "factory", "b": "depot"},
     {"a": "home", "b": "e"},
-    {"a": "w", "b": "fort"},
-    {"a": "e", "b": "fort"},
-    {"a": "w", "b": "nw"},
+    {"a": "home", "b": "mid"},
+    {"a": "e", "b": "mid"},
+    {"a": "mid", "b": "nw"},
+    {"a": "mid", "b": "ne"},
     {"a": "e", "b": "ne"},
-    {"a": "fort", "b": "red"},
-    {"a": "nw", "b": "red"},
-    {"a": "fort", "b": "green"},
+    {"a": "depot", "b": "nw"},
+    {"a": "nw", "b": "redfactory"},
     {"a": "ne", "b": "green"},
-    {"a": "red", "b": "redfactory"},
-    {"a": "green", "b": "greenkeep"},
-    {"a": "red", "b": "green"}
+    {"a": "redfactory", "b": "red"},
+    {"a": "red", "b": "top"},
+    {"a": "green", "b": "top"}
   ]
 }

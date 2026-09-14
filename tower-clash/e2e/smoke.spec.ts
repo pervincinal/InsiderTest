@@ -277,7 +277,7 @@ test.describe('Tower Clash smoke', () => {
     expect(saveAfterWin?.stars['1']).toBe(stars);
     // result screen shows the coins of this (first) clear and the running total
     const result = await page.evaluate(() => window.__towerclash.getResult());
-    expect(result).toEqual({ outcome: 'won', stars, coinsEarned: stars * COINS_PER_STAR, coinsTotal: coinsBeforeWin + stars * COINS_PER_STAR, crystalsEarned: 0 });
+    expect(result).toMatchObject({ outcome: 'won', stars, coinsEarned: stars * COINS_PER_STAR, coinsTotal: coinsBeforeWin + stars * COINS_PER_STAR, crystalsEarned: 0 });
     expect(saveAfterWin?.gold).toBe(result!.coinsTotal);
     await page.waitForTimeout(250); // let capture effects fade so the shot shows the overlay
     await shot(page, 'result');

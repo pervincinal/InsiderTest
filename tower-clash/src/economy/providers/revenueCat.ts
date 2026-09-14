@@ -206,6 +206,17 @@ export const revenueCatStore: StoreProvider = {
       }
     }
   },
+
+  async getSupportId(): Promise<string | null> {
+    if (!rc) return null;
+    try {
+      const { appUserID } = await rc.Purchases.getAppUserID();
+      return typeof appUserID === 'string' && appUserID.length > 0 ? appUserID : null;
+    } catch (err) {
+      warn('getAppUserID', err);
+      return null;
+    }
+  },
 };
 
 /** Test hook. */

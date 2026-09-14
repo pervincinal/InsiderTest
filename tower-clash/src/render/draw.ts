@@ -2,7 +2,7 @@ import type { GameState, LevelDef, Outcome, Road, Unit } from '../sim/types';
 import { C } from '../sim/constants';
 import { capacityOf, roadPointAt } from '../sim/step';
 import type { Biome, Palette } from './palette';
-import { biomeFor, withAlpha } from './palette';
+import { biomeFor, themeFor, withAlpha } from './palette';
 import type { View } from './view';
 import { applyDeviceTransform, applyTransform, clipToMap } from './view';
 import { HUD } from './layout';
@@ -37,7 +37,7 @@ export interface PlayUi {
   coinsTotal: number;
   /** Visual effects fed from sim events (optional: menus / tests draw without them). */
   particles?: ParticleSystem;
-  /** Equipped cosmetic skins; applied to the player's towers and soldiers only. */
+  /** Equipped cosmetic skins; roof / helmet apply to the player's towers and soldiers only, the theme re-lights the ground. */
   skin?: TowerSkin;
 }
 
@@ -505,13 +505,14 @@ function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState
 
 const specCache = new WeakMap<GameState, TerrainSpec>();
 
-function terrainSpec(state: GameState): TerrainSpec {
+function terrainSpec(state: GameState, theme: string | undefined): TerrainSpec {
   let spec = specCache.get(state);
-  if (spec) return spec;
+  if (spec && spec.theme === theme) return spec;
   spec = {
     key: `level:${state.levelId}`,
     seed: state.levelId,
     biome: biomeFor(state.levelId),
+    theme,
     roads: Object.values(state.roads).map((r) => ({ points: r.points, kind: r.kind })),
     towers: Object.values(state.towers).map((t) => ({ x: t.x, y: t.y })),
   };
@@ -522,17 +523,18 @@ function terrainSpec(state: GameState): TerrainSpec {
 /** Draw one frame. Reads state and ui; never mutates either. `nowMs` drives purely visual motion. */
 export function drawGame(ctx: CanvasRenderingContext2D, state: GameState, view: View, ui: PlayUi, nowMs = 0): void {
   const pal = ui.palette;
+  const theme = ui.skin?.theme;
 
-  // Letterbox bars in device space (deep water), then the map in logical space.
+  // Letterbox bars in device space (deep water, themed), then the map in logical space.
   applyDeviceTransform(view);
-  ctx.fillStyle = pal.letterbox;
+  ctx.fillStyle = theme ? themeFor(theme).letterbox : pal.letterbox;
   ctx.fillRect(0, 0, view.cssW, view.cssH);
 
   ctx.save();
   applyTransform(view);
   clipToMap(view);
   const motion = motionAllowed();
-  const spec = terrainSpec(state);
+  const spec = terrainSpec(state, theme);
   // capture shake moves the whole world (not the HUD)
   const shake = motion ? (ui.particles?.shake(nowMs) ?? { dx: 0, dy: 0 }) : { dx: 0, dy: 0 };
   ctx.save();

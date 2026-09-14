@@ -7,10 +7,10 @@
  * Owned by the Frontend Engineer.
  */
 import type { LevelDef } from '../sim/types';
-import type { SaveData } from '../ui/save';
+import type { BoosterCharges, SaveData } from '../ui/save';
 import { starsFor, writeSave } from '../ui/save';
 import type { IapProductDef } from './catalog';
-import { EARN_RULES, IAP_PRODUCTS } from './catalog';
+import { CONVERSION, CRYSTAL_SERVICES, EARN_RULES, IAP_PRODUCTS } from './catalog';
 import type { StoreProvider } from './store';
 import { getStore } from './store';
 
@@ -66,6 +66,44 @@ export function spendCrystals(save: SaveData, amount: number): boolean {
   save.crystals -= Math.floor(amount);
   writeSave(save);
   return true;
+}
+
+/* ---------- crystal sinks: gold conversion, booster crate ---------- */
+
+/** Gold a conversion of `crystals` pays (CONVERSION.goldPerCrystal). */
+export function conversionGold(crystals: number): number {
+  return Math.max(0, Math.floor(crystals)) * CONVERSION.goldPerCrystal;
+}
+
+/** Pack sizes (in crystals) the shop offers for conversion. */
+export const CONVERSION_PACKS: readonly number[] = CONVERSION.packsCrystals;
+
+/**
+ * Crystals → gold, one catalog pack at a time (gold → crystals never exists). Returns the gold
+ * added, or null (nothing changes) when the pack is not offered or unaffordable.
+ */
+export function convertCrystals(save: SaveData, crystals: number): number | null {
+  if (!CONVERSION_PACKS.includes(crystals)) return null;
+  if (!spendCrystals(save, crystals)) return null;
+  const gold = conversionGold(crystals);
+  save.gold += gold;
+  writeSave(save);
+  return gold;
+}
+
+/**
+ * Booster crate (ECONOMY.md §3.1): crystals → pre-paid charges of every booster. Returns the
+ * charges added, or null (nothing changes) when unaffordable.
+ */
+export function buyBoosterCrate(save: SaveData): BoosterCharges | null {
+  const crate = CRYSTAL_SERVICES.boosterCrate;
+  if (!spendCrystals(save, crate.costCrystals)) return null;
+  const added: BoosterCharges = { ...crate.charges };
+  save.charges.overdrive += added.overdrive;
+  save.charges.freeze += added.freeze;
+  save.charges.airstrike += added.airstrike;
+  writeSave(save);
+  return added;
 }
 
 /* ---------- store grants ---------- */

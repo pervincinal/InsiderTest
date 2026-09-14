@@ -8,8 +8,8 @@
  *
  *   --google
  *   store/screenshots/raw/NN-<name>.png        – uncaptioned 1080×1920 frames (viewport 360×640 @3x)
- *   store/screenshots/en/01..06.png            – captioned phone screenshots, English
- *   store/screenshots/az/01..06.png            – captioned phone screenshots, Azerbaijani
+ *   store/screenshots/en/01..07.png            – captioned phone screenshots, English
+ *   store/screenshots/az/01..07.png            – captioned phone screenshots, Azerbaijani
  *   store/feature-graphic.png                  – 1024×500 Google Play feature graphic (drawn on canvas)
  *   Google Play accepts any 9:16 size between 320 and 3840 px, so this set may be scaled down
  *   (1080×1920 → 945×1680 → …) until every file fits the size budget.
@@ -17,8 +17,18 @@
  *   --apple
  *   store/screenshots/raw-apple-6.7/NN-<name>.png – 1290×2796 frames (viewport 430×932 @3x)
  *   store/screenshots/raw-apple-6.5/NN-<name>.png – 1284×2778 frames (viewport 428×926 @3x)
- *   store/screenshots/apple-6.7/en/01..06.png     – captioned, exactly 1290×2796 (iPhone 6.7")
- *   store/screenshots/apple-6.5/en/01..06.png     – captioned, exactly 1284×2778 (iPhone 6.5")
+ *   store/screenshots/apple-6.7/en/01..07.png     – captioned, exactly 1290×2796 (iPhone 6.7")
+ *   store/screenshots/apple-6.5/en/01..07.png     – captioned, exactly 1284×2778 (iPhone 6.5")
+ *   store/iap-review/shop-crystals.png            – uncaptioned 1290×2796 shop frame, Crystals tab: the
+ *                                                   App Store Connect "review screenshot" for every in-app
+ *                                                   purchase (≥ 640×920). Without `--apple` it is written
+ *                                                   from the Google set instead (1080×1920).
+ *
+ *   Frame 07 (ECON-7) is the shop on its Upgrades tab (Commander upgrades, paid with in-game gold) on a
+ *   seeded mid-game save. The public sets deliberately do not use the Crystals tab: it shows the
+ *   catalogue's fallback USD prices and the web build's "Test store" line, and a fixed-currency price
+ *   in a public screenshot is a consumer-law problem in the EU (STORE_LISTING.md §1.3). The IAP review
+ *   frame is the Crystals tab because Apple needs the purchasable product visible in-app.
  *   App Store Connect only accepts these exact sizes, so the Apple sets are never scaled. Every
  *   file is first re-encoded losslessly (`pngRecompress.mjs`); when it is still over budget the
  *   script steps down `APPLE_QUALITY_LADDER` at the same pixel size: fewer colour levels per
@@ -32,6 +42,7 @@
  */
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { get } from 'node:http';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
@@ -54,6 +65,8 @@ const PORT = portArg ? Number(portArg.slice('--port='.length)) : 4180;
 const URL = `http://localhost:${PORT}/`;
 const DO_APPLE = flag('apple') || flag('all');
 const DO_GOOGLE = flag('google') || flag('all') || !flag('apple');
+/** The IAP review frame is taken from the Apple 6.7" set (1290×2796) when it is rendered, else from the Google set (1080×1920). */
+const IAP_REVIEW_SET = DO_APPLE ? 'apple-6.7' : 'google';
 
 /** Order matters: index N becomes <lang>/0N.png. */
 const SHOTS = [
@@ -63,7 +76,25 @@ const SHOTS = [
   { name: 'level-09-fortress', en: 'Storm the fortress', az: 'Qalanı ələ keçir' },
   { name: 'level-15-citadel', en: 'Silence the guns', az: 'Topları susdur' },
   { name: 'result-win', en: 'Three-star every level', az: 'Hər səviyyədə üç ulduz' },
+  { name: 'shop-upgrades', en: 'Boost your commander', az: 'Komandirini gücləndir', shop: 'upgrades' },
 ];
+
+/** Uncaptioned IAP review frame (Apple): the shop's Crystals tab, written by the first set rendered. */
+const IAP_REVIEW = { file: join(STORE, 'iap-review', 'shop-crystals.png'), tab: 'crystals' };
+
+/**
+ * Save-v3 seed for the shop frames (`towerclash.save.v3`, normalised by `loadSave` on reload): a
+ * plausible mid-game player — levels 1–14 cleared, some gold and crystals earned in play, two
+ * Commander tracks already trained so the Upgrades tab shows filled tier pips and "Now / Next"
+ * lines. Nothing here is a purchase: no entitlements, no skins, `purchases: []`.
+ */
+const SHOP_SAVE = {
+  version: 3,
+  gold: 1450,
+  crystals: 140,
+  stars: Object.fromEntries(Array.from({ length: 14 }, (_, i) => [String(i + 1), (i + 1) % 3 === 0 ? 2 : 3])),
+  upgrades: { production: 2, capacity: 1 },
+};
 
 /**
  * One entry per store format. `exact` = the output must keep its pixel size (App Store);
@@ -126,6 +157,24 @@ const kb = (n) => `${(n / 1024).toFixed(0)} KB`;
 
 /* ---------- preview server ---------- */
 
+/**
+ * Readiness probe with `node:http` rather than the global `fetch`: in sandboxes that route Node's
+ * fetch through an outbound proxy (`HTTPS_PROXY` set), `fetch('http://localhost:…')` fails while a
+ * plain `http.get` — and Chromium — reach the preview server fine.
+ */
+const httpOk = (url) =>
+  new Promise((resolve) => {
+    const req = get(url, (res) => {
+      res.resume();
+      resolve((res.statusCode ?? 500) < 400);
+    });
+    req.on('error', () => resolve(false));
+    req.setTimeout(2000, () => {
+      req.destroy();
+      resolve(false);
+    });
+  });
+
 async function startPreview() {
   if (!existsSync(join(ROOT, 'dist', 'index.html'))) throw new Error('dist/ missing — run `npm run build` first');
   const vite = join(ROOT, 'node_modules', 'vite', 'bin', 'vite.js');
@@ -139,12 +188,7 @@ async function startPreview() {
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
     if (child.exitCode !== null) throw new Error(`vite preview exited early:\n${log}`);
-    try {
-      const res = await fetch(URL);
-      if (res.ok) return child;
-    } catch {
-      /* not up yet */
-    }
+    if (await httpOk(URL)) return child;
     await sleep(200);
   }
   child.kill('SIGKILL');
@@ -213,7 +257,9 @@ async function playToResult(page, id, fastUntilMs) {
     let deadline = Date.now() + 60_000;
     while (Date.now() < deadline && (await screen(page)) === 'play' && (await simTime(page)) < fastUntilMs) await sleep(100);
     await page.evaluate(() => window.__towerclash.setSpeed(1));
-    deadline = Date.now() + 90_000;
+    // Generous: the 1290×2796 Apple canvas at ×1 runs well below real time when the machine is busy
+    // (e.g. e2e suites in parallel), and the sim advances per rendered frame.
+    deadline = Date.now() + 240_000;
     while (Date.now() < deadline && (await screen(page)) !== 'result') await sleep(150);
     result = await page.evaluate(() => window.__towerclash.getResult());
     if (result?.outcome === 'won') break;
@@ -247,6 +293,24 @@ async function captureRaw(browser, set) {
   const result = await playToResult(page, 1, 12_000);
   await page.screenshot({ path: out(5) });
 
+  // shop frames on the seeded save (the shop is a full screen, so nothing from the result overlays it)
+  await seedShopSave(page);
+  for (let i = 6; i < SHOTS.length; i++) {
+    await openShop(page, SHOTS[i].shop);
+    await page.screenshot({ path: out(i) });
+  }
+  if (set.id === IAP_REVIEW_SET) {
+    await openShop(page, IAP_REVIEW.tab);
+    mkdirSync(dirname(IAP_REVIEW.file), { recursive: true });
+    await page.screenshot({ path: IAP_REVIEW.file });
+    const buf = recompressPng(readFileSync(IAP_REVIEW.file));
+    const [w, h] = pngSize(buf);
+    if (w < 640 || h < 920) throw new Error(`${IAP_REVIEW.file} is ${w}×${h}, App Store Connect needs ≥ 640×920`);
+    if (buf.length > MAX_BYTES) throw new Error(`${IAP_REVIEW.file} is ${kb(buf.length)} (> 600 KB)`);
+    writeFileSync(IAP_REVIEW.file, buf);
+    console.log(`[${set.id}] IAP review frame ${w}×${h} ${kb(buf.length)} → ${IAP_REVIEW.file}`);
+  }
+
   // every raw frame must be exactly viewport × scale; store it losslessly re-encoded
   for (let i = 0; i < SHOTS.length; i++) {
     const buf = recompressPng(readFileSync(out(i)));
@@ -256,6 +320,28 @@ async function captureRaw(browser, set) {
   }
   console.log(`[${set.id}] raw frames written (level 1 result: ${result.stars} stars, ${result.coinsEarned} coins)`);
   await page.context().close();
+}
+
+/** Write `SHOP_SAVE` under the v3 key and reload so the app boots on it (the wallet header reads the live save). */
+async function seedShopSave(page) {
+  await page.evaluate((save) => localStorage.setItem('towerclash.save.v3', JSON.stringify(save)), SHOP_SAVE);
+  await page.reload();
+  await page.waitForFunction(() => typeof window.__towerclash?.getScreen === 'function');
+  await page.evaluate(() => document.fonts?.ready);
+  const live = await page.evaluate(() => {
+    const s = window.__towerclash.economy.getSave();
+    return { gold: s.gold, crystals: s.crystals, production: s.upgrades.production ?? 0 };
+  });
+  if (live.gold !== SHOP_SAVE.gold || live.crystals !== SHOP_SAVE.crystals || live.production !== SHOP_SAVE.upgrades.production) {
+    throw new Error(`shop seed not applied: live save is ${JSON.stringify(live)}`);
+  }
+}
+
+/** Open the shop on `tab` from the current screen and let the cards / price strings settle. */
+async function openShop(page, tab) {
+  await page.evaluate((t) => window.__towerclash.openShop(t), tab);
+  await page.waitForFunction(() => window.__towerclash.getScreen() === 'shop');
+  await page.waitForTimeout(700); // fake-store getProducts() resolves, particles/toasts idle
 }
 
 /* ---------- caption pass (canvas) ---------- */

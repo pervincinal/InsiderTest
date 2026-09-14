@@ -6,7 +6,9 @@ import type { Page } from '@playwright/test';
  * equip from the shop, the level-break interstitial obeys its gating rules, and the defeat screen's
  * "Reinforcements" continue restarts the level with +15 starting infantry. Ads come from the fake
  * provider installed through `window.__towerclash.economy.setAdsAvailable(true)`; on the plain web
- * build every rewarded button is hidden (the provider is unavailable).
+ * build every rewarded button is hidden (the provider is unavailable). ECON-4 / ECON-2 UI:
+ * achievements (trophy screen, once-only crystal grants), crystals → gold conversion with a confirm
+ * card, the booster crate, and the settings About block (version, support id, privacy options).
  *
  * Like smoke.spec.ts this file imports nothing from src/; hit regions are mirrored from
  * src/render/layout.ts (SHOP, RESULT) with a pointer to their source of truth.
@@ -15,9 +17,29 @@ import type { Page } from '@playwright/test';
 // src/render/layout.ts — SHOP (content cards are in content space; the tests never scroll)
 const SHOP = { tabs: { x: 30, y: 112, w: 660, h: 60 }, back: { x: 18, y: 20, w: 140, h: 60 } };
 const SHOP_TABS = ['crystals', 'bundles', 'skins', 'upgrades'] as const;
-function shopRowRect(i: number): { x: number; y: number; w: number; h: number } {
+type R = { x: number; y: number; w: number; h: number };
+function shopRowRect(i: number): R {
   return { x: 34, y: 200 + i * (168 + 16), w: 652, h: 168 };
 }
+function shopPackRect(i: number): R {
+  return { x: 34 + (i % 2) * (316 + 20), y: 200 + Math.floor(i / 2) * (262 + 18), w: 316, h: 262 };
+}
+// the convert card takes the grid slot after the 5 crystal packs; its segmented picker and CONVERT button
+const CONVERT_CARD = shopPackRect(5);
+const CONVERT_SEG = { x: CONVERT_CARD.x + 24, y: CONVERT_CARD.y + 96, w: CONVERT_CARD.w - 48, h: 52 };
+const CONVERT_BUY = { x: CONVERT_CARD.x + 24, y: CONVERT_CARD.y + CONVERT_CARD.h - 54 - 16, w: CONVERT_CARD.w - 48, h: 54 };
+const CONVERT_CONFIRM = { yes: { x: 130, y: 676, w: 210, h: 72 }, no: { x: 380, y: 676, w: 210, h: 72 } };
+// src/render/layout.ts — TITLE.achievements / TITLE.settings, ACHIEVEMENTS_LAYOUT.back, settingsAboutLayout(true, true)
+const TITLE_ACHIEVEMENTS = { x: 18, y: 990, w: 128, h: 132 };
+const TITLE_SETTINGS = { x: 180, y: 780, w: 172, h: 64 };
+const ACHIEVEMENTS_BACK = { x: 18, y: 20, w: 140, h: 60 };
+const ABOUT_COPY = { x: 522, y: 921, w: 118, h: 48 };
+const ABOUT_PRIVACY = { x: 160, y: 986, w: 400, h: 60 };
+// src/economy/catalog.ts — CONVERSION, CRYSTAL_SERVICES.boosterCrate, ACHIEVEMENTS crystals
+const CONVERSION = { goldPerCrystal: 5, packs: [20, 100, 500] };
+const CRATE = { cost: 60, charges: { overdrive: 5, freeze: 3, airstrike: 2 } };
+const FIRST_WIN_CRYSTALS = 5;
+const STARS_10_CRYSTALS = 10;
 function shopSkinRect(top: number, i: number): { x: number; y: number; w: number; h: number } {
   return { x: 34 + (i % 3) * (208 + 14), y: top + 46 + Math.floor(i / 3) * (236 + 16), w: 208, h: 236 };
 }
@@ -25,23 +47,29 @@ const SKIN_ROOFS_TOP = 194; // SHOP.row.y0 - 6
 // src/render/layout.ts — RESULT
 const RESULT = { next: { x: 84, y: 780, w: 170, h: 72 }, menu: { x: 466, y: 780, w: 170, h: 72 }, continueAd: { x: 368, y: 700, w: 268, h: 62 } };
 const SAVE_KEY = 'towerclash.save.v3';
-// src/economy/catalog.ts — COMMANDER_UPGRADES tier 1 cost / effects, CRYSTAL_SERVICES.continue, SKINS
+// src/economy/catalog.ts — COMMANDER_UPGRADES: Capacity (row 1) is the cheap 5-step ladder (60 / 120 …, +5 % per
+// tier); Production (row 0) starts at 200 after the 2026-09-13 retune. CRYSTAL_SERVICES.continue, SKINS.
+const CAPACITY_ROW = 1;
 const TIER1_COST = 60;
-const PRODUCTION_PER_TIER = 0.04;
+const CAPACITY_PER_TIER = 0.05;
 const CONTINUE_BONUS = 15;
 const SLATE_COST = 80;
 // a level the "auto lose" helper loses within seconds on every seed (verified levels 12 and 16)
 const LOSING_LEVEL = 12;
 
-async function tapRect(page: Page, r: { x: number; y: number; w: number; h: number }): Promise<void> {
+async function tapRect(page: Page, r: R): Promise<void> {
   const c = await page.evaluate(([x, y]) => window.__towerclash.toClient(x, y), [r.x + r.w / 2, r.y + r.h / 2] as const);
   await page.mouse.click(c.x, c.y);
 }
 
+/** Tap segment `i` of a segmented control drawn with `drawSegmented` (4 px inset, equal widths). */
+async function tapSegment(page: Page, r: R, count: number, i: number): Promise<void> {
+  const segW = (r.w - 8) / count;
+  await tapRect(page, { x: r.x + 4 + i * segW, y: r.y, w: segW, h: r.h });
+}
+
 async function tapTab(page: Page, tab: (typeof SHOP_TABS)[number]): Promise<void> {
-  const i = SHOP_TABS.indexOf(tab);
-  const segW = (SHOP.tabs.w - 8) / SHOP_TABS.length;
-  await tapRect(page, { x: SHOP.tabs.x + 4 + i * segW, y: SHOP.tabs.y, w: segW, h: SHOP.tabs.h });
+  await tapSegment(page, SHOP.tabs, SHOP_TABS.length, SHOP_TABS.indexOf(tab));
 }
 
 const screen = (page: Page) => page.evaluate(() => window.__towerclash.getScreen());
@@ -51,8 +79,20 @@ interface SaveShape {
   crystals: number;
   upgrades: Record<string, number>;
   skins: { owned: string[]; equipped: { roof: string | null; helmet: string | null } };
+  charges: { overdrive: number; freeze: number; airstrike: number };
   adCounters: { levelsCompleted: number; rewardedByPlacement: Record<string, number> };
   entitlements: { noAds: boolean };
+  achievements: { unlocked: string[] };
+}
+
+/** Reference player at ×10 on level 1, seed 1 (verified by `npm run playtest`) → result screen. */
+async function winLevelOne(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    window.__towerclash.loadLevel(1, 1);
+    window.__towerclash.setSpeed(10);
+    window.__towerclash.autoplay();
+  });
+  await expect.poll(() => screen(page), { timeout: 60_000, intervals: [250] }).toBe('result');
 }
 
 async function boot(page: Page, seeded: Record<string, unknown>): Promise<string[]> {
@@ -72,17 +112,127 @@ test.describe('economy', () => {
     const errors = await boot(page, { version: 3, gold: 100, crystals: 0, stars: { '1': 3 } });
     await page.evaluate(() => window.__towerclash.economy.openShop('upgrades'));
     await expect.poll(() => screen(page)).toBe('shop');
-    await tapRect(page, shopRowRect(0)); // Production tier 1
-    await expect.poll(async () => (await save(page)).upgrades.production).toBe(1);
+    await tapRect(page, shopRowRect(CAPACITY_ROW)); // Capacity tier 1
+    await expect.poll(async () => (await save(page)).upgrades.capacity).toBe(1);
     expect((await save(page)).gold).toBe(100 - TIER1_COST);
-    await tapRect(page, shopRowRect(0)); // tier 2 costs 120: unaffordable, nothing changes
+    await tapRect(page, shopRowRect(CAPACITY_ROW)); // tier 2 costs 120: unaffordable, nothing changes
     await page.waitForTimeout(150);
-    expect((await save(page)).upgrades.production).toBe(1);
+    expect((await save(page)).upgrades.capacity).toBe(1);
     expect((await save(page)).gold).toBe(100 - TIER1_COST);
+    await tapRect(page, shopRowRect(0)); // Production tier 1 costs 200: unaffordable too
+    await page.waitForTimeout(150);
+    expect((await save(page)).upgrades.production ?? 0).toBe(0);
     await page.evaluate(() => window.__towerclash.loadLevel(1, 1));
     await expect.poll(() => screen(page)).toBe('play');
     const mods = await page.evaluate(() => window.__towerclash.getState()?.modifiers);
-    expect(mods).toEqual({ productionMul: 1 + PRODUCTION_PER_TIER, capacityMul: 1, startGarrisonBonus: 0, unitSpeedMul: 1 });
+    expect(mods).toEqual({ productionMul: 1, capacityMul: 1 + CAPACITY_PER_TIER, startGarrisonBonus: 0, unitSpeedMul: 1 });
+    expect(errors).toEqual([]);
+  });
+
+  test('achievements: the trophy opens the screen (star goals pay on entry), a first win unlocks First victory once', async ({ page }) => {
+    const stars: Record<string, number> = {};
+    for (let id = 1; id <= 10; id++) stars[String(id)] = 3;
+    const errors = await boot(page, { version: 3, gold: 0, crystals: 0, stars });
+    expect((await save(page)).achievements.unlocked).toEqual([]);
+    await tapRect(page, TITLE_ACHIEVEMENTS);
+    await expect.poll(() => screen(page)).toBe('achievements');
+    // ten 3★ levels were already in the save: entering the screen evaluates and pays the goal, once
+    await expect.poll(async () => (await save(page)).achievements.unlocked).toEqual(['stars_10']);
+    expect((await save(page)).crystals).toBe(STARS_10_CRYSTALS);
+    await tapRect(page, ACHIEVEMENTS_BACK);
+    await expect.poll(() => screen(page)).toBe('title');
+    await tapRect(page, TITLE_ACHIEVEMENTS);
+    await expect.poll(() => screen(page)).toBe('achievements');
+    expect((await save(page)).crystals).toBe(STARS_10_CRYSTALS); // re-entering grants nothing
+    await page.keyboard.press('Escape');
+    await expect.poll(() => screen(page)).toBe('title');
+    // first win → First victory (+5); the same win again unlocks nothing new
+    await winLevelOne(page);
+    const first = await page.evaluate(() => window.__towerclash.getResult());
+    expect(first?.outcome).toBe('won');
+    expect(first?.achievements).toContain('first_win');
+    let s = await save(page);
+    expect(s.achievements.unlocked).toContain('first_win');
+    expect(s.crystals).toBeGreaterThanOrEqual(STARS_10_CRYSTALS + FIRST_WIN_CRYSTALS);
+    const crystalsAfterFirst = s.crystals;
+    await winLevelOne(page);
+    const second = await page.evaluate(() => window.__towerclash.getResult());
+    expect(second?.achievements).toEqual([]); // identical seed → identical facts → nothing new
+    s = await save(page);
+    expect(s.crystals).toBe(crystalsAfterFirst);
+    expect(new Set(s.achievements.unlocked).size).toBe(s.achievements.unlocked.length);
+    expect(errors).toEqual([]);
+  });
+
+  test('crystals → gold conversion: pick a pack, confirm (cancel changes nothing), never without the crystals', async ({ page }) => {
+    const [small, mid] = CONVERSION.packs as [number, number, number];
+    const errors = await boot(page, { version: 3, gold: 0, crystals: mid });
+    await page.evaluate(() => window.__towerclash.economy.openShop('crystals'));
+    await expect.poll(() => screen(page)).toBe('shop');
+    // small pack, then CANCEL on the confirm card → balances untouched
+    await tapSegment(page, CONVERT_SEG, CONVERSION.packs.length, 0);
+    await tapRect(page, CONVERT_BUY);
+    await page.waitForTimeout(150);
+    await tapRect(page, CONVERT_CONFIRM.no);
+    await page.waitForTimeout(150);
+    expect(await save(page)).toMatchObject({ gold: 0, crystals: mid });
+    // mid pack, CONVERT → confirm → crystals gone, gold at the catalog rate
+    await tapSegment(page, CONVERT_SEG, CONVERSION.packs.length, 1);
+    await tapRect(page, CONVERT_BUY);
+    await page.waitForTimeout(150);
+    await tapRect(page, CONVERT_CONFIRM.yes);
+    await expect.poll(async () => (await save(page)).gold).toBe(mid * CONVERSION.goldPerCrystal);
+    expect((await save(page)).crystals).toBe(0);
+    // no crystals left: CONVERT only toasts (no confirm card), nothing moves
+    await tapSegment(page, CONVERT_SEG, CONVERSION.packs.length, 0);
+    await tapRect(page, CONVERT_BUY);
+    await page.waitForTimeout(200);
+    expect(await save(page)).toMatchObject({ gold: mid * CONVERSION.goldPerCrystal, crystals: 0 });
+    expect(small).toBeLessThan(mid);
+    expect(errors).toEqual([]);
+  });
+
+  test('booster crate in the Bundles tab adds pre-paid charges for crystals, stacking, until unaffordable', async ({ page }) => {
+    const errors = await boot(page, { version: 3, gold: 0, crystals: CRATE.cost * 2 + 10, charges: { overdrive: 1, freeze: 0, airstrike: 0 } });
+    await page.evaluate(() => window.__towerclash.economy.openShop('bundles'));
+    await expect.poll(() => screen(page)).toBe('shop');
+    await tapRect(page, shopRowRect(0)); // the crate is the first row
+    await expect.poll(async () => (await save(page)).charges).toEqual({ overdrive: 1 + 5, freeze: 3, airstrike: 2 });
+    expect((await save(page)).crystals).toBe(CRATE.cost + 10);
+    await tapRect(page, shopRowRect(0));
+    await expect.poll(async () => (await save(page)).charges).toEqual({ overdrive: 11, freeze: 6, airstrike: 4 });
+    expect((await save(page)).crystals).toBe(10);
+    await tapRect(page, shopRowRect(0)); // 10 crystals: unaffordable
+    await page.waitForTimeout(200);
+    expect((await save(page)).charges).toEqual({ overdrive: 11, freeze: 6, airstrike: 4 });
+    expect((await save(page)).crystals).toBe(10);
+    expect(CRATE.charges).toEqual({ overdrive: 5, freeze: 3, airstrike: 2 });
+    expect(errors).toEqual([]);
+  });
+
+  test('settings About: version always; support id + COPY and PRIVACY OPTIONS only when the native providers say so', async ({ page, context }) => {
+    const errors = await boot(page, { version: 3, gold: 0, crystals: 0 });
+    // web providers: no support id, no privacy options
+    await tapRect(page, TITLE_SETTINGS);
+    await expect.poll(() => screen(page)).toBe('settings');
+    await page.waitForTimeout(200); // the provider probe is async
+    const web = await page.evaluate(() => window.__towerclash.economy.getAboutInfo());
+    expect(web?.version).toMatch(/^\d+\.\d+\.\d+/);
+    expect(web?.supportId).toBeNull();
+    expect(web?.privacyOptions).toBe(false);
+    await page.keyboard.press('Escape');
+    await expect.poll(() => screen(page)).toBe('title');
+    // native-like providers: both rows appear; COPY puts the id on the clipboard
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await page.evaluate(() => window.__towerclash.economy.setNativeInfo({ supportId: 'rc-test-1234', privacyOptionsRequired: true }));
+    await tapRect(page, TITLE_SETTINGS);
+    await expect.poll(() => screen(page)).toBe('settings');
+    await expect.poll(() => page.evaluate(() => window.__towerclash.economy.getAboutInfo())).toEqual({ version: web!.version, supportId: 'rc-test-1234', privacyOptions: true });
+    await tapRect(page, ABOUT_COPY);
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('rc-test-1234');
+    await tapRect(page, ABOUT_PRIVACY); // the web ads provider has no form: a toast, never a crash
+    await page.waitForTimeout(200);
+    expect(await screen(page)).toBe('settings');
     expect(errors).toEqual([]);
   });
 

@@ -284,6 +284,148 @@ export function biomeFor(levelId: number): Biome {
 
 const shadeCache = new Map<string, string>();
 
+/* ---------- terrain themes (shop cosmetics, ECON-5) ---------- */
+
+/**
+ * Sprite ids of the terrain themes (`SKINS` category `terrainTheme`): `theme_dusk` → `theme.dusk`,
+ * `theme_winter_night` → `theme.winter_night`, `theme_neon` → `theme.neon`. A theme re-lights the
+ * cached ground of every biome (tint mixed into grass / cliff / bushes, water gradient, path) and
+ * adds an ambient wash + glow specks in the animated overlay. Buildings, units and badges are never
+ * tinted so owner colours and numerals keep their contrast in both palettes.
+ */
+export const THEME_IDS = ['theme.default', 'theme.dusk', 'theme.winter_night', 'theme.neon'] as const;
+export type ThemeId = (typeof THEME_IDS)[number];
+
+export interface TerrainTheme {
+  id: ThemeId;
+  /** Map water gradient (top → bottom), letterbox water and sparkle colour. */
+  waterTop: string;
+  waterBottom: string;
+  letterbox: string;
+  waterSparkle: string;
+  /** Colour mixed into the biome's grass / cliff tones and how much (0 = untouched). */
+  tint: string;
+  tintAmount: number;
+  /** Bushes / pines / cacti take this mix instead (default: same as `tint`). */
+  bushTint?: string;
+  bushTintAmount?: number;
+  /** Path tint strength (roads stay lighter than the ground so columns read on them). */
+  pathTintAmount: number;
+  /** Explicit road colours (skips the tint). */
+  path?: { lit: string; shade: string };
+  /** Scatter dot colours (flowers / pebbles) override. */
+  dots?: readonly string[];
+  /** Full-map wash over the ground every frame (rgba); undefined = none. */
+  ambient?: string;
+  /** Cloud-shadow alpha (0.5 by default). */
+  cloudAlpha: number;
+  /** Twinkling specks over the plateau (fireflies / snow / neon motes); undefined = none. */
+  glow?: string;
+}
+
+const THEMES: Record<ThemeId, TerrainTheme> = Object.freeze({
+  'theme.default': {
+    id: 'theme.default',
+    waterTop: '#3fb6de',
+    waterBottom: '#8ee2f5',
+    letterbox: '#1f8fc2',
+    waterSparkle: 'rgba(232, 251, 255, 0.6)',
+    tint: '#ffffff',
+    tintAmount: 0,
+    pathTintAmount: 0,
+    cloudAlpha: 0.5,
+  },
+  'theme.dusk': {
+    id: 'theme.dusk',
+    waterTop: '#f2a067',
+    waterBottom: '#3d4f9c',
+    letterbox: '#d97a4e',
+    waterSparkle: 'rgba(255, 236, 200, 0.65)',
+    tint: '#ff8a4a',
+    tintAmount: 0.24,
+    pathTintAmount: 0.14,
+    ambient: 'rgba(255, 120, 60, 0.1)',
+    cloudAlpha: 0.32,
+  },
+  'theme.winter_night': {
+    id: 'theme.winter_night',
+    waterTop: '#0a1530',
+    waterBottom: '#1b3f78',
+    letterbox: '#060d20',
+    waterSparkle: 'rgba(214, 236, 255, 0.75)',
+    tint: '#22305e',
+    tintAmount: 0.48,
+    pathTintAmount: 0.3,
+    dots: ['#fffaf0', '#c9dcff', '#8fb4ff'],
+    ambient: 'rgba(10, 20, 60, 0.14)',
+    cloudAlpha: 0.22,
+    glow: 'rgba(224, 240, 255, 0.85)',
+  },
+  'theme.neon': {
+    id: 'theme.neon',
+    waterTop: '#0d0620',
+    waterBottom: '#2c1264',
+    letterbox: '#07031a',
+    waterSparkle: 'rgba(90, 255, 240, 0.8)',
+    tint: '#2b1352',
+    tintAmount: 0.72,
+    bushTint: '#7a3cff',
+    bushTintAmount: 0.45,
+    pathTintAmount: 0,
+    path: { lit: '#3b2a6c', shade: '#ff4fd8' },
+    dots: ['#4ffff0', '#ff4fd8', '#ffe14f'],
+    ambient: 'rgba(140, 40, 220, 0.08)',
+    cloudAlpha: 0.2,
+    glow: 'rgba(90, 255, 240, 0.8)',
+  },
+});
+
+/** Theme for a sprite id; unknown / undefined ids give the untinted default. */
+export function themeFor(id: string | undefined): TerrainTheme {
+  return (id && (THEMES as Record<string, TerrainTheme>)[id]) || THEMES['theme.default'];
+}
+
+/** Linear mix of two #rrggbb colours (t = 0 → a, t = 1 → b). Memoised. */
+export function mix(a: string, b: string, t: number): string {
+  if (t <= 0) return a;
+  const key = `${a}~${b}~${t}`;
+  const hit = shadeCache.get(key);
+  if (hit !== undefined) return hit;
+  const na = parseInt(a.slice(1), 16);
+  const nb = parseInt(b.slice(1), 16);
+  const ch = (shift: number): number => {
+    const va = (na >> shift) & 0xff;
+    const vb = (nb >> shift) & 0xff;
+    return Math.max(0, Math.min(255, Math.round(va + (vb - va) * t)));
+  };
+  const out = `#${((ch(16) << 16) | (ch(8) << 8) | ch(0)).toString(16).padStart(6, '0')}`;
+  if (shadeCache.size < 512) shadeCache.set(key, out);
+  return out;
+}
+
+const mixTones = (t: Tones, tint: string, k: number): Tones => (k > 0 ? { lit: mix(t.lit, tint, k), mid: mix(t.mid, tint, k), shade: mix(t.shade, tint, k) } : t);
+
+const themedBiomeCache = new Map<string, BiomeColors>();
+
+/** Biome colours re-lit by a theme (memoised per biome object identity and theme). */
+export function themedBiome(biome: BiomeColors, theme: TerrainTheme, biomeId = ''): BiomeColors {
+  if (theme.tintAmount === 0 && !theme.path && !theme.dots) return biome;
+  const key = `${theme.id}|${biomeId}|${biome.grass.mid}`;
+  const hit = themedBiomeCache.get(key);
+  if (hit) return hit;
+  const bushTint = theme.bushTint ?? theme.tint;
+  const bushK = theme.bushTintAmount ?? theme.tintAmount;
+  const out: BiomeColors = {
+    grass: mixTones(biome.grass, theme.tint, theme.tintAmount),
+    cliff: { lit: mix(biome.cliff.lit, theme.tint, theme.tintAmount), shade: mix(biome.cliff.shade, theme.tint, theme.tintAmount) },
+    path: theme.path ?? { lit: mix(biome.path.lit, theme.tint, theme.pathTintAmount), shade: mix(biome.path.shade, theme.tint, theme.pathTintAmount) },
+    bush: mixTones(biome.bush, bushTint, bushK),
+    dots: theme.dots ?? biome.dots,
+  };
+  themedBiomeCache.set(key, out);
+  return out;
+}
+
 /** Lighten (amount > 0) or darken (amount < 0) a #rrggbb colour. amount in -1..1. Memoised. */
 export function shade(hex: string, amount: number): string {
   const key = `${hex}${amount}`;

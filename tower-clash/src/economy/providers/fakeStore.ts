@@ -135,4 +135,10 @@ export const fakeStore: StoreProvider = {
     await sleep(Math.min(delayMs, 50));
     return [...owned];
   },
+
+  async getSupportId(): Promise<string | null> {
+    // No purchase backend on the web: there is no record to reference, so no id (the UI hides
+    // the "Support ID" row).
+    return null;
+  },
 };

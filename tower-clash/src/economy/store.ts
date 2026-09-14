@@ -13,6 +13,8 @@
  *     consumables (crystal packs) are never restored. Grant each returned id idempotently.
  *   - Call `init()` once at startup (it never rejects); check `isAvailable()` before rendering
  *     buy buttons — when false, `purchase()` resolves `{ ok: false, error: 'unavailable' }`.
+ *   - Settings → About → "Support ID" (privacy policy B.7): show `await getSupportId()` verbatim
+ *     with a copy button; hide the row when it resolves `null` (web, or store unavailable).
  *
  * Owned by the Mobile Engineer.
  */
@@ -56,6 +58,13 @@ export interface StoreProvider {
   restore(): Promise<string[]>;
   /** False on the web, before `init()` finished, or when the store could not be configured. */
   isAvailable(): boolean;
+  /**
+   * Anonymous, per-install identifier the purchase backend knows this player by (RevenueCat app
+   * user id, e.g. `$RCAnonymousID:…`). Shown as "Support ID" so a player can ask for their
+   * purchase record to be deleted. `null` on the web, before `init()`, or when the store is
+   * unavailable. Never rejects. It is not a secret, but do not log or send it anywhere.
+   */
+  getSupportId(): Promise<string | null>;
 }
 
 let store: StoreProvider | null = null;

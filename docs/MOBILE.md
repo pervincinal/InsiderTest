@@ -179,8 +179,16 @@ The game never talks to a store SDK directly. Two small interfaces in `tower-cla
 | `src/economy/providers/fakeStore.ts` | fake store: every purchase succeeds after 300 ms; `configureFakeStore({ failNext: 'cancelled' \| 'unavailable' \| 'failed' })` forces the next one to fail (for e2e and manual QA); prices come from `src/economy/catalog.ts` (`priceUsd`) |
 | `src/economy/providers/revenueCat.ts` | RevenueCat: offerings/packages → products, purchase, restore, error mapping (user cancel → `cancelled`) |
 | `src/economy/providers/noAds.ts` | web no-op |
-| `src/economy/providers/admob.ts` | AdMob: initialize → UMP consent form (EEA/UK) → iOS tracking prompt → preload interstitial + rewarded; `showRewarded()` reports `rewarded: true` only on the SDK's reward event |
+| `src/economy/providers/admob.ts` | AdMob: initialize (max ad content rating G) → UMP consent form (EEA/UK only) → preload interstitial + rewarded; `showRewarded()` reports `rewarded: true` only on the SDK's reward event; **no iOS tracking prompt**, iOS requests non-personalised ads (`npa`) — see §8.7 |
 | `src/economy/providers/config.ts` | where the keys/ids are read from (below) |
+
+Settings-screen hooks promised by the privacy policy (`docs/publishing/PRIVACY_POLICY.md` B.2 / B.7, backlog ECON-2) — the Frontend Engineer wires the UI against exactly these names:
+
+| Method | Provider behaviour | UI contract |
+|---|---|---|
+| `AdsProvider.privacyOptionsRequired(): Promise<boolean>` | AdMob: UMP `privacyOptionsRequirementStatus === 'REQUIRED'` (EEA/UK user who saw the consent form); web no-op: `false` | show Settings → "Privacy options" only when `true` |
+| `AdsProvider.showPrivacyOptions(): Promise<void>` | AdMob: `showPrivacyOptionsForm()`, then re-reads consent (ads may become unavailable if consent was withdrawn); web: no-op | call on tap; never rejects |
+| `StoreProvider.getSupportId(): Promise<string \| null>` | RevenueCat: `Purchases.getAppUserID()` (anonymous `$RCAnonymousID:…`); fake store / web: `null` | Settings → About → "Support ID" with a copy button; hide the row on `null` |
 
 The plugin packages are loaded with dynamic `import()` only inside a native shell; the web bundle does not contain them. Product ids are opaque strings defined by `docs/ECONOMY.md` / `src/economy/catalog.ts` (e.g. `crystals_100`, `remove_ads`, `premium_bundle`) and **must be typed identically** in App Store Connect, Google Play Console and RevenueCat.
 
@@ -250,7 +258,7 @@ Locally: create `tower-clash/.env.local` with the same `VITE_*` lines (`VITE_RC_
 ### 8.4 Native project changes already in place
 
 - **Android** `AndroidManifest.xml`: `com.google.android.gms.ads.APPLICATION_ID` meta-data → `@string/admob_app_id`. The `com.android.vending.BILLING` (Play Billing) and `com.google.android.gms.permission.AD_ID` (Android 13+) permissions are merged in automatically from the RevenueCat / AdMob libraries. The AdMob plugin is Kotlin and targets Java 21, so builds need **JDK 21** (the workflow already uses it).
-- **iOS** `Info.plist`: `GADApplicationIdentifier`, `NSUserTrackingUsageDescription` (the text of the iOS "Allow tracking?" prompt), and `SKAdNetworkItems` with Google's published list (100 entries, `cstr6suwn9.skadnetwork` first). Refresh the list from <https://developers.google.com/admob/ios/ios14> when the AdMob SDK is bumped.
+- **iOS** `Info.plist`: `GADApplicationIdentifier` and `SKAdNetworkItems` with Google's published list (100 entries, `cstr6suwn9.skadnetwork` first). Refresh the list from <https://developers.google.com/admob/ios/ios14> when the AdMob SDK is bumped. There is deliberately **no** `NSUserTrackingUsageDescription` (§8.7): without it iOS cannot even show the tracking prompt, which is the technical proof for the "no tracking" App Privacy answer.
 - **iOS capability (manual, in Xcode):** open `ios/App/App.xcodeproj` → target *App* → *Signing & Capabilities* → "+ Capability" → **In-App Purchase**. This only needs to be done once and requires the Apple Developer account; without it StoreKit returns no products.
 - **Xcode SPM**: `npx cap sync` added `CapacitorCommunityAdmob` (pulls Google Mobile Ads 13.6.0 + UMP) and `RevenuecatPurchasesCapacitor` (purchases-hybrid-common 18.36.1) to `ios/App/CapApp-SPM/Package.swift`; the first macOS build resolves them from GitHub.
 
@@ -265,15 +273,33 @@ Locally: create `tower-clash/.env.local` with the same `VITE_*` lines (`VITE_RC_
 **Ads:**
 - With empty ad-unit placeholders the app uses Google's official **test ad units** (`ca-app-pub-3940256099942544/…`), which always fill with "Test Ad" creatives and are safe to click. The app also passes `initializeForTesting: true` in that case.
 - With real ad units, register the phone as a *test device* (AdMob → Settings → Test devices, or copy the device id printed in logcat/Xcode console at first ad request) **before** testing, otherwise your clicks count as invalid traffic and the AdMob account can be suspended.
-- Consent: the UMP form appears only in the EEA/UK (or when a debug geography is forced). Ads are shown only when `canRequestAds` is true after the consent step.
-- On iOS 14+ the tracking prompt (`NSUserTrackingUsageDescription`) appears once after the consent form; declining still allows non-personalized ads.
+- Consent: the UMP form appears only in the EEA/UK (or when a debug geography is forced). Ads are shown only when `canRequestAds` is true after the consent step. Without a published consent message in AdMob (§8.2 step 7) UMP reports "not required" and the Settings "Privacy options" entry stays hidden.
+- No iOS tracking prompt ever appears (§8.7). iOS test ads are therefore always non-personalised "Test Ad" creatives; that is expected, not a bug.
+- To test the "Privacy options" entry outside the EEA: AdMob → Privacy & messaging → the message's *Test* tab lists the debug device id; or temporarily pass `{ debugGeography: AdmobConsentDebugGeography.EEA, testDeviceIdentifiers: [...] }` to `requestConsentInfo()` in `admob.ts` (never commit that).
 
 ### 8.6 Store paperwork changes caused by monetization
 
 - **Privacy policy** must now mention: in-app purchases processed by Apple/Google, RevenueCat receiving purchase receipts and an anonymous app user id, Google AdMob showing ads and using the advertising identifier (IDFA/AAID) with consent, and no other personal data.
 - **Google Play Data safety:** declare "Device or other IDs" (advertising id) and "Purchase history" as collected/shared with third parties (Google AdMob, RevenueCat). **Ads declaration:** "Contains ads" = yes.
-- **App Store App Privacy:** "Purchases" (linked to identity: no), "Identifiers → Device ID" (used for third-party advertising), "Usage data → Advertising data". Answer "Yes" to *Does this app use the Advertising Identifier (IDFA)?* when submitting.
-- **Age rating:** the consent flow and AdMob's `tagForUnderAgeOfConsent` are not enabled; if the store listing targets children (Play "Families"), that changes — ask before enabling.
+- **App Store App Privacy:** "Purchases" (linked to identity: no), "Identifiers → Device ID" (used for third-party advertising), "Usage data → Advertising data" — all **Used for tracking: No** (the table in `docs/publishing/STORE_LISTING.md` §6.4 *option A*). App Store Connect → App Privacy → *Tracking*: **"No, we do not use data for tracking purposes."** When submitting, answer *Does this app use the Advertising Identifier (IDFA)?* with **Yes → "Serve advertisements within the app"** only (not "Attribute this app installation…", not "Attribute an action…"), and confirm *"This app respects the Limit Ad Tracking setting"* — Google's SDK does.
+- **Age rating:** `maxAdContentRating` is pinned to **G** and the app is registered as not child-directed (`tagForChildDirectedTreatment: false`); `tagForUnderAgeOfConsent` is not enabled. If the store listing targets children (Play "Families"), that changes — ask before enabling.
+
+### 8.7 No tracking on iOS (ECON-3 decision, option A)
+
+Decision (Producer default, `docs/publishing/STORE_LISTING.md` §6.4 option A, launch checklist MZ9): Tower Clash does **not** track users. Concretely:
+
+- `src/economy/providers/admob.ts` never calls `AdMob.requestTrackingAuthorization()` / `trackingAuthorizationStatus()`; a unit test (`tests/economy/ads.test.ts`, "no tracking") fails the build if either comes back.
+- Every iOS ad request carries `npa: true` (Google's "non-personalised ads" extra), so the ads never use the IDFA even if the user has tracking allowed system-wide. On Android the UMP consent answer decides personalisation (the SDK reads the TCF string itself; outside the EEA/UK Google's defaults apply).
+- `ios/App/App/Info.plist` has no `NSUserTrackingUsageDescription`; `SKAdNetworkItems` stay (they let Google report aggregated conversions to advertisers without any user-level data and are required by the Google Mobile Ads SDK).
+
+What this means for the paperwork (non-developer steps):
+
+1. App Store Connect → App Privacy → *Tracking* → **No**. Fill the data types from `STORE_LISTING.md` §6.4 option A. The store page must show only "Data Not Linked to You" (no "Data Used to Track You").
+2. Privacy policy (`docs/publishing/PRIVACY_POLICY.md`, Publisher): Part B.2 currently says *"On iOS 14.5 and later, Apple's 'Allow tracking?' prompt appears once; if you decline, Google receives no IDFA…"* — replace with: *"On iOS the app never asks for tracking permission and always requests non-personalised ads; Google receives no IDFA."* The Azerbaijani half of the same paragraph needs the matching change. The bullet *"iOS: Settings → Privacy & Security → Tracking…"* can stay (it is still a valid system setting) or go.
+3. `docs/publishing/STORE_LISTING.md`: §6.4 opening sentence ("option B is what the tree does today") and the App Review note ("requests App Tracking Transparency only if configured to") are stale — the tree now implements option A. `LAUNCH_CHECKLIST.md` MZ9 → done (option A), A14 → "tracking: No".
+4. Google Play is unaffected (Data safety already says the advertising id is collected for advertising; the "Privacy options" entry satisfies Google's UMP requirement for EEA users).
+
+Reverting to option B (personalised ads on iOS) would need: the ATT call back in `admob.ts`, `npa` off on iOS, `NSUserTrackingUsageDescription` back in `Info.plist`, the "no tracking" unit test removed, App Privacy *Tracking* = Yes, and privacy policy 2.x re-worded. Do not do it piecemeal.
 
 ## 7. Open items
 
@@ -282,3 +308,5 @@ Locally: create `tower-clash/.env.local` with the same `VITE_*` lines (`VITE_RC_
 - Signed builds: create the accounts and secrets above, then add the `bundleRelease` job (snippet in section 6) and the iOS archive job to the workflows. The Gradle side is already in place.
 - `npm run version:check` should run in the CI workflow so a forgotten `version:sync` fails the build.
 - Monetization (§8): create the RevenueCat / AdMob accounts and the products; add the In-App Purchase capability in Xcode; rewrite the privacy policy; the Android workflow has not yet been run with the AdMob (Kotlin) and RevenueCat modules — the next push validates the Gradle build on CI (no Android SDK in the development sandbox).
+- ECON-2 UI side: the Settings "Privacy options" entry and the About "Support ID" row still have to be wired by the Frontend Engineer against the three methods in §8.1; the provider side is done.
+- Privacy policy / store listing wording for "no tracking" (§8.7 steps 2–3) — Publisher.

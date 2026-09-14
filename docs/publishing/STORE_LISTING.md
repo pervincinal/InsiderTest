@@ -17,7 +17,8 @@ What must NOT be claimed: leaderboards, multiplayer, cloud save, more than 40 le
 | Category | — | Games › Strategy | Oyunlar › Strategiya |
 | Tags | — | Strategy, Casual, Single player, Offline, Stylised | — |
 | Contact e-mail | — | `[developer e-mail]` | — |
-| Privacy policy URL | — | `[URL of PRIVACY_POLICY.md on GitHub Pages — planned: https://pervincinal.github.io/InsiderTest/privacy.html]` (must be v2.0 of the policy, which has the ads/purchases section) | — |
+| Privacy policy URL | — | `https://pervincinal.github.io/InsiderTest/privacy.html` (policy v2.0 with the ads/purchases section; the page is `tower-clash/public/privacy.html`, published by the Pages job — resolves once GitHub Pages is enabled, checklist W3) | — |
+| Website (optional) | — | `https://pervincinal.github.io/InsiderTest/` — support page `https://pervincinal.github.io/InsiderTest/support.html` | — |
 | Store labels (automatic) | — | **Contains ads** (from the Ads declaration) · **In-app purchases** (from the product list) — Google adds both badges; nothing to type | — |
 
 ### 1.1 Full description — English (≤ 4000)
@@ -112,7 +113,8 @@ Qeyd: oyunun interfeysi ingilis dilindədir (menyular: PLAY, SEND, MENU, VICTORY
 |---|---|---|
 | App icon | 512×512 PNG, 32-bit | `tower-clash/public/icons/icon-512.png` (same mark as `resources/icon.svg`) |
 | Feature graphic | 1024×500 PNG/JPG | `tower-clash/store/feature-graphic.png` (144 KB) |
-| Phone screenshots | 2–8, 9:16, 320–3840 px | `tower-clash/store/screenshots/en/01..06.png` and `az/01..06.png`, 1080×1920, each < 600 KB |
+| Phone screenshots | 2–8, 9:16, 320–3840 px | `tower-clash/store/screenshots/en/01..07.png` and `az/01..07.png`, 1080×1920, each < 600 KB |
+| IAP review screenshot (Apple only, not shown on any store page) | ≥ 640×920 | `tower-clash/store/iap-review/shop-crystals.png`, 1290×2796, uncaptioned shop Crystals tab (see §6.1) |
 
 Screenshot order and captions (same frames in every set):
 
@@ -124,8 +126,9 @@ Screenshot order and captions (same frames in every set):
 | 04 | Level 9 (first fortress) | Storm the fortress | Qalanı ələ keçir |
 | 05 | Level 15 (artillery citadel) | Silence the guns | Topları susdur |
 | 06 | Result screen, 3 stars | Three-star every level | Hər səviyyədə üç ulduz |
+| 07 | Shop, **Upgrades** tab (five Commander tracks, gold prices, seeded mid-game save: 1450 gold, 140 crystals, Production tier 2, Capacity tier 1) | Boost your commander | Komandirini gücləndir |
 
-Follow-ups: (PUB-6) add frames from levels 17+ (two enemies, mines, a cut bridge, three enemies); **[v0.3+]** add one shop frame (skins / Commander upgrades) once the shop screen exists — it doubles as the App Store Connect "review screenshot" for the in-app purchases (§6.1). Screenshots never show a price in a fixed currency (the store SDK localises prices; a hard-coded "$0.99" in a screenshot is a consumer-law problem in the EU).
+Frame 07 deliberately shows the Upgrades tab and not the Crystals tab: the crystal packs display the catalogue's fallback USD prices (the store SDK localises them only on a device) and, in the web build, a "Test store" line. Screenshots never show a price in a fixed currency (a hard-coded "$0.99" in a screenshot is a consumer-law problem in the EU), so the Crystals tab is used only for the private App Store Connect review screenshot (§6.1). Follow-up: (PUB-6) add frames from levels 17+ (two enemies, mines, a cut bridge, three enemies).
 
 ### 1.4 Alternative wording for an ad-free / purchase-free build
 
@@ -151,9 +154,9 @@ HONEST BY DESIGN
 | Keywords | 100 | `tower,war,strategy,rts,capture,conquer,castle,army,offline,tap,casual,defense,attack,soldiers` (93) | `qüllə,strategiya,qala,ordu,oflayn,müharibə,fəth,döyüş,əsgər,tower,war,rts,casual` (80) |
 | Primary category | — | Games | — |
 | Subcategories | — | Strategy, Casual | — |
-| Support URL | — | `[repository URL]` | — |
+| Support URL | — | `https://pervincinal.github.io/InsiderTest/support.html` (`tower-clash/public/support.html`: contact, restore purchases, delete data; the `[developer e-mail]` placeholder must be filled before submission) | — |
 | Marketing URL | — | `https://pervincinal.github.io/InsiderTest/` (active once GitHub Pages is enabled in the repository settings) | — |
-| Privacy policy URL | — | `[URL of PRIVACY_POLICY.md on GitHub Pages — planned: https://pervincinal.github.io/InsiderTest/privacy.html]` | — |
+| Privacy policy URL | — | `https://pervincinal.github.io/InsiderTest/privacy.html` (policy v2.0, `tower-clash/public/privacy.html`; active once GitHub Pages is enabled) | — |
 | Copyright | — | `© 2026 [developer name]` | — |
 | In-App Purchases (automatic) | — | App Store shows an "In-App Purchases" line with the products from §6.1 once they are attached to the version; nothing to type in the description | — |
 
@@ -165,10 +168,10 @@ App Store screenshots (exact device sizes, rendered by `node store/tools/renderS
 
 | Device size | Requirement | File |
 |---|---|---|
-| iPhone 6.7" | 1290×2796 | `tower-clash/store/screenshots/apple-6.7/en/01..06.png` |
-| iPhone 6.5" | 1284×2778 | `tower-clash/store/screenshots/apple-6.5/en/01..06.png` |
+| iPhone 6.7" | 1290×2796 | `tower-clash/store/screenshots/apple-6.7/en/01..07.png` |
+| iPhone 6.5" | 1284×2778 | `tower-clash/store/screenshots/apple-6.5/en/01..07.png` |
 
-Same six frames and captions as the Google set (English only — Azerbaijani is not an App Store locale). iPad screenshots are not needed if the app is marked iPhone-only in App Store Connect (recommended; the game is portrait phone-first).
+Same seven frames and captions as the Google set (English only — Azerbaijani is not an App Store locale). iPad screenshots are not needed if the app is marked iPhone-only in App Store Connect (recommended; the game is portrait phone-first).
 
 Review notes for App Review (paste into "Notes"): *Single-player offline game, no account needed. In-app purchases are one-time products handled by StoreKit through RevenueCat; "Restore Purchases" is in the shop screen. Ads are Google AdMob; the app requests App Tracking Transparency only if configured to (see §6.4) and serves non-personalised ads when declined. Sandbox tester: none required — all content is available without purchase.*
 
@@ -250,7 +253,7 @@ USD is the base price; Apple converts by price tier, Google by exchange rate (re
 
 Rules that follow from the list (Apple 3.1.1 / 3.1.2, Play Payments policy, EU consumer law): every product goes through StoreKit / Play Billing (RevenueCat wraps both; no external checkout links); a **Restore Purchases** button is mandatory in the shop for the non-consumables; the shop shows the **store-localised price string**, never a hard-coded "$"; the Starter Pack "×2 value" badge must be computed from the `crystals_100` rate; no subscriptions, so no subscription terms text is needed. Display names are the catalog `title` strings so the shop UI and the store sheets say the same thing (RevenueCat returns the store title).
 
-Apple additionally needs, per product: a **review screenshot** (any shop screenshot ≥ 640×920 showing the product — one image can be reused for all), and the first products must be submitted **with the app version** (they appear in the version's "In-App Purchases and Subscriptions" section). Google needs the AAB uploaded to a testing track before products can be created.
+Apple additionally needs, per product: a **review screenshot** (any shop screenshot ≥ 640×920 showing the product — one image can be reused for all): `tower-clash/store/iap-review/shop-crystals.png` (1290×2796, the shop's Crystals tab with the five crystal packs and the Restore Purchases button; rendered from the web build, so it shows the catalogue's USD fallback prices and the "Test store" line — acceptable for review, which only checks that the product is visible in-app, but re-render from a native build with RevenueCat keys if store-localised prices are wanted). The first products must be submitted **with the app version** (they appear in the version's "In-App Purchases and Subscriptions" section). Google needs the AAB uploaded to a testing track before products can be created.
 
 ### 6.2 Google Play — Ads declaration and ad policy facts
 

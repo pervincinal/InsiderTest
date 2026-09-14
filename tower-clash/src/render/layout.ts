@@ -75,6 +75,8 @@ export const TITLE = Object.freeze({
   shop: { x: 180, y: 864, w: 360, h: 64 } as Rect,
   /** Daily chest sits bottom-right, clear of the demo towers' unit badges. */
   daily: { x: 574, y: 990, w: 128, h: 132 } as Rect,
+  /** Trophy button (achievements) mirrors the chest, bottom-left. */
+  achievements: { x: 18, y: 990, w: 128, h: 132 } as Rect,
   wallet: { x: 120, y: 1172, w: 480, h: 52 } as Rect,
 });
 
@@ -99,7 +101,71 @@ export const SETTINGS = Object.freeze({
     yes: { x: 130, y: 676, w: 210, h: 72 } as Rect,
     no: { x: 380, y: 676, w: 210, h: 72 } as Rect,
   },
+  /** About card under the settings card: version, support id (copy), privacy options (native). */
+  about: { x: 50, y: 830, w: 620 },
+  aboutRowH: 62,
 });
+
+export interface SettingsAboutLayout {
+  card: Rect;
+  /** Baseline y of the version row. */
+  versionY: number;
+  /** Baseline y of the support-id row, or null when there is no id. */
+  supportY: number | null;
+  /** COPY button beside the support id. */
+  copy: Rect | null;
+  /** PRIVACY OPTIONS button (only when the ads SDK requires a privacy options entry). */
+  privacy: Rect | null;
+}
+
+/** Rows of the About card, top to bottom: version · support id (optional) · privacy (optional). */
+export function settingsAboutLayout(hasSupportId: boolean, hasPrivacy: boolean): SettingsAboutLayout {
+  const a = SETTINGS.about;
+  const rowH = SETTINGS.aboutRowH;
+  let y = a.y + 22;
+  const versionY = y + rowH / 2;
+  y += rowH;
+  let supportY: number | null = null;
+  let copy: Rect | null = null;
+  if (hasSupportId) {
+    supportY = y + rowH / 2;
+    copy = { x: a.x + a.w - 148, y: y + rowH / 2 - 24, w: 118, h: 48 };
+    y += rowH;
+  }
+  let privacy: Rect | null = null;
+  if (hasPrivacy) {
+    privacy = { x: 160, y: y + 10, w: 400, h: 60 };
+    y += 80;
+  }
+  return { card: { x: a.x, y: a.y, w: a.w, h: y + 22 - a.y }, versionY, supportY, copy, privacy };
+}
+
+/* ---------- achievements (ECONOMY.md §2.1) ---------- */
+
+/**
+ * Achievements screen: glass header (BACK · title), a summary pill and one row per catalog
+ * achievement (medal · label + progress bar · crystal reward). Rows scroll when they overflow.
+ */
+export const ACHIEVEMENTS_LAYOUT = Object.freeze({
+  headerH: 100,
+  back: { x: 18, y: 20, w: 140, h: 60 } as Rect,
+  summary: { x: 110, y: 112, w: 500, h: 44 } as Rect,
+  row: { x: 34, w: 652, h: 96, gap: 10, y0: 176 },
+  contentTop: 168,
+  contentBottom: 1262,
+});
+
+/** Content-space rect of achievement row `i`. */
+export function achievementRowRect(i: number): Rect {
+  const r = ACHIEVEMENTS_LAYOUT.row;
+  return { x: r.x, y: r.y0 + i * (r.h + r.gap), w: r.w, h: r.h };
+}
+
+/** Largest scroll for `count` rows (0 when everything fits). */
+export function achievementsMaxScroll(count: number): number {
+  const bottom = ACHIEVEMENTS_LAYOUT.row.y0 + count * (ACHIEVEMENTS_LAYOUT.row.h + ACHIEVEMENTS_LAYOUT.row.gap) + 10;
+  return Math.max(0, bottom - ACHIEVEMENTS_LAYOUT.contentBottom);
+}
 
 /* ---------- level select: winding path map ---------- */
 
@@ -178,6 +244,12 @@ export const SHOP = Object.freeze({
   /** Buy button inside a card (relative to the card's bottom-right). */
   buyW: 150,
   buyH: 54,
+  /** Crystals → gold confirm card (screen space, over the crystals tab). */
+  convertConfirm: {
+    card: { x: 90, y: 470, w: 540, h: 320 } as Rect,
+    yes: { x: 130, y: 676, w: 210, h: 72 } as Rect,
+    no: { x: 380, y: 676, w: 210, h: 72 } as Rect,
+  },
 });
 
 export function shopPackRect(i: number): Rect {
@@ -202,6 +274,11 @@ export function shopSkinRect(top: number, i: number): Rect {
 /** Buy / equip button docked bottom-centre inside a card. */
 export function shopBuyRect(card: Rect, w: number = SHOP.buyW, h: number = SHOP.buyH): Rect {
   return { x: card.x + card.w / 2 - w / 2, y: card.y + card.h - h - 16, w, h };
+}
+
+/** Pack-size segmented control inside the crystals → gold convert card. */
+export function shopConvertSegRect(card: Rect): Rect {
+  return { x: card.x + 24, y: card.y + 96, w: card.w - 48, h: 52 };
 }
 
 /** Buy button docked at the right of a full-width row. */

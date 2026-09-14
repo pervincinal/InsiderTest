@@ -4,8 +4,9 @@
  *
  * Contract for callers (Frontend Engineer):
  *   - Call `init()` once at startup (never rejects). It may show the Google UMP consent form
- *     (EEA/UK) and the iOS App Tracking Transparency prompt — do it on the title screen, not
- *     mid-battle.
+ *     (EEA/UK) — do it on the title screen, not mid-battle. There is NO iOS App Tracking
+ *     Transparency prompt: the app does not track (STORE_LISTING.md §6.4 option A); iOS always
+ *     requests non-personalised ads.
  *   - `isAvailable()` false => hide every ad-driven button (rewarded offers, etc.).
  *   - "Remove ads" is an entitlement the UI owns (from `StoreProvider`): when the player owns it,
  *     simply do not call `showInterstitial()`. Whether rewarded ads stay on for paying players is
@@ -15,6 +16,10 @@
  *   - `showRewarded(placementId)` resolves `{ rewarded: true }` ONLY when the ad network fired
  *     its reward event. Grant the reward iff `rewarded`. `placementId` is an opaque string from
  *     the economy catalog (used for analytics and optional per-placement ad units).
+ *   - Settings → "Privacy options" (privacy policy B.2): render the entry iff
+ *     `await privacyOptionsRequired()` is true (Google requires it for EEA/UK users who saw the
+ *     consent form) and call `showPrivacyOptions()` on tap. Both never reject; re-check
+ *     `isAvailable()` afterwards because the player may have withdrawn consent.
  *
  * Owned by the Mobile Engineer.
  */
@@ -35,6 +40,19 @@ export interface AdsProvider {
   showInterstitial(): Promise<boolean>;
   /** Show a rewarded video. `{ rewarded: true }` only on the network's reward event; never rejects. */
   showRewarded(placementId: string): Promise<RewardedResult>;
+  /**
+   * True iff the consent SDK requires a "Privacy options" entry point in the app's settings
+   * (UMP `privacyOptionsRequirementStatus === 'REQUIRED'`, i.e. an EEA/UK user who has seen the
+   * consent form). False on the web, before `init()`, and everywhere consent is not required.
+   * Never rejects.
+   */
+  privacyOptionsRequired(): Promise<boolean>;
+  /**
+   * Reopen the consent ("privacy options") form so the player can change or withdraw consent.
+   * Resolves when the form is dismissed; no-op when `privacyOptionsRequired()` is false or an
+   * ad is on screen. Never rejects.
+   */
+  showPrivacyOptions(): Promise<void>;
 }
 
 let ads: AdsProvider | null = null;

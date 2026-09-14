@@ -4,11 +4,25 @@ import { LEVELS } from '../levels/index';
 import type { Palette } from '../render/palette';
 import type { View } from '../render/view';
 import { applyDeviceTransform, applyTransform, clipToMap } from '../render/view';
-import type { ShopTab } from '../render/layout';
-import { HUD, LEVEL_MAP, RESULT, SETTINGS, TITLE, levelMapMaxScroll, levelNodeCentre, levelNodeRect } from '../render/layout';
+import type { SettingsAboutLayout, ShopTab } from '../render/layout';
+import {
+  ACHIEVEMENTS_LAYOUT,
+  HUD,
+  LEVEL_MAP,
+  RESULT,
+  SETTINGS,
+  TITLE,
+  achievementRowRect,
+  achievementsMaxScroll,
+  levelMapMaxScroll,
+  levelNodeCentre,
+  levelNodeRect,
+  settingsAboutLayout,
+} from '../render/layout';
 import type { Rect } from '../render/widgets';
 import { inRect, segmentAt } from '../render/widgets';
-import { MOTION_SEGMENTS, RATIO_SEGMENTS, drawLevelSelect, drawSettings, drawTitle } from '../render/menus';
+import type { AchievementRow } from '../render/menus';
+import { MOTION_SEGMENTS, RATIO_SEGMENTS, drawAchievements, drawLevelSelect, drawSettings, drawTitle } from '../render/menus';
 import type { ToastOpts } from '../render/economyWidgets';
 import type { PointerPoint } from '../input/pointer';
 import { drawGame } from '../render/draw';
@@ -21,12 +35,18 @@ import type { AdSession } from '../economy/adsFlow';
 import { canShowRewarded, maybeShowInterstitial, onResultShown, showRewarded } from '../economy/adsFlow';
 import type { ResultEarnings } from '../economy/wallet';
 import { bandOf, claimDaily, dailyStatus, earnCrystals, earnGold, payMilestones, spendCrystals } from '../economy/wallet';
-import { AD_PLACEMENTS, CRYSTAL_SERVICES } from '../economy/catalog';
+import { ACHIEVEMENTS, AD_PLACEMENTS, CRYSTAL_SERVICES } from '../economy/catalog';
+import type { AchievementGrant } from '../economy/achievements';
+import { achievementCrystalsEarned, achievementProgress, achievementToast, evaluateAchievements } from '../economy/achievements';
+import type { AdsProvider } from '../economy/ads';
+import { getAds } from '../economy/ads';
+import type { StoreProvider } from '../economy/store';
+import { getStore } from '../economy/store';
 import { commanderSummary } from './upgrades';
 
 /** A screen owns drawing and input while it is current. */
 export interface Screen {
-  readonly name: 'title' | 'levelSelect' | 'play' | 'result' | 'settings' | 'shop';
+  readonly name: 'title' | 'levelSelect' | 'play' | 'result' | 'settings' | 'shop' | 'achievements';
   enter?(): void;
   exit?(): void;
   update?(dtMs: number, nowMs: number): void;
@@ -57,12 +77,38 @@ export interface App {
   goLevels(): void;
   /** Open the shop on `tab`; BACK runs `back` (default: the title). */
   goShop(tab?: ShopTab, back?: () => void): void;
+  /** Open the achievements screen; BACK runs `back` (default: the title). */
+  goAchievements(back?: () => void): void;
+  /** Overrides for the About block (e2e / dev): undefined = ask the providers. */
+  readonly nativeInfo?: NativeInfoOverride;
   startLevel(levelId: number, seed?: number, opts?: StartOptions): boolean;
   go(screen: Screen): void;
   /** Open the settings screen; BACK returns to `from` (title, or the paused play screen). */
   openSettings(from: Screen): void;
   /** Sim speed multiplier for this and future levels (pause-menu toggle, debug). */
   setSpeed(n: number): void;
+}
+
+/** Test/dev override of what the native providers report for the settings About block. */
+export interface NativeInfoOverride {
+  supportId?: string | null;
+  privacyOptionsRequired?: boolean;
+}
+
+/** `__APP_VERSION__` / `__APP_BUILD__` are injected by vite.config.ts; "dev" when absent (Vitest). */
+export function appVersion(): string {
+  const version = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'dev';
+  const build = typeof __APP_BUILD__ === 'string' && __APP_BUILD__ ? ` (build ${__APP_BUILD__})` : '';
+  return `${version}${build}`;
+}
+
+/* Optional provider extensions the Mobile Engineer is adding (feature-checked so the build stays green either way). */
+interface PrivacyOptionsExt {
+  privacyOptionsRequired?: () => Promise<boolean> | boolean;
+  showPrivacyOptions?: () => Promise<void> | void;
+}
+interface SupportIdExt {
+  getSupportId?: () => Promise<string | null> | string | null;
 }
 
 /** Transient status pill shared by the screens (purchase results, rewards, errors). */
@@ -137,6 +183,8 @@ export class TitleScreen implements Screen {
       soundRect: TITLE_SOUND,
       shopRect: TITLE.shop,
       dailyRect: TITLE.daily,
+      achievementsRect: TITLE.achievements,
+      achievements: { unlocked: save.achievements.unlocked.length, total: ACHIEVEMENTS.length },
       walletRect: TITLE.wallet,
       soundOn: !isMuted(),
       totalStars: total,
@@ -156,7 +204,7 @@ export class TitleScreen implements Screen {
   }
 
   private hit(p: PointerPoint): Rect | null {
-    for (const r of [TITLE_PLAY, TITLE_SETTINGS, TITLE_SOUND, TITLE.shop, TITLE.daily, TITLE.wallet]) if (inRect(r, p.x, p.y)) return r;
+    for (const r of [TITLE_PLAY, TITLE_SETTINGS, TITLE_SOUND, TITLE.shop, TITLE.daily, TITLE.achievements, TITLE.wallet]) if (inRect(r, p.x, p.y)) return r;
     return null;
   }
 
@@ -175,6 +223,13 @@ export class TitleScreen implements Screen {
     else if (inRect(TITLE_SOUND, p.x, p.y)) toggleMuted(); // persists settings.sound via the audio facade
     else if (inRect(TITLE.shop, p.x, p.y) || inRect(TITLE.wallet, p.x, p.y)) this.app.goShop('crystals', () => this.app.goTitle());
     else if (inRect(TITLE.daily, p.x, p.y)) this.claimChest();
+    else if (inRect(TITLE.achievements, p.x, p.y)) this.app.goAchievements(() => this.app.goTitle());
+  }
+
+  /** Achievements are re-evaluated on every claim (ECON-4); the toast names what unlocked. */
+  private withAchievements(text: string): string {
+    const extra = achievementToast(evaluateAchievements(this.app.save));
+    return extra ? `${text} · ${extra}` : text;
   }
 
   /** Streak reward first; once claimed, the rewarded crystal chest (when a video is available). */
@@ -184,7 +239,7 @@ export class TitleScreen implements Screen {
     if (claimed) {
       playSfx('upgrade');
       const parts = [claimed.gold > 0 ? `+${claimed.gold} gold` : '', claimed.crystals > 0 ? `+${claimed.crystals} crystals` : ''].filter(Boolean);
-      this.toast.show(`Day ${claimed.day} reward: ${parts.join(' · ')}`, 'ok', this.nowMs);
+      this.toast.show(this.withAchievements(`Day ${claimed.day} reward: ${parts.join(' · ')}`), 'ok', this.nowMs);
       return;
     }
     if (this.adChestOffered() && !this.pendingAd) {
@@ -195,7 +250,7 @@ export class TitleScreen implements Screen {
         const amount = DAILY_CHEST_PLACEMENT.reward.kind === 'crystals' ? DAILY_CHEST_PLACEMENT.reward.amount : 0;
         earnCrystals(save, amount);
         playSfx('upgrade');
-        this.toast.show(`Crystal chest: +${amount} crystals`, 'ok', this.nowMs);
+        this.toast.show(this.withAchievements(`Crystal chest: +${amount} crystals`), 'ok', this.nowMs);
       });
       return;
     }
@@ -222,17 +277,59 @@ export class SettingsScreen implements Screen {
   readonly name = 'settings' as const;
   private pressed: Rect | null = null;
   private confirming = false;
+  private nowMs = 0;
+  private readonly toast = new Toast();
+  /** About block: support id from the store and the ads SDK's privacy-options requirement (native only). */
+  private supportId: string | null = null;
+  private privacyRequired = false;
+  private about: SettingsAboutLayout = settingsAboutLayout(false, false);
+  private privacyPending = false;
 
   constructor(
     private readonly app: App,
     private readonly back: () => void,
-  ) {}
+  ) {
+    void this.probeNative();
+  }
 
   get isConfirming(): boolean {
     return this.confirming;
   }
 
+  /** What the About block currently shows (e2e). */
+  get aboutInfo(): { version: string; supportId: string | null; privacyOptions: boolean } {
+    return { version: appVersion(), supportId: this.supportId, privacyOptions: this.privacyRequired };
+  }
+
+  /**
+   * Ask the providers (feature-checked: the web providers have neither method) — or take the
+   * app's override. Never throws; a failing provider just leaves the row hidden.
+   */
+  private async probeNative(): Promise<void> {
+    const over = this.app.nativeInfo;
+    const ads = getAds() as AdsProvider & PrivacyOptionsExt;
+    const store = getStore() as StoreProvider & SupportIdExt;
+    let privacy = false;
+    let id: string | null = null;
+    try {
+      if (over?.privacyOptionsRequired !== undefined) privacy = over.privacyOptionsRequired;
+      else if (typeof ads.privacyOptionsRequired === 'function') privacy = (await ads.privacyOptionsRequired()) === true;
+    } catch {
+      privacy = false;
+    }
+    try {
+      if (over?.supportId !== undefined) id = over.supportId;
+      else if (typeof store.getSupportId === 'function') id = await store.getSupportId();
+    } catch {
+      id = null;
+    }
+    this.supportId = typeof id === 'string' && id.length > 0 ? id : null;
+    this.privacyRequired = privacy;
+    this.about = settingsAboutLayout(this.supportId !== null, this.privacyRequired);
+  }
+
   draw(view: View, nowMs: number): void {
+    this.nowMs = nowMs;
     const s = this.app.save.settings;
     const total = Object.values(this.app.save.stars).reduce((a, b) => a + b, 0);
     drawSettings(view, this.app.palette(), {
@@ -243,14 +340,53 @@ export class SettingsScreen implements Screen {
       confirming: this.confirming,
       totalStars: total,
       coins: this.app.save.gold,
+      about: this.about,
+      version: appVersion(),
+      supportId: this.supportId,
       nowMs,
       pressed: this.pressed,
+      toast: this.toast.opts(nowMs),
     });
   }
 
   private rects(): Rect[] {
     if (this.confirming) return [SETTINGS.confirm.yes, SETTINGS.confirm.no];
-    return [SETTINGS.back, SETTINGS.sound, SETTINGS.colorBlind, SETTINGS.motion, SETTINGS.sendRatio, SETTINGS.reset];
+    const list = [SETTINGS.back, SETTINGS.sound, SETTINGS.colorBlind, SETTINGS.motion, SETTINGS.sendRatio, SETTINGS.reset];
+    if (this.about.copy) list.push(this.about.copy);
+    if (this.about.privacy) list.push(this.about.privacy);
+    return list;
+  }
+
+  /** Copy the support id to the clipboard (toast either way). */
+  copySupportId(): void {
+    const id = this.supportId;
+    if (!id) return;
+    const clip = typeof navigator !== 'undefined' ? navigator.clipboard : undefined;
+    if (!clip || typeof clip.writeText !== 'function') {
+      this.toast.show('Copy is not available here', 'error', this.nowMs);
+      return;
+    }
+    clip.writeText(id).then(
+      () => this.toast.show('Support ID copied', 'ok', this.nowMs),
+      () => this.toast.show('Could not copy the Support ID', 'error', this.nowMs),
+    );
+  }
+
+  /** Open the ads SDK's privacy options form (UMP); no-op when the provider has none. */
+  openPrivacyOptions(): void {
+    if (this.privacyPending) return;
+    const ads = getAds() as AdsProvider & PrivacyOptionsExt;
+    if (typeof ads.showPrivacyOptions !== 'function') {
+      this.toast.show('Privacy options are not available here', 'error', this.nowMs);
+      return;
+    }
+    this.privacyPending = true;
+    Promise.resolve()
+      .then(() => ads.showPrivacyOptions?.())
+      .catch(() => this.toast.show('Could not open privacy options', 'error', this.nowMs))
+      .finally(() => {
+        this.privacyPending = false;
+      });
   }
 
   down(p: PointerPoint): void {
@@ -281,6 +417,16 @@ export class SettingsScreen implements Screen {
       playSfx('button');
       return;
     }
+    if (hit === this.about.copy) {
+      playSfx('button');
+      this.copySupportId();
+      return;
+    }
+    if (hit === this.about.privacy) {
+      playSfx('button');
+      this.openPrivacyOptions();
+      return;
+    }
     playSfx('button');
     if (hit === SETTINGS.colorBlind) {
       save.settings.colorBlind = !save.settings.colorBlind;
@@ -309,6 +455,108 @@ export class SettingsScreen implements Screen {
       if (this.confirming) this.confirming = false;
       else this.back();
     }
+  }
+}
+
+/* ---------- Achievements (ECON-4) ---------- */
+
+/**
+ * Every catalog achievement with a progress bar and its crystal reward; unlocked rows are marked.
+ * Entering re-evaluates the save (a migrated save with 3★ levels gets its star goals paid here).
+ */
+export class AchievementsScreen implements Screen {
+  readonly name = 'achievements' as const;
+  private scroll = 0;
+  private downY = 0;
+  private scrollAtDown = 0;
+  private held = false;
+  private dragging = false;
+  private pressed: Rect | null = null;
+  private nowMs = 0;
+  private readonly toast = new Toast();
+
+  constructor(
+    private readonly app: App,
+    private readonly back: () => void = () => app.goTitle(),
+  ) {}
+
+  enter(): void {
+    const text = achievementToast(evaluateAchievements(this.app.save));
+    if (text) {
+      playSfx('upgrade');
+      this.toast.show(text, 'ok', performance.now(), 3500);
+    }
+  }
+
+  rows(): AchievementRow[] {
+    return achievementProgress(this.app.save).map((p, i) => ({ ...p, rect: achievementRowRect(i) }));
+  }
+
+  private maxScroll(): number {
+    return achievementsMaxScroll(ACHIEVEMENTS.length);
+  }
+
+  setScroll(y: number): void {
+    this.scroll = Math.max(0, Math.min(this.maxScroll(), y));
+  }
+
+  draw(view: View, nowMs: number): void {
+    this.nowMs = nowMs;
+    const save = this.app.save;
+    drawAchievements(view, this.app.palette(), {
+      rows: this.rows(),
+      unlockedCount: save.achievements.unlocked.length,
+      total: ACHIEVEMENTS.length,
+      crystalsEarned: achievementCrystalsEarned(save),
+      scroll: this.scroll,
+      backRect: ACHIEVEMENTS_LAYOUT.back,
+      nowMs,
+      pressed: this.pressed,
+      toast: this.toast.opts(nowMs),
+    });
+  }
+
+  down(p: PointerPoint): void {
+    this.held = true;
+    this.downY = p.y;
+    this.scrollAtDown = this.scroll;
+    this.dragging = false;
+    this.pressed = inRect(ACHIEVEMENTS_LAYOUT.back, p.x, p.y) ? ACHIEVEMENTS_LAYOUT.back : null;
+  }
+
+  move(p: PointerPoint): void {
+    if (!this.held) return;
+    if (Math.abs(p.y - this.downY) > 14) {
+      this.dragging = true;
+      this.pressed = null;
+    }
+    if (this.dragging) this.setScroll(this.scrollAtDown - (p.y - this.downY));
+  }
+
+  up(p: PointerPoint): void {
+    const hit = this.pressed;
+    this.pressed = null;
+    const wasDrag = this.dragging;
+    this.held = false;
+    this.dragging = false;
+    if (wasDrag) return;
+    if (hit === ACHIEVEMENTS_LAYOUT.back && inRect(hit, p.x, p.y)) this.back();
+  }
+
+  wheel(dy: number): void {
+    this.setScroll(this.scroll + dy);
+  }
+
+  cancel(): void {
+    this.held = false;
+    this.dragging = false;
+    this.pressed = null;
+  }
+
+  key(e: KeyboardEvent): void {
+    if (e.key === 'Escape') this.back();
+    else if (e.key === 'ArrowDown') this.setScroll(this.scroll + 120);
+    else if (e.key === 'ArrowUp') this.setScroll(this.scroll - 120);
   }
 }
 
@@ -446,6 +694,8 @@ export interface ResultInfo {
   earnings: ResultEarnings;
   /** This attempt already used the "Reinforcements" continue (offered once per attempt). */
   continued: boolean;
+  /** Achievements this result unlocked (toasted on enter). */
+  achievements: AchievementGrant;
 }
 
 const DOUBLE_GOLD = AD_PLACEMENTS.find((p) => p.id === 'rv_double_gold')!;
@@ -472,6 +722,8 @@ export class ResultScreen implements Screen {
 
   enter(): void {
     onResultShown(this.app.ads);
+    const text = achievementToast(this.info.achievements);
+    if (text) this.toast.show(text, 'ok', performance.now(), 3500);
   }
 
   private get won(): boolean {
@@ -637,6 +889,7 @@ export class ResultScreen implements Screen {
     delete save.defeats[key];
     payMilestones(save);
     writeSave(save);
+    evaluateAchievements(save); // a skip changes the star table (never to 3★, but the rule is "after each result")
     playSfx('upgrade');
     this.leave(() => this.nextLevel());
   }

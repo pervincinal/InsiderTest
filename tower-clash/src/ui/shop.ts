@@ -8,14 +8,15 @@ import type { View } from '../render/view';
 import type { Rect } from '../render/widgets';
 import { inRect, segmentAt } from '../render/widgets';
 import type { ShopTab } from '../render/layout';
-import { SHOP, SHOP_TABS, shopPackRect, shopRowRect, shopSkinRect } from '../render/layout';
-import type { ShopBundleCard, ShopPackCard, ShopSkinCard, ShopUpgradeCard } from '../render/menus';
+import { SHOP, SHOP_TABS, shopBuyRect, shopConvertSegRect, shopPackRect, shopRowRect, shopSkinRect } from '../render/layout';
+import type { ShopBundleCard, ShopConvertCard, ShopCrateCard, ShopPackCard, ShopSkinCard, ShopUpgradeCard } from '../render/menus';
 import { drawShop } from '../render/menus';
 import { ParticleSystem } from '../render/particles';
 import type { PointerPoint } from '../input/pointer';
 import type { IapProductDef, SkinDef } from '../economy/catalog';
 import { getStore } from '../economy/store';
-import { grantProduct, restorePurchases, spendCrystals } from '../economy/wallet';
+import { CONVERSION_PACKS, buyBoosterCrate, conversionGold, convertCrystals, grantProduct, restorePurchases, spendCrystals } from '../economy/wallet';
+import { CONVERSION, CRYSTAL_SERVICES } from '../economy/catalog';
 import { ownsProduct, shopSkins, spriteSkinId, visibleProducts } from '../economy/entitlements';
 import { UPGRADE_DEFS, UPGRADE_GLYPH, buyUpgrade, upgradeCost, upgradeEffectText, upgradeTier } from './upgrades';
 import { writeSave } from './save';
@@ -25,11 +26,14 @@ import { playSfx } from '../audio/index';
 
 interface Hit {
   rect: Rect;
-  action: () => void;
+  /** `p` is the pointer in content space (scroll already applied). */
+  action: (p: PointerPoint) => void;
 }
 
 interface Layout {
   packs: ShopPackCard[];
+  convert: ShopConvertCard | null;
+  crate: ShopCrateCard | null;
   bundles: ShopBundleCard[];
   skinHeaders: { label: string; y: number }[];
   skins: ShopSkinCard[];
@@ -71,6 +75,9 @@ export class ShopScreen implements Screen {
   private dragging = false;
   private pressed: Rect | null = null;
   private pending: string | null = null;
+  /** Selected conversion pack (index into CONVERSION_PACKS) and the pending confirmation. */
+  private convertIdx = 0;
+  private confirmConvert: { crystals: number; gold: number } | null = null;
   private nowMs = 0;
   private readonly toast = new Toast();
   private readonly particles = new ParticleSystem();
@@ -104,6 +111,12 @@ export class ShopScreen implements Screen {
     this.tab = tab;
     this.scroll = 0;
     this.pressed = null;
+    this.confirmConvert = null;
+  }
+
+  /** Conversion awaiting confirmation, if any (e2e). */
+  get pendingConversion(): { crystals: number; gold: number } | null {
+    return this.confirmConvert;
   }
 
   private priceOf(p: IapProductDef): string {
@@ -113,7 +126,7 @@ export class ShopScreen implements Screen {
   /** Cards + hit regions of the active tab, in content space (scroll is applied at draw / hit time). */
   private layout(): Layout {
     const save = this.app.save;
-    const out: Layout = { packs: [], bundles: [], skinHeaders: [], skins: [], upgrades: [], restoreRect: null, hits: [], contentHeight: 0 };
+    const out: Layout = { packs: [], convert: null, crate: null, bundles: [], skinHeaders: [], skins: [], upgrades: [], restoreRect: null, hits: [], contentHeight: 0 };
     let bottom: number = SHOP.contentTop;
     if (this.tab === 'crystals') {
       const packs = visibleProducts(save).filter((p) => p.bonusPct !== undefined);
@@ -123,9 +136,35 @@ export class ShopScreen implements Screen {
         out.hits.push({ rect, action: () => void this.buy(p, rect) });
         bottom = Math.max(bottom, rect.y + rect.h);
       });
+      // crystals → gold converter takes the next grid slot (ECONOMY.md §2)
+      const rect = shopPackRect(packs.length);
+      const segRect = shopConvertSegRect(rect);
+      const buyRect = shopBuyRect(rect, rect.w - 48);
+      const crystals = CONVERSION_PACKS[this.convertIdx] ?? CONVERSION_PACKS[0] ?? 0;
+      out.convert = {
+        rect,
+        packs: CONVERSION_PACKS,
+        selected: this.convertIdx,
+        segRect,
+        buyRect,
+        crystals,
+        gold: conversionGold(crystals),
+        goldPerCrystal: CONVERSION.goldPerCrystal,
+        affordable: save.crystals >= crystals,
+      };
+      out.hits.push({ rect: segRect, action: (p) => this.pickConversion(segmentAt(segRect, CONVERSION_PACKS.length, p.x, p.y)) });
+      out.hits.push({ rect: buyRect, action: () => this.askConversion() });
+      bottom = Math.max(bottom, rect.y + rect.h);
     } else if (this.tab === 'bundles') {
+      // booster crate first (crystals, ECONOMY.md §3.1), then the store bundles
+      const crate = CRYSTAL_SERVICES.boosterCrate;
+      const crateRect = shopRowRect(0);
+      out.crate = { rect: crateRect, cost: crate.costCrystals, charges: { ...crate.charges }, owned: { ...save.charges }, affordable: save.crystals >= crate.costCrystals };
+      out.hits.push({ rect: crateRect, action: () => this.tapCrate(crateRect) });
+      bottom = Math.max(bottom, crateRect.y + crateRect.h);
       const bundles = visibleProducts(save).filter((p) => p.bonusPct === undefined);
-      bundles.forEach((p, i) => {
+      bundles.forEach((p, idx) => {
+        const i = idx + 1;
         const rect = shopRowRect(i);
         const owned = ownsProduct(save, p.id);
         out.bundles.push({ id: p.id, rect, title: p.title, lines: bundleLines(p), price: this.priceOf(p), owned, glyph: BUNDLE_GLYPH[p.id] ?? 'chest' });
@@ -206,7 +245,10 @@ export class ShopScreen implements Screen {
       gold: this.app.save.gold,
       crystals: this.app.save.crystals,
       packs: lay.packs,
+      convert: lay.convert,
+      crate: lay.crate,
       bundles: lay.bundles,
+      confirmConvert: this.confirmConvert,
       skinHeaders: lay.skinHeaders,
       skins: lay.skins,
       upgrades: lay.upgrades,
@@ -229,6 +271,11 @@ export class ShopScreen implements Screen {
   }
 
   down(p: PointerPoint): void {
+    if (this.confirmConvert) {
+      const c = SHOP.convertConfirm;
+      this.pressed = [c.yes, c.no].find((r) => inRect(r, p.x, p.y)) ?? null;
+      return;
+    }
     this.held = true;
     this.downY = p.y;
     this.scrollAtDown = this.scroll;
@@ -238,6 +285,10 @@ export class ShopScreen implements Screen {
   }
 
   move(p: PointerPoint): void {
+    if (this.confirmConvert) {
+      if (this.pressed && !inRect(this.pressed, p.x, p.y)) this.pressed = null;
+      return;
+    }
     if (!this.held) return;
     if (Math.abs(p.y - this.downY) > 14) {
       this.dragging = true;
@@ -249,6 +300,12 @@ export class ShopScreen implements Screen {
   up(p: PointerPoint): void {
     const hit = this.pressed;
     this.pressed = null;
+    if (this.confirmConvert) {
+      const c = SHOP.convertConfirm;
+      if (hit === c.yes && inRect(c.yes, p.x, p.y)) this.confirmConversion();
+      else if (hit === c.no && inRect(c.no, p.x, p.y)) this.cancelConversion();
+      return;
+    }
     const wasDrag = this.dragging;
     this.held = false;
     this.dragging = false;
@@ -270,7 +327,7 @@ export class ShopScreen implements Screen {
       return;
     }
     const target = this.contentHit(p);
-    if (target && hit && inRect(hit, p.x, p.y + this.scroll)) target.action();
+    if (target && hit && inRect(hit, p.x, p.y + this.scroll)) target.action({ ...p, y: p.y + this.scroll });
   }
 
   wheel(dy: number): void {
@@ -284,6 +341,11 @@ export class ShopScreen implements Screen {
   }
 
   key(e: KeyboardEvent): void {
+    if (this.confirmConvert) {
+      if (e.key === 'Escape') this.cancelConversion();
+      else if (e.key === 'Enter') this.confirmConversion();
+      return;
+    }
     if (e.key === 'Escape') this.back();
     else if (e.key === 'ArrowDown') this.setScroll(this.scroll + 120);
     else if (e.key === 'ArrowUp') this.setScroll(this.scroll - 120);
@@ -348,6 +410,61 @@ export class ShopScreen implements Screen {
     this.pending = null;
     this.toast.show(granted.length ? `Restored: ${granted.join(', ')}` : 'Nothing new to restore', 'ok', this.nowMs);
     return granted;
+  }
+
+  /* ----- crystals → gold (ECONOMY.md §2) ----- */
+
+  pickConversion(index: number): void {
+    if (index < 0 || index >= CONVERSION_PACKS.length || index === this.convertIdx) return;
+    this.convertIdx = index;
+    playSfx('button');
+  }
+
+  /** CONVERT tapped: open the confirm card (unaffordable packs just toast). */
+  askConversion(): void {
+    const crystals = CONVERSION_PACKS[this.convertIdx];
+    if (crystals === undefined) return;
+    if (this.app.save.crystals < crystals) {
+      this.toast.show(`Need ${crystals} crystals · earn them from milestones and achievements`, 'error', this.nowMs);
+      return;
+    }
+    playSfx('button');
+    this.confirmConvert = { crystals, gold: conversionGold(crystals) };
+  }
+
+  cancelConversion(): void {
+    this.confirmConvert = null;
+    playSfx('button');
+  }
+
+  /** Confirmed: spend the crystals, add the gold, burst coins on the card. */
+  confirmConversion(): boolean {
+    const q = this.confirmConvert;
+    this.confirmConvert = null;
+    if (!q) return false;
+    const gold = convertCrystals(this.app.save, q.crystals);
+    if (gold === null) {
+      this.toast.show('Not enough crystals', 'error', this.nowMs);
+      return false;
+    }
+    const card = this.layout().convert?.rect;
+    if (card) this.burst('gold', card);
+    playSfx('upgrade');
+    this.toast.show(`Converted ${q.crystals} crystals into ${gold} gold`, 'ok', this.nowMs);
+    return true;
+  }
+
+  /* ----- booster crate (ECONOMY.md §3.1) ----- */
+
+  private tapCrate(rect: Rect): void {
+    const added = buyBoosterCrate(this.app.save);
+    if (!added) {
+      this.toast.show(`Need ${CRYSTAL_SERVICES.boosterCrate.costCrystals} crystals for the crate`, 'error', this.nowMs);
+      return;
+    }
+    this.burst('crystal', rect);
+    playSfx('upgrade');
+    this.toast.show(`Booster crate: +${added.overdrive} Overdrive · +${added.freeze} Freeze · +${added.airstrike} Airstrike`, 'ok', this.nowMs);
   }
 
   private tapSkin(skin: SkinDef, family: 'roof' | 'helmet', rect: Rect): void {

@@ -88,6 +88,12 @@ describe('fakeStore', () => {
     expect((await fakeStore.restore()).sort()).toEqual(['remove_ads', 'starter_bundle']);
   });
 
+  it('has no support id on the web (the UI hides the row)', async () => {
+    expect(await fakeStore.getSupportId()).toBeNull();
+    await fakeStore.init();
+    expect(await fakeStore.getSupportId()).toBeNull();
+  });
+
   it('formats prices from the price map and "$?.??" for unknown ids', async () => {
     configureFakeStore({ prices: { crystals_small: 0.99, crystals_big: 4.5 } });
     const products = await fakeStore.getProducts(['crystals_small', 'crystals_big', 'unknown_id']);
@@ -112,6 +118,11 @@ describe('revenueCatStore without a configured key', () => {
       error: 'unavailable',
     });
     expect(await revenueCatStore.restore()).toEqual([]);
+    expect(await revenueCatStore.getSupportId()).toBeNull();
+  });
+
+  it('getSupportId is null before init and never rejects', async () => {
+    expect(await revenueCatStore.getSupportId()).toBeNull();
   });
 
   it('maps RevenueCat error codes to the store vocabulary', () => {

@@ -6,25 +6,30 @@ import type { View } from './view';
 import { applyDeviceTransform, applyTransform, clipToMap } from './view';
 import type { Rect } from './widgets';
 import {
+  drawBoltGlyph,
   drawButton,
   drawCard,
   drawCoin,
+  drawCrosshairGlyph,
   drawExtrudedText,
   drawFlag,
   drawGearGlyph,
   drawGlassBand,
   drawLock,
   drawPill,
+  drawRoundButton,
   drawSegmented,
+  drawSnowflakeGlyph,
   drawSpeakerGlyph,
   drawStars,
   drawToggle,
+  drawTrophyGlyph,
   font,
   roundRect,
   withShadow,
 } from './widgets';
-import type { ShopTab } from './layout';
-import { LEVEL_MAP, SETTINGS, SHOP, SHOP_TABS, levelNodeCentre, levelNodeRect, shopBuyRect, shopRowBuyRect } from './layout';
+import type { SettingsAboutLayout, ShopTab } from './layout';
+import { ACHIEVEMENTS_LAYOUT, LEVEL_MAP, SETTINGS, SHOP, SHOP_TABS, levelNodeCentre, levelNodeRect, shopBuyRect, shopRowBuyRect } from './layout';
 import type { TerrainSpec } from './terrain';
 import { drawTerrain } from './terrain';
 import type { UpgradeKind } from './sprites';
@@ -188,6 +193,10 @@ export interface TitleOpts {
   soundRect: Rect;
   shopRect: Rect;
   dailyRect: Rect;
+  /** Trophy button (achievements screen). */
+  achievementsRect: Rect;
+  /** Unlocked / total achievements shown on the trophy tag. */
+  achievements: { unlocked: number; total: number };
   walletRect: Rect;
   soundOn: boolean;
   totalStars: number;
@@ -259,6 +268,8 @@ export function drawTitle(view: View, pal: Palette, o: TitleOpts): void {
 
   // daily reward chest (top-right): open + pulsing when claimable, closed once claimed
   drawDailyChest(ctx, pal, o.dailyRect, o.daily, o.nowMs, o.pressed === o.dailyRect);
+  // trophy (bottom-left): achievements
+  drawTrophyButton(ctx, pal, o.achievementsRect, o.achievements, o.pressed === o.achievementsRect);
 
   // wallet footer: stars · gold · crystals (tap → shop)
   drawWallet(ctx, pal, o.walletRect, o.gold, o.crystals, { stars: o.totalStars, pressed: o.pressed === o.walletRect });
@@ -297,6 +308,25 @@ function drawDailyChest(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, d:
   const label = d.adChest ? `+${d.crystals}` : d.claimable ? `DAY ${d.day}` : 'DONE';
   ctx.fillText(label, tag.x + tag.w / 2 + (d.adChest ? 8 : 0), tag.y + tag.h / 2 + 1, tag.w - 8);
   if (d.adChest) drawCrystal(ctx, pal, tag.x + tag.w / 2 - 18, tag.y + tag.h / 2, 8);
+}
+
+/** Round clay button with a gold trophy and an "n/total" tag underneath (tap → achievements). */
+function drawTrophyButton(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, a: { unlocked: number; total: number }, pressed: boolean): void {
+  const cx = r.x + r.w / 2;
+  const cy = r.y + 58;
+  ctx.save();
+  if (pressed) ctx.translate(0, 3);
+  drawRoundButton(ctx, pal, cx, cy, 42, { pressed });
+  drawTrophyGlyph(ctx, pal.gold, cx, cy - 4, 21, pal.goldShade);
+  ctx.restore();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const tag: Rect = { x: r.x + 14, y: r.y + r.h - 34, w: r.w - 28, h: 30 };
+  const done = a.total > 0 && a.unlocked >= a.total;
+  drawPill(ctx, tag, done ? pal.gold : pal.paper, done ? pal.goldShade : undefined, 2);
+  ctx.fillStyle = pal.ink;
+  ctx.font = font(15);
+  ctx.fillText(`${a.unlocked}/${a.total}`, tag.x + tag.w / 2, tag.y + tag.h / 2 + 1, tag.w - 8);
 }
 
 /* ---------- Level select: winding path map ---------- */
@@ -615,8 +645,13 @@ export interface SettingsOpts {
   confirming: boolean;
   totalStars: number;
   coins: number;
+  /** About card: app version, optional support id (tap COPY) and the native privacy-options entry. */
+  about: SettingsAboutLayout;
+  version: string;
+  supportId: string | null;
   nowMs: number;
   pressed?: Rect | null;
+  toast?: ToastOpts | null;
 }
 
 export const MOTION_SEGMENTS: readonly { label: string; value: MotionPref }[] = [
@@ -642,6 +677,43 @@ function settingsRow(ctx: CanvasRenderingContext2D, pal: Palette, control: Rect,
   // hairline separator under the row
   ctx.fillStyle = 'rgba(30, 42, 68, 0.1)';
   ctx.fillRect(SETTINGS.card.x + 28, control.y + SETTINGS.rowH - 22, SETTINGS.card.w - 56, 2);
+}
+
+/** About: "Tower Clash · Version x.y.z", the store support id with a COPY button, PRIVACY OPTIONS when the ads SDK asks for it. */
+function drawAboutCard(ctx: CanvasRenderingContext2D, pal: Palette, o: SettingsOpts): void {
+  const ab = o.about;
+  drawCard(ctx, pal, ab.card);
+  const x = SETTINGS.labelX;
+  const right = ab.card.x + ab.card.w - 36;
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = pal.ink;
+  ctx.font = font(26);
+  ctx.fillText('Tower Clash', x, ab.versionY - 12);
+  ctx.fillStyle = pal.textDim;
+  ctx.font = font(17, '500');
+  ctx.fillText('Progress is stored on this device', x, ab.versionY + 16, ab.card.w - 260);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = pal.ink;
+  ctx.font = font(20, '500');
+  ctx.fillText(`Version ${o.version}`, right, ab.versionY + 2);
+  if (ab.supportY !== null && ab.copy && o.supportId !== null) {
+    ctx.fillStyle = 'rgba(30, 42, 68, 0.1)';
+    ctx.fillRect(ab.card.x + 28, ab.supportY - SETTINGS.aboutRowH / 2 - 2, ab.card.w - 56, 2);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = pal.ink;
+    ctx.font = font(22);
+    ctx.fillText('Support ID', x, ab.supportY - 12);
+    ctx.fillStyle = pal.textDim;
+    ctx.font = font(16, '500');
+    ctx.fillText(o.supportId, x, ab.supportY + 15, ab.copy.x - x - 16);
+    drawButton(ctx, pal, ab.copy, 'COPY', { fontPx: 19, flat: true, pressed: o.pressed === ab.copy });
+  }
+  if (ab.privacy) {
+    ctx.fillStyle = 'rgba(30, 42, 68, 0.1)';
+    ctx.fillRect(ab.card.x + 28, ab.privacy.y - 12, ab.card.w - 56, 2);
+    drawButton(ctx, pal, ab.privacy, 'PRIVACY OPTIONS', { fontPx: 22, pressed: o.pressed === ab.privacy });
+  }
 }
 
 export function drawSettings(view: View, pal: Palette, o: SettingsOpts): void {
@@ -671,6 +743,7 @@ export function drawSettings(view: View, pal: Palette, o: SettingsOpts): void {
   drawStars(ctx, pal, 360 + 12 - sw / 2 - 22, SETTINGS.reset.y - 44, 1, 10, [1, 0, 0]);
   drawCoin(ctx, pal, 360 + 12 + sw / 2 + 22, SETTINGS.reset.y - 44, 11);
   drawButton(ctx, pal, SETTINGS.reset, 'RESET PROGRESS', { fontPx: 24, border: pal.owners.enemy1, text: pal.owners.enemy1, pressed: o.pressed === SETTINGS.reset });
+  drawAboutCard(ctx, pal, o);
 
   // header
   drawGlassBand(ctx, { x: 0, y: 0, w: C.MAP_W, h: SETTINGS.headerH });
@@ -694,6 +767,7 @@ export function drawSettings(view: View, pal: Palette, o: SettingsOpts): void {
     drawButton(ctx, pal, c.yes, 'RESET', { fill: pal.owners.enemy1, fontPx: 26, pressed: o.pressed === c.yes });
     drawButton(ctx, pal, c.no, 'CANCEL', { fontPx: 26, pressed: o.pressed === c.no });
   }
+  if (o.toast) drawToast(ctx, pal, o.toast);
   ctx.restore();
 }
 
@@ -747,6 +821,30 @@ export interface ShopUpgradeCard {
   affordable: boolean;
 }
 
+/** Booster crate (ECONOMY.md §3.1): crystals → pre-paid charges of every booster. */
+export interface ShopCrateCard {
+  rect: Rect;
+  cost: number;
+  charges: { overdrive: number; freeze: number; airstrike: number };
+  owned: { overdrive: number; freeze: number; airstrike: number };
+  affordable: boolean;
+}
+
+/** Crystals → gold converter (ECONOMY.md §2): pick a pack, confirm. */
+export interface ShopConvertCard {
+  rect: Rect;
+  /** Pack sizes in crystals and the selected index. */
+  packs: readonly number[];
+  selected: number;
+  segRect: Rect;
+  buyRect: Rect;
+  /** Selected pack: crystals spent and gold received. */
+  crystals: number;
+  gold: number;
+  goldPerCrystal: number;
+  affordable: boolean;
+}
+
 export interface ShopOpts {
   tab: ShopTab;
   tabsRect: Rect;
@@ -760,6 +858,12 @@ export interface ShopOpts {
   skinHeaders: { label: string; y: number }[];
   skins: ShopSkinCard[];
   upgrades: ShopUpgradeCard[];
+  /** Booster crate row (bundles tab). */
+  crate?: ShopCrateCard | null;
+  /** Convert card (crystals tab). */
+  convert?: ShopConvertCard | null;
+  /** Conversion awaiting confirmation (modal over the tab). */
+  confirmConvert?: { crystals: number; gold: number } | null;
   /** Restore-purchases button (content space), on the store tabs. */
   restoreRect: Rect | null;
   storeAvailable: boolean;
@@ -909,6 +1013,110 @@ function drawSkinCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopSkinCa
   }
 }
 
+/** Three overlapping booster discs (bolt · snowflake · crosshair) as the crate's glyph. */
+function crateGlyph(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number): void {
+  const discs: { dx: number; dy: number; fill: string; glyph: (cx: number, cy: number) => void }[] = [
+    { dx: -26, dy: 14, fill: pal.sky, glyph: (cx, cy) => drawSnowflakeGlyph(ctx, pal.paper, cx, cy, 12) },
+    { dx: 26, dy: 14, fill: pal.owners.enemy1, glyph: (cx, cy) => drawCrosshairGlyph(ctx, pal.paper, cx, cy, 12) },
+    { dx: 0, dy: -16, fill: pal.gold, glyph: (cx, cy) => drawBoltGlyph(ctx, pal.paper, cx, cy, 13, shade(pal.gold, -0.45)) },
+  ];
+  for (const d of discs) {
+    drawRoundButton(ctx, pal, x + d.dx, y + d.dy, 24, { fill: d.fill });
+    d.glyph(x + d.dx, y + d.dy - 1);
+  }
+}
+
+function drawCrateCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopCrateCard, o: ShopOpts): void {
+  const r = c.rect;
+  drawCard(ctx, pal, r, { radius: 22, edge: 5 });
+  crateGlyph(ctx, pal, r.x + 70, r.y + r.h / 2 - 2);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = pal.ink;
+  ctx.font = font(26);
+  const textX = r.x + 136;
+  const textW = r.w - 136 - SHOP.buyW - 40;
+  ctx.fillText('Booster Crate', textX, r.y + 40, textW);
+  ctx.fillStyle = pal.textDim;
+  ctx.font = font(17, '500');
+  const lines = [
+    `${c.charges.overdrive}× Overdrive · ${c.charges.freeze}× Freeze · ${c.charges.airstrike}× Airstrike`,
+    'Pre-paid charges, used before gold',
+    `You own ${c.owned.overdrive} · ${c.owned.freeze} · ${c.owned.airstrike}`,
+  ];
+  lines.forEach((line, i) => ctx.fillText(line, textX, r.y + 72 + i * 24, textW));
+  const buy = shopRowBuyRect(r);
+  drawBuyButton(ctx, pal, buy, String(c.cost), {
+    glyph: 'crystal',
+    fill: pal.owners.player,
+    disabled: !c.affordable,
+    pressed: rectEq(o.pressed, buy) || rectEq(o.pressed, r),
+    fontPx: 24,
+  });
+}
+
+function drawConvertCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopConvertCard, o: ShopOpts): void {
+  const r = c.rect;
+  const cx = r.x + r.w / 2;
+  drawCard(ctx, pal, r, { radius: 22, edge: 5 });
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = pal.ink;
+  ctx.font = font(26);
+  ctx.fillText('CONVERT', cx + 14, r.y + 36);
+  drawCrystal(ctx, pal, cx - ctx.measureText('CONVERT').width / 2 - 8, r.y + 36, 12);
+  ctx.fillStyle = pal.textDim;
+  ctx.font = font(16, '500');
+  ctx.fillText(`1 crystal = ${c.goldPerCrystal} gold · never back`, cx, r.y + 70, r.w - 24);
+  drawSegmented(
+    ctx,
+    pal,
+    c.segRect,
+    c.packs.map((n) => ({ label: String(n) })),
+    c.selected,
+    20,
+  );
+  // result line: "→ 100 gold" with a coin
+  ctx.fillStyle = pal.ink;
+  ctx.font = font(22);
+  const label = `\u2192 ${formatAmount(c.gold)} gold`;
+  const w = ctx.measureText(label).width;
+  ctx.fillText(label, cx + 10, r.y + 170);
+  drawGoldCoin(ctx, pal, cx + 10 - w / 2 - 16, r.y + 170, 11);
+  drawBuyButton(ctx, pal, c.buyRect, 'CONVERT', {
+    fill: pal.owners.player,
+    disabled: !c.affordable,
+    pressed: rectEq(o.pressed, c.buyRect),
+    fontPx: 22,
+  });
+}
+
+/** Modal over the crystals tab: "Convert 20 crystals into 100 gold?" with CONVERT / CANCEL. */
+function drawConvertConfirm(ctx: CanvasRenderingContext2D, pal: Palette, q: { crystals: number; gold: number }, o: ShopOpts): void {
+  ctx.fillStyle = 'rgba(26, 58, 90, 0.5)';
+  ctx.fillRect(0, 0, C.MAP_W, C.MAP_H);
+  const c = SHOP.convertConfirm;
+  drawCard(ctx, pal, c.card);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = pal.ink;
+  ctx.font = font(34);
+  ctx.fillText('Convert crystals?', 360, c.card.y + 62);
+  ctx.font = font(26);
+  const line = `${q.crystals}       ${q.gold}`;
+  const w = ctx.measureText(line).width;
+  ctx.fillText(line, 360, c.card.y + 122);
+  drawCrystal(ctx, pal, 360 - w / 2 - 18, c.card.y + 122, 13);
+  ctx.fillStyle = pal.textDim;
+  ctx.fillText('\u2192', 360, c.card.y + 122);
+  drawGoldCoin(ctx, pal, 360 + w / 2 + 18, c.card.y + 122, 12);
+  ctx.fillStyle = pal.textDim;
+  ctx.font = font(19, '500');
+  ctx.fillText('Gold can never be turned back into crystals.', 360, c.card.y + 168, c.card.w - 40);
+  drawButton(ctx, pal, c.yes, 'CONVERT', { fill: pal.owners.player, fontPx: 26, pressed: o.pressed === c.yes });
+  drawButton(ctx, pal, c.no, 'CANCEL', { fontPx: 26, pressed: o.pressed === c.no });
+}
+
 /** Five tier pips: filled up to `tier`. */
 function drawTierPips(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, tier: number, max: number): void {
   for (let i = 0; i < max; i++) {
@@ -969,6 +1177,8 @@ export function drawShop(view: View, pal: Palette, o: ShopOpts): void {
   ctx.clip();
   ctx.translate(0, -o.scroll);
   for (const c of o.packs) drawPackCard(ctx, pal, c, o);
+  if (o.convert) drawConvertCard(ctx, pal, o.convert, o);
+  if (o.crate) drawCrateCard(ctx, pal, o.crate, o);
   for (const c of o.bundles) drawBundleCard(ctx, pal, c, o);
   for (const h of o.skinHeaders) {
     ctx.textAlign = 'left';
@@ -1014,6 +1224,119 @@ export function drawShop(view: View, pal: Palette, o: ShopOpts): void {
   drawExtrudedText(ctx, 'SHOP', 280, 50, 40, { face: pal.paper, side: shade(pal.owners.player, -0.25), outline: pal.ink, depth: 4 });
   drawWallet(ctx, pal, o.walletRect, o.gold, o.crystals);
   drawSegmented(ctx, pal, o.tabsRect, SHOP_TABS.map((t) => ({ label: TAB_LABELS[t], value: t })), SHOP_TABS.indexOf(o.tab), 19);
+  if (o.confirmConvert) drawConvertConfirm(ctx, pal, o.confirmConvert, o);
+  if (o.toast) drawToast(ctx, pal, { ...o.toast, y: o.toast.y ?? 1210 });
+  ctx.restore();
+}
+
+/* ---------- Achievements (ECONOMY.md §2.1) ---------- */
+
+export interface AchievementRow {
+  id: string;
+  /** Content-space rect. */
+  rect: Rect;
+  label: string;
+  current: number;
+  target: number;
+  crystals: number;
+  unlocked: boolean;
+}
+
+export interface AchievementsOpts {
+  rows: AchievementRow[];
+  unlockedCount: number;
+  total: number;
+  crystalsEarned: number;
+  scroll: number;
+  backRect: Rect;
+  nowMs: number;
+  pressed?: Rect | null;
+  toast?: ToastOpts | null;
+}
+
+function checkGlyph(ctx: CanvasRenderingContext2D, color: string, cx: number, cy: number, s: number): void {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = Math.max(3, s * 0.35);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(cx - s * 0.6, cy);
+  ctx.lineTo(cx - s * 0.15, cy + s * 0.45);
+  ctx.lineTo(cx + s * 0.65, cy - s * 0.5);
+  ctx.stroke();
+}
+
+function drawAchievementRow(ctx: CanvasRenderingContext2D, pal: Palette, a: AchievementRow): void {
+  const r = a.rect;
+  drawCard(ctx, pal, r, { radius: 20, edge: 5 });
+  // medal
+  const mx = r.x + 52;
+  const my = r.y + 44;
+  drawRoundButton(ctx, pal, mx, my, 31, { fill: a.unlocked ? pal.gold : pal.panelBorder });
+  drawTrophyGlyph(ctx, a.unlocked ? pal.paper : pal.textDim, mx, my - 3, 15, a.unlocked ? pal.goldShade : undefined);
+  // label + progress bar
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = pal.ink;
+  ctx.font = font(22);
+  const textX = r.x + 104;
+  const barW = 290;
+  ctx.fillText(a.label, textX, r.y + 30, r.w - 104 - 170);
+  const bar: Rect = { x: textX, y: r.y + 54, w: barW, h: 14 };
+  roundRect(ctx, bar, 7);
+  ctx.fillStyle = 'rgba(30, 42, 68, 0.12)';
+  ctx.fill();
+  const frac = a.target > 0 ? Math.max(0, Math.min(1, a.current / a.target)) : 0;
+  if (frac > 0) {
+    roundRect(ctx, { x: bar.x, y: bar.y, w: Math.max(14, bar.w * frac), h: bar.h }, 7);
+    ctx.fillStyle = a.unlocked ? pal.gold : pal.owners.player;
+    ctx.fill();
+  }
+  ctx.fillStyle = pal.textDim;
+  ctx.font = font(15, '500');
+  ctx.fillText(`${a.current}/${a.target}`, bar.x + bar.w + 12, bar.y + bar.h / 2 + 1, 60);
+  // reward pill
+  const pill: Rect = { x: r.x + r.w - 148, y: r.y + 24, w: 128, h: 42 };
+  if (a.unlocked) {
+    drawPill(ctx, pill, pal.owners.enemy2, shade(pal.owners.enemy2, -0.35), 2);
+    checkGlyph(ctx, pal.paper, pill.x + 24, pill.y + pill.h / 2, 12);
+    ctx.fillStyle = pal.paper;
+  } else {
+    drawPill(ctx, pill, pal.paper, pal.panelBorder, 2);
+    drawCrystal(ctx, pal, pill.x + 24, pill.y + pill.h / 2, 10);
+    ctx.fillStyle = pal.ink;
+  }
+  ctx.font = font(20);
+  ctx.textAlign = 'center';
+  ctx.fillText(`+${a.crystals}`, pill.x + 24 + (pill.w - 24) / 2 - 2, pill.y + pill.h / 2 + 1, pill.w - 50);
+  if (a.unlocked) {
+    drawCrystal(ctx, pal, pill.x + pill.w - 22, pill.y + pill.h / 2, 9);
+  }
+}
+
+export function drawAchievements(view: View, pal: Palette, o: AchievementsOpts): void {
+  const ctx = beginFrame(view, pal);
+  drawWater(ctx, pal, o.nowMs, o.scroll * 0.4);
+  const L = ACHIEVEMENTS_LAYOUT;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, L.contentTop, C.MAP_W, L.contentBottom - L.contentTop);
+  ctx.clip();
+  ctx.translate(0, -o.scroll);
+  for (const row of o.rows) drawAchievementRow(ctx, pal, row);
+  ctx.restore();
+  // fixed chrome: header + summary pill
+  drawGlassBand(ctx, { x: 0, y: 0, w: C.MAP_W, h: L.summary.y + L.summary.h + 12 });
+  drawButton(ctx, pal, o.backRect, 'BACK', { fontPx: 24, pressed: o.pressed === o.backRect });
+  drawExtrudedText(ctx, 'ACHIEVEMENTS', 430, 50, 34, { face: pal.paper, side: shade(pal.owners.player, -0.25), outline: pal.ink, depth: 4 });
+  drawPill(ctx, L.summary, pal.paper);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = pal.ink;
+  ctx.font = font(19, '500');
+  const summary = `${o.unlockedCount} of ${o.total} unlocked  ·  ${o.crystalsEarned} crystals earned`;
+  ctx.fillText(summary, 360 + 10, L.summary.y + L.summary.h / 2 + 1, L.summary.w - 60);
+  drawCrystal(ctx, pal, 360 + 10 + ctx.measureText(summary).width / 2 + 16, L.summary.y + L.summary.h / 2, 9);
   if (o.toast) drawToast(ctx, pal, { ...o.toast, y: o.toast.y ?? 1210 });
   ctx.restore();
 }

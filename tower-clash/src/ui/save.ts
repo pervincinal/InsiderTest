@@ -55,6 +55,11 @@ export interface AdCounters {
 /** Pre-paid booster uses, consumed before gold (ECONOMY.md §3.1). */
 export type BoosterCharges = { overdrive: number; freeze: number; airstrike: number };
 
+/** Achievements (ECONOMY.md §2.1, `catalog.ACHIEVEMENTS`): ids already unlocked and paid. */
+export interface AchievementState {
+  unlocked: string[];
+}
+
 export interface SaveData {
   version: number;
   stars: Record<string, number>; // levelId → 0..3
@@ -79,6 +84,8 @@ export interface SaveData {
   defeats: Record<string, number>;
   /** Band indices (0..4) where the level skip was already used. */
   skips: number[];
+  /** Unlocked achievement ids (crystals are granted once, at unlock). Added without a schema bump. */
+  achievements: AchievementState;
   settings: Settings;
 }
 
@@ -99,6 +106,7 @@ export function defaultSave(): SaveData {
     replayGold: { day: '', earned: 0 },
     defeats: {},
     skips: [],
+    achievements: { unlocked: [] },
     settings: { sendRatio: 1, colorBlind: false, sound: true, reducedMotion: 'auto' },
   };
 }
@@ -171,6 +179,7 @@ export function normalizeSave(raw: unknown): SaveData {
   if (isRecord(raw.replayGold)) out.replayGold = { day: dayString(raw.replayGold.day), earned: nonNegInt(raw.replayGold.earned) ?? 0 };
   out.defeats = countMap(raw.defeats);
   out.skips = Array.isArray(raw.skips) ? [...new Set(raw.skips.map(nonNegInt).filter((n): n is number => n !== null))] : [];
+  if (isRecord(raw.achievements)) out.achievements = { unlocked: stringList(raw.achievements.unlocked) };
   if (isRecord(raw.settings)) {
     const s = raw.settings;
     if (s.sendRatio === 0.5 || s.sendRatio === 1) out.settings.sendRatio = s.sendRatio;

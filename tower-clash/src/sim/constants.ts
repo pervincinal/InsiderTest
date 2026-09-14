@@ -36,4 +36,12 @@ export const C = Object.freeze({
   AIRSTRIKE_DAMAGE: 10,
   BOOSTER_COST: { overdrive: 30, freeze: 40, airstrike: 50 } as const,
   COINS_PER_STAR: 10,
+
+  /** Continue after defeat (ECONOMY.md §3.5): rewind, then a free freeze and reinforcements. */
+  CONTINUE_REWIND_MS: 20_000,
+  CONTINUE_FREEZE_MS: 5_000,
+  CONTINUE_INFANTRY: 15,
+  /** Snapshot ring for the rewind: one snapshot per interval, kept for at least the rewind window. */
+  SNAPSHOT_INTERVAL_MS: 1_000,
+  SNAPSHOT_CAPACITY_MS: 20_000,
 });
