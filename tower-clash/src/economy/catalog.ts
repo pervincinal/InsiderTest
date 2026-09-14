@@ -197,7 +197,7 @@ export const SKINS = [
 /** Crystal-priced services (ECONOMY.md §3.1, §3.4, §3.5). */
 export const CRYSTAL_SERVICES = {
   levelSkip: { costCrystals: 30, offerAfterDefeats: 3, maxPerBand: 1, starsGranted: 1 },
-  continue: { costCrystals: 10, rewindMs: 20_000, snapshotEveryMs: 5000, bonusInfantry: 15, freeFreeze: true, perAttempt: 1 },
+  continue: { costCrystals: 10, rewindMs: 20_000, snapshotEveryMs: 1000, bonusInfantry: 15, freeFreeze: true, perAttempt: 1 },
   boosterCrate: { costCrystals: 60, charges: { overdrive: 5, freeze: 3, airstrike: 2 } },
 } as const satisfies {
   levelSkip: { costCrystals: number; offerAfterDefeats: number; maxPerBand: number; starsGranted: number };

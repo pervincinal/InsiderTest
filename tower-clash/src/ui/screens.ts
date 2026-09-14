@@ -43,6 +43,7 @@ import { getAds } from '../economy/ads';
 import type { StoreProvider } from '../economy/store';
 import { getStore } from '../economy/store';
 import { commanderSummary } from './upgrades';
+import { equippedSkin } from '../economy/entitlements';
 
 /** A screen owns drawing and input while it is current. */
 export interface Screen {
@@ -62,7 +63,10 @@ export interface Screen {
 
 /** Per-attempt options for `App.startLevel`. */
 export interface StartOptions {
-  /** "Reinforcements" continue (ECONOMY.md §3.5): +15 starting infantry on every player tower, once. */
+  /**
+   * Fallback "Reinforcements" continue (ECONOMY.md §3.5) when no snapshot can be resumed: restart
+   * with +15 starting infantry on every player tower; the new attempt offers no second continue.
+   */
   reinforcements?: boolean;
 }
 
@@ -197,6 +201,7 @@ export class TitleScreen implements Screen {
         crystals: adChest && DAILY_CHEST_PLACEMENT.reward.kind === 'crystals' ? DAILY_CHEST_PLACEMENT.reward.amount : daily.crystals,
         adChest,
       },
+      theme: equippedSkin(save).theme,
       nowMs,
       pressed: this.pressed,
       toast: this.toast.opts(nowMs),
@@ -696,6 +701,11 @@ export interface ResultInfo {
   continued: boolean;
   /** Achievements this result unlocked (toasted on enter). */
   achievements: AchievementGrant;
+  /**
+   * Rewind the play screen ~20 s and resume with the reinforcements (`PlayScreen.resumeFromSnapshot`).
+   * False = no usable snapshot; the result screen then restarts the level with the bonus garrison.
+   */
+  resume?: () => boolean;
 }
 
 const DOUBLE_GOLD = AD_PLACEMENTS.find((p) => p.id === 'rv_double_gold')!;
@@ -850,7 +860,9 @@ export class ResultScreen implements Screen {
     });
   }
 
+  /** Paid continue: rewind and resume; if the snapshot ring cannot serve one, restart with the bonus garrison. */
   private reinforce(): void {
+    if (this.info.resume?.()) return;
     playSfx('upgrade');
     this.app.startLevel(this.info.level.id, undefined, { reinforcements: true });
   }

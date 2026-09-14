@@ -1,5 +1,7 @@
 import type { Command, GameState, LevelDef, SimEvent } from '../sim/types';
 import { Rng } from '../sim/rng';
+import { C } from '../sim/constants';
+import { SnapshotRing, applyContinue } from '../sim/snapshot';
 import { createState } from '../sim/create';
 import { getOutcome } from '../sim/outcome';
 import { LEVELS } from '../levels/index';
@@ -43,6 +45,17 @@ interface Effect {
   kind: 'ring' | 'puff';
 }
 
+/**
+ * One entry of the continue ring (ECONOMY.md §3.5): the sim state plus the AI / autoplay rng
+ * streams, which live outside `GameState` and must rewind with it so a replayed stretch stays
+ * deterministic. `time` mirrors `state.time` for `SnapshotRing`.
+ */
+interface Snapshot {
+  time: number;
+  state: GameState;
+  rng: { player: number; enemies: Record<string, number> };
+}
+
 export class PlayScreen implements Screen {
   readonly name = 'play' as const;
   readonly loop: GameLoop;
@@ -60,8 +73,12 @@ export class PlayScreen implements Screen {
   /** Airstrike targeting mode (M3-1): the next tap on an enemy tower fires, anywhere else cancels. */
   targeting = false;
   private pressedBooster: BoosterKind | null = null;
-  /** This attempt is a "Reinforcements" continue (ECONOMY.md §3.5) — offered once per attempt. */
-  readonly reinforced: boolean;
+  /** This attempt already used its "Reinforcements" continue (ECONOMY.md §3.5) — offered once per attempt. */
+  private continued: boolean;
+  /** State + rng snapshots of the last `C.SNAPSHOT_CAPACITY_MS` of sim time, one per `C.SNAPSHOT_INTERVAL_MS`. */
+  private readonly ring = new SnapshotRing<Snapshot>();
+  /** Sim ms discarded by continues: the star clock is `state.time + rewoundMs` (continuing never improves it). */
+  private rewoundMs = 0;
   /** A rewarded video for a free booster charge is in flight (sim paused meanwhile). */
   private adPending = false;
   private readonly toast = new Toast();
@@ -79,7 +96,7 @@ export class PlayScreen implements Screen {
     speed = 1,
     opts: StartOptions = {},
   ) {
-    this.reinforced = opts.reinforcements === true;
+    this.continued = opts.reinforcements === true;
     this.loop = new GameLoop({
       beforeTick: (s) => this.runAi(s),
       onEvents: (ev) => {
@@ -88,8 +105,9 @@ export class PlayScreen implements Screen {
       },
     });
     this.loop.speed = speed;
-    // Commander upgrades (+ the one-off continue bonus) are sim input, fixed for the whole match.
-    const modifiers = modifiersFromSave(app.save, this.reinforced ? CRYSTAL_SERVICES.continue.bonusInfantry : 0);
+    // Commander upgrades are sim input, fixed for the whole match. The bonus garrison is only the
+    // fallback continue (no usable snapshot): the normal continue rewinds instead (`resumeFromSnapshot`).
+    const modifiers = modifiersFromSave(app.save, this.continued ? CRYSTAL_SERVICES.continue.bonusInfantry : 0);
     this.loop.load(createState(level, seed, modifiers));
     resetAudioLevel();
     const rngs = rngsFor(seed, level.enemies);
@@ -116,6 +134,55 @@ export class PlayScreen implements Screen {
 
   get state(): GameState {
     return this.loop.state!;
+  }
+
+  /** Match clock for stars and results: sim time plus whatever the continue rewound (ECONOMY.md §3.5). */
+  elapsedMs(): number {
+    return this.state.time + this.rewoundMs;
+  }
+
+  /** Whether the once-per-attempt "Reinforcements" continue was already used. */
+  get hasContinued(): boolean {
+    return this.continued;
+  }
+
+  private snapshot(): Snapshot {
+    const enemies: Record<string, number> = {};
+    for (const [owner, rng] of this.enemyRngs) enemies[owner] = rng.state;
+    return { time: this.state.time, state: this.state, rng: { player: this.playerRng.state, enemies } };
+  }
+
+  /**
+   * "Reinforcements" continue (ECONOMY.md §3.5): rewind to the snapshot `C.CONTINUE_REWIND_MS` before
+   * the defeat, restore the rng streams, grant the free Freeze + infantry (`applyContinue`) and resume
+   * on this screen with the tutorial and HUD intact. Returns false — and changes nothing — when the
+   * continue was used, the level is still running, or no snapshot with a player tower exists (the
+   * caller then falls back to a restart with the bonus garrison).
+   */
+  resumeFromSnapshot(): boolean {
+    if (this.continued || !this.loop.finished) return false;
+    const snap = this.ring.rewind(C.CONTINUE_REWIND_MS);
+    if (!snap) return false;
+    const restored = applyContinue(snap.state);
+    if (!restored) return false;
+    this.rewoundMs += this.state.time - restored.time;
+    this.playerRng.state = snap.rng.player;
+    for (const [owner, rng] of this.enemyRngs) {
+      const saved = snap.rng.enemies[owner];
+      if (saved !== undefined) rng.state = saved;
+    }
+    this.continued = true;
+    this.finishedHandled = false;
+    this.targeting = false;
+    this.pressedBooster = null;
+    this.effects.length = 0;
+    this.gestures.reset();
+    this.loop.load(restored); // also drops queued commands and unpauses
+    this.ring.record(this.snapshot()); // the abandoned future is forgotten; the rewound state is the new base
+    resetAudioLevel();
+    playSfx('upgrade');
+    this.app.go(this);
+    return true;
   }
 
   /* ----- AI wiring: every C.AI_TICK_MS of sim time the loop applies these right before the tick ----- */
@@ -205,7 +272,7 @@ export class PlayScreen implements Screen {
     this.nowMs = nowMs;
     this.gestures.tick(nowMs);
     this.tutorial?.onSelect(this.gestures.selectedTowerId, this.state);
-    this.loop.advance(dtMs);
+    if (this.loop.advance(dtMs) > 0) this.ring.record(this.snapshot()); // the ring clones at most once per interval
     onSimFrame(this.state); // own-unit arrivals are detected by diffing units (no sim event for them)
     if (this.loop.finished && !this.finishedHandled) {
       this.finishedHandled = true;
@@ -237,6 +304,7 @@ export class PlayScreen implements Screen {
         toast: this.toast.opts(this.nowMs),
       },
       skin: equippedSkin(this.app.save),
+      clockMs: this.elapsedMs(),
       level: this.level,
       palette: this.app.palette(),
       alpha: this.loop.alpha,
@@ -247,7 +315,7 @@ export class PlayScreen implements Screen {
       paused: this.loop.paused,
       sendRatio: this.app.save.settings.sendRatio,
       outcome,
-      stars: outcome === 'won' ? starsFor(this.level, this.state.time) : 0,
+      stars: outcome === 'won' ? starsFor(this.level, this.elapsedMs()) : 0,
       hasNext: idx >= 0 && idx + 1 < LEVELS.length,
       speed: this.loop.speed,
       coinsEarned: this.earnings.gold,
@@ -259,13 +327,24 @@ export class PlayScreen implements Screen {
   private finish(): void {
     const outcome = getOutcome(this.state);
     if (outcome === 'playing') return;
-    this.earnings = recordResult(this.app.save, this.level, outcome, this.state.time);
+    const elapsed = this.elapsedMs();
+    this.earnings = recordResult(this.app.save, this.level, outcome, elapsed);
     this.match.outcome = outcome;
-    this.match.timeMs = this.state.time;
+    this.match.timeMs = elapsed;
     const achievements = evaluateAchievements(this.app.save, this.match);
     const ui = this.buildUi(); // after recordResult so the totals are final
     this.gestures.reset();
-    this.app.go(new ResultScreen(this.app, { state: this.state, level: this.level, ui, earnings: this.earnings, continued: this.reinforced, achievements }));
+    this.app.go(
+      new ResultScreen(this.app, {
+        state: this.state,
+        level: this.level,
+        ui,
+        earnings: this.earnings,
+        continued: this.continued,
+        achievements,
+        resume: () => this.resumeFromSnapshot(),
+      }),
+    );
   }
 
   draw(view: View, nowMs: number): void {

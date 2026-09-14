@@ -6,63 +6,95 @@ Semantic versioning. The version lives in `tower-clash/package.json`; native ver
 
 ## v0.3.0 — (in progress, not tagged)
 
-Proposed tag: `tower-clash-v0.3.0` — **not before the Producer confirms** every line below against `docs/BACKLOG.md` "Done". Scope per `docs/ECONOMY.md` §8 Phase A: the economy and shop on all builds, web-safe (no store/ad SDK on the web). Native version at the tag: `0.3.0` / build 3 (`npm run version:sync`).
+Proposed tag: `tower-clash-v0.3.0` — **not before the Producer confirms** the lines below against `docs/BACKLOG.md` "Done" and GitHub Pages is enabled (checklist W3). Scope per `docs/ECONOMY.md` §8 Phase A: the economy and shop on all builds, web-safe (no store/ad SDK on the web). Native version at the tag: `0.3.0` / build 3 (`npm run version:sync`; the tree still says 0.2.0 / build 2).
 
-**Status on 2026-09-13 18:32 (Publisher check of the tree).** Committed: `src/economy/catalog.ts` (currencies, earn rules, achievements, Commander upgrades, skins, crystal services, IAP catalog, ad placements), `src/economy/store.ts` + `ads.ts` with the RevenueCat / AdMob / fake / no-op providers, `PlayerModifiers` in the sim, currency and shop glyphs plus skin hooks in the renderer, AdMob / RevenueCat plugins and native config placeholders. **Uncommitted, in progress (Frontend Engineer):** `wallet.ts`, `entitlements.ts`, `adsFlow.ts` (interstitial gate, rewarded caps), `ui/upgrades.ts`, save schema v3, shop rendering with a Restore-purchases button, wallet and result widgets. **Not seen yet:** screen wiring, daily reward, achievements UI, level skip / continue. Every line below is therefore **planned** until the Producer moves it to "Done".
+**Status on 2026-09-14 (Publisher check of the tree against `docs/BACKLOG.md` "Done", Sprint 3 + Day 2).** Everything under "In this build" is committed and covered by `npm run check` (370 unit tests), `npm run playtest` (40/40 levels, max-upgrade median 2.0★) and the e2e suites (54 + 4 WebView). The last block, "Still planned", lists what is *not* in the tree and must not appear in the store "What's new" text.
 
 ### English
 
-**Gold and crystals (planned)**
-- Coins become **gold** (same save value); a second currency, **crystals**, is earned from level milestones (10 / 20 / 30 / 40 levels cleared), a full band at three stars, ten achievements and days 4 and 7 of the daily streak.
-- Gold from replays (3 per star, 100 per day) and star improvements, plus a 7-day daily reward.
-- Crystals convert to gold (1 : 5, packs of 20 / 100 / 500); gold never converts to crystals.
+**In this build — gold and crystals**
+- Coins become **gold** (same save value; save schema v3 migrates old progress); a second currency, **crystals**, is earned from level milestones (10 / 20 / 30 / 40 levels cleared), a full band at three stars, achievements and days 4 and 7 of the daily streak.
+- Gold from replays (3 per star, 100 per day) and star improvements, plus a **7-day daily reward** on the title screen (a rewarded ×2 chest in the native apps).
+- **Achievements screen** (trophy button): ten achievements with progress bars — first victory, first level-3 tower, first fortress, first bridge cut, first tank factory, ten / twenty / forty 3★ levels, flawless win, win under 30 s — paying 5 to 20 crystals each.
+- **Crystal → gold conversion** card in the shop (1 : 5; packs of 20 / 100 / 500 crystals); gold never converts to crystals.
 
-**Commander upgrades (planned)**
+**In this build — Commander upgrades**
 - Five permanent tracks bought with gold, five tiers each: production +4 %/tier, capacity +5 %, starting garrison +1, booster cost −5 %, march speed +3 %. Costs 60 / 120 / 200 / 300 / 420 gold per tier.
-- Capped so the reference bot still wins every level with zero upgrades and averages ≤ 2.5 stars with everything maxed (`npm run playtest -- --upgrades max`).
+- Capped so the reference bot still wins every level with zero upgrades and averages ≤ 2.5 stars with everything maxed (`npm run playtest -- --upgrades max`, measured median 2.0★).
 
-**Shop and skins (planned)**
-- Shop screen: gold, crystals, upgrades, skins, booster crate (60 crystals → 5 Overdrive + 3 Freeze + 2 Airstrike charges).
-- Cosmetic skins for crystals: Slate / Pagoda / Onion-dome roofs, Viking / Knight / Samurai helmets, Dusk / Winter night / Neon islands. Skins never change readability or team colours.
-- Level skip (30 crystals, offered after three defeats, one per band) and "Reinforcements" continue after a defeat (10 crystals, or a rewarded video in the native apps): the battle rewinds 20 s, one free Freeze, +15 infantry.
+**In this build — shop, skins, crystal services**
+- Shop tabs: crystals (packs + converter), bundles (**booster crate**: 60 crystals → 5 Overdrive + 3 Freeze + 2 Airstrike charges; Starter Pack, Remove Ads, Premium Bundle, Premium Upgrade), skins, upgrades; a **Restore Purchases** button; store price strings come from the store provider (fallback USD on the web).
+- **Skins** with dedicated sprites: 7 tower roofs (default, gold, iron, slate, tent, pagoda, onion) and 7 unit helmets (default, plume, bronze, viking, knight, samurai, royal); Slate / Pagoda / Onion-dome roofs and Viking / Knight / Samurai helmets are sold for crystals, Gold roof + Royal helmet come with Premium, the Bronze helmet with the Starter Pack. Three **terrain themes** (Dusk, Winter night, Neon) are rendered by the engine — see "Still planned" for the equip flow. Skins never change readability or team colours.
+- **Level skip** (30 crystals, offered after three defeats on an uncleared level, one per band, grants 1★) and **Reinforcements** after a defeat (10 crystals, or a rewarded video in the native apps): the level restarts with +15 infantry on every player tower, once per attempt.
 
-**Web build (planned)**
-- No ads, no real purchases: the ad layer is a no-op and the store is a demo provider. Nothing in the web version asks for payment.
+**In this build — web build**
+- No ads, no real purchases: the ad layer is a no-op and the store is a demo ("Test store") provider. Nothing in the web version asks for payment; the web/PWA build still makes no network calls after loading.
 
-**Native apps — groundwork (in the tree, inactive without keys)**
-- RevenueCat and AdMob providers behind the `StoreProvider` / `AdsProvider` interfaces; with no keys configured the store reports "unavailable" and AdMob serves Google test ads only. Real purchases and ads are **v1.0 native** (Phase B), not v0.3.0.
+**In this build — native apps (groundwork, inactive without keys)**
+- RevenueCat and AdMob providers behind the `StoreProvider` / `AdsProvider` interfaces; with no keys configured the store reports "unavailable" and AdMob serves Google test ads only. Interstitial gate (never in a battle, never in levels 1–5, at most one per three completed levels, four per session) and rewarded placements with daily caps (×2 gold, daily chest, continue).
+- **No tracking on iOS:** the app never shows Apple's App Tracking Transparency prompt (`Info.plist` has no `NSUserTrackingUsageDescription`), every iOS ad request asks for non-personalised ads, and a unit test fails the build if the tracking call comes back. On Android the UMP consent form decides personalisation (EEA/UK/Switzerland).
+- Settings → **"Privacy options"** (re-opens the consent form; shown only when the ads SDK reports it is required) and Settings → About → **Support ID** (RevenueCat anonymous app user id, copy-to-clipboard) for deletion requests, as promised in the privacy policy.
+- Real purchases and ads are **v1.0 native** (Phase B), not v0.3.0.
 
-**Publishing (done in this tree)**
-- Privacy policy v2.0 with a web part and a mobile-app part (AdMob, RevenueCat, consent, children, rights); store listing with in-app purchase list, Play Ads / Data safety answers and Apple privacy labels; launch checklist §6 (payments profile, Paid Applications agreement, RevenueCat, AdMob, `app-ads.txt`); `ACCOUNTS.md` §5 on receiving money.
+**In this build — levels, sim, QA**
+- Levels **27 "Armour Race"**, **31 "Guns over the River"** and **37 "Tank Country"** rebuilt so the enemy tank factories stand at the front and their tanks actually march (100/100 seeds each; median clear 53 / 51 / 71 s).
+- Sim: `SnapshotRing` (one snapshot per second, 20 s of history) and `applyContinue` — the engine side of a true rewind is ready (UI wiring is still planned, below).
+- **Android WebView e2e** project (Playwright, WebView user agent + viewport): safe-area title, touch play flow, back button = pause, background pause; 3 bugs found and fixed in the sweep.
 
-Known limitations at the time of writing: the shop and wallet are not implemented; the web listing claims in `README.md` still describe the web version (ad-free, purchase-free) and stay true.
+**In this build — publishing**
+- Privacy policy **v2.1** (web part + mobile-app part: AdMob, RevenueCat, consent, children, rights; 2.1 = no tracking on iOS) published as `public/privacy.html` together with `public/support.html` (contact, restore purchases, delete data) — live on GitHub Pages once it is enabled; store listing with the in-app purchase list, Play Ads / Data safety answers, Apple privacy labels (option A, Tracking = No) and App Review note; launch checklist §6 (payments profile, Paid Applications agreement, RevenueCat, AdMob, `app-ads.txt`); `ACCOUNTS.md` §5 on receiving money; store screenshot 07 (Upgrades tab) and the App Store IAP review frame.
+
+**Still planned (not in this build — do not list in "What's new")**
+- True 20 s rewind for Reinforcements (ECON-6b): today the level restarts with the +15 infantry bonus; the free Freeze charge promised in `docs/ECONOMY.md` §3.5 is not granted yet.
+- Buying and equipping the three terrain themes in the shop (ECON-10): the renderer supports them, the shop lists roofs and helmets only.
+- Level 30 seed 33 loss at 40 seeds (ECON-11).
+- Real RevenueCat / AdMob keys, store products, sandbox purchase test (ECON-1, Phase B — needs the stakeholder's accounts).
+- Real-device pass on a phone (QA-2, MM-1); signed release builds (MM-3).
+
+Known limitations at the time of writing: the web listing claims in `README.md` describe the web version (ad-free, purchase-free) and stay true; `README.md` still says version 0.2.0 until the tag.
 
 ### Azərbaycanca
 
-**Qızıl və kristallar (planlaşdırılıb)**
-- Sikkələr **qızıl** olur (eyni yaddaş dəyəri); ikinci valyuta **kristallar** səviyyə mərhələlərindən (10 / 20 / 30 / 40 səviyyə), bir zonanın hamısını üç ulduzla keçməkdən, on nailiyyətdən və gündəlik seriyanın 4 və 7-ci günlərindən qazanılır.
-- Təkrar oyunlardan (hər ulduza 3, gündə 100) və ulduz yaxşılaşdırmalarından qızıl, üstəgəl 7 günlük gündəlik mükafat.
-- Kristal qızıla çevrilir (1 : 5, 20 / 100 / 500 paketlərlə); qızıl heç vaxt kristala çevrilmir.
+**Bu build-də — qızıl və kristallar**
+- Sikkələr **qızıl** olur (eyni yaddaş dəyəri; yaddaş sxemi v3 köhnə irəliləyişi köçürür); ikinci valyuta **kristallar** səviyyə mərhələlərindən (10 / 20 / 30 / 40 səviyyə), bir zonanın hamısını üç ulduzla keçməkdən, nailiyyətlərdən və gündəlik seriyanın 4 və 7-ci günlərindən qazanılır.
+- Təkrar oyunlardan (hər ulduza 3, gündə 100) və ulduz yaxşılaşdırmalarından qızıl, üstəgəl baş ekranda **7 günlük gündəlik mükafat** (native tətbiqlərdə mükafatlı ×2 sandıq).
+- **Nailiyyətlər ekranı** (kubok düyməsi): tərəqqi zolaqlı on nailiyyət — ilk qələbə, ilk 3-cü səviyyə qüllə, ilk qala, ilk körpü kəsmə, ilk tank fabriki, on / iyirmi / qırx 3★ səviyyə, qüllə itirmədən qələbə, 30 saniyədən tez qələbə — hər biri 5–20 kristal verir.
+- Mağazada **kristal → qızıl çevirmə** kartı (1 : 5; 20 / 100 / 500 kristal paketləri); qızıl heç vaxt kristala çevrilmir.
 
-**Komandir təkmilləşdirmələri (planlaşdırılıb)**
+**Bu build-də — Komandir təkmilləşdirmələri**
 - Qızılla alınan beş daimi xətt, hər biri beş pillə: istehsal +4 %/pillə, tutum +5 %, başlanğıc qarnizon +1, gücləndirici qiyməti −5 %, yürüş sürəti +3 %. Pillə qiymətləri 60 / 120 / 200 / 300 / 420 qızıl.
-- Məhdudlaşdırılıb ki, istinad botu təkmilləşdirməsiz hər səviyyəni keçsin və hər şey maksimumda olanda orta ≤ 2.5 ulduz alsın (`npm run playtest -- --upgrades max`).
+- Məhdudlaşdırılıb ki, istinad botu təkmilləşdirməsiz hər səviyyəni keçsin və hər şey maksimumda olanda orta ≤ 2.5 ulduz alsın (`npm run playtest -- --upgrades max`, ölçülən median 2.0★).
 
-**Mağaza və görünüşlər (planlaşdırılıb)**
-- Mağaza ekranı: qızıl, kristal, təkmilləşdirmələr, görünüşlər, gücləndirici sandığı (60 kristal → 5 Overdrive + 3 Freeze + 2 Airstrike).
-- Kristalla alınan kosmetik görünüşlər: Slate / Pagoda / Soğan günbəz damları, Vikinq / Cəngavər / Samuray dəbilqələri, Alaqaranlıq / Qış gecəsi / Neon adaları. Görünüşlər oxunaqlılığı və komanda rənglərini dəyişmir.
-- Səviyyəni keçmək (30 kristal, üç məğlubiyyətdən sonra təklif olunur, hər zonada bir dəfə) və məğlubiyyətdən sonra "Əlavə qüvvə" ilə davam (10 kristal və ya native tətbiqlərdə mükafatlı video): döyüş 20 saniyə geri qayıdır, bir pulsuz Freeze, +15 piyada.
+**Bu build-də — mağaza, görünüşlər, kristal xidmətləri**
+- Mağaza tabları: kristallar (paketlər + çevirici), paketlər (**gücləndirici sandığı**: 60 kristal → 5 Overdrive + 3 Freeze + 2 Airstrike; Başlanğıc paketi, Reklamları sil, Premium paket, Premium təkmilləşdirmə), görünüşlər, təkmilləşdirmələr; **Alışları bərpa et** düyməsi; qiymət mətnləri mağaza təminatçısından gəlir (vebdə USD ehtiyat qiymətlər).
+- Ayrıca sprite-lı **görünüşlər**: 7 qüllə damı (standart, qızıl, dəmir, slate, çadır, paqoda, soğan günbəz) və 7 əsgər dəbilqəsi (standart, lələkli, bürünc, vikinq, cəngavər, samuray, kral); Slate / Paqoda / Soğan günbəz damları və Vikinq / Cəngavər / Samuray dəbilqələri kristalla satılır, Qızıl dam + Kral dəbilqəsi Premium ilə, Bürünc dəbilqə Başlanğıc paketi ilə gəlir. Üç **relyef mövzusu** (Alaqaranlıq, Qış gecəsi, Neon) mühərrik tərəfindən çəkilir — geyinmə axını üçün "Hələ planlaşdırılıb"a bax. Görünüşlər oxunaqlılığı və komanda rənglərini dəyişmir.
+- **Səviyyəni keçmək** (30 kristal, keçilməmiş səviyyədə üç məğlubiyyətdən sonra təklif olunur, hər zonada bir dəfə, 1★ verir) və məğlubiyyətdən sonra **Əlavə qüvvə** (10 kristal və ya native tətbiqlərdə mükafatlı video): səviyyə hər oyunçu qülləsində +15 piyada ilə yenidən başlayır, hər cəhddə bir dəfə.
 
-**Veb build (planlaşdırılıb)**
-- Reklam və real alış yoxdur: reklam qatı boşdur, mağaza demo təminatçısıdır. Veb versiyada heç nə ödəniş istəmir.
+**Bu build-də — veb build**
+- Reklam və real alış yoxdur: reklam qatı boşdur, mağaza demo ("Test store") təminatçısıdır. Veb versiyada heç nə ödəniş istəmir; veb/PWA build yükləndikdən sonra yenə heç bir şəbəkə sorğusu göndərmir.
 
-**Native tətbiqlər — hazırlıq (ağacdadır, açarsız qeyri-aktiv)**
-- `StoreProvider` / `AdsProvider` interfeyslərinin arxasında RevenueCat və AdMob təminatçıları; açar konfiqurasiya olunmayanda mağaza "əlçatmaz" deyir, AdMob yalnız Google test reklamları göstərir. Real alış və reklam **v1.0 native** (B mərhələsi) üçündür, v0.3.0 üçün yox.
+**Bu build-də — native tətbiqlər (hazırlıq, açarsız qeyri-aktiv)**
+- `StoreProvider` / `AdsProvider` interfeyslərinin arxasında RevenueCat və AdMob təminatçıları; açar konfiqurasiya olunmayanda mağaza "əlçatmaz" deyir, AdMob yalnız Google test reklamları göstərir. Aralıq reklam qapısı (heç vaxt döyüşdə, heç vaxt 1–5-ci səviyyələrdə, hər üç tamamlanmış səviyyədə ən çox bir, sessiyada dörd) və gündəlik limitli mükafatlı yerləşdirmələr (×2 qızıl, gündəlik sandıq, davam).
+- **iOS-da izləmə yoxdur:** tətbiq Apple-ın App Tracking Transparency sorğusunu heç vaxt göstərmir (`Info.plist`-də `NSUserTrackingUsageDescription` yoxdur), iOS-da hər reklam sorğusu fərdiləşdirilməmiş reklam istəyir, izləmə çağırışı geri qayıtsa unit test build-i dayandırır. Android-də fərdiləşdirməni UMP razılıq forması müəyyən edir (AİZ/BB/İsveçrə).
+- Parametrlər → **"Məxfilik seçimləri"** (razılıq formasını yenidən açır; yalnız reklam SDK-sı tələb olunduğunu bildirəndə görünür) və Parametrlər → Haqqında → **Dəstək ID** (RevenueCat anonim istifadəçi id-si, kopyalama düyməsi ilə) — məxfilik siyasətində vəd edildiyi kimi silinmə sorğuları üçün.
+- Real alış və reklam **v1.0 native** (B mərhələsi) üçündür, v0.3.0 üçün yox.
 
-**Nəşr (bu ağacda hazırdır)**
-- Məxfilik siyasəti v2.0 — veb hissəsi və mobil tətbiq hissəsi (AdMob, RevenueCat, razılıq, uşaqlar, hüquqlar); tətbiqdaxili alış siyahısı, Play reklam / məlumat təhlükəsizliyi cavabları və Apple məxfilik etiketləri ilə mağaza mətni; buraxılış siyahısı §6 (ödəniş profili, Paid Applications müqaviləsi, RevenueCat, AdMob, `app-ads.txt`); pul almaq haqqında `ACCOUNTS.md` §5.
+**Bu build-də — səviyyələr, sim, QA**
+- **27 "Armour Race"**, **31 "Guns over the River"** və **37 "Tank Country"** səviyyələri yenidən qurulub: düşmən tank fabrikləri cəbhədədir və tanklar həqiqətən yeriyir (hər biri 100/100 seed; median keçmə vaxtı 53 / 51 / 71 s).
+- Sim: `SnapshotRing` (saniyədə bir snapshot, 20 s tarixçə) və `applyContinue` — əsl geri sarmanın mühərrik tərəfi hazırdır (UI bağlantısı hələ planlaşdırılıb, aşağıda).
+- **Android WebView e2e** layihəsi (Playwright, WebView user agent + viewport): safe-area baş ekran, toxunma ilə oyun axını, geri düyməsi = pauza, arxa fon pauzası; süpürgədə 3 bug tapılıb və düzəldilib.
 
-Yazılan vaxt məlum məhdudiyyətlər: mağaza və cüzdan hələ yazılmayıb; `README.md`-dəki iddialar veb versiyanı (reklamsız, alışsız) təsvir edir və doğru qalır.
+**Bu build-də — nəşr**
+- Məxfilik siyasəti **v2.1** (veb hissəsi + mobil tətbiq hissəsi: AdMob, RevenueCat, razılıq, uşaqlar, hüquqlar; 2.1 = iOS-da izləmə yoxdur) `public/privacy.html` kimi, `public/support.html` ilə birlikdə (əlaqə, alışların bərpası, məlumatın silinməsi) — GitHub Pages aktivləşəndə canlı olacaq; tətbiqdaxili alış siyahısı, Play reklam / məlumat təhlükəsizliyi cavabları, Apple məxfilik etiketləri (A variantı, İzləmə = Yox) və App Review qeydi ilə mağaza mətni; buraxılış siyahısı §6 (ödəniş profili, Paid Applications müqaviləsi, RevenueCat, AdMob, `app-ads.txt`); pul almaq haqqında `ACCOUNTS.md` §5; mağaza skrinşotu 07 (Təkmilləşdirmələr tabı) və App Store IAP baxış kadrı.
+
+**Hələ planlaşdırılıb (bu build-də yoxdur — "Yeniliklər" mətninə yazma)**
+- Əlavə qüvvə üçün əsl 20 s geri sarma (ECON-6b): bu gün səviyyə +15 piyada bonusu ilə yenidən başlayır; `docs/ECONOMY.md` §3.5-də vəd edilən pulsuz Freeze hələ verilmir.
+- Üç relyef mövzusunun mağazada alınması və geyinilməsi (ECON-10): render dəstəkləyir, mağaza yalnız dam və dəbilqələri göstərir.
+- 30-cu səviyyə seed 33 məğlubiyyəti 40 seed-də (ECON-11).
+- Real RevenueCat / AdMob açarları, mağaza məhsulları, sandbox alış testi (ECON-1, B mərhələsi — tərəf-müqabilin hesabları lazımdır).
+- Real telefonda yoxlama (QA-2, MM-1); imzalanmış release build-lər (MM-3).
+
+Yazılan vaxt məlum məhdudiyyətlər: `README.md`-dəki iddialar veb versiyanı (reklamsız, alışsız) təsvir edir və doğru qalır; tag qoyulana qədər `README.md` hələ 0.2.0 versiyasını göstərir.
 
 ---
 

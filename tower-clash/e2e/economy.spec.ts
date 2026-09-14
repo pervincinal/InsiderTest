@@ -4,7 +4,8 @@ import type { Page } from '@playwright/test';
 /*
  * Economy (Phase A, docs/ECONOMY.md): commander upgrades reach the sim as `state.modifiers`, skins
  * equip from the shop, the level-break interstitial obeys its gating rules, and the defeat screen's
- * "Reinforcements" continue restarts the level with +15 starting infantry. Ads come from the fake
+ * "Reinforcements" continue rewinds the running level ~20 s (snapshot ring) with a free Freeze and
+ * +15 troops — once per attempt, the star clock keeps the original start. Ads come from the fake
  * provider installed through `window.__towerclash.economy.setAdsAvailable(true)`; on the plain web
  * build every rewarded button is hidden (the provider is unavailable). ECON-4 / ECON-2 UI:
  * achievements (trophy screen, once-only crystal grants), crystals → gold conversion with a confirm
@@ -44,6 +45,9 @@ function shopSkinRect(top: number, i: number): { x: number; y: number; w: number
   return { x: 34 + (i % 3) * (208 + 14), y: top + 46 + Math.floor(i / 3) * (236 + 16), w: 208, h: 236 };
 }
 const SKIN_ROOFS_TOP = 194; // SHOP.row.y0 - 6
+// roofs (4 → 2 rows) then helmets (5 → 2 rows) then terrain themes (3), each section 22 px under the previous one
+const SKIN_HELMETS_TOP = SKIN_ROOFS_TOP + 46 + 2 * (236 + 16) - 16 + 22;
+const SKIN_THEMES_TOP = SKIN_HELMETS_TOP + 46 + 2 * (236 + 16) - 16 + 22;
 // src/render/layout.ts — RESULT
 const RESULT = { next: { x: 84, y: 780, w: 170, h: 72 }, menu: { x: 466, y: 780, w: 170, h: 72 }, continueAd: { x: 368, y: 700, w: 268, h: 62 } };
 const SAVE_KEY = 'towerclash.save.v3';
@@ -52,10 +56,15 @@ const SAVE_KEY = 'towerclash.save.v3';
 const CAPACITY_ROW = 1;
 const TIER1_COST = 60;
 const CAPACITY_PER_TIER = 0.05;
-const CONTINUE_BONUS = 15;
 const SLATE_COST = 80;
+const DUSK_COST = 150;
 // a level the "auto lose" helper loses within seconds on every seed (verified levels 12 and 16)
 const LOSING_LEVEL = 12;
+// src/sim/constants.ts — CONTINUE_REWIND_MS / CONTINUE_FREEZE_MS; a level + seed the "auto lose" helper loses
+// after the full rewind window (~27 s of sim time) so the continue really goes back 20 s (tests/ui/continue.test.ts)
+const CONTINUE_REWIND_MS = 20_000;
+const REWIND_LEVEL = 15;
+const REWIND_SEED = 3;
 
 async function tapRect(page: Page, r: R): Promise<void> {
   const c = await page.evaluate(([x, y]) => window.__towerclash.toClient(x, y), [r.x + r.w / 2, r.y + r.h / 2] as const);
@@ -78,7 +87,7 @@ interface SaveShape {
   gold: number;
   crystals: number;
   upgrades: Record<string, number>;
-  skins: { owned: string[]; equipped: { roof: string | null; helmet: string | null } };
+  skins: { owned: string[]; equipped: { roof: string | null; helmet: string | null; theme: string | null } };
   charges: { overdrive: number; freeze: number; airstrike: number };
   adCounters: { levelsCompleted: number; rewardedByPlacement: Record<string, number> };
   entitlements: { noAds: boolean };
@@ -257,6 +266,27 @@ test.describe('economy', () => {
     await expect.poll(async () => (await save(page)).skins.equipped.roof).toBeNull();
     await tapRect(page, shopSkinRect(SKIN_ROOFS_TOP, 0)); // and back on
     await expect.poll(async () => (await save(page)).skins.equipped.roof).toBe('roof_slate');
+    // terrain themes (ECON-10) sit below the fold: scroll to the end, the card rects move up by the scroll
+    await page.evaluate(() => window.__towerclash.economy.grant('crystals_550'));
+    const scroll = await page.evaluate(() => window.__towerclash.economy.shopScroll(10_000));
+    expect(scroll).toBeGreaterThan(0);
+    const themeCard = (i: number) => {
+      const r = shopSkinRect(SKIN_THEMES_TOP, i);
+      return { ...r, y: r.y - scroll };
+    };
+    const before = (await save(page)).crystals;
+    expect(before).toBeGreaterThanOrEqual(DUSK_COST);
+    await tapRect(page, themeCard(0)); // Dusk, 150 crystals
+    await expect.poll(async () => (await save(page)).skins.equipped.theme).toBe('theme_dusk');
+    s = await save(page);
+    expect(s.crystals).toBe(before - DUSK_COST);
+    expect(s.skins.owned).toEqual(['roof_slate', 'theme_dusk']);
+    expect(s.skins.equipped.roof).toBe('roof_slate'); // its own slot: the roof stays equipped
+    await tapRect(page, themeCard(0)); // equipped → untinted
+    await expect.poll(async () => (await save(page)).skins.equipped.theme).toBeNull();
+    await tapRect(page, themeCard(0));
+    await expect.poll(async () => (await save(page)).skins.equipped.theme).toBe('theme_dusk');
+    await page.evaluate(() => window.__towerclash.economy.shopScroll(0));
     // the shop tab switch works by tap and the BACK button leaves
     await tapTab(page, 'crystals');
     await tapRect(page, SHOP.back);
@@ -309,41 +339,48 @@ test.describe('economy', () => {
     expect(errors).toEqual([]);
   });
 
-  test('defeat → CONTINUE (rewarded video) restarts the level with +15 starting infantry, once', async ({ page }) => {
-    const errors = await boot(page, { version: 3, gold: 0, crystals: 0, stars: { '1': 1, '2': 1, '3': 1, '4': 1, '5': 1, '6': 1, '7': 1, '8': 1, '9': 1, '10': 1, '11': 1 } });
+  test('defeat → CONTINUE (rewarded video) rewinds the level ~20 s with a free Freeze, once per attempt', async ({ page }) => {
+    const errors = await boot(page, { version: 3, gold: 0, crystals: 0, stars: { '1': 1, '2': 1, '3': 1, '4': 1, '5': 1, '6': 1, '7': 1, '8': 1, '9': 1, '10': 1, '11': 1, '12': 1, '13': 1, '14': 1 } });
     await page.evaluate(() => window.__towerclash.economy.setAdsAvailable(true));
-    await page.evaluate((lvl) => {
-      window.__towerclash.loadLevel(lvl, 3);
-      window.__towerclash.setSpeed(20);
-      window.__towerclash.economy.autoLose();
-    }, LOSING_LEVEL);
-    const base = await page.evaluate(() => {
-      const s = window.__towerclash.getState()!;
-      return { mods: s.modifiers, home: Object.values(s.towers).filter((t) => t.owner === 'player').map((t) => [t.id, t.units] as const) };
-    });
-    expect(base.mods.startGarrisonBonus).toBe(0);
+    await page.evaluate(
+      ([lvl, seed]) => {
+        window.__towerclash.loadLevel(lvl, seed);
+        window.__towerclash.setSpeed(20);
+        window.__towerclash.economy.autoLose();
+      },
+      [REWIND_LEVEL, REWIND_SEED] as const,
+    );
     await expect.poll(() => screen(page), { timeout: 60_000, intervals: [250] }).toBe('result');
     expect((await page.evaluate(() => window.__towerclash.getResult()))?.outcome).toBe('lost');
+    const lost = await page.evaluate(() => window.__towerclash.economy.getClock()!);
+    expect(lost.continued).toBe(false);
+    expect(lost.elapsedMs).toBe(lost.timeMs);
+    expect(lost.timeMs).toBeGreaterThanOrEqual(CONTINUE_REWIND_MS + 2000);
     await page.evaluate(() => window.__towerclash.setSpeed(1));
     await tapRect(page, RESULT.continueAd);
     await expect.poll(() => screen(page)).toBe('play');
     const cont = await page.evaluate(() => {
       const s = window.__towerclash.getState()!;
-      return { mods: s.modifiers, levelId: s.levelId, time: s.time };
+      const clock = window.__towerclash.economy.getClock()!;
+      return { ...clock, levelId: s.levelId, freeze: s.boosters.some((b) => b.type === 'freeze' && b.owner === 'player' && b.untilMs > s.time), mods: s.modifiers };
     });
-    expect(cont.levelId).toBe(LOSING_LEVEL);
-    expect(cont.mods.startGarrisonBonus).toBe(CONTINUE_BONUS);
+    expect(cont.levelId).toBe(REWIND_LEVEL);
+    expect(cont.continued).toBe(true);
+    expect(cont.mods.startGarrisonBonus).toBe(0); // a rewind, not the +15 garrison restart
+    expect(lost.timeMs - cont.timeMs).toBeGreaterThanOrEqual(15_000); // the sim went back (≥ 20 s minus the ×1 drift since the tap)
+    expect(cont.elapsedMs - cont.timeMs).toBeGreaterThanOrEqual(CONTINUE_REWIND_MS); // the star clock keeps the original start
+    expect(cont.freeze).toBe(true);
     expect((await save(page)).adCounters.rewardedByPlacement['rv_continue']).toBe(1);
     expect((await page.evaluate(() => window.__towerclash.economy.getAdStats())).fakeRewarded).toBe(1);
-    // lose again: the continued attempt offers no second continue (tap lands on nothing)
-    await page.evaluate(() => {
-      window.__towerclash.setSpeed(20);
-      window.__towerclash.economy.autoLose();
-    });
+    // the reinforced attempt plays on (auto-lose is still on) and offers no second continue
+    await page.evaluate(() => window.__towerclash.setSpeed(20));
     await expect.poll(() => screen(page), { timeout: 60_000, intervals: [250] }).toBe('result');
-    await tapRect(page, RESULT.continueAd);
-    await page.waitForTimeout(300);
-    expect(await screen(page)).toBe('result');
+    expect((await page.evaluate(() => window.__towerclash.economy.getClock()))?.continued).toBe(true);
+    if ((await page.evaluate(() => window.__towerclash.getResult()))?.outcome === 'lost') {
+      await tapRect(page, RESULT.continueAd); // lands on nothing
+      await page.waitForTimeout(300);
+      expect(await screen(page)).toBe('result');
+    }
     expect((await save(page)).adCounters.rewardedByPlacement['rv_continue']).toBe(1);
     // NEXT is disabled on a defeat: a tap on it does nothing
     await tapRect(page, RESULT.next);

@@ -17,7 +17,7 @@ What must NOT be claimed: leaderboards, multiplayer, cloud save, more than 40 le
 | Category | — | Games › Strategy | Oyunlar › Strategiya |
 | Tags | — | Strategy, Casual, Single player, Offline, Stylised | — |
 | Contact e-mail | — | `[developer e-mail]` | — |
-| Privacy policy URL | — | `https://pervincinal.github.io/InsiderTest/privacy.html` (policy v2.0 with the ads/purchases section; the page is `tower-clash/public/privacy.html`, published by the Pages job — resolves once GitHub Pages is enabled, checklist W3) | — |
+| Privacy policy URL | — | `https://pervincinal.github.io/InsiderTest/privacy.html` (policy v2.1 with the ads/purchases section; the page is `tower-clash/public/privacy.html`, published by the Pages job — resolves once GitHub Pages is enabled, checklist W3) | — |
 | Website (optional) | — | `https://pervincinal.github.io/InsiderTest/` — support page `https://pervincinal.github.io/InsiderTest/support.html` | — |
 | Store labels (automatic) | — | **Contains ads** (from the Ads declaration) · **In-app purchases** (from the product list) — Google adds both badges; nothing to type | — |
 
@@ -140,7 +140,7 @@ HONEST BY DESIGN
 • No in-app purchases.
 • No account, no sign-in, no tracking — your progress is stored only on your device.
 ```
-(AZ: "Reklam yoxdur. / Tətbiqdaxili alış yoxdur. / Hesab, giriş və izləmə yoxdur — irəliləyişin yalnız öz cihazında saxlanılır.") and answer the declarations in §6 as "no ads / no purchases / no data collected" (the v1.0 answers in the git history of this file). The privacy policy v2.0 Part A already covers that case.
+(AZ: "Reklam yoxdur. / Tətbiqdaxili alış yoxdur. / Hesab, giriş və izləmə yoxdur — irəliləyişin yalnız öz cihazında saxlanılır.") and answer the declarations in §6 as "no ads / no purchases / no data collected" (the v1.0 answers in the git history of this file). The privacy policy v2.1 Part A already covers that case.
 
 ---
 
@@ -156,7 +156,7 @@ HONEST BY DESIGN
 | Subcategories | — | Strategy, Casual | — |
 | Support URL | — | `https://pervincinal.github.io/InsiderTest/support.html` (`tower-clash/public/support.html`: contact, restore purchases, delete data; the `[developer e-mail]` placeholder must be filled before submission) | — |
 | Marketing URL | — | `https://pervincinal.github.io/InsiderTest/` (active once GitHub Pages is enabled in the repository settings) | — |
-| Privacy policy URL | — | `https://pervincinal.github.io/InsiderTest/privacy.html` (policy v2.0, `tower-clash/public/privacy.html`; active once GitHub Pages is enabled) | — |
+| Privacy policy URL | — | `https://pervincinal.github.io/InsiderTest/privacy.html` (policy v2.1, `tower-clash/public/privacy.html`; active once GitHub Pages is enabled) | — |
 | Copyright | — | `© 2026 [developer name]` | — |
 | In-App Purchases (automatic) | — | App Store shows an "In-App Purchases" line with the products from §6.1 once they are attached to the version; nothing to type in the description | — |
 
@@ -173,7 +173,7 @@ App Store screenshots (exact device sizes, rendered by `node store/tools/renderS
 
 Same seven frames and captions as the Google set (English only — Azerbaijani is not an App Store locale). iPad screenshots are not needed if the app is marked iPhone-only in App Store Connect (recommended; the game is portrait phone-first).
 
-Review notes for App Review (paste into "Notes"): *Single-player offline game, no account needed. In-app purchases are one-time products handled by StoreKit through RevenueCat; "Restore Purchases" is in the shop screen. Ads are Google AdMob; the app requests App Tracking Transparency only if configured to (see §6.4) and serves non-personalised ads when declined. Sandbox tester: none required — all content is available without purchase.*
+Review notes for App Review (paste into "Notes"): *Single-player offline game, no account needed. In-app purchases are one-time products handled by StoreKit through RevenueCat; "Restore Purchases" is in the shop screen. Ads are Google AdMob; the app never requests App Tracking Transparency (no `NSUserTrackingUsageDescription` in Info.plist) and always requests non-personalised ads on iOS, so the IDFA is not used — App Privacy "Tracking" is answered No (see §6.4). Sandbox tester: none required — all content is available without purchase.*
 
 ---
 
@@ -283,9 +283,9 @@ Everything is answered "not linked to the user's identity" — there is no accou
 
 ### 6.4 Apple — App Privacy ("nutrition labels") and App Tracking Transparency
 
-Two options; the answer depends on **one line of code** in `tower-clash/src/economy/providers/admob.ts` (`runConsentFlow` currently calls `AdMob.requestTrackingAuthorization()` on iOS, i.e. option B is what the tree does today).
+Decision taken: **option A** (checklist MZ9, Producer default, implemented by the Mobile Engineer on 2026-09-14 — `docs/MOBILE.md` §8.7). What the tree does: `runConsentFlow` in `tower-clash/src/economy/providers/admob.ts` never calls `AdMob.requestTrackingAuthorization()`; every iOS ad request carries `npa: 1` (non-personalised ads), while on Android personalisation follows the UMP consent answer; `ios/App/App/Info.plist` has **no** `NSUserTrackingUsageDescription`, so iOS cannot even show the prompt; the unit test `tests/economy/ads.test.ts` ("no tracking") fails the build if the call comes back. Privacy policy v2.1 B.2 says the same in user language. Option B below is kept only as the documented alternative — it is **not** what the tree does.
 
-**Option A — recommended: do not track, do not show the ATT prompt.** Remove the `requestTrackingAuthorization` call (keep the UMP form), leave `NSUserTrackingUsageDescription` in `Info.plist` (harmless) and serve non-personalised ads on iOS. Why: (1) ATT opt-in rates for casual games are typically 20–35 %, so personalised-ad revenue on iOS is small while the prompt costs first-session goodwill; (2) "Data Used to Track You" on the store page is the single most negative privacy label for a family-friendly casual game; (3) with no ATT the review question *"Does this app use the Advertising Identifier (IDFA)?"* is answered honestly with **Yes, to serve advertisements within the app** only (no attribution, no tracking), which Apple accepts without the prompt when the SDK respects the ATT status (Google's SDK does); (4) no SKAdNetwork-attribution campaigns are planned. Labels for option A:
+**Option A — adopted: no tracking, no ATT prompt.** No `requestTrackingAuthorization` call (the UMP consent form stays for EEA/UK/Swiss users), no `NSUserTrackingUsageDescription` in `Info.plist`, non-personalised ads on every iOS request. Why: (1) ATT opt-in rates for casual games are typically 20–35 %, so personalised-ad revenue on iOS is small while the prompt costs first-session goodwill; (2) "Data Used to Track You" on the store page is the single most negative privacy label for a family-friendly casual game; (3) with no ATT the review question *"Does this app use the Advertising Identifier (IDFA)?"* is answered honestly with **Yes, to serve advertisements within the app** only (no attribution, no tracking), which Apple accepts without the prompt when the SDK respects the ATT status (Google's SDK does); (4) no SKAdNetwork-attribution campaigns are planned. Labels for option A:
 
 | App Privacy section | Data type | Purposes | Linked to user | Used for tracking |
 |---|---|---|---|---|
@@ -297,13 +297,13 @@ Two options; the answer depends on **one line of code** in `tower-clash/src/econ
 
 Summary shown on the store: **"Data Not Linked to You"** only; "Data Used to Track You" absent. App Store Connect → App Privacy → *Tracking*: "No, we do not use data for tracking purposes".
 
-**Option B — as the tree is today: ATT prompt shown, IDFA used for personalised ads when granted.** Same rows, but *Identifiers → Device ID* and *Usage Data → Advertising Data* get **Used for tracking: Yes**, the store page shows "Data Used to Track You", and the *Tracking* question is answered "Yes". `NSUserTrackingUsageDescription` (already in `Info.plist`) must describe the purpose — the current text does.
+**Option B — rejected alternative, not in the tree: ATT prompt shown, IDFA used for personalised ads when granted.** Same rows, but *Identifiers → Device ID* and *Usage Data → Advertising Data* get **Used for tracking: Yes**, the store page shows "Data Used to Track You", and the *Tracking* question is answered "Yes". Switching to it is a package deal (`docs/MOBILE.md` §8.7): the ATT call back in `admob.ts`, `npa` off on iOS, `NSUserTrackingUsageDescription` with a purpose string back in `Info.plist`, the "no tracking" unit test removed, App Privacy *Tracking* = Yes and a privacy policy 2.x re-wording. Do not do it piecemeal.
 
-Either way: *Contact Info, User Content, Health, Financial Info, Browsing History, Search History* → not collected. Export compliance stays "uses only standard HTTPS" (`ITSAppUsesNonExemptEncryption = NO` remains correct). The Publisher's recommendation is **A**; this is a decision for the Producer + Mobile Engineer, recorded in `LAUNCH_CHECKLIST.md` row MZ9.
+Either way: *Contact Info, User Content, Health, Financial Info, Browsing History, Search History* → not collected. Export compliance stays "uses only standard HTTPS" (`ITSAppUsesNonExemptEncryption = NO` remains correct). Option A is the recorded decision (`LAUNCH_CHECKLIST.md` row MZ9, done 2026-09-14); the App Store Connect answers for row A14 are the option A table above plus *Tracking* = No.
 
 ### 6.5 Age rating and audience impact
 
 - **Google Play — Target audience and content:** *13 and over* (or 18+) — **not** "designed for children / Families". Reason: AdMob would then require a Families self-certified SDK configuration, `tagForChildDirectedTreatment`, no personalised ads and a Teacher Approved review; the game does not implement that. AdMob app settings: *Not child-directed*; **Max ad content rating: G**.
 - **Google Play — IARC:** interactive elements **"In-Game Purchases"**; *"Does the game include purchases of random items (loot boxes)?"* → **No**. Expected rating unchanged (Everyone / PEGI 3).
-- **Apple — Age rating:** stays **9+**. Questionnaire deltas caused by monetization: *Unrestricted Web Access* **No**; *Gambling and Contests* **No**; *Loot boxes* **No**; ads and IAP are disclosed through the Ads/IAP metadata, not the rating. If option 6.4-B is kept, Apple's *"Made for Kids"* is out of the question anyway (kids apps may not use third-party ad SDKs that track).
-- **Both stores:** the privacy policy (v2.0, Part B) must be live at the URL before submission; both consoles reject a listing whose policy URL contradicts the Data safety / App Privacy answers.
+- **Apple — Age rating:** stays **9+**. Questionnaire deltas caused by monetization: *Unrestricted Web Access* **No**; *Gambling and Contests* **No**; *Loot boxes* **No**; ads and IAP are disclosed through the Ads/IAP metadata, not the rating. Apple's *"Made for Kids"* is not pursued either way (kids-category apps may not include third-party ad SDKs in their standard configuration), even though option 6.4-A means the app tracks nobody.
+- **Both stores:** the privacy policy (v2.1, Part B) must be live at the URL before submission; both consoles reject a listing whose policy URL contradicts the Data safety / App Privacy answers.

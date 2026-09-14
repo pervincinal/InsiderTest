@@ -2,8 +2,8 @@
   "id": 31,
   "name": "Guns over the River",
   "lesson": "Artillery kills one unit per shot whatever it weighs: a tank on a long bridge under the guns is five units lost, so silence the guns before the armour crosses. The enemy factory takes the far bank with its own tanks, so cross in one heavy column, never tank by tank",
-  "star3": 45000,
-  "star2": 100000,
+  "star3": 40000,
+  "star2": 80000,
   "enemies": [
     {"owner": "enemy1", "personality": "turtle", "aggression": 0.75},
     {"owner": "enemy2", "personality": "rusher", "aggression": 0.75}

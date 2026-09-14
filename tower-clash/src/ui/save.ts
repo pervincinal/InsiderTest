@@ -29,11 +29,14 @@ export interface Entitlements {
   starterPack: boolean;
 }
 
+/** Cosmetic families: one skin of each can be equipped (`SKINS[].category` towerRoof / unitHelmet / terrainTheme). */
+export type SkinFamily = 'roof' | 'helmet' | 'theme';
+
 export interface SkinState {
   /** Catalog skin ids (`SKINS[].id`). */
   owned: string[];
-  /** Equipped catalog skin id per family, or null for the default look. */
-  equipped: { roof: string | null; helmet: string | null };
+  /** Equipped catalog skin id per family, or null for the default look. `theme` is additive to v3 (missing = none). */
+  equipped: Record<SkinFamily, string | null>;
 }
 
 export interface DailyState {
@@ -97,7 +100,7 @@ export function defaultSave(): SaveData {
     crystals: 0,
     entitlements: { noAds: false, premium: false, starterPack: false },
     upgrades: {},
-    skins: { owned: [], equipped: { roof: null, helmet: null } },
+    skins: { owned: [], equipped: { roof: null, helmet: null, theme: null } },
     charges: { overdrive: 0, freeze: 0, airstrike: 0 },
     daily: { lastClaimDay: null, streak: 0 },
     adCounters: { day: '', rewardedByPlacement: {}, levelsCompleted: 0 },
@@ -157,8 +160,10 @@ export function normalizeSave(raw: unknown): SaveData {
     out.skins.owned = stringList(raw.skins.owned);
     if (isRecord(raw.skins.equipped)) {
       const eq = raw.skins.equipped;
-      out.skins.equipped.roof = typeof eq.roof === 'string' && out.skins.owned.includes(eq.roof) ? eq.roof : null;
-      out.skins.equipped.helmet = typeof eq.helmet === 'string' && out.skins.owned.includes(eq.helmet) ? eq.helmet : null;
+      for (const family of ['roof', 'helmet', 'theme'] as const) {
+        const id = eq[family];
+        out.skins.equipped[family] = typeof id === 'string' && out.skins.owned.includes(id) ? id : null;
+      }
     }
   }
   if (isRecord(raw.charges)) {

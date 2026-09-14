@@ -67,6 +67,10 @@ export interface TowerClashDebug {
     autoLose(): boolean;
     /** Tap-equivalents on the result screen (economy offers). */
     resultAction(action: 'doubleGold' | 'continueCrystals' | 'continueAd' | 'skip'): boolean;
+    /** Continue clock of the current attempt (ECONOMY.md §3.5): sim time, star-clock time, whether the continue was used. */
+    getClock(): { timeMs: number; elapsedMs: number; continued: boolean } | null;
+    /** Shop scroll (logical px, clamped); `y` omitted = read only. -1 when the shop is not open. */
+    shopScroll(y?: number): number;
     /** Open the achievements screen (from the current screen). */
     openAchievements(): void;
     /** Pretend the native providers report this support id / privacy requirement (settings → About). */
@@ -291,6 +295,12 @@ class TowerClashApp implements App {
           else if (action === 'continueAd') cur.continueWithAd();
           else cur.skipLevel();
           return true;
+        },
+        getClock: () => (this.play ? { timeMs: this.play.state.time, elapsedMs: this.play.elapsedMs(), continued: this.play.hasContinued } : null),
+        shopScroll: (y) => {
+          if (!(this.current instanceof ShopScreen)) return -1;
+          if (y !== undefined) this.current.setScroll(y);
+          return this.current.scrollY;
         },
         openAchievements: () => this.goAchievements(this.backFromShop()),
         setNativeInfo: (info) => {

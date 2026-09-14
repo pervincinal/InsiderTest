@@ -92,10 +92,22 @@ export interface ResultExtras {
   pending: boolean;
 }
 
-export type HudPlayUi = PlayUi & { hud?: HudExtras };
+export type HudPlayUi = PlayUi & {
+  hud?: HudExtras;
+  /**
+   * Match clock for the timer pill and the result cards. Defaults to `state.time`; after a
+   * "Reinforcements" rewind it keeps the original start (`state.time` + rewound ms) so the clock
+   * on screen matches the one the stars are scored on (ECONOMY.md §3.5).
+   */
+  clockMs?: number;
+};
 
 function extrasOf(ui: PlayUi): HudExtras | undefined {
   return (ui as HudPlayUi).hud;
+}
+
+function clockOf(ui: PlayUi, state: Pick<GameState, 'time'>): number {
+  return (ui as HudPlayUi).clockMs ?? state.time;
 }
 
 /** Booster accent colours: gold bolt, ice snowflake, red crosshair (all from the active palette). */
@@ -295,7 +307,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, state: GameState, _view: 
   ctx.textAlign = 'center';
   ctx.fillStyle = pal.ink;
   ctx.font = font(34);
-  ctx.fillText(formatTime(state.time), timer.x + timer.w / 2, timer.y + timer.h / 2 + 2);
+  ctx.fillText(formatTime(clockOf(ui, state)), timer.x + timer.w / 2, timer.y + timer.h / 2 + 2);
   if (ui.speed !== 1) {
     const tag = HUD.speedTag;
     drawPill(ctx, tag, pal.accent);
@@ -371,7 +383,7 @@ function drawPauseCard(ctx: CanvasRenderingContext2D, state: GameState, ui: Play
   ctx.font = font(24, '500');
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(`Level ${ui.level.id} · ${formatTime(state.time)}`, 360, card.y + 136);
+  ctx.fillText(`Level ${ui.level.id} · ${formatTime(clockOf(ui, state))}`, 360, card.y + 136);
   drawButton(ctx, pal, PAUSE.resume, 'RESUME', { fill: pal.owners.player, fontPx: 30 });
   const fast = ui.speed !== 1;
   drawButton(ctx, pal, PAUSE.speed, `SPEED ×${ui.speed}`, { fontPx: 24, border: fast ? pal.accent : undefined, text: fast ? pal.accent : undefined });
@@ -431,7 +443,7 @@ function drawResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: Pla
   ctx.textBaseline = 'middle';
   ctx.fillStyle = pal.ink;
   ctx.font = font(30);
-  ctx.fillText(`Time ${formatTime(state.time)}`, 360, card.y + 200);
+  ctx.fillText(`Time ${formatTime(clockOf(ui, state))}`, 360, card.y + 200);
 
   // stars pop in one after another with a gold burst
   const starY = card.y + 272;
@@ -490,7 +502,12 @@ function drawResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: Pla
       ctx.textAlign = 'center';
       ctx.fillStyle = pal.textDim;
       ctx.font = font(16, '500');
-      ctx.fillText('Reinforcements: restart with +15 troops on every tower', 360, RESULT.continueSolo.y - 18, card.w - 60);
+      ctx.fillText(
+        `Reinforcements: rewind ${Math.round(C.CONTINUE_REWIND_MS / 1000)} s, +${C.CONTINUE_INFANTRY} troops and a free Freeze`,
+        360,
+        RESULT.continueSolo.y - 18,
+        card.w - 60,
+      );
       if (ex.continueCrystals !== null) {
         const r = both ? RESULT.continueCrystals : RESULT.continueSolo;
         drawOfferButton(ctx, pal, r, 'CONTINUE', String(ex.continueCrystals), 'crystal', { pressed: pressed === r, pending: ex.pending, nowMs: since });

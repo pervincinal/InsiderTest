@@ -112,7 +112,7 @@ Skins never change hitboxes, colours that encode ownership (blue/red/green/yello
 30 crystals. Offered only after **3 consecutive defeats** on the same level; grants 1★ and unlocks the next level; pays no gold, counts toward milestones but not toward "full band at 3★". At most one skip per band (5 per campaign). Rationale: a frustration valve, not a progression product.
 
 ### 3.5 Continue after defeat — "Reinforcements" (rewarded ad or 10 crystals)
-On the defeat screen: *Watch a video* (cap 3 / day) or *10 crystals*. Effect: the sim rewinds to the snapshot **20 s before the defeat** (the game loop keeps a ring buffer of state snapshots every 5 s — cheap because the state is plain data and deterministic), then grants a free Freeze (5 s) and +15 infantry to the player's highest-garrison tower. Once per attempt. Result stars are computed from the original start time (continuing never improves the star clock).
+On the defeat screen: *Watch a video* (cap 3 / day) or *10 crystals*. Effect: the sim rewinds to the snapshot **20 s before the defeat** (the game loop keeps a ring buffer of state snapshots every 1 s (20 s history) — cheap because the state is plain data and deterministic), then grants a free Freeze (5 s) and +15 infantry to the player's highest-garrison tower. Once per attempt. Result stars are computed from the original start time (continuing never improves the star clock).
 
 ### 3.6 Energy / lives — **none, rejected**
 - Levels are 1–3 minutes; energy would gate the exact behaviour (retrying for 3★) the design wants.

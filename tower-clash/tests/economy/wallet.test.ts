@@ -18,9 +18,10 @@ import {
   spendCrystals,
   spendGold,
 } from '../../src/economy/wallet';
-import { boosterDiscount, boosterPrice, equippedSkin, interstitialsDisabled, ownsProduct, visibleProducts } from '../../src/economy/entitlements';
+import { boosterDiscount, boosterPrice, equippedSkin, interstitialsDisabled, ownsProduct, shopSkins, skinFamily, spriteSkinId, visibleProducts } from '../../src/economy/entitlements';
+import { HELMET_SKINS, ROOF_SKINS, THEME_IDS } from '../../src/render/sprites';
 import { buyUpgrade, commanderSummary, modifiersFromSave, upgradeCost, upgradeTier } from '../../src/ui/upgrades';
-import { CONVERSION, CRYSTAL_SERVICES, EARN_RULES, IAP_PRODUCTS } from '../../src/economy/catalog';
+import { CONVERSION, CRYSTAL_SERVICES, EARN_RULES, IAP_PRODUCTS, SKINS } from '../../src/economy/catalog';
 import type { StoreProvider } from '../../src/economy/store';
 import { makeLevel } from '../helpers';
 
@@ -275,10 +276,37 @@ describe('commander upgrades', () => {
 
 describe('skins', () => {
   it('equippedSkin maps owned catalog ids onto sprite ids and ignores unowned ones', () => {
-    expect(equippedSkin(save)).toEqual({ roof: undefined, helmet: undefined });
+    expect(equippedSkin(save)).toEqual({ roof: undefined, helmet: undefined, theme: undefined });
     save.skins.owned = ['roof_gold'];
-    save.skins.equipped = { roof: 'roof_gold', helmet: 'helmet_royal' };
-    expect(equippedSkin(save)).toEqual({ roof: 'roof.gold', helmet: undefined });
+    save.skins.equipped = { roof: 'roof_gold', helmet: 'helmet_royal', theme: 'theme_neon' };
+    expect(equippedSkin(save)).toEqual({ roof: 'roof.gold', helmet: undefined, theme: undefined });
+  });
+
+  it('a terrain theme equips into its own slot (ECON-10) and flows to the renderer as theme.*', () => {
+    save.skins.owned = ['theme_winter_night', 'helmet_viking'];
+    save.skins.equipped = { roof: null, helmet: 'helmet_viking', theme: 'theme_winter_night' };
+    expect(equippedSkin(save)).toEqual({ roof: undefined, helmet: 'helmet.viking', theme: 'theme.winter_night' });
+    save.skins.equipped.theme = null;
+    expect(equippedSkin(save).theme).toBeUndefined();
+  });
+
+  it('every catalog skin has a dedicated sprite id and the shop lists all three families', () => {
+    const sprites = new Set<string>([...ROOF_SKINS, ...HELMET_SKINS, ...THEME_IDS]);
+    for (const skin of SKINS) expect(sprites.has(spriteSkinId(skin.id)), skin.id).toBe(true);
+    expect(shopSkins().map((s) => s.id)).toEqual(SKINS.map((s) => s.id));
+    expect(shopSkins().filter((s) => s.category === 'terrainTheme').map((s) => s.id)).toEqual(['theme_dusk', 'theme_winter_night', 'theme_neon']);
+    expect(skinFamily({ category: 'terrainTheme' })).toBe('theme');
+    expect(skinFamily({ category: 'towerRoof' })).toBe('roof');
+    expect(skinFamily({ category: 'unitHelmet' })).toBe('helmet');
+  });
+
+  it('the save keeps an equipped theme only when owned; a v3 save without the slot loads as none', () => {
+    store.setItem(SAVE_KEY, JSON.stringify({ version: 3, skins: { owned: ['theme_dusk'], equipped: { roof: null, helmet: null, theme: 'theme_dusk' } } }));
+    expect(loadSaveFrom(store).skins.equipped).toEqual({ roof: null, helmet: null, theme: 'theme_dusk' });
+    store.setItem(SAVE_KEY, JSON.stringify({ version: 3, skins: { owned: [], equipped: { roof: null, helmet: null, theme: 'theme_dusk' } } }));
+    expect(loadSaveFrom(store).skins.equipped.theme).toBeNull();
+    store.setItem(SAVE_KEY, JSON.stringify({ version: 3, skins: { owned: ['theme_neon'], equipped: { roof: null, helmet: null } } }));
+    expect(loadSaveFrom(store).skins.equipped).toEqual({ roof: null, helmet: null, theme: null });
   });
 });
 
@@ -294,7 +322,7 @@ describe('save migration v2 → v3', () => {
     expect(s.settings.reducedMotion).toBe('off');
     expect(s.entitlements).toEqual({ noAds: false, premium: false, starterPack: false });
     expect(s.upgrades).toEqual({});
-    expect(s.skins).toEqual({ owned: [], equipped: { roof: null, helmet: null } });
+    expect(s.skins).toEqual({ owned: [], equipped: { roof: null, helmet: null, theme: null } });
     expect(s.charges).toEqual({ overdrive: 0, freeze: 0, airstrike: 0 });
     expect(s.daily).toEqual({ lastClaimDay: null, streak: 0 });
     expect(s.purchases).toEqual([]);
@@ -311,6 +339,6 @@ describe('save migration v2 → v3', () => {
     expect(s.gold).toBe(0);
     expect(s.crystals).toBe(0);
     expect(s.upgrades).toEqual({ production: 5, bogus: 0 });
-    expect(s.skins.equipped).toEqual({ roof: null, helmet: null });
+    expect(s.skins.equipped).toEqual({ roof: null, helmet: null, theme: null });
   });
 });

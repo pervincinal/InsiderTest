@@ -7,7 +7,7 @@
  */
 import { C } from '../sim/constants';
 import type { TowerSkin } from '../render/sprites';
-import type { SaveData } from '../ui/save';
+import type { SaveData, SkinFamily } from '../ui/save';
 import type { IapProductDef, SkinDef } from './catalog';
 import { ADVANTAGE_LIMIT, COMMANDER_UPGRADES, IAP_PRODUCTS, INTERSTITIAL_RULES, SKINS } from './catalog';
 
@@ -59,35 +59,27 @@ export function skinById(id: string): SkinDef | undefined {
 }
 
 /**
- * Catalog skin id → sprite skin id (`src/render/sprites.ts` draws four roofs and two helmets in
- * Phase A; the remaining catalog looks reuse the closest sprite until the tech artist adds them).
+ * Catalog skin id → sprite skin id: every catalog look has a dedicated sprite named after it
+ * (`roof_slate` → `roof.slate`, `helmet_viking` → `helmet.viking`, `theme_winter_night` →
+ * `theme.winter_night`; see `ROOF_SKINS` / `HELMET_SKINS` / `THEME_IDS` in `src/render/sprites.ts`).
  */
-const SPRITE_SKIN: Readonly<Record<string, string>> = {
-  roof_slate: 'roof.iron',
-  roof_pagoda: 'roof.tent',
-  roof_onion: 'roof.tent',
-  roof_gold: 'roof.gold',
-  helmet_bronze: 'helmet.plume',
-  helmet_viking: 'helmet.plume',
-  helmet_knight: 'helmet.plume',
-  helmet_samurai: 'helmet.plume',
-  helmet_royal: 'helmet.plume',
-};
-
 export function spriteSkinId(catalogId: string): string {
-  return SPRITE_SKIN[catalogId] ?? (catalogId.startsWith('helmet') ? 'helmet.default' : 'roof.default');
+  return catalogId.replace('_', '.');
 }
 
-/** The equipped looks as the renderer wants them (undefined fields = default look). */
+/** The equipped looks as the renderer wants them (undefined fields = default look / untinted terrain). */
 export function equippedSkin(save: SaveData): TowerSkin {
-  const { roof, helmet } = save.skins.equipped;
-  return {
-    roof: roof && save.skins.owned.includes(roof) ? spriteSkinId(roof) : undefined,
-    helmet: helmet && save.skins.owned.includes(helmet) ? spriteSkinId(helmet) : undefined,
-  };
+  const { owned, equipped } = save.skins;
+  const pick = (id: string | null): string | undefined => (id && owned.includes(id) ? spriteSkinId(id) : undefined);
+  return { roof: pick(equipped.roof), helmet: pick(equipped.helmet), theme: pick(equipped.theme) };
 }
 
-/** Skins sold or shown in the shop (Phase A: roofs and helmets; terrain themes need renderer support). */
+/** Skins sold or shown in the shop: roofs, helmets and terrain themes (ECON-10), in catalog order. */
 export function shopSkins(): SkinDef[] {
-  return (SKINS as readonly SkinDef[]).filter((s) => s.category !== 'terrainTheme');
+  return [...(SKINS as readonly SkinDef[])];
+}
+
+/** The family slot a catalog skin equips into. */
+export function skinFamily(skin: Pick<SkinDef, 'category'>): SkinFamily {
+  return skin.category === 'towerRoof' ? 'roof' : skin.category === 'unitHelmet' ? 'helmet' : 'theme';
 }

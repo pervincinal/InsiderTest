@@ -1,7 +1,7 @@
 import type { Owner, Road, TowerKind } from '../sim/types';
 import { C } from '../sim/constants';
 import type { Palette } from './palette';
-import { shade } from './palette';
+import { shade, themeFor } from './palette';
 import type { View } from './view';
 import { applyDeviceTransform, applyTransform, clipToMap } from './view';
 import type { Rect } from './widgets';
@@ -108,6 +108,18 @@ const DEMO_TERRAIN: TerrainSpec = {
   bottom: 1150,
 };
 
+/** The title island re-lit by the equipped terrain theme (`TerrainSpec.theme`); memoised per theme id. */
+const themedDemoTerrain = new Map<string, TerrainSpec>();
+function demoTerrain(theme: string | undefined): TerrainSpec {
+  if (!theme) return DEMO_TERRAIN;
+  let spec = themedDemoTerrain.get(theme);
+  if (!spec) {
+    spec = { ...DEMO_TERRAIN, theme };
+    themedDemoTerrain.set(theme, spec);
+  }
+  return spec;
+}
+
 /** Marching columns: (road index, forward?, owner, count, phase). */
 const DEMO_COLUMNS: { road: number; forward: boolean; owner: Owner; count: number; phase: number }[] = [
   { road: 0, forward: true, owner: 'player', count: 7, phase: 0 },
@@ -123,10 +135,10 @@ function motion(): boolean {
   return !reduced;
 }
 
-function beginFrame(view: View, pal: Palette): CanvasRenderingContext2D {
+function beginFrame(view: View, pal: Palette, letterbox: string = pal.letterbox): CanvasRenderingContext2D {
   const ctx = view.ctx;
   applyDeviceTransform(view);
-  ctx.fillStyle = pal.letterbox;
+  ctx.fillStyle = letterbox;
   ctx.fillRect(0, 0, view.cssW, view.cssH);
   ctx.save();
   applyTransform(view);
@@ -207,11 +219,13 @@ export interface TitleOpts {
   /** Rect currently held down (pressed look), if any. */
   pressed?: Rect | null;
   toast?: ToastOpts | null;
+  /** Equipped terrain theme sprite id (`theme.*`); undefined = untinted. */
+  theme?: string;
 }
 
 export function drawTitle(view: View, pal: Palette, o: TitleOpts): void {
-  const ctx = beginFrame(view, pal);
-  drawTerrain(ctx, view, pal, DEMO_TERRAIN);
+  const ctx = beginFrame(view, pal, o.theme ? themeFor(o.theme).letterbox : undefined);
+  drawTerrain(ctx, view, pal, demoTerrain(o.theme));
   drawDemoWorld(ctx, pal, o.nowMs, true);
 
   ctx.textAlign = 'center';

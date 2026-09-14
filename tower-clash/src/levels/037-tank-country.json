@@ -2,8 +2,8 @@
   "id": 37,
   "name": "Tank Country",
   "lesson": "Two enemy factories stand at the front: their tanks take the flank towers at once and their banks fall on whoever is weakest, the yellow base included. Hold the fortress in the middle while the three grind each other, then take a factory in one push before its bank refills",
-  "star3": 65000,
-  "star2": 130000,
+  "star3": 55000,
+  "star2": 110000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.65},
     {"owner": "enemy2", "personality": "rusher", "aggression": 0.65},

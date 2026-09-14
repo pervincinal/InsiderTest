@@ -17,8 +17,9 @@ import type { IapProductDef, SkinDef } from '../economy/catalog';
 import { getStore } from '../economy/store';
 import { CONVERSION_PACKS, buyBoosterCrate, conversionGold, convertCrystals, grantProduct, restorePurchases, spendCrystals } from '../economy/wallet';
 import { CONVERSION, CRYSTAL_SERVICES } from '../economy/catalog';
-import { ownsProduct, shopSkins, spriteSkinId, visibleProducts } from '../economy/entitlements';
+import { ownsProduct, shopSkins, skinFamily, spriteSkinId, visibleProducts } from '../economy/entitlements';
 import { UPGRADE_DEFS, UPGRADE_GLYPH, buyUpgrade, upgradeCost, upgradeEffectText, upgradeTier } from './upgrades';
+import type { SkinFamily } from './save';
 import { writeSave } from './save';
 import type { App, Screen } from './screens';
 import { Toast } from './screens';
@@ -176,13 +177,14 @@ export class ShopScreen implements Screen {
       for (const [category, label] of [
         ['towerRoof', 'Tower roofs'],
         ['unitHelmet', 'Soldier helmets'],
+        ['terrainTheme', 'Terrain themes'],
       ] as const) {
         const list = shopSkins().filter((s) => s.category === category);
         out.skinHeaders.push({ label, y: top });
         list.forEach((s, i) => {
           const rect = shopSkinRect(top, i);
           const owned = save.skins.owned.includes(s.id);
-          const family = category === 'towerRoof' ? 'roof' : 'helmet';
+          const family = skinFamily(s);
           const equipped = owned && save.skins.equipped[family] === s.id;
           out.skins.push({ id: s.id, rect, label: skinLabel(s), spriteId: spriteSkinId(s.id), cost: s.costCrystals, owned, equipped, locked: !owned && s.costCrystals === 0 });
           out.hits.push({ rect, action: () => this.tapSkin(s, family, rect) });
@@ -228,6 +230,11 @@ export class ShopScreen implements Screen {
 
   setScroll(y: number): void {
     this.scroll = Math.max(0, Math.min(this.maxScroll(), y));
+  }
+
+  /** Current content scroll in logical px (debug / e2e). */
+  get scrollY(): number {
+    return this.scroll;
   }
 
   draw(view: View, nowMs: number): void {
@@ -467,7 +474,7 @@ export class ShopScreen implements Screen {
     this.toast.show(`Booster crate: +${added.overdrive} Overdrive · +${added.freeze} Freeze · +${added.airstrike} Airstrike`, 'ok', this.nowMs);
   }
 
-  private tapSkin(skin: SkinDef, family: 'roof' | 'helmet', rect: Rect): void {
+  private tapSkin(skin: SkinDef, family: SkinFamily, rect: Rect): void {
     const save = this.app.save;
     if (save.skins.owned.includes(skin.id)) {
       this.equipSkin(skin.id, family);
@@ -490,7 +497,7 @@ export class ShopScreen implements Screen {
   }
 
   /** Equip an owned skin; tapping the equipped one reverts to the default look. */
-  equipSkin(id: string, family: 'roof' | 'helmet'): void {
+  equipSkin(id: string, family: SkinFamily): void {
     const save = this.app.save;
     if (!save.skins.owned.includes(id)) return;
     save.skins.equipped[family] = save.skins.equipped[family] === id ? null : id;

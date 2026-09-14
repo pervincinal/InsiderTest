@@ -1,13 +1,13 @@
 # Tower Clash — Privacy Policy / Məxfilik Siyasəti
 
-**Version 2.0 · Last updated: 2026-09-13** · **Versiya 2.0 · Son yenilənmə: 13.09.2026**
+**Version 2.1 · Last updated: 2026-09-14** · **Versiya 2.1 · Son yenilənmə: 14.09.2026**
 
 Tower Clash exists in two forms, and they handle data differently. Please read the section for the version you use:
 
 - **Part A — Web / PWA version** (played in a browser or installed from the browser to the home screen): stores progress on your device only; no ads, no purchases, no network calls after loading.
 - **Part B — Mobile app versions** (installed from Google Play or the Apple App Store, package `com.pervincinal.towerclash`): the same game, plus optional in-app purchases and advertising, which involve two service providers (Google AdMob and RevenueCat).
 
-This page is hosted publicly (planned address: `https://pervincinal.github.io/InsiderTest/privacy.html`) and linked from both store listings. Version history: 1.0 (2026-09-13, web-only wording); 2.0 (2026-09-13, adds Part B for the store apps).
+This page is hosted publicly (planned address: `https://pervincinal.github.io/InsiderTest/privacy.html`) and linked from both store listings. Version history: 1.0 (2026-09-13, web-only wording); 2.0 (2026-09-13, adds Part B for the store apps); 2.1 (2026-09-14, iOS: no tracking prompt, non-personalised ads only).
 
 ---
 
@@ -42,14 +42,14 @@ The apps show two kinds of ads: a short full-screen ad between levels (never dur
 
 To show ads, the Google Mobile Ads SDK inside the app sends the following to Google:
 
-- **Advertising identifier** of your device (Google Advertising ID on Android; on iOS the IDFA only if you allow tracking, see below), used to serve, cap and measure ads, and to detect fraud.
+- **Advertising identifier** of your device (Google Advertising ID on Android; on iOS none — the app never asks for tracking permission, so Apple's advertising identifier (IDFA) is not available to the ad SDK, see below), used to serve, cap and measure ads, and to detect fraud.
 - **Device and app information**: device model, operating system version, language, screen size, app version, IP address, and how you interact with an ad (view, click, close). Google may derive a **coarse (approximate) location** from your IP address for ad delivery and legal compliance; the app itself never requests location permission.
 
-**Personalised vs. non-personalised ads.** In the European Economic Area, the United Kingdom and Switzerland the app shows Google's consent form (User Messaging Platform, GDPR) before any ad is requested; if you refuse, you still get ads, but only non-personalised ones, and the advertising identifier is not used for profiling. On iOS 14.5 and later, Apple's "Allow tracking?" prompt appears once; if you decline, Google receives no IDFA and serves non-personalised ads only. You can change either choice at any time:
+**Personalised vs. non-personalised ads.** In the European Economic Area, the United Kingdom and Switzerland the app shows Google's consent form (User Messaging Platform, GDPR) before any ad is requested; if you refuse, you still get ads, but only non-personalised ones, and the advertising identifier is not used for profiling. On iOS the app never asks for tracking permission (there is no "Allow tracking?" prompt) and always requests non-personalised ads; Google receives no IDFA. On Android, personalisation follows your answer in the consent form where that form applies. You can change your choice at any time:
 
 - Android: Settings → Google → Ads → *Delete advertising ID* or *Opt out of Ads Personalisation* (wording varies by Android version).
-- iOS: Settings → Privacy & Security → Tracking → switch off "Allow Apps to Request to Track", or per app.
-- EEA/UK/Switzerland: the in-game Settings screen has a "Privacy options" entry that reopens the consent form (available once the apps ship).
+- iOS: nothing to change — ads in the iOS app are always non-personalised. (The system setting Settings → Privacy & Security → Tracking is not used by the app.)
+- EEA/UK/Switzerland: the in-game Settings screen has a "Privacy options" entry that reopens the consent form (mobile apps only; shown when the consent framework requires it).
 - Google's ad settings: https://adssettings.google.com
 
 Google's own description of how it uses ad data: https://policies.google.com/technologies/partner-sites and https://policies.google.com/privacy. The ads themselves may include a link to Google's "Why this ad?" information.
@@ -86,14 +86,14 @@ There are no subscriptions and no random paid items (no loot boxes).
 
 #### B.6 Children
 
-Tower Clash is not directed at children under 13 (or the higher age of digital consent in your country) and is listed for a general audience. The app is registered with Google AdMob as **not child-directed**, with the maximum ad content rating set to "G" (general audiences). If you are under the age of digital consent in your country, the app does not serve personalised ads to you when you decline the consent or tracking prompt, and we ask that you do not make purchases without a parent's or guardian's permission — store parental controls (Apple "Ask to Buy", Google Play purchase authentication) apply to every purchase in the app.
+Tower Clash is not directed at children under 13 (or the higher age of digital consent in your country) and is listed for a general audience. The app is registered with Google AdMob as **not child-directed**, with the maximum ad content rating set to "G" (general audiences). If you are under the age of digital consent in your country, the app does not serve personalised ads to you when you decline the consent form (and never on iOS, where ads are always non-personalised), and we ask that you do not make purchases without a parent's or guardian's permission — store parental controls (Apple "Ask to Buy", Google Play purchase authentication) apply to every purchase in the app.
 
 #### B.7 Your rights and choices
 
 - **Delete everything on the device:** uninstall the app (or reset progress in Settings).
 - **Ad personalisation:** opt out with the system settings or the in-game "Privacy options" listed in B.2. Resetting the advertising ID on your device disconnects future ad data from past data.
-- **Purchase records:** to have RevenueCat's record of your anonymous app user ID deleted, e-mail us (below) with the "Support ID" shown in the game's Settings → About screen (available once the apps ship). Note that deleting it also removes the ability to restore purchases from that installation; the store's own purchase history is unaffected and can be managed with Apple or Google.
-- **EU/EEA, UK, Swiss, Brazilian, Californian and similar rights** (access, correction, deletion, objection, portability, complaint to a supervisory authority) apply to the data above. Because we hold no identifying information, we may need the Support ID to locate a record. The legal basis for processing is your consent (personalised ads, iOS tracking), the performance of a contract (purchases) and our legitimate interest in showing non-personalised ads and preventing fraud.
+- **Purchase records:** to have RevenueCat's record of your anonymous app user ID deleted, e-mail us (below) with the "Support ID" shown in the game's Settings → About screen (mobile apps only). Note that deleting it also removes the ability to restore purchases from that installation; the store's own purchase history is unaffected and can be managed with Apple or Google.
+- **EU/EEA, UK, Swiss, Brazilian, Californian and similar rights** (access, correction, deletion, objection, portability, complaint to a supervisory authority) apply to the data above. Because we hold no identifying information, we may need the Support ID to locate a record. The legal basis for processing is your consent (personalised ads on Android, where the consent form applies), the performance of a contract (purchases) and our legitimate interest in showing non-personalised ads and preventing fraud.
 - **Do Not Sell / Share (US state laws):** we do not sell personal data. Where the use of an advertising identifier for personalised ads counts as "sharing", the AdMob consent form (US state regulations message) and the system opt-outs above are the way to refuse.
 
 #### B.8 Security
@@ -103,6 +103,8 @@ Data in transit between the app and Google / RevenueCat uses HTTPS (TLS). The ap
 ### Changes to this policy
 
 If a future version changes what is collected (for example online leaderboards), this page is updated before that version ships and the version number and "last updated" date change. Material changes for the mobile apps are also summarised in the store "What's new" text.
+
+Changelog: 2.1 (2026-09-14) — the iOS app never asks for tracking permission (Apple's App Tracking Transparency prompt was removed) and always requests non-personalised ads; B.2, B.6 and B.7 re-worded accordingly. 2.0 (2026-09-13) — Part B (mobile apps: ads, purchases, RevenueCat) added. 1.0 (2026-09-13) — first version, web only.
 
 ### Contact
 
@@ -118,7 +120,7 @@ Tower Clash iki formada mövcuddur və onlar məlumatla fərqli davranır. İsti
 - **A hissəsi — Veb / PWA versiyası** (brauzerdə oynanır və ya brauzerdən ana ekrana quraşdırılır): irəliləyiş yalnız cihazınızda saxlanılır; reklam, alış və yükləndikdən sonra şəbəkə sorğusu yoxdur.
 - **B hissəsi — Mobil tətbiq versiyaları** (Google Play və ya Apple App Store-dan quraşdırılır, paket `com.pervincinal.towerclash`): eyni oyun, üstəgəl könüllü tətbiqdaxili alışlar və reklamlar; bunlar iki xidmət təminatçısını (Google AdMob və RevenueCat) əhatə edir.
 
-Bu səhifə açıq şəkildə yerləşdirilir (planlaşdırılan ünvan: `https://pervincinal.github.io/InsiderTest/privacy.html`) və hər iki mağaza səhifəsindən link verilir. Versiya tarixçəsi: 1.0 (13.09.2026, yalnız veb); 2.0 (13.09.2026, mağaza tətbiqləri üçün B hissəsi əlavə olunub).
+Bu səhifə açıq şəkildə yerləşdirilir (planlaşdırılan ünvan: `https://pervincinal.github.io/InsiderTest/privacy.html`) və hər iki mağaza səhifəsindən link verilir. Versiya tarixçəsi: 1.0 (13.09.2026, yalnız veb); 2.0 (13.09.2026, mağaza tətbiqləri üçün B hissəsi əlavə olunub); 2.1 (14.09.2026, iOS: izləmə sorğusu yoxdur, yalnız fərdiləşdirilməmiş reklam).
 
 ### A hissəsi — Veb / PWA versiyası
 
@@ -149,14 +151,14 @@ Tətbiqlər iki növ reklam göstərir: səviyyələr arasında qısa tam ekran 
 
 Reklam göstərmək üçün tətbiqdəki Google Mobile Ads SDK Google-a bunları göndərir:
 
-- Cihazınızın **reklam identifikatoru** (Android-də Google Advertising ID; iOS-da IDFA yalnız izləməyə icazə versəniz, aşağıya bax) — reklamları göstərmək, sayını məhdudlaşdırmaq, ölçmək və saxtakarlığı aşkarlamaq üçün.
+- Cihazınızın **reklam identifikatoru** (Android-də Google Advertising ID; iOS-da yoxdur — tətbiq heç vaxt izləmə icazəsi istəmir, ona görə Apple-ın reklam identifikatoru (IDFA) reklam SDK-sı üçün əlçatan deyil, aşağıya bax) — reklamları göstərmək, sayını məhdudlaşdırmaq, ölçmək və saxtakarlığı aşkarlamaq üçün.
 - **Cihaz və tətbiq məlumatı**: cihaz modeli, əməliyyat sistemi versiyası, dil, ekran ölçüsü, tətbiq versiyası, IP ünvanı və reklamla necə davrandığınız (baxış, klik, bağlama). Google reklam çatdırılması və qanuni tələblər üçün IP ünvanınızdan **təxmini (kobud) məkan** çıxara bilər; tətbiq özü heç vaxt məkan icazəsi istəmir.
 
-**Fərdiləşdirilmiş və fərdiləşdirilməmiş reklamlar.** Avropa İqtisadi Zonası, Böyük Britaniya və İsveçrədə tətbiq hər hansı reklam istəməzdən əvvəl Google-un razılıq formasını (User Messaging Platform, GDPR) göstərir; rədd etsəniz yenə reklam görürsünüz, amma yalnız fərdiləşdirilməmiş, və reklam identifikatoru profil üçün istifadə olunmur. iOS 14.5 və sonrakı versiyalarda Apple-ın "İzləməyə icazə verilsin?" sorğusu bir dəfə görünür; rədd etsəniz Google IDFA almır və yalnız fərdiləşdirilməmiş reklam göstərir. Hər iki seçimi istənilən vaxt dəyişə bilərsiniz:
+**Fərdiləşdirilmiş və fərdiləşdirilməmiş reklamlar.** Avropa İqtisadi Zonası, Böyük Britaniya və İsveçrədə tətbiq hər hansı reklam istəməzdən əvvəl Google-un razılıq formasını (User Messaging Platform, GDPR) göstərir; rədd etsəniz yenə reklam görürsünüz, amma yalnız fərdiləşdirilməmiş, və reklam identifikatoru profil üçün istifadə olunmur. iOS-da tətbiq heç vaxt izləmə icazəsi istəmir ("İzləməyə icazə verilsin?" sorğusu yoxdur) və həmişə fərdiləşdirilməmiş reklam sorğusu göndərir; Google IDFA almır. Android-də fərdiləşdirmə, razılıq formasının tətbiq olunduğu yerlərdə, oradakı cavabınıza uyğundur. Seçiminizi istənilən vaxt dəyişə bilərsiniz:
 
 - Android: Parametrlər → Google → Reklamlar → *Reklam ID-sini sil* və ya *Reklam fərdiləşdirməsindən imtina et* (Android versiyasına görə adlar fərqlənir).
-- iOS: Parametrlər → Məxfilik və Təhlükəsizlik → İzləmə → "Tətbiqlərin izləmə istəməsinə icazə ver" seçimini söndürün və ya tətbiq üzrə.
-- AİZ/BB/İsveçrə: oyundaxili Parametrlər ekranındakı "Məxfilik seçimləri" razılıq formasını yenidən açır (tətbiqlər çıxandan sonra).
+- iOS: dəyişməyə ehtiyac yoxdur — iOS tətbiqində reklamlar həmişə fərdiləşdirilməmişdir. (Parametrlər → Məxfilik və Təhlükəsizlik → İzləmə sistem parametrini tətbiq istifadə etmir.)
+- AİZ/BB/İsveçrə: oyundaxili Parametrlər ekranındakı "Məxfilik seçimləri" razılıq formasını yenidən açır (yalnız mobil tətbiqlərdə; razılıq çərçivəsi tələb edəndə göstərilir).
 - Google reklam parametrləri: https://adssettings.google.com
 
 Google-un reklam məlumatını necə istifadə etdiyi: https://policies.google.com/technologies/partner-sites və https://policies.google.com/privacy.
@@ -193,14 +195,14 @@ Abunəlik yoxdur, pullu təsadüfi əşyalar (loot box) yoxdur.
 
 #### B.6 Uşaqlar
 
-Tower Clash 13 yaşdan kiçik uşaqlara (və ya ölkənizdəki daha yüksək rəqəmsal razılıq yaşına) yönəlməyib və ümumi auditoriya üçün siyahıya alınıb. Tətbiq Google AdMob-da **uşaqlara yönəlməmiş** kimi qeydiyyatdadır, maksimum reklam məzmun reytinqi "G" (ümumi auditoriya) olaraq təyin edilib. Ölkənizdəki rəqəmsal razılıq yaşından kiçiksinizsə, razılıq və ya izləmə sorğusunu rədd etdikdə tətbiq sizə fərdiləşdirilmiş reklam göstərmir; valideyn və ya qəyyumun icazəsi olmadan alış etməməyinizi xahiş edirik — mağazaların valideyn nəzarəti (Apple "Ask to Buy", Google Play alış təsdiqi) tətbiqdəki hər alışa şamil olunur.
+Tower Clash 13 yaşdan kiçik uşaqlara (və ya ölkənizdəki daha yüksək rəqəmsal razılıq yaşına) yönəlməyib və ümumi auditoriya üçün siyahıya alınıb. Tətbiq Google AdMob-da **uşaqlara yönəlməmiş** kimi qeydiyyatdadır, maksimum reklam məzmun reytinqi "G" (ümumi auditoriya) olaraq təyin edilib. Ölkənizdəki rəqəmsal razılıq yaşından kiçiksinizsə, razılıq formasını rədd etdikdə tətbiq sizə fərdiləşdirilmiş reklam göstərmir (iOS-da isə heç vaxt, çünki orada reklamlar həmişə fərdiləşdirilməmişdir); valideyn və ya qəyyumun icazəsi olmadan alış etməməyinizi xahiş edirik — mağazaların valideyn nəzarəti (Apple "Ask to Buy", Google Play alış təsdiqi) tətbiqdəki hər alışa şamil olunur.
 
 #### B.7 Hüquqlarınız və seçimləriniz
 
 - **Cihazdakı hər şeyi silmək:** tətbiqi silin (və ya Parametrlərdə irəliləyişi sıfırlayın).
 - **Reklam fərdiləşdirməsi:** B.2-də göstərilən sistem parametrləri və ya oyundaxili "Məxfilik seçimləri" ilə imtina edin. Cihazda reklam ID-sini sıfırlamaq gələcək reklam məlumatını keçmişdən ayırır.
-- **Alış qeydləri:** RevenueCat-dəki anonim tətbiq istifadəçi ID-nizin qeydinin silinməsi üçün oyunun Parametrlər → Haqqında ekranındakı "Dəstək ID"-si ilə bizə e-poçt yazın (tətbiqlər çıxandan sonra). Nəzərə alın: silinmə həmin quraşdırmadan alışları bərpa etmək imkanını da aradan qaldırır; mağazanın öz alış tarixçəsi dəyişmir və Apple / Google ilə idarə oluna bilər.
-- **Aİ/AİZ, BB, İsveçrə, Braziliya, Kaliforniya və oxşar hüquqlar** (əlçatanlıq, düzəliş, silinmə, etiraz, daşınma, nəzarət orqanına şikayət) yuxarıdakı məlumata şamil olunur. Şəxsiyyəti müəyyən edən məlumat saxlamadığımız üçün qeydi tapmaq üçün Dəstək ID-si lazım ola bilər. Emalın hüquqi əsası: razılığınız (fərdiləşdirilmiş reklam, iOS izləmə), müqavilənin icrası (alışlar) və fərdiləşdirilməmiş reklam göstərmək və saxtakarlığın qarşısını almaq üzrə qanuni marağımız.
+- **Alış qeydləri:** RevenueCat-dəki anonim tətbiq istifadəçi ID-nizin qeydinin silinməsi üçün oyunun Parametrlər → Haqqında ekranındakı "Dəstək ID"-si ilə bizə e-poçt yazın (yalnız mobil tətbiqlərdə). Nəzərə alın: silinmə həmin quraşdırmadan alışları bərpa etmək imkanını da aradan qaldırır; mağazanın öz alış tarixçəsi dəyişmir və Apple / Google ilə idarə oluna bilər.
+- **Aİ/AİZ, BB, İsveçrə, Braziliya, Kaliforniya və oxşar hüquqlar** (əlçatanlıq, düzəliş, silinmə, etiraz, daşınma, nəzarət orqanına şikayət) yuxarıdakı məlumata şamil olunur. Şəxsiyyəti müəyyən edən məlumat saxlamadığımız üçün qeydi tapmaq üçün Dəstək ID-si lazım ola bilər. Emalın hüquqi əsası: razılığınız (razılıq formasının tətbiq olunduğu yerlərdə Android-də fərdiləşdirilmiş reklam), müqavilənin icrası (alışlar) və fərdiləşdirilməmiş reklam göstərmək və saxtakarlığın qarşısını almaq üzrə qanuni marağımız.
 - **Satma / Paylaşma (ABŞ ştat qanunları):** şəxsi məlumat satmırıq. Reklam identifikatorunun fərdiləşdirilmiş reklam üçün istifadəsi "paylaşma" sayıldıqda, AdMob razılıq forması (ABŞ ştat mesajı) və yuxarıdakı sistem imtinaları rədd etmə yoludur.
 
 #### B.8 Təhlükəsizlik
@@ -210,6 +212,8 @@ Tətbiq ilə Google / RevenueCat arasındakı məlumat HTTPS (TLS) ilə ötürü
 ### Bu siyasətdə dəyişikliklər
 
 Gələcək versiya toplananları dəyişsə (məsələn, onlayn liderlər cədvəli), həmin versiya çıxmazdan əvvəl bu səhifə yenilənir, versiya nömrəsi və "son yenilənmə" tarixi dəyişir. Mobil tətbiqlər üçün əhəmiyyətli dəyişikliklər mağazanın "Yeniliklər" mətnində də qeyd olunur.
+
+Dəyişikliklər tarixçəsi: 2.1 (14.09.2026) — iOS tətbiqi heç vaxt izləmə icazəsi istəmir (Apple-ın App Tracking Transparency sorğusu çıxarılıb) və həmişə fərdiləşdirilməmiş reklam sorğusu göndərir; B.2, B.6 və B.7 buna uyğun yenidən yazılıb. 2.0 (13.09.2026) — B hissəsi (mobil tətbiqlər: reklam, alışlar, RevenueCat) əlavə olunub. 1.0 (13.09.2026) — ilk versiya, yalnız veb.
 
 ### Əlaqə
 
