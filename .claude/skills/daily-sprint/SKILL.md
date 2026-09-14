@@ -23,6 +23,7 @@ If `npm run check` is red at the start of the day, fixing it is the first backlo
 ## 2. Execute with the team
 - Spawn agents in one message when independent (different directories). Use `subagent_type` = role file name (`gameplay-engineer`, `frontend-engineer`, `ai-engineer`, `level-designer`, `qa-engineer`, `tech-artist`, `game-designer`). If that type is not available, use `general-purpose` and paste `.claude/agents/<role>.md` at the top of the prompt.
 - Each prompt must include: the backlog item verbatim, the GDD section, owned paths, "run `npm run check` in tower-clash before finishing and report the output".
+- Playwright in parallel agents: each agent must run `playwright test --output <scratchpad>/pw-<role>` (or its own port + `--output`) so concurrent runs do not delete each other's `test-results/`; only the Producer runs the final `npm run e2e`.
 - Sequence dependencies: sim types before renderer/AI work that needs them; levels after mechanics they use.
 
 ## 3. Integrate and verify
