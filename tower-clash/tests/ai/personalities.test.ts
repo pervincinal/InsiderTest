@@ -26,6 +26,26 @@ function duel(enemyDef: EnemyDef, enemyUnits: number, playerUnits: number, seed 
 
 const sends = (cmds: Command[]) => cmds.filter((c) => c.type === 'sendUnits');
 const upgrades = (cmds: Command[]) => cmds.filter((c) => c.type === 'upgrade');
+const cuts = (cmds: Command[]) => cmds.filter((c) => c.type === 'cutBridge');
+
+/**
+ * e (enemy1, `enemyUnits`) at the north end of a 600 px bridge from p (player, `playerUnits`); with `alt`,
+ * a plain detour p — n — e (neutral n) keeps e reachable once the bridge is gone.
+ */
+function bridgeDuel(enemyDef: EnemyDef, enemyUnits: number, playerUnits: number, alt = true, level: 1 | 2 | 3 = 3): GameState {
+  return createState(
+    makeLevel({
+      enemies: [enemyDef],
+      towers: [
+        { id: 'p', x: 360, y: 1000, owner: 'player', units: playerUnits },
+        { id: 'e', x: 360, y: 400, owner: 'enemy1', units: enemyUnits, level },
+        ...(alt ? [{ id: 'n', x: 60, y: 700, owner: 'neutral' as const, units: 2 }] : []),
+      ],
+      roads: [{ a: 'p', b: 'e', kind: 'bridge' }, ...(alt ? [{ a: 'p', b: 'n' }, { a: 'n', b: 'e' }] : [])],
+    }),
+    1,
+  );
+}
 
 describe('rusher', () => {
   it('attacks only when garrison ≥ target + 3 at aggression 0', () => {
@@ -119,6 +139,78 @@ describe('turtle', () => {
       else expect(attacks).toBeGreaterThan(0);
     }
   });
+});
+
+describe('turtle: cutBridge', () => {
+  it('cuts the bridge under a player column that would take its max-level tower', () => {
+    const def = enemy('turtle', 1);
+    // 40 walk at e (L3, 20 units, 30 when they land): nothing left to upgrade and, with 42 to hold against
+    // the column, nothing spare for an attack — its one move is to drown the column.
+    const state = bridgeDuel(def, 20, 40);
+    applyCommand(state, { type: 'sendUnits', owner: 'player', from: 'p', to: 'e', ratio: 1 });
+    const cmds = enemyCommands(state, def, new Rng(1));
+    expect(cmds).toEqual([{ type: 'cutBridge', owner: 'enemy1', roadId: 'e-p' }]);
+    applyCommand(state, cmds[0]!);
+    expect(state.roads['e-p']!.cut).toBe(true);
+    expect(state.queues).toHaveLength(0);
+    expect(state.towers['e']!.units).toBe(20);
+  });
+
+  it('keeps the bridge under a column its garrison absorbs', () => {
+    const def = enemy('turtle', 1);
+    const state = bridgeDuel(def, 20, 40);
+    applyCommand(state, { type: 'sendUnits', owner: 'player', from: 'p', to: 'e', ratio: (5 + 0.5) / 40 });
+    expect(state.queues[0]!.remaining).toBe(5);
+    expect(cuts(enemyCommands(state, def, new Rng(1)))).toHaveLength(0);
+  });
+
+  it('never cuts its last route to an opponent, even to save the tower', () => {
+    const def = enemy('turtle', 1);
+    const state = bridgeDuel(def, 20, 40, false);
+    applyCommand(state, { type: 'sendUnits', owner: 'player', from: 'p', to: 'e', ratio: 1 });
+    expect(cuts(enemyCommands(state, def, new Rng(1)))).toHaveLength(0);
+  });
+
+  it('does not cut pre-emptively: a big garrison across the bridge is not a column', () => {
+    const def = enemy('turtle', 1);
+    const state = bridgeDuel(def, 20, 40);
+    expect(cuts(enemyCommands(state, def, new Rng(1)))).toHaveLength(0);
+  });
+
+  it('does not burn a bridge for a tower below max level (a fresh capture is not worth it)', () => {
+    const def = enemy('turtle', 1);
+    // Same lethal column, but e is L1 with 5 units: it cannot afford an upgrade under threat and lets the tower go.
+    const state = bridgeDuel(def, 5, 30, true, 1);
+    applyCommand(state, { type: 'sendUnits', owner: 'player', from: 'p', to: 'e', ratio: 1 });
+    expect(enemyCommands(state, def, new Rng(1))).toEqual([]);
+    // At L2 (barracks max is L3) still no; at L3 it cuts.
+    state.towers['e']!.level = 2;
+    expect(cuts(enemyCommands(state, def, new Rng(1)))).toHaveLength(0);
+    state.towers['e']!.level = 3;
+    expect(cuts(enemyCommands(state, def, new Rng(1)))).toEqual([{ type: 'cutBridge', owner: 'enemy1', roadId: 'e-p' }]);
+  });
+
+  it('is gated by aggression like every other action, and cuts on a later tick if skipped', () => {
+    const def = enemy('turtle', 0);
+    const state = bridgeDuel(def, 20, 40);
+    applyCommand(state, { type: 'sendUnits', owner: 'player', from: 'p', to: 'e', ratio: 1 });
+    const rng = new Rng(3);
+    let total = 0;
+    for (let i = 0; i < 12; i++) total += cuts(enemyCommands(state, def, rng)).length;
+    expect(total).toBeGreaterThan(0);
+    expect(total).toBeLessThan(12);
+  });
+});
+
+describe('rusher and opportunist never cut bridges', () => {
+  for (const personality of ['rusher', 'opportunist'] as const) {
+    it(personality, () => {
+      const def = enemy(personality, 1);
+      const state = bridgeDuel(def, 20, 40);
+      applyCommand(state, { type: 'sendUnits', owner: 'player', from: 'p', to: 'e', ratio: 1 });
+      expect(cuts(enemyCommands(state, def, new Rng(1)))).toHaveLength(0);
+    });
+  }
 });
 
 describe('opportunist', () => {

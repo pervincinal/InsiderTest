@@ -3,8 +3,8 @@
  * tower owners/garrisons/levels, roads (cut, barrier, mine), and units walking the roads.
  * Nothing mutates state.
  */
-import type { Command, EnemyDef, GameState, Owner, Road, Tower, UnitKind } from '../sim/index';
-import { C, Rng, capacityOf, modifiersFor } from '../sim/index';
+import type { Command, EnemyDef, GameState, Owner, Road, Tower, Unit, UnitKind } from '../sim/index';
+import { C, Rng, capacityOf, modifiersFor, roadIdFor } from '../sim/index';
 
 /**
  * A snapshot the AI reasons about: the towers/roads/units it can see plus the player's permanent
@@ -257,6 +257,96 @@ export function hopsToOpponent(state: GameState, owner: Owner): Map<string, numb
     }
   }
   return hops;
+}
+
+/** The road between two towers, if any (cut or not). */
+export function roadBetween(state: GameState, a: string, b: string): Road | undefined {
+  return state.roads[roadIdFor(a, b)];
+}
+
+/* ---------- Threat model (what a human sees: garrisons and columns on the roads) ---------- */
+
+/** Time until a walking unit reaches its destination, ms. */
+export function remainingMs(state: GameState, u: Unit): number {
+  const road = state.roads[u.roadId];
+  if (!road) return 0;
+  return ((1 - u.progress) * road.length * 1000) / u.speed;
+}
+
+export interface Inbound {
+  weight: number;
+  /** Earliest landing of that owner's column, ms. */
+  etaMs: number;
+}
+
+/** Weight heading to a tower, per owner, with the earliest landing (walking units plus queued ones). */
+export function inboundByOwner(state: GameState, towerId: string): Map<Owner, Inbound> {
+  const out = new Map<Owner, Inbound>();
+  const add = (owner: Owner, weight: number, etaMs: number): void => {
+    const cur = out.get(owner);
+    if (cur) {
+      cur.weight += weight;
+      cur.etaMs = Math.min(cur.etaMs, etaMs);
+    } else out.set(owner, { weight, etaMs });
+  };
+  for (const u of state.units) if (u.to === towerId) add(u.owner, u.weight, remainingMs(state, u));
+  for (const q of state.queues) {
+    if (q.to !== towerId) continue;
+    const road = state.roads[q.roadId];
+    if (!road) continue;
+    add(q.owner, q.remaining * (q.unitKind === 'tank' ? C.TANK_WEIGHT : C.INFANTRY_WEIGHT), travelMsFor(state, road, q.owner, q.unitKind));
+  }
+  return out;
+}
+
+/** Time until a column of `weight` sent now has fully arrived over `travelMs`. */
+export function arrivalMs(travelMs: number, weight: number): number {
+  return travelMs + weight * C.LEAVE_INTERVAL_MS;
+}
+
+/** A column that could be thrown at one of `self`'s towers from a neighbour. */
+export interface ThreatSource {
+  from: Tower;
+  /** Weight that would land after the road's barrier/mine ate its share. */
+  attackers: number;
+  /** When the last unit of that column could have landed, ms (its production credit window). */
+  etaMs: number;
+}
+
+/**
+ * The column neighbour `n` could throw at a tower of `self`: a hostile garrison as it will be at now +
+ * `atMs` (plus its reinforcements on the way, minus what is already attacking it), or a hostile column
+ * that is about to flip the neighbour — neutral or another rival's — and carry on from there. The column
+ * is timed as if it left right now (a racing rival does not wait) at *its* owner's speed, never at
+ * `self`'s. `undefined` when nothing could come from that side.
+ */
+export function threatFrom(state: GameState, self: Owner, n: Neighbour, atMs = 0): ThreatSource | undefined {
+  const from = n.tower;
+  if (from.owner === self) return undefined;
+  const inbound = inboundByOwner(state, from.id);
+  let attackers = 0;
+  let landMs = 0;
+  if (from.owner !== 'neutral') {
+    let hostile = 0;
+    let support = 0;
+    for (const [owner, v] of inbound) {
+      if (owner === from.owner) support += v.weight;
+      else hostile += v.weight;
+    }
+    attackers = projectedUnits(from, atMs, state) + support - Math.ceil(hostile / defenceMultiplier(from));
+  }
+  // A column of another rival bigger than the garrison flips the neighbour and keeps the remainder.
+  for (const [owner, v] of inbound) {
+    if (owner === self || owner === 'neutral' || owner === from.owner) continue;
+    const remainder = v.weight - effectiveDefenders(from);
+    if (remainder > attackers) {
+      attackers = remainder;
+      landMs = v.etaMs;
+    }
+  }
+  attackers -= n.roadCost;
+  if (attackers <= 0) return undefined;
+  return { from, attackers, etaMs: landMs + arrivalMs(n.theirTravelMs, attackers) };
 }
 
 /** Aggression gate: an enemy tower skips its action this tick with probability (1 - aggression) * 0.5. */

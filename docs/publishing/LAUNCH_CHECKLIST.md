@@ -4,7 +4,7 @@ Status legend: **done** — exists in the repo today · **needs stakeholder** �
 
 Nothing in this list is a request; it is the full inventory of what stands between the current build and public availability on three channels. The stakeholder can pick up the "needs stakeholder" rows whenever they wish; everything else is already in the backlog.
 
-Shared facts: app id / bundle id / package name **`com.pervincinal.towerclash`**, display name **Tower Clash**, version **0.2.0** (build number 2) in the tree; the next store build is **v1.0 native** with in-app purchases (RevenueCat) and ads (AdMob) per `docs/ECONOMY.md` §8, preceded by **v0.3.0** (economy + shop, web-safe). The web/PWA build has no ads, no purchases and no network calls; the store builds talk to Google AdMob, RevenueCat and the store billing systems (privacy policy v2.1 Part B; no tracking on iOS). Secret names below are the exact names the CI workflows should read from *Settings → Secrets and variables → Actions*.
+Shared facts: app id / bundle id / package name **`com.pervincinal.towerclash`**, display name **Tower Clash**, version **0.3.0** (build number 3) in the tree — the v0.3.0 economy + shop release (web-safe), ready to tag on 2026-09-15; the next store build is **v1.0 native** with in-app purchases (RevenueCat) and ads (AdMob) per `docs/ECONOMY.md` §8. The web/PWA build has no ads, no purchases and no network calls; the store builds talk to Google AdMob, RevenueCat and the store billing systems (privacy policy v2.1 Part B; no tracking on iOS). Secret names below are the exact names the CI workflows should read from *Settings → Secrets and variables → Actions*.
 
 ---
 
@@ -30,7 +30,7 @@ Shared facts: app id / bundle id / package name **`com.pervincinal.towerclash`**
 | G3 | Upload keystore (`keytool -genkeypair … -validity 10000`), stored safely offline; enrol in Play App Signing | needs stakeholder | Losing it means never updating the app |
 | G4 | CI secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` | needs stakeholder | `base64 -w0 release.jks` for the first one |
 | G5 | Release signing config in `android/app/build.gradle` reading those secrets; `bundleRelease` job producing `app-release.aab` in `tower-clash-android` | signing config done / job todo (Mobile Engineer) | Currently only `assembleDebug` runs in CI |
-| G6 | Align native version with `package.json` (`versionName` / `versionCode`, bump on every upload) | done (Mobile Engineer) | `npm run version:sync`; bump to 1.0.0 / build 3+ for the store build |
+| G6 | Align native version with `package.json` (`versionName` / `versionCode`, bump on every upload) | done (Mobile Engineer; at 0.3.0 / 3 since 2026-09-15) | `npm run version:sync`; bump to 1.0.0 / build 4+ for the store build |
 | G7 | Store listing texts EN + AZ (title, short, full description) — monetization wording | done (text, `STORE_LISTING.md` §1) / re-verify **[v0.3+]** lines before pasting | §1.4 holds the ad-free wording if the economy is cut |
 | G8 | App icon 512×512 | done | `tower-clash/public/icons/icon-512.png` |
 | G9 | Feature graphic 1024×500 | done | `tower-clash/store/feature-graphic.png` |
@@ -73,10 +73,10 @@ Shared facts: app id / bundle id / package name **`com.pervincinal.towerclash`**
 
 | # | Step | Status | Notes |
 |---|---|---|---|
-| V1 | `tower-clash/package.json` version `0.2.0`, `config.buildNumber` 2 | done | Next: `0.3.0` / 3 when the economy ships on web; `1.0.0` / 4+ for the first store upload with IAP + ads |
-| V2 | Release notes v0.2.0 EN + AZ; v0.3.0 section "(in progress)" | done / in progress | `RELEASE_NOTES.md`; v0.3.0 lines are marked planned until the Producer confirms |
-| V3 | Git tag `tower-clash-v0.2.0` | todo (Producer) | Proposed in `RELEASE_NOTES.md`; `tower-clash-v0.1.0` was never created and can be skipped |
-| V4 | Native versions aligned (see G6, A7) | done | `npm run version:check` can guard CI |
+| V1 | `tower-clash/package.json` version `0.3.0`, `config.buildNumber` 3 | done (Publisher, 2026-09-15) | Next: `1.0.0` / 4+ for the first store upload with IAP + ads |
+| V2 | Release notes v0.3.0 EN + AZ, dated 2026-09-15, "ready to tag" (v0.2.0 and v0.1.0 sections kept) | done | `RELEASE_NOTES.md`; the v0.3.0 section lists only what is in the tree — "Not in this build" holds the rest |
+| V3 | Git tags `tower-clash-v0.3.0` (and `tower-clash-v0.2.0` retroactively, if wanted) | todo (Producer) | Proposed in `RELEASE_NOTES.md`; no tag exists in the repo yet; `tower-clash-v0.1.0` can be skipped |
+| V4 | Native versions aligned (see G6, A7) | done | `npm run version:check` passes at 0.3.0 / 3 (2026-09-15); can guard CI |
 
 ## 5. Secrets summary (names only, none exist yet)
 

@@ -5,12 +5,14 @@
  */
 import type { Command, EnemyDef, GameState, Tower } from '../sim/index';
 import { Rng } from '../sim/index';
+import { bridgeCutCommands } from './bridges';
 import {
   clamp01,
   defenceMultiplier,
   effectiveDefenders,
   hostileNeighbours,
   ownedTowers,
+  roadBetween,
   sendCommand,
   skipsAction,
   spendable,
@@ -77,7 +79,24 @@ export function rusherCommands(state: GameState, enemy: EnemyDef, rng: Rng): Com
   return cmds;
 }
 
-/** Turtle: upgrade to max level whenever affordable; otherwise attack only with ×2 superiority. */
+/** Roads this tick's sendUnits commands use. */
+function roadsUsedBy(state: GameState, cmds: readonly Command[]): Set<string> {
+  const out = new Set<string>();
+  for (const cmd of cmds) {
+    if (cmd.type !== 'sendUnits') continue;
+    const road = roadBetween(state, cmd.from, cmd.to);
+    if (road) out.add(road.id);
+  }
+  return out;
+}
+
+/**
+ * Turtle: upgrade to max level whenever affordable; otherwise attack only with ×2 superiority. It is also
+ * the one personality that cuts a bridge (`bridges.ts`, the reference player's rule without cover — a
+ * turtle never reinforces — and without the pre-emptive case): under a column that would take one of
+ * its max-level towers (a fresh L1 capture is not worth a bridge to it, just as it does not attack
+ * before max level), never under its own column and never its last route to an opponent.
+ */
 export function turtleCommands(state: GameState, enemy: EnemyDef, rng: Rng): Command[] {
   const cmds: Command[] = [];
   for (const tower of ownedTowers(state, enemy.owner)) {
@@ -97,6 +116,11 @@ export function turtleCommands(state: GameState, enemy: EnemyDef, rng: Rng): Com
     if (skipsAction(enemy, rng)) continue;
     const cmd = sendCommand(tower, target.tower.id, available);
     if (cmd) cmds.push(cmd);
+  }
+  const opts = { usedRoads: roadsUsedBy(state, cmds), preemptive: false, worthSaving: (t: Tower) => upgradeCost(t) === undefined };
+  for (const cut of bridgeCutCommands(state, enemy.owner, opts)) {
+    if (skipsAction(enemy, rng)) continue;
+    cmds.push(cut);
   }
   return cmds;
 }

@@ -12,7 +12,11 @@
  *      counting what the target grows before and during the stream) and the captured tower could be
  *      held against its other enemy neighbours; top up a wave that has become too small to land,
  *   5) otherwise wait — or, if nothing better is on, upgrade a frontline tower when it would still
- *      survive an all-in from its strongest enemy neighbour (covered by rear reinforcements).
+ *      survive an all-in from its strongest enemy neighbour (covered by rear reinforcements),
+ *   6) cut a bridge it owns an end of (`bridges.ts`) when a hostile column on it — or the garrison about
+ *      to come over it — would take the tower and the reinforcements above cannot save it, provided no
+ *      own units or this tick's sends use the bridge and every enemy tower stays reachable by another
+ *      road (BFS); the last route to a remaining enemy tower is never cut.
  *
  * Every send keeps a home reserve (`reserveToHold`): what the tower needs to survive the strongest
  * column that could reach it — an adjacent enemy garrison, or an enemy column about to take an adjacent
@@ -23,9 +27,11 @@
  * and march times include them (via `capacityOf` / `modifiersFor` through the shared helpers), enemy
  * towers and columns never do.
  */
-import type { Command, GameState, Owner, Tower, Unit } from '../sim/index';
+import type { Command, GameState, Tower } from '../sim/index';
 import { C, Rng, capacityOf } from '../sim/index';
+import { bridgeCutCommands } from './bridges';
 import {
+  arrivalMs,
   defenceMultiplier,
   effectiveDefenders,
   enemyNeighbours,
@@ -35,17 +41,20 @@ import {
   incomingSupport,
   incomingThreat,
   incomingWeight,
-  isEnemyOwner,
+  inboundByOwner,
   neighbours,
   ownedTowers,
   projectedDefenders,
   projectedUnits,
+  roadBetween,
   sendCommand,
+  threatFrom,
   threatReserve,
-  unitSpeedFor,
+  unitWeightOf,
   upgradeCost,
   wholeUnits,
   type Neighbour,
+  type ThreatSource,
 } from './common';
 
 const OWNER = 'player' as const;
@@ -87,15 +96,16 @@ interface Ctx {
   cmds: Command[];
   rule: string;
   trace?: RuleTrace;
+  /** Roads this tick's sends use (commands are not applied until the tick ends). */
+  usedRoads: Set<string>;
+  /** Friendly weight sent to each tower this tick. */
+  sentTo: Map<string, number>;
+  /** Weight sent away from each tower this tick. */
+  sentFrom: Map<string, number>;
 }
 
 function costToTake(n: Neighbour): number {
   return n.roadCost + n.oncoming;
-}
-
-/** Time until a column of `weight` sent now has fully arrived over `travelMs`. */
-function arrivalMs(travelMs: number, weight: number): number {
-  return travelMs + weight * C.LEAVE_INTERVAL_MS;
 }
 
 function isRear(ctx: Ctx, tower: Tower): boolean {
@@ -104,41 +114,6 @@ function isRear(ctx: Ctx, tower: Tower): boolean {
 
 /* ---------- Threat model (what a human sees: garrisons and columns on the roads) ---------- */
 
-/** Time until a walking unit reaches its destination, ms. */
-function remainingMs(state: GameState, u: Unit): number {
-  const road = state.roads[u.roadId];
-  if (!road) return 0;
-  return ((1 - u.progress) * road.length * 1000) / u.speed;
-}
-
-interface Inbound {
-  weight: number;
-  /** Earliest landing of that owner's column, ms. */
-  etaMs: number;
-}
-
-/** Weight heading to a tower, per owner, with the earliest landing (walking units plus queued ones). */
-function inboundByOwner(state: GameState, towerId: string): Map<Owner, Inbound> {
-  const out = new Map<Owner, Inbound>();
-  const add = (owner: Owner, weight: number, etaMs: number): void => {
-    const cur = out.get(owner);
-    if (cur) {
-      cur.weight += weight;
-      cur.etaMs = Math.min(cur.etaMs, etaMs);
-    } else out.set(owner, { weight, etaMs });
-  };
-  for (const u of state.units) if (u.to === towerId) add(u.owner, u.weight, remainingMs(state, u));
-  for (const q of state.queues) {
-    if (q.to !== towerId) continue;
-    const road = state.roads[q.roadId];
-    if (!road) continue;
-    const tank = q.unitKind === 'tank';
-    const speed = unitSpeedFor(state, q.owner, q.unitKind);
-    add(q.owner, q.remaining * (tank ? C.TANK_WEIGHT : C.INFANTRY_WEIGHT), (road.length * 1000) / speed);
-  }
-  return out;
-}
-
 /** Earliest landing of hostile weight already heading to the tower (Infinity when nothing is). */
 function threatEtaMs(state: GameState, tower: Tower): number {
   let eta = Infinity;
@@ -146,57 +121,12 @@ function threatEtaMs(state: GameState, tower: Tower): number {
   return eta;
 }
 
-/** A column that could be thrown at one of our towers from a neighbour. */
-interface ThreatSource {
-  from: Tower;
-  /** Weight that would land after the road's barrier/mine ate its share. */
-  attackers: number;
-  /** When the last unit of that column could have landed, ms (its production credit window). */
-  etaMs: number;
-}
-
-/**
- * The column neighbour `n` could throw at `tower`: an enemy garrison as it will be at now + `atMs` (plus
- * its reinforcements on the way, minus what is already attacking it), or an enemy column that is about
- * to flip the neighbour — neutral or another enemy's — and carry on from there. The column is timed as
- * if it left right now (a racing enemy does not wait for us to land) at *its* owner's speed, never at
- * ours. `undefined` when nothing could come from that side.
- */
-function threatFrom(state: GameState, n: Neighbour, atMs = 0): ThreatSource | undefined {
-  const from = n.tower;
-  if (from.owner === OWNER) return undefined;
-  const inbound = inboundByOwner(state, from.id);
-  let attackers = 0;
-  let landMs = 0;
-  if (isEnemyOwner(from.owner)) {
-    let hostile = 0;
-    let support = 0;
-    for (const [owner, v] of inbound) {
-      if (owner === from.owner) support += v.weight;
-      else hostile += v.weight;
-    }
-    attackers = projectedUnits(from, atMs, state) + support - Math.ceil(hostile / defenceMultiplier(from));
-  }
-  // A column of another enemy bigger than the garrison flips the neighbour and keeps the remainder.
-  for (const [owner, v] of inbound) {
-    if (!isEnemyOwner(owner) || owner === from.owner) continue;
-    const remainder = v.weight - effectiveDefenders(from);
-    if (remainder > attackers) {
-      attackers = remainder;
-      landMs = v.etaMs;
-    }
-  }
-  attackers -= n.roadCost;
-  if (attackers <= 0) return undefined;
-  return { from, attackers, etaMs: landMs + arrivalMs(n.theirTravelMs, attackers) };
-}
-
 /** Every column that could be sent at `tower`, one per hostile neighbour (excluding `exclude`). */
 function threatSources(state: GameState, tower: Tower, exclude?: string): ThreatSource[] {
   const out: ThreatSource[] = [];
   for (const n of neighbours(state, tower.id)) {
     if (n.tower.id === exclude) continue;
-    const src = threatFrom(state, n);
+    const src = threatFrom(state, OWNER, n);
     if (src) out.push(src);
   }
   return out;
@@ -255,6 +185,14 @@ function push(ctx: Ctx, tower: Tower, cmd: Command | undefined): void {
   if (!cmd) return;
   ctx.cmds.push(cmd);
   ctx.trace?.(ctx.rule, cmd);
+  if (cmd.type !== 'sendUnits') return;
+  // Exactly what the sim will put on the road for this ratio.
+  const w = unitWeightOf(tower);
+  const weight = Math.floor(Math.floor(tower.units * (cmd.ratio ?? 1)) / w) * w;
+  const road = roadBetween(ctx.state, cmd.from, cmd.to);
+  if (road) ctx.usedRoads.add(road.id);
+  ctx.sentTo.set(cmd.to, (ctx.sentTo.get(cmd.to) ?? 0) + weight);
+  ctx.sentFrom.set(cmd.from, (ctx.sentFrom.get(cmd.from) ?? 0) + weight);
 }
 
 function free(ctx: Ctx, tower: Tower): boolean {
@@ -425,7 +363,7 @@ function holdNeed(state: GameState, target: Tower, landingMs: number): number {
   const cap = capacityOf(asOurs, state);
   let need = 0;
   for (const n of neighbours(state, target.id)) {
-    const src = threatFrom(state, n, landingMs);
+    const src = threatFrom(state, OWNER, n, landingMs);
     if (!src || src.attackers > cap) continue;
     const grown = Math.floor((genPerSecond(asOurs, state) * Math.max(0, src.etaMs - landingMs)) / 1000);
     need = Math.max(need, Math.ceil(src.attackers / defenceMultiplier(asOurs)) - grown);
@@ -560,11 +498,44 @@ function upgradeFrontline(ctx: Ctx, mine: Tower[]): void {
   }
 }
 
+/**
+ * Rule 6: cut a bridge under a column that would take the tower (or before the garrison across it comes),
+ * after every other rule has had its say: a bridge this tick's sends use is never cut, reinforcements
+ * sent this tick count as defenders, and for the "about to send" case the spare units of friendly
+ * neighbours that could still answer the attack count as cover. See `bridges.ts` for the full rule.
+ */
+function cutBridges(ctx: Ctx): void {
+  const { state } = ctx;
+  const cover = (home: Tower, etaMs: number): number => {
+    let total = 0;
+    for (const h of friendlyNeighbours(state, home.id)) {
+      if (h.travelMs > etaMs) continue;
+      total += Math.max(0, spare(state, h.tower) - (ctx.sentFrom.get(h.tower.id) ?? 0));
+    }
+    return total;
+  };
+  for (const cmd of bridgeCutCommands(state, OWNER, { usedRoads: ctx.usedRoads, sentTo: ctx.sentTo, cover })) {
+    ctx.cmds.push(cmd);
+    ctx.trace?.(ctx.rule, cmd);
+  }
+}
+
 /** Commands for the player owner this AI tick. Deterministic for a given state and rng. */
 export function referencePlayerCommands(state: GameState, rng: Rng, trace?: RuleTrace): Command[] {
   const mine = ownedTowers(state, OWNER);
   if (mine.length === 0) return [];
-  const ctx: Ctx = { state, rng, hops: hopsToOpponent(state, OWNER), used: new Set(), cmds: [], rule: '', trace };
+  const ctx: Ctx = {
+    state,
+    rng,
+    hops: hopsToOpponent(state, OWNER),
+    used: new Set(),
+    cmds: [],
+    rule: '',
+    trace,
+    usedRoads: new Set(),
+    sentTo: new Map(),
+    sentFrom: new Map(),
+  };
   const rules: [string, (ctx: Ctx, mine: Tower[]) => void][] = [
     ['reinforce', reinforce],
     ['capture', captureNeutrals],
@@ -573,6 +544,7 @@ export function referencePlayerCommands(state: GameState, rng: Rng, trace?: Rule
     ['sustain', sustain],
     ['attack', attack],
     ['upgradeFront', upgradeFrontline],
+    ['cutBridge', cutBridges],
   ];
   for (const [name, rule] of rules) {
     ctx.rule = name;
