@@ -14,6 +14,23 @@ Design pillars:
 
 ## 2. Core rules (authoritative — engineers implement exactly this)
 
+## 2.0 Rules v2 (2026-09-15, stakeholder request) — supersede §2.2 "Upgrade" and §2.3 "Sending units"
+
+**Auto-upgrade.** Towers no longer upgrade by spending units. Capacity ladder is **25 / 50 / 100** for L1 / L2 / L3. When a L1 or L2 tower's garrison reaches its capacity it upgrades instantly (level +1, garrison kept, `upgrade` event). L3 is the maximum: the garrison caps at 100 and production stops adding. Fortress: capacity ×1.5 (37 / 75), max L2. Artillery and tank factory use the same ladder (weight for tanks). Commander "capacity" upgrades multiply the ladder; the `upgrade` command is ignored (kept for save/replay compatibility). Production intervals per level stay 1.0 / 0.7 / 0.5 s.
+
+**Attack streams (links).** Sending is a persistent **link** from an owned tower to a road-connected tower:
+- `link { owner, from, to }` — valid when `owner` owns `from`, an uncut road connects them, `to ≠ from`, and `from` has fewer than `maxLinks(level) = level` active links (L1 = 1 target, L2 = 2, L3 = 3). `unlink { owner, from, to? }` removes one or all links of `from`.
+- While a tower has ≥ 1 link it **drains**: every `LEAVE_INTERVAL_MS` (120 ms) one unit (infantry, or a whole tank when ≥ 5 weight) leaves into the next link round-robin, as long as garrison ≥ 1. Newly produced and newly arrived units are drained the same way, so a linked tower does not grow and cannot auto-upgrade ("inkişafı dayanır").
+- A link ends automatically when: the source changes owner; the road is cut; or the target is owned by the link owner **and** its garrison is at capacity (nothing to reinforce). A link does **not** end on capture — it keeps flowing as a supply line until the player stops it or the target fills up.
+- Units on a road still clash as before; arrivals reinforce (friendly) or damage/capture (hostile) exactly as in §2.3.
+- Boosters, mines, barriers, bridges, artillery are unchanged. Continue/rewind snapshots include links.
+
+**Interaction.** Tap own tower = select. Tap a connected tower = create link (or remove it if that link exists). At the link limit the tap is refused with a short shake and hint "L2 needed for 2 streams". Drag from tower to tower = link. Tap the selected tower again = deselect. The send-ratio toggle is removed.
+
+**Presentation.** Every active link is drawn as a road-following ribbon in the **owner's colour** (player blue, enemies red/green/yellow), ~10 px wide, 55 % alpha, with chevrons animating toward the target and an arrowhead at the target; the player's own links are brighter with a thin ink outline; enemy links are visible too so incoming attacks can be read at a glance. Tower sprites change with level: L1 small tower, L2 taller with a second storey and banner, L3 large keep with double roof and battlements (all kinds), plus the existing gems.
+
+**AI.** Bots issue `link`/`unlink` instead of `sendUnits`: an attack is a link; "reserve" becomes "unlink when the source is threatened or the goal is reached"; the reference player unlinks a supply line when the target is full or when the source needs to grow to the next level.
+
 ### 2.1 Map
 - A level is a graph: **towers** (nodes) with `x,y` in a 720×1280 logical space, and **roads** (edges). Units only travel along roads. Roads are straight segments unless `waypoints` are given.
 - Owners: `neutral`, `player`, `enemy1`, `enemy2`, `enemy3`. Colours: grey, blue, red, green, yellow.
