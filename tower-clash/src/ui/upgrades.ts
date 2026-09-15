@@ -11,6 +11,7 @@ import type { UpgradeKind } from '../render/sprites';
 import type { SaveData } from './save';
 import { writeSave } from './save';
 import { spendGold } from '../economy/wallet';
+import { t } from './i18n';
 
 export const UPGRADE_DEFS: readonly CommanderUpgradeDef[] = COMMANDER_UPGRADES;
 
@@ -62,15 +63,15 @@ export function upgradeEffectText(def: CommanderUpgradeDef, tier: number): strin
   const v = def.effect.perTier * tier;
   switch (def.effect.kind) {
     case 'productionMul':
-      return `+${pct(v)} production`;
+      return t('upgrade.production', { v: pct(v) });
     case 'capacityMul':
-      return `+${pct(v)} tower capacity`;
+      return t('upgrade.capacity', { v: pct(v) });
     case 'startingGarrison':
-      return `+${v} units on every tower at start`;
+      return t('upgrade.garrison', { v });
     case 'boosterDiscount':
-      return `−${pct(v)} booster gold price`;
+      return t('upgrade.discount', { v: pct(v) });
     case 'marchSpeedMul':
-      return `+${pct(v)} march speed`;
+      return t('upgrade.speed', { v: pct(v) });
   }
 }
 
@@ -79,15 +80,15 @@ function shortEffect(def: CommanderUpgradeDef, tier: number): string {
   const v = def.effect.perTier * tier;
   switch (def.effect.kind) {
     case 'productionMul':
-      return `+${pct(v)} prod`;
+      return t('upgrade.short.production', { v: pct(v) });
     case 'capacityMul':
-      return `+${pct(v)} cap`;
+      return t('upgrade.short.capacity', { v: pct(v) });
     case 'startingGarrison':
-      return `+${v} troops`;
+      return t('upgrade.short.garrison', { v });
     case 'boosterDiscount':
-      return `−${pct(v)} boosters`;
+      return t('upgrade.short.discount', { v: pct(v) });
     case 'marchSpeedMul':
-      return `+${pct(v)} speed`;
+      return t('upgrade.short.speed', { v: pct(v) });
   }
 }
 

@@ -34,6 +34,7 @@ import { L3_LEVEL, emptyMatch, evaluateAchievements } from '../economy/achieveme
 import { CRYSTAL_SERVICES } from '../economy/catalog';
 import { isMuted, onPlayerCommand, onSimEvents, onSimFrame, playSfx, resetAudioLevel, toggleMuted } from '../audio/index';
 import { hapticCapture } from '../native/index';
+import { t } from './i18n';
 
 /** Transient visual effect driven by sim events (capture flash / death puff). */
 interface Effect {
@@ -419,7 +420,7 @@ export class PlayScreen implements Screen {
       this.app.save.charges[kind] += 1;
       writeSave(this.app.save);
       playSfx('upgrade');
-      this.toast.show(`Free ${kind} charge added`, 'ok', this.nowMs);
+      this.toast.show(t('play.freeCharge', { kind: t(`booster.${kind}`) }), 'ok', this.nowMs);
     }
     return ok;
   }

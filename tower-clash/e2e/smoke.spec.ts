@@ -19,8 +19,11 @@ import type { Page } from '@playwright/test';
 // src/render/layout.ts — TITLE
 const TITLE_PLAY = { x: 180, y: 640, w: 360, h: 96 };
 const TITLE_SETTINGS = { x: 180, y: 780, w: 172, h: 64 };
-// src/render/layout.ts — SETTINGS
-const SETTINGS = { back: { x: 18, y: 20, w: 140, h: 60 }, sound: { x: 470, y: 216, w: 160, h: 56 } };
+// src/render/layout.ts — SETTINGS (+ the language picker: one segment per language in src/ui/i18n.ts LANGUAGES order)
+const SETTINGS = { back: { x: 18, y: 20, w: 140, h: 60 }, sound: { x: 470, y: 216, w: 160, h: 56 }, language: { x: 86, y: 664, w: 548, h: 56 } };
+const LANGUAGE_ORDER = ['en', 'az', 'ru', 'tr'] as const;
+// src/render/layout.ts — TITLE.lang (language chip, tap → next language)
+const TITLE_LANG = { x: 630, y: 18, w: 72, h: 44 };
 // src/render/layout.ts — LEVEL_MAP + levelNodeRect (winding path map; the test scrolls the map to 0 first)
 const LEVEL_MAP = { nodeR: 46, top: 260, step: 150, amp: 185, period: 5 };
 function levelNodeRect(index: number, scroll = 0): { x: number; y: number; w: number; h: number } {
@@ -71,6 +74,12 @@ async function tapAt(page: Page, lx: number, ly: number): Promise<void> {
   await page.mouse.click(c.x, c.y);
 }
 
+/** Tap segment `i` of a segmented control drawn with `drawSegmented` (4 px inset, equal widths). */
+async function tapSegment(page: Page, r: { x: number; y: number; w: number; h: number }, count: number, i: number): Promise<void> {
+  const segW = (r.w - 8) / count;
+  await tapRect(page, { x: r.x + 4 + i * segW, y: r.y, w: segW, h: r.h });
+}
+
 const screen = (page: Page) => page.evaluate(() => window.__towerclash.getScreen());
 const simTime = (page: Page) => page.evaluate(() => window.__towerclash.getState()?.time ?? -1);
 const levelId = (page: Page) => page.evaluate(() => window.__towerclash.getState()?.levelId ?? -1);
@@ -93,6 +102,8 @@ const readSave = (page: Page) =>
       : null;
   }, SAVE_KEY);
 const coins = (page: Page) => page.evaluate(() => window.__towerclash.getCoins());
+const language = (page: Page) => page.evaluate(() => window.__towerclash.getLanguage());
+const text = (page: Page, key: string) => page.evaluate((k) => window.__towerclash.getText(k), key);
 const boosters = (page: Page) => page.evaluate(() => window.__towerclash.getState()?.boosters ?? []);
 
 /** Stars by clear time, mirrors src/ui/save.ts starsFor (GDD §2.4). */
@@ -336,4 +347,53 @@ test.describe('Tower Clash smoke', () => {
     expect(pageErrors).toEqual([]);
     expect(consoleErrors).toEqual([]);
   });
+
+  test('language: detected from the browser on first run, AZ picked in settings changes the title chip, hints and persists', async ({ page }) => {
+    const pageErrors: string[] = [];
+    page.on('pageerror', (err) => pageErrors.push(String(err)));
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.__towerclash?.getLanguage === 'function');
+    // Playwright's default locale is en-US → English, persisted on the first run
+    expect(await language(page)).toBe('en');
+    expect((await readSaveLang(page))?.settings.language).toBe('en');
+    expect(await text(page, 'title.play')).toBe('PLAY');
+
+    // settings → pick Azərbaycanca
+    await tapRect(page, TITLE_SETTINGS);
+    await expect.poll(() => screen(page)).toBe('settings');
+    await tapSegment(page, SETTINGS.language, LANGUAGE_ORDER.length, LANGUAGE_ORDER.indexOf('az'));
+    await expect.poll(() => language(page)).toBe('az');
+    await expect.poll(() => text(page, 'settings.title')).toBe('AYARLAR');
+    await expect.poll(async () => (await readSaveLang(page))?.settings.language).toBe('az');
+    await page.waitForTimeout(200);
+    await shot(page, 'settings-az');
+    await tapRect(page, SETTINGS.back);
+    await expect.poll(() => screen(page)).toBe('title');
+    // title chip + play label are Azerbaijani now
+    expect(await text(page, 'title.play')).toBe('OYNA');
+    expect(await page.evaluate(() => document.documentElement.lang)).toBe('az');
+    await page.waitForTimeout(200);
+    await shot(page, 'title-az');
+
+    // tutorial hint of level 1 is translated
+    await page.evaluate(() => window.__towerclash.loadLevel(1, 1));
+    await expect.poll(() => screen(page)).toBe('play');
+    await expect.poll(() => hint(page)).toBe('Öz qüllənə vur');
+
+    // the choice survives a reload; the title chip cycles languages (az → ru) and persists too
+    await page.reload();
+    await page.waitForFunction(() => typeof window.__towerclash?.getLanguage === 'function');
+    expect(await language(page)).toBe('az');
+    await tapRect(page, TITLE_LANG);
+    await expect.poll(() => language(page)).toBe('ru');
+    await expect.poll(() => text(page, 'title.play')).toBe('ИГРАТЬ');
+    expect((await readSaveLang(page))?.settings.language).toBe('ru');
+    expect(pageErrors).toEqual([]);
+  });
 });
+
+const readSaveLang = (page: Page) =>
+  page.evaluate((key) => {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as { settings: { language?: string } }) : null;
+  }, SAVE_KEY);

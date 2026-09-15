@@ -1,5 +1,6 @@
 import type { Palette } from './palette';
 import { shade } from './palette';
+import { t } from '../ui/i18n';
 
 /*
  * Claymorphic UI primitives (ART_DIRECTION §4): paper faces with an inner top highlight, a soft
@@ -15,7 +16,8 @@ export interface Rect {
   h: number;
 }
 
-export const FONT = "'Fredoka', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+/** Fredoka (latin, latin-ext) first; Nunito covers Cyrillic (index.html @font-face, unicode-range) since Fredoka has none. */
+export const FONT = "'Fredoka', 'Nunito', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 
 export type FontWeight = 'normal' | 'bold' | '900' | '500' | '700';
 
@@ -26,6 +28,17 @@ function weightOf(weight: FontWeight): 500 | 700 {
 
 export function font(px: number, weight: FontWeight = 'bold'): string {
   return `${weightOf(weight)} ${px}px ${FONT}`;
+}
+
+/**
+ * Largest size ≤ `px` at which `text` fits `maxWidth` (translated headings vary a lot in length,
+ * e.g. "LEVELS" → "SƏVİYYƏLƏR"). Measures once at `px` and scales linearly; leaves `ctx.font` set.
+ */
+export function fitFontPx(ctx: CanvasRenderingContext2D, text: string, px: number, maxWidth: number, weight: FontWeight = '700'): number {
+  ctx.font = font(px, weight);
+  const w = ctx.measureText(text).width;
+  if (w <= maxWidth || w <= 0) return px;
+  return Math.max(8, Math.floor((px * maxWidth) / w));
 }
 
 export function inRect(r: Rect, x: number, y: number): boolean {
@@ -672,7 +685,7 @@ export function drawToggle(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect,
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const labelX = on ? r.x + (r.w - knobR * 2 - 16) / 2 : r.x + knobR * 2 + 16 + (r.w - knobR * 2 - 16) / 2;
-  ctx.fillText(on ? 'ON' : 'OFF', labelX, ky + 1);
+  ctx.fillText(on ? t('common.on') : t('common.off'), labelX, ky + 1, r.w - knobR * 2 - 20);
   ctx.restore();
 }
 

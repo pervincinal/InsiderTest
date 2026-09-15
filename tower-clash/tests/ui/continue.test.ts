@@ -33,6 +33,7 @@ function fakeApp(save: SaveData) {
     },
     openSettings() {},
     setSpeed() {},
+    setLanguage() {},
   };
   return { app, starts, current: () => current };
 }

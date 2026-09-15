@@ -10,6 +10,9 @@ export const SAVE_KEY_V2 = 'towerclash.save.v2';
 export const SAVE_KEY_V1 = 'towerclash.save.v1';
 export const SAVE_VERSION = 3;
 
+import type { Language } from './i18n';
+import { isLanguage } from './i18n';
+
 /** Reduced-motion preference: `auto` follows the OS (`prefers-reduced-motion`), `on`/`off` override it. */
 export type MotionPref = 'auto' | 'on' | 'off';
 
@@ -18,6 +21,8 @@ export interface Settings {
   colorBlind: boolean;
   sound: boolean;
   reducedMotion: MotionPref;
+  /** UI language (src/ui/i18n.ts). Absent until the first run detects it from the browser or the player picks one. */
+  language?: Language;
 }
 
 /** One-time purchases the player owns (ECONOMY.md §4). */
@@ -191,6 +196,7 @@ export function normalizeSave(raw: unknown): SaveData {
     if (typeof s.colorBlind === 'boolean') out.settings.colorBlind = s.colorBlind;
     if (typeof s.sound === 'boolean') out.settings.sound = s.sound;
     if (s.reducedMotion === 'auto' || s.reducedMotion === 'on' || s.reducedMotion === 'off') out.settings.reducedMotion = s.reducedMotion;
+    if (isLanguage(s.language)) out.settings.language = s.language;
   }
   return out;
 }

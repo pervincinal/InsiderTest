@@ -3,6 +3,8 @@ import { C } from '../sim/constants';
 import type { Palette } from '../render/palette';
 import { TOWER_RADIUS } from '../render/layout';
 import { font, roundRect } from '../render/widgets';
+import type { TranslationKey } from './i18n';
+import { t } from './i18n';
 
 /*
  * First-play tutorial for levels 1–3 (M1-7): a pulsing ring + arrow on a tower and a short
@@ -11,7 +13,8 @@ import { font, roundRect } from '../render/widgets';
  */
 
 export interface TutorialStep {
-  text: string;
+  /** Hint in the current UI language (a getter over `t()`, so a language switch mid-level applies at once). */
+  readonly text: string;
   /** Tower the ring/arrow points at. */
   towerId: string;
   /** Optional gate: the step stays hidden (and cannot complete) until this holds. */
@@ -59,31 +62,32 @@ export class Tutorial {
 const isSend = (cmd: Command, from: string, to: string): boolean =>
   cmd.type === 'sendUnits' && cmd.owner === 'player' && cmd.from === from && cmd.to === to;
 
+/** A step whose `text` is translated on every read. */
+function step(key: TranslationKey, rest: Omit<TutorialStep, 'text'>, params?: Record<string, number>): TutorialStep {
+  return {
+    ...rest,
+    get text(): string {
+      return t(key, params);
+    },
+  };
+}
+
 const STEPS_BY_LEVEL: Record<number, () => TutorialStep[]> = {
   1: () => [
-    { text: 'Tap your tower', towerId: 'home', onSelect: (sel) => sel === 'home' },
-    { text: 'Now tap the grey tower', towerId: 'camp', onCommand: (cmd) => isSend(cmd, 'home', 'camp') },
+    step('tutorial.tapTower', { towerId: 'home', onSelect: (sel) => sel === 'home' }),
+    step('tutorial.tapGrey', { towerId: 'camp', onCommand: (cmd) => isSend(cmd, 'home', 'camp') }),
   ],
   2: () => [
-    {
-      text: 'Tap your tower, then the grey tower',
-      towerId: 'mid',
-      onCommand: (cmd) => isSend(cmd, 'home', 'mid'),
-    },
-    {
-      text: 'Reinforce: send more from home to the middle',
+    step('tutorial.tapThenGrey', { towerId: 'mid', onCommand: (cmd) => isSend(cmd, 'home', 'mid') }),
+    step('tutorial.reinforce', {
       towerId: 'mid',
       showWhen: (s) => s.towers['mid']?.owner === 'player',
       onCommand: (cmd) => isSend(cmd, 'home', 'mid'),
-    },
+    }),
   ],
   3: () => [
-    { text: 'Tap your tower to select it', towerId: 'home', onSelect: (sel) => sel === 'home' },
-    {
-      text: `Tap your selected tower again to upgrade (costs ${C.UPGRADE_COST[1]})`,
-      towerId: 'home',
-      onCommand: (cmd) => cmd.type === 'upgrade' && cmd.owner === 'player',
-    },
+    step('tutorial.select', { towerId: 'home', onSelect: (sel) => sel === 'home' }),
+    step('tutorial.upgrade', { towerId: 'home', onCommand: (cmd) => cmd.type === 'upgrade' && cmd.owner === 'player' }, { n: C.UPGRADE_COST[1] ?? 0 }),
   ],
 };
 

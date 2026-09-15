@@ -10,7 +10,14 @@
  *   4) attack the weakest adjacent enemy tower when the own towers adjacent to it — plus rear towers
  *      that can relay through them in the same stream — hold ≥ defenders × 1.2 + 2 (fortress-aware,
  *      counting what the target grows before and during the stream) and the captured tower could be
- *      held against its other enemy neighbours; top up a wave that has become too small to land,
+ *      held against its other enemy neighbours; top up a wave that has become too small to land.
+ *      Bridge-aware: a bridge into an enemy tower that could cut it (a finished, max-level keep — the
+ *      turtle's rule, and what a human would burn a bridge for) is an exposed route. Sources and relays
+ *      that would cross one are planned as losing everything that lands later than one AI tick after
+ *      the first unit steps on the bridge (`bridgeLoss`); the plan without them is preferred when it
+ *      reaches `needed` within +30 % of the exposed plan's delivery time (`SAFE_PLAN_SLOWDOWN`), else
+ *      the exposed plan must reach `needed` with what survives the cut. A wave is never topped up over
+ *      an exposed route,
  *   5) otherwise wait — or, if nothing better is on, upgrade a frontline tower when it would still
  *      survive an all-in from its strongest enemy neighbour (covered by rear reinforcements),
  *   6) cut a bridge it owns an end of (`bridges.ts`) when a hostile column on it — or the garrison about
@@ -29,7 +36,7 @@
  */
 import type { Command, GameState, Tower } from '../sim/index';
 import { C, Rng, capacityOf } from '../sim/index';
-import { bridgeCutCommands } from './bridges';
+import { bridgeCutCommands, keepsRoutes } from './bridges';
 import {
   arrivalMs,
   defenceMultiplier,
@@ -42,6 +49,7 @@ import {
   incomingThreat,
   incomingWeight,
   inboundByOwner,
+  isEnemyOwner,
   neighbours,
   ownedTowers,
   projectedDefenders,
@@ -72,6 +80,14 @@ const ATTACK_FACTOR = 1.2;
 const ATTACK_SLACK = 2;
 /** Rule 4: a stream longer than this is not planned for (later units are a bonus). */
 const MAX_STREAM_MS = 20_000;
+/**
+ * Rule 4: how long after the first unit steps on a bridge the far tower could cut it — one enemy AI tick.
+ * Everything of the stream landing later than that is planned as lost (the sim drowns walking units and
+ * wipes the queue alike).
+ */
+export const CUT_REACTION_MS = C.AI_TICK_MS;
+/** Rule 4: a plan without exposed routes is preferred when it delivers `needed` within this factor of the exposed plan's time. */
+export const SAFE_PLAN_SLOWDOWN = 1.3;
 /** Rule 5: extra defenders wanted after a frontline upgrade, on top of the enemy's all-in. */
 const UPGRADE_SAFETY = 1;
 /** Rule 5: a reinforcement counts as covering the upgrade if it lands within this of the enemy's wave. */
@@ -319,6 +335,39 @@ function supplyForward(ctx: Ctx, mine: Tower[]): void {
   }
 }
 
+/* ---------- Bridge awareness (rule 4): routes an enemy could cut under the wave ---------- */
+
+/**
+ * Could the owner of `tower` cut a bridge under a wave heading to it? An enemy tower at its max level:
+ * the turtle burns bridges only for a keep it has finished building, and that is what a human would
+ * expect of any careful opponent. Neutral towers have nobody to cut; other enemy towers are not planned
+ * for (over-caution on every bridge would send the bot the long way round on levels 28–36).
+ */
+export function mayCutBridge(tower: Tower): boolean {
+  return isEnemyOwner(tower.owner) && upgradeCost(tower) === undefined;
+}
+
+/**
+ * A send over `n` that the far end could cut: a bridge into a tower that `mayCutBridge` — unless the cut
+ * would strand the far side. Nobody burns the last road to the towers they mean to take (rule 6 never
+ * does; `keepsRoutes` is the same public test from the far owner's side), so a bridge whose loss would
+ * lengthen the enemy's way to one of our towers by more than `MAX_DETOUR_HOPS` is safe to use.
+ */
+export function exposedRoute(state: GameState, n: Neighbour): boolean {
+  return n.road.kind === 'bridge' && mayCutBridge(n.tower) && keepsRoutes(state, n.tower.owner, n.road, new Set());
+}
+
+/**
+ * Weight of a `force` stream over an exposed bridge of `travelMs` that is lost when the far end cuts
+ * `CUT_REACTION_MS` after the first unit steps on: every unit landing later than that. Units leave one
+ * per `LEAVE_INTERVAL_MS`, so unit k lands at `travelMs + k × LEAVE_INTERVAL_MS` — on any real bridge
+ * (longer than 60 px) that is the whole stream.
+ */
+export function bridgeLoss(force: number, travelMs: number): number {
+  const kept = Math.max(0, Math.floor((CUT_REACTION_MS - travelMs) / C.LEAVE_INTERVAL_MS) + 1);
+  return Math.max(0, force - kept);
+}
+
 /**
  * Is a wave of `inbound` weight enough to flip the neighbour by `margin`, counting what it grows before a
  * unit sent now lands?
@@ -329,13 +378,15 @@ function waveSuffices(state: GameState, inbound: number, n: Neighbour, margin = 
 
 /**
  * Rule 4a: top up a wave that has become too small to land — with a second wave that closes the gap by
- * the attack slack, never one unit at a time (a wave that stays short is written off).
+ * the attack slack, never one unit at a time (a wave that stays short is written off). Never over an
+ * exposed route: a top-up on a bridge the far end can cut is lost with the wave it was meant to save.
  */
 function sustain(ctx: Ctx, mine: Tower[]): void {
   const { state } = ctx;
   for (const tower of mine) {
     if (!free(ctx, tower)) continue;
     const targets = enemyNeighbours(state, tower.id).filter((n) => {
+      if (exposedRoute(state, n)) return false;
       const inbound = incomingWeight(state, n.tower.id, OWNER);
       if (inbound <= 0 || waveSuffices(state, inbound, n)) return false;
       return waveSuffices(state, inbound + spare(state, tower, n.tower.id), n, ATTACK_SLACK);
@@ -345,12 +396,23 @@ function sustain(ctx: Ctx, mine: Tower[]): void {
   }
 }
 
+interface Source {
+  tower: Tower;
+  n: Neighbour;
+  force: number;
+  /** The route is a bridge the target could cut (`exposedRoute`). */
+  exposed: boolean;
+}
+
 interface Plan {
   target: Tower;
-  sources: { tower: Tower; n: Neighbour; force: number }[];
+  sources: Source[];
   relays: { tower: Tower; via: Tower; force: number }[];
   needed: number;
+  /** Weight that lands: the wave minus what exposed routes lose to a cut (`bridgeLoss`). */
   force: number;
+  /** When `needed` weight has landed, ms: the slowest road plus the stream shared by the surviving sources. */
+  deliveryMs: number;
 }
 
 /**
@@ -390,7 +452,65 @@ function holdShortfall(ctx: Ctx, target: Tower, surplus: number, landingMs: numb
   return Math.max(0, need - surplus - support);
 }
 
-/** Rule 4b: attack the weakest adjacent enemy tower with every adjacent own tower plus rear relays at once. */
+/**
+ * The wave `sources` (own towers next to `target`, with `inbound` already walking) can throw at it, with
+ * rear relays pouring into them: what lands after bridge losses, what the target needs, and when.
+ */
+function buildPlan(ctx: Ctx, target: Tower, sources: Source[], inbound: number): Plan {
+  const { state } = ctx;
+  const relays: Plan['relays'] = [];
+  const relayIds = new Set<string>();
+  let losses = 0;
+  let slowest = 0;
+  for (const s of sources) {
+    losses += costToTake(s.n);
+    slowest = Math.max(slowest, s.n.travelMs);
+  }
+  // Rear towers next to a source can pour into it and continue in the same stream.
+  for (const s of sources) {
+    for (const r of friendlyNeighbours(state, s.tower.id)) {
+      const rear = r.tower;
+      if (!free(ctx, rear) || relayIds.has(rear.id) || sources.some((x) => x.tower.id === rear.id)) continue;
+      if (enemyNeighbours(state, rear.id).length > 0) continue;
+      const force = spare(state, rear);
+      if (force <= 0) continue;
+      relayIds.add(rear.id);
+      relays.push({ tower: rear, via: s.tower, force });
+    }
+  }
+  let raw = inbound;
+  let lost = 0;
+  let streams = 0;
+  for (const s of sources) {
+    let through = s.force;
+    for (const r of relays) if (r.via.id === s.tower.id) through += r.force;
+    raw += through;
+    const loss = s.exposed ? bridgeLoss(through, s.n.travelMs) : 0;
+    lost += loss;
+    if (through - loss > 0) streams++;
+  }
+  let force = raw - lost;
+  const streamMs = Math.min(MAX_STREAM_MS, force * C.LEAVE_INTERVAL_MS);
+  // A source keeps producing into the stream — unless its route is cut under it.
+  for (const s of sources) if (!s.exposed) force += Math.floor((genPerSecond(s.tower, state) * streamMs) / 1000);
+  const firstHit = projectedDefenders(target, slowest, state);
+  const regenDuringStream = Math.ceil((genPerSecond(target, state) * streamMs) / 1000) * defenceMultiplier(target);
+  const toFlip = firstHit + regenDuringStream + losses;
+  let needed = firstHit * ATTACK_FACTOR + ATTACK_SLACK + regenDuringStream + losses;
+  // The captured tower must be holdable with what is left of the wave (the remainder becomes the
+  // garrison one unit per weight, fortress or not), or the wave is just a gift.
+  const waveIds = new Set([...sources.map((s) => s.tower.id), ...relays.map((r) => r.tower.id)]);
+  needed += holdShortfall(ctx, target, Math.max(0, force - toFlip), slowest + streamMs, waveIds);
+  const deliveryMs = slowest + Math.min(MAX_STREAM_MS, (needed * C.LEAVE_INTERVAL_MS) / Math.max(1, streams));
+  return { target, sources, relays, needed, force, deliveryMs };
+}
+
+/**
+ * Rule 4b: attack the weakest adjacent enemy tower with every adjacent own tower plus rear relays at once.
+ * When some of those routes are bridges the target could cut, the plan without them is taken if it is
+ * enough and not much slower (`SAFE_PLAN_SLOWDOWN`); otherwise the exposed plan stands, judged on what
+ * survives the cut.
+ */
 function attack(ctx: Ctx, mine: Tower[]): void {
   const { state } = ctx;
   const targets = new Map<string, Tower>();
@@ -399,49 +519,24 @@ function attack(ctx: Ctx, mine: Tower[]): void {
   const plans: Plan[] = [];
   for (const target of targets.values()) {
     const inbound = incomingWeight(state, target.id, OWNER);
-    const sources: Plan['sources'] = [];
-    const relays: Plan['relays'] = [];
-    const relayIds = new Set<string>();
-    let losses = 0;
-    let slowest = 0;
+    const sources: Source[] = [];
     for (const tower of mine) {
       if (!free(ctx, tower)) continue;
       const n = neighbours(state, tower.id).find((x) => x.tower.id === target.id);
       if (!n) continue;
       // A wave that is still enough on its own needs no company: keep the garrison at home.
       if (inbound > 0 && waveSuffices(state, inbound, n)) continue;
-      const force = spare(state, tower, target.id);
-      sources.push({ tower, n, force });
-      losses += costToTake(n);
-      slowest = Math.max(slowest, n.travelMs);
+      sources.push({ tower, n, force: spare(state, tower, target.id), exposed: exposedRoute(state, n) });
     }
     if (sources.length === 0) continue;
-    // Rear towers next to a source can pour into it and continue in the same stream.
-    for (const s of sources) {
-      for (const r of friendlyNeighbours(state, s.tower.id)) {
-        const rear = r.tower;
-        if (!free(ctx, rear) || relayIds.has(rear.id) || sources.some((x) => x.tower.id === rear.id)) continue;
-        if (enemyNeighbours(state, rear.id).length > 0) continue;
-        const force = spare(state, rear);
-        if (force <= 0) continue;
-        relayIds.add(rear.id);
-        relays.push({ tower: rear, via: s.tower, force });
-      }
+    const full = buildPlan(ctx, target, sources, inbound);
+    let plan = full;
+    if (full.sources.some((s) => s.exposed)) {
+      const safeSources = sources.filter((s) => !s.exposed);
+      const safe = safeSources.length > 0 ? buildPlan(ctx, target, safeSources, inbound) : undefined;
+      if (safe && safe.force >= safe.needed && safe.deliveryMs <= full.deliveryMs * SAFE_PLAN_SLOWDOWN) plan = safe;
     }
-    let force = inbound;
-    for (const s of sources) force += s.force;
-    for (const r of relays) force += r.force;
-    const streamMs = Math.min(MAX_STREAM_MS, force * C.LEAVE_INTERVAL_MS);
-    for (const s of sources) force += Math.floor((genPerSecond(s.tower, state) * streamMs) / 1000);
-    const firstHit = projectedDefenders(target, slowest, state);
-    const regenDuringStream = Math.ceil((genPerSecond(target, state) * streamMs) / 1000) * defenceMultiplier(target);
-    const toFlip = firstHit + regenDuringStream + losses;
-    let needed = firstHit * ATTACK_FACTOR + ATTACK_SLACK + regenDuringStream + losses;
-    // The captured tower must be holdable with what is left of the wave (the remainder becomes the
-    // garrison one unit per weight, fortress or not), or the wave is just a gift.
-    const waveIds = new Set([...sources.map((s) => s.tower.id), ...relays.map((r) => r.tower.id)]);
-    needed += holdShortfall(ctx, target, Math.max(0, force - toFlip), slowest + streamMs, waveIds);
-    plans.push({ target, sources, relays, needed, force });
+    plans.push(plan);
   }
 
   for (let launched = 0; launched < MAX_PLANS_PER_TICK; launched++) {

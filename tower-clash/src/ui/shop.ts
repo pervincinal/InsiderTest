@@ -9,8 +9,8 @@ import type { Rect } from '../render/widgets';
 import { inRect, segmentAt } from '../render/widgets';
 import type { ShopTab } from '../render/layout';
 import { SHOP, SHOP_TABS, shopBuyRect, shopConvertSegRect, shopPackRect, shopRowRect, shopSkinRect } from '../render/layout';
-import type { ShopBundleCard, ShopConvertCard, ShopCrateCard, ShopPackCard, ShopSkinCard, ShopUpgradeCard } from '../render/menus';
-import { drawShop } from '../render/menus';
+import type { ShopBundleCard, ShopConvertCard, ShopCrateCard, ShopPackCard, ShopSkinCard, ShopUpgradeCard } from '../render/menusShop';
+import { drawShop } from '../render/menusShop';
 import { ParticleSystem } from '../render/particles';
 import type { PointerPoint } from '../input/pointer';
 import type { IapProductDef, SkinDef } from '../economy/catalog';
@@ -24,6 +24,7 @@ import { writeSave } from './save';
 import type { App, Screen } from './screens';
 import { Toast } from './screens';
 import { playSfx } from '../audio/index';
+import { t } from './i18n';
 
 interface Hit {
   rect: Rect;
@@ -54,11 +55,11 @@ const BUNDLE_GLYPH: Record<string, ShopBundleCard['glyph']> = {
 function bundleLines(p: IapProductDef): string[] {
   const g = p.grants;
   const lines: string[] = [];
-  if (g.crystals) lines.push(`${g.crystals} crystals`);
-  if (g.gold) lines.push(`${g.gold} gold`);
-  if (g.removeAds) lines.push('No ads between levels');
-  if (g.skins?.length) lines.push(g.skins.length === 1 ? 'Exclusive Bronze helmet' : 'Gold roof + Royal helmet');
-  if (g.boosterDiscount) lines.push(`−${Math.round(g.boosterDiscount * 100)} % on boosters, forever`);
+  if (g.crystals) lines.push(t('shop.line.crystals', { n: g.crystals }));
+  if (g.gold) lines.push(t('shop.line.gold', { n: g.gold }));
+  if (g.removeAds) lines.push(t('shop.line.noAds'));
+  if (g.skins?.length) lines.push(g.skins.length === 1 ? t('shop.line.bronze') : t('shop.line.royal'));
+  if (g.boosterDiscount) lines.push(t('shop.line.discount', { n: Math.round(g.boosterDiscount * 100) }));
   return lines;
 }
 
@@ -174,13 +175,13 @@ export class ShopScreen implements Screen {
       });
     } else if (this.tab === 'skins') {
       let top = SHOP.row.y0 - 6;
-      for (const [category, label] of [
-        ['towerRoof', 'Tower roofs'],
-        ['unitHelmet', 'Soldier helmets'],
-        ['terrainTheme', 'Terrain themes'],
+      for (const [category, key] of [
+        ['towerRoof', 'shop.roofs'],
+        ['unitHelmet', 'shop.helmets'],
+        ['terrainTheme', 'shop.themes'],
       ] as const) {
         const list = shopSkins().filter((s) => s.category === category);
-        out.skinHeaders.push({ label, y: top });
+        out.skinHeaders.push({ label: t(key), y: top });
         list.forEach((s, i) => {
           const rect = shopSkinRect(top, i);
           const owned = save.skins.owned.includes(s.id);
@@ -377,7 +378,7 @@ export class ShopScreen implements Screen {
     if (this.pending) return false;
     const store = getStore();
     if (!store.isAvailable()) {
-      this.toast.show('Store unavailable on this platform', 'error', this.nowMs);
+      this.toast.show(t('shop.toast.storeUnavailablePlatform'), 'error', this.nowMs);
       return false;
     }
     this.pending = product.id;
@@ -385,22 +386,22 @@ export class ShopScreen implements Screen {
     const res = await store.purchase(product.id);
     this.pending = null;
     if (!res.ok) {
-      if (res.error === 'unavailable') this.toast.show('Store unavailable right now', 'error', this.nowMs);
-      else if (res.error === 'failed') this.toast.show('Purchase failed · nothing was charged', 'error', this.nowMs);
+      if (res.error === 'unavailable') this.toast.show(t('shop.toast.storeUnavailableNow'), 'error', this.nowMs);
+      else if (res.error === 'failed') this.toast.show(t('shop.toast.purchaseFailed'), 'error', this.nowMs);
       return false; // cancelled: nothing to say
     }
     const granted = grantProduct(this.app.save, product.id, res.transactionId);
     if (!granted) {
-      this.toast.show('Already owned', 'ok', this.nowMs);
+      this.toast.show(t('shop.toast.alreadyOwned'), 'ok', this.nowMs);
       return false;
     }
     this.burst(granted.crystals > 0 ? 'crystal' : 'gold', rect);
     playSfx('upgrade');
     const parts = [
-      granted.crystals > 0 ? `+${granted.crystals} crystals` : '',
-      granted.gold > 0 ? `+${granted.gold} gold` : '',
-      granted.noAds ? 'ads removed' : '',
-      granted.skins.length ? `${granted.skins.length} skin${granted.skins.length > 1 ? 's' : ''}` : '',
+      granted.crystals > 0 ? t('amount.crystals', { n: granted.crystals }) : '',
+      granted.gold > 0 ? t('amount.gold', { n: granted.gold }) : '',
+      granted.noAds ? t('shop.toast.adsRemoved') : '',
+      granted.skins.length ? (granted.skins.length > 1 ? t('shop.toast.skins', { n: granted.skins.length }) : t('shop.toast.skin')) : '',
     ].filter(Boolean);
     this.toast.show(`${product.title}: ${parts.join(' · ')}`, 'ok', this.nowMs);
     return true;
@@ -409,13 +410,13 @@ export class ShopScreen implements Screen {
   async restore(): Promise<string[]> {
     if (this.pending) return [];
     if (!getStore().isAvailable()) {
-      this.toast.show('Store unavailable on this platform', 'error', this.nowMs);
+      this.toast.show(t('shop.toast.storeUnavailablePlatform'), 'error', this.nowMs);
       return [];
     }
     this.pending = 'restore';
     const granted = await restorePurchases(this.app.save);
     this.pending = null;
-    this.toast.show(granted.length ? `Restored: ${granted.join(', ')}` : 'Nothing new to restore', 'ok', this.nowMs);
+    this.toast.show(granted.length ? t('shop.toast.restored', { list: granted.join(', ') }) : t('shop.toast.nothingToRestore'), 'ok', this.nowMs);
     return granted;
   }
 
@@ -432,7 +433,7 @@ export class ShopScreen implements Screen {
     const crystals = CONVERSION_PACKS[this.convertIdx];
     if (crystals === undefined) return;
     if (this.app.save.crystals < crystals) {
-      this.toast.show(`Need ${crystals} crystals · earn them from milestones and achievements`, 'error', this.nowMs);
+      this.toast.show(t('shop.toast.needCrystals', { n: crystals }), 'error', this.nowMs);
       return;
     }
     playSfx('button');
@@ -451,13 +452,13 @@ export class ShopScreen implements Screen {
     if (!q) return false;
     const gold = convertCrystals(this.app.save, q.crystals);
     if (gold === null) {
-      this.toast.show('Not enough crystals', 'error', this.nowMs);
+      this.toast.show(t('shop.toast.notEnoughCrystals'), 'error', this.nowMs);
       return false;
     }
     const card = this.layout().convert?.rect;
     if (card) this.burst('gold', card);
     playSfx('upgrade');
-    this.toast.show(`Converted ${q.crystals} crystals into ${gold} gold`, 'ok', this.nowMs);
+    this.toast.show(t('shop.toast.converted', { crystals: q.crystals, gold }), 'ok', this.nowMs);
     return true;
   }
 
@@ -466,12 +467,12 @@ export class ShopScreen implements Screen {
   private tapCrate(rect: Rect): void {
     const added = buyBoosterCrate(this.app.save);
     if (!added) {
-      this.toast.show(`Need ${CRYSTAL_SERVICES.boosterCrate.costCrystals} crystals for the crate`, 'error', this.nowMs);
+      this.toast.show(t('shop.toast.needCrate', { n: CRYSTAL_SERVICES.boosterCrate.costCrystals }), 'error', this.nowMs);
       return;
     }
     this.burst('crystal', rect);
     playSfx('upgrade');
-    this.toast.show(`Booster crate: +${added.overdrive} Overdrive · +${added.freeze} Freeze · +${added.airstrike} Airstrike`, 'ok', this.nowMs);
+    this.toast.show(t('shop.toast.crateAdded', { o: added.overdrive, f: added.freeze, a: added.airstrike }), 'ok', this.nowMs);
   }
 
   private tapSkin(skin: SkinDef, family: SkinFamily, rect: Rect): void {
@@ -481,11 +482,11 @@ export class ShopScreen implements Screen {
       return;
     }
     if (skin.costCrystals === 0) {
-      this.toast.show(skin.source === 'starter' ? 'Comes with the Starter Pack' : 'Comes with the Premium bundle', 'ok', this.nowMs);
+      this.toast.show(skin.source === 'starter' ? t('shop.toast.starterOnly') : t('shop.toast.premiumOnly'), 'ok', this.nowMs);
       return;
     }
     if (!spendCrystals(save, skin.costCrystals)) {
-      this.toast.show('Not enough crystals', 'error', this.nowMs);
+      this.toast.show(t('shop.toast.notEnoughCrystals'), 'error', this.nowMs);
       return;
     }
     save.skins.owned.push(skin.id);
@@ -493,7 +494,7 @@ export class ShopScreen implements Screen {
     writeSave(save);
     this.burst('crystal', rect);
     playSfx('upgrade');
-    this.toast.show(`${skin.label} unlocked and equipped`, 'ok', this.nowMs);
+    this.toast.show(t('shop.toast.skinUnlocked', { name: skin.label }), 'ok', this.nowMs);
   }
 
   /** Equip an owned skin; tapping the equipped one reverts to the default look. */
@@ -509,12 +510,13 @@ export class ShopScreen implements Screen {
     const cost = upgradeCost(this.app.save, id);
     if (cost === null) return;
     if (!buyUpgrade(this.app.save, id)) {
-      this.toast.show(`Need ${cost} gold · earn stars or watch ×2 gold after a win`, 'error', this.nowMs);
+      this.toast.show(t('shop.toast.needGold', { n: cost }), 'error', this.nowMs);
       return;
     }
     this.burst('gold', rect);
     playSfx('upgrade');
     const def = UPGRADE_DEFS.find((d) => d.id === id)!;
-    this.toast.show(`${def.label} tier ${upgradeTier(this.app.save, id)}: ${upgradeEffectText(def, upgradeTier(this.app.save, id))}`, 'ok', this.nowMs);
+    const tier = upgradeTier(this.app.save, id);
+    this.toast.show(t('shop.toast.upgraded', { name: def.label, tier, effect: upgradeEffectText(def, tier) }), 'ok', this.nowMs);
   }
 }

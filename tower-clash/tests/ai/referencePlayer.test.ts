@@ -3,6 +3,7 @@ import { makeLevel } from '../helpers';
 import { Rng, applyCommand, createState, getOutcome, step } from '../../src/sim/index';
 import type { Command, GameState, LevelDef, Outcome } from '../../src/sim/index';
 import { isAiTick, referencePlayerCommands, rngsFor, runAiTick } from '../../src/ai/index';
+import { CUT_REACTION_MS, bridgeLoss } from '../../src/ai/referencePlayer';
 import { LEVELS } from '../../src/levels/index';
 
 const sends = (cmds: Command[]) => cmds.filter((c) => c.type === 'sendUnits');
@@ -344,5 +345,122 @@ describe('reference player: home reserve and threat model', () => {
       if (getOutcome(state) !== 'won') lost.push(seed);
     }
     expect(lost).toEqual([]);
+  });
+});
+
+describe('reference player: bridge-aware attack planner', () => {
+  /**
+   * Two own towers next to enemy `e` (600 px north): `a` over a bridge, `b` over a plain road, and an
+   * `a`–`b` road (320 px) so that cutting the bridge would leave `a` two hops from `e` — a cut the far
+   * side can afford (`keepsRoutes`, +1 hop). `e` is a turtle keep at `level` with `units`.
+   */
+  function forkLevel(opts: { a: number; b: number; units: number; level: 1 | 2 | 3; link?: boolean; bridge?: boolean }): LevelDef {
+    return makeLevel({
+      enemies: [{ owner: 'enemy1', personality: 'turtle', aggression: 0.5 }],
+      towers: [
+        { id: 'a', x: 200, y: 1000, owner: 'player', units: opts.a, level: 3 },
+        { id: 'b', x: 520, y: 1000, owner: 'player', units: opts.b, level: 3 },
+        { id: 'e', x: 360, y: 400, owner: 'enemy1', units: opts.units, level: opts.level },
+      ],
+      roads: [
+        { a: 'a', b: 'e', kind: opts.bridge === false ? 'road' : 'bridge' },
+        { a: 'b', b: 'e' },
+        ...(opts.link === false ? [] : [{ a: 'a', b: 'b' }]),
+      ],
+    });
+  }
+
+  it('bridgeLoss: everything landing later than one AI tick after the first step is lost', () => {
+    expect(CUT_REACTION_MS).toBe(500);
+    // A 600 px bridge takes 5 s: nothing lands in time.
+    expect(bridgeLoss(22, 5000)).toBe(22);
+    // A 60 px hop (500 ms): only the first unit lands before the cut.
+    expect(bridgeLoss(10, 500)).toBe(9);
+    // 380 ms: units 0 and 1 land at 380 and 500 ms, the rest are lost.
+    expect(bridgeLoss(10, 380)).toBe(8);
+    expect(bridgeLoss(1, 380)).toBe(0);
+  });
+
+  it('(1) attacks a max-level keep with the plain-road source only, keeping the bridge source home', () => {
+    // e (L3, 4) has 14 when b's column lands (5.2 s at 2/s); needed = 14 × 1.2 + 2 + 8 regen during the
+    // 3.6 s stream = 26.8 < b's 30 + 3 produced. Adding a over the bridge would only feed the cut.
+    const state = createState(forkLevel({ a: 30, b: 30, units: 4, level: 3 }), 1);
+    const cmds = referencePlayerCommands(state, new Rng(1));
+    expect(sends(cmds)).toEqual([{ type: 'sendUnits', owner: 'player', from: 'b', to: 'e', ratio: 1 }]);
+  });
+
+  it('(1) the same fork into an L1 barracks uses both sources: only a finished keep is planned as a cutter', () => {
+    const state = createState(forkLevel({ a: 30, b: 30, units: 4, level: 1 }), 1);
+    const from = sends(referencePlayerCommands(state, new Rng(1))).map((c) => (c.type === 'sendUnits' ? c.from : ''));
+    expect(from.sort()).toEqual(['a', 'b']);
+  });
+
+  it('(1) a keep that would strand itself by cutting is not a cutter: both sources go', () => {
+    // Without the a–b road, cutting a–e leaves `a` unreachable for the enemy: rule 6 would never do it, nor
+    // does the bot expect the enemy to.
+    const state = createState(forkLevel({ a: 30, b: 30, units: 4, level: 3, link: false }), 1);
+    const from = sends(referencePlayerCommands(state, new Rng(1))).map((c) => (c.type === 'sendUnits' ? c.from : ''));
+    expect(from.sort()).toEqual(['a', 'b']);
+  });
+
+  it('(2) requires the force surviving the cut to reach needed: a wave that is all bridge waits', () => {
+    // a (40) alone could take e (needed 26.8 + regen, force 40): over a plain road it goes …
+    const road = createState(forkLevel({ a: 40, b: 1, units: 4, level: 3, bridge: false }), 1);
+    expect(sends(referencePlayerCommands(road, new Rng(1))).map((c) => (c.type === 'sendUnits' ? c.from : ''))).toContain('a');
+    // … over a bridge the keep can cut, all 40 are planned as lost: 1 + 3 produced from b is no wave.
+    const bridge = createState(forkLevel({ a: 40, b: 1, units: 4, level: 3 }), 1);
+    expect(sends(referencePlayerCommands(bridge, new Rng(1)))).toHaveLength(0);
+    // The bridge source is still free for the other rules: it upgrades nothing (already L3) and waits.
+    expect(referencePlayerCommands(bridge, new Rng(1)).filter((c) => c.type === 'upgrade')).toHaveLength(0);
+  });
+
+  it('(2) relays pouring into an exposed source are lost with it', () => {
+    // r (30) behind a is a relay for a's stream; through the bridge both are lost, so the plan still waits.
+    const level = forkLevel({ a: 40, b: 1, units: 4, level: 3 });
+    level.towers.push({ id: 'r', x: 200, y: 1250, owner: 'player', units: 30, level: 3 });
+    level.roads.push({ a: 'a', b: 'r' });
+    const state = createState(level, 1);
+    expect(sends(referencePlayerCommands(state, new Rng(1)))).toHaveLength(0);
+  });
+
+  it('sustain: never tops up a wave over a bridge the keep can cut', () => {
+    // a short wave of 10 is on the bridge; a has 30 more. Over a plain road rule 4a would add them.
+    const road = createState(forkLevel({ a: 40, b: 1, units: 20, level: 3, bridge: false }), 1);
+    applyCommand(road, { type: 'sendUnits', owner: 'player', from: 'a', to: 'e', ratio: 10.5 / 40 });
+    for (let i = 0; i < 10; i++) step(road);
+    expect(road.towers['a']!.units).toBe(31); // 30 kept + 1 produced in 0.5 s
+    const rules: string[] = [];
+    const topUp = sends(referencePlayerCommands(road, new Rng(1), (rule) => rules.push(rule)));
+    expect(topUp).toEqual([{ type: 'sendUnits', owner: 'player', from: 'a', to: 'e', ratio: 1 }]);
+    expect(rules).toEqual(['sustain']);
+    const bridge = createState(forkLevel({ a: 40, b: 1, units: 20, level: 3 }), 1);
+    applyCommand(bridge, { type: 'sendUnits', owner: 'player', from: 'a', to: 'e', ratio: 10.5 / 40 });
+    for (let i = 0; i < 10; i++) step(bridge);
+    expect(sends(referencePlayerCommands(bridge, new Rng(1)))).toHaveLength(0);
+  });
+
+  it('level 40 seed 6: no player unit is drowned by an enemy bridge cut, and the crown falls before 90 s', () => {
+    const level = LEVELS.find((l) => l.id === 40)!;
+    const state = createState(level, 6);
+    const rngs = rngsFor(6, level.enemies);
+    let drowned = 0;
+    let enemyCuts = 0;
+    while (getOutcome(state) === 'playing' && state.time < 180_000) {
+      if (isAiTick(state)) {
+        const p = referencePlayerCommands(state, rngs.player);
+        const e = runAiTick(state, rngs.enemies);
+        for (const cmd of p) applyCommand(state, cmd);
+        for (const cmd of e) {
+          if (cmd.type === 'cutBridge') enemyCuts++;
+          applyCommand(state, cmd);
+        }
+        for (const ev of state.events) if (ev.type === 'unitDied' && ev.cause === 'bridge' && ev.owner === 'player') drowned += 1;
+      }
+      step(state);
+    }
+    expect(getOutcome(state)).toBe('won');
+    expect(enemyCuts).toBe(0);
+    expect(drowned).toBe(0);
+    expect(state.time).toBeLessThanOrEqual(90_000);
   });
 });

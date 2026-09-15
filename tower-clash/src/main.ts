@@ -7,12 +7,14 @@ import { createView, resize, toClient } from './render/view';
 import { attachPointer } from './input/pointer';
 import type { PointerPoint } from './input/pointer';
 import type { SaveData } from './ui/save';
-import { isLevelUnlocked, loadSave } from './ui/save';
+import { isLevelUnlocked, loadSave, writeSave } from './ui/save';
 import type { App, NativeInfoOverride, Screen, StartOptions } from './ui/screens';
-import { AchievementsScreen, LevelSelectScreen, ResultScreen, SettingsScreen, TitleScreen } from './ui/screens';
+import { ResultScreen, TitleScreen, beginMapFrame, endMapFrame } from './ui/screens';
 import { PlayScreen } from './ui/play';
-import { ShopScreen } from './ui/shop';
 import { applyMotionPref } from './ui/motion';
+import type { Language, TranslationKey } from './ui/i18n';
+import { browserLanguages, currentLanguage, detectLanguage, onLanguageChange, setLanguage, t } from './ui/i18n';
+import { drawSpinner } from './render/economyWidgets';
 import { initAudio, toggleMuted, unlockAudio } from './audio/index';
 import { initNative } from './native/index';
 import type { ShopTab } from './render/layout';
@@ -24,6 +26,13 @@ import type { FakeStoreOptions } from './economy/providers/fakeStore';
 import { configureFakeStore } from './economy/providers/fakeStore';
 import { grantProduct } from './economy/wallet';
 import type { GrantResult } from './economy/wallet';
+
+/**
+ * The level map, shop, achievements and settings screens (and the menu drawing they need) are a
+ * separate chunk (PERF-1): `import()` on demand, preloaded once the first frame is on screen.
+ * Only types cross this boundary statically — see scripts/checkBundle.mjs.
+ */
+type LazyScreens = typeof import('./ui/lazyScreens');
 
 /** Test/debug surface for Playwright. */
 export interface TowerClashDebug {
@@ -37,6 +46,9 @@ export interface TowerClashDebug {
   toClient(x: number, y: number): { x: number; y: number };
   /** Text of the tutorial hint on screen, or null. */
   getTutorialHint(): string | null;
+  /** Current UI language code and a translation lookup (I18N e2e). */
+  getLanguage(): string;
+  getText(key: string): string;
   /** Result screen numbers, or null when not on the result screen. */
   getResult(): { outcome: string; stars: number; coinsEarned: number; coinsTotal: number; crystalsEarned: number; achievements: string[] } | null;
   /** Level-select lock state for a level id (undefined id → false). */
@@ -48,8 +60,8 @@ export interface TowerClashDebug {
   getCoins(): number;
   /** Simulate the platform back button (Android); true when a screen handled it. */
   back(): boolean;
-  /** Open the shop (default tab: crystals) from the current screen; perf/e2e hook. */
-  openShop(tab?: ShopTab): void;
+  /** Open the shop (default tab: crystals) from the current screen; resolves once it is on screen (perf/e2e hook). */
+  openShop(tab?: ShopTab): Promise<void>;
   aiAvailable: boolean;
   /** Economy test surface (Phase A): the live save, direct grants, fake ads, fake-store knobs. */
   economy: {
@@ -61,8 +73,8 @@ export interface TowerClashDebug {
     configureFakeStore(opts: FakeStoreOptions): void;
     /** Session ad counters + what the fake provider showed. */
     getAdStats(): { interstitialsShown: number; rewardedShown: number; fakeInterstitials: number; fakeRewarded: number };
-    /** Open the shop on a tab (from the current screen). */
-    openShop(tab: ShopTab): void;
+    /** Open the shop on a tab (from the current screen); resolves once it is on screen. */
+    openShop(tab: ShopTab): Promise<void>;
     /** Lose the running level as fast as the sim allows (every garrison marches into the enemy). */
     autoLose(): boolean;
     /** Tap-equivalents on the result screen (economy offers). */
@@ -71,8 +83,8 @@ export interface TowerClashDebug {
     getClock(): { timeMs: number; elapsedMs: number; continued: boolean } | null;
     /** Shop scroll (logical px, clamped); `y` omitted = read only. -1 when the shop is not open. */
     shopScroll(y?: number): number;
-    /** Open the achievements screen (from the current screen). */
-    openAchievements(): void;
+    /** Open the achievements screen (from the current screen); resolves once it is on screen. */
+    openAchievements(): Promise<void>;
     /** Pretend the native providers report this support id / privacy requirement (settings → About). */
     setNativeInfo(info: NativeInfoOverride | null): void;
     /** What the settings About block shows, or null when not on the settings screen. */
@@ -86,6 +98,38 @@ declare global {
   }
 }
 
+/**
+ * Placeholder while a lazy chunk downloads: the map background with a small spinner that fades
+ * in, so a fast load (the usual case after the idle preload) shows nothing at all. No input.
+ */
+class LoadingScreen implements Screen {
+  readonly name = 'loading' as const;
+  private shownAt = 0;
+
+  constructor(private readonly app: App) {}
+
+  draw(view: View, nowMs: number): void {
+    if (!this.shownAt) this.shownAt = nowMs;
+    const pal = this.app.palette();
+    beginMapFrame(view, pal);
+    const alpha = Math.max(0, Math.min(1, (nowMs - this.shownAt - 80) / 200));
+    if (alpha > 0) {
+      view.ctx.save();
+      view.ctx.globalAlpha = alpha;
+      drawSpinner(view.ctx, pal.paper, 360, 640, 18, nowMs);
+      view.ctx.restore();
+    }
+    endMapFrame(view);
+  }
+}
+
+/** Run `fn` when the browser is idle (after the first frame); falls back to a short timeout. */
+function whenIdle(fn: () => void): void {
+  const w = window as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number };
+  if (typeof w.requestIdleCallback === 'function') w.requestIdleCallback(fn, { timeout: 1500 });
+  else setTimeout(fn, 50);
+}
+
 class TowerClashApp implements App {
   readonly view: View;
   readonly save: SaveData;
@@ -95,11 +139,14 @@ class TowerClashApp implements App {
   private speed = 1;
   private play: PlayScreen | null = null;
   private fakeAds: FakeAdsProvider | null = null;
+  private lazy: LazyScreens | null = null;
+  private lazyPromise: Promise<LazyScreens> | null = null;
+  private preloadQueued = false;
   nativeInfo?: NativeInfoOverride;
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(canvas: HTMLCanvasElement, save: SaveData) {
     this.view = createView(canvas);
-    this.save = loadSave();
+    this.save = save;
     this.current = new TitleScreen(this);
     initAudio(this.save);
     applyMotionPref(this.save.settings.reducedMotion);
@@ -165,8 +212,62 @@ class TowerClashApp implements App {
     this.go(new TitleScreen(this));
   }
 
+  /* ----- lazy screens (PERF-1) ----- */
+
+  /** The lazy chunk, fetched once; a failed fetch is retried on the next call. */
+  private loadLazy(): Promise<LazyScreens> {
+    if (!this.lazyPromise) {
+      this.lazyPromise = import('./ui/lazyScreens')
+        .then((m) => {
+          this.lazy = m;
+          return m;
+        })
+        .catch((err: unknown) => {
+          this.lazyPromise = null;
+          throw err;
+        });
+    }
+    return this.lazyPromise;
+  }
+
+  /**
+   * Navigate to a lazily loaded screen: at once when the chunk is in, otherwise through the
+   * spinner. A navigation that happened meanwhile wins; a failed download returns to `from`.
+   * Resolves once the target screen is current (or the navigation was abandoned).
+   */
+  private goLazy(make: (screens: LazyScreens) => Screen): Promise<void> {
+    if (this.lazy) {
+      this.go(make(this.lazy));
+      return Promise.resolve();
+    }
+    const from = this.current;
+    const loading = new LoadingScreen(this);
+    this.go(loading);
+    return this.loadLazy().then(
+      (screens) => {
+        if (this.current === loading) this.go(make(screens));
+      },
+      () => {
+        if (this.current === loading) this.current = from; // no enter(): the screen never left
+      },
+    );
+  }
+
+  /** Warm the lazy chunk once the first frame is painted, so the first tap on SHOP / settings is instant. */
+  private preloadLazy(): void {
+    if (this.preloadQueued) return;
+    this.preloadQueued = true;
+    whenIdle(() => void this.loadLazy().catch(() => undefined));
+  }
+
   openSettings(from: Screen): void {
-    this.go(new SettingsScreen(this, () => this.go(from)));
+    void this.goLazy((L) => new L.SettingsScreen(this, () => this.go(from)));
+  }
+
+  setLanguage(code: Language): void {
+    this.save.settings.language = code;
+    writeSave(this.save);
+    void setLanguage(code);
   }
 
   /**
@@ -180,14 +281,9 @@ class TowerClashApp implements App {
       else this.goLevels();
       return true;
     }
-    if (
-      cur instanceof SettingsScreen ||
-      cur instanceof ResultScreen ||
-      cur instanceof LevelSelectScreen ||
-      cur instanceof ShopScreen ||
-      cur instanceof AchievementsScreen
-    ) {
-      cur.key(new KeyboardEvent('keydown', { key: 'Escape' }));
+    if (cur.name === 'loading') return true; // swallowed: the pending screen arrives in a moment
+    if (cur.name === 'settings' || cur.name === 'result' || cur.name === 'levelSelect' || cur.name === 'shop' || cur.name === 'achievements') {
+      cur.key?.(new KeyboardEvent('keydown', { key: 'Escape' }));
       return true;
     }
     return false;
@@ -195,15 +291,23 @@ class TowerClashApp implements App {
 
   goLevels(): void {
     this.play = null;
-    this.go(new LevelSelectScreen(this));
+    void this.goLazy((L) => new L.LevelSelectScreen(this));
   }
 
   goShop(tab: ShopTab = 'crystals', back: () => void = () => this.goTitle()): void {
-    this.go(new ShopScreen(this, tab, back));
+    void this.openShop(tab, back);
   }
 
   goAchievements(back: () => void = () => this.goTitle()): void {
-    this.go(new AchievementsScreen(this, back));
+    void this.openAchievements(back);
+  }
+
+  private openShop(tab: ShopTab, back: () => void): Promise<void> {
+    return this.goLazy((L) => new L.ShopScreen(this, tab, back));
+  }
+
+  private openAchievements(back: () => void): Promise<void> {
+    return this.goLazy((L) => new L.AchievementsScreen(this, back));
   }
 
   setSpeed(n: number): void {
@@ -228,9 +332,9 @@ class TowerClashApp implements App {
   /** The shop returns to the screen that opened it (result screens stay alive underneath). */
   private backFromShop(): () => void {
     const from = this.current;
-    if (from instanceof ShopScreen) return () => this.goTitle();
+    if (from.name === 'shop') return () => this.goTitle();
     if (from instanceof ResultScreen) return () => this.go(from);
-    if (from instanceof LevelSelectScreen) return () => this.goLevels();
+    if (from.name === 'levelSelect') return () => this.goLevels();
     return () => this.goTitle();
   }
 
@@ -239,7 +343,8 @@ class TowerClashApp implements App {
     this.lastFrame = now;
     this.current.update?.(dt, now);
     this.current.draw(this.view, now);
-    requestAnimationFrame((t) => this.frame(t));
+    this.preloadLazy(); // after the first paint; a no-op from then on
+    requestAnimationFrame((f) => this.frame(f));
   }
 
   debug(): TowerClashDebug {
@@ -255,6 +360,8 @@ class TowerClashApp implements App {
       getSpeed: () => this.play?.loop.speed ?? this.speed,
       toClient: (x, y) => toClient(this.view, x, y),
       getTutorialHint: () => (this.current === this.play ? (this.play?.tutorialStep()?.text ?? null) : null),
+      getLanguage: () => currentLanguage(),
+      getText: (key) => t(key as TranslationKey),
       getResult: () => {
         if (!(this.current instanceof ResultScreen)) return null;
         const { outcome, stars, coinsEarned, coinsTotal } = this.current.info.ui;
@@ -263,12 +370,16 @@ class TowerClashApp implements App {
       },
       isLevelUnlocked: (id) => isLevelUnlocked(this.save, LEVELS, LEVELS.findIndex((l) => l.id === id)),
       setLevelSelectScroll: (y) => {
-        if (this.current instanceof LevelSelectScreen) this.current.setScroll(y);
+        const L = this.lazy;
+        if (L && this.current instanceof L.LevelSelectScreen) this.current.setScroll(y);
       },
-      getLevelSelectScroll: () => (this.current instanceof LevelSelectScreen ? this.current.getScroll() : 0),
+      getLevelSelectScroll: () => {
+        const L = this.lazy;
+        return L && this.current instanceof L.LevelSelectScreen ? this.current.getScroll() : 0;
+      },
       getCoins: () => this.save.gold,
       back: () => this.onBack(),
-      openShop: (tab = 'crystals') => this.goShop(tab, this.backFromShop()),
+      openShop: (tab = 'crystals') => this.openShop(tab, this.backFromShop()),
       aiAvailable: true,
       economy: {
         getSave: () => this.save,
@@ -281,7 +392,7 @@ class TowerClashApp implements App {
           fakeInterstitials: this.fakeAds?.interstitials ?? 0,
           fakeRewarded: this.fakeAds?.rewarded ?? 0,
         }),
-        openShop: (tab) => this.goShop(tab, this.backFromShop()),
+        openShop: (tab) => this.openShop(tab, this.backFromShop()),
         autoLose: () => {
           if (!this.play || this.current !== this.play) return false;
           this.play.setSuicide(true);
@@ -298,15 +409,19 @@ class TowerClashApp implements App {
         },
         getClock: () => (this.play ? { timeMs: this.play.state.time, elapsedMs: this.play.elapsedMs(), continued: this.play.hasContinued } : null),
         shopScroll: (y) => {
-          if (!(this.current instanceof ShopScreen)) return -1;
+          const L = this.lazy;
+          if (!L || !(this.current instanceof L.ShopScreen)) return -1;
           if (y !== undefined) this.current.setScroll(y);
           return this.current.scrollY;
         },
-        openAchievements: () => this.goAchievements(this.backFromShop()),
+        openAchievements: () => this.openAchievements(this.backFromShop()),
         setNativeInfo: (info) => {
           this.nativeInfo = info ?? undefined;
         },
-        getAboutInfo: () => (this.current instanceof SettingsScreen ? this.current.aboutInfo : null),
+        getAboutInfo: () => {
+          const L = this.lazy;
+          return L && this.current instanceof L.SettingsScreen ? this.current.aboutInfo : null;
+        },
       },
     };
   }
@@ -328,22 +443,45 @@ function registerServiceWorker(): void {
 }
 
 /**
- * Wait for the bundled Fredoka faces (index.html @font-face) so the first canvas frame is not
- * painted in the fallback face. Bounded by a timeout: a missing/slow font must never block the game.
+ * Wait for the bundled faces (index.html @font-face) so the first canvas frame is not painted in
+ * the fallback face: Fredoka 500/700, plus the Nunito Cyrillic face when the UI is Russian
+ * (Fredoka ships no Cyrillic; `unicode-range` only fetches Nunito when Cyrillic text is drawn).
+ * Bounded by a timeout: a missing/slow font must never block the game.
  */
-async function waitForFonts(timeoutMs = 1500): Promise<void> {
+async function waitForFonts(language: Language, timeoutMs = 1500): Promise<void> {
   const fonts = (document as { fonts?: FontFaceSet }).fonts;
   if (!fonts || typeof fonts.load !== 'function') return;
-  const load = Promise.all([fonts.load('700 32px Fredoka'), fonts.load('500 32px Fredoka')]).then(() => undefined);
+  const loads = [fonts.load('700 32px Fredoka'), fonts.load('500 32px Fredoka')];
+  if (language === 'ru') loads.push(fonts.load('700 32px Nunito', 'Пауза'), fonts.load('500 32px Nunito', 'Пауза'));
+  const load = Promise.all(loads).then(() => undefined);
   const timeout = new Promise<void>((resolve) => setTimeout(resolve, timeoutMs));
   await Promise.race([load, timeout]).catch(() => undefined);
+}
+
+/**
+ * UI language: the persisted choice, else the browser's preference on the first run (persisted so
+ * a later browser change does not silently switch the game). The dictionary is awaited so the
+ * title never flashes English.
+ */
+async function bootLanguage(save: SaveData): Promise<Language> {
+  let code = save.settings.language;
+  if (!code) {
+    code = detectLanguage(browserLanguages());
+    save.settings.language = code;
+    writeSave(save);
+  }
+  await setLanguage(code);
+  return code;
 }
 
 async function boot(): Promise<void> {
   const canvas = document.getElementById('game');
   if (!(canvas instanceof HTMLCanvasElement)) throw new Error('#game canvas missing');
-  await waitForFonts();
-  const app = new TowerClashApp(canvas);
+  const save = loadSave();
+  const language = await bootLanguage(save);
+  await waitForFonts(language);
+  onLanguageChange((code) => void waitForFonts(code, 800)); // warm the Cyrillic face when switching to Russian
+  const app = new TowerClashApp(canvas, save);
   window.__towerclash = app.debug();
   registerServiceWorker();
 }

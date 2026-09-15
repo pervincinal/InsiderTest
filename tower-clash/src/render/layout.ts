@@ -78,6 +78,8 @@ export const TITLE = Object.freeze({
   /** Trophy button (achievements) mirrors the chest, bottom-left. */
   achievements: { x: 18, y: 990, w: 128, h: 132 } as Rect,
   wallet: { x: 120, y: 1172, w: 480, h: 52 } as Rect,
+  /** Language chip (top-right): shows the current code, tap → next language. */
+  lang: { x: 630, y: 18, w: 72, h: 44 } as Rect,
 });
 
 /**
@@ -87,7 +89,7 @@ export const TITLE = Object.freeze({
 export const SETTINGS = Object.freeze({
   headerH: 100,
   back: { x: 18, y: 20, w: 140, h: 60 } as Rect,
-  card: { x: 50, y: 150, w: 620, h: 650 } as Rect,
+  card: { x: 50, y: 150, w: 620, h: 750 } as Rect,
   rowH: 96,
   labelX: 86,
   /** Row controls, top to bottom. */
@@ -95,14 +97,17 @@ export const SETTINGS = Object.freeze({
   colorBlind: { x: 470, y: 312, w: 160, h: 56 } as Rect,
   motion: { x: 372, y: 408, w: 258, h: 56 } as Rect,
   sendRatio: { x: 420, y: 504, w: 210, h: 56 } as Rect,
-  reset: { x: 160, y: 676, w: 400, h: 72 } as Rect,
+  /** Language row: label line at `languageLabelY`, then a full-width picker (one segment per language, I18N). */
+  languageLabelY: 600,
+  language: { x: 86, y: 664, w: 548, h: 56 } as Rect,
+  reset: { x: 160, y: 800, w: 400, h: 72 } as Rect,
   confirm: {
     card: { x: 90, y: 470, w: 540, h: 320 } as Rect,
     yes: { x: 130, y: 676, w: 210, h: 72 } as Rect,
     no: { x: 380, y: 676, w: 210, h: 72 } as Rect,
   },
   /** About card under the settings card: version, support id (copy), privacy options (native). */
-  about: { x: 50, y: 830, w: 620 },
+  about: { x: 50, y: 920, w: 620 },
   aboutRowH: 62,
 });
 
