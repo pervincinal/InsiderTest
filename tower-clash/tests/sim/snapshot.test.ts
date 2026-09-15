@@ -49,12 +49,16 @@ const SCRIPT: [number, Command][] = [
   [0, { type: 'sendUnits', owner: 'player', from: 'p', to: 'a', ratio: 0.5 }],
   [0, { type: 'sendUnits', owner: 'enemy1', from: 't', to: 'a' }],
   [40, { type: 'sendUnits', owner: 'enemy1', from: 'e', to: 'a', ratio: 0.5 }],
-  [60, { type: 'upgrade', owner: 'player', towerId: 'p' }],
+  [60, { type: 'upgrade', owner: 'player', towerId: 'p' }], // rules v2: ignored
+  [80, { type: 'link', owner: 'player', from: 'p', to: 'a' }],
+  [100, { type: 'link', owner: 'enemy1', from: 'e', to: 'a' }],
   [120, { type: 'booster', owner: 'player', booster: 'overdrive' }],
   [200, { type: 'sendUnits', owner: 'player', from: 'a', to: 'e' }],
   [220, { type: 'cutBridge', owner: 'player', roadId: 'p-t' }],
   [300, { type: 'booster', owner: 'player', booster: 'freeze' }],
+  [340, { type: 'unlink', owner: 'player', from: 'p' }],
   [420, { type: 'sendUnits', owner: 'enemy1', from: 't', to: 'a' }],
+  [440, { type: 'link', owner: 'player', from: 'p', to: 'a' }],
 ];
 
 /** Apply the script's commands for `tick` (sim time = tick × 50 ms before the step), then step. */
@@ -212,7 +216,7 @@ describe('applyContinue', () => {
     expect(state.towers['q']!.units).toBe(14);
     const out = applyContinue(state);
     expect(out).toBe(state);
-    expect(state.towers['q']!.units).toBe(29);
+    expect(state.towers['q']!.units).toBe(25); // 14 + 15 capped at the L1 capacity (25)
     expect(state.towers['p']!.units).toBe(12);
     expect(state.towers['e']!.units).toBe(12);
     expect(state.boosters).toEqual([{ type: 'freeze', owner: 'player', untilMs: 7000 }]);
@@ -228,7 +232,8 @@ describe('applyContinue', () => {
     applyContinue(state, { freezeMs: 5000, infantry: 15 });
     run(state, 100); // t = 7000
     expect(state.towers['e']!.units).toBe(12);
-    expect(state.towers['q']!.units).toBe(30); // 29 + 5 capped at 30
+    expect(state.towers['q']!.units).toBe(32); // full at 25 → auto-upgrade to L2 on the first tick, then 7 at 700 ms
+    expect(state.towers['q']!.level).toBe(2);
     expect(state.towers['p']!.units).toBe(17);
     expect(state.boosters.length).toBe(1);
     run(state, 1); // t = 7050: booster expired, enemy resumes
@@ -240,7 +245,7 @@ describe('applyContinue', () => {
   it('reinforcements are capped at the tower capacity (including the player capacity modifier)', () => {
     const base = createState(makeLevel({ towers: [{ id: 'p', x: 0, y: 0, owner: 'player', units: 20 }], roads: [] }), 1);
     applyContinue(base, { freezeMs: 5000, infantry: 15 });
-    expect(base.towers['p']!.units).toBe(30);
+    expect(base.towers['p']!.units).toBe(25);
 
     const boosted = createState(makeLevel({ towers: [{ id: 'p', x: 0, y: 0, owner: 'player', units: 20 }], roads: [] }), 1, {
       productionMul: 1,
@@ -249,9 +254,9 @@ describe('applyContinue', () => {
       unitSpeedMul: 1,
     });
     applyContinue(boosted, { freezeMs: 5000, infantry: 15 });
-    expect(boosted.towers['p']!.units).toBe(35);
+    expect(boosted.towers['p']!.units).toBe(31); // floor(25 × 1.25)
     applyContinue(boosted, { freezeMs: 5000, infantry: 15 });
-    expect(boosted.towers['p']!.units).toBe(37);
+    expect(boosted.towers['p']!.units).toBe(31);
   });
 
   it('on a tie the first player tower in level order is chosen', () => {

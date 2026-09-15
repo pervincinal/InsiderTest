@@ -4,6 +4,17 @@ export { C } from './constants';
 export { Rng, nextRandom } from './rng';
 export { createState, roadIdFor } from './create';
 export { applyCommand } from './commands';
-export { step, capacityOf, modifiersFor, unitPosition, roadPointAt } from './step';
+export {
+  step,
+  capacityOf,
+  maxLevelOf,
+  maxLinksOf,
+  linksFrom,
+  isLinked,
+  tryAutoUpgrade,
+  modifiersFor,
+  unitPosition,
+  roadPointAt,
+} from './step';
 export { getOutcome } from './outcome';
 export { SnapshotRing, applyContinue, cloneState, deepCopy } from './snapshot';

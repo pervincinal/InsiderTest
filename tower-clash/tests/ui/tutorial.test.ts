@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createState } from '../../src/sim/create';
 import { applyCommand } from '../../src/sim/commands';
+import { step } from '../../src/sim/step';
+import { C } from '../../src/sim/constants';
 import { getLevel } from '../../src/levels/index';
 import { Tutorial, tutorialFor } from '../../src/ui/tutorial';
 
@@ -24,49 +26,72 @@ describe('tutorialFor', () => {
   });
 });
 
-describe('level 1 tutorial', () => {
-  it('select home → send home→camp → done', () => {
+describe('level 1 tutorial (rules v2: start a stream)', () => {
+  it('select home → link home→camp → done', () => {
     const state = stateFor(1);
     const tut = tutorialFor(1, 0)!;
     expect(tut.current(state)?.text).toBe('Tap your tower');
     tut.onSelect('camp', state); // wrong tower: stays
     expect(tut.current(state)?.text).toBe('Tap your tower');
     tut.onSelect('home', state);
-    expect(tut.current(state)?.text).toBe('Now tap the grey tower');
-    tut.onCommand({ type: 'sendUnits', owner: 'player', from: 'home', to: 'foe', ratio: 1 }, state); // not the grey one
-    expect(tut.current(state)?.text).toBe('Now tap the grey tower');
-    tut.onCommand({ type: 'sendUnits', owner: 'player', from: 'home', to: 'camp', ratio: 1 }, state);
+    expect(tut.current(state)?.text).toBe('Now tap the grey tower — the stream keeps flowing');
+    tut.onCommand({ type: 'link', owner: 'player', from: 'home', to: 'foe' }, state); // not the grey one
+    expect(tut.current(state)?.text).toBe('Now tap the grey tower — the stream keeps flowing');
+    tut.onCommand({ type: 'unlink', owner: 'player', from: 'home', to: 'camp' }, state); // wrong verb
+    expect(tut.finished).toBe(false);
+    tut.onCommand({ type: 'link', owner: 'player', from: 'home', to: 'camp' }, state);
     expect(tut.current(state)).toBeNull();
     expect(tut.finished).toBe(true);
   });
 });
 
-describe('level 2 tutorial', () => {
-  it('reinforce hint is gated until mid is captured, then clears on the next send', () => {
+describe('level 2 tutorial (rules v2: stop a stream)', () => {
+  const link = { type: 'link', owner: 'player', from: 'home', to: 'mid' } as const;
+
+  it('stop hint is gated until the home→mid stream exists, then clears on the unlink', () => {
     const state = stateFor(2);
     const tut = tutorialFor(2, 0)!;
-    const send = { type: 'sendUnits', owner: 'player', from: 'home', to: 'mid', ratio: 1 } as const;
-    tut.onCommand(send, state);
-    expect(tut.current(state)).toBeNull(); // gated: mid still neutral
+    expect(tut.current(state)?.text).toBe('Tap your tower, then the grey tower');
+    tut.onCommand(link, state);
+    expect(tut.current(state)).toBeNull(); // gated: no stream in the state yet
     expect(tut.finished).toBe(false);
-    tut.onCommand(send, state); // sends while gated do not count
+    tut.onCommand({ type: 'unlink', owner: 'player', from: 'home', to: 'mid' }, state); // unlinks while gated do not count
+    expect(tut.finished).toBe(false);
+    applyCommand(state, link);
+    expect(state.links).toHaveLength(1);
+    expect(tut.current(state)?.text).toBe('Tap the target again to stop the stream');
+    tut.onCommand({ type: 'unlink', owner: 'player', from: 'home' }, state); // "all links of home" counts too
+    expect(tut.finished).toBe(true);
+  });
+
+  it('also completes when the stream ends on its own after the capture (target full)', () => {
+    const state = stateFor(2);
+    const tut = tutorialFor(2, 0)!;
+    tut.onCommand(link, state);
+    applyCommand(state, link);
+    expect(tut.current(state)?.text).toBe('Tap the target again to stop the stream');
+    // the sim ended the supply line: mid is ours and no link remains
     state.towers['mid']!.owner = 'player';
-    expect(tut.current(state)?.text).toMatch(/Reinforce/);
-    tut.onCommand(send, state);
+    state.links = [];
+    tut.onSelect(null, state);
     expect(tut.finished).toBe(true);
   });
 });
 
-describe('level 3 tutorial', () => {
-  it('mentions the real upgrade cost and completes on an upgrade command', () => {
+describe('level 3 tutorial (rules v2: auto-upgrade)', () => {
+  it('mentions the L1 capacity and completes when a player tower reaches level 2 by filling up', () => {
     const state = stateFor(3);
     const tut = tutorialFor(3, 0)!;
+    expect(tut.current(state)?.text).toBe(`Let a tower fill to ${C.CAPACITY[1]} to upgrade it — L2 can attack 2 targets`);
+    expect(C.CAPACITY[1]).toBe(25);
     tut.onSelect('home', state);
-    expect(tut.current(state)?.text).toBe('Tap your selected tower again to upgrade (costs 10)');
-    const cmd = { type: 'upgrade', owner: 'player', towerId: 'home' } as const;
-    tut.onCommand(cmd, state);
-    applyCommand(state, cmd);
-    expect(state.towers['home']!.level).toBe(2);
+    expect(tut.finished).toBe(false); // selecting is not the lesson
+    const home = state.towers['home']!;
+    home.units = C.CAPACITY[1] - 1;
+    step(state); // production tops it up → auto-upgrade
+    for (let i = 0; i < 40 && home.level < 2; i++) step(state);
+    expect(home.level).toBe(2);
+    tut.onSelect(null, state);
     expect(tut.finished).toBe(true);
   });
 });

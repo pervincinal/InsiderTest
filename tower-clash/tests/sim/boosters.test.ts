@@ -17,8 +17,11 @@ describe('boosters in step', () => {
     expect(state.boosters.length).toBe(1);
     run(state, 200);
     expect(state.boosters).toEqual([]);
-    expect(state.towers['p']!.units).toBe(80); // capped
+    expect(state.towers['p']!.units).toBe(90); // 70 + 20 at the normal L3 rate (cap 100)
     expect(state.towers['e']!.units).toBe(50);
+    run(state, 200);
+    expect(state.towers['p']!.units).toBe(100); // capped at L3
+    expect(state.towers['p']!.level).toBe(3);
   });
 
   it('freeze stops enemy generation for 5 s, not the caster', () => {

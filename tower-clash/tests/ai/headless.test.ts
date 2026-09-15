@@ -31,11 +31,11 @@ describe('runHeadless', () => {
 
   it('with max modifiers wins level 1 faster than without: seed 1 outright, 18+ of 20 seeds, 15 %+ less time in total', () => {
     // Upgrades change the opening (bigger garrison, faster columns) and so the whole match, so a single
-    // seed can come out slower (seed 9: 21.65 s vs 20.7 s); the population must be clearly faster.
+    // seed could come out slower; the population must be clearly faster.
     const first = runHeadless(level1, 1, referencePlayerCommands);
     const firstBoosted = runHeadless(level1, 1, referencePlayerCommands, { modifiers: MAX_MODIFIERS });
-    expect(first).toMatchObject({ outcome: 'won', timeMs: 19_400 });
-    expect(firstBoosted).toMatchObject({ outcome: 'won', timeMs: 15_550 });
+    expect(first).toMatchObject({ outcome: 'won', timeMs: 16_400 });
+    expect(firstBoosted).toMatchObject({ outcome: 'won', timeMs: 11_600 });
 
     let faster = 0;
     let baseTotal = 0;

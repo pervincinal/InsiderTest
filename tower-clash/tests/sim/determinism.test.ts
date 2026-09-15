@@ -25,11 +25,14 @@ function scenario(seed: number): GameState {
     [0, { type: 'sendUnits', owner: 'player', from: 'p', to: 'a', ratio: 0.5 }],
     [0, { type: 'sendUnits', owner: 'enemy1', from: 't', to: 'a' }],
     [40, { type: 'sendUnits', owner: 'enemy1', from: 'e', to: 'a', ratio: 0.5 }],
-    [60, { type: 'upgrade', owner: 'player', towerId: 'p' }],
+    [60, { type: 'upgrade', owner: 'player', towerId: 'p' }], // rules v2: ignored
+    [80, { type: 'link', owner: 'player', from: 'p', to: 'a' }],
+    [100, { type: 'link', owner: 'enemy1', from: 'e', to: 'a' }],
     [120, { type: 'booster', owner: 'player', booster: 'overdrive' }],
     [200, { type: 'sendUnits', owner: 'player', from: 'a', to: 'e' }],
     [220, { type: 'cutBridge', owner: 'player', roadId: 'p-t' }],
     [300, { type: 'booster', owner: 'player', booster: 'freeze' }],
+    [340, { type: 'unlink', owner: 'player', from: 'p' }],
   ];
   for (let tick = 0; tick < 600; tick++) {
     for (const [at, cmd] of script) if (at === tick) applyCommand(state, cmd);
@@ -51,7 +54,11 @@ describe('determinism', () => {
     const s = scenario(42);
     expect(s.roads['p-t']!.cut).toBe(true);
     expect(s.roads['a-p']!.mine).toBe(0);
-    expect(s.towers['p']!.level).toBe(2);
+    expect(s.towers['p']!.level).toBe(1); // the `upgrade` command is ignored and p drained through its link
+    expect(s.towers['a']!.owner).toBe('player'); // captured through the p → a stream
+    expect(s.towers['a']!.level).toBe(3); // auto-upgraded twice on reinforcements + generation
+    expect(s.towers['e']!.owner).toBe('player');
+    expect(s.links).toEqual([]); // player unlinked at tick 340; enemy1's link died with its source
     expect(s.boosters).toEqual([]);
   });
 });

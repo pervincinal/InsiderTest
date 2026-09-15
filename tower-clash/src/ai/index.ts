@@ -8,7 +8,15 @@ import { opportunistCommands, rusherCommands, turtleCommands } from './personali
 
 export { referencePlayerCommands } from './referencePlayer';
 export type { RuleTrace } from './referencePlayer';
-export { rusherCommands, turtleCommands, opportunistCommands, OPPORTUNIST_RESERVE } from './personalities';
+export {
+  rusherCommands,
+  turtleCommands,
+  opportunistCommands,
+  OPPORTUNIST_RESERVE,
+  OPPORTUNIST_MAX_LINKS,
+  ENEMY_MAX_LINKS,
+  SUPPLY_FULL_UNITS,
+} from './personalities';
 export {
   isAiTick,
   ownedTowers,
@@ -20,6 +28,14 @@ export {
   incomingSupport,
   effectiveDefenders,
   hopsToOpponent,
+  linkPending,
+  linksTo,
+  freeLinkSlots,
+  hasLink,
+  inflowRate,
+  linkRate,
+  holdReserve,
+  fallsAtMs,
 } from './common';
 export type { Neighbour } from './common';
 

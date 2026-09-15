@@ -23,6 +23,8 @@ export interface TutorialStep {
   onCommand?(cmd: Command, state: GameState): boolean;
   /** Completes as soon as the selection matches. */
   onSelect?(selectedTowerId: string | null, state: GameState): boolean;
+  /** Completes as soon as the sim state satisfies this (checked every frame, e.g. an auto-upgrade). */
+  doneWhen?(state: GameState): boolean;
 }
 
 export class Tutorial {
@@ -48,8 +50,13 @@ export class Tutorial {
     if (step?.onCommand?.(cmd, state)) this.advance();
   }
 
-  /** Call every frame with the current selection. */
+  /** Call every frame with the current selection (also settles the state-driven `doneWhen` steps). */
   onSelect(selectedTowerId: string | null, state: GameState): void {
+    // `doneWhen` is checked on the raw step, before the `showWhen` gate (the two may exclude each other).
+    if (this.steps[this.index]?.doneWhen?.(state)) {
+      this.advance();
+      return;
+    }
     const step = this.current(state);
     if (step?.onSelect?.(selectedTowerId, state)) this.advance();
   }
@@ -59,8 +66,12 @@ export class Tutorial {
   }
 }
 
-const isSend = (cmd: Command, from: string, to: string): boolean =>
-  cmd.type === 'sendUnits' && cmd.owner === 'player' && cmd.from === from && cmd.to === to;
+const isLink = (cmd: Command, from: string, to: string): boolean =>
+  cmd.type === 'link' && cmd.owner === 'player' && cmd.from === from && cmd.to === to;
+const isUnlink = (cmd: Command, from: string, to: string): boolean =>
+  cmd.type === 'unlink' && cmd.owner === 'player' && cmd.from === from && (cmd.to === undefined || cmd.to === to);
+const hasLink = (state: GameState, from: string, to: string): boolean =>
+  state.links.some((l) => l.owner === 'player' && l.from === from && l.to === to);
 
 /** A step whose `text` is translated on every read. */
 function step(key: TranslationKey, rest: Omit<TutorialStep, 'text'>, params?: Record<string, number>): TutorialStep {
@@ -72,22 +83,32 @@ function step(key: TranslationKey, rest: Omit<TutorialStep, 'text'>, params?: Re
   };
 }
 
+/*
+ * Rules v2 (GDD §2.0): level 1 teaches the stream (tap your tower, then a target — it keeps
+ * flowing), level 2 how to stop one (tap the target again), level 3 the auto-upgrade (a tower
+ * that fills to its capacity gains a level; L2 can run two streams).
+ */
 const STEPS_BY_LEVEL: Record<number, () => TutorialStep[]> = {
   1: () => [
     step('tutorial.tapTower', { towerId: 'home', onSelect: (sel) => sel === 'home' }),
-    step('tutorial.tapGrey', { towerId: 'camp', onCommand: (cmd) => isSend(cmd, 'home', 'camp') }),
+    step('tutorial.tapGrey', { towerId: 'camp', onCommand: (cmd) => isLink(cmd, 'home', 'camp') }),
   ],
   2: () => [
-    step('tutorial.tapThenGrey', { towerId: 'mid', onCommand: (cmd) => isSend(cmd, 'home', 'mid') }),
-    step('tutorial.reinforce', {
+    step('tutorial.tapThenGrey', { towerId: 'mid', onCommand: (cmd) => isLink(cmd, 'home', 'mid') }),
+    step('tutorial.stopStream', {
       towerId: 'mid',
-      showWhen: (s) => s.towers['mid']?.owner === 'player',
-      onCommand: (cmd) => isSend(cmd, 'home', 'mid'),
+      showWhen: (s) => hasLink(s, 'home', 'mid'),
+      onCommand: (cmd) => isUnlink(cmd, 'home', 'mid'),
+      // the stream may end on its own (target full): nothing left to teach then
+      doneWhen: (s) => s.towers['mid']?.owner === 'player' && !hasLink(s, 'home', 'mid'),
     }),
   ],
   3: () => [
-    step('tutorial.select', { towerId: 'home', onSelect: (sel) => sel === 'home' }),
-    step('tutorial.upgrade', { towerId: 'home', onCommand: (cmd) => cmd.type === 'upgrade' && cmd.owner === 'player' }, { n: C.UPGRADE_COST[1] ?? 0 }),
+    step(
+      'tutorial.fillToUpgrade',
+      { towerId: 'home', doneWhen: (s) => Object.values(s.towers).some((tw) => tw.owner === 'player' && tw.level >= 2) },
+      { n: C.CAPACITY[1] },
+    ),
   ],
 };
 

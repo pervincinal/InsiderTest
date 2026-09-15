@@ -53,14 +53,15 @@ describe('marching', () => {
 describe('arrival', () => {
   it('friendly arrivals reinforce, capped at capacity', () => {
     const state = createState(makeLevel({ towers: [
-      { id: 'p', x: 360, y: 1000, owner: 'player', units: 28 },
+      { id: 'p', x: 360, y: 1000, owner: 'player', units: 98, level: 3 },
       { id: 'q', x: 360, y: 400, owner: 'player', units: 0 },
     ], roads: [{ a: 'p', b: 'q' }] }), 1);
     spawn(state, { owner: 'player', from: 'q', to: 'p', progress: 0.995 });
     spawn(state, { owner: 'player', from: 'q', to: 'p', progress: 0.995, weight: 5, kind: 'tank' });
     step(state);
     expect(state.units).toEqual([]);
-    expect(state.towers['p']!.units).toBe(30);
+    expect(state.towers['p']!.units).toBe(100);
+    expect(state.towers['p']!.level).toBe(3);
   });
 
   it('hostile arrivals remove weight; equal weight leaves 0 without a capture', () => {

@@ -1,6 +1,6 @@
 /**
  * Settings screen (M3-3 + I18N): sound, colour-blind palette, reduced motion (auto/on/off
- * override), default send ratio, UI language and a two-step reset of the progress; the About card
+ * override), UI language and a two-step reset of the progress; the About card
  * shows the version, the store support id (COPY) and the ads SDK's privacy options (native).
  * Every change persists immediately; BACK returns to the screen that opened it (title, or the
  * paused play screen). Loaded lazily with its drawing (PERF-1, src/ui/lazyScreens.ts).
@@ -10,7 +10,7 @@ import type { SettingsAboutLayout } from '../render/layout';
 import { SETTINGS, settingsAboutLayout } from '../render/layout';
 import type { Rect } from '../render/widgets';
 import { inRect, segmentAt } from '../render/widgets';
-import { LANGUAGE_SEGMENTS, MOTION_SEGMENTS, RATIO_SEGMENTS, drawSettings } from '../render/menusSettings';
+import { LANGUAGE_SEGMENTS, MOTION_SEGMENTS, drawSettings } from '../render/menusSettings';
 import type { PointerPoint } from '../input/pointer';
 import { resetProgress, writeSave } from './save';
 import { applyMotionPref } from './motion';
@@ -95,7 +95,6 @@ export class SettingsScreen implements Screen {
       soundOn: !isMuted(),
       colorBlind: s.colorBlind,
       reducedMotion: s.reducedMotion,
-      sendRatio: s.sendRatio,
       language: currentLanguage(),
       confirming: this.confirming,
       totalStars: total,
@@ -111,7 +110,7 @@ export class SettingsScreen implements Screen {
 
   private rects(): Rect[] {
     if (this.confirming) return [SETTINGS.confirm.yes, SETTINGS.confirm.no];
-    const list = [SETTINGS.back, SETTINGS.sound, SETTINGS.colorBlind, SETTINGS.motion, SETTINGS.sendRatio, SETTINGS.language, SETTINGS.reset];
+    const list = [SETTINGS.back, SETTINGS.sound, SETTINGS.colorBlind, SETTINGS.motion, SETTINGS.language, SETTINGS.reset];
     if (this.about.copy) list.push(this.about.copy);
     if (this.about.privacy) list.push(this.about.privacy);
     return list;
@@ -196,9 +195,6 @@ export class SettingsScreen implements Screen {
         save.settings.reducedMotion = seg.value;
         applyMotionPref(seg.value);
       }
-    } else if (hit === SETTINGS.sendRatio) {
-      const seg = RATIO_SEGMENTS[segmentAt(SETTINGS.sendRatio, RATIO_SEGMENTS.length, p.x, p.y)];
-      if (seg) save.settings.sendRatio = seg.value;
     } else if (hit === SETTINGS.language) {
       const seg = LANGUAGE_SEGMENTS[segmentAt(SETTINGS.language, LANGUAGE_SEGMENTS.length, p.x, p.y)];
       if (seg) this.app.setLanguage(seg.code); // persists through the app

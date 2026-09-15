@@ -4,7 +4,7 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
 /*
- * Smoke: PWA files → title → level select (locks) → play level 1 (tutorial + manual send) →
+ * Smoke: PWA files → title → level select (locks) → play level 1 (tutorial + manual stream) →
  * reference player wins → result (stars, coins) → next level → level select (level 2 unlocked,
  * level 3 locked) → pause menu (speed toggle) → save persisted. Everything is canvas-drawn, so the
  * test taps logical (720×1280) coordinates converted with `window.__towerclash.toClient` and reads
@@ -62,6 +62,8 @@ const readLevel = (file: string): LevelJson => JSON.parse(readFileSync(new URL(f
 
 const SHOTS = fileURLToPath(new URL('./__screenshots__/', import.meta.url));
 const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}smoke-${name}.png`, scale: 'css' });
+/** Look-review shots (rules v2 streams / tutorial), named without the `smoke-` prefix. */
+const lookShot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}${name}.png`, scale: 'css' });
 
 /** Tap the centre of a logical rectangle. */
 async function tapRect(page: Page, r: { x: number; y: number; w: number; h: number }): Promise<void> {
@@ -84,6 +86,11 @@ const screen = (page: Page) => page.evaluate(() => window.__towerclash.getScreen
 const simTime = (page: Page) => page.evaluate(() => window.__towerclash.getState()?.time ?? -1);
 const levelId = (page: Page) => page.evaluate(() => window.__towerclash.getState()?.levelId ?? -1);
 const hint = (page: Page) => page.evaluate(() => window.__towerclash.getTutorialHint());
+const limitHint = (page: Page) => page.evaluate(() => window.__towerclash.getLimitHint());
+/** Active attack streams (rules v2 `state.links`), reduced to what the test asserts on. */
+const links = (page: Page) => page.evaluate(() => (window.__towerclash.getState()?.links ?? []).map((l) => ({ owner: l.owner, from: l.from, to: l.to })));
+/** The player's streams only (the bot runs its own at the same time). */
+const playerLinks = (page: Page) => links(page).then((ls) => ls.filter((l) => l.owner === 'player'));
 const unlocked = (page: Page, ids: number[]) => page.evaluate((list) => list.map((id) => window.__towerclash.isLevelUnlocked(id)), ids);
 const towerUnits = (page: Page, id: string) =>
   page.evaluate((tid) => window.__towerclash.getState()?.towers[tid]?.units ?? -1, id);
@@ -225,29 +232,45 @@ test.describe('Tower Clash smoke', () => {
     expect(t0).toBeGreaterThanOrEqual(0);
     await expect.poll(() => simTime(page)).toBeGreaterThan(t0);
     expect(await hint(page)).toBe('Tap your tower');
+    await page.waitForTimeout(300); // let the ring / arrow pulse once
+    await lookShot(page, 'look3-tutorial');
 
-    // Manual send: tap the player tower ("home") then the neutral tower ("camp") — level 1's lesson.
-    // Each tutorial hint must disappear on its matching action.
+    // Rules v2 stream: tap the player tower ("home") then the neutral tower ("camp") — level 1's
+    // lesson. Each tutorial hint must disappear on its matching action; the tap creates one link
+    // and units start marching.
     const level1 = readLevel(LEVEL_FILES[0]!);
     expect(level1.id).toBe(1);
     const home = level1.towers.find((t) => t.id === 'home')!;
     const camp = level1.towers.find((t) => t.id === 'camp')!;
+    const foe = level1.towers.find((t) => t.id === 'foe')!;
     expect(home.y).toBeGreaterThan(HUD.mapTop);
     expect(home.y).toBeLessThan(HUD.mapBottom);
     const garrisonBefore = await towerUnits(page, 'home');
     expect(garrisonBefore).toBeGreaterThan(0);
+    expect(await playerLinks(page)).toEqual([]);
     await tapAt(page, home.x, home.y);
-    await expect.poll(() => hint(page), { message: 'first hint should clear once home is selected' }).toBe('Now tap the grey tower');
+    await expect.poll(() => hint(page), { message: 'first hint should clear once home is selected' }).toBe('Now tap the grey tower — the stream keeps flowing');
     await tapAt(page, camp.x, camp.y);
-    await expect.poll(() => hint(page), { message: 'second hint should clear after the send' }).toBeNull();
-    await expect.poll(() => towerUnits(page, 'home'), { message: 'home garrison should drop after send' }).toBeLessThan(
-      garrisonBefore,
-    );
+    await expect.poll(() => hint(page), { message: 'second hint should clear after the link' }).toBeNull();
+    await expect.poll(() => playerLinks(page), { message: 'the tap should create exactly one player stream' }).toEqual([{ owner: 'player', from: 'home', to: 'camp' }]);
+    await expect.poll(() => towerUnits(page, 'home'), { message: 'home garrison should drain through the stream' }).toBeLessThan(garrisonBefore);
     await expect
       .poll(() => page.evaluate(() => window.__towerclash.getState()?.units.length ?? 0), {
         message: 'units should be marching on the road',
       })
       .toBeGreaterThan(0);
+
+    // (c1) link limit: home is L1 (one stream), so a second target ("foe", road-connected) is refused
+    //      with the hint bubble and no second link.
+    expect(await limitHint(page)).toBeNull();
+    await tapAt(page, foe.x, foe.y);
+    await expect.poll(() => limitHint(page), { message: 'a second target at L1 should raise the link-limit hint' }).toBe(await text(page, 'hint.linkLimit').then((s) => s.replaceAll('{n}', '2')));
+    expect(await playerLinks(page)).toEqual([{ owner: 'player', from: 'home', to: 'camp' }]);
+    await expect.poll(() => limitHint(page), { message: 'the hint fades on its own' }).toBeNull();
+
+    // (c1b) tapping the target again stops the stream (home stays selected).
+    await tapAt(page, camp.x, camp.y);
+    await expect.poll(() => playerLinks(page), { message: 'the second tap on the target should remove the stream' }).toEqual([]);
 
     // (c2) booster bar: OVERDRIVE costs 30 coins, lands in state.boosters and persists the balance;
     //      a second tap while it runs is ignored (one active per type).
@@ -268,15 +291,30 @@ test.describe('Tower Clash smoke', () => {
     await expect.poll(async () => (await readSave(page))?.settings.sound).toBe(true);
     const coinsBeforeWin = SEEDED_COINS - OVERDRIVE_COST;
 
-    // (d) reference player at ×10 wins within 60 s wall-clock. Restart the level first so the bot plays
-    // from the authored opening state: the manual send above depends on wall-clock timing (a slow CI
-    // runner can let the rusher take the emptied home tower before autoplay starts).
+    // (d) reference player wins within 60 s wall-clock. Restart the level first so the bot plays from
+    // the authored opening state: the manual stream above depends on wall-clock timing (a slow CI
+    // runner can let the rusher take the drained home tower before autoplay starts). The first
+    // seconds run at ×1 for the look shot (a player stream and an enemy stream on screen), then ×10.
     await page.evaluate(() => {
       window.__towerclash.loadLevel(1, 1); // fixed seed: the bot's win on seed 1 is verified by `npm run playtest`
-      window.__towerclash.setSpeed(10);
+      window.__towerclash.setSpeed(1);
       window.__towerclash.autoplay();
     });
     await expect.poll(() => levelId(page)).toBe(1);
+    const bothStreams = await page
+      .waitForFunction(
+        () => {
+          const ls = window.__towerclash.getState()?.links ?? [];
+          return ls.some((l) => l.owner === 'player') && ls.some((l) => l.owner !== 'player');
+        },
+        null,
+        { timeout: 20_000 },
+      )
+      .then(() => true)
+      .catch(() => false);
+    test.info().annotations.push({ type: 'look3-play-links', description: bothStreams ? 'player + enemy streams on screen' : 'no player+enemy stream pair within 20 s' });
+    await lookShot(page, 'look3-play-links');
+    await page.evaluate(() => window.__towerclash.setSpeed(10));
     await expect.poll(() => screen(page), { timeout: 60_000, intervals: [250] }).toBe('result');
     const finalState = await page.evaluate(() => window.__towerclash.getState());
     expect(finalState).not.toBeNull();

@@ -1,4 +1,4 @@
-import type { GameState, Owner, PlayerModifiers, Road, SimEvent, Tower, Unit } from './types';
+import type { GameState, Link, Owner, PlayerModifiers, Road, SimEvent, Tower, Unit, UnitKind, UnlinkReason } from './types';
 import { DEFAULT_MODIFIERS } from './types';
 import { C } from './constants';
 import { getOutcome } from './outcome';
@@ -11,17 +11,49 @@ export function modifiersFor(owner: Owner, state?: Pick<GameState, 'modifiers'>)
   return owner === 'player' && state ? state.modifiers : DEFAULT_MODIFIERS;
 }
 
+/** Rules v2: every kind uses the 25 / 50 / 100 ladder; a fortress holds ×1.5 (37 / 75). */
 function baseCapacityOf(tower: Tower): number {
-  switch (tower.kind) {
-    case 'barracks':
-      return C.CAPACITY[tower.level];
-    case 'fortress':
-      return Math.floor(C.CAPACITY[tower.level] * C.FORTRESS_CAPACITY_MUL);
-    case 'artillery':
-      return C.ARTILLERY_CAPACITY;
-    case 'tankFactory':
-      return C.TANK_FACTORY_CAPACITY;
+  const base = C.CAPACITY[tower.level];
+  return tower.kind === 'fortress' ? Math.floor(base * C.FORTRESS_CAPACITY_MUL) : base;
+}
+
+/** Highest level a tower of this kind can reach (fortress stops at L2). */
+export function maxLevelOf(tower: Pick<Tower, 'kind'>): number {
+  return tower.kind === 'fortress' ? C.FORTRESS_MAX_LEVEL : C.MAX_LEVEL;
+}
+
+/** Maximum simultaneous outgoing links of a tower (GDD §2.0: L1 = 1, L2 = 2, L3 = 3). */
+export function maxLinksOf(tower: Pick<Tower, 'level'>): number {
+  return C.LINKS_PER_LEVEL[tower.level];
+}
+
+/** Active links leaving `towerId`, in creation order. */
+export function linksFrom(state: Pick<GameState, 'links'>, towerId: string): Link[] {
+  return state.links.filter((l) => l.from === towerId);
+}
+
+/** True when the tower currently drains through at least one link. */
+export function isLinked(state: Pick<GameState, 'links'>, towerId: string): boolean {
+  return state.links.some((l) => l.from === towerId);
+}
+
+/**
+ * Rules v2 auto-upgrade: an owned L1/L2 tower whose garrison has reached its (modified) capacity
+ * gains a level at once, keeping its garrison. A linked tower never upgrades (its garrison drains).
+ * At the kind's max level the garrison is clamped at capacity. Returns whether a level was gained.
+ */
+export function tryAutoUpgrade(state: GameState, tower: Tower): boolean {
+  if (!C.AUTO_UPGRADE || tower.owner === 'neutral') return false;
+  const cap = capacityOf(tower, state);
+  if (tower.units < cap) return false;
+  if (tower.level >= maxLevelOf(tower)) {
+    tower.units = Math.min(tower.units, cap);
+    return false;
   }
+  if (isLinked(state, tower.id)) return false;
+  tower.level = (tower.level + 1) as 1 | 2 | 3;
+  state.events.push({ type: 'upgrade', towerId: tower.id, level: tower.level });
+  return true;
 }
 
 /**
@@ -90,6 +122,7 @@ function generation(state: GameState, dt: number): void {
 
     const cap = capacityOf(tower, state);
     if (tower.units >= cap) {
+      tryAutoUpgrade(state, tower);
       tower.genAccMs = 0;
       continue;
     }
@@ -117,30 +150,98 @@ function generation(state: GameState, dt: number): void {
       tower.genAccMs -= interval;
       tower.units = Math.min(cap, tower.units + weight);
     }
-    if (tower.units >= cap) tower.genAccMs = 0;
+    if (tower.units >= cap) {
+      // Reaching capacity at L1/L2 upgrades at once (garrison kept); at max level production stops.
+      if (!tryAutoUpgrade(state, tower)) tower.genAccMs = 0;
+    }
   }
 }
 
+/** Put a fresh unit on `roadId` leaving `from` toward `to`. Speed is fixed at spawn (player march bonus). */
+function spawnUnit(state: GameState, owner: Owner, kind: UnitKind, from: string, to: string, roadId: string): Unit {
+  const tank = kind === 'tank';
+  const speedMul = modifiersFor(owner, state).unitSpeedMul;
+  const unit: Unit = {
+    id: state.nextUnitId++,
+    owner,
+    kind,
+    weight: tank ? C.TANK_WEIGHT : C.INFANTRY_WEIGHT,
+    roadId,
+    from,
+    to,
+    progress: 0,
+    speed: (tank ? C.UNIT_SPEED * C.TANK_SPEED_MUL : C.UNIT_SPEED) * speedMul,
+  };
+  state.units.push(unit);
+  return unit;
+}
+
+/** Remove `link` from the state and emit the `unlinked` event. */
+export function removeLink(state: GameState, link: Link, reason: UnlinkReason): void {
+  const i = state.links.indexOf(link);
+  if (i < 0) return;
+  state.links.splice(i, 1);
+  state.events.push({ type: 'unlinked', owner: link.owner, from: link.from, to: link.to, reason });
+}
+
+/**
+ * Rules v2 auto-unlink: a link ends when its source changed owner (`sourceLost`), its road is cut or
+ * gone (`roadCut`), or its target is the link owner's and sits at capacity (`targetFull`).
+ */
+function pruneLinks(state: GameState): void {
+  for (const link of [...state.links]) {
+    const from = state.towers[link.from];
+    const to = state.towers[link.to];
+    const road = state.roads[link.roadId];
+    if (!from || !to || from.owner !== link.owner) removeLink(state, link, 'sourceLost');
+    else if (!road || road.cut) removeLink(state, link, 'roadCut');
+    else if (to.owner === link.owner && to.units >= capacityOf(to, state)) removeLink(state, link, 'targetFull');
+  }
+}
+
+/**
+ * Rules v2 draining: every tower with ≥ 1 link sends one unit every `LEAVE_INTERVAL_MS` into its
+ * links round-robin (infantry; a tank factory sends a whole tank while it holds ≥ TANK_WEIGHT).
+ * The timer keeps running while the garrison is empty (clamped to one interval) so a freshly
+ * produced or arrived unit leaves on the same tick — a linked tower never grows.
+ */
+function drain(state: GameState, dt: number): void {
+  for (const id in state.towers) {
+    const tower = state.towers[id]!;
+    const links = linksFrom(state, tower.id);
+    if (links.length === 0) {
+      tower.drainAccMs = 0;
+      continue;
+    }
+    tower.drainAccMs += dt;
+    while (tower.drainAccMs >= C.LEAVE_INTERVAL_MS) {
+      let kind: UnitKind = 'infantry';
+      let weight: number = C.INFANTRY_WEIGHT;
+      if (tower.kind === 'tankFactory' && tower.units >= C.TANK_WEIGHT) {
+        kind = 'tank';
+        weight = C.TANK_WEIGHT;
+      }
+      if (tower.units < weight) {
+        tower.drainAccMs = C.LEAVE_INTERVAL_MS; // stay armed: the next unit leaves as soon as it exists
+        break;
+      }
+      tower.drainAccMs -= C.LEAVE_INTERVAL_MS;
+      const link = links[tower.linkCursor % links.length]!;
+      tower.linkCursor = (tower.linkCursor + 1) % links.length;
+      tower.units -= weight;
+      spawnUnit(state, tower.owner, kind, link.from, link.to, link.roadId);
+    }
+  }
+}
+
+/** @deprecated legacy `sendUnits` queues (one-shot sends); links are the rules-v2 path. */
 function releaseQueues(state: GameState): void {
   const keep = [];
   for (const q of state.queues) {
     const road = state.roads[q.roadId];
     if (!road || road.cut) continue; // road destroyed under the queue: units are lost
     if (q.remaining > 0 && state.time >= q.nextLeaveMs) {
-      const tank = q.unitKind === 'tank';
-      // Speed is fixed at spawn (player march bonus); units already on a road never change speed.
-      const speedMul = modifiersFor(q.owner, state).unitSpeedMul;
-      state.units.push({
-        id: state.nextUnitId++,
-        owner: q.owner,
-        kind: q.unitKind,
-        weight: tank ? C.TANK_WEIGHT : C.INFANTRY_WEIGHT,
-        roadId: q.roadId,
-        from: q.from,
-        to: q.to,
-        progress: 0,
-        speed: (tank ? C.UNIT_SPEED * C.TANK_SPEED_MUL : C.UNIT_SPEED) * speedMul,
-      });
+      spawnUnit(state, q.owner, q.unitKind, q.from, q.to, q.roadId);
       q.remaining -= 1;
       q.nextLeaveMs += C.LEAVE_INTERVAL_MS;
     }
@@ -266,6 +367,7 @@ function artillery(state: GameState, dt: number): void {
 function arrive(state: GameState, tower: Tower, unit: Unit): void {
   if (tower.owner === unit.owner) {
     tower.units = Math.min(capacityOf(tower, state), tower.units + unit.weight);
+    tryAutoUpgrade(state, tower); // reinforcements count toward the auto-upgrade too
     return;
   }
   let damage: number;
@@ -287,7 +389,11 @@ function arrive(state: GameState, tower: Tower, unit: Unit): void {
     tower.genAccMs = 0;
     tower.artilleryCooldownMs = 0;
     tower.defenceAcc = 0;
+    tower.drainAccMs = 0;
+    tower.linkCursor = 0;
     state.events.push({ type: 'capture', towerId: tower.id, by: unit.owner, from });
+    // The old owner's streams out of this tower die with it (the new owner may re-link).
+    for (const link of linksFrom(state, tower.id)) removeLink(state, link, 'sourceLost');
   } else {
     tower.units -= damage;
   }
@@ -312,9 +418,12 @@ export function step(state: GameState, dtMs: number = C.TICK_MS): void {
 
   // 1) boosters expire
   state.boosters = state.boosters.filter((b) => b.untilMs >= state.time);
-  // 2) generation
+  // 2) generation (+ auto-upgrade)
   generation(state, dtMs);
-  // 3) queues release units
+  // 3) links: auto-unlink, then drain one unit per LEAVE_INTERVAL_MS round-robin
+  pruneLinks(state);
+  drain(state, dtMs);
+  // 3b) legacy queues release units
   releaseQueues(state);
   // 4) movement
   const prev = move(state, dtMs);
@@ -324,8 +433,10 @@ export function step(state: GameState, dtMs: number = C.TICK_MS): void {
   clashes(state, prev);
   // 7) artillery
   artillery(state, dtMs);
-  // 8) arrivals
+  // 8) arrivals (+ auto-upgrade on reinforcement, links of a captured source removed)
   arrivals(state);
+  // 8b) a target filled by this tick's arrivals releases its supply lines now
+  pruneLinks(state);
   // 9) outcome, emitted once
   if (outcomeBefore === 'playing') {
     const now = getOutcome(state);

@@ -29,13 +29,13 @@ export const tr: Dictionary = {
   'levels.title': 'BÖLÜMLER',
   'levels.commander': 'KOMUTAN',
   'levels.noUpgrades': 'Henüz yükseltme yok · eğitmek için dokun',
-
-  'hud.send': 'GÖNDER',
   'hud.level': 'BÖLÜM {n}',
   'hud.free': 'BEDAVA',
   'hud.lesson': 'DERS',
   'hud.airstrikeHint': 'HAVA SALDIRISI · düşman kulesine dokun · iptal için başka yere dokun',
-  'hud.selectHint': 'Göndermek için bağlı kuleye dokun · yükseltmek için tekrar dokun',
+  'hud.selectHint': 'Akış başlatmak için bağlı kuleye dokun · durdurmak için tekrar dokun',
+  'hud.streams': 'AKIŞLAR',
+  'hint.linkLimit': '{n} akış için L{n} gerekir',
 
   'pause.title': 'DURAKLATILDI',
   'pause.subtitle': 'Bölüm {n} · {time}',
@@ -70,8 +70,6 @@ export const tr: Dictionary = {
   'settings.motion': 'Azaltılmış hareket',
   'settings.motionSub': 'Otomatik sistem ayarını izler',
   'settings.motionAuto': 'OTO',
-  'settings.sendRatio': 'Varsayılan gönderim',
-  'settings.sendRatioSub': 'Dokunuş başına garnizon payı',
   'settings.language': 'Dil',
   'settings.languageSub': 'Menüler, ipuçları ve mesajlar',
   'settings.summary': '{stars} yıldız  ·  {coins} altın',
@@ -170,9 +168,8 @@ export const tr: Dictionary = {
   'play.freeCharge': 'Ücretsiz {kind} hakkı eklendi',
 
   'tutorial.tapTower': 'Kulene dokun',
-  'tutorial.tapGrey': 'Şimdi gri kuleye dokun',
+  'tutorial.tapGrey': 'Şimdi gri kuleye dokun — akış sürekli devam eder',
   'tutorial.tapThenGrey': 'Kulene, sonra gri kuleye dokun',
-  'tutorial.reinforce': 'Takviye et: evden ortaya daha fazla gönder',
-  'tutorial.select': 'Seçmek için kulene dokun',
-  'tutorial.upgrade': 'Yükseltmek için seçili kulene tekrar dokun (bedeli {n})',
+  'tutorial.stopStream': 'Akışı durdurmak için hedefe tekrar dokun',
+  'tutorial.fillToUpgrade': 'Kule {n}\'e dolsun ki yükselsin — L2 2 hedefe saldırabilir',
 };

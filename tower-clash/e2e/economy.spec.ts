@@ -373,7 +373,9 @@ test.describe('economy', () => {
     expect(cont.freeze).toBe(true);
     expect((await save(page)).adCounters.rewardedByPlacement['rv_continue']).toBe(1);
     expect((await page.evaluate(() => window.__towerclash.economy.getAdStats())).fakeRewarded).toBe(1);
-    // the reinforced attempt plays on (auto-lose is still on) and offers no second continue
+    // the reinforced attempt plays on (auto-lose is still on) and offers no second continue. Under
+    // rules v2 the free Freeze can let the trickle capture the drained enemy towers, so the second
+    // result may be a win; a second defeat must not offer CONTINUE again and keeps NEXT disabled.
     await page.evaluate(() => window.__towerclash.setSpeed(20));
     await expect.poll(() => screen(page), { timeout: 60_000, intervals: [250] }).toBe('result');
     expect((await page.evaluate(() => window.__towerclash.economy.getClock()))?.continued).toBe(true);
@@ -381,12 +383,12 @@ test.describe('economy', () => {
       await tapRect(page, RESULT.continueAd); // lands on nothing
       await page.waitForTimeout(300);
       expect(await screen(page)).toBe('result');
+      // NEXT is disabled on a defeat: a tap on it does nothing
+      await tapRect(page, RESULT.next);
+      await page.waitForTimeout(200);
+      expect(await screen(page)).toBe('result');
     }
     expect((await save(page)).adCounters.rewardedByPlacement['rv_continue']).toBe(1);
-    // NEXT is disabled on a defeat: a tap on it does nothing
-    await tapRect(page, RESULT.next);
-    await page.waitForTimeout(200);
-    expect(await screen(page)).toBe('result');
     expect(errors).toEqual([]);
   });
 });

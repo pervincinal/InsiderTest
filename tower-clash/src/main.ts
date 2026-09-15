@@ -46,6 +46,8 @@ export interface TowerClashDebug {
   toClient(x: number, y: number): { x: number; y: number };
   /** Text of the tutorial hint on screen, or null. */
   getTutorialHint(): string | null;
+  /** Text of the link-limit refusal bubble while it is on screen (rules v2), or null. */
+  getLimitHint(): string | null;
   /** Current UI language code and a translation lookup (I18N e2e). */
   getLanguage(): string;
   getText(key: string): string;
@@ -360,6 +362,7 @@ class TowerClashApp implements App {
       getSpeed: () => this.play?.loop.speed ?? this.speed,
       toClient: (x, y) => toClient(this.view, x, y),
       getTutorialHint: () => (this.current === this.play ? (this.play?.tutorialStep()?.text ?? null) : null),
+      getLimitHint: () => (this.current === this.play && this.play?.gestures.limitHint ? this.play.gestures.limitHintText : null),
       getLanguage: () => currentLanguage(),
       getText: (key) => t(key as TranslationKey),
       getResult: () => {

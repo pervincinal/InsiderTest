@@ -47,10 +47,12 @@ describe('recordWin coins (GDD §2.6: 10 per star, first clear only)', () => {
   });
 
   it('normalizeSave clamps hostile input', () => {
-    const s = normalizeSave({ stars: { '1': 9, '2': -1, '3': 'x' }, coins: -5, settings: { sendRatio: 0.3 } });
+    const s = normalizeSave({ stars: { '1': 9, '2': -1, '3': 'x' }, coins: -5, settings: { sendRatio: 0.3, sound: 'yes' } });
     expect(s.stars).toEqual({ '1': 3, '2': 0 });
     expect(s.gold).toBe(0);
-    expect(s.settings.sendRatio).toBe(1);
+    expect(s.settings.sound).toBe(true);
+    // rules v2 dropped the send ratio: an old field is tolerated and simply not carried over
+    expect('sendRatio' in s.settings).toBe(false);
   });
 });
 
@@ -80,7 +82,7 @@ describe('save schema v3 (M3-3 + economy Phase A)', () => {
     expect(s.stars).toEqual({ '1': 3, '2': 1 });
     expect(s.gold).toBe(40);
     expect(s.crystals).toBe(0);
-    expect(s.settings).toEqual({ sendRatio: 0.5, colorBlind: true, sound: false, reducedMotion: 'auto' });
+    expect(s.settings).toEqual({ colorBlind: true, sound: false, reducedMotion: 'auto' }); // v1 sendRatio dropped (rules v2)
     const written = JSON.parse(store.dump()[SAVE_KEY]!) as { version: number; gold: number };
     expect(written.version).toBe(3);
     expect(written.gold).toBe(40);

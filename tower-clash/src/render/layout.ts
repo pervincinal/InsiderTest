@@ -11,8 +11,8 @@ export const HUD = Object.freeze({
   mute: { x: 560, y: 18, w: 62, h: 60 } as Rect,
   pause: { x: 636, y: 18, w: 66, h: 60 } as Rect,
   bottomBar: { x: 0, y: 1180, w: 720, h: 100 } as Rect,
-  /** Segmented SEND toggle: left half = 100 %, right half = 50 %. */
-  ratio: { x: 18, y: 1196, w: 200, h: 64 } as Rect,
+  /** Active-streams pill (rules v2, replaces the SEND toggle): "STREAMS ⇢ n" for the player's links. */
+  streams: { x: 18, y: 1196, w: 200, h: 64 } as Rect,
   /** Coin balance pill, right of the booster bar. */
   coins: { x: 474, y: 1204, w: 98, h: 46 } as Rect,
   /** Gold + crystal wallet drawn over the booster bar once the level is over (tap → shop). */
@@ -24,7 +24,7 @@ export const HUD = Object.freeze({
 });
 
 /**
- * Booster bar (M3-1): three round clay buttons in the bottom band between SEND and the coin pill.
+ * Booster bar (M3-1): three round clay buttons in the bottom band between the streams pill and the coin pill.
  * Each hit rect is the disc (top-aligned, `disc` px) plus the cost chip underneath it.
  */
 export const BOOSTERS = Object.freeze({
@@ -96,8 +96,11 @@ export const SETTINGS = Object.freeze({
   sound: { x: 470, y: 216, w: 160, h: 56 } as Rect,
   colorBlind: { x: 470, y: 312, w: 160, h: 56 } as Rect,
   motion: { x: 372, y: 408, w: 258, h: 56 } as Rect,
-  sendRatio: { x: 420, y: 504, w: 210, h: 56 } as Rect,
-  /** Language row: label line at `languageLabelY`, then a full-width picker (one segment per language, I18N). */
+  /**
+   * Language row: label line at `languageLabelY`, then a full-width picker (one segment per language,
+   * I18N). The row the rules-v2 removal of the send ratio freed (y ≈ 504) is left blank on purpose so
+   * the picker / reset rects (mirrored by the e2e specs) keep their positions.
+   */
   languageLabelY: 600,
   language: { x: 86, y: 664, w: 548, h: 56 } as Rect,
   reset: { x: 160, y: 800, w: 400, h: 72 } as Rect,

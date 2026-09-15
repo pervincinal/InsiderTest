@@ -195,10 +195,10 @@ test.describe('Tower Clash in an Android WebView', () => {
     const garrisonBefore = await towerUnits(page, 'home');
     expect(garrisonBefore).toBeGreaterThan(0);
     await touchAt(page, home.x, home.y);
-    await expect.poll(() => hint(page), { message: 'touching the home tower selects it' }).toBe('Now tap the grey tower');
+    await expect.poll(() => hint(page), { message: 'touching the home tower selects it' }).toBe('Now tap the grey tower — the stream keeps flowing');
     await touchAt(page, camp.x, camp.y);
-    await expect.poll(() => hint(page), { message: 'touching the target sends' }).toBeNull();
-    await expect.poll(() => towerUnits(page, 'home'), { message: 'home garrison drops after the send' }).toBeLessThan(garrisonBefore);
+    await expect.poll(() => hint(page), { message: 'touching the target starts the stream' }).toBeNull();
+    await expect.poll(() => towerUnits(page, 'home'), { message: 'home garrison drains into the stream' }).toBeLessThan(garrisonBefore);
     await expect
       .poll(() => page.evaluate(() => window.__towerclash.getState()?.units.length ?? 0), { message: 'units marching' })
       .toBeGreaterThan(0);

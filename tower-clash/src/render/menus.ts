@@ -115,7 +115,7 @@ export function beginFrame(view: View, pal: Palette, letterbox: string = pal.let
 
 function drawDemoWorld(ctx: CanvasRenderingContext2D, pal: Palette, nowMs: number, withBadges: boolean): void {
   const anim = motion();
-  for (const t of DEMO_TOWERS) drawTowerShadow(ctx, pal, t.x, t.y, t.kind);
+  for (const t of DEMO_TOWERS) drawTowerShadow(ctx, pal, t.x, t.y, t.kind, t.level);
   const t0 = anim ? nowMs / 1000 : 0;
   for (const col of DEMO_COLUMNS) {
     const road = DEMO_ROADS[col.road]!;
@@ -128,7 +128,7 @@ function drawDemoWorld(ctx: CanvasRenderingContext2D, pal: Palette, nowMs: numbe
     }
   }
   for (const t of DEMO_TOWERS) drawTowerSprite(ctx, pal, t, { nowMs, motion: anim });
-  if (withBadges) for (const t of DEMO_TOWERS) drawBadge(ctx, pal, t.x, t.y + badgeY(t.kind), String(t.units));
+  if (withBadges) for (const t of DEMO_TOWERS) drawBadge(ctx, pal, t.x, t.y + badgeY(t.kind, t.level), String(t.units));
 }
 
 /** Gradient water with drifting sparkles (menus background; `scroll` parallaxes the sparkles). */

@@ -58,6 +58,8 @@ export interface Tower {
   genAccMs: number; // accumulated ms toward next produced unit
   artilleryCooldownMs: number;
   defenceAcc: number; // fortress only: fractional hostile damage carried between arrivals
+  linkCursor: number; // round-robin index into this tower's outgoing links (rules v2 draining)
+  drainAccMs: number; // accumulated ms toward the next unit leaving through a link
 }
 
 export interface Road {
@@ -84,6 +86,21 @@ export interface Unit {
   speed: number; // px per second
 }
 
+/**
+ * Rules v2 (GDD §2.0): a persistent attack stream from `from` to the road-connected `to`. While a
+ * tower has ≥ 1 link it drains one unit every `LEAVE_INTERVAL_MS` into its links round-robin.
+ */
+export interface Link {
+  owner: Owner; // owner of `from` when the link was created; the link dies when `from` changes hands
+  from: string; // tower id
+  to: string; // tower id
+  roadId: string;
+  createdMs: number; // sim time of the `link` command
+}
+
+export type UnlinkReason = 'manual' | 'sourceLost' | 'roadCut' | 'targetFull';
+
+/** @deprecated Legacy one-shot send (`sendUnits`), kept during the transition to links. */
 export interface SendQueue {
   owner: Owner;
   from: string;
@@ -129,7 +146,8 @@ export interface GameState {
   towers: Record<string, Tower>;
   roads: Record<string, Road>;
   units: Unit[];
-  queues: SendQueue[];
+  links: Link[]; // active attack streams (rules v2)
+  queues: SendQueue[]; // legacy `sendUnits` queues
   boosters: Booster[];
   enemies: EnemyDef[];
   nextUnitId: number;
@@ -139,7 +157,9 @@ export interface GameState {
 
 export type SimEvent =
   | { type: 'capture'; towerId: string; by: Owner; from: Owner }
-  | { type: 'upgrade'; towerId: string; level: number }
+  | { type: 'upgrade'; towerId: string; level: number } // auto-upgrade (rules v2)
+  | { type: 'linked'; owner: Owner; from: string; to: string }
+  | { type: 'unlinked'; owner: Owner; from: string; to: string; reason: UnlinkReason }
   | { type: 'unitDied'; x: number; y: number; owner: Owner; cause: 'clash' | 'artillery' | 'mine' | 'barrier' | 'bridge' }
   | { type: 'bridgeCut'; roadId: string }
   | { type: 'won'; timeMs: number }
@@ -148,7 +168,11 @@ export type SimEvent =
 /* ---------- Commands (only way to act on the sim) ---------- */
 
 export type Command =
+  | { type: 'link'; owner: Owner; from: string; to: string } // rules v2: start an attack stream
+  | { type: 'unlink'; owner: Owner; from: string; to?: string } // remove one (or all) links of `from`
+  /** @deprecated legacy one-shot send; prefer `link`. */
   | { type: 'sendUnits'; owner: Owner; from: string; to: string; ratio?: number } // ratio default 1
+  /** @deprecated rules v2: upgrades are automatic; validated and ignored (kept for save/replay compatibility). */
   | { type: 'upgrade'; owner: Owner; towerId: string }
   | { type: 'cutBridge'; owner: Owner; roadId: string }
   | { type: 'booster'; owner: Owner; booster: 'overdrive' | 'freeze' | 'airstrike'; towerId?: string };

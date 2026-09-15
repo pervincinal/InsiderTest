@@ -29,13 +29,13 @@ export const ru: Dictionary = {
   'levels.title': 'УРОВНИ',
   'levels.commander': 'КОМАНДИР',
   'levels.noUpgrades': 'Улучшений пока нет · нажми, чтобы обучить',
-
-  'hud.send': 'ОТПР.',
   'hud.level': 'УРОВЕНЬ {n}',
   'hud.free': 'БЕСПЛ.',
   'hud.lesson': 'УРОК',
   'hud.airstrikeHint': 'АВИАУДАР · нажми на башню врага · в другом месте — отмена',
-  'hud.selectHint': 'Нажми на соседнюю башню, чтобы отправить · ещё раз — улучшить',
+  'hud.selectHint': 'Нажми на соседнюю башню, чтобы начать поток · ещё раз — остановить',
+  'hud.streams': 'ПОТОКИ',
+  'hint.linkLimit': 'Для {n} потоков нужен L{n}',
 
   'pause.title': 'ПАУЗА',
   'pause.subtitle': 'Уровень {n} · {time}',
@@ -70,8 +70,6 @@ export const ru: Dictionary = {
   'settings.motion': 'Меньше анимации',
   'settings.motionSub': 'Авто — как в системе',
   'settings.motionAuto': 'АВТО',
-  'settings.sendRatio': 'Отправка',
-  'settings.sendRatioSub': 'Доля гарнизона за нажатие',
   'settings.language': 'Язык',
   'settings.languageSub': 'Меню, подсказки и сообщения',
   'settings.summary': '{stars} звёзд  ·  {coins} золота',
@@ -170,9 +168,8 @@ export const ru: Dictionary = {
   'play.freeCharge': 'Добавлен бесплатный заряд: {kind}',
 
   'tutorial.tapTower': 'Нажми на свою башню',
-  'tutorial.tapGrey': 'Теперь нажми на серую башню',
+  'tutorial.tapGrey': 'Теперь нажми на серую башню — поток идёт непрерывно',
   'tutorial.tapThenGrey': 'Нажми на свою башню, затем на серую',
-  'tutorial.reinforce': 'Подкрепи: отправь ещё из дома в центр',
-  'tutorial.select': 'Нажми на свою башню, чтобы выбрать её',
-  'tutorial.upgrade': 'Нажми на выбранную башню ещё раз, чтобы улучшить (цена {n})',
+  'tutorial.stopStream': 'Нажми на цель ещё раз, чтобы остановить поток',
+  'tutorial.fillToUpgrade': 'Дай башне наполниться до {n} для улучшения — L2 атакует 2 цели',
 };

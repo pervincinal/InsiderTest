@@ -1,4 +1,4 @@
-import type { Command, GameState, LevelDef, SimEvent } from '../sim/types';
+import type { Command, GameState, LevelDef, SimEvent, Tower } from '../sim/types';
 import { Rng } from '../sim/rng';
 import { C } from '../sim/constants';
 import { SnapshotRing, applyContinue } from '../sim/snapshot';
@@ -117,10 +117,10 @@ export class PlayScreen implements Screen {
     this.tutorial = tutorialFor(level.id, app.save.stars[String(level.id)] ?? 0);
     this.gestures = new PlayGestures({
       getState: () => (this.loop.finished ? null : this.loop.state),
-      getSendRatio: () => this.app.save.settings.sendRatio,
+      limitHintText: (n) => t('hint.linkLimit', { n }),
       onCommand: (cmd) => {
         this.tutorial?.onCommand(cmd, this.state);
-        onPlayerCommand(cmd, this.state); // `send` has no sim event, so the tick is keyed off the command
+        onPlayerCommand(cmd, this.state); // legacy `sendUnits` feedback; `link` / `unlink` are keyed off their sim events
         this.notePlayerCommand(cmd);
         this.loop.enqueue(cmd);
       },
@@ -208,24 +208,39 @@ export class PlayScreen implements Screen {
   }
 
   /**
-   * Debug helper: every player tower trickles two units per AI tick into the strongest connected
-   * enemy tower (else any non-player tower). Units die on arrival without capturing, the garrison
-   * drains faster than it grows, and the enemy walks into the empty tower.
+   * Debug helper (e2e "auto lose"): every player tower trickles two units per AI tick towards the
+   * enemy — into the strongest connected enemy tower when there is one, else through a player
+   * neighbour towards the front — so garrisons never grow and the enemy walks into empty towers.
+   * Uses the legacy one-shot `sendUnits` on purpose: a rules-v2 link would drain the whole
+   * garrison in seconds and the continue tests need a defeat that comes after a full rewind
+   * window.
    */
   private suicideCommands(state: GameState): Command[] {
     const cmds: Command[] = [];
+    const neighbours = (id: string): Tower[] => {
+      const out: Tower[] = [];
+      for (const r of Object.values(state.roads)) {
+        if (r.cut) continue;
+        const otherId = r.a === id ? r.b : r.b === id ? r.a : null;
+        const other = otherId ? state.towers[otherId] : undefined;
+        if (other) out.push(other);
+      }
+      return out;
+    };
+    const hostileScore = (other: Tower): number => (other.owner === 'neutral' ? 0 : 1000) + other.units;
     for (const t of Object.values(state.towers)) {
       if (t.owner !== 'player' || t.units <= 0) continue;
       let best: { to: string; score: number } | null = null;
-      for (const r of Object.values(state.roads)) {
-        if (r.cut) continue;
-        const otherId = r.a === t.id ? r.b : r.b === t.id ? r.a : null;
-        const other = otherId ? state.towers[otherId] : undefined;
-        if (!other || other.owner === 'player') continue;
-        const score = (other.owner === 'neutral' ? 0 : 1000) + other.units;
+      for (const other of neighbours(t.id)) {
+        // an enemy neighbour first; otherwise a player neighbour that borders the enemy (score < 0 keeps it below any enemy)
+        let score: number;
+        if (other.owner !== 'player') score = hostileScore(other);
+        else if (neighbours(other.id).some((n) => n.owner !== 'player')) score = -1;
+        else continue;
         if (!best || score > best.score) best = { to: other.id, score };
       }
-      if (best) cmds.push({ type: 'sendUnits', owner: 'player', from: t.id, to: best.to, ratio: Math.min(1, 2 / t.units) });
+      if (!best) continue;
+      cmds.push({ type: 'sendUnits', owner: 'player', from: t.id, to: best.to, ratio: Math.min(1, 2 / t.units) });
     }
     return cmds;
   }
@@ -264,6 +279,10 @@ export class PlayScreen implements Screen {
         if (t) this.effects.push({ x: t.x, y: t.y, color: pal.star, bornMs: this.nowMs, lifeMs: 350, kind: 'ring' });
       } else if (ev.type === 'bridgeCut') {
         if (this.cutRequests.has(ev.roadId)) m.cutBridge = true;
+      } else if (ev.type === 'linked') {
+        if (ev.owner === 'player') playSfx('send'); // one tick per stream started (manual or autoplay)
+      } else if (ev.type === 'unlinked') {
+        if (ev.owner === 'player' && ev.reason === 'manual') playSfx('button'); // auto-ends (target full, road cut) stay silent
       }
     }
     onSimEvents(events, this.state);
@@ -301,6 +320,7 @@ export class PlayScreen implements Screen {
         targeting: this.targeting,
         muted: isMuted(),
         pressedBooster: this.pressedBooster,
+        streams: this.state.links.filter((l) => l.owner === 'player').length,
         wallet: { gold: this.app.save.gold, crystals: this.app.save.crystals },
         toast: this.toast.opts(this.nowMs),
       },
@@ -314,7 +334,8 @@ export class PlayScreen implements Screen {
       pressRoadId: this.gestures.pressRoadId,
       pressProgress: this.gestures.pressProgress,
       paused: this.loop.paused,
-      sendRatio: this.app.save.settings.sendRatio,
+      limitHint: this.gestures.limitHint ?? undefined,
+      limitHintText: this.gestures.limitHintText || undefined,
       outcome,
       stars: outcome === 'won' ? starsFor(this.level, this.elapsedMs()) : 0,
       hasNext: idx >= 0 && idx + 1 < LEVELS.length,
@@ -457,13 +478,7 @@ export class PlayScreen implements Screen {
       this.useBooster(booster);
       return true;
     }
-    if (inRect(HUD.coins, p.x, p.y)) return true;
-    if (inRect(HUD.ratio, p.x, p.y)) {
-      // segmented control: left half = 100 %, right half = 50 %
-      this.app.save.settings.sendRatio = p.x < HUD.ratio.x + HUD.ratio.w / 2 ? 1 : 0.5;
-      writeSave(this.app.save);
-      return true;
-    }
+    if (inRect(HUD.coins, p.x, p.y) || inRect(HUD.streams, p.x, p.y)) return true;
     if (inRect(HUD.menu, p.x, p.y)) {
       this.app.goLevels();
       return true;

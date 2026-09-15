@@ -83,6 +83,8 @@ export function createState(level: LevelDef, seed: number, modifiers: Readonly<P
       genAccMs: 0,
       artilleryCooldownMs: 0,
       defenceAcc: 0,
+      linkCursor: 0,
+      drainAccMs: 0,
     };
     const tower = towers[def.id]!;
     if (tower.owner === 'player' && mods.startGarrisonBonus > 0) {
@@ -134,6 +136,7 @@ export function createState(level: LevelDef, seed: number, modifiers: Readonly<P
     towers,
     roads,
     units: [],
+    links: [],
     queues: [],
     boosters: [],
     enemies: level.enemies.map((e) => ({ ...e })),

@@ -32,13 +32,13 @@ export const en = {
   'levels.title': 'LEVELS',
   'levels.commander': 'COMMANDER',
   'levels.noUpgrades': 'No upgrades yet · tap to train',
-
-  'hud.send': 'SEND',
   'hud.level': 'LEVEL {n}',
   'hud.free': 'FREE',
   'hud.lesson': 'LESSON',
   'hud.airstrikeHint': 'AIRSTRIKE · tap an enemy tower · tap elsewhere to cancel',
-  'hud.selectHint': 'Tap a connected tower to send · tap again to upgrade',
+  'hud.selectHint': 'Tap a connected tower to start a stream · tap it again to stop',
+  'hud.streams': 'STREAMS',
+  'hint.linkLimit': 'L{n} needed for {n} streams',
 
   'pause.title': 'PAUSED',
   'pause.subtitle': 'Level {n} · {time}',
@@ -73,8 +73,6 @@ export const en = {
   'settings.motion': 'Reduced motion',
   'settings.motionSub': 'Auto follows the system setting',
   'settings.motionAuto': 'AUTO',
-  'settings.sendRatio': 'Default send',
-  'settings.sendRatioSub': 'Share of a garrison per tap',
   'settings.language': 'Language',
   'settings.languageSub': 'Menus, hints and messages',
   'settings.summary': '{stars} stars  ·  {coins} coins',
@@ -173,11 +171,10 @@ export const en = {
   'play.freeCharge': 'Free {kind} charge added',
 
   'tutorial.tapTower': 'Tap your tower',
-  'tutorial.tapGrey': 'Now tap the grey tower',
+  'tutorial.tapGrey': 'Now tap the grey tower — the stream keeps flowing',
   'tutorial.tapThenGrey': 'Tap your tower, then the grey tower',
-  'tutorial.reinforce': 'Reinforce: send more from home to the middle',
-  'tutorial.select': 'Tap your tower to select it',
-  'tutorial.upgrade': 'Tap your selected tower again to upgrade (costs {n})',
+  'tutorial.stopStream': 'Tap the target again to stop the stream',
+  'tutorial.fillToUpgrade': 'Let a tower fill to {n} to upgrade it — L2 can attack 2 targets',
 } as const;
 
 export type TranslationKey = keyof typeof en;

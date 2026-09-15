@@ -16,8 +16,8 @@ import { isLanguage } from './i18n';
 /** Reduced-motion preference: `auto` follows the OS (`prefers-reduced-motion`), `on`/`off` override it. */
 export type MotionPref = 'auto' | 'on' | 'off';
 
+/** Rules v2 removed the send ratio; a `sendRatio` field in an older save is ignored (schema stays v3). */
 export interface Settings {
-  sendRatio: number; // 1 or 0.5
   colorBlind: boolean;
   sound: boolean;
   reducedMotion: MotionPref;
@@ -115,7 +115,7 @@ export function defaultSave(): SaveData {
     defeats: {},
     skips: [],
     achievements: { unlocked: [] },
-    settings: { sendRatio: 1, colorBlind: false, sound: true, reducedMotion: 'auto' },
+    settings: { colorBlind: false, sound: true, reducedMotion: 'auto' },
   };
 }
 
@@ -192,7 +192,6 @@ export function normalizeSave(raw: unknown): SaveData {
   if (isRecord(raw.achievements)) out.achievements = { unlocked: stringList(raw.achievements.unlocked) };
   if (isRecord(raw.settings)) {
     const s = raw.settings;
-    if (s.sendRatio === 0.5 || s.sendRatio === 1) out.settings.sendRatio = s.sendRatio;
     if (typeof s.colorBlind === 'boolean') out.settings.colorBlind = s.colorBlind;
     if (typeof s.sound === 'boolean') out.settings.sound = s.sound;
     if (s.reducedMotion === 'auto' || s.reducedMotion === 'on' || s.reducedMotion === 'off') out.settings.reducedMotion = s.reducedMotion;

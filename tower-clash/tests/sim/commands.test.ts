@@ -5,27 +5,16 @@ import { applyCommand } from '../../src/sim/commands';
 import { step } from '../../src/sim/step';
 import { run, spawn } from './util';
 
-describe('upgrade', () => {
-  it('costs 10 then 20 units and emits an upgrade event', () => {
-    const state = createState(makeLevel({ towers: [{ id: 'p', x: 0, y: 0, owner: 'player', units: 30 }], roads: [] }), 1);
-    applyCommand(state, { type: 'upgrade', owner: 'player', towerId: 'p' });
-    expect(state.towers['p']!.level).toBe(2);
-    expect(state.towers['p']!.units).toBe(20);
-    expect(state.events).toEqual([{ type: 'upgrade', towerId: 'p', level: 2 }]);
-    applyCommand(state, { type: 'upgrade', owner: 'player', towerId: 'p' });
-    expect(state.towers['p']!.level).toBe(3);
-    expect(state.towers['p']!.units).toBe(0);
-  });
-
-  it('is refused when the garrison is below the cost', () => {
-    const state = createState(makeLevel({ towers: [{ id: 'p', x: 0, y: 0, owner: 'player', units: 9 }], roads: [] }), 1);
+describe('upgrade (rules v2: validated and ignored)', () => {
+  it('does not change level or garrison and emits no event, even when the old cost is affordable', () => {
+    const state = createState(makeLevel({ towers: [{ id: 'p', x: 0, y: 0, owner: 'player', units: 20 }], roads: [] }), 1);
     applyCommand(state, { type: 'upgrade', owner: 'player', towerId: 'p' });
     expect(state.towers['p']!.level).toBe(1);
-    expect(state.towers['p']!.units).toBe(9);
+    expect(state.towers['p']!.units).toBe(20);
     expect(state.events).toEqual([]);
   });
 
-  it('is refused at max level (3) and for a fortress at level 2', () => {
+  it('is ignored for a fortress at level 2 and a barracks at level 3', () => {
     const state = createState(
       makeLevel({
         towers: [
@@ -44,15 +33,17 @@ describe('upgrade', () => {
     expect(state.towers['f']!.units).toBe(50);
   });
 
-  it('ignores upgrades by someone who does not own the tower', () => {
+  it('ignores upgrades by someone who does not own the tower or for an unknown tower (never throws)', () => {
     const state = createState(makeLevel(), 1);
     applyCommand(state, { type: 'upgrade', owner: 'enemy1', towerId: 'p' });
+    applyCommand(state, { type: 'upgrade', owner: 'player', towerId: 'nope' });
     expect(state.towers['p']!.level).toBe(1);
     expect(state.towers['p']!.units).toBe(10);
+    expect(state.events).toEqual([]);
   });
 });
 
-describe('sendUnits', () => {
+describe('sendUnits (legacy one-shot queue)', () => {
   it('sends all units by default: garrison drops immediately and a queue is created', () => {
     const state = createState(makeLevel(), 1);
     applyCommand(state, { type: 'sendUnits', owner: 'player', from: 'p', to: 'e' });

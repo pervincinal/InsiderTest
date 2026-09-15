@@ -1,7 +1,7 @@
 {
   "id": 1,
   "name": "First Taps",
-  "lesson": "Tap your tower, then tap a target to send everyone",
+  "lesson": "Tap your tower, then tap a target: the stream keeps flowing until you stop it",
   "star3": 30000,
   "star2": 60000,
   "enemies": [{ "owner": "enemy1", "personality": "rusher", "aggression": 0.2 }],

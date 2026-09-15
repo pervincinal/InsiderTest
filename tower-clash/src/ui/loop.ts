@@ -9,7 +9,10 @@ export const MAX_TICKS_PER_FRAME = 10;
 export interface LoopHooks {
   /** Called before every tick; returned commands are applied to the state before that tick (AI wiring). */
   beforeTick?(state: GameState): Command[] | undefined;
-  /** Receives the events of every tick run this frame, after the last step. */
+  /**
+   * Receives every event of this frame after the last step: those emitted by the ticks and those
+   * emitted by the commands applied before each tick (`linked` / `unlinked` / `bridgeCut`).
+   */
   onEvents?(events: SimEvent[]): void;
 }
 
@@ -67,13 +70,22 @@ export class GameLoop {
     }
 
     const events: SimEvent[] = [];
+    // Commands emit events too (`linked`, `unlinked`, `bridgeCut`) and `step()` starts by resetting
+    // `state.events`, so the list is drained right before every step as well as right after it.
+    // Draining clears the state's list so the next pre-step drain never re-collects a tick's events.
+    const drain = (): void => {
+      if (!state.events.length) return;
+      events.push(...state.events);
+      state.events = [];
+    };
     let ran = 0;
     for (let i = 0; i < ticks; i++) {
       const aiCmds = this.hooks.beforeTick?.(state);
       if (aiCmds) for (const cmd of aiCmds) applyCommand(state, cmd);
+      drain();
       step(state, C.TICK_MS);
       ran++;
-      if (state.events.length) events.push(...state.events);
+      drain();
       if (getOutcome(state) !== 'playing') {
         this.acc = 0;
         break;

@@ -3,14 +3,15 @@
  * kills everything on the bridge, so the rule is conservative. For every uncut bridge with exactly one
  * endpoint owned by `self` (`home`; the far end is neutral or hostile) it cuts when all of:
  *   (a) ownership — `self` owns `home` (the sim refuses anything else);
- *   (b) threat — either a hostile column is on the bridge heading to `home` and what is heading to `home`
+ *   (b) threat — either a hostile column is on the bridge heading to `home` (units walking it, or a
+ *       hostile stream linked over it whose source still drains) and what is heading to `home`
  *       altogether is at least the garrison it will have when the first unit lands plus the friendly
  *       support on its way (the cut must either drown a column that alone could take the tower, or turn a
  *       lost tower into a held one); or nothing is on the bridge yet but the far tower could send a
  *       column (`threatFrom`: its garrison, or a rival's column about to flip it) that `home` plus its
  *       support and `cover` could not stop — "about to send one" (enemy-owned far tower only; a rival
  *       column about to flip a neutral far tower is judged once it owns it);
- *   (c) own use — none of `self`'s units or queues are on the bridge, `self` has not committed units to
+ *   (c) own use — none of `self`'s units or streams are on the bridge, `self` has not committed units to
  *       it this tick (`usedRoads`), and every opponent tower reachable over uncut roads before the cut
  *       is still reachable after it within `MAX_DETOUR_HOPS` extra road hops (BFS from `self`'s towers
  *       over uncut roads): the last route to a remaining enemy tower is never cut, nor a bridge whose
@@ -24,6 +25,7 @@ import {
   defenceMultiplier,
   incomingSupport,
   incomingThreat,
+  linkPending,
   neighbours,
   ownedTowers,
   projectedUnits,
@@ -48,7 +50,7 @@ export interface BridgeCutOptions {
   worthSaving?: (home: Tower) => boolean;
 }
 
-/** Hostile weight of `self` on `road` walking or queued toward `home`, with the earliest landing. */
+/** Hostile weight of `self` on `road` walking, streaming or queued toward `home`, with the earliest landing. */
 export function columnOnBridge(state: GameState, road: Road, home: Tower, self: Owner): { weight: number; etaMs: number } {
   let weight = 0;
   let etaMs = Infinity;
@@ -56,6 +58,15 @@ export function columnOnBridge(state: GameState, road: Road, home: Tower, self: 
     if (u.roadId !== road.id || u.to !== home.id || u.owner === self) continue;
     weight += u.weight;
     etaMs = Math.min(etaMs, remainingMs(state, u));
+  }
+  for (const l of state.links) {
+    if (l.roadId !== road.id || l.to !== home.id || l.owner === self) continue;
+    const pending = linkPending(state, l);
+    if (pending <= 0) continue;
+    const from = state.towers[l.from];
+    const kind = from?.kind === 'tankFactory' && from.units >= C.TANK_WEIGHT ? 'tank' : 'infantry';
+    weight += pending;
+    etaMs = Math.min(etaMs, travelMsFor(state, road, l.owner, kind));
   }
   for (const q of state.queues) {
     if (q.roadId !== road.id || q.to !== home.id || q.owner === self) continue;
@@ -65,9 +76,10 @@ export function columnOnBridge(state: GameState, road: Road, home: Tower, self: 
   return { weight, etaMs };
 }
 
-/** Does `self` have units walking or queued on the road (either direction)? */
+/** Does `self` have units walking, a stream linked or a queue on the road (either direction)? */
 export function ownUnitsOnRoad(state: GameState, road: Road, self: Owner): boolean {
   for (const u of state.units) if (u.roadId === road.id && u.owner === self) return true;
+  for (const l of state.links) if (l.roadId === road.id && l.owner === self) return true;
   for (const q of state.queues) if (q.roadId === road.id && q.owner === self) return true;
   return false;
 }

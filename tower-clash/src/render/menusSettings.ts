@@ -22,7 +22,6 @@ export interface SettingsOpts {
   soundOn: boolean;
   colorBlind: boolean;
   reducedMotion: MotionPref;
-  sendRatio: number;
   language: Language;
   /** Reset-progress confirm card is open. */
   confirming: boolean;
@@ -41,10 +40,6 @@ export const MOTION_SEGMENTS: readonly { key: 'settings.motionAuto' | 'common.on
   { key: 'settings.motionAuto', value: 'auto' },
   { key: 'common.on', value: 'on' },
   { key: 'common.off', value: 'off' },
-];
-export const RATIO_SEGMENTS: readonly { label: string; value: number }[] = [
-  { label: '100%', value: 1 },
-  { label: '50%', value: 0.5 },
 ];
 /** Picker order = `LANGUAGES` (one segment each). */
 export const LANGUAGE_SEGMENTS = LANGUAGES;
@@ -125,8 +120,6 @@ export function drawSettings(view: View, pal: Palette, o: SettingsOpts): void {
     MOTION_SEGMENTS.findIndex((m) => m.value === o.reducedMotion),
     20,
   );
-  settingsRow(ctx, pal, SETTINGS.sendRatio, t('settings.sendRatio'), t('settings.sendRatioSub'));
-  drawSegmented(ctx, pal, SETTINGS.sendRatio, RATIO_SEGMENTS, RATIO_SEGMENTS.findIndex((r) => r.value === o.sendRatio), 20);
   // language: label line, then a full-width picker (I18N)
   const langLabel: Rect = { x: card.x + card.w - 36, y: SETTINGS.languageLabelY, w: 0, h: 56 };
   settingsRow(ctx, pal, langLabel, t('settings.language'), t('settings.languageSub'), false);

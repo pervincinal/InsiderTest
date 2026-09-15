@@ -1,6 +1,6 @@
 import type { Command, GameState, Road, Tower } from '../sim/types';
 import { roadIdFor } from '../sim/create';
-import { roadPointAt } from '../sim/step';
+import { linksFrom, maxLinksOf, roadPointAt } from '../sim/step';
 import type { View } from '../render/view';
 import { toLogical } from '../render/view';
 import { ROAD_HIT_RADIUS, TOWER_HIT_RADIUS } from '../render/layout';
@@ -114,17 +114,38 @@ export function connectedRoad(state: GameState, a: string, b: string): Road | nu
 
 export const LONG_PRESS_MS = 500;
 const DRAG_THRESHOLD = 14; // logical px before a press counts as a drag
+/** How long the link-limit refusal (shake + hint bubble) stays on screen. */
+export const LIMIT_HINT_MS = 900;
 
 export interface GestureOptions {
   getState(): GameState | null;
-  getSendRatio(): number;
   onCommand(cmd: Command): void;
+  /** Localised text for the link-limit refusal (`n` = the level that would allow one more stream). */
+  limitHintText?(nextLevel: number): string;
+}
+
+/** What a tap / drag from `from` onto `to` should do under rules v2 (pure, unit-tested). */
+export type LinkDecision = { kind: 'link' } | { kind: 'unlink' } | { kind: 'limit'; nextLevel: number } | { kind: 'none' };
+
+/**
+ * Rules v2 (GDD §2.0): an existing `from → to` stream toggles off; otherwise a new one starts,
+ * unless `from` is at its per-level link limit (L1 = 1, L2 = 2, L3 = 3), which is refused with a
+ * hint. `allowUnlink` is false for drags (a drag always means "link"; dragging onto an existing
+ * stream is a no-op).
+ */
+export function decideLink(state: GameState, from: string, to: string, allowUnlink = true): LinkDecision {
+  const src = state.towers[from];
+  if (!src || src.owner !== 'player' || from === to || !connectedRoad(state, from, to)) return { kind: 'none' };
+  const links = linksFrom(state, from);
+  if (links.some((l) => l.to === to)) return allowUnlink ? { kind: 'unlink' } : { kind: 'none' };
+  if (links.length >= maxLinksOf(src)) return { kind: 'limit', nextLevel: src.level + 1 };
+  return { kind: 'link' };
 }
 
 /**
- * Tap own tower = select; tap a connected tower = send (source stays selected);
- * tap the selected tower = upgrade; tap empty = deselect;
- * drag own tower → tower = send; long-press an intact bridge midpoint = cut.
+ * Tap own tower = select; tap a connected tower = start a stream to it (or stop it when that
+ * stream exists; refused with a hint at the link limit); tap the selected tower again = deselect;
+ * tap empty = deselect; drag own tower → tower = link; long-press an intact bridge midpoint = cut.
  * Only ever produces sim commands for owner 'player'.
  */
 export class PlayGestures {
@@ -132,6 +153,12 @@ export class PlayGestures {
   hoverTowerId: string | null = null;
   pressRoadId: string | null = null;
   pressProgress = 0;
+  /**
+   * Link-limit refusal for the renderer (`PlayUi.limitHint` / `limitHintText`): a fresh object per
+   * refusal (the renderer keys its shake on the object identity), null once it expired.
+   */
+  limitHint: { until: number } | null = null;
+  limitHintText = '';
 
   private downTowerId: string | null = null;
   private downX = 0;
@@ -146,6 +173,8 @@ export class PlayGestures {
   reset(): void {
     this.selectedTowerId = null;
     this.hoverTowerId = null;
+    this.limitHint = null;
+    this.limitHintText = '';
     this.clearPress();
   }
 
@@ -209,11 +238,11 @@ export class PlayGestures {
     const target = hitTower(state, p.x, p.y);
     const src = downTowerId ? state.towers[downTowerId] : undefined;
 
-    // Drag from own tower onto another tower → send.
+    // Drag from own tower onto a connected tower → link (the source stays selected).
     if (moved && src && src.owner === 'player') {
       if (target && target.id !== src.id && connectedRoad(state, src.id, target.id)) {
-        this.send(src.id, target.id);
         this.selectedTowerId = src.id;
+        this.act(state, src.id, target.id, p.timeMs, false);
       }
       return;
     }
@@ -229,11 +258,11 @@ export class PlayGestures {
     const sel = this.selectedTowerId ? state.towers[this.selectedTowerId] : undefined;
 
     if (sel && sel.id === target.id) {
-      this.opts.onCommand({ type: 'upgrade', owner: 'player', towerId: sel.id });
+      this.selectedTowerId = null; // rules v2: no manual upgrade — the second tap just deselects
       return;
     }
     if (sel && connectedRoad(state, sel.id, target.id)) {
-      this.send(sel.id, target.id);
+      this.act(state, sel.id, target.id, p.timeMs, true);
       return;
     }
     if (target.owner === 'player') {
@@ -249,8 +278,12 @@ export class PlayGestures {
     this.clearPress();
   }
 
-  /** Call once per frame so long-presses fire without pointer movement. */
+  /** Call once per frame so long-presses fire without pointer movement and the limit hint expires. */
   tick(nowMs: number): void {
+    if (this.limitHint && nowMs >= this.limitHint.until) {
+      this.limitHint = null;
+      this.limitHintText = '';
+    }
     if (!this.pointerDown || !this.pressRoadId || this.longPressFired) {
       if (!this.pressRoadId) this.pressProgress = 0;
       return;
@@ -265,7 +298,22 @@ export class PlayGestures {
     }
   }
 
-  private send(from: string, to: string): void {
-    this.opts.onCommand({ type: 'sendUnits', owner: 'player', from, to, ratio: this.opts.getSendRatio() });
+  /** Apply `decideLink` for a gesture from `from` onto `to`: emit the command or raise the limit hint. */
+  private act(state: GameState, from: string, to: string, nowMs: number, allowUnlink: boolean): void {
+    const d = decideLink(state, from, to, allowUnlink);
+    switch (d.kind) {
+      case 'link':
+        this.opts.onCommand({ type: 'link', owner: 'player', from, to });
+        return;
+      case 'unlink':
+        this.opts.onCommand({ type: 'unlink', owner: 'player', from, to });
+        return;
+      case 'limit':
+        this.limitHint = { until: nowMs + LIMIT_HINT_MS };
+        this.limitHintText = this.opts.limitHintText?.(d.nextLevel) ?? `L${d.nextLevel}`;
+        return;
+      case 'none':
+        return;
+    }
   }
 }

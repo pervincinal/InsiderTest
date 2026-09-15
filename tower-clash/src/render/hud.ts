@@ -33,14 +33,14 @@ import { prefersReducedMotion } from './particles';
 import { reducedMotionOverride } from '../ui/motion';
 import type { BoosterKind, BoosterStatus } from '../ui/boosters';
 import type { Palette } from './palette';
-import { drawCrystal, drawGoldCoin, drawVideoGlyph } from './sprites';
+import { badgeY, drawCrystal, drawGoldCoin, drawVideoGlyph } from './sprites';
 import type { ToastOpts } from './economyWidgets';
 import { drawSpinner, drawToast, drawWallet } from './economyWidgets';
 import { t } from '../ui/i18n';
 
 /*
  * In-game HUD (ART_DIRECTION §4): glass paper bands top and bottom, level chip, timer pill, pause
- * button, segmented SEND toggle, MENU; the pause card and the result card (slide-up, sequential
+ * button, the active-streams pill (rules v2), MENU; the pause card and the result card (slide-up, sequential
  * star pops, extruded VICTORY / DEFEAT, coins counting up). Drawn by draw.ts after the world with
  * the logical (720×1280) transform active and the canvas clipped to the map. Reads state only.
  */
@@ -65,6 +65,8 @@ export interface HudExtras {
   muted: boolean;
   /** Booster currently held down (pressed look). */
   pressedBooster?: BoosterKind | null;
+  /** Number of the player's active attack streams (`state.links` owned by the player), rules v2. */
+  streams?: number;
   /** Gold + crystal balances (drawn over the booster bar once the level is over; tap → shop). */
   wallet?: { gold: number; crystals: number };
   /** Economy rows on the result card (ECONOMY.md §3.4, §3.5, §5.2). */
@@ -136,38 +138,73 @@ function pauseGlyph(ctx: CanvasRenderingContext2D, color: string, cx: number, cy
   }
 }
 
-/** SEND ratio as a segmented control: label column, then 100 % | 50 % segments (left / right half of the rect). */
-function drawSendToggle(ctx: CanvasRenderingContext2D, ui: PlayUi): void {
+/** Active-streams pill (rules v2, where the SEND toggle used to be): small caption, then "⇢ n". */
+function drawStreamsPill(ctx: CanvasRenderingContext2D, ui: PlayUi, n: number): void {
   const pal = ui.palette;
-  const r = HUD.ratio;
+  const r = HUD.streams;
   drawButton(ctx, pal, r, '');
-  const labelW = 56;
-  ctx.textAlign = 'center';
+  const cy = r.y + (r.h - 4) / 2;
+  ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = pal.textDim;
-  ctx.font = font(14);
-  ctx.fillText(t('hud.send'), r.x + labelW / 2 + 2, r.y + (r.h - 4) / 2 + 1, labelW - 4);
-  const segW = (r.w - labelW - 8) / 2;
-  const segs: { label: string; ratio: number }[] = [
-    { label: '100%', ratio: 1 },
-    { label: '50%', ratio: 0.5 },
-  ];
-  segs.forEach((seg, i) => {
-    const sr: Rect = { x: r.x + labelW + i * segW, y: r.y + 6, w: segW, h: r.h - 4 - 12 };
-    const active = ui.sendRatio === seg.ratio;
-    if (active) {
-      roundRect(ctx, { x: sr.x, y: sr.y + 2, w: sr.w, h: sr.h }, 12);
-      ctx.fillStyle = shade(pal.owners.player, -0.4);
-      ctx.fill();
-      roundRect(ctx, sr, 12);
-      ctx.fillStyle = pal.owners.player;
-      ctx.fill();
-      innerHighlight(ctx, sr, 12, 0.45);
-    }
-    ctx.fillStyle = active ? pal.paper : pal.textDim;
-    ctx.font = font(21);
-    ctx.fillText(seg.label, sr.x + sr.w / 2, sr.y + sr.h / 2 + 1, sr.w - 4);
-  });
+  ctx.font = font(14, '500');
+  ctx.fillText(t('hud.streams'), r.x + 16, cy - 13, 120);
+  const color = n > 0 ? pal.owners.player : pal.textDim;
+  drawStreamArrow(ctx, color, r.x + 28, cy + 12, 12, 3);
+  ctx.fillStyle = n > 0 ? pal.ink : pal.textDim;
+  ctx.font = font(26);
+  ctx.fillText(String(n), r.x + 48, cy + 13);
+}
+
+/** A stroked "⇢" (shaft + chevron head) pointing right, centred on (cx, cy). */
+function drawStreamArrow(ctx: CanvasRenderingContext2D, color: string, cx: number, cy: number, len: number, width: number): void {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(cx - len / 2, cy);
+  ctx.lineTo(cx + len / 2, cy);
+  ctx.moveTo(cx + len / 2 - len * 0.4, cy - len * 0.4);
+  ctx.lineTo(cx + len / 2, cy);
+  ctx.lineTo(cx + len / 2 - len * 0.4, cy + len * 0.4);
+  ctx.stroke();
+}
+
+/**
+ * Per-tower stream count (rules v2): a small "⇢n" chip left of the garrison badge of every tower
+ * that currently drains through ≥ 1 link, in the owner's tone so enemy streams read too.
+ */
+function drawStreamChips(ctx: CanvasRenderingContext2D, state: GameState, ui: PlayUi): void {
+  const pal = ui.palette;
+  const counts = new Map<string, number>();
+  for (const l of state.links) counts.set(l.from, (counts.get(l.from) ?? 0) + 1);
+  if (counts.size === 0) return;
+  ctx.save();
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  for (const [id, n] of counts) {
+    const tw = state.towers[id];
+    if (!tw) continue;
+    const raise = ui.selectedTowerId === tw.id ? 4 : 0;
+    const by = Math.max(HUD.mapTop + 26, tw.y + badgeY(tw.kind, tw.level) - raise);
+    const tones = pal.ownerTones[tw.owner];
+    const chip: Rect = { x: tw.x - 72, y: by - 11, w: 46, h: 24 };
+    ctx.fillStyle = pal.groundShadow;
+    roundRect(ctx, { x: chip.x + 1, y: chip.y + 3, w: chip.w, h: chip.h }, 12);
+    ctx.fill();
+    roundRect(ctx, chip, 12);
+    ctx.fillStyle = pal.paper;
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = tones.shade;
+    ctx.stroke();
+    drawStreamArrow(ctx, tones.mid, chip.x + 14, chip.y + chip.h / 2, 10, 2.5);
+    ctx.fillStyle = pal.ink;
+    ctx.font = font(16, '900');
+    ctx.fillText(String(n), chip.x + 25, chip.y + chip.h / 2 + 1);
+  }
+  ctx.restore();
 }
 
 function boosterGlyph(ctx: CanvasRenderingContext2D, kind: BoosterKind, color: string, cx: number, cy: number, s: number, outline: string): void {
@@ -288,6 +325,8 @@ export function drawHud(ctx: CanvasRenderingContext2D, state: GameState, _view: 
   const pal = ui.palette;
   const hud = extrasOf(ui);
   ctx.save();
+  // stream counters sit on the world, just under the bands
+  if (ui.outcome === 'playing') drawStreamChips(ctx, state, ui);
   // glass bands
   drawGlassBand(ctx, HUD.topBar);
   drawGlassBand(ctx, HUD.bottomBar);
@@ -345,8 +384,8 @@ export function drawHud(ctx: CanvasRenderingContext2D, state: GameState, _view: 
     lines.forEach((l, i) => ctx.fillText(l, 360, 108 + 20 + captionH + i * 26));
   }
 
-  // bottom bar: send ratio · boosters · coins · menu (wallet replaces boosters + coins once the level is over)
-  drawSendToggle(ctx, ui);
+  // bottom bar: streams · boosters · coins · menu (wallet replaces boosters + coins once the level is over)
+  drawStreamsPill(ctx, ui, hud?.streams ?? 0);
   if (ui.outcome !== 'playing' && hud?.wallet) {
     drawWallet(ctx, pal, HUD.wallet, hud.wallet.gold, hud.wallet.crystals, { pressed: hud.pressed === HUD.wallet });
   } else {

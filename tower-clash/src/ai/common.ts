@@ -1,10 +1,11 @@
 /**
  * Shared AI helpers. Everything here reads only what a human player could see on screen:
- * tower owners/garrisons/levels, roads (cut, barrier, mine), and units walking the roads.
+ * tower owners/garrisons/levels, roads (cut, barrier, mine), units walking the roads and the attack
+ * streams (links) drawn on them (GDD §2.0: every link is visible in its owner's colour).
  * Nothing mutates state.
  */
-import type { Command, EnemyDef, GameState, Owner, Road, Tower, Unit, UnitKind } from '../sim/index';
-import { C, Rng, capacityOf, modifiersFor, roadIdFor } from '../sim/index';
+import type { Command, EnemyDef, GameState, Link, Owner, Road, Tower, Unit, UnitKind } from '../sim/index';
+import { C, Rng, capacityOf, linksFrom, maxLinksOf, modifiersFor, roadIdFor } from '../sim/index';
 
 /**
  * A snapshot the AI reasons about: the towers/roads/units it can see plus the player's permanent
@@ -99,10 +100,195 @@ export function friendlyNeighbours(state: GameState, towerId: string): Neighbour
   return neighbours(state, towerId).filter((n) => n.tower.owner === source.owner);
 }
 
-/** Weight of `owner`'s units heading to a tower: on the roads plus still streaming out of a queue. */
+/* ---------- Streams (links) as a human reads them ---------- */
+
+/** Links whose target is `towerId`, in creation order. */
+export function linksTo(state: GameState, towerId: string): Link[] {
+  return state.links.filter((l) => l.to === towerId);
+}
+
+/** Free outgoing link slots of a tower right now (per-level limit minus its active links). */
+export function freeLinkSlots(state: GameState, tower: Tower): number {
+  return Math.max(0, maxLinksOf(tower) - linksFrom(state, tower.id).length);
+}
+
+/** Does a link `from → to` exist? */
+export function hasLink(state: GameState, from: string, to: string): boolean {
+  return state.links.some((l) => l.from === from && l.to === to);
+}
+
+/**
+ * Weight still to leave through `link`: the source's garrison is drained round-robin over its links, so
+ * each stream gets an equal share (whole weight units). What has already left is on the road.
+ */
+export function linkPending(state: GameState, link: Link): number {
+  const from = state.towers[link.from];
+  if (!from) return 0;
+  const n = linksFrom(state, from.id).length;
+  if (n === 0) return 0;
+  return Math.floor(from.units / n);
+}
+
+/** Weight the source of `towerId`'s links still holds for them, all links together (0 when unlinked). */
+export function pendingOf(state: GameState, towerId: string): number {
+  let sum = 0;
+  for (const l of linksFrom(state, towerId)) sum += linkPending(state, l);
+  return sum;
+}
+
+/** Kind of unit a tower puts on the road (a tank while a factory holds one). */
+function streamKind(tower: Tower): UnitKind {
+  return tower.kind === 'tankFactory' && tower.units >= C.TANK_WEIGHT ? 'tank' : 'infantry';
+}
+
+/** Depth limit for chained streams (a → b → c …) when reading a stream's rate. */
+const CHAIN_DEPTH = 4;
+
+/**
+ * Units per second `link` delivers once its source is drained: the source's production plus what the
+ * source's own supply streams pour into it (chained streams relay through a linked tower), shared over
+ * the source's links round-robin. Chain-aware up to `CHAIN_DEPTH` hops; a linked tower never grows, so
+ * everything that reaches it leaves again.
+ */
+export function linkRate(state: GameState, link: Link, depth = 0): number {
+  const from = state.towers[link.from];
+  if (!from || depth > CHAIN_DEPTH) return 0;
+  const n = linksFrom(state, from.id).length;
+  if (n === 0) return 0;
+  let rate = genPerSecond(from, state);
+  for (const l of linksTo(state, from.id)) if (l.owner === from.owner) rate += linkRate(state, l, depth + 1);
+  return rate / n;
+}
+
+/**
+ * Units per second streams pour into `towerId` after their sources are drained: hostile streams (link
+ * owner ≠ tower owner) with `hostile: true`, the tower owner's own supply streams otherwise.
+ */
+export function inflowRate(state: GameState, towerId: string, hostile: boolean): number {
+  const tower = state.towers[towerId];
+  if (!tower) return 0;
+  let rate = 0;
+  for (const l of linksTo(state, towerId)) if ((l.owner !== tower.owner) === hostile) rate += linkRate(state, l);
+  return rate;
+}
+
+/** A unit about to land on a tower. */
+export interface Landing {
+  etaMs: number;
+  weight: number;
+  hostile: boolean;
+}
+
+/** How far ahead the landing model reads a stream's trickle. */
+export const STREAM_HORIZON_MS = 10_000;
+
+/**
+ * Everything that will land on `tower` within `horizonMs`, as a human reads it: units on the roads (at
+ * their remaining walk), what every stream into the tower still drains out of its source (one unit per
+ * `LEAVE_INTERVAL_MS` from its travel time on) and the trickle each stream keeps delivering after that
+ * (`linkRate`). `exclude` leaves one stream out (to judge a tower without that help). Unsorted.
+ */
+export function landings(state: GameState, tower: Tower, horizonMs = STREAM_HORIZON_MS, exclude?: Link, excludeFrom?: string): Landing[] {
+  const out: Landing[] = [];
+  for (const u of state.units) {
+    if (u.to !== tower.id || u.from === excludeFrom) continue;
+    const eta = remainingMs(state, u);
+    if (eta <= horizonMs) out.push({ etaMs: eta, weight: u.weight, hostile: u.owner !== tower.owner });
+  }
+  for (const l of state.links) {
+    if (l.to !== tower.id || l === exclude || l.from === excludeFrom) continue;
+    const from = state.towers[l.from];
+    const road = state.roads[l.roadId];
+    if (!from || !road) continue;
+    const hostile = l.owner !== tower.owner;
+    const kind = streamKind(from);
+    const unit = kind === 'tank' ? C.TANK_WEIGHT : C.INFANTRY_WEIGHT;
+    const travel = travelMsFor(state, road, l.owner, kind);
+    const n = Math.max(1, linksFrom(state, from.id).length);
+    const pending = linkPending(state, l);
+    let t = travel;
+    for (let left = pending; left > 0 && t <= horizonMs; left -= unit) {
+      out.push({ etaMs: t, weight: Math.min(unit, left), hostile });
+      t += C.LEAVE_INTERVAL_MS * n;
+    }
+    const rate = linkRate(state, l);
+    if (rate <= 0) continue;
+    const gap = (1000 * unit) / rate;
+    for (t = Math.max(t, travel) + gap; t <= horizonMs; t += gap) out.push({ etaMs: t, weight: unit, hostile });
+  }
+  for (const q of state.queues) {
+    if (q.to !== tower.id) continue;
+    const road = state.roads[q.roadId];
+    if (!road) continue;
+    const unit = q.unitKind === 'tank' ? C.TANK_WEIGHT : C.INFANTRY_WEIGHT;
+    const travel = travelMsFor(state, road, q.owner, q.unitKind);
+    for (let k = 0; k < q.remaining; k++) {
+      const eta = travel + k * C.LEAVE_INTERVAL_MS;
+      if (eta <= horizonMs) out.push({ etaMs: eta, weight: unit, hostile: q.owner !== tower.owner });
+    }
+  }
+  return out;
+}
+
+/**
+ * Walk the landings on `tower` in time order from a garrison of `start`, adding the tower's own
+ * production between landings (fortress defenders count double against hostile weight). Returns the
+ * lowest garrison on the way and the time of the first hostile landing that would have flipped the
+ * tower (Infinity when it holds within the horizon). Pure arithmetic on what is visible.
+ */
+export function walkLandings(state: GameState, tower: Tower, start: number, list: Landing[]): { minUnits: number; fallsAtMs: number; hostile: boolean } {
+  const sorted = [...list].sort((a, b) => a.etaMs - b.etaMs || (a.hostile ? 1 : -1));
+  const rate = tower.owner === 'neutral' ? 0 : genPerSecond(tower, state);
+  const mult = defenceMultiplier(tower);
+  const cap = capacityOf(tower, state);
+  let g = start;
+  let minUnits = start;
+  let tPrev = 0;
+  let fallsAtMs = Infinity;
+  let hostile = false;
+  for (const l of sorted) {
+    g = Math.min(cap, g + (rate * (l.etaMs - tPrev)) / 1000);
+    tPrev = l.etaMs;
+    if (l.hostile) {
+      hostile = true;
+      g -= l.weight / mult;
+      if (g < 0 && fallsAtMs === Infinity) fallsAtMs = l.etaMs;
+    } else g = Math.min(cap, g + l.weight);
+    minUnits = Math.min(minUnits, g);
+  }
+  return { minUnits, fallsAtMs, hostile };
+}
+
+/**
+ * Units the tower must hold right now to survive what is visibly coming at it within the horizon — the
+ * columns on the roads and the streams (burst and trickle) aimed at it, net of its own production and of
+ * the friendly streams feeding it — plus `margin`. 0 when nothing hostile is coming. `exclude` judges the
+ * tower without one of its supply streams; `excludeFrom` leaves out everything coming from one
+ * neighbour (a stream the tower is about to attack head-on: its own units clash with that column).
+ */
+export function holdReserve(state: GameState, tower: Tower, margin = 1, exclude?: Link, excludeFrom?: string): number {
+  const walk = walkLandings(state, tower, 0, landings(state, tower, STREAM_HORIZON_MS, exclude, excludeFrom));
+  if (!walk.hostile) return 0;
+  return Math.max(0, Math.ceil(-walk.minUnits)) + margin;
+}
+
+/** When the tower would fall to what is visibly coming at it, ms (Infinity when it holds within the horizon). */
+export function fallsAtMs(state: GameState, tower: Tower): number {
+  return walkLandings(state, tower, tower.units, landings(state, tower)).fallsAtMs;
+}
+
+/** Weight of `owner`'s units already walking the roads to a tower (what has left its sources). */
+export function walkingWeight(state: GameState, towerId: string, owner: Owner): number {
+  let sum = 0;
+  for (const u of state.units) if (u.to === towerId && u.owner === owner) sum += u.weight;
+  return sum;
+}
+
+/** Weight of `owner`'s units heading to a tower: on the roads plus still to drain out of its links (and legacy queues). */
 export function incomingWeight(state: GameState, towerId: string, owner: Owner): number {
   let sum = 0;
   for (const u of state.units) if (u.to === towerId && u.owner === owner) sum += u.weight;
+  for (const l of state.links) if (l.to === towerId && l.owner === owner) sum += linkPending(state, l);
   for (const q of state.queues) {
     if (q.to === towerId && q.owner === owner) sum += q.remaining * (q.unitKind === 'tank' ? C.TANK_WEIGHT : 1);
   }
@@ -111,14 +297,15 @@ export function incomingWeight(state: GameState, towerId: string, owner: Owner):
 
 /**
  * Sum of hostile unit weight heading to a tower (everyone but the tower's owner): units on roads plus
- * units still streaming out of a hostile tower toward it (a human sees the column forming; the source
- * garrison already dropped).
+ * what hostile streams still hold in their source garrisons (a human sees the ribbon and the source
+ * draining; the trickle that follows is `inflowRate`).
  */
 export function incomingThreat(state: GameState, towerId: string): number {
   const tower = state.towers[towerId];
   if (!tower) return 0;
   let sum = 0;
   for (const u of state.units) if (u.to === towerId && u.owner !== tower.owner) sum += u.weight;
+  for (const l of state.links) if (l.to === towerId && l.owner !== tower.owner) sum += linkPending(state, l);
   for (const q of state.queues) {
     if (q.to === towerId && q.owner !== tower.owner) sum += q.remaining * (q.unitKind === 'tank' ? C.TANK_WEIGHT : 1);
   }
@@ -178,14 +365,13 @@ export function projectedDefenders(tower: Tower, afterMs: number, state: Visible
 }
 
 /** Highest level this tower can reach. */
-export function maxLevelOf(tower: Tower): number {
+export function maxLevelOf(tower: Pick<Tower, 'kind'>): number {
   return tower.kind === 'fortress' ? C.FORTRESS_MAX_LEVEL : C.MAX_LEVEL;
 }
 
-/** Units needed for the next upgrade, or undefined when already at max. */
-export function upgradeCost(tower: Tower): number | undefined {
-  if (tower.level >= maxLevelOf(tower)) return undefined;
-  return (C.UPGRADE_COST as readonly number[])[tower.level];
+/** Rules v2: is the tower at its kind's top level (garrison capped, nothing left to grow into)? */
+export function atMaxLevel(tower: Pick<Tower, 'kind' | 'level'>): boolean {
+  return tower.level >= maxLevelOf(tower);
 }
 
 /**
@@ -203,13 +389,6 @@ export function spendable(state: GameState, tower: Tower, margin = 2): number {
   return Math.max(0, tower.units - threatReserve(state, tower, margin));
 }
 
-/** Ratio that makes the sim send exactly `count` weight from the tower (1 when sending everything). */
-export function sendRatio(tower: Tower, count: number): number {
-  if (count >= tower.units) return 1;
-  if (count <= 0) return 0;
-  return (count + 0.5) / tower.units;
-}
-
 /** Weight of one unit produced by this tower: a tank for a tank factory, infantry otherwise. */
 export function unitWeightOf(tower: Tower): number {
   return tower.kind === 'tankFactory' ? C.TANK_WEIGHT : C.INFANTRY_WEIGHT;
@@ -225,11 +404,14 @@ export function wholeUnits(tower: Tower, count: number): number {
   return Math.floor(Math.max(0, Math.min(count, tower.units)) / w) * w;
 }
 
-/** Build a sendUnits command for `count` weight; `undefined` when nothing would be sent. */
-export function sendCommand(tower: Tower, to: string, count: number): Command | undefined {
-  const whole = wholeUnits(tower, count);
-  if (whole <= 0) return undefined;
-  return { type: 'sendUnits', owner: tower.owner, from: tower.id, to, ratio: sendRatio(tower, whole) };
+/** Rules v2: the command that starts a stream `tower → to` (the sim validates road, owner and slots). */
+export function linkCommand(tower: Tower, to: string): Command {
+  return { type: 'link', owner: tower.owner, from: tower.id, to };
+}
+
+/** Rules v2: the command that ends one stream of `tower` (or every stream when `to` is omitted). */
+export function unlinkCommand(tower: Tower, to?: string): Command {
+  return to === undefined ? { type: 'unlink', owner: tower.owner, from: tower.id } : { type: 'unlink', owner: tower.owner, from: tower.id, to };
 }
 
 /**
@@ -290,6 +472,14 @@ export function inboundByOwner(state: GameState, towerId: string): Map<Owner, In
     } else out.set(owner, { weight, etaMs });
   };
   for (const u of state.units) if (u.to === towerId) add(u.owner, u.weight, remainingMs(state, u));
+  for (const l of state.links) {
+    if (l.to !== towerId) continue;
+    const road = state.roads[l.roadId];
+    const from = state.towers[l.from];
+    if (!road || !from) continue;
+    const pending = linkPending(state, l);
+    if (pending > 0) add(l.owner, pending, travelMsFor(state, road, l.owner, streamKind(from)));
+  }
   for (const q of state.queues) {
     if (q.to !== towerId) continue;
     const road = state.roads[q.roadId];
@@ -314,11 +504,13 @@ export interface ThreatSource {
 }
 
 /**
- * The column neighbour `n` could throw at a tower of `self`: a hostile garrison as it will be at now +
- * `atMs` (plus its reinforcements on the way, minus what is already attacking it), or a hostile column
- * that is about to flip the neighbour — neutral or another rival's — and carry on from there. The column
- * is timed as if it left right now (a racing rival does not wait) at *its* owner's speed, never at
- * `self`'s. `undefined` when nothing could come from that side.
+ * The column neighbour `n` could throw at a tower of `self` right now: a hostile garrison as it will be
+ * at now + `atMs` (plus its reinforcements on the way, minus what is already attacking it and minus what
+ * its own streams drain away), or a hostile column that is about to flip the neighbour — neutral or
+ * another rival's — and carry on from there. The column is timed as if it left right now (a racing
+ * rival does not wait) at *its* owner's speed, never at `self`'s. What streams keep trickling later is
+ * not a column: `holdReserve` reads the streams actually aimed at a tower. `undefined` when nothing
+ * could come from that side.
  */
 export function threatFrom(state: GameState, self: Owner, n: Neighbour, atMs = 0): ThreatSource | undefined {
   const from = n.tower;
@@ -333,7 +525,9 @@ export function threatFrom(state: GameState, self: Owner, n: Neighbour, atMs = 0
       if (owner === from.owner) support += v.weight;
       else hostile += v.weight;
     }
-    attackers = projectedUnits(from, atMs, state) + support - Math.ceil(hostile / defenceMultiplier(from));
+    // What the neighbour already pours into its streams is on its way somewhere (counted by
+    // `incomingThreat` where it matters), not a column it could still throw at us.
+    attackers = projectedUnits(from, atMs, state) - pendingOf(state, from.id) + support - Math.ceil(hostile / defenceMultiplier(from));
   }
   // A column of another rival bigger than the garrison flips the neighbour and keeps the remainder.
   for (const [owner, v] of inbound) {

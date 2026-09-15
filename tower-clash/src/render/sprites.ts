@@ -105,42 +105,55 @@ function roofStyle(pal: Palette, owner: Tones, skin?: TowerSkin): RoofStyle {
   }
 }
 
-/** Top of the sprite above the anchor, per kind (badge sits above this). */
-export function towerTop(kind: TowerKind): number {
-  switch (kind) {
-    case 'artillery':
-      return 56;
-    case 'tankFactory':
-      return 74;
-    case 'fortress':
-      return 86;
-    default:
-      return 94;
-  }
+/** Level index 0..2 clamped, for the per-level geometry tables. */
+function tier(level: number): 0 | 1 | 2 {
+  return level >= 3 ? 2 : level === 2 ? 1 : 0;
+}
+
+/**
+ * Top of the sprite above the anchor, per kind and level (badge sits above this). Rules v2: L1 is
+ * a small single tower, L2 taller with a storey ledge and a banner, L3 a keep with battlements
+ * and a double roof — so the silhouette alone tells the level at a glance.
+ */
+const TOWER_TOP: Record<TowerKind, readonly [number, number, number]> = {
+  barracks: [80, 110, 136],
+  fortress: [74, 94, 134],
+  artillery: [44, 58, 70],
+  tankFactory: [66, 78, 96],
+};
+
+export function towerTop(kind: TowerKind, level = 1): number {
+  return TOWER_TOP[kind][tier(level)];
 }
 
 /** Centre of the unit-count badge for a tower. */
-export function badgeY(kind: TowerKind): number {
-  return -towerTop(kind) - 18;
+export function badgeY(kind: TowerKind, level = 1): number {
+  return -towerTop(kind, level) - 18;
 }
 
-/** Radius / height used for the ground shadow of each kind. */
-function footprint(kind: TowerKind): { r: number; h: number } {
+/** Radius / height used for the ground shadow of each kind and level. */
+function footprint(kind: TowerKind, level: number): { r: number; h: number } {
+  const k = tier(level);
   switch (kind) {
     case 'artillery':
-      return { r: 40, h: 34 };
+      return { r: [36, 40, 46][k]!, h: [26, 34, 42][k]! };
     case 'tankFactory':
-      return { r: 38, h: 52 };
+      return { r: [34, 38, 46][k]!, h: [40, 52, 66][k]! };
     case 'fortress':
-      return { r: 46, h: 62 };
+      return { r: [44, 46, 52][k]!, h: [50, 62, 88][k]! };
     default:
-      return { r: 32, h: 70 };
+      return { r: [28, 32, 40][k]!, h: [54, 70, 92][k]! };
   }
 }
 
+/** Ground radius of a building's base (plinth / wall ring), so ribbons and rings can clear it. */
+export function towerFootprintRadius(kind: TowerKind, level = 1): number {
+  return footprint(kind, level).r;
+}
+
 /** Long directional shadow + contact shadow, as one path so the overlap stays a single tone. */
-export function drawTowerShadow(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, kind: TowerKind): void {
-  const { r, h } = footprint(kind);
+export function drawTowerShadow(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, kind: TowerKind, level = 1): void {
+  const { r, h } = footprint(kind, level);
   const ry = r * 0.42;
   const dx = h * SHADOW_DX;
   const dy = h * SHADOW_DY;
@@ -569,74 +582,200 @@ function plinth(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: numbe
   cylinder(ctx, pal.stoneTones, x, y - h, y + 2, r, r * 0.4, 0, 0);
 }
 
-function drawBarracks(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, y: number, level: number, o: TowerDrawOptions): void {
-  const pulse = 1 + (o.pulse ?? 0) * 0.15;
-  plinth(ctx, pal, x, y, 28, 9);
-  cylinder(ctx, pal.stoneTones, x, y - 48, y - 8, 22, 8, 3);
-  // door
+/** Arched doorway in the body's shade tone. */
+function door(ctx: CanvasRenderingContext2D, pal: Palette, x: number, bottom: number, hw: number, h: number): void {
   ctx.fillStyle = pal.stoneTones.shade;
   ctx.beginPath();
-  ctx.moveTo(x - 6, y - 8);
-  ctx.lineTo(x - 6, y - 22);
-  ctx.arc(x, y - 22, 6, Math.PI, 0);
-  ctx.lineTo(x + 6, y - 8);
+  ctx.moveTo(x - hw, bottom);
+  ctx.lineTo(x - hw, bottom - h + hw);
+  ctx.arc(x, bottom - h + hw, hw, Math.PI, 0);
+  ctx.lineTo(x + hw, bottom);
   ctx.closePath();
   ctx.fill();
-  // tent awning at the base (left front)
-  ctx.fillStyle = tones.shade;
-  ctx.beginPath();
-  ctx.moveTo(x - 48, y + 10);
-  ctx.lineTo(x - 32, y - 14);
-  ctx.lineTo(x - 14, y + 10);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = tones.mid;
-  ctx.beginPath();
-  ctx.moveTo(x - 48, y + 10);
-  ctx.lineTo(x - 32, y - 14);
-  ctx.lineTo(x - 26, y + 10);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = tones.lit;
-  ctx.beginPath();
-  ctx.moveTo(x - 48, y + 10);
-  ctx.lineTo(x - 32, y - 14);
-  ctx.lineTo(x - 37, y + 10);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = shade(tones.shade, -0.35);
-  ctx.beginPath();
-  ctx.moveTo(x - 37, y + 10);
-  ctx.lineTo(x - 32, y - 2);
-  ctx.lineTo(x - 27, y + 10);
-  ctx.closePath();
-  ctx.fill();
-  // roof
-  const rh = 40 * pulse;
-  roof(ctx, pal, tones, roofStyle(pal, tones, o.skin), x, y - 50, rh, 30 * pulse, 9 * pulse);
-  gems(ctx, pal, x, y - 2, level, o.nowMs, o.motion);
-  flag(ctx, pal, tones, x + 27, y - 76, 30, o.nowMs, o.motion);
 }
 
-function crenels(ctx: CanvasRenderingContext2D, pal: Palette, x: number, top: number, r: number, ry: number, n: number): void {
+/** Tent awning at the base (left front) in owner cloth, `s` scales it. */
+function awning(ctx: CanvasRenderingContext2D, tones: Tones, x: number, y: number, s: number): void {
+  const tri = (ax: number, bx: number, cx: number, color: string): void => {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(x + ax * s, y + 10);
+    ctx.lineTo(x + bx * s, y - 14 * s + 10 * (1 - s));
+    ctx.lineTo(x + cx * s, y + 10);
+    ctx.closePath();
+    ctx.fill();
+  };
+  tri(-48, -32, -14, tones.shade);
+  tri(-48, -32, -26, tones.mid);
+  tri(-48, -32, -37, tones.lit);
+  // dark opening
+  ctx.fillStyle = shade(tones.shade, -0.35);
+  ctx.beginPath();
+  ctx.moveTo(x - 37 * s, y + 10);
+  ctx.lineTo(x - 32 * s, y - 2 * s + 10 * (1 - s));
+  ctx.lineTo(x - 27 * s, y + 10);
+  ctx.closePath();
+  ctx.fill();
+}
+
+/** Stone ledge ring where the second storey starts (L2): underside shade, mid, lit top, rim. */
+function ledge(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, r: number, ry: number): void {
+  const st = pal.stoneTones;
+  ctx.fillStyle = st.shade;
+  ctx.beginPath();
+  ctx.ellipse(x, y + 3.5, r, ry, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = st.mid;
+  ctx.beginPath();
+  ctx.ellipse(x, y + 1.5, r, ry, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = shade(st.lit, 0.12);
+  ctx.beginPath();
+  ctx.ellipse(x, y, r, ry, 0, 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = RIM;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.ellipse(x, y, r - 1, ry - 1, 0, Math.PI * 0.85, Math.PI * 1.45);
+  ctx.stroke();
+}
+
+/**
+ * Hanging owner-coloured banner on a gold rod (L2): swallowtail hem that sways, lit stripe on the
+ * left, a paper emblem dot. Reads as "second storey" even at phone size.
+ */
+function banner(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, top: number, w: number, h: number, nowMs: number, motion: boolean): void {
+  const sway = motion ? Math.sin(nowMs / 320 + x * 0.05) * 1.6 : 0;
+  const hw = w / 2;
+  const cloth = (ox: number, oy: number, color: string): void => {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(x - hw + ox, top + oy);
+    ctx.lineTo(x + hw + ox, top + oy);
+    ctx.lineTo(x + hw + sway + ox, top + h + oy);
+    ctx.lineTo(x + sway * 0.6 + ox, top + h - hw * 0.8 + oy);
+    ctx.lineTo(x - hw + sway + ox, top + h + oy);
+    ctx.closePath();
+    ctx.fill();
+  };
+  cloth(1.5, 2, withAlphaInk(0.22));
+  cloth(0, 0, tones.mid);
+  // lit stripe on the left third
+  ctx.fillStyle = tones.lit;
+  ctx.beginPath();
+  ctx.moveTo(x - hw, top);
+  ctx.lineTo(x - hw + w * 0.32, top);
+  ctx.lineTo(x - hw + w * 0.32 + sway, top + h - 2);
+  ctx.lineTo(x - hw + sway, top + h);
+  ctx.closePath();
+  ctx.fill();
+  // emblem
+  ctx.fillStyle = pal.paper;
+  ctx.beginPath();
+  ctx.arc(x + sway * 0.3, top + h * 0.42, hw * 0.42, 0, TAU);
+  ctx.fill();
+  // rod
+  ctx.strokeStyle = pal.goldShade;
+  ctx.lineCap = 'round';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(x - hw - 3, top);
+  ctx.lineTo(x + hw + 3, top);
+  ctx.stroke();
+  ctx.strokeStyle = pal.gold;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(x - hw - 3, top - 0.8);
+  ctx.lineTo(x + hw + 3, top - 0.8);
+  ctx.stroke();
+}
+
+function withAlphaInk(alpha: number): string {
+  return `rgba(30, 42, 68, ${alpha})`;
+}
+
+/**
+ * Merlons along one half of a rim (`back` = the far half, drawn before whatever stands on the rim;
+ * front half drawn after so it overlaps the roof skirt). Battlements of the L3 keep.
+ */
+function crenelsHalf(ctx: CanvasRenderingContext2D, pal: Palette, x: number, top: number, r: number, ry: number, n: number, back: boolean, size = 10): void {
+  const a0 = back ? Math.PI : 0;
   for (let i = 0; i < n; i++) {
-    const a = Math.PI + ((i + 0.5) / n) * Math.PI;
+    const a = a0 + ((i + 0.5) / n) * Math.PI;
     const cx = x + Math.cos(a) * r;
     const cy = top + Math.sin(a) * ry;
+    const w = size;
+    const h = size + 1;
     ctx.fillStyle = pal.stoneTones.shade;
-    roundRect(ctx, { x: cx - 5, y: cy - 9, w: 11, h: 11 }, 2);
+    roundRect(ctx, { x: cx - w / 2 + 1, y: cy - h + 1, w, h }, 2);
     ctx.fill();
-    ctx.fillStyle = pal.stoneTones.lit;
-    roundRect(ctx, { x: cx - 6, y: cy - 10, w: 10, h: 9 }, 2);
+    ctx.fillStyle = Math.cos(a) < -0.2 ? pal.stoneTones.lit : pal.stoneTones.mid;
+    roundRect(ctx, { x: cx - w / 2, y: cy - h, w: w - 1, h: h - 2 }, 2);
     ctx.fill();
   }
 }
 
-/** Half of the fortress wall ring (back half behind the keep, front half in front of it). */
-function wallRing(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, front: boolean): void {
+/**
+ * Lower skirt roof of the L3 double roof: a shallow cone in the roof material that the turret
+ * stands through. Tent stripes carry over; band skins get the owner band under it.
+ */
+function skirtRoof(ctx: CanvasRenderingContext2D, owner: Tones, style: RoofStyle, x: number, base: number, rx: number, ry: number, height: number): void {
+  if (style.band) ownerBand(ctx, owner, x, base + 2, rx + 3, ry + 1.5);
+  cone(ctx, style.tones, x, base, base - height, rx, ry, style.stripes);
+  if (style.shingles) shingles(ctx, style.tones, x, base, height, rx, ry);
+  if (style.rivets) rivets(ctx, style.tones, x, base, rx, ry);
+}
+
+function drawBarracks(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, y: number, level: number, o: TowerDrawOptions): void {
+  const pulse = 1 + (o.pulse ?? 0) * 0.15;
+  const style = roofStyle(pal, tones, o.skin);
   const st = pal.stoneTones;
-  const rx = 46;
-  const ry = 19;
+  switch (tier(level)) {
+    case 0:
+      // L1: small single tower
+      plinth(ctx, pal, x, y, 26, 8);
+      cylinder(ctx, st, x, y - 42, y - 8, 20, 7.5, 2);
+      door(ctx, pal, x, y - 8, 5.5, 13);
+      awning(ctx, tones, x, y, 0.9);
+      roof(ctx, pal, tones, style, x, y - 44, 32 * pulse, 26 * pulse, 8 * pulse);
+      gems(ctx, pal, x, y - 2, level, o.nowMs, o.motion);
+      flag(ctx, pal, tones, x + 24, y - 66, 26, o.nowMs, o.motion);
+      break;
+    case 1:
+      // L2: taller, storey ledge, banner
+      plinth(ctx, pal, x, y, 30, 10);
+      cylinder(ctx, st, x, y - 62, y - 8, 23, 8.5, 4);
+      door(ctx, pal, x, y - 8, 6, 14);
+      ledge(ctx, pal, x, y - 36, 25.5, 9.5);
+      banner(ctx, pal, tones, x - 1, y - 60, 12, 20, o.nowMs, o.motion);
+      awning(ctx, tones, x, y, 1);
+      roof(ctx, pal, tones, style, x, y - 64, 42 * pulse, 31 * pulse, 9 * pulse);
+      gems(ctx, pal, x, y - 3, level, o.nowMs, o.motion);
+      flag(ctx, pal, tones, x + 28, y - 92, 32, o.nowMs, o.motion);
+      break;
+    default:
+      // L3: wide keep with battlements, skirt roof and a tall turret
+      plinth(ctx, pal, x, y, 40, 12);
+      cylinder(ctx, st, x, y - 50, y - 10, 32, 11, 3);
+      door(ctx, pal, x, y - 10, 7, 17);
+      awning(ctx, tones, x - 8, y, 1.05);
+      crenelsHalf(ctx, pal, x, y - 50, 32, 11, 7, true);
+      skirtRoof(ctx, tones, style, x, y - 52, 26 * pulse, 8.5 * pulse, 16 * pulse);
+      cylinder(ctx, st, x, y - 86, y - 60, 18, 6.5, 2);
+      crenelsHalf(ctx, pal, x, y - 50, 32, 11, 7, false);
+      roof(ctx, pal, tones, style, x, y - 88, 44 * pulse, 24 * pulse, 7.5 * pulse);
+      gems(ctx, pal, x, y - 4, level, o.nowMs, o.motion);
+      flag(ctx, pal, tones, x + 22, y - 116, 30, o.nowMs, o.motion);
+  }
+}
+
+function crenels(ctx: CanvasRenderingContext2D, pal: Palette, x: number, top: number, r: number, ry: number, n: number): void {
+  crenelsHalf(ctx, pal, x, top, r, ry, n, true, 9);
+}
+
+/** Half of the fortress wall ring (back half behind the keep, front half in front of it). */
+function wallRing(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, front: boolean, rx = 46, ry = 19): void {
+  const st = pal.stoneTones;
   const a0 = front ? 0 : Math.PI;
   const a1 = front ? Math.PI : Math.PI * 2;
   // wall face: shade band, then mid, then lit top rim on the left
@@ -657,7 +796,7 @@ function wallRing(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: num
   ctx.ellipse(x, y - 3, rx, ry, 0, a0, a1);
   ctx.stroke();
   // crenels along the top
-  const n = 7;
+  const n = Math.round(rx / 6.5);
   for (let i = 0; i < n; i++) {
     const a = a0 + ((i + 0.5) / n) * Math.PI;
     const cx = x + Math.cos(a) * rx;
@@ -673,26 +812,59 @@ function wallRing(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: num
 
 function drawFortress(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, y: number, level: number, o: TowerDrawOptions): void {
   const pulse = 1 + (o.pulse ?? 0) * 0.15;
-  wallRing(ctx, pal, x, y, false);
+  const style = roofStyle(pal, tones, o.skin);
+  const st = pal.stoneTones;
+  const k = tier(level);
+  const rx = [44, 48, 54][k]!;
+  const ry = [18, 19.5, 22][k]!;
+  wallRing(ctx, pal, x, y, false, rx, ry);
   // courtyard floor
   ctx.fillStyle = pal.pathShade;
   ctx.beginPath();
-  ctx.ellipse(x, y + 1, 40, 15, 0, 0, Math.PI * 2);
+  ctx.ellipse(x, y + 1, rx - 6, ry - 4, 0, 0, Math.PI * 2);
   ctx.fill();
-  cylinder(ctx, pal.stoneTones, x, y - 46, y - 4, 28, 10, 3);
-  crenels(ctx, pal, x, y - 46, 28, 10, 6);
-  roof(ctx, pal, tones, roofStyle(pal, tones, o.skin), x, y - 50, 34 * pulse, 21 * pulse, 7 * pulse);
-  flag(ctx, pal, tones, x + 32, y - 76, 30, o.nowMs, o.motion);
-  wallRing(ctx, pal, x, y, true);
+  switch (k) {
+    case 0:
+      cylinder(ctx, st, x, y - 38, y - 4, 24, 9, 2);
+      crenels(ctx, pal, x, y - 38, 24, 9, 5);
+      roof(ctx, pal, tones, style, x, y - 42, 28 * pulse, 18 * pulse, 6 * pulse);
+      flag(ctx, pal, tones, x + 26, y - 64, 26, o.nowMs, o.motion);
+      break;
+    case 1:
+      cylinder(ctx, st, x, y - 52, y - 4, 28, 10, 3);
+      ledge(ctx, pal, x, y - 30, 30, 10.5);
+      banner(ctx, pal, tones, x, y - 50, 12, 18, o.nowMs, o.motion);
+      crenels(ctx, pal, x, y - 52, 28, 10, 6);
+      roof(ctx, pal, tones, style, x, y - 56, 34 * pulse, 21 * pulse, 7 * pulse);
+      flag(ctx, pal, tones, x + 31, y - 84, 30, o.nowMs, o.motion);
+      break;
+    default:
+      cylinder(ctx, st, x, y - 54, y - 4, 32, 11, 3);
+      door(ctx, pal, x, y - 4, 6, 14);
+      crenelsHalf(ctx, pal, x, y - 54, 32, 11, 7, true);
+      skirtRoof(ctx, tones, style, x, y - 56, 26 * pulse, 8.5 * pulse, 16 * pulse);
+      cylinder(ctx, st, x, y - 88, y - 64, 18, 6.5, 2);
+      crenelsHalf(ctx, pal, x, y - 54, 32, 11, 7, false);
+      roof(ctx, pal, tones, style, x, y - 90, 40 * pulse, 22 * pulse, 7 * pulse);
+      flag(ctx, pal, tones, x + 25, y - 116, 30, o.nowMs, o.motion);
+  }
+  wallRing(ctx, pal, x, y, true, rx, ry);
   gems(ctx, pal, x, y + 12, level, o.nowMs, o.motion);
 }
 
 function drawArtillery(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, y: number, level: number, o: TowerDrawOptions): void {
   const pulse = 1 + (o.pulse ?? 0) * 0.15;
-  cylinder(ctx, pal.stoneTones, x, y - 20, y + 2, 32, 12, 1);
+  const k = tier(level);
+  const st = pal.stoneTones;
+  // bunker: wider and taller per level, with a raised gun deck from L2 and battlements at L3
+  const br = [28, 32, 38][k]!;
+  const bh = [16, 20, 24][k]!;
+  cylinder(ctx, st, x, y - bh, y + 2, br, br * 0.37, k === 2 ? 2 : 1);
+  if (k === 2) crenelsHalf(ctx, pal, x, y - bh, br, br * 0.37, 8, true, 8);
   // sandbags along the front
-  for (let i = 0; i < 5; i++) {
-    const bx = x - 30 + i * 12;
+  const bags = [4, 5, 6][k]!;
+  for (let i = 0; i < bags; i++) {
+    const bx = x - bags * 6 + i * 12;
     ctx.fillStyle = pal.pathShade;
     roundRect(ctx, { x: bx, y: y + 2, w: 13, h: 9 }, 4);
     ctx.fill();
@@ -700,10 +872,18 @@ function drawArtillery(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones
     roundRect(ctx, { x: bx + 1, y: y + 2, w: 10, h: 5 }, 3);
     ctx.fill();
   }
+  let dy = y - bh;
+  if (k >= 1) {
+    // raised gun deck (second storey) with a banner on the bunker wall
+    const dr = [0, 26, 30][k]!;
+    const dh = [0, 10, 14][k]!;
+    cylinder(ctx, st, x, dy - dh, dy, dr, dr * 0.35, 0, 0.15);
+    banner(ctx, pal, tones, x - br * 0.62, dy + 2, 9, bh - 4, o.nowMs, o.motion);
+    dy -= dh;
+  }
   // dome in owner colour (or the skin material over an owner band): three facets
-  const rx = 22 * pulse;
-  const ry = 17 * pulse;
-  const dy = y - 20;
+  const rx = [19, 22, 25][k]! * pulse;
+  const ry = [14, 17, 19][k]! * pulse;
   const style = roofStyle(pal, tones, o.skin);
   if (style.band) ownerBand(ctx, tones, x, dy, rx + 2, 6);
   if (style.shape === 'pagoda') pagoda(ctx, pal, style.tones, x, dy, ry * 1.3, rx, 7, 2);
@@ -711,21 +891,31 @@ function drawArtillery(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones
   else {
     dome(ctx, style.tones, x, dy, rx, ry, style.stripes);
     if (style.shingles) shingles(ctx, style.tones, x, dy, ry, rx, rx * 0.5);
+    if (k === 2) {
+      // L3 double roof: observation cupola on the dome
+      dome(ctx, style.tones, x, dy - ry + 3, rx * 0.34, ry * 0.36);
+      ctx.fillStyle = style.tones.lit;
+      ctx.beginPath();
+      ctx.arc(x, dy - ry + 3 - ry * 0.36 - 1, 2.2, 0, TAU);
+      ctx.fill();
+    }
   }
   if (style.rivets) rivets(ctx, style.tones, x, dy, rx, ry);
-  // barrel tracks the last target
+  // barrel tracks the last target; longer and heavier per level
   const a = o.aim ?? -0.6;
-  const bx = x + Math.cos(a) * 30;
-  const by = dy - 6 + Math.sin(a) * 22;
+  const len = [26, 30, 36][k]!;
+  const bw = [9, 10, 12][k]!;
+  const bx = x + Math.cos(a) * len;
+  const by = dy - 6 + Math.sin(a) * len * 0.73;
   ctx.lineCap = 'round';
   ctx.strokeStyle = pal.metal.shade;
-  ctx.lineWidth = 10;
+  ctx.lineWidth = bw;
   ctx.beginPath();
   ctx.moveTo(x, dy - 6);
   ctx.lineTo(bx, by);
   ctx.stroke();
   ctx.strokeStyle = pal.metal.mid;
-  ctx.lineWidth = 6;
+  ctx.lineWidth = bw * 0.6;
   ctx.stroke();
   ctx.strokeStyle = pal.metal.lit;
   ctx.lineWidth = 2;
@@ -735,15 +925,15 @@ function drawArtillery(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones
   ctx.stroke();
   ctx.fillStyle = pal.metal.shade;
   ctx.beginPath();
-  ctx.arc(x, dy - 6, 6, 0, Math.PI * 2);
+  ctx.arc(x, dy - 6, bw * 0.6, 0, Math.PI * 2);
   ctx.fill();
-  gems(ctx, pal, x - 2, y - 8, level, o.nowMs, o.motion);
-  flag(ctx, pal, tones, x - 28, y - 50, 26, o.nowMs, o.motion);
+  gems(ctx, pal, x + (k >= 1 ? 4 : -2), y - bh * 0.45, level, o.nowMs, o.motion);
+  flag(ctx, pal, tones, x - br + 3, y - bh - [26, 30, 34][k]!, [22, 26, 28][k]!, o.nowMs, o.motion);
 }
 
-/** Two-tier hip roof with curling eaves across the factory deck (pagoda skin). */
-function factoryPagoda(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, top: number, pulse: number): void {
-  const tier = (b: number, w0: number, w1: number, h: number): void => {
+/** Two-tier hip roof with curling eaves across the factory deck (pagoda skin); `hw` = deck half width. */
+function factoryPagoda(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, top: number, pulse: number, hw = 32): void {
+  const tier_ = (b: number, w0: number, w1: number, h: number): void => {
     // underside lip, mid face, lit left facet, shade right facet
     ctx.fillStyle = tones.shade;
     ctx.fillRect(x - w0 - 2, b - 1, (w0 + 2) * 2, 4);
@@ -787,116 +977,166 @@ function factoryPagoda(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones
     ctx.quadraticCurveTo(x - w0 + 1, b + 1, x, b + 1);
     ctx.stroke();
   };
-  tier(top, 38, 26, 11 * pulse);
+  const s = hw / 32;
+  tier_(top, 38 * s, 26 * s, 11 * pulse * s);
   // wall stub
   ctx.fillStyle = pal.stoneTones.mid;
-  ctx.fillRect(x - 20, top - 16 * pulse, 40, 6 * pulse);
+  ctx.fillRect(x - 20 * s, top - 16 * pulse * s, 40 * s, 6 * pulse * s);
   ctx.fillStyle = pal.stoneTones.lit;
-  ctx.fillRect(x - 20, top - 16 * pulse, 6, 6 * pulse);
-  tier(top - 15 * pulse, 24, 10, 10 * pulse);
+  ctx.fillRect(x - 20 * s, top - 16 * pulse * s, 6 * s, 6 * pulse * s);
+  tier_(top - 15 * pulse * s, 24 * s, 10 * s, 10 * pulse * s);
   // ridge + finial
   ctx.fillStyle = tones.shade;
-  ctx.fillRect(x - 11, top - 27 * pulse, 22, 3);
-  finial(ctx, pal, x, top - 26 * pulse, 2.4);
+  ctx.fillRect(x - 11 * s, top - 27 * pulse * s, 22 * s, 3);
+  finial(ctx, pal, x, top - 26 * pulse * s, 2.4 * s);
+}
+
+/** Saw-tooth roof row across a factory deck: `n` teeth over `x-hw..x+hw` rising `h` from `top`. */
+function sawTeeth(ctx: CanvasRenderingContext2D, style: RoofStyle, x: number, top: number, hw: number, n: number, h: number, dim = false): void {
+  const rt = style.tones;
+  const tw = (hw * 2) / n;
+  for (let i = 0; i < n; i++) {
+    const sx = x - hw + i * tw;
+    const striped = style.stripes && i % 2 === 1;
+    ctx.fillStyle = dim ? rt.shade : striped ? style.stripes!.mid : rt.mid;
+    ctx.beginPath();
+    ctx.moveTo(sx, top);
+    ctx.lineTo(sx + tw * 0.4, top - h);
+    ctx.lineTo(sx + tw, top);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = dim ? rt.mid : striped ? style.stripes!.lit : rt.lit;
+    ctx.beginPath();
+    ctx.moveTo(sx, top);
+    ctx.lineTo(sx + tw * 0.4, top - h);
+    ctx.lineTo(sx + tw * 0.4, top);
+    ctx.closePath();
+    ctx.fill();
+    if (style.shingles && !dim) {
+      ctx.strokeStyle = INK_LINE;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      for (const hh of [h * 0.3, h * 0.6]) {
+        ctx.moveTo(sx + (tw * 0.4 * hh) / h, top - hh);
+        ctx.lineTo(sx + tw - (tw * 0.6 * hh) / h, top - hh);
+      }
+      ctx.stroke();
+    }
+  }
+}
+
+/** Chimney with a drifting smoke puff (cool grey reads on cream, sand, snow and dark rock alike). */
+function chimney(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, top: number, bottom: number, w: number, nowMs: number, motion: boolean, phase = 0): void {
+  const st = pal.stoneTones;
+  ctx.fillStyle = st.shade;
+  ctx.fillRect(x, top, w, bottom - top);
+  ctx.fillStyle = st.mid;
+  ctx.fillRect(x, top, w * 0.42, bottom - top);
+  ctx.fillStyle = tones.shade;
+  ctx.fillRect(x - 2, top - 4, w + 4, 6);
+  const drift = motion ? (nowMs / 40 + phase) % 30 : 12;
+  ctx.fillStyle = `rgba(190, 200, 214, ${0.85 - drift / 45})`;
+  ctx.beginPath();
+  ctx.arc(x + w / 2, top - 8 - drift * 0.35, 4 + drift * 0.12, 0, Math.PI * 2);
+  ctx.arc(x + w / 2 + 5 + drift * 0.25, top - 14 - drift * 0.45, 5 + drift * 0.14, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 function drawFactory(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, y: number, level: number, o: TowerDrawOptions): void {
   const pulse = 1 + (o.pulse ?? 0) * 0.15;
   const st = pal.stoneTones;
-  plinth(ctx, pal, x, y, 40, 8);
+  const k = tier(level);
+  const hw = [28, 32, 40][k]!; // half width of the box
+  const top = y - [32, 40, 52][k]!; // deck line
+  plinth(ctx, pal, x, y, [34, 40, 48][k]!, [7, 8, 10][k]!);
   // boxy body: front (mid), right side (shade), lit left strip, rim
   ctx.fillStyle = st.mid;
-  ctx.fillRect(x - 32, y - 40, 64, 36);
+  ctx.fillRect(x - hw, top, hw * 2, y - 4 - top);
   ctx.fillStyle = st.shade;
-  ctx.fillRect(x + 14, y - 40, 18, 36);
+  ctx.fillRect(x + hw * 0.45, top, hw * 0.55, y - 4 - top);
   ctx.fillStyle = st.lit;
-  ctx.fillRect(x - 32, y - 40, 12, 36);
+  ctx.fillRect(x - hw, top, hw * 0.36, y - 4 - top);
   ctx.strokeStyle = RIM;
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(x - 30.5, y - 40);
-  ctx.lineTo(x - 30.5, y - 5);
+  ctx.moveTo(x - hw + 1.5, top);
+  ctx.lineTo(x - hw + 1.5, y - 5);
   ctx.stroke();
-  // door + windows
+  // storey band from L2: a shade strip with a lit line above it, across the whole front
+  if (k >= 1) {
+    const ly = y - [0, 22, 28][k]!;
+    ctx.fillStyle = st.shade;
+    ctx.fillRect(x - hw, ly, hw * 2, 3);
+    ctx.fillStyle = shade(st.lit, 0.12);
+    ctx.fillRect(x - hw, ly - 2, hw * 2, 2);
+    // upper-storey windows
+    ctx.fillStyle = '#bfe8ff';
+    for (const wx of k === 2 ? [-30, -14, 2] : [-24, 4]) ctx.fillRect(x + wx, ly - 12, 9, 8);
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    for (const wx of k === 2 ? [-30, -14, 2] : [-24, 4]) ctx.fillRect(x + wx, ly - 12, 4, 3);
+    banner(ctx, pal, tones, x + hw * 0.72, top + 3, [0, 10, 12][k]!, [0, 20, 24][k]!, o.nowMs, o.motion);
+  }
+  // door + ground-floor windows
   ctx.fillStyle = st.shade;
-  roundRect(ctx, { x: x - 8, y: y - 22, w: 16, h: 18 }, 3);
+  const dh = [14, 18, 20][k]!;
+  roundRect(ctx, { x: x - dh / 2, y: y - 4 - dh, w: dh, h: dh }, 3);
   ctx.fill();
+  const wy = k === 0 ? top + 6 : y - 4 - dh + 2;
   ctx.fillStyle = '#bfe8ff';
-  ctx.fillRect(x - 24, y - 32, 9, 8);
-  ctx.fillRect(x + 4, y - 32, 9, 8);
+  ctx.fillRect(x - hw + 6, wy, 9, 8);
+  ctx.fillRect(x + dh / 2 + 4, wy, 9, 8);
   ctx.fillStyle = 'rgba(255,255,255,0.7)';
-  ctx.fillRect(x - 24, y - 32, 4, 3);
-  ctx.fillRect(x + 4, y - 32, 4, 3);
+  ctx.fillRect(x - hw + 6, wy, 4, 3);
+  ctx.fillRect(x + dh / 2 + 4, wy, 4, 3);
   // saw-tooth roof in owner colour (or the skin material over an owner strip); pagoda and onion
   // skins swap the teeth for a tiered hip roof / a bulb on a flat deck
   const style = roofStyle(pal, tones, o.skin);
   const rt = style.tones;
-  const teeth = style.shape === 'pagoda' || style.shape === 'onion' ? 0 : 3;
-  const tw = 64 / 3;
-  if (style.shape === 'pagoda') factoryPagoda(ctx, pal, rt, x, y - 40, pulse);
+  const teeth = style.shape === 'pagoda' || style.shape === 'onion' ? 0 : [3, 3, 4][k]!;
+  const th = [13, 16, 18][k]! * pulse;
+  if (style.shape === 'pagoda') factoryPagoda(ctx, pal, rt, x, top, pulse, hw);
   else if (style.shape === 'onion') {
     ctx.fillStyle = rt.shade;
-    ctx.fillRect(x - 32, y - 44, 64, 4);
+    ctx.fillRect(x - hw, top - 4, hw * 2, 4);
     ctx.fillStyle = rt.mid;
-    ctx.fillRect(x - 32, y - 46, 64, 4);
-    onion(ctx, pal, rt, x - 6, y - 46, 22 * pulse, 15 * pulse, 5);
-  }
-  for (let i = 0; i < teeth; i++) {
-    const sx = x - 32 + i * tw;
-    const striped = style.stripes && i === 1;
-    ctx.fillStyle = striped ? style.stripes!.mid : rt.mid;
-    ctx.beginPath();
-    ctx.moveTo(sx, y - 40);
-    ctx.lineTo(sx + tw * 0.4, y - 40 - 16 * pulse);
-    ctx.lineTo(sx + tw, y - 40);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = striped ? style.stripes!.lit : rt.lit;
-    ctx.beginPath();
-    ctx.moveTo(sx, y - 40);
-    ctx.lineTo(sx + tw * 0.4, y - 40 - 16 * pulse);
-    ctx.lineTo(sx + tw * 0.4, y - 40);
-    ctx.closePath();
-    ctx.fill();
-    if (style.shingles) {
-      ctx.strokeStyle = INK_LINE;
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      for (const hh of [5, 10]) {
-        ctx.moveTo(sx + (tw * 0.4 * hh) / 16, y - 40 - hh);
-        ctx.lineTo(sx + tw - (tw * 0.6 * hh) / 16, y - 40 - hh);
-      }
-      ctx.stroke();
-    }
+    ctx.fillRect(x - hw, top - 6, hw * 2, 4);
+    onion(ctx, pal, rt, x - hw * 0.19, top - 6, 22 * pulse * (hw / 32), 15 * pulse * (hw / 32), 5 * (hw / 32));
   }
   if (teeth) {
+    if (k === 2) {
+      // L3 double roof: a second row of teeth stepped back and up, peaks showing between the front ones
+      sawTeeth(ctx, style, x + 8, top - 9, hw, teeth, th * 0.9, true);
+      ctx.fillStyle = st.mid;
+      ctx.fillRect(x - hw + 8, top - 9, hw * 2, 9);
+      // corner merlons (battlements) at both ends of the deck
+      for (const cx of [x - hw + 2, x + hw - 10]) {
+        ctx.fillStyle = st.shade;
+        roundRect(ctx, { x: cx + 1, y: top - 9, w: 9, h: 10 }, 2);
+        ctx.fill();
+        ctx.fillStyle = st.lit;
+        roundRect(ctx, { x: cx, y: top - 10, w: 8, h: 8 }, 2);
+        ctx.fill();
+      }
+    }
+    sawTeeth(ctx, style, x, top, hw, teeth, th);
     ctx.fillStyle = style.band ? tones.mid : rt.shade;
-    ctx.fillRect(x - 32, y - 41, 64, 3);
+    ctx.fillRect(x - hw, top - 1, hw * 2, 3);
   }
   if (style.rivets) {
     ctx.fillStyle = rt.lit;
     for (let i = 0; i < 4; i++) {
       ctx.beginPath();
-      ctx.arc(x - 24 + i * 16, y - 45, 1.6, 0, TAU);
+      ctx.arc(x - hw * 0.75 + i * hw * 0.5, top - 5, 1.6, 0, TAU);
       ctx.fill();
     }
   }
-  // chimney + smoke
-  ctx.fillStyle = st.shade;
-  ctx.fillRect(x + 16, y - 70, 12, 32);
-  ctx.fillStyle = st.mid;
-  ctx.fillRect(x + 16, y - 70, 5, 32);
-  ctx.fillStyle = tones.shade;
-  ctx.fillRect(x + 14, y - 74, 16, 6);
-  const drift = o.motion ? (o.nowMs / 40) % 30 : 12;
-  // cool grey smoke reads on cream, sand, snow and dark rock alike
-  ctx.fillStyle = `rgba(190, 200, 214, ${0.85 - drift / 45})`;
-  ctx.beginPath();
-  ctx.arc(x + 22, y - 78 - drift * 0.35, 4 + drift * 0.12, 0, Math.PI * 2);
-  ctx.arc(x + 27 + drift * 0.25, y - 84 - drift * 0.45, 5 + drift * 0.14, 0, Math.PI * 2);
-  ctx.fill();
-  gems(ctx, pal, x - 18, y - 4, level, o.nowMs, o.motion);
-  flag(ctx, pal, tones, x - 36, y - 62, 24, o.nowMs, o.motion);
+  // chimney(s) + smoke: one from L1, twin stacks at L3
+  const cw = [10, 12, 11][k]!;
+  const ch = [28, 32, 38][k]!;
+  chimney(ctx, pal, tones, x + hw * 0.5, top - ch, top + 2, cw, o.nowMs, o.motion);
+  if (k === 2) chimney(ctx, pal, tones, x + hw * 0.5 + 15, top - ch + 6, top + 2, cw, o.nowMs, o.motion, 14);
+  gems(ctx, pal, x - hw * 0.55, y - [3, 4, 5][k]!, level, o.nowMs, o.motion);
+  flag(ctx, pal, tones, x - hw - 4, top - [20, 22, 24][k]!, [22, 24, 26][k]!, o.nowMs, o.motion);
 }
 
 function drawKind(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, kind: TowerKind, x: number, y: number, level: number, o: TowerDrawOptions): void {
@@ -932,7 +1172,7 @@ export function drawTowerSprite(ctx: CanvasRenderingContext2D, pal: Palette, t: 
     drawKind(ctx, pal, pal.ownerTones[wipe.from], t.kind, t.x, y, t.level, o);
     ctx.save();
     ctx.beginPath();
-    ctx.arc(t.x, y - towerTop(t.kind) * 0.55, 8 + wipe.t * 90, 0, Math.PI * 2);
+    ctx.arc(t.x, y - towerTop(t.kind, t.level) * 0.55, 8 + wipe.t * 90, 0, Math.PI * 2);
     ctx.clip();
     drawKind(ctx, pal, tones, t.kind, t.x, y, t.level, o);
     ctx.restore();
@@ -1844,7 +2084,7 @@ export function drawUpgradeGlyph(ctx: CanvasRenderingContext2D, pal: Palette, x:
 
 /**
  * Skin card preview inside a `size` × `size` tile centred on (x, y). `roof.*` ids draw a player
- * barracks wearing that roof; `helmet.*` ids draw a large player soldier wearing that helmet;
+ * L2 barracks wearing that roof; `helmet.*` ids draw a large player soldier wearing that helmet;
  * `theme.*` ids draw a miniature island in that theme with a player barracks and two soldiers on
  * it. Unknown ids fall back to the default of their family.
  */
@@ -1865,11 +2105,12 @@ export function drawSkinPreview(ctx: CanvasRenderingContext2D, pal: Palette, x: 
     drawUnitSprite(ctx, pal, 58, 26, 'player', 'infantry', 1, 0, 1, 0, false, 1.6);
     drawUnitSprite(ctx, pal, 84, 14, 'player', 'infantry', 1, 0, 2, 0, false, 1.6);
   } else {
-    const s = size / 128;
-    ctx.translate(x + size * 0.06, y + size * 0.4);
+    // an L2 barracks (storey ledge + banner) so the roof reads at its full size
+    const s = size / 150;
+    ctx.translate(x + size * 0.06, y + size * 0.42);
     ctx.scale(s, s);
-    drawTowerShadow(ctx, pal, 0, 0, 'barracks');
-    drawTowerSprite(ctx, pal, { x: 0, y: 0, owner: 'player', kind: 'barracks', level: 1 }, { nowMs: 0, motion: false, skin: { roof: skinId } });
+    drawTowerShadow(ctx, pal, 0, 0, 'barracks', 2);
+    drawTowerSprite(ctx, pal, { x: 0, y: 0, owner: 'player', kind: 'barracks', level: 2 }, { nowMs: 0, motion: false, skin: { roof: skinId } });
   }
   ctx.restore();
 }

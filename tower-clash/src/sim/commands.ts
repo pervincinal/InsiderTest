@@ -1,7 +1,7 @@
 import type { Command, GameState } from './types';
 import { C } from './constants';
 import { roadIdFor } from './create';
-import { unitPosition } from './step';
+import { linksFrom, maxLinksOf, removeLink, unitPosition } from './step';
 
 /**
  * Apply a command to the state. Invalid commands (wrong owner, no road, not enough units, …)
@@ -10,6 +10,12 @@ import { unitPosition } from './step';
 export function applyCommand(state: GameState, cmd: Command): void {
   if (cmd.owner === 'neutral') return;
   switch (cmd.type) {
+    case 'link':
+      link(state, cmd);
+      return;
+    case 'unlink':
+      unlink(state, cmd);
+      return;
     case 'sendUnits':
       sendUnits(state, cmd);
       return;
@@ -25,6 +31,33 @@ export function applyCommand(state: GameState, cmd: Command): void {
   }
 }
 
+/**
+ * Rules v2: start a persistent attack stream `from → to`. Valid when the owner holds `from`, an uncut
+ * road joins the two towers, the link does not already exist and `from` is under its per-level limit.
+ */
+function link(state: GameState, cmd: Extract<Command, { type: 'link' }>): void {
+  const from = state.towers[cmd.from];
+  const to = state.towers[cmd.to];
+  if (!from || !to || from === to || from.owner !== cmd.owner) return;
+  const road = state.roads[roadIdFor(from.id, to.id)];
+  if (!road || road.cut) return;
+  const existing = linksFrom(state, from.id);
+  if (existing.some((l) => l.to === to.id)) return;
+  if (existing.length >= maxLinksOf(from)) return;
+  state.links.push({ owner: cmd.owner, from: from.id, to: to.id, roadId: road.id, createdMs: state.time });
+  state.events.push({ type: 'linked', owner: cmd.owner, from: from.id, to: to.id });
+}
+
+/** Rules v2: remove one (`to` given) or every link leaving `from`, if they belong to the owner. */
+function unlink(state: GameState, cmd: Extract<Command, { type: 'unlink' }>): void {
+  for (const l of linksFrom(state, cmd.from)) {
+    if (l.owner !== cmd.owner) continue;
+    if (cmd.to !== undefined && l.to !== cmd.to) continue;
+    removeLink(state, l, 'manual');
+  }
+}
+
+/** @deprecated legacy one-shot send kept for the AI during the transition to links. */
 function sendUnits(state: GameState, cmd: Extract<Command, { type: 'sendUnits' }>): void {
   const from = state.towers[cmd.from];
   const to = state.towers[cmd.to];
@@ -55,16 +88,14 @@ function sendUnits(state: GameState, cmd: Extract<Command, { type: 'sendUnits' }
   });
 }
 
+/**
+ * @deprecated Rules v2: towers upgrade automatically when full (see `tryAutoUpgrade`). The command is
+ * still accepted for save/replay compatibility but changes nothing.
+ */
 function upgrade(state: GameState, cmd: Extract<Command, { type: 'upgrade' }>): void {
   const tower = state.towers[cmd.towerId];
   if (!tower || tower.owner !== cmd.owner) return;
-  const max = tower.kind === 'fortress' ? C.FORTRESS_MAX_LEVEL : C.MAX_LEVEL;
-  if (tower.level >= max) return;
-  const cost: number | undefined = (C.UPGRADE_COST as readonly number[])[tower.level];
-  if (cost === undefined || tower.units < cost) return;
-  tower.units -= cost;
-  tower.level = (tower.level + 1) as 1 | 2 | 3;
-  state.events.push({ type: 'upgrade', towerId: tower.id, level: tower.level });
+  // intentionally a no-op
 }
 
 function cutBridge(state: GameState, cmd: Extract<Command, { type: 'cutBridge' }>): void {
@@ -85,6 +116,7 @@ function cutBridge(state: GameState, cmd: Extract<Command, { type: 'cutBridge' }
   }
   state.units = survivors;
   state.queues = state.queues.filter((q) => q.roadId !== road.id);
+  for (const l of state.links.filter((l) => l.roadId === road.id)) removeLink(state, l, 'roadCut');
   state.events.push({ type: 'bridgeCut', roadId: road.id });
 }
 

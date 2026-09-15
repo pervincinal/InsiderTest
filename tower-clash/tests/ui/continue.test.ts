@@ -38,15 +38,19 @@ function fakeApp(save: SaveData) {
   return { app, starts, current: () => current };
 }
 
-/** Two player towers against a strong enemy; the debug "suicide" mode loses it after ~20+ s of sim time. */
+/**
+ * Two player towers against a strong enemy; the debug "suicide" mode loses it after ~22+ s of sim
+ * time (the rules-v2 rusher streams its garrison, so the enemy sits a long road away and the
+ * player starts with a few more defenders than before to keep a full rewind window in play).
+ */
 function losingLevel(): LevelDef {
   return makeLevel({
     star3: 30_000,
     star2: 60_000,
     towers: [
-      { id: 'p', x: 360, y: 1000, owner: 'player', units: 30, level: 1 },
-      { id: 'q', x: 160, y: 900, owner: 'player', units: 20, level: 1 },
-      { id: 'e', x: 360, y: 300, owner: 'enemy1', units: 100, level: 1 },
+      { id: 'p', x: 360, y: 1000, owner: 'player', units: 40, level: 1 },
+      { id: 'q', x: 160, y: 900, owner: 'player', units: 24, level: 1 },
+      { id: 'e', x: 360, y: 160, owner: 'enemy1', units: 100, level: 1 },
     ],
     roads: [
       { a: 'p', b: 'e' },
@@ -143,6 +147,7 @@ describe('continue after defeat — rewind (ECONOMY.md §3.5, ECON-6b)', () => {
     expect(play.state.towers).toEqual(expectedTowers);
     expect(play.state.units).toEqual(ref.units);
     expect(play.state.queues).toEqual(ref.queues);
+    expect(play.state.links).toEqual(ref.links);
     expect(play.state.rngState).toBe(ref.rngState);
   });
 
@@ -178,6 +183,7 @@ describe('continue after defeat — rewind (ECONOMY.md §3.5, ECON-6b)', () => {
     for (const t of Object.values(state.towers)) t.owner = 'player';
     state.units = state.units.filter((u) => u.owner === 'player');
     state.queues = state.queues.filter((q) => q.owner === 'player');
+    state.links = state.links.filter((l) => l.owner === 'player');
     clock.now += 250;
     play.update(250, clock.now);
     const won = shell.current();
@@ -200,6 +206,7 @@ describe('continue after defeat — rewind (ECONOMY.md §3.5, ECON-6b)', () => {
     for (const t of Object.values(state.towers)) if (t.owner === 'player') t.owner = 'enemy1';
     state.units = state.units.filter((u) => u.owner !== 'player');
     state.queues = state.queues.filter((q) => q.owner !== 'player');
+    state.links = state.links.filter((l) => l.owner !== 'player');
     clock.now += 250;
     play.update(250, clock.now);
     const again = shell.current();

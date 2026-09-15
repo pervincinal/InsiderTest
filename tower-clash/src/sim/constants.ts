@@ -6,9 +6,21 @@ export const C = Object.freeze({
 
   /** ms per produced infantry by barracks level (index = level). */
   GEN_MS: [0, 1000, 700, 500] as const,
-  CAPACITY: [0, 30, 50, 80] as const,
-  UPGRADE_COST: [0, 10, 20] as const, // cost to go from level index → index+1
+  /**
+   * Garrison capacity (weight) by level (index = level) — GDD §2.0 ladder 25 / 50 / 100. Every tower
+   * kind uses this ladder (fortress × FORTRESS_CAPACITY_MUL); the player's `capacityMul` multiplies it.
+   */
+  CAPACITY: [0, 25, 50, 100] as const,
+  /**
+   * @deprecated Rules v2 (GDD §2.0): upgrades are automatic and free; the `upgrade` command is ignored.
+   * Kept only so older layers still compile — do not read it for gameplay.
+   */
+  UPGRADE_COST: [0, 10, 20] as const,
   MAX_LEVEL: 3,
+  /** Rules v2: a tower upgrades by itself when its garrison reaches its capacity (L1 → L2 → L3). */
+  AUTO_UPGRADE: true,
+  /** Maximum simultaneous attack streams (links) a tower may have, by level (index = level). */
+  LINKS_PER_LEVEL: [0, 1, 2, 3] as const,
 
   UNIT_SPEED: 120, // px/s
   LEAVE_INTERVAL_MS: 120,
@@ -17,12 +29,10 @@ export const C = Object.freeze({
   TANK_WEIGHT: 5,
   TANK_SPEED_MUL: 0.7,
   TANK_GEN_MS: 4000,
-  TANK_FACTORY_CAPACITY: 40,
 
   ARTILLERY_GEN_MUL: 2, // generation interval multiplier (half rate)
   ARTILLERY_COOLDOWN_MS: 800,
   ARTILLERY_RANGE: 140,
-  ARTILLERY_CAPACITY: 40,
 
   FORTRESS_CAPACITY_MUL: 1.5,
   FORTRESS_DEFENCE: 2, // attackers needed per defender

@@ -29,13 +29,13 @@ export const az: Dictionary = {
   'levels.title': 'SƏVİYYƏLƏR',
   'levels.commander': 'KOMANDİR',
   'levels.noUpgrades': 'Hələ təkmilləşmə yoxdur · öyrətmək üçün vur',
-
-  'hud.send': 'GÖNDƏR',
   'hud.level': 'SƏVİYYƏ {n}',
   'hud.free': 'PULSUZ',
   'hud.lesson': 'DƏRS',
   'hud.airstrikeHint': 'HAVA ZƏRBƏSİ · düşmən qülləsinə vur · ləğv üçün başqa yerə vur',
-  'hud.selectHint': 'Göndərmək üçün bağlı qülləyə vur · təkmilləşdirmək üçün yenidən vur',
+  'hud.selectHint': 'Axın başlatmaq üçün bağlı qülləyə vur · dayandırmaq üçün yenidən vur',
+  'hud.streams': 'AXINLAR',
+  'hint.linkLimit': '{n} axın üçün L{n} lazımdır',
 
   'pause.title': 'FASİLƏ',
   'pause.subtitle': 'Səviyyə {n} · {time}',
@@ -70,8 +70,6 @@ export const az: Dictionary = {
   'settings.motion': 'Az hərəkət',
   'settings.motionSub': 'Avto sistem ayarına uyğundur',
   'settings.motionAuto': 'AVTO',
-  'settings.sendRatio': 'Standart göndəriş',
-  'settings.sendRatioSub': 'Hər vuruşda qarnizonun payı',
   'settings.language': 'Dil',
   'settings.languageSub': 'Menyular, ipucları və mesajlar',
   'settings.summary': '{stars} ulduz  ·  {coins} qızıl',
@@ -170,9 +168,8 @@ export const az: Dictionary = {
   'play.freeCharge': 'Pulsuz {kind} yükü əlavə olundu',
 
   'tutorial.tapTower': 'Öz qüllənə vur',
-  'tutorial.tapGrey': 'İndi boz qülləyə vur',
+  'tutorial.tapGrey': 'İndi boz qülləyə vur — axın davam edir',
   'tutorial.tapThenGrey': 'Öz qüllənə, sonra boz qülləyə vur',
-  'tutorial.reinforce': 'Gücləndir: evdən ortaya daha çox göndər',
-  'tutorial.select': 'Seçmək üçün öz qüllənə vur',
-  'tutorial.upgrade': 'Təkmilləşdirmək üçün seçilmiş qülləyə yenidən vur (qiymət {n})',
+  'tutorial.stopStream': 'Axını dayandırmaq üçün hədəfə yenidən vur',
+  'tutorial.fillToUpgrade': 'Qüllə {n}-ə dolsun ki, təkmilləşsin — L2 2 hədəfə hücum edə bilər',
 };

@@ -64,7 +64,7 @@ describe('t()', () => {
     await p;
     expect(isLanguageLoaded('az')).toBe(true);
     expect(t('title.play')).toBe('OYNA');
-    expect(t('tutorial.upgrade', { n: 10 })).toBe(az['tutorial.upgrade'].replace('{n}', '10'));
+    expect(t('tutorial.fillToUpgrade', { n: 25 })).toBe(az['tutorial.fillToUpgrade'].replace('{n}', '25'));
     await setLanguage('ru');
     expect(t('result.victory')).toBe('ПОБЕДА');
     await setLanguage('tr');

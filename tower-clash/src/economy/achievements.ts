@@ -19,7 +19,10 @@ export interface MatchSummary {
   timeMs: number;
   /** An enemy captured a tower the player owned at some point. */
   lostTower: boolean;
-  /** The player upgraded one of their towers to level 3. */
+  /**
+   * One of the player's towers reached level 3. Rules v2 upgrades are automatic (a full tower gains
+   * a level and the sim emits `upgrade`), so this is set from that event — no player command involved.
+   */
   upgradedToL3: boolean;
   capturedFortress: boolean;
   capturedTankFactory: boolean;
