@@ -44,6 +44,10 @@ jobs:
           java-version: 21
 
       - uses: android-actions/setup-android@v3
+        with:
+          # The action's default package list includes the retired 'tools' package, which makes
+          # sdkmanager exit 1 on current runner images. Ask only for what the project needs.
+          packages: platform-tools platforms;android-36 build-tools;36.0.0
 
       - uses: gradle/actions/setup-gradle@v4
 
