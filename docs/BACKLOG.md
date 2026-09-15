@@ -7,8 +7,9 @@ Priority = order within a section. Producer moves items; anyone may add to Bugs 
 
 ## Next (ECON — Phase B/C after accounts exist)
 - [ ] ECON-1 Phase B: real RevenueCat + AdMob keys (secrets `RC_*`, `ADMOB_*`), sandbox purchase test on a device, App Store Connect / Play products created with catalog ids — mobile-engineer + publisher (needs stakeholder accounts)
-- [ ] PERF-1 Eager bundle is 79.6 kB gzip of the 80 kB budget: lazy-load the shop/achievements/settings screens (dynamic import) or raise the budget with a reason — frontend-engineer + qa
-- [ ] AI-2 Attack planner should prefer non-bridge sources into a maxed turtle keep (turtle now cuts bridges; level 40 seeds 6/7 slower) — ai-engineer
+- [ ] PERF-2 Levels JSON are 13.8 kB gzip of the eager chunk: eager `LEVEL_META` + per-level `import()` in `src/levels/index.ts` (start of PlayScreen becomes async) — level-designer + frontend
+- [ ] I18N-2 Translate level names and lessons (JSON `name_az/ru/tr`, `lesson_*`) and catalog labels (skins, achievements) — level-designer + monetization-designer + frontend
+- [ ] PUB-7 Store listing screenshots in AZ/RU/TR now that the UI is localised (captions + in-game language) — publisher
 - [ ] QA-2 Real-device pass (Android APK, iPhone via TestFlight later) — needs stakeholder's phone
 - [ ] ECON-8 `app-ads.txt` hosting needs a domain root (user-site repo or custom domain) — needs stakeholder decision
 
@@ -61,6 +62,7 @@ Priority = order within a section. Producer moves items; anyone may add to Bugs 
 - Local 2-player on one screen
 
 ## Done
+- 2026-09-15 Day 3b: lazy screens (eager 74.8 kB gzip), i18n EN/AZ/RU/TR with settings picker + title chip, Nunito Cyrillic subset; reference player bridge-aware attack planning (level 40 worst 112 → 91 s, no regressions)
 - 2026-09-15 Day 3: reference player + turtle cut bridges (13 + 8 tests); levels 6/21/23 → 100/100 (medians 43/38/60 s); version 0.3.0 build 3 synced to Android/iOS; README and release notes v0.3.0 final (tag `tower-clash-v0.3.0` exists locally only: the CCR git proxy accepts pushes to the working branch, not tags — create the release from the GitHub UI)
 - 2026-09-14 Day 2b: true 20 s rewind continue with original star clock; terrain theme skins buy/equip (title + play re-lit); level 30 → 100/100; star times recomputed for 6/9/10/11/27/31/37; privacy policy v2.1 + site pages + listing aligned with no-ATT; release notes v0.3.0 status
 - 2026-09-14 Day 2: achievements + booster crate + crystal→gold conversion; settings privacy options + support id; no ATT (non-personalised ads on iOS); dedicated skin sprites (7 roofs, 7 helmets) + terrain themes (dusk, winter night, neon); sim snapshot ring + continue API; levels 27/31/37 with marching enemy tanks (100/100 seeds, medians 53/51/71 s); Android WebView e2e project; privacy.html + support.html on the site; store shot 07 + IAP review frame; routine re-bound to the producer session
