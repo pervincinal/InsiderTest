@@ -115,24 +115,24 @@ Qeyd: menyular, işarələr, təlimat, səviyyə adları və dərslər azərbayc
 |---|---|---|
 | App icon | 512×512 PNG, 32-bit | `tower-clash/public/icons/icon-512.png` (same mark as `resources/icon.svg`) |
 | Feature graphic | 1024×500 PNG/JPG | `tower-clash/store/feature-graphic.png` (144 KB) |
-| Phone screenshots | 2–8, 9:16, 320–3840 px | `tower-clash/store/screenshots/en/01..08.png` and `az/01..08.png`, 1080×1920, each < 600 KB (v0.4.0 retake, `577b894`) |
+| Phone screenshots | 2–8, 9:16, 320–3840 px | `tower-clash/store/screenshots/en/01..08.png`, `az/`, `ru/`, `tr/` (one set per store language; caption *and* the game's own UI in that language, PUB-7), 1080×1920, each < 600 KB (v0.4.0 retake, `577b894`; AZ/RU/TR in-game sets rendered 2026-09-17) |
 | IAP review screenshot (Apple only, not shown on any store page) | ≥ 640×920 | `tower-clash/store/iap-review/shop-crystals.png`, 1290×2796, uncaptioned shop Crystals tab (see §6.1) |
 
 Screenshot order and captions (same frames in every set; the `SHOTS` table in `renderStoreShots.mjs` is the source of truth). **Status (2026-09-17, v0.4.0 retake by the Tech Artist, commit `577b894`; Publisher check of `store/screenshots/raw/*.png` and `en/`, `az/`):** all eight frames are rules-v2 renders — STREAMS pill in the HUD, no SEND toggle, the new tutorial hint on 02 — and the set is ready to upload. Google Play allows up to 8 phone screenshots, App Store up to 10 (frame 09 is App Store only).
 
-| # | Frame (raw file name) | EN caption | AZ caption | Status |
-|---|---|---|---|---|
-| 01 | Title screen with the language chip (`01-title`) | Capture every tower | Bütün qüllələri tut | done |
-| 02 | Level 1 "First Taps" on a fresh save, tutorial hint "Tap your tower" and the lesson banner (`02-level-01-tutorial`) | Tap, and the stream flows | Vur — axın davam edir | done |
-| 03 | Level 5 "Two Roads": a blue player stream and a red enemy stream on the roads at the same moment (`03-level-05-streams`) | Streams keep flowing | Axınlar dayanmır | done |
-| 04 | Level 4 "Build-up": a player tower reaching 25 and turning into the L2 sprite (`04-level-04-upgrade`) | Fill up to level up | Doldur, səviyyə qalxsın | done |
-| 05 | Level 5: the limit hint "L2 needed for 2 streams" on an L1 tower that already runs one stream (`05-level-05-limit-hint`) | Bigger towers, more streams | Böyük qüllə, çox axın | done |
-| 06 | Level 9 "Stone Walls" (first fortress), player stream into the fortress (`06-level-09-fortress`) | Storm the fortress | Qalanı ələ keçir | done |
-| 07 | Result screen, 3 stars (`07-result-win`) | Three-star every level | Hər səviyyədə üç ulduz | done |
-| 08 | Shop, **Upgrades** tab (five Commander tracks, gold prices, seeded mid-game save) (`08-shop-upgrades`) | Boost your commander | Komandirini gücləndir | done |
-| 09 | Level 15 (artillery citadel) — **App Store sets only** (`09-level-15-citadel`) | Silence the guns | Topları susdur | done (Apple 6.7" / 6.5" only; not in the Google set, which stays at 8) |
+| # | Frame (raw file name) | EN caption | AZ caption | RU caption | TR caption | Status |
+|---|---|---|---|---|---|---|
+| 01 | Title screen with the language chip (`01-title`) | Capture every tower | Bütün qüllələri tut | Захвати все башни | Tüm kuleleri ele geçir | done |
+| 02 | Level 1 "First Taps" on a fresh save, tutorial hint "Tap your tower" and the lesson banner (`02-level-01-tutorial`) | Tap, and the stream flows | Vur — axın davam edir | Нажми — поток пошёл | Dokun, akış başlasın | done |
+| 03 | Level 5 "Two Roads": a blue player stream and a red enemy stream on the roads at the same moment (`03-level-05-streams`) | Streams keep flowing | Axınlar dayanmır | Потоки не иссякают | Akışlar durmaz | done |
+| 04 | Level 4 "Build-up": a player tower reaching 25 and turning into the L2 sprite (`04-level-04-upgrade`) | Fill up to level up | Doldur, səviyyə qalxsın | Наполни и прокачай | Doldur, seviye atla | done |
+| 05 | Level 5: the limit hint "L2 needed for 2 streams" on an L1 tower that already runs one stream (`05-level-05-limit-hint`) | Bigger towers, more streams | Böyük qüllə, çox axın | Выше башня — больше потоков | Büyük kule, çok akış | done |
+| 06 | Level 9 "Stone Walls" (first fortress), player stream into the fortress (`06-level-09-fortress`) | Storm the fortress | Qalanı ələ keçir | Штурмуй крепость | Kaleyi fethet | done |
+| 07 | Result screen, 3 stars (`07-result-win`) | Three-star every level | Hər səviyyədə üç ulduz | Везде по три звезды | Her bölümde üç yıldız | done |
+| 08 | Shop, **Upgrades** tab (five Commander tracks, gold prices, seeded mid-game save) (`08-shop-upgrades`) | Boost your commander | Komandirini gücləndir | Прокачай командира | Komutanını güçlendir | done |
+| 09 | Level 15 (artillery citadel) — **App Store sets only** (`09-level-15-citadel`) | Silence the guns | Topları susdur | Заглуши пушки (Apple sets are EN only) | Topları sustur (Apple sets are EN only) | done (Apple 6.7" / 6.5" only; not in the Google set, which stays at 8) |
 
-The README embeds `store/screenshots/en/02,04,06,07.png` (tutorial, upgrade, fortress, result) with matching alt texts; `LAUNCH_CHECKLIST.md` G10 / A11 list the same files. Localised AZ/RU/TR in-game language sets (the game's UI in those languages, not just the caption) are PUB-7 and can be rendered in the same run by switching the language through the settings before capturing. None of the frames shows the v2.1 under-fire badge — no frame catches a hostile landing on an owned tower (03: the red stream is still on the road; 06: the blue column has not reached the fortress; 09: the citadel fires at a neutral, which never recruits) — so the set claims nothing about the rule either way; a frame with the peach badge can join a future set (PUB-6).
+The README embeds `store/screenshots/en/02,04,06,07.png` (tutorial, upgrade, fortress, result) with matching alt texts; `LAUNCH_CHECKLIST.md` G10 / A11 list the same files. Localised AZ/RU/TR in-game sets are rendered by the same script (PUB-7 done 2026-09-17: `store/screenshots/{az,ru,tr}/01..08.png`, in-game UI in that language).
 
 Frame 08 deliberately shows the Upgrades tab and not the Crystals tab: the crystal packs display the catalogue's fallback USD prices (the store SDK localises them only on a device) and, in the web build, a "Test store" line. Screenshots never show a price in a fixed currency (a hard-coded "$0.99" in a screenshot is a consumer-law problem in the EU), so the Crystals tab is used only for the private App Store Connect review screenshot (§6.1). Follow-up: (PUB-6) add frames from levels 17+ (two enemies, mines, a cut bridge, three enemies).
 

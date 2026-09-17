@@ -7,9 +7,11 @@
  * Default (no flag) = `--google`. Output (all PNG, every file kept under 600 KB):
  *
  *   --google
- *   store/screenshots/raw/NN-<name>.png        – uncaptioned 1080×1920 frames (viewport 360×640 @3x)
- *   store/screenshots/en/01..08.png            – captioned phone screenshots, English
- *   store/screenshots/az/01..08.png            – captioned phone screenshots, Azerbaijani
+ *   store/screenshots/raw/NN-<name>.png        – uncaptioned 1080×1920 frames (viewport 360×640 @3x), game in English
+ *   store/screenshots/raw-<lang>/NN-<name>.png – the same frames with the game's UI in az / ru / tr (PUB-7)
+ *   store/screenshots/<lang>/01..08.png        – captioned phone screenshots, en / az / ru / tr: caption *and*
+ *                                                in-game text (title, HUD, lesson banner, tutorial hint, shop,
+ *                                                result) in that language
  *   store/feature-graphic.png                  – 1024×500 Google Play feature graphic (drawn on canvas)
  *   Google Play accepts any 9:16 size between 320 and 3840 px, so this set may be scaled down
  *   (1080×1920 → 945×1680 → …) until every file fits the size budget.
@@ -18,7 +20,7 @@
  *   store/screenshots/raw-apple-6.7/NN-<name>.png – 1290×2796 frames (viewport 430×932 @3x)
  *   store/screenshots/raw-apple-6.5/NN-<name>.png – 1284×2778 frames (viewport 428×926 @3x)
  *   store/screenshots/apple-6.7/en/01..09.png     – captioned, exactly 1290×2796 (iPhone 6.7"; 09 = App Store extra)
- *   store/screenshots/apple-6.5/en/01..09.png     – captioned, exactly 1284×2778 (iPhone 6.5")
+ *   store/screenshots/apple-6.5/en/01..09.png     – captioned, exactly 1284×2778 (iPhone 6.5"), English only
  *   store/iap-review/shop-crystals.png            – uncaptioned 1290×2796 shop frame, Crystals tab: the
  *                                                   App Store Connect "review screenshot" for every in-app
  *                                                   purchase (≥ 640×920). Without `--apple` it is written
@@ -35,6 +37,12 @@
  *   channel (canvas posterise) and, when the transitive `sharp` module of `@capacitor/assets`
  *   can be imported, a dithered 256-colour palette (libimagequant). `sharp` is optional: without
  *   it the posterise steps alone still produce a file under the limit.
+ *
+ * In-game language (PUB-7): every set lists its languages (`SETS[].langs`); the raw frames are captured
+ * once per language in a fresh browser context whose `towerclash.save.v3` is pre-seeded with
+ * `settings.language` (an init script, so the language is in before the app's first frame — the app
+ * reads `save.settings.language` at boot, `bootLanguage` in src/main.ts). The caption of each frame
+ * comes from the `SHOTS[].<lang>` column.
  *
  * The script starts `vite preview` on the given port itself and kills it on exit. Chromium is the
  * preinstalled headless shell under /opt/pw-browsers (never run `playwright install` here);
@@ -74,15 +82,24 @@ const IAP_REVIEW_SET = DO_APPLE ? 'apple-6.7' : 'google';
  * set (8 phone screenshots max there, 10 on the App Store).
  */
 const SHOTS = [
-  { name: 'title', capture: 'title', en: 'Capture every tower', az: 'Bütün qüllələri tut' },
-  { name: 'level-01-tutorial', capture: 'tutorial', en: 'Tap, and the stream flows', az: 'Vur — axın davam edir' },
-  { name: 'level-05-streams', capture: 'streams', en: 'Streams keep flowing', az: 'Axınlar dayanmır' },
-  { name: 'level-04-upgrade', capture: 'upgrade', en: 'Fill up to level up', az: 'Doldur, səviyyə qalxsın' },
-  { name: 'level-05-limit-hint', capture: 'limitHint', en: 'Bigger towers, more streams', az: 'Böyük qüllə, çox axın' },
-  { name: 'level-09-fortress', capture: 'fortress', en: 'Storm the fortress', az: 'Qalanı ələ keçir' },
-  { name: 'result-win', capture: 'result', en: 'Three-star every level', az: 'Hər səviyyədə üç ulduz' },
-  { name: 'shop-upgrades', capture: 'shop', en: 'Boost your commander', az: 'Komandirini gücləndir', shop: 'upgrades' },
-  { name: 'level-15-citadel', capture: 'citadel', en: 'Silence the guns', az: 'Topları susdur', appleOnly: true },
+  { name: 'title', capture: 'title',
+    en: 'Capture every tower', az: 'Bütün qüllələri tut', ru: 'Захвати все башни', tr: 'Tüm kuleleri ele geçir' },
+  { name: 'level-01-tutorial', capture: 'tutorial',
+    en: 'Tap, and the stream flows', az: 'Vur — axın davam edir', ru: 'Нажми — поток пошёл', tr: 'Dokun, akış başlasın' },
+  { name: 'level-05-streams', capture: 'streams',
+    en: 'Streams keep flowing', az: 'Axınlar dayanmır', ru: 'Потоки не иссякают', tr: 'Akışlar durmaz' },
+  { name: 'level-04-upgrade', capture: 'upgrade',
+    en: 'Fill up to level up', az: 'Doldur, səviyyə qalxsın', ru: 'Наполни и прокачай', tr: 'Doldur, seviye atla' },
+  { name: 'level-05-limit-hint', capture: 'limitHint',
+    en: 'Bigger towers, more streams', az: 'Böyük qüllə, çox axın', ru: 'Выше башня — больше потоков', tr: 'Büyük kule, çok akış' },
+  { name: 'level-09-fortress', capture: 'fortress',
+    en: 'Storm the fortress', az: 'Qalanı ələ keçir', ru: 'Штурмуй крепость', tr: 'Kaleyi fethet' },
+  { name: 'result-win', capture: 'result',
+    en: 'Three-star every level', az: 'Hər səviyyədə üç ulduz', ru: 'Везде по три звезды', tr: 'Her bölümde üç yıldız' },
+  { name: 'shop-upgrades', capture: 'shop', shop: 'upgrades',
+    en: 'Boost your commander', az: 'Komandirini gücləndir', ru: 'Прокачай командира', tr: 'Komutanını güçlendir' },
+  { name: 'level-15-citadel', capture: 'citadel', appleOnly: true,
+    en: 'Silence the guns', az: 'Topları susdur', ru: 'Заглуши пушки', tr: 'Topları sustur' },
 ];
 /** Frames of one set, in order (the Google set drops the App-Store-only extras). */
 const shotsFor = (set) => SHOTS.filter((s) => !s.appleOnly || set.exact);
@@ -109,7 +126,10 @@ const SHOP_SAVE = {
 
 /**
  * One entry per store format. `exact` = the output must keep its pixel size (App Store);
- * otherwise the set may be scaled down to meet the size budget (Google Play).
+ * otherwise the set may be scaled down to meet the size budget (Google Play). `langs` = the
+ * in-game languages captured (one raw directory each; `<lang>/NN.png` carries the matching caption).
+ * The Apple sets stay English (Azerbaijani is not an App Store locale; RU/TR App Store sets are not
+ * in the listing plan).
  */
 const SETS = {
   google: {
@@ -117,9 +137,9 @@ const SETS = {
     viewport: { width: 360, height: 640 },
     scale: 3,
     out: { w: 1080, h: 1920 },
-    rawDir: join(STORE, 'screenshots', 'raw'),
+    rawDir: (lang) => join(STORE, 'screenshots', lang === 'en' ? 'raw' : `raw-${lang}`),
     outDir: (lang) => join(STORE, 'screenshots', lang),
-    langs: ['en', 'az'],
+    langs: ['en', 'az', 'ru', 'tr'],
     exact: false,
   },
   'apple-6.7': {
@@ -127,7 +147,7 @@ const SETS = {
     viewport: { width: 430, height: 932 },
     scale: 3,
     out: { w: 1290, h: 2796 },
-    rawDir: join(STORE, 'screenshots', 'raw-apple-6.7'),
+    rawDir: () => join(STORE, 'screenshots', 'raw-apple-6.7'),
     outDir: (lang) => join(STORE, 'screenshots', 'apple-6.7', lang),
     langs: ['en'],
     exact: true,
@@ -137,12 +157,15 @@ const SETS = {
     viewport: { width: 428, height: 926 },
     scale: 3,
     out: { w: 1284, h: 2778 },
-    rawDir: join(STORE, 'screenshots', 'raw-apple-6.5'),
+    rawDir: () => join(STORE, 'screenshots', 'raw-apple-6.5'),
     outDir: (lang) => join(STORE, 'screenshots', 'apple-6.5', lang),
     langs: ['en'],
     exact: true,
   },
 };
+
+/** Save key the app boots from (src/ui/save.ts `SAVE_KEY`); `settings.language` is the in-game language. */
+const SAVE_KEY = 'towerclash.save.v3';
 
 /**
  * Re-encode steps for exact-size sets, tried in order until the file is under budget (best
@@ -162,7 +185,7 @@ const APPLE_QUALITY_LADDER = [
 ];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const rawFile = (set, i) => join(set.rawDir, `${String(i + 1).padStart(2, '0')}-${shotsFor(set)[i].name}.png`);
+const rawFile = (set, lang, i) => join(set.rawDir(lang), `${String(i + 1).padStart(2, '0')}-${shotsFor(set)[i].name}.png`);
 const outFile = (set, lang, i) => join(set.outDir(lang), `${String(i + 1).padStart(2, '0')}.png`);
 const kb = (n) => `${(n / 1024).toFixed(0)} KB`;
 
@@ -227,7 +250,43 @@ const FRAME_CONDITIONS = () => {
   };
 };
 
-async function openGame(browser, set) {
+/**
+ * Installed in every game context (init script, runs before the app on every navigation incl. the
+ * shop-seed reload): pins `settings.language` in the v3 save so the app boots in `lang`. The rest
+ * of the save is left as it is (absent on the first load → a fresh save, so level 1 still shows its
+ * tutorial and the wallet starts at 0; the seeded shop save on the reload).
+ */
+const SEED_LANGUAGE = ({ key, lang }) => {
+  let save = {};
+  try {
+    save = JSON.parse(localStorage.getItem(key) ?? '{}') ?? {};
+  } catch {
+    save = {};
+  }
+  if (typeof save !== 'object' || Array.isArray(save)) save = {};
+  save.version = 3;
+  save.settings = { ...(save.settings ?? {}), language: lang };
+  localStorage.setItem(key, JSON.stringify(save));
+};
+
+/** Fonts the app waits for at boot (src/main.ts `waitForFonts`): Fredoka, plus Nunito for the Cyrillic UI. */
+const awaitFonts = (page, lang) =>
+  page.evaluate(async (lang) => {
+    const fonts = document.fonts;
+    if (!fonts) return;
+    await fonts.ready;
+    const loads = [fonts.load('700 32px Fredoka'), fonts.load('500 32px Fredoka')];
+    if (lang === 'ru') loads.push(fonts.load('700 32px Nunito', 'Пауза'), fonts.load('500 32px Nunito', 'Пауза'));
+    await Promise.all(loads).catch(() => undefined);
+  }, lang);
+
+/** Throws when the app did not boot in the language the context was seeded with. */
+async function assertLanguage(page, lang) {
+  const live = await page.evaluate(() => window.__towerclash.getLanguage());
+  if (live !== lang) throw new Error(`in-game language is "${live}", expected "${lang}" (save seed not applied)`);
+}
+
+async function openGame(browser, set, lang) {
   // Fresh context = fresh localStorage, so level 1 shows its tutorial and coins start at 0.
   const context = await browser.newContext({
     viewport: set.viewport,
@@ -236,10 +295,12 @@ async function openGame(browser, set) {
     hasTouch: true,
   });
   await context.addInitScript(FRAME_CONDITIONS);
+  await context.addInitScript(SEED_LANGUAGE, { key: SAVE_KEY, lang });
   const page = await context.newPage();
   await page.goto(URL);
   await page.waitForFunction(() => typeof window.__towerclash?.getScreen === 'function');
-  await page.evaluate(() => document.fonts?.ready); // Fredoka must be in before the first frame
+  await awaitFonts(page, lang); // Fredoka (and Nunito for RU) must be in before the first frame
+  await assertLanguage(page, lang);
   await page.waitForTimeout(600); // let the title demo animate in
   return page;
 }
@@ -412,19 +473,21 @@ const FRAMES = {
   // shop on the seeded mid-game save (the shop is a full screen, so nothing from the result overlays it)
   shop: async (page, ctx, shot) => {
     if (!ctx.shopSeeded) {
-      await seedShopSave(page);
+      await seedShopSave(page, ctx.lang);
       ctx.shopSeeded = true;
     }
     await openShop(page, shot.shop);
   },
 };
 
-async function captureRaw(browser, set) {
-  mkdirSync(set.rawDir, { recursive: true });
-  const page = await openGame(browser, set);
-  const out = (i) => rawFile(set, i);
+/** Raw frames of `set` with the game in `lang` (one fresh context per language). */
+async function captureRaw(browser, set, lang) {
+  mkdirSync(set.rawDir(lang), { recursive: true });
+  const page = await openGame(browser, set, lang);
+  const out = (i) => rawFile(set, lang, i);
   const shots = shotsFor(set);
-  const ctx = { result: null, shopSeeded: false };
+  const ctx = { result: null, shopSeeded: false, lang };
+  const tag = `${set.id}/${lang}`;
 
   for (let i = 0; i < shots.length; i++) {
     const shot = shots[i];
@@ -432,10 +495,10 @@ async function captureRaw(browser, set) {
     if (!frame) throw new Error(`no capture routine "${shot.capture}" for frame ${shot.name}`);
     await frame(page, ctx, shot);
     await page.screenshot({ path: out(i) });
-    console.log(`[${set.id}] ${String(i + 1).padStart(2, '0')}-${shot.name}`);
+    console.log(`[${tag}] ${String(i + 1).padStart(2, '0')}-${shot.name}`);
   }
   const result = ctx.result;
-  if (set.id === IAP_REVIEW_SET) {
+  if (set.id === IAP_REVIEW_SET && lang === 'en') {
     await openShop(page, IAP_REVIEW.tab);
     mkdirSync(dirname(IAP_REVIEW.file), { recursive: true });
     await page.screenshot({ path: IAP_REVIEW.file });
@@ -444,7 +507,7 @@ async function captureRaw(browser, set) {
     if (w < 640 || h < 920) throw new Error(`${IAP_REVIEW.file} is ${w}×${h}, App Store Connect needs ≥ 640×920`);
     if (buf.length > MAX_BYTES) throw new Error(`${IAP_REVIEW.file} is ${kb(buf.length)} (> 600 KB)`);
     writeFileSync(IAP_REVIEW.file, buf);
-    console.log(`[${set.id}] IAP review frame ${w}×${h} ${kb(buf.length)} → ${IAP_REVIEW.file}`);
+    console.log(`[${tag}] IAP review frame ${w}×${h} ${kb(buf.length)} → ${IAP_REVIEW.file}`);
   }
 
   // every raw frame must be exactly viewport × scale; store it losslessly re-encoded
@@ -454,16 +517,20 @@ async function captureRaw(browser, set) {
     if (w !== set.out.w || h !== set.out.h) throw new Error(`${out(i)} is ${w}×${h}, expected ${set.out.w}×${set.out.h}`);
     writeFileSync(out(i), buf);
   }
-  console.log(`[${set.id}] raw frames written (level 1 result: ${result.stars} stars, ${result.coinsEarned} coins)`);
+  console.log(`[${tag}] raw frames written (level 1 result: ${result.stars} stars, ${result.coinsEarned} coins)`);
   await page.context().close();
 }
 
-/** Write `SHOP_SAVE` under the v3 key and reload so the app boots on it (the wallet header reads the live save). */
-async function seedShopSave(page) {
-  await page.evaluate((save) => localStorage.setItem('towerclash.save.v3', JSON.stringify(save)), SHOP_SAVE);
+/**
+ * Write `SHOP_SAVE` under the v3 key and reload so the app boots on it (the wallet header reads the
+ * live save). The init script re-applies the context's language on the reload.
+ */
+async function seedShopSave(page, lang) {
+  await page.evaluate(({ key, save }) => localStorage.setItem(key, JSON.stringify(save)), { key: SAVE_KEY, save: SHOP_SAVE });
   await page.reload();
   await page.waitForFunction(() => typeof window.__towerclash?.getScreen === 'function');
-  await page.evaluate(() => document.fonts?.ready);
+  await awaitFonts(page, lang);
+  await assertLanguage(page, lang);
   const live = await page.evaluate(() => {
     const s = window.__towerclash.economy.getSave();
     return { gold: s.gold, crystals: s.crystals, production: s.upgrades.production ?? 0 };
@@ -595,8 +662,8 @@ async function composeScaled(page, set) {
     sizes.length = 0;
     const shots = shotsFor(set);
     for (let i = 0; i < shots.length; i++) {
-      const raw = readFileSync(rawFile(set, i)).toString('base64');
       for (const lang of set.langs) {
+        const raw = readFileSync(rawFile(set, lang, i)).toString('base64');
         const b64 = await page.evaluate(composeInPage, { png: raw, caption: shots[i][lang], w: set.out.w, h: set.out.h, scale });
         const file = outFile(set, lang, i);
         writeFileSync(file, recompressPng(Buffer.from(b64, 'base64')));
@@ -617,8 +684,8 @@ async function composeScaled(page, set) {
 async function composeExact(page, set) {
   const shots = shotsFor(set);
   for (let i = 0; i < shots.length; i++) {
-    const raw = readFileSync(rawFile(set, i)).toString('base64');
     for (const lang of set.langs) {
+      const raw = readFileSync(rawFile(set, lang, i)).toString('base64');
       const file = outFile(set, lang, i);
       let done = false;
       const composed = new Map(); // bits → canvas PNG, so palette steps reuse the same pixels
@@ -831,7 +898,7 @@ try {
     if (DO_GOOGLE) sets.push(SETS.google);
     if (DO_APPLE) sets.push(SETS['apple-6.7'], SETS['apple-6.5']);
     for (const set of sets) {
-      await captureRaw(browser, set);
+      for (const lang of set.langs) await captureRaw(browser, set, lang);
       await composeAll(browser, set);
     }
     if (DO_GOOGLE) await featureGraphic(browser);
