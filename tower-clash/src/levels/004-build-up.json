@@ -1,7 +1,13 @@
 {
   "id": 4,
   "name": "Build Up",
+  "name_az": "Güc Topla",
+  "name_ru": "Накопление",
+  "name_tr": "Güç Topla",
   "lesson": "Let your tower fill up: at 25 units it upgrades itself, recruits faster and can run two streams. The enemy turtles, so out-produce it instead of racing it",
+  "lesson_az": "Qoy qüllən dolsun: 25 əsgərdə özü yüksəlir, daha tez yığır və iki axın apara bilir. Düşmən tısbağadır: onunla yarışma, ondan çox istehsal et",
+  "lesson_ru": "Дай башне наполниться: при 25 бойцах она сама растёт, быстрее вербует и ведёт два потока. Враг сидит в обороне — не гонись, а перепроизведи его",
+  "lesson_tr": "Kulen dolsun: 25 askerde kendi kendine yükselir, daha hızlı asker toplar ve iki akış sürer. Düşman kaplumbağa: yarışma, ondan çok üret",
   "star3": 40000,
   "star2": 80000,
   "enemies": [{ "owner": "enemy1", "personality": "turtle", "aggression": 0.3 }],

@@ -1,7 +1,13 @@
 {
   "id": 39,
   "name": "The Long Night",
+  "name_az": "Uzun Gecə",
+  "name_ru": "Долгая ночь",
+  "name_tr": "Uzun Gece",
   "lesson": "Patience against turtles: they out-build you if you race, so let your towers fill to level 3 behind your walls and strike only when you are twice their size",
+  "lesson_az": "Tısbağalara qarşı səbir: yarışsan, səndən çox tikirlər, ona görə qoy qüllələrin divar arxasında 3-cü səviyyəyə dolsun və yalnız onlardan iki dəfə böyük olanda vur",
+  "lesson_ru": "Терпение против черепах: в гонке они перестроят тебя, так что дай башням наполниться до уровня 3 за стенами и бей лишь когда ты вдвое больше их",
+  "lesson_tr": "Kaplumbağalara karşı sabır: yarışırsan senden çok inşa ederler, o yüzden kulelerin surların ardında 3. seviyeye dolsun ve ancak onların iki katı olunca vur",
   "star3": 40000,
   "star2": 80000,
   "enemies": [

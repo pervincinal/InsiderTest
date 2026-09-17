@@ -1,7 +1,13 @@
 {
   "id": 23,
   "name": "First Blood",
+  "name_az": "İlk Qan",
+  "name_ru": "Первая кровь",
+  "name_tr": "İlk Kan",
   "lesson": "Your keep starts at level 2 with two streams. Kill the rusher first: a turtle sits still while it fills up to level 3, so the restless enemy is the only one that hurts you and the softer one to take",
+  "lesson_az": "Qəsrin 2-ci səviyyədə iki axınla başlayır. Əvvəl hücumçunu öldür: tısbağa 3-cü səviyyəyə dolana qədər yerində oturur, yəni səni yalnız narahat düşmən incidir və onu almaq da asandır",
+  "lesson_ru": "Твоя цитадель начинает на уровне 2 с двумя потоками. Сначала убей рвача: черепаха сидит на месте, пока не наполнится до уровня 3, так что беспокойный враг — единственный, кто тебе вредит, и его же легче взять",
+  "lesson_tr": "Kalen 2. seviyede iki akışla başlar. Önce saldırganı öldür: kaplumbağa 3. seviyeye dolana kadar yerinde oturur, yani sana yalnız huzursuz düşman zarar verir ve o daha kolay alınır",
   "star3": 45000,
   "star2": 90000,
   "enemies": [

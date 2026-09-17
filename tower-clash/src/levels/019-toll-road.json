@@ -1,7 +1,13 @@
 {
   "id": 19,
   "name": "Toll Road",
+  "name_az": "Rüsum Yolu",
+  "name_ru": "Пошлина",
+  "name_tr": "Paralı Yol",
   "lesson": "A mine works both ways: sit behind a mined road and let the enemy rush pay the toll before it reaches you",
+  "lesson_az": "Mina hər iki tərəfə işləyir: minalı yolun arxasında otur və qoy düşmən hücumu sənə çatmazdan əvvəl rüsumu ödəsin",
+  "lesson_ru": "Мина работает в обе стороны: сядь за минированной дорогой и пусть вражеский натиск платит пошлину, пока дойдёт до тебя",
+  "lesson_tr": "Mayın iki yönlü çalışır: mayınlı yolun arkasında otur ve düşman hücumu sana ulaşmadan bedeli ödesin",
   "star3": 30000,
   "star2": 65000,
   "enemies": [

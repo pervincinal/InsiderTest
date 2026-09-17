@@ -1,7 +1,13 @@
 {
   "id": 20,
   "name": "Roadblock",
+  "name_az": "Barrikada",
+  "name_ru": "Заслон",
+  "name_tr": "Barikat",
   "lesson": "Barriers: a walled road has hit points and every unit that walks into it dies until it breaks, so budget the extra units or take the open road",
+  "lesson_az": "Sədlər: divarlı yolun canı var və qırılana qədər ona girən hər əsgər ölür, ona görə əlavə əsgər hesabla və ya açıq yolla get",
+  "lesson_ru": "Заслоны: у перегороженной дороги есть прочность, и каждый боец, идущий в неё, гибнет, пока она не рухнет, — заложи лишних бойцов или иди открытой дорогой",
+  "lesson_tr": "Bariyerler: duvarlı yolun canı vardır ve kırılana kadar ona giren her asker ölür, o yüzden fazladan asker hesapla ya da açık yoldan git",
   "star3": 20000,
   "star2": 50000,
   "enemies": [

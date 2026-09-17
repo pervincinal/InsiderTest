@@ -1,7 +1,13 @@
 {
   "id": 28,
   "name": "Burn the Bridge",
+  "name_az": "Körpünü Yandır",
+  "name_ru": "Сожги мост",
+  "name_tr": "Köprüyü Yak",
   "lesson": "Bridges: long-press a bridge you own an end of to cut it. Units on it drown and the enemy column behind it is stranded for good",
+  "lesson_az": "Körpülər: bir ucu sənin olan körpünü kəsmək üçün üstünə uzun bas. Üstündəki əsgərlər boğulur, arxadakı düşmən dəstəsi isə birdəfəlik ilişib qalır",
+  "lesson_ru": "Мосты: удерживай мост, чей край твой, чтобы обрушить его. Бойцы на нём тонут, а вражеская колонна за ним застревает навсегда",
+  "lesson_tr": "Köprüler: bir ucu senin olan köprüyü kesmek için basılı tut. Üstündeki askerler boğulur, arkasındaki düşman kolu temelli mahsur kalır",
   "star3": 40000,
   "star2": 80000,
   "enemies": [

@@ -3,12 +3,22 @@
  * Pure functions: a level in, a list of human-readable error strings out (empty = valid).
  */
 import type { LevelDef, Owner, RoadDef, TowerDef } from '../../src/sim/types';
+import type { LevelTextTranslations } from '../../src/ui/i18n';
 
 export const MAP_W = 720;
 export const MAP_H = 1280;
 export const EDGE_MARGIN = 90;
 export const MIN_TOWER_DISTANCE = 150;
 export const MAX_LEVEL_ID = 40;
+
+/** Languages a level's `name` / `lesson` are translated into (I18N-2): `name_az`, `lesson_ru`, … */
+export const LEVEL_TEXT_LANGS = ['az', 'ru', 'tr'] as const;
+export const LEVEL_TEXT_FIELDS = ['name', 'lesson'] as const;
+/** A translation may be this much longer than the English text (it must fit the same UI). */
+export const TRANSLATION_LENGTH_SLACK = 0.2;
+
+/** A level as authored: `LevelDef` plus the optional translated texts. */
+export type AuthoredLevel = LevelDef & LevelTextTranslations;
 
 const OWNERS: readonly string[] = ['neutral', 'player', 'enemy1', 'enemy2', 'enemy3'];
 const ENEMY_OWNERS: readonly string[] = ['enemy1', 'enemy2', 'enemy3'];
@@ -78,6 +88,44 @@ export function validateFields(level: LevelDef): string[] {
   if (!Array.isArray(level.towers)) errors.push('towers must be an array');
   if (!Array.isArray(level.roads)) errors.push('roads must be an array');
   return errors;
+}
+
+/** Longest translation allowed for an English text of `enLength` characters. */
+export function translationMaxLength(enLength: number): number {
+  return Math.ceil(enLength * (1 + TRANSLATION_LENGTH_SLACK));
+}
+
+/**
+ * Translated texts (`name_az`, `lesson_tr`, …): when present they must be non-empty strings no
+ * longer than the English text + 20 %. Absence is not an error — see `translationWarnings`.
+ */
+export function validateTranslations(level: AuthoredLevel): string[] {
+  const errors: string[] = [];
+  for (const field of LEVEL_TEXT_FIELDS) {
+    const en = level[field];
+    for (const lang of LEVEL_TEXT_LANGS) {
+      const key = `${field}_${lang}` as const;
+      const v = level[key];
+      if (v === undefined) continue;
+      if (typeof v !== 'string' || v.trim() === '') {
+        errors.push(`${key} must be a non-empty string when present`);
+        continue;
+      }
+      const max = translationMaxLength(en.length);
+      if (v.length > max) errors.push(`${key} is ${v.length} characters, max ${max} (${field} + ${TRANSLATION_LENGTH_SLACK * 100} %)`);
+    }
+  }
+  return errors;
+}
+
+/** Non-fatal: every language the level's name or lesson is not translated into. */
+export function translationWarnings(level: AuthoredLevel): string[] {
+  const warnings: string[] = [];
+  for (const field of LEVEL_TEXT_FIELDS) {
+    const missing = LEVEL_TEXT_LANGS.filter((lang) => level[`${field}_${lang}`] === undefined);
+    if (missing.length > 0) warnings.push(`${field} not translated: ${missing.join(', ')}`);
+  }
+  return warnings;
 }
 
 export function validateStars(level: LevelDef): string[] {
@@ -281,6 +329,7 @@ export function validateLevel(level: LevelDef): string[] {
   const errors = validateFields(level);
   if (errors.length > 0) return errors;
   return [
+    ...validateTranslations(level),
     ...validateStars(level),
     ...validateEnemies(level),
     ...validateTowers(level),
@@ -299,6 +348,8 @@ export interface LevelReport {
   roads: number;
   enemies: number;
   errors: string[];
+  /** Advisory only (missing translations); never fails the check. */
+  warnings: string[];
 }
 
 /** Validate a whole list: per-level checks plus cross-level uniqueness and play order. */
@@ -311,14 +362,31 @@ export function validateLevels(levels: LevelDef[]): LevelReport[] {
     roads: Array.isArray(level.roads) ? level.roads.length : 0,
     enemies: Array.isArray(level.enemies) ? level.enemies.length : 0,
     errors: validateLevel(level),
+    warnings: validateFields(level).length === 0 ? translationWarnings(level) : [],
   }));
   const idCount = new Map<number, number>();
   for (const level of levels) idCount.set(level.id, (idCount.get(level.id) ?? 0) + 1);
   const nameCount = new Map<string, number>();
   for (const level of levels) nameCount.set(level.name, (nameCount.get(level.name) ?? 0) + 1);
+  // translated names must be unique too (they label the level-select node and the HUD)
+  const translatedCount = new Map<string, number>();
+  const translatedKey = (lang: string, v: string) => `${lang}:${v}`;
+  for (const level of levels as AuthoredLevel[]) {
+    for (const lang of LEVEL_TEXT_LANGS) {
+      const v = level[`name_${lang}`];
+      if (typeof v === 'string') translatedCount.set(translatedKey(lang, v), (translatedCount.get(translatedKey(lang, v)) ?? 0) + 1);
+    }
+  }
   for (const [i, report] of reports.entries()) {
     if ((idCount.get(report.id) ?? 0) > 1) report.errors.push(`duplicate level id ${report.id}`);
     if ((nameCount.get(report.name) ?? 0) > 1) report.errors.push(`duplicate level name "${report.name}"`);
+    const level = levels[i] as AuthoredLevel | undefined;
+    for (const lang of LEVEL_TEXT_LANGS) {
+      const v = level?.[`name_${lang}`];
+      if (typeof v === 'string' && (translatedCount.get(translatedKey(lang, v)) ?? 0) > 1) {
+        report.errors.push(`duplicate level name_${lang} "${v}"`);
+      }
+    }
     const prev = reports[i - 1];
     if (prev && prev.id >= report.id) report.errors.push(`play order: id ${report.id} follows id ${prev.id}`);
   }
@@ -335,15 +403,18 @@ export function formatReport(reports: LevelReport[]): string {
     String(r.towers),
     String(r.roads),
     String(r.enemies),
-    r.errors.length === 0 ? 'ok' : `FAIL (${r.errors.length})`,
+    r.errors.length > 0 ? `FAIL (${r.errors.length})` : r.warnings.length > 0 ? `ok (${r.warnings.length} warning(s))` : 'ok',
   ]);
   const widths = header.map((h, i) => Math.max(h.length, ...rows.map((row) => row[i]?.length ?? 0)));
   const line = (cells: string[]) => cells.map((c, i) => c.padEnd(widths[i] ?? 0)).join('  ');
   const out = [line(header), widths.map((w) => '-'.repeat(w)).join('  '), ...rows.map(line)];
   for (const r of reports) {
     for (const e of r.errors) out.push(`  ! level ${r.id}: ${e}`);
+    for (const w of r.warnings) out.push(`  ? level ${r.id}: ${w}`);
   }
   const failed = reports.filter((r) => r.errors.length > 0).length;
-  out.push('', failed === 0 ? `${reports.length} level(s) valid.` : `${failed} of ${reports.length} level(s) FAILED.`);
+  const warned = reports.filter((r) => r.warnings.length > 0).length;
+  const warnNote = warned > 0 ? ` ${warned} with warnings.` : '';
+  out.push('', failed === 0 ? `${reports.length} level(s) valid.${warnNote}` : `${failed} of ${reports.length} level(s) FAILED.${warnNote}`);
   return out.join('\n');
 }

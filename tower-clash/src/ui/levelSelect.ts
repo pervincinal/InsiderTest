@@ -5,6 +5,7 @@
  */
 import { C } from '../sim/constants';
 import { LEVEL_META } from '../levels/index';
+import { levelName } from './i18n';
 import type { View } from '../render/view';
 import { LEVEL_MAP, levelMapMaxScroll, levelNodeCentre, levelNodeRect } from '../render/layout';
 import type { Rect } from '../render/widgets';
@@ -52,7 +53,7 @@ export class LevelSelectScreen implements Screen {
     drawLevelSelect(view, this.app.palette(), {
       nodes: LEVEL_META.map((level, i) => ({
         id: level.id,
-        name: level.name,
+        name: levelName(level),
         stars: this.app.save.stars[String(level.id)] ?? 0,
         unlocked: isLevelUnlocked(this.app.save, LEVEL_META, i),
       })),

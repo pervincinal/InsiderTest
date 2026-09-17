@@ -1,7 +1,13 @@
 {
   "id": 21,
   "name": "Behind the Wall",
+  "name_az": "Divar Arxasında",
+  "name_ru": "За стеной",
+  "name_tr": "Duvarın Ardında",
   "lesson": "A barrier shields you too: the rusher behind the wall must spend units breaking it, so expand on the open side first and meet it when it is bled",
+  "lesson_az": "Sədd səni də qoruyur: divar arxasındakı hücumçu onu qırmaq üçün əsgər xərcləməlidir, ona görə əvvəl açıq tərəfdə genişlən və onu zəifləyəndə qarşıla",
+  "lesson_ru": "Заслон защищает и тебя: рвачу за стеной придётся тратить бойцов на её пролом, так что сначала расширяйся с открытой стороны и встречай его обескровленным",
+  "lesson_tr": "Bariyer seni de korur: duvarın ardındaki saldırgan onu kırmak için asker harcamalı, o yüzden önce açık tarafta genişle ve onu kan kaybedince karşıla",
   "star3": 25000,
   "star2": 50000,
   "enemies": [

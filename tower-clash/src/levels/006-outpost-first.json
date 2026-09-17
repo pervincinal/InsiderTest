@@ -1,7 +1,13 @@
 {
   "id": 6,
   "name": "Outpost First",
+  "name_az": "Əvvəl Forpost",
+  "name_ru": "Сначала форпост",
+  "name_tr": "Önce Karakol",
   "lesson": "The enemy holds two towers: take the weak outpost first, then the base behind it loses its shield",
+  "lesson_az": "Düşmənin iki qülləsi var: əvvəl zəif forpostu al, onda arxadakı baza qalxansız qalır",
+  "lesson_ru": "У врага две башни: сначала возьми слабый форпост — база за ним останется без щита",
+  "lesson_tr": "Düşmanın iki kulesi var: önce zayıf karakolu al, arkasındaki üs kalkansız kalır",
   "star3": 45000,
   "star2": 90000,
   "enemies": [{ "owner": "enemy1", "personality": "opportunist", "aggression": 0.4 }],

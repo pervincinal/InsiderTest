@@ -1,7 +1,13 @@
 {
   "id": 16,
   "name": "Last Bastion",
+  "name_az": "Son Bastion",
+  "name_ru": "Последний оплот",
+  "name_tr": "Son Kale",
   "lesson": "Two fronts against a keep: hold the fortress in the middle so the rush breaks on your walls, silence the guns from the flank, then converge on the keep",
+  "lesson_az": "Qəsrə qarşı iki cəbhə: ortadakı qalanı saxla ki, hücum divarlarında qırılsın, topları cinahdan susdur, sonra hamısını qəsrə yönəlt",
+  "lesson_ru": "Два фронта против цитадели: держи крепость в центре, чтобы натиск разбился о твои стены, заглуши пушки с фланга и сходись к цитадели",
+  "lesson_tr": "Kaleye karşı iki cephe: ortadaki hisarı tut ki hücum surlarında kırılsın, topları yandan sustur, sonra hep birlikte kaleye yüklen",
   "star3": 30000,
   "star2": 60000,
   "enemies": [

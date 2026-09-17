@@ -26,6 +26,7 @@ import { evaluateAchievements } from '../economy/achievements';
 import { equippedSkin } from '../economy/entitlements';
 import type { Language } from './i18n';
 import { currentLanguage, nextLanguage, t } from './i18n';
+import { achievementName } from './catalogText';
 
 /** A screen owns drawing and input while it is current. */
 export interface Screen {
@@ -91,10 +92,10 @@ export function appVersion(): string {
   return `${version}${build}`;
 }
 
-/** Toast text for freshly unlocked achievements (names from the catalog stay English), or null. */
+/** Toast text for freshly unlocked achievements (translated names, src/ui/catalogText.ts), or null. */
 export function achievementToastText(grant: AchievementGrant): string | null {
   if (!grant.unlocked.length) return null;
-  const names = grant.unlocked.length <= 2 ? grant.unlocked.map((a) => a.label).join(', ') : t('achievements.many', { n: grant.unlocked.length });
+  const names = grant.unlocked.length <= 2 ? grant.unlocked.map((a) => achievementName(a)).join(', ') : t('achievements.many', { n: grant.unlocked.length });
   return t('achievements.unlocked', { names, crystals: grant.crystals });
 }
 

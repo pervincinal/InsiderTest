@@ -1,7 +1,13 @@
 {
   "id": 30,
   "name": "Drawbridge",
+  "name_az": "Asma Körpü",
+  "name_ru": "Поднять мост",
+  "name_tr": "Asma Köprü",
   "lesson": "Your keep starts at level 2. Fight one front at a time: cut the bridge on one flank, finish the enemy on the other, then come back over the long road",
+  "lesson_az": "Qəsrin 2-ci səviyyədə başlayır. Bir vaxtda bir cəbhədə vuruş: bir cinahda körpünü kəs, o birində düşməni bitir, sonra uzun yolla geri qayıt",
+  "lesson_ru": "Твоя цитадель начинает на уровне 2. Воюй на одном фронте за раз: обруши мост на одном фланге, добей врага на другом, потом вернись длинной дорогой",
+  "lesson_tr": "Kalen 2. seviyede başlar. Tek seferde tek cephede savaş: bir kanatta köprüyü kes, diğerinde düşmanı bitir, sonra uzun yoldan geri dön",
   "star3": 20000,
   "star2": 40000,
   "enemies": [

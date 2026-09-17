@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { LEVEL_META, getLoadedLevel, levelIndex, loadAllLevels, loadLevel } from '../../src/levels/index';
 import { checkManifest } from '../../scripts/lib/levelManifest';
 import {
+  LEVEL_TEXT_FIELDS,
+  LEVEL_TEXT_LANGS,
   bandFor,
+  translationMaxLength,
+  translationWarnings,
   validateBand,
   validateConnectivity,
   validateLevel,
@@ -11,7 +15,10 @@ import {
   validateRoads,
   validateStars,
   validateTowers,
+  validateTranslations,
 } from '../../scripts/lib/validateLevel';
+import type { AuthoredLevel } from '../../scripts/lib/validateLevel';
+import { levelLesson, levelName } from '../../src/ui/i18n';
 import { makeLevel } from '../helpers';
 
 const LEVELS = await loadAllLevels();
@@ -49,7 +56,33 @@ describe('shipped levels', () => {
     expect(LEVEL_META.map((m) => m.id)).toEqual(LEVELS.map((l) => l.id));
     for (const level of LEVELS) {
       const meta = LEVEL_META[levelIndex(level.id)]!;
-      expect(meta).toEqual({ id: level.id, name: level.name, star3: level.star3, star2: level.star2 });
+      const { name_az, name_ru, name_tr } = level as AuthoredLevel;
+      expect(meta).toEqual({ id: level.id, name: level.name, name_az, name_ru, name_tr, star3: level.star3, star2: level.star2 });
+    }
+  });
+
+  it('every level carries az / ru / tr names and lessons within the length limit (I18N-2)', () => {
+    for (const level of LEVELS as AuthoredLevel[]) {
+      expect(translationWarnings(level), `level ${level.id}`).toEqual([]);
+      expect(validateTranslations(level), `level ${level.id}`).toEqual([]);
+      for (const field of LEVEL_TEXT_FIELDS) {
+        for (const lang of LEVEL_TEXT_LANGS) {
+          const v = level[`${field}_${lang}`];
+          expect(typeof v, `level ${level.id} ${field}_${lang}`).toBe('string');
+          expect(v!.trim().length, `level ${level.id} ${field}_${lang} empty`).toBeGreaterThan(0);
+          expect(v, `level ${level.id} ${field}_${lang} is untranslated`).not.toBe(level[field]);
+          expect(v!.length, `level ${level.id} ${field}_${lang} length`).toBeLessThanOrEqual(translationMaxLength(level[field].length));
+        }
+      }
+      // the helpers pick the translation and never return English for a translated level
+      expect(levelName(level, 'ru')).toBe(level.name_ru);
+      expect(levelLesson(level, 'tr')).toBe(level.lesson_tr);
+      expect(levelName(level, 'en')).toBe(level.name);
+    }
+    // translated names are unique per language (they label the level-select node)
+    for (const lang of LEVEL_TEXT_LANGS) {
+      const names = (LEVELS as AuthoredLevel[]).map((l) => l[`name_${lang}`]);
+      expect(new Set(names).size, `${lang} names unique`).toBe(names.length);
     }
   });
 
@@ -62,6 +95,36 @@ describe('shipped levels', () => {
 });
 
 describe('validator rules', () => {
+  it('checks translations only when present: non-empty and at most EN + 20 %', () => {
+    const base = makeLevel({ id: 5, name: 'Two Roads', lesson: 'Hold one road while you push down the other' });
+    expect(validateTranslations(base)).toEqual([]);
+    expect(translationWarnings(base)).toEqual(['name not translated: az, ru, tr', 'lesson not translated: az, ru, tr']);
+    expect(validateLevel(base), 'missing translations never fail').toEqual([]);
+
+    const partial: AuthoredLevel = { ...base, name_ru: 'Две дороги', lesson_ru: 'Держи одну дорогу, пока давишь по другой' };
+    expect(validateTranslations(partial)).toEqual([]);
+    expect(translationWarnings(partial)).toEqual(['name not translated: az, tr', 'lesson not translated: az, tr']);
+    expect(validateLevels([partial])[0]!.warnings).toEqual(['name not translated: az, tr', 'lesson not translated: az, tr']);
+    expect(validateLevels([partial])[0]!.errors).toEqual([]);
+
+    expect(translationMaxLength(10)).toBe(12);
+    expect(translationMaxLength(9)).toBe(11);
+    const tooLong: AuthoredLevel = { ...base, name_az: 'x'.repeat(translationMaxLength(base.name.length) + 1) };
+    expect(validateTranslations(tooLong)).toEqual([`name_az is ${tooLong.name_az!.length} characters, max ${translationMaxLength(base.name.length)} (name + 20 %)`]);
+    expect(validateLevel(tooLong)).toHaveLength(1);
+    const empty: AuthoredLevel = { ...base, lesson_tr: '  ' };
+    expect(validateTranslations(empty)).toEqual(['lesson_tr must be a non-empty string when present']);
+    const wrongType = { ...base, name_ru: 7 } as unknown as AuthoredLevel;
+    expect(validateTranslations(wrongType)).toEqual(['name_ru must be a non-empty string when present']);
+  });
+
+  it('rejects duplicate translated names across levels', () => {
+    const a: AuthoredLevel = { ...makeLevel({ id: 1, name: 'Alpha' }), name_tr: 'Aynı' };
+    const b: AuthoredLevel = { ...makeLevel({ id: 2, name: 'Bravo' }), name_tr: 'Aynı' };
+    const errors = validateLevels([a, b]).flatMap((r) => r.errors);
+    expect(errors).toEqual(['duplicate level name_tr "Aynı"', 'duplicate level name_tr "Aynı"']);
+  });
+
   it('rejects star3 >= star2', () => {
     expect(validateStars(makeLevel({ star3: 60_000, star2: 60_000 }))).toHaveLength(1);
     expect(validateStars(makeLevel({ star3: 30_000, star2: 60_000 }))).toEqual([]);

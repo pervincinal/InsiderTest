@@ -133,6 +133,45 @@ export function browserLanguages(): readonly string[] {
   return navigator.language ? [navigator.language] : [];
 }
 
+/* ---------- Level text (I18N-2) ---------- */
+
+/**
+ * Optional translated `name` / `lesson` of a level (level JSON fields `name_az`, `lesson_ru`, …).
+ * English lives in `name` / `lesson`; a missing or empty translation falls back to it.
+ */
+export interface LevelTextTranslations {
+  readonly name_az?: string;
+  readonly name_ru?: string;
+  readonly name_tr?: string;
+  readonly lesson_az?: string;
+  readonly lesson_ru?: string;
+  readonly lesson_tr?: string;
+}
+
+export type LevelTextField = 'name' | 'lesson';
+
+/** `name_ru`, `lesson_az`, … — the JSON key of a translated level field (none for English). */
+export function levelTextKey(field: LevelTextField, lang: Language): keyof LevelTextTranslations | undefined {
+  return lang === 'en' ? undefined : (`${field}_${lang}` as keyof LevelTextTranslations);
+}
+
+function levelText(level: Readonly<Partial<Record<LevelTextField, string>> & LevelTextTranslations>, field: LevelTextField, lang: Language): string {
+  const key = levelTextKey(field, lang);
+  const translated = key ? level[key] : undefined;
+  if (typeof translated === 'string' && translated.trim() !== '') return translated;
+  return level[field] ?? '';
+}
+
+/** A level's name in `lang` (default: the current UI language); English when untranslated. */
+export function levelName(level: Readonly<{ name: string } & LevelTextTranslations>, lang: Language = current): string {
+  return levelText(level, 'name', lang);
+}
+
+/** A level's lesson in `lang` (default: the current UI language); English when untranslated. */
+export function levelLesson(level: Readonly<{ lesson: string } & LevelTextTranslations>, lang: Language = current): string {
+  return levelText(level, 'lesson', lang);
+}
+
 /** Next language in picker order (title chip tap). */
 export function nextLanguage(code: Language): Language {
   const i = LANGUAGE_CODES.indexOf(code);

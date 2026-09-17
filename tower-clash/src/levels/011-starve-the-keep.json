@@ -1,7 +1,13 @@
 {
   "id": 11,
   "name": "Starve the Keep",
+  "name_az": "Qalanı Ac Qoy",
+  "name_ru": "Голодная осада",
+  "name_tr": "Kaleyi Aç Bırak",
   "lesson": "Starve the fortress: take the barracks that feeds it first, then the walls fall to your streams",
+  "lesson_az": "Qalanı ac qoy: əvvəl onu bəsləyən kazarmanı al, sonra divarlar axınlarına tab gətirmir",
+  "lesson_ru": "Замори крепость голодом: сначала возьми казарму, что её кормит, и стены падут под твоими потоками",
+  "lesson_tr": "Kaleyi aç bırak: önce onu besleyen kışlayı al, sonra surlar akışlarına dayanamaz",
   "star3": 30000,
   "star2": 60000,
   "enemies": [{ "owner": "enemy1", "personality": "opportunist", "aggression": 0.4 }],

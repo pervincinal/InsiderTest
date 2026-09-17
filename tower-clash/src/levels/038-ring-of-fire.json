@@ -1,7 +1,13 @@
 {
   "id": 38,
   "name": "Ring of Fire",
+  "name_az": "Atəş Halqası",
+  "name_ru": "Кольцо огня",
+  "name_tr": "Ateş Çemberi",
   "lesson": "Guns you own are the best defence against three: hold the artillery posts and let the enemies march into their fire",
+  "lesson_az": "Sənin topların üçə qarşı ən yaxşı müdafiədir: artilleriya postlarını saxla və qoy düşmənlər onların atəşinə yerisin",
+  "lesson_ru": "Свои пушки — лучшая защита от троих: держи артиллерийские посты и пусть враги маршируют под их огонь",
+  "lesson_tr": "Sahip olduğun toplar üçe karşı en iyi savunmadır: topçu mevzilerini tut ve düşmanlar ateşlerine yürüsün",
   "star3": 25000,
   "star2": 50000,
   "enemies": [

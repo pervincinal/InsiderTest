@@ -1,7 +1,13 @@
 {
   "id": 25,
   "name": "Heavy Metal",
+  "name_az": "Ağır Metal",
+  "name_ru": "Тяжёлый металл",
+  "name_tr": "Ağır Metal",
   "lesson": "Tank factory: it builds one 5-weight tank every 4 s instead of infantry. A tank kills five infantry on the road or counts as five defenders, but it is slow, so ship armour early",
+  "lesson_az": "Tank zavodu: piyada əvəzinə hər 4 saniyədə bir 5 çəkili tank düzəldir. Tank yolda beş piyadanı öldürür və ya beş müdafiəçi sayılır, amma yavaşdır, ona görə zirehi tez göndər",
+  "lesson_ru": "Танковый завод: вместо пехоты он строит один танк весом 5 каждые 4 с. Танк убивает пять пехотинцев на дороге или считается за пять защитников, но он медленный — отправляй броню пораньше",
+  "lesson_tr": "Tank fabrikası: piyade yerine her 4 saniyede bir 5 ağırlığında tank üretir. Tank yolda beş piyadeyi öldürür ya da beş savunmacı sayılır, ama yavaştır, o yüzden zırhı erken yolla",
   "star3": 40000,
   "star2": 80000,
   "enemies": [

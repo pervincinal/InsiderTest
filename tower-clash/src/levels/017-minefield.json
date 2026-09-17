@@ -1,7 +1,13 @@
 {
   "id": 17,
   "name": "Minefield",
+  "name_az": "Mina Sahəsi",
+  "name_ru": "Минное поле",
+  "name_tr": "Mayınlı Yol",
   "lesson": "Mines: the marked road kills the first 6 units that cross it, so take the long way round or pay the toll with a few before the main column",
+  "lesson_az": "Minalar: işarəli yol ondan keçən ilk 6 əsgəri öldürür, ona görə uzun yolla dolan və ya əsas dəstədən əvvəl bir neçə əsgərlə rüsumu ödə",
+  "lesson_ru": "Мины: отмеченная дорога убивает первых 6 бойцов, что по ней пройдут, так что иди в обход или заплати пошлину парой бойцов перед основной колонной",
+  "lesson_tr": "Mayınlar: işaretli yol geçen ilk 6 askeri öldürür, o yüzden uzun yoldan dolaş ya da ana koldan önce birkaç askerle bedeli öde",
   "star3": 20000,
   "star2": 40000,
   "enemies": [

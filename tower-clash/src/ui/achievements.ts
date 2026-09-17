@@ -12,6 +12,7 @@ import { drawAchievements } from '../render/menusAchievements';
 import type { PointerPoint } from '../input/pointer';
 import { playSfx } from '../audio/index';
 import { ACHIEVEMENTS } from '../economy/catalog';
+import { achievementName } from './catalogText';
 import { achievementCrystalsEarned, achievementProgress, evaluateAchievements } from '../economy/achievements';
 import type { App, Screen } from './screens';
 import { Toast, achievementToastText } from './screens';
@@ -41,7 +42,7 @@ export class AchievementsScreen implements Screen {
   }
 
   rows(): AchievementRow[] {
-    return achievementProgress(this.app.save).map((p, i) => ({ ...p, rect: achievementRowRect(i) }));
+    return achievementProgress(this.app.save).map((p, i) => ({ ...p, label: achievementName(p), rect: achievementRowRect(i) }));
   }
 
   private maxScroll(): number {

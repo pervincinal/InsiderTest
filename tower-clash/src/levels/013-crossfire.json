@@ -1,7 +1,13 @@
 {
   "id": 13,
   "name": "Crossfire",
+  "name_az": "Çarpaz Atəş",
+  "name_ru": "Под огнём",
+  "name_tr": "Çapraz Ateş",
   "lesson": "Your own guns thin every wave: hold the artillery post and make the enemy walk through its fire",
+  "lesson_az": "Öz topların hər dalğanı seyrəldir: artilleriya postunu saxla və düşməni onun atəşindən keçməyə məcbur et",
+  "lesson_ru": "Свои пушки прореживают каждую волну: держи артиллерийский пост и заставь врага идти под его огонь",
+  "lesson_tr": "Kendi topların her dalgayı seyreltir: topçu mevziini tut ve düşmanı ateşinin içinden yürüt",
   "star3": 55000,
   "star2": 110000,
   "enemies": [{ "owner": "enemy1", "personality": "turtle", "aggression": 0.5 }],

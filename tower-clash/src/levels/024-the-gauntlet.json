@@ -1,7 +1,13 @@
 {
   "id": 24,
   "name": "The Gauntlet",
+  "name_az": "Sınaq Yolu",
+  "name_ru": "Сквозь строй",
+  "name_tr": "Zorlu Geçit",
   "lesson": "Band finale: read the map before you tap. Mines, walls, guns and two rivals mean the cheapest road to the finish is rarely the shortest",
+  "lesson_az": "Mərhələ finalı: vurmazdan əvvəl xəritəni oxu. Minalar, divarlar, toplar və iki rəqib: finişə ən ucuz yol nadir hallarda ən qısasıdır",
+  "lesson_ru": "Финал этапа: изучи карту, прежде чем нажимать. Мины, стены, пушки и два соперника: самая дешёвая дорога к финишу редко бывает самой короткой",
+  "lesson_tr": "Etap finali: dokunmadan önce haritayı oku. Mayınlar, duvarlar, toplar ve iki rakip: bitişe en ucuz yol nadiren en kısasıdır",
   "star3": 35000,
   "star2": 70000,
   "enemies": [

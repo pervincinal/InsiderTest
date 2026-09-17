@@ -1,7 +1,13 @@
 {
   "id": 8,
   "name": "Two Bases",
+  "name_az": "İki Baza",
+  "name_ru": "Две базы",
+  "name_tr": "İki Üs",
   "lesson": "You start with two bases: stream both into the same target instead of attacking piecemeal",
+  "lesson_az": "İki baza ilə başlayırsan: hissə-hissə hücum etmə, hər ikisini eyni hədəfə axıt",
+  "lesson_ru": "У тебя две базы: лей обе в одну цель вместо атак по частям",
+  "lesson_tr": "İki üsle başlıyorsun: parça parça saldırma, ikisini de aynı hedefe akıt",
   "star3": 35000,
   "star2": 70000,
   "enemies": [{ "owner": "enemy1", "personality": "rusher", "aggression": 0.5 }],

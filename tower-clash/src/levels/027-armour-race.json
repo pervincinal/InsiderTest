@@ -1,7 +1,13 @@
 {
   "id": 27,
   "name": "Armour Race",
+  "name_az": "Zireh Yarışı",
+  "name_ru": "Гонка брони",
+  "name_tr": "Zırh Yarışı",
   "lesson": "Enemy tank factory: it streams its bank of tanks at the weakest tower next to it, and one 5-weight tank flips a garrison of four. Keep the tower facing it above the bank, and take the factory before its bank fills",
+  "lesson_az": "Düşmən tank zavodu: yığdığı tankları yanındakı ən zəif qülləyə axıdır və bir 5 çəkili tank dörd əsgərlik qarnizonu çevirir. Onunla üzbəüz qülləni yığımdan yuxarı saxla və zavodu yığımı dolmamış al",
+  "lesson_ru": "Вражеский танковый завод: он льёт свой запас танков в слабейшую соседнюю башню, а один танк весом 5 переворачивает гарнизон из четырёх. Держи башню напротив него выше его запаса и возьми завод, пока запас не наполнился",
+  "lesson_tr": "Düşman tank fabrikası: biriktirdiği tankları yanındaki en zayıf kuleye akıtır ve 5 ağırlığında bir tank dört kişilik garnizonu çevirir. Karşısındaki kuleyi birikimin üstünde tut ve fabrikayı birikimi dolmadan al",
   "star3": 25000,
   "star2": 50000,
   "enemies": [

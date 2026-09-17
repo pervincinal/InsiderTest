@@ -1,7 +1,13 @@
 {
   "id": 18,
   "name": "Two Rivals",
+  "name_az": "İki Rəqib",
+  "name_ru": "Два врага",
+  "name_tr": "İki Rakip",
   "lesson": "Two enemies fight each other too: expand on the quiet flank while the rusher throws itself at the turtle, then finish whoever is left thin",
+  "lesson_az": "İki düşmən bir-biri ilə də vuruşur: hücumçu tısbağaya cumarkən sakit cinahda genişlən, sonra zəif qalanı bitir",
+  "lesson_ru": "Два врага дерутся и между собой: расширяйся на тихом фланге, пока рвач бьётся о черепаху, потом добей того, кто остался слабым",
+  "lesson_tr": "İki düşman birbiriyle de savaşır: saldırgan kaplumbağaya yüklenirken sessiz kanatta genişle, sonra zayıf kalanı bitir",
   "star3": 45000,
   "star2": 105000,
   "enemies": [

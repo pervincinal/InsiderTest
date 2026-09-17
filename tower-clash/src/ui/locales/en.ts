@@ -1,8 +1,10 @@
 /**
  * English — the reference dictionary. Every other locale must provide every key listed here
  * (enforced by the `Dictionary` type and tests/ui/i18n.test.ts). Keys are `area.name`; `{param}`
- * placeholders are filled by `t()`. Level names and lessons stay English (they live in the level
- * JSON), as do catalog labels (product / skin / achievement names).
+ * placeholders are filled by `t()`. Level names and lessons live in the level JSON (`name_az`,
+ * `lesson_ru`, … — see `levelName` / `levelLesson` in ../i18n.ts); catalog labels (skins,
+ * achievements, upgrade tracks) are the `skin.*` / `achievement.*` / `upgrade.name.*` keys below,
+ * keyed by catalog id. IAP product titles stay English (the stores show their own).
  */
 export const en = {
   'common.back': 'BACK',
@@ -169,6 +171,48 @@ export const en = {
   'booster.freeze': 'Freeze',
   'booster.airstrike': 'Airstrike',
   'play.freeCharge': 'Free {kind} charge added',
+
+  // Catalog labels (src/economy/catalog.ts): skins (full name for toasts, short name for the shop
+  // card), achievements and commander upgrade tracks. Keys are `<kind>.<catalog id>`.
+  'skin.roof_slate': 'Slate roof',
+  'skin.roof_slate.short': 'Slate',
+  'skin.roof_pagoda': 'Pagoda roof',
+  'skin.roof_pagoda.short': 'Pagoda',
+  'skin.roof_onion': 'Onion dome',
+  'skin.roof_onion.short': 'Onion dome',
+  'skin.roof_gold': 'Gold roof',
+  'skin.roof_gold.short': 'Gold',
+  'skin.helmet_bronze': 'Bronze helmet',
+  'skin.helmet_bronze.short': 'Bronze',
+  'skin.helmet_viking': 'Viking helmet',
+  'skin.helmet_viking.short': 'Viking',
+  'skin.helmet_knight': 'Knight helmet',
+  'skin.helmet_knight.short': 'Knight',
+  'skin.helmet_samurai': 'Samurai helmet',
+  'skin.helmet_samurai.short': 'Samurai',
+  'skin.helmet_royal': 'Royal helmet',
+  'skin.helmet_royal.short': 'Royal',
+  'skin.theme_dusk': 'Dusk',
+  'skin.theme_dusk.short': 'Dusk',
+  'skin.theme_winter_night': 'Winter night',
+  'skin.theme_winter_night.short': 'Winter night',
+  'skin.theme_neon': 'Neon',
+  'skin.theme_neon.short': 'Neon',
+  'achievement.first_win': 'First victory',
+  'achievement.first_l3': 'Upgrade a tower to level 3',
+  'achievement.first_fortress': 'Capture a fortress',
+  'achievement.first_bridge_cut': 'Cut a bridge',
+  'achievement.first_tank': 'Capture a tank factory',
+  'achievement.stars_10': 'Ten 3★ levels',
+  'achievement.stars_20': 'Twenty 3★ levels',
+  'achievement.stars_40': 'Every level at 3★',
+  'achievement.flawless': 'Win without losing a tower',
+  'achievement.speedrunner': 'Win in under 30 s',
+  'upgrade.name.production': 'Production',
+  'upgrade.name.capacity': 'Capacity',
+  'upgrade.name.garrison': 'Starting garrison',
+  'upgrade.name.booster_cost': 'Booster discount',
+  'upgrade.name.march_speed': 'March speed',
 
   'tutorial.tapTower': 'Tap your tower',
   'tutorial.tapGrey': 'Now tap the grey tower — the stream keeps flowing',

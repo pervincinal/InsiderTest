@@ -1,7 +1,13 @@
 {
   "id": 15,
   "name": "The Citadel",
+  "name_az": "Sitadel",
+  "name_ru": "Цитадель",
+  "name_tr": "İç Kale",
   "lesson": "Everything together: hold your own walls, take the guns from the flank, then break the citadel with every stream you have",
+  "lesson_az": "Hamısı birlikdə: öz divarlarını saxla, topları cinahdan al, sonra əlindəki bütün axınlarla sitadeli qır",
+  "lesson_ru": "Всё вместе: держи свои стены, возьми пушки с фланга, затем ломай цитадель всеми потоками, что у тебя есть",
+  "lesson_tr": "Hepsi bir arada: kendi surlarını tut, topları yandan al, sonra elindeki tüm akışlarla iç kaleyi kır",
   "star3": 30000,
   "star2": 60000,
   "enemies": [{ "owner": "enemy1", "personality": "rusher", "aggression": 0.7 }],

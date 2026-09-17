@@ -1,7 +1,13 @@
 {
   "id": 29,
   "name": "Island Hopping",
+  "name_az": "Adadan Adaya",
+  "name_ru": "По островам",
+  "name_tr": "Adadan Adaya",
   "lesson": "Cut only what you must: a cut bridge is gone for you as well, so cut the enemy approach and keep your own road forward",
+  "lesson_az": "Yalnız lazım olanı kəs: kəsilən körpü sənin üçün də yoxdur, ona görə düşmənin yolunu kəs, öz irəli yolunu isə saxla",
+  "lesson_ru": "Режь только нужное: обрушенный мост пропадает и для тебя, так что руби подход врага, а свою дорогу вперёд сохрани",
+  "lesson_tr": "Sadece gerekeni kes: kesilen köprü senin için de yok olur, o yüzden düşmanın yolunu kes, kendi ileri yolunu koru",
   "star3": 20000,
   "star2": 40000,
   "enemies": [

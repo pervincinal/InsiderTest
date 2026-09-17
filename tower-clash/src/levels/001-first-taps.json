@@ -1,7 +1,13 @@
 {
   "id": 1,
   "name": "First Taps",
+  "name_az": "İlk Toxunuş",
+  "name_ru": "Первые тапы",
+  "name_tr": "İlk Dokunuş",
   "lesson": "Tap your tower, then tap a target: the stream keeps flowing until you stop it",
+  "lesson_az": "Qüllənə vur, sonra hədəfə vur: sən dayandırana qədər axın davam edir",
+  "lesson_ru": "Нажми на свою башню, потом на цель: поток идёт, пока ты его не остановишь",
+  "lesson_tr": "Kulene dokun, sonra hedefe dokun: sen durdurana kadar akış sürer",
   "star3": 30000,
   "star2": 60000,
   "enemies": [{ "owner": "enemy1", "personality": "rusher", "aggression": 0.2 }],

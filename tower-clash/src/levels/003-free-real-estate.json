@@ -1,7 +1,13 @@
 {
   "id": 3,
   "name": "Free Real Estate",
+  "name_az": "Sahibsiz Torpaq",
+  "name_ru": "Ничейная земля",
+  "name_tr": "Bedava Arsa",
   "lesson": "Neutral towers are free production: grab both before you fight",
+  "lesson_az": "Neytral qüllələr pulsuz istehsaldır: döyüşdən əvvəl hər ikisini götür",
+  "lesson_ru": "Нейтральные башни — бесплатное производство: забери обе до боя",
+  "lesson_tr": "Tarafsız kuleler bedava üretimdir: savaşmadan önce ikisini de kap",
   "star3": 30000,
   "star2": 60000,
   "enemies": [{ "owner": "enemy1", "personality": "rusher", "aggression": 0.3 }],

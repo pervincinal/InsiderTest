@@ -25,6 +25,7 @@ import type { App, Screen } from './screens';
 import { Toast } from './screens';
 import { playSfx } from '../audio/index';
 import { t } from './i18n';
+import { skinName, skinShortName, upgradeName } from './catalogText';
 
 interface Hit {
   rect: Rect;
@@ -61,10 +62,6 @@ function bundleLines(p: IapProductDef): string[] {
   if (g.skins?.length) lines.push(g.skins.length === 1 ? t('shop.line.bronze') : t('shop.line.royal'));
   if (g.boosterDiscount) lines.push(t('shop.line.discount', { n: Math.round(g.boosterDiscount * 100) }));
   return lines;
-}
-
-function skinLabel(s: SkinDef): string {
-  return s.label.replace(/ (roof|helmet)$/i, '');
 }
 
 export class ShopScreen implements Screen {
@@ -187,7 +184,7 @@ export class ShopScreen implements Screen {
           const owned = save.skins.owned.includes(s.id);
           const family = skinFamily(s);
           const equipped = owned && save.skins.equipped[family] === s.id;
-          out.skins.push({ id: s.id, rect, label: skinLabel(s), spriteId: spriteSkinId(s.id), cost: s.costCrystals, owned, equipped, locked: !owned && s.costCrystals === 0 });
+          out.skins.push({ id: s.id, rect, label: skinShortName(s), spriteId: spriteSkinId(s.id), cost: s.costCrystals, owned, equipped, locked: !owned && s.costCrystals === 0 });
           out.hits.push({ rect, action: () => this.tapSkin(s, family, rect) });
           bottom = Math.max(bottom, rect.y + rect.h);
         });
@@ -201,7 +198,7 @@ export class ShopScreen implements Screen {
         out.upgrades.push({
           id: d.id,
           rect,
-          label: d.label,
+          label: upgradeName(d),
           glyph: UPGRADE_GLYPH[d.id] ?? 'production',
           tier,
           maxTier: d.maxTier,
@@ -494,7 +491,7 @@ export class ShopScreen implements Screen {
     writeSave(save);
     this.burst('crystal', rect);
     playSfx('upgrade');
-    this.toast.show(t('shop.toast.skinUnlocked', { name: skin.label }), 'ok', this.nowMs);
+    this.toast.show(t('shop.toast.skinUnlocked', { name: skinName(skin) }), 'ok', this.nowMs);
   }
 
   /** Equip an owned skin; tapping the equipped one reverts to the default look. */
@@ -517,6 +514,6 @@ export class ShopScreen implements Screen {
     playSfx('upgrade');
     const def = UPGRADE_DEFS.find((d) => d.id === id)!;
     const tier = upgradeTier(this.app.save, id);
-    this.toast.show(t('shop.toast.upgraded', { name: def.label, tier, effect: upgradeEffectText(def, tier) }), 'ok', this.nowMs);
+    this.toast.show(t('shop.toast.upgraded', { name: upgradeName(def), tier, effect: upgradeEffectText(def, tier) }), 'ok', this.nowMs);
   }
 }

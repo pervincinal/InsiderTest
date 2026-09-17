@@ -1,7 +1,13 @@
 {
   "id": 12,
   "name": "Gun Post",
+  "name_az": "Top Postu",
+  "name_ru": "Батарея",
+  "name_tr": "Top Mevzii",
   "lesson": "Artillery shells every unit that passes within its range: take the post before you march past it, or go around",
+  "lesson_az": "Artilleriya mənzilindən keçən hər əsgəri vurur: yanından keçməzdən əvvəl postu al və ya yolu dolan",
+  "lesson_ru": "Артиллерия бьёт по всем, кто проходит в её радиусе: возьми пост, прежде чем идти мимо, или обойди",
+  "lesson_tr": "Topçu menzilinden geçen her askeri vurur: önünden geçmeden önce mevziyi al ya da etrafından dolaş",
   "star3": 20000,
   "star2": 40000,
   "enemies": [{ "owner": "enemy1", "personality": "rusher", "aggression": 0.5 }],

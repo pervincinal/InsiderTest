@@ -3,11 +3,26 @@ import { en } from '../../src/ui/locales/en';
 import { az } from '../../src/ui/locales/az';
 import { ru } from '../../src/ui/locales/ru';
 import { tr } from '../../src/ui/locales/tr';
-import { LANGUAGES, LANGUAGE_CODES, currentLanguage, detectLanguage, interpolate, isLanguageLoaded, nextLanguage, setLanguage, t } from '../../src/ui/i18n';
+import {
+  LANGUAGES,
+  LANGUAGE_CODES,
+  currentLanguage,
+  detectLanguage,
+  interpolate,
+  isLanguageLoaded,
+  levelLesson,
+  levelName,
+  levelTextKey,
+  nextLanguage,
+  setLanguage,
+  t,
+} from '../../src/ui/i18n';
+import { achievementName, skinName, skinShortName, upgradeName } from '../../src/ui/catalogText';
+import { achievementToastText } from '../../src/ui/screens';
 import { defaultSave, normalizeSave } from '../../src/ui/save';
 import { tutorialFor } from '../../src/ui/tutorial';
 import { commanderSummary } from '../../src/ui/upgrades';
-import { COMMANDER_UPGRADES } from '../../src/economy/catalog';
+import { ACHIEVEMENTS, COMMANDER_UPGRADES, SKINS } from '../../src/economy/catalog';
 
 const DICTS = { en, az, ru, tr } as const;
 const EN_KEYS = Object.keys(en).sort();
@@ -122,6 +137,77 @@ describe('translated UI text', () => {
     expect(commanderSummary(save)).toBe(`+${v} prod`);
     await setLanguage('tr');
     expect(commanderSummary(save)).toBe(tr['upgrade.short.production'].replace('{v}', v));
+    await setLanguage('en');
+  });
+});
+
+describe('level text (I18N-2)', () => {
+  const level = {
+    name: 'Two Roads',
+    lesson: 'Two routes to the enemy: hold one while you push down the other',
+    name_az: 'İki Yol',
+    name_ru: 'Две дороги',
+    lesson_ru: 'К врагу две дороги: держи одну, пока давишь по другой',
+    lesson_tr: '',
+  };
+
+  it('levelTextKey maps a field and language to the JSON key (none for English)', () => {
+    expect(levelTextKey('name', 'en')).toBeUndefined();
+    expect(levelTextKey('name', 'ru')).toBe('name_ru');
+    expect(levelTextKey('lesson', 'az')).toBe('lesson_az');
+  });
+
+  it('returns the translation for an explicit language and English when it is missing or empty', () => {
+    expect(levelName(level, 'az')).toBe('İki Yol');
+    expect(levelName(level, 'ru')).toBe('Две дороги');
+    expect(levelName(level, 'tr')).toBe('Two Roads'); // no name_tr
+    expect(levelName(level, 'en')).toBe('Two Roads');
+    expect(levelLesson(level, 'ru')).toBe('К врагу две дороги: держи одну, пока давишь по другой');
+    expect(levelLesson(level, 'tr')).toBe(level.lesson); // empty string is not a translation
+    expect(levelLesson(level, 'az')).toBe(level.lesson);
+  });
+
+  it('follows the current UI language by default', async () => {
+    await setLanguage('ru');
+    expect(levelName(level)).toBe('Две дороги');
+    expect(levelLesson(level)).toBe('К врагу две дороги: держи одну, пока давишь по другой');
+    await setLanguage('tr');
+    expect(levelName(level)).toBe('Two Roads');
+    await setLanguage('en');
+    expect(levelName(level)).toBe('Two Roads');
+  });
+});
+
+describe('catalog labels (I18N-2)', () => {
+  it('every skin, achievement and upgrade track has its keys in the reference dictionary', () => {
+    for (const s of SKINS) {
+      expect(en, `skin.${s.id}`).toHaveProperty(`skin.${s.id}`, s.label);
+      expect(en, `skin.${s.id}.short`).toHaveProperty(`skin.${s.id}.short`);
+    }
+    for (const a of ACHIEVEMENTS) expect(en, `achievement.${a.id}`).toHaveProperty(`achievement.${a.id}`, a.label);
+    for (const u of COMMANDER_UPGRADES) expect(en, `upgrade.name.${u.id}`).toHaveProperty(`upgrade.name.${u.id}`, u.label);
+  });
+
+  it('labels follow the language and fall back to the catalog label for unknown ids', async () => {
+    const slate = SKINS.find((s) => s.id === 'roof_slate')!;
+    const firstWin = ACHIEVEMENTS.find((a) => a.id === 'first_win')!;
+    const production = COMMANDER_UPGRADES.find((u) => u.id === 'production')!;
+    await setLanguage('en');
+    expect(skinName(slate)).toBe('Slate roof');
+    expect(skinShortName(slate)).toBe('Slate');
+    expect(achievementName(firstWin)).toBe('First victory');
+    expect(upgradeName(production)).toBe('Production');
+    await setLanguage('az');
+    expect(skinName(slate)).toBe(az['skin.roof_slate']);
+    expect(skinShortName(slate)).toBe(az['skin.roof_slate.short']);
+    expect(achievementName(firstWin)).toBe(az['achievement.first_win']);
+    expect(upgradeName(production)).toBe(az['upgrade.name.production']);
+    expect(achievementToastText({ unlocked: [firstWin], crystals: 5 })).toBe(
+      az['achievements.unlocked'].replace('{names}', az['achievement.first_win']).replace('{crystals}', '5'),
+    );
+    expect(skinName({ id: 'roof_future', label: 'Future roof' })).toBe('Future roof');
+    expect(skinShortName({ id: 'roof_future', label: 'Future roof' })).toBe('Future');
+    expect(achievementName({ id: 'nope', label: 'Not yet' })).toBe('Not yet');
     await setLanguage('en');
   });
 });

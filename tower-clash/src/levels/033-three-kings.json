@@ -1,7 +1,13 @@
 {
   "id": 33,
   "name": "Three Kings",
+  "name_az": "Üç Kral",
+  "name_ru": "Три короля",
+  "name_tr": "Üç Kral",
   "lesson": "Three enemies fight each other where they touch: stay out of the middle and take neutrals while they bleed",
+  "lesson_az": "Üç düşmən toxunduqları yerdə bir-biri ilə vuruşur: ortadan uzaq dur və onlar qan itirərkən neytralları al",
+  "lesson_ru": "Три врага дерутся между собой на стыках: держись вне центра и бери нейтралов, пока они истекают кровью",
+  "lesson_tr": "Üç düşman temas ettikleri yerde birbiriyle savaşır: ortadan uzak dur ve onlar kan kaybederken tarafsızları al",
   "star3": 40000,
   "star2": 80000,
   "enemies": [

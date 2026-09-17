@@ -1,7 +1,13 @@
 {
   "id": 34,
   "name": "Weakest Link",
+  "name_az": "Ən Zəif Halqa",
+  "name_ru": "Слабое звено",
+  "name_tr": "En Zayıf Halka",
   "lesson": "Your keep starts at level 2, but two rushers hit whichever neighbour is weakest, so never leave a border tower thin: keep every frontier garrison above the enemy next to it",
+  "lesson_az": "Qəsrin 2-ci səviyyədə başlayır, amma iki hücumçu ən zəif qonşunu vurur, ona görə sərhəd qülləsini heç vaxt boş qoyma: hər sərhəd qarnizonunu yanındakı düşməndən yuxarı saxla",
+  "lesson_ru": "Твоя цитадель начинает на уровне 2, но два рвача бьют по слабейшему соседу, так что не оставляй пограничную башню пустой: держи каждый гарнизон на границе выше соседнего врага",
+  "lesson_tr": "Kalen 2. seviyede başlar ama iki saldırgan en zayıf komşuya vurur, o yüzden sınır kulesini asla zayıf bırakma: her sınır garnizonunu yanındaki düşmanın üstünde tut",
   "star3": 35000,
   "star2": 70000,
   "enemies": [

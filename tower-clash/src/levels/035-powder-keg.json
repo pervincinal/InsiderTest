@@ -1,7 +1,13 @@
 {
   "id": 35,
   "name": "Powder Keg",
+  "name_az": "Barıt Anbarı",
+  "name_ru": "Бочка пороха",
+  "name_tr": "Barut Fıçısı",
   "lesson": "Your keep starts at level 2. Mines between rivals are free kills: leave the mined roads between two enemies alone and let their own columns trigger them",
+  "lesson_az": "Qəsrin 2-ci səviyyədə başlayır. Rəqiblər arasındakı minalar pulsuz qırğındır: iki düşmən arasındakı minalı yollara toxunma, qoy öz dəstələri onları partlatsın",
+  "lesson_ru": "Твоя цитадель начинает на уровне 2. Мины между соперниками — бесплатные жертвы: не трогай минированные дороги между двумя врагами, пусть их подрывают их же колонны",
+  "lesson_tr": "Kalen 2. seviyede başlar. Rakipler arasındaki mayınlar bedava kayıptır: iki düşman arasındaki mayınlı yollara dokunma, onları kendi kolları patlatsın",
   "star3": 20000,
   "star2": 40000,
   "enemies": [

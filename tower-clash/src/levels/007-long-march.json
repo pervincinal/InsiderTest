@@ -1,7 +1,13 @@
 {
   "id": 7,
   "name": "Long March",
+  "name_az": "Uzun Yürüş",
+  "name_ru": "Долгий марш",
+  "name_tr": "Uzun Yürüyüş",
   "lesson": "Distance is time: stream your army into the forward tower first, because a long road lets the enemy regrow before you land",
+  "lesson_az": "Məsafə vaxtdır: ordunu əvvəl öndəki qülləyə axıt, çünki uzun yolda sən çatana qədər düşmən yenidən böyüyür",
+  "lesson_ru": "Расстояние — это время: сначала лей войска в передовую башню, ведь на длинной дороге враг успеет отрасти до твоего прихода",
+  "lesson_tr": "Mesafe zamandır: orduyu önce öndeki kuleye akıt, çünkü uzun yolda düşman sen varana kadar yeniden büyür",
   "star3": 50000,
   "star2": 100000,
   "enemies": [{ "owner": "enemy1", "personality": "turtle", "aggression": 0.4 }],

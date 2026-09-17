@@ -5,11 +5,13 @@
  * only the metadata below ships in the eager bundle. See src/levels/index.ts for the API.
  */
 import type { LevelDef } from '../sim/types';
+import type { LevelTextTranslations } from '../ui/i18n';
 
 /** JSON string fields are widened by TS; the validator (`npm run levels:check`) guards the enums. */
 const def = (m: { default: unknown }): LevelDef => m.default as LevelDef;
 
-export interface LevelManifestEntry {
+/** Metadata per level; `name_az` / `name_ru` / `name_tr` are the translated names (I18N-2). */
+export interface LevelManifestEntry extends Pick<LevelTextTranslations, 'name_az' | 'name_ru' | 'name_tr'> {
   readonly id: number;
   readonly name: string;
   /** Star clocks in ms (GDD §3): finish under `star3` for three stars, under `star2` for two. */
@@ -20,44 +22,44 @@ export interface LevelManifestEntry {
 
 /** Every level in play order. */
 export const LEVEL_MANIFEST: readonly LevelManifestEntry[] = [
-  { id: 1, name: 'First Taps', star3: 30000, star2: 60000, load: () => import('./001-first-taps.json').then(def) },
-  { id: 2, name: 'Supply Line', star3: 30000, star2: 60000, load: () => import('./002-supply-line.json').then(def) },
-  { id: 3, name: 'Free Real Estate', star3: 30000, star2: 60000, load: () => import('./003-free-real-estate.json').then(def) },
-  { id: 4, name: 'Build Up', star3: 40000, star2: 80000, load: () => import('./004-build-up.json').then(def) },
-  { id: 5, name: 'Two Roads', star3: 30000, star2: 60000, load: () => import('./005-two-roads.json').then(def) },
-  { id: 6, name: 'Outpost First', star3: 45000, star2: 90000, load: () => import('./006-outpost-first.json').then(def) },
-  { id: 7, name: 'Long March', star3: 50000, star2: 100000, load: () => import('./007-long-march.json').then(def) },
-  { id: 8, name: 'Two Bases', star3: 35000, star2: 70000, load: () => import('./008-two-bases.json').then(def) },
-  { id: 9, name: 'Stone Walls', star3: 25000, star2: 50000, load: () => import('./009-stone-walls.json').then(def) },
-  { id: 10, name: 'Hold the Line', star3: 65000, star2: 130000, load: () => import('./010-hold-the-line.json').then(def) },
-  { id: 11, name: 'Starve the Keep', star3: 30000, star2: 60000, load: () => import('./011-starve-the-keep.json').then(def) },
-  { id: 12, name: 'Gun Post', star3: 20000, star2: 40000, load: () => import('./012-gun-post.json').then(def) },
-  { id: 13, name: 'Crossfire', star3: 55000, star2: 110000, load: () => import('./013-crossfire.json').then(def) },
-  { id: 14, name: 'Guns and Walls', star3: 30000, star2: 60000, load: () => import('./014-guns-and-walls.json').then(def) },
-  { id: 15, name: 'The Citadel', star3: 30000, star2: 60000, load: () => import('./015-the-citadel.json').then(def) },
-  { id: 16, name: 'Last Bastion', star3: 30000, star2: 60000, load: () => import('./016-last-bastion.json').then(def) },
-  { id: 17, name: 'Minefield', star3: 20000, star2: 40000, load: () => import('./017-minefield.json').then(def) },
-  { id: 18, name: 'Two Rivals', star3: 45000, star2: 105000, load: () => import('./018-two-rivals.json').then(def) },
-  { id: 19, name: 'Toll Road', star3: 30000, star2: 65000, load: () => import('./019-toll-road.json').then(def) },
-  { id: 20, name: 'Roadblock', star3: 20000, star2: 50000, load: () => import('./020-roadblock.json').then(def) },
-  { id: 21, name: 'Behind the Wall', star3: 25000, star2: 50000, load: () => import('./021-behind-the-wall.json').then(def) },
-  { id: 22, name: 'Castle in the Middle', star3: 45000, star2: 90000, load: () => import('./022-castle-in-the-middle.json').then(def) },
-  { id: 23, name: 'First Blood', star3: 45000, star2: 90000, load: () => import('./023-first-blood.json').then(def) },
-  { id: 24, name: 'The Gauntlet', star3: 35000, star2: 70000, load: () => import('./024-the-gauntlet.json').then(def) },
-  { id: 25, name: 'Heavy Metal', star3: 40000, star2: 80000, load: () => import('./025-heavy-metal.json').then(def) },
-  { id: 26, name: 'Steamroller', star3: 25000, star2: 55000, load: () => import('./026-steamroller.json').then(def) },
-  { id: 27, name: 'Armour Race', star3: 25000, star2: 50000, load: () => import('./027-armour-race.json').then(def) },
-  { id: 28, name: 'Burn the Bridge', star3: 40000, star2: 80000, load: () => import('./028-burn-the-bridge.json').then(def) },
-  { id: 29, name: 'Island Hopping', star3: 20000, star2: 40000, load: () => import('./029-island-hopping.json').then(def) },
-  { id: 30, name: 'Drawbridge', star3: 20000, star2: 40000, load: () => import('./030-drawbridge.json').then(def) },
-  { id: 31, name: 'Guns over the River', star3: 65000, star2: 130000, load: () => import('./031-guns-over-the-river.json').then(def) },
-  { id: 32, name: 'Siege Works', star3: 25000, star2: 50000, load: () => import('./032-siege-works.json').then(def) },
-  { id: 33, name: 'Three Kings', star3: 40000, star2: 80000, load: () => import('./033-three-kings.json').then(def) },
-  { id: 34, name: 'Weakest Link', star3: 35000, star2: 70000, load: () => import('./034-weakest-link.json').then(def) },
-  { id: 35, name: 'Powder Keg', star3: 20000, star2: 40000, load: () => import('./035-powder-keg.json').then(def) },
-  { id: 36, name: 'Three Bridges', star3: 30000, star2: 60000, load: () => import('./036-three-bridges.json').then(def) },
-  { id: 37, name: 'Tank Country', star3: 35000, star2: 70000, load: () => import('./037-tank-country.json').then(def) },
-  { id: 38, name: 'Ring of Fire', star3: 25000, star2: 50000, load: () => import('./038-ring-of-fire.json').then(def) },
-  { id: 39, name: 'The Long Night', star3: 40000, star2: 80000, load: () => import('./039-the-long-night.json').then(def) },
-  { id: 40, name: 'The Crown', star3: 35000, star2: 70000, load: () => import('./040-the-crown.json').then(def) },
+  { id: 1, name: 'First Taps', name_az: 'İlk Toxunuş', name_ru: 'Первые тапы', name_tr: 'İlk Dokunuş', star3: 30000, star2: 60000, load: () => import('./001-first-taps.json').then(def) },
+  { id: 2, name: 'Supply Line', name_az: 'Təchizat Xətti', name_ru: 'Снабжение', name_tr: 'İkmal Hattı', star3: 30000, star2: 60000, load: () => import('./002-supply-line.json').then(def) },
+  { id: 3, name: 'Free Real Estate', name_az: 'Sahibsiz Torpaq', name_ru: 'Ничейная земля', name_tr: 'Bedava Arsa', star3: 30000, star2: 60000, load: () => import('./003-free-real-estate.json').then(def) },
+  { id: 4, name: 'Build Up', name_az: 'Güc Topla', name_ru: 'Накопление', name_tr: 'Güç Topla', star3: 40000, star2: 80000, load: () => import('./004-build-up.json').then(def) },
+  { id: 5, name: 'Two Roads', name_az: 'İki Yol', name_ru: 'Две дороги', name_tr: 'İki Yol', star3: 30000, star2: 60000, load: () => import('./005-two-roads.json').then(def) },
+  { id: 6, name: 'Outpost First', name_az: 'Əvvəl Forpost', name_ru: 'Сначала форпост', name_tr: 'Önce Karakol', star3: 45000, star2: 90000, load: () => import('./006-outpost-first.json').then(def) },
+  { id: 7, name: 'Long March', name_az: 'Uzun Yürüş', name_ru: 'Долгий марш', name_tr: 'Uzun Yürüyüş', star3: 50000, star2: 100000, load: () => import('./007-long-march.json').then(def) },
+  { id: 8, name: 'Two Bases', name_az: 'İki Baza', name_ru: 'Две базы', name_tr: 'İki Üs', star3: 35000, star2: 70000, load: () => import('./008-two-bases.json').then(def) },
+  { id: 9, name: 'Stone Walls', name_az: 'Daş Divarlar', name_ru: 'Каменные стены', name_tr: 'Taş Duvarlar', star3: 25000, star2: 50000, load: () => import('./009-stone-walls.json').then(def) },
+  { id: 10, name: 'Hold the Line', name_az: 'Xətti Saxla', name_ru: 'Держи строй', name_tr: 'Hattı Tut', star3: 65000, star2: 130000, load: () => import('./010-hold-the-line.json').then(def) },
+  { id: 11, name: 'Starve the Keep', name_az: 'Qalanı Ac Qoy', name_ru: 'Голодная осада', name_tr: 'Kaleyi Aç Bırak', star3: 30000, star2: 60000, load: () => import('./011-starve-the-keep.json').then(def) },
+  { id: 12, name: 'Gun Post', name_az: 'Top Postu', name_ru: 'Батарея', name_tr: 'Top Mevzii', star3: 20000, star2: 40000, load: () => import('./012-gun-post.json').then(def) },
+  { id: 13, name: 'Crossfire', name_az: 'Çarpaz Atəş', name_ru: 'Под огнём', name_tr: 'Çapraz Ateş', star3: 55000, star2: 110000, load: () => import('./013-crossfire.json').then(def) },
+  { id: 14, name: 'Guns and Walls', name_az: 'Top və Divar', name_ru: 'Пушки и стены', name_tr: 'Toplar ve Surlar', star3: 30000, star2: 60000, load: () => import('./014-guns-and-walls.json').then(def) },
+  { id: 15, name: 'The Citadel', name_az: 'Sitadel', name_ru: 'Цитадель', name_tr: 'İç Kale', star3: 30000, star2: 60000, load: () => import('./015-the-citadel.json').then(def) },
+  { id: 16, name: 'Last Bastion', name_az: 'Son Bastion', name_ru: 'Последний оплот', name_tr: 'Son Kale', star3: 30000, star2: 60000, load: () => import('./016-last-bastion.json').then(def) },
+  { id: 17, name: 'Minefield', name_az: 'Mina Sahəsi', name_ru: 'Минное поле', name_tr: 'Mayınlı Yol', star3: 20000, star2: 40000, load: () => import('./017-minefield.json').then(def) },
+  { id: 18, name: 'Two Rivals', name_az: 'İki Rəqib', name_ru: 'Два врага', name_tr: 'İki Rakip', star3: 45000, star2: 105000, load: () => import('./018-two-rivals.json').then(def) },
+  { id: 19, name: 'Toll Road', name_az: 'Rüsum Yolu', name_ru: 'Пошлина', name_tr: 'Paralı Yol', star3: 30000, star2: 65000, load: () => import('./019-toll-road.json').then(def) },
+  { id: 20, name: 'Roadblock', name_az: 'Barrikada', name_ru: 'Заслон', name_tr: 'Barikat', star3: 20000, star2: 50000, load: () => import('./020-roadblock.json').then(def) },
+  { id: 21, name: 'Behind the Wall', name_az: 'Divar Arxasında', name_ru: 'За стеной', name_tr: 'Duvarın Ardında', star3: 25000, star2: 50000, load: () => import('./021-behind-the-wall.json').then(def) },
+  { id: 22, name: 'Castle in the Middle', name_az: 'Ortadakı Qala', name_ru: 'Замок в центре', name_tr: 'Ortadaki Kale', star3: 45000, star2: 90000, load: () => import('./022-castle-in-the-middle.json').then(def) },
+  { id: 23, name: 'First Blood', name_az: 'İlk Qan', name_ru: 'Первая кровь', name_tr: 'İlk Kan', star3: 45000, star2: 90000, load: () => import('./023-first-blood.json').then(def) },
+  { id: 24, name: 'The Gauntlet', name_az: 'Sınaq Yolu', name_ru: 'Сквозь строй', name_tr: 'Zorlu Geçit', star3: 35000, star2: 70000, load: () => import('./024-the-gauntlet.json').then(def) },
+  { id: 25, name: 'Heavy Metal', name_az: 'Ağır Metal', name_ru: 'Тяжёлый металл', name_tr: 'Ağır Metal', star3: 40000, star2: 80000, load: () => import('./025-heavy-metal.json').then(def) },
+  { id: 26, name: 'Steamroller', name_az: 'Buldozer', name_ru: 'Каток', name_tr: 'Silindir', star3: 25000, star2: 55000, load: () => import('./026-steamroller.json').then(def) },
+  { id: 27, name: 'Armour Race', name_az: 'Zireh Yarışı', name_ru: 'Гонка брони', name_tr: 'Zırh Yarışı', star3: 25000, star2: 50000, load: () => import('./027-armour-race.json').then(def) },
+  { id: 28, name: 'Burn the Bridge', name_az: 'Körpünü Yandır', name_ru: 'Сожги мост', name_tr: 'Köprüyü Yak', star3: 40000, star2: 80000, load: () => import('./028-burn-the-bridge.json').then(def) },
+  { id: 29, name: 'Island Hopping', name_az: 'Adadan Adaya', name_ru: 'По островам', name_tr: 'Adadan Adaya', star3: 20000, star2: 40000, load: () => import('./029-island-hopping.json').then(def) },
+  { id: 30, name: 'Drawbridge', name_az: 'Asma Körpü', name_ru: 'Поднять мост', name_tr: 'Asma Köprü', star3: 20000, star2: 40000, load: () => import('./030-drawbridge.json').then(def) },
+  { id: 31, name: 'Guns over the River', name_az: 'Çay Üstü Toplar', name_ru: 'Пушки над рекой', name_tr: 'Nehir Üstü Toplar', star3: 65000, star2: 130000, load: () => import('./031-guns-over-the-river.json').then(def) },
+  { id: 32, name: 'Siege Works', name_az: 'Mühasirə', name_ru: 'Осадные работы', name_tr: 'Kuşatma', star3: 25000, star2: 50000, load: () => import('./032-siege-works.json').then(def) },
+  { id: 33, name: 'Three Kings', name_az: 'Üç Kral', name_ru: 'Три короля', name_tr: 'Üç Kral', star3: 40000, star2: 80000, load: () => import('./033-three-kings.json').then(def) },
+  { id: 34, name: 'Weakest Link', name_az: 'Ən Zəif Halqa', name_ru: 'Слабое звено', name_tr: 'En Zayıf Halka', star3: 35000, star2: 70000, load: () => import('./034-weakest-link.json').then(def) },
+  { id: 35, name: 'Powder Keg', name_az: 'Barıt Anbarı', name_ru: 'Бочка пороха', name_tr: 'Barut Fıçısı', star3: 20000, star2: 40000, load: () => import('./035-powder-keg.json').then(def) },
+  { id: 36, name: 'Three Bridges', name_az: 'Üç Körpü', name_ru: 'Три моста', name_tr: 'Üç Köprü', star3: 30000, star2: 60000, load: () => import('./036-three-bridges.json').then(def) },
+  { id: 37, name: 'Tank Country', name_az: 'Tank Ölkəsi', name_ru: 'Страна танков', name_tr: 'Tank Ülkesi', star3: 35000, star2: 70000, load: () => import('./037-tank-country.json').then(def) },
+  { id: 38, name: 'Ring of Fire', name_az: 'Atəş Halqası', name_ru: 'Кольцо огня', name_tr: 'Ateş Çemberi', star3: 25000, star2: 50000, load: () => import('./038-ring-of-fire.json').then(def) },
+  { id: 39, name: 'The Long Night', name_az: 'Uzun Gecə', name_ru: 'Долгая ночь', name_tr: 'Uzun Gece', star3: 40000, star2: 80000, load: () => import('./039-the-long-night.json').then(def) },
+  { id: 40, name: 'The Crown', name_az: 'Tac', name_ru: 'Корона', name_tr: 'Taç', star3: 35000, star2: 70000, load: () => import('./040-the-crown.json').then(def) },
 ];

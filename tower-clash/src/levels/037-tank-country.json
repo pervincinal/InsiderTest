@@ -1,7 +1,13 @@
 {
   "id": 37,
   "name": "Tank Country",
+  "name_az": "Tank Ölkəsi",
+  "name_ru": "Страна танков",
+  "name_tr": "Tank Ülkesi",
   "lesson": "Two enemy factories stand at the front: their tanks take the flank towers at once and their banks fall on whoever is weakest, the yellow base included. Hold the fortress in the middle while the three grind each other, then take a factory in one push before its bank refills",
+  "lesson_az": "Cəbhədə iki düşmən zavodu var: tankları cinah qüllələrini dərhal alır, yığımları isə ən zəifin üstünə düşür, sarı baza da daxil. Üçü bir-birini əzərkən ortadakı qalanı saxla, sonra yığımı yenidən dolmamış bir zavodu bir hücumla al",
+  "lesson_ru": "На фронте два вражеских завода: их танки сразу берут фланговые башни, а запасы падают на слабейшего, включая жёлтую базу. Держи крепость в центре, пока трое перемалывают друг друга, потом возьми завод одним рывком, пока его запас не наполнился снова",
+  "lesson_tr": "Cephede iki düşman fabrikası var: tankları kanat kulelerini hemen alır, birikimleri en zayıfın üstüne düşer, sarı üs dahil. Üçü birbirini ezerken ortadaki kaleyi tut, sonra birikimi yeniden dolmadan bir fabrikayı tek hamlede al",
   "star3": 35000,
   "star2": 70000,
   "enemies": [

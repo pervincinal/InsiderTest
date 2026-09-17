@@ -1,7 +1,13 @@
 {
   "id": 10,
   "name": "Hold the Line",
+  "name_az": "Xətti Saxla",
+  "name_ru": "Держи строй",
+  "name_tr": "Hattı Tut",
   "lesson": "Capture the neutral fortress and hold it: on your own walls every defender counts double",
+  "lesson_az": "Neytral qalanı ələ keçir və saxla: öz divarlarında hər müdafiəçi ikiqat sayılır",
+  "lesson_ru": "Захвати нейтральную крепость и держи её: на своих стенах каждый защитник считается за двоих",
+  "lesson_tr": "Tarafsız kaleyi ele geçir ve tut: kendi surlarında her savunmacı iki sayılır",
   "star3": 65000,
   "star2": 130000,
   "enemies": [{ "owner": "enemy1", "personality": "turtle", "aggression": 0.4 }],
