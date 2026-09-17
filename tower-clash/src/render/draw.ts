@@ -1,6 +1,6 @@
 import type { GameState, LevelDef, Outcome, Owner, Road, Tower, Unit } from '../sim/types';
 import { C } from '../sim/constants';
-import { capacityOf, roadPointAt } from '../sim/step';
+import { capacityOf, isUnderFire, roadPointAt } from '../sim/step';
 import type { Biome, Palette } from './palette';
 import { biomeFor, themeFor, withAlpha } from './palette';
 import type { View } from './view';
@@ -13,7 +13,7 @@ import { drawTerrain, drawTerrainOverlay } from './terrain';
 import type { TowerSkin } from './sprites';
 import { badgeY, drawBadge, drawTowerShadow, drawTowerSprite, drawUnitSprite, towerFootprintRadius } from './sprites';
 import type { ParticleSystem } from './particles';
-import { prefersReducedMotion } from './particles';
+import { hostileAttackers, prefersReducedMotion } from './particles';
 
 /** Everything the renderer needs beyond the sim state. Owned by the play screen; read-only here. */
 export interface PlayUi {
@@ -648,6 +648,9 @@ function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState
     drawUnitSprite(ctx, pal, u.x, u.y, u.unit.owner, u.unit.kind, u.dx, u.dy, u.unit.id, nowMs, motion, u.scale, u.unit.owner === 'player' ? skin?.helmet : undefined);
   const fx = ui.particles;
   const hint = limitHintState(ui, nowMs);
+  // rules v2.1 "under fire": who is landing on whom (badge tint + impact rings, see particles.ts)
+  const attackers = hostileAttackers(state);
+  fx?.landings(state, attackers, pal, nowMs);
   for (const t of towers) {
     while (ui_ < units.length && units[ui_]!.y <= t.y + 4) drawUnit(units[ui_++]!);
     const shake = hint && ui.selectedTowerId === t.id && motion ? hint.shake : 0;
@@ -673,7 +676,13 @@ function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState
     const raise = ui.selectedTowerId === t.id ? 4 : 0;
     const by = Math.max(HUD.mapTop + 26, t.y + badgeY(t.kind, t.level) - raise);
     const pop = badgePop(state, t.id, t.units, nowMs, motion);
-    drawBadge(ctx, pal, t.x, by, String(t.units), t.units >= capacityOf(t), { stroke: pal.ownerTones[t.owner].shade, scale: pop });
+    const by_ = isUnderFire(state, t) ? attackers.get(t.id) : undefined;
+    drawBadge(ctx, pal, t.x, by, String(t.units), t.units >= capacityOf(t), {
+      stroke: pal.ownerTones[t.owner].shade,
+      scale: pop,
+      underFire: isUnderFire(state, t) ? (by_ ? pal.owners[by_] : pal.ink) : undefined,
+      shake: motion ? (fx?.badgeHit(t.id, nowMs) ?? 0) : 0,
+    });
     const n = queued.get(t.id) ?? 0;
     if (n > 0) chip(ctx, pal, t.x + 46, by + 2, `+${n}`, pal.ownerTones[t.owner].mid);
   }

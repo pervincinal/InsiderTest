@@ -5,14 +5,23 @@
  * Nothing mutates state.
  */
 import type { Command, EnemyDef, GameState, Link, Owner, Road, Tower, Unit, UnitKind } from '../sim/index';
-import { C, Rng, capacityOf, linksFrom, maxLinksOf, modifiersFor, roadIdFor } from '../sim/index';
+import { C, Rng, capacityOf, isUnderFire, linksFrom, maxLinksOf, modifiersFor, roadIdFor } from '../sim/index';
 
 /**
  * A snapshot the AI reasons about: the towers/roads/units it can see plus the player's permanent
- * modifiers. `state.modifiers` is public information (the player bought them), so both sides may
- * read it: the enemy planners estimate a boosted player, the reference player its own boosted towers.
+ * modifiers and the clock. `state.modifiers` is public information (the player bought them), so both
+ * sides may read it: the enemy planners estimate a boosted player, the reference player its own boosted
+ * towers. `time` is needed to read a tower's under-fire window (rules v2.1, GDD §2.0: the garrison
+ * number is drawn in the attacker's colour while `time < underFireUntilMs`).
  */
-export type Visible = Pick<GameState, 'modifiers'>;
+export type Visible = Pick<GameState, 'modifiers' | 'time'>;
+
+/**
+ * Rules v2.1: how long a trickle an attacker is willing to wait for. A tower under fire recruits
+ * nothing, so a stream's source production keeps landing on a garrison that no longer regrows; every
+ * attack rule counts `production × SIEGE_PLAN_MS` on top of the burst (GDD §2.0 v2.1, `SIEGE_PLAN_S`).
+ */
+export const SIEGE_PLAN_MS = 10_000;
 
 /** A tower reachable from a source tower over one uncut road. */
 export interface Neighbour {
@@ -232,9 +241,12 @@ export function landings(state: GameState, tower: Tower, horizonMs = STREAM_HORI
 
 /**
  * Walk the landings on `tower` in time order from a garrison of `start`, adding the tower's own
- * production between landings (fortress defenders count double against hostile weight). Returns the
- * lowest garrison on the way and the time of the first hostile landing that would have flipped the
- * tower (Infinity when it holds within the horizon). Pure arithmetic on what is visible.
+ * production between landings (fortress defenders count double against hostile weight). Rules v2.1:
+ * production is 0 while the tower is under fire — for the rest of its current window and for
+ * `UNDER_FIRE_MS` after every hostile landing — so a trickle with landings closer than that stops it
+ * recruiting altogether. Returns the lowest garrison on the way and the time of the first hostile
+ * landing that would have flipped the tower (Infinity when it holds within the horizon). Pure
+ * arithmetic on what is visible.
  */
 export function walkLandings(state: GameState, tower: Tower, start: number, list: Landing[]): { minUnits: number; fallsAtMs: number; hostile: boolean } {
   const sorted = [...list].sort((a, b) => a.etaMs - b.etaMs || (a.hostile ? 1 : -1));
@@ -244,19 +256,43 @@ export function walkLandings(state: GameState, tower: Tower, start: number, list
   let g = start;
   let minUnits = start;
   let tPrev = 0;
+  let pausedUntil = underFireLeftMs(state, tower);
   let fallsAtMs = Infinity;
   let hostile = false;
   for (const l of sorted) {
-    g = Math.min(cap, g + (rate * (l.etaMs - tPrev)) / 1000);
+    const from = Math.max(tPrev, pausedUntil);
+    if (l.etaMs > from) g = Math.min(cap, g + (rate * (l.etaMs - from)) / 1000);
     tPrev = l.etaMs;
     if (l.hostile) {
       hostile = true;
       g -= l.weight / mult;
+      pausedUntil = l.etaMs + C.UNDER_FIRE_MS;
       if (g < 0 && fallsAtMs === Infinity) fallsAtMs = l.etaMs;
     } else g = Math.min(cap, g + l.weight);
     minUnits = Math.min(minUnits, g);
   }
   return { minUnits, fallsAtMs, hostile };
+}
+
+/**
+ * Rules v2.1 steady state of a tower under streams, units per second, once every burst has landed: the
+ * friendly streams' trickle plus what the tower still recruits between hostile landings, minus the
+ * hostile trickle. `extraFriendly` adds helpers about to link. ≤ 0 means the tower bleeds: a supply
+ * line only delays its fall (a counter-stream or a bridge cut is the answer, not more supply).
+ */
+export function siegeNetRate(state: GameState, tower: Tower, extraFriendly = 0): number {
+  let hostileRate = 0;
+  let underFire = 0; // fraction of the time the hostile trickles keep the tower under fire
+  for (const l of linksTo(state, tower.id)) {
+    if (l.owner === tower.owner) continue;
+    const from = state.towers[l.from];
+    const rate = linkRate(state, l);
+    if (!from || rate <= 0) continue;
+    hostileRate += rate;
+    underFire += Math.min(1, (C.UNDER_FIRE_MS * rate) / (1000 * unitWeightOf(from)));
+  }
+  const own = tower.owner === 'neutral' ? 0 : genPerSecond(tower, state) * (1 - Math.min(1, underFire));
+  return inflowRate(state, tower.id, false) + extraFriendly + own - hostileRate / defenceMultiplier(tower);
 }
 
 /**
@@ -354,9 +390,52 @@ export function genPerSecond(tower: Tower, state: Visible): number {
   return base * modifiersFor(tower.owner, state).productionMul;
 }
 
-/** Garrison the tower will have after `afterMs` of generation (capped at its owner's capacity), as raw units. */
+/** Rules v2.1: milliseconds of the tower's current under-fire window still to run (0 when it recruits). */
+export function underFireLeftMs(state: Visible, tower: Tower): number {
+  return isUnderFire(state, tower) ? tower.underFireUntilMs - state.time : 0;
+}
+
+/**
+ * Raw weight the tower produces within the next `ms` if nothing else hits it: its rate over the part of
+ * the window that is not under fire (rules v2.1). Fractional; callers round as the sim would.
+ */
+export function producedIn(tower: Tower, ms: number, state: Visible): number {
+  return (genPerSecond(tower, state) * Math.max(0, ms - underFireLeftMs(state, tower))) / 1000;
+}
+
+/**
+ * Rules v2.1: the production of `tower` that survives a hostile stream landing one unit every `gapMs`,
+ * per second. Every landing pauses recruiting for `UNDER_FIRE_MS`, so a barracks trickle (gap ≤ 1 s)
+ * leaves nothing and a lone tank factory (gap 4 s) leaves 2.5 s of every 4.
+ */
+export function siegeRegenPerSecond(tower: Tower, gapMs: number, state: Visible): number {
+  if (!(gapMs > C.UNDER_FIRE_MS)) return 0;
+  if (!Number.isFinite(gapMs)) return genPerSecond(tower, state);
+  return (genPerSecond(tower, state) * (gapMs - C.UNDER_FIRE_MS)) / gapMs;
+}
+
+/**
+ * Weight `source` adds to a stream it runs for `planMs` after its burst (rules v2.1: the trickle keeps
+ * landing on a target that recruits nothing), in whole units of its kind, minus what the target still
+ * recruits between landings that far apart. 0 for a source that produces nothing.
+ */
+export function siegeCredit(source: Tower, target: Tower, planMs: number, state: Visible): number {
+  const rate = genPerSecond(source, state);
+  if (rate <= 0) return 0;
+  const unit = unitWeightOf(source);
+  const lands = Math.floor((rate * planMs) / 1000 / unit) * unit;
+  const regen = Math.ceil((siegeRegenPerSecond(target, (1000 * unit) / rate, state) * planMs) / 1000) * defenceMultiplier(target);
+  return Math.max(0, lands - regen);
+}
+
+/**
+ * Garrison the tower will have after `afterMs` of generation (capped at its owner's capacity), as raw
+ * units — nothing while it is under fire (rules v2.1). A streaming tower drains every recruit into its
+ * ribbons instead, but those meet whatever is sent at it on the road, so counting them as growth is the
+ * same arithmetic for an attacker.
+ */
 export function projectedUnits(tower: Tower, afterMs: number, state: Visible): number {
-  return Math.min(capacityOf(tower, state), tower.units + Math.floor((genPerSecond(tower, state) * afterMs) / 1000));
+  return Math.min(capacityOf(tower, state), tower.units + Math.floor(producedIn(tower, afterMs, state)));
 }
 
 /** Projected garrison in attacker weight (fortress-aware). */
@@ -504,31 +583,55 @@ export interface ThreatSource {
 }
 
 /**
+ * A hostile tower's own column: its garrison as it will be at now + `atMs`, plus its reinforcements on
+ * the way, minus what is already attacking it and minus what its own streams drain away.
+ */
+function ownColumn(state: GameState, from: Tower, atMs: number): number {
+  let hostile = 0;
+  let support = 0;
+  for (const [owner, v] of inboundByOwner(state, from.id)) {
+    if (owner === from.owner) support += v.weight;
+    else hostile += v.weight;
+  }
+  // What the tower still holds for its streams counts too: a link is redirected in one tick (rushers
+  // drop and re-aim theirs whenever a column shows), so a garrison is a threat until it has left.
+  return projectedUnits(from, atMs, state) + support - Math.ceil(hostile / defenceMultiplier(from));
+}
+
+/**
+ * Share of a hostile column two hops away (through a neutral) that counts as a threat: it must want
+ * and take the neutral first, and its capture is visible for a whole travel time before it can carry
+ * on — a human keeps something at home for it, not everything.
+ */
+export const TWO_HOP_DISCOUNT = 0.5;
+
+/**
  * The column neighbour `n` could throw at a tower of `self` right now: a hostile garrison as it will be
  * at now + `atMs` (plus its reinforcements on the way, minus what is already attacking it and minus what
  * its own streams drain away), or a hostile column that is about to flip the neighbour — neutral or
- * another rival's — and carry on from there. The column is timed as if it left right now (a racing
- * rival does not wait) at *its* owner's speed, never at `self`'s. What streams keep trickling later is
- * not a column: `holdReserve` reads the streams actually aimed at a tower. `undefined` when nothing
- * could come from that side.
+ * another rival's — and carry on from there. A neutral neighbour also relays what a hostile tower on
+ * its far side could throw through it: that column minus what flipping the neutral costs, discounted by
+ * `TWO_HOP_DISCOUNT` (a home whose neighbours are all neutral is not safe when an enemy sits behind
+ * one of them). An own neighbour that falls within the landing horizon relays the surplus of the
+ * attack that takes it (nothing is kept for a neighbour that holds). The column is timed as if it left right now (a racing rival does not wait) at *its*
+ * owner's speed, never at `self`'s. What streams keep trickling later is not a column: `holdReserve`
+ * reads the streams actually aimed at a tower. `undefined` when nothing could come from that side.
  */
 export function threatFrom(state: GameState, self: Owner, n: Neighbour, atMs = 0): ThreatSource | undefined {
   const from = n.tower;
-  if (from.owner === self) return undefined;
+  if (from.owner === self) {
+    // An own neighbour that falls to what is visibly coming at it: the surplus of that attack carries
+    // on from there (a stream keeps flowing through the tower it took).
+    const walk = walkLandings(state, from, from.units, landings(state, from));
+    if (walk.fallsAtMs === Infinity) return undefined;
+    const attackers = Math.ceil(-walk.minUnits) - n.roadCost;
+    if (attackers <= 0) return undefined;
+    return { from, attackers, etaMs: walk.fallsAtMs + arrivalMs(n.theirTravelMs, attackers) };
+  }
   const inbound = inboundByOwner(state, from.id);
   let attackers = 0;
   let landMs = 0;
-  if (from.owner !== 'neutral') {
-    let hostile = 0;
-    let support = 0;
-    for (const [owner, v] of inbound) {
-      if (owner === from.owner) support += v.weight;
-      else hostile += v.weight;
-    }
-    // What the neighbour already pours into its streams is on its way somewhere (counted by
-    // `incomingThreat` where it matters), not a column it could still throw at us.
-    attackers = projectedUnits(from, atMs, state) - pendingOf(state, from.id) + support - Math.ceil(hostile / defenceMultiplier(from));
-  }
+  if (from.owner !== 'neutral') attackers = ownColumn(state, from, atMs);
   // A column of another rival bigger than the garrison flips the neighbour and keeps the remainder.
   for (const [owner, v] of inbound) {
     if (owner === self || owner === 'neutral' || owner === from.owner) continue;
@@ -536,6 +639,17 @@ export function threatFrom(state: GameState, self: Owner, n: Neighbour, atMs = 0
     if (remainder > attackers) {
       attackers = remainder;
       landMs = v.etaMs;
+    }
+  }
+  if (from.owner === 'neutral') {
+    // Two hops: a hostile tower behind the neutral could take it and carry the remainder on to us.
+    for (const m of neighbours(state, from.id)) {
+      if (m.tower.owner === self || m.tower.owner === 'neutral') continue;
+      const through = (ownColumn(state, m.tower, atMs) - m.roadCost - weightToCapture(from)) * TWO_HOP_DISCOUNT;
+      if (through > attackers) {
+        attackers = through;
+        landMs = arrivalMs(travelMsFor(state, m.road, m.tower.owner), through);
+      }
     }
   }
   attackers -= n.roadCost;

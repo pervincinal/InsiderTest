@@ -76,6 +76,8 @@ export interface Palette {
   badge: string;
   badgeEdge: string;
   badgeFull: string;
+  /** Badge paper while the tower is under fire (rules v2.1): warm alert tint, ink numerals stay ≥ 4.5:1. */
+  badgeAlert: string;
   shadow: string;
 
   /* ---- v2 clay tokens (ART_DIRECTION §2) ---- */
@@ -229,6 +231,7 @@ export const DEFAULT_PALETTE: Palette = Object.freeze({
   badge: '#fffaf0',
   badgeEdge: '#1e2a44',
   badgeFull: '#ffe38a',
+  badgeAlert: '#ffd7c2',
   shadow: 'rgba(26, 58, 90, 0.22)',
 
   sky: '#1f8fc2',

@@ -13,8 +13,14 @@
  *      · any stream whose source has drained to the reserve it must keep (`reserveToHold`: what survives
  *        the strongest column an enemy neighbour could throw, counting the hostile columns already on
  *        their way) — a wave, not a leak; the source then regrows unlinked,
+ *      · a supply line whose source is drained (≤ `DRAINED_UNITS`) into a tower that a hostile stream
+ *        still bleeds (`siegeNetRate` ≤ 0: the trickle out-delivers everything it gets) — the line only
+ *        feeds a tower it cannot save; the answer to that trickle is a counter-stream at the drained
+ *        enemy source (rule 4) or a bridge cut (rule 5), not a second tower starved at 0,
  *   1) reinforce — link a friendly neighbour to a tower under attack, only when its column lands before
- *      the tower falls and only when the helpers together save it (an all-in is answered, not raced);
+ *      the tower falls and only when the helpers together save it (an all-in is answered, not raced):
+ *      their bursts and trickle cover what it is short of within the horizon, and either the bursts
+ *      alone absorb it or the helpers' trickle turns the siege around (`siegeNetRate` > 0 with them);
  *      ended by rule 0 once the tower is safe,
  *   2) capture — link to a neighbouring neutral the garrison can flip and hold (contested neutrals need
  *      more); in the opening a tower below `OPENING_GROW_LEVEL` keeps growing toward its auto-upgrade
@@ -24,8 +30,13 @@
  *      friendly tower toward the front (chained streams relay through),
  *   4) attack — the weakest adjacent enemy tower, with every free adjacent own tower (up to its link
  *      limit) plus rear relays chained into them, when what lands ≥ defenders × 1.2 + 2 (fortress-aware,
- *      counting what the target grows before and during the stream, the sources' own production while the
- *      stream runs, and what the captured tower needs to be held). Bridge-aware: a bridge into an enemy
+ *      counting what the target grows before the first landing, the sources' own production while the
+ *      stream runs — the burst plus `SIEGE_PLAN_MS` of trickle, rules v2.1: from the first landing the
+ *      target recruits nothing while landings are < `UNDER_FIRE_MS` apart — and what the captured tower
+ *      needs to be held). A drained enemy source at 0 is the weakest target there is: streaming at it from
+ *      a tower next to it — or from the sieged tower itself when its garrison exceeds what is still
+ *      coming down that road (`spare` with the attacker excluded, `needed` counting its burst and the
+ *      units on the road) — is how a hostile ribbon is answered. Bridge-aware: a bridge into an enemy
  *      keep that could cut it (a finished keep — the turtle's rule) is an exposed route; a stream over it
  *      is planned as losing everything landing later than one AI tick after its first unit steps on
  *      (`bridgeLoss`), and the plan without such sources is preferred when it reaches `needed` within
@@ -59,16 +70,22 @@ import {
   inboundByOwner,
   inflowRate,
   isEnemyOwner,
+  landings,
   linkCommand,
   linkPending,
+  linkRate,
   neighbours,
   ownedTowers,
+  producedIn,
   projectedUnits,
   roadBetween,
+  siegeNetRate,
+  siegeRegenPerSecond,
   threatFrom,
   unlinkCommand,
   walkingWeight,
   wholeUnits,
+  SIEGE_PLAN_MS,
   STREAM_HORIZON_MS,
   type Neighbour,
   type ThreatSource,
@@ -103,6 +120,10 @@ export const CUT_REACTION_MS = C.AI_TICK_MS;
 export const SAFE_PLAN_SLOWDOWN = 1.3;
 /** Home reserve: defenders kept above the strongest column that could land. */
 const HOLD_MARGIN = 1;
+/** Rule 0: a stream source holding at most this is drained — it only relays its production. */
+export const DRAINED_UNITS = 1;
+/** Rule 1: the smallest burst worth pouring into a siege the helpers cannot turn — one AI tick of drain. */
+export const MIN_WAVE = Math.floor(C.AI_TICK_MS / C.LEAVE_INTERVAL_MS);
 /**
  * Rule 4: hard cap on plans launched per tick. Every launched plan marks its sources used, so the loop
  * ends after at most one iteration per own tower; the cap is a last line of defence against a plan that
@@ -237,7 +258,7 @@ function reserveFor(state: GameState, as: Tower, sources: ThreatSource[], exclud
   if (reserve > cap) reserve = 0;
   for (const src of sources) {
     const need = Math.ceil((src.attackers + threat) / mult) + HOLD_MARGIN;
-    const grown = Math.floor((genPerSecond(as, state) * src.etaMs) / 1000);
+    const grown = Math.floor(producedIn(as, src.etaMs, state));
     if (need - grown > cap) continue;
     reserve = Math.max(reserve, need - grown);
   }
@@ -400,7 +421,7 @@ function relayOptions(ctx: Ctx, sources: Source[]): RelayOption[] {
  * toward it) can throw at it, with the given rear `relays` chained into them: what lands after bridge
  * losses, what the target needs, and when.
  */
-function evaluatePlan(ctx: Ctx, target: Tower, sources: Source[], inbound: number, relays: RelayOption[]): Plan {
+function evaluatePlan(ctx: Ctx, target: Tower, sources: Source[], inbound: number, relays: RelayOption[], hold = true): Plan {
   const { state } = ctx;
   let losses = 0;
   let slowest = 0;
@@ -421,20 +442,40 @@ function evaluatePlan(ctx: Ctx, target: Tower, sources: Source[], inbound: numbe
     if (through - loss > 0 || s.linked) streams++;
   }
   let force = raw - lost;
-  const streamMs = Math.min(MAX_STREAM_MS, Math.max(force, 1) * C.LEAVE_INTERVAL_MS);
-  // A source with nothing to hold back keeps producing into the stream — unless its route is cut under it.
-  for (const s of sources) {
-    if (s.exposed || reserveToHold(state, s.tower, target.id) > 0) continue;
-    force += Math.floor((genPerSecond(s.tower, state) * streamMs) / 1000);
-  }
+  const burstMs = Math.min(MAX_STREAM_MS, Math.max(force, 1) * C.LEAVE_INTERVAL_MS);
+  // A source with nothing to hold back keeps producing into the stream — unless its route is cut under
+  // it. Rules v2.1: that trickle keeps landing on a target that recruits nothing, so the plan runs
+  // `SIEGE_PLAN_MS` past the burst (within `MAX_STREAM_MS`) when there is a trickle at all.
+  const trickling = sources.filter((s) => !s.exposed && reserveToHold(state, s.tower, target.id) <= 0);
+  let trickle = 0;
+  for (const s of trickling) trickle += genPerSecond(s.tower, state);
+  // Rules v2.1: nothing is recruited during the burst (a landing every 120 ms) and only what the gap
+  // between trickle landings leaves after it; friendly supply into the target still lands. The siege
+  // phase is planned only when our trickle gains on that.
+  const unit = trickling.length > 0 && trickling.every((s) => s.tower.kind === 'tankFactory') ? C.TANK_WEIGHT : C.INFANTRY_WEIGHT;
+  const gapMs = trickle > 0 ? (1000 * unit) / trickle : Infinity;
+  const supplyRate = inflowRate(state, target.id, false);
+  // What the target itself streams down our roads meets our column there: a loss over the siege phase
+  // (its growth before our first landing is in `firstHit`, whether it stays in the garrison or walks).
+  let roadTrickle = 0;
+  for (const s of sources) roadTrickle += streamRateInto(state, target.id, s.tower.id);
+  const siegeGain = trickle - roadTrickle - (supplyRate + siegeRegenPerSecond(target, gapMs, state)) * defenceMultiplier(target);
   const firstHit = defendersAtLanding(state, target, slowest);
-  const regenDuringStream = Math.ceil(((genPerSecond(target, state) + inflowRate(state, target.id, false)) * streamMs) / 1000) * defenceMultiplier(target);
+  // The siege phase is opened by a wave that matches the garrison it hits — a thin stream is walked
+  // through by the target's own counter (a turtle keep at 100 answers a 1-unit source at once).
+  const planMs = siegeGain > 0 && force >= firstHit ? Math.min(MAX_STREAM_MS, burstMs + SIEGE_PLAN_MS) : burstMs;
+  for (const s of trickling) force += Math.floor(producedIn(s.tower, planMs, state));
+  losses += Math.ceil((roadTrickle * Math.max(0, planMs - burstMs)) / 1000);
+  const regenUnits = (supplyRate * planMs + siegeRegenPerSecond(target, gapMs, state) * Math.max(0, planMs - burstMs)) / 1000;
+  const regenDuringStream = Math.ceil(regenUnits) * defenceMultiplier(target);
+  const streamMs = planMs;
   const toFlip = firstHit + regenDuringStream + losses;
   let needed = firstHit * ATTACK_FACTOR + ATTACK_SLACK + regenDuringStream + losses;
   // The captured tower must be holdable with what is left of the stream (the remainder becomes the
   // garrison one unit per weight, fortress or not), or the stream is just a gift.
   const waveIds = new Set([...sources.map((s) => s.tower.id), ...relays.map((r) => r.tower.id)]);
-  needed += holdShortfall(ctx, target, Math.max(0, force - toFlip), slowest + streamMs, waveIds);
+  const shortfall = hold ? holdShortfall(ctx, target, Math.max(0, force - toFlip), slowest + streamMs, waveIds) : 0;
+  needed += shortfall;
   const deliveryMs = slowest + Math.min(MAX_STREAM_MS, (needed * C.LEAVE_INTERVAL_MS) / Math.max(1, streams));
   return { target, sources, relays, toFlip, needed, force, deliveryMs };
 }
@@ -444,14 +485,14 @@ function evaluatePlan(ctx: Ctx, target: Tower, sources: Source[], inbound: numbe
  * chained in one at a time (biggest first) until it is covered — rear garrisons that are not needed
  * keep growing toward their auto-upgrade. `recruit: false` judges a running stream as it is.
  */
-function buildPlan(ctx: Ctx, target: Tower, sources: Source[], inbound: number, recruit: boolean): Plan {
-  let plan = evaluatePlan(ctx, target, sources, inbound, []);
+function buildPlan(ctx: Ctx, target: Tower, sources: Source[], inbound: number, recruit: boolean, hold = true): Plan {
+  let plan = evaluatePlan(ctx, target, sources, inbound, [], hold);
   if (!recruit || plan.force >= plan.needed) return plan;
   const options = relayOptions(ctx, sources);
   const relays: RelayOption[] = [];
   for (const r of options) {
     relays.push(r);
-    plan = evaluatePlan(ctx, target, sources, inbound, relays);
+    plan = evaluatePlan(ctx, target, sources, inbound, relays, hold);
     if (plan.force >= plan.needed) break;
   }
   return plan;
@@ -505,6 +546,30 @@ export function wantAt(state: GameState, tower: Tower): number {
   return Math.min(SUPPLY_MAX, Math.max(SUPPLY_MIN, reserveToHold(state, tower)));
 }
 
+/** Is a hostile stream (a ribbon of another owner) aimed at the tower? */
+function besieged(state: GameState, tower: Tower): boolean {
+  return state.links.some((l) => l.to === tower.id && l.owner !== tower.owner);
+}
+
+/** Units per second the enemy tower `from` streams into `to` right now (0 without such a ribbon). */
+function streamRateInto(state: GameState, from: string, to: string): number {
+  let rate = 0;
+  for (const l of state.links) if (l.from === from && l.to === to) rate += linkRate(state, l);
+  return rate;
+}
+
+/**
+ * Rules v2.1 parry: a stream from `tower` back at an enemy `source` that streams into it, run only
+ * while the enemy keeps its ribbon up and our production on that road is at least its trickle. The two
+ * trickles annihilate on the road, nothing lands on either side, and the rest of our economy outgrows
+ * theirs — the last resort when supply cannot save the tower and no surplus can flip the source.
+ */
+function isParry(state: GameState, tower: Tower, source: Tower): boolean {
+  if (!isEnemyOwner(source.owner)) return false;
+  const theirs = streamRateInto(state, source.id, tower.id);
+  return theirs > 0 && genPerSecond(tower, state) >= theirs;
+}
+
 function maintain(ctx: Ctx, mine: Tower[]): void {
   const { state } = ctx;
   // (a) hopeless attacks: everything this owner streams into an enemy tower, judged per target.
@@ -514,7 +579,7 @@ function maintain(ctx: Ctx, mine: Tower[]): void {
     if (l.owner === OWNER && t && isEnemyOwner(t.owner)) targets.set(t.id, t);
   }
   for (const target of targets.values()) {
-    const sources = streamingSources(ctx, target);
+    const sources = streamingSources(ctx, target).filter((s) => !isParry(state, s.tower, target));
     if (sources.length === 0) continue;
     const plan = buildPlan(ctx, target, sources, incomingWeight(state, target.id, OWNER), false);
     if (plan.force >= plan.toFlip) continue;
@@ -534,6 +599,12 @@ function maintain(ctx: Ctx, mine: Tower[]): void {
           pushUnlink(ctx, tower, to);
           continue;
         }
+        // Rules v2.1: a drained source feeding a tower that a hostile stream still bleeds is a leak —
+        // the target cannot be saved by supply, only by a counter-stream or a cut (rules 4 and 5).
+        if (!relay && tower.units <= DRAINED_UNITS && besieged(state, target) && siegeNetRate(state, target) <= 0) {
+          pushUnlink(ctx, tower, to);
+          continue;
+        }
       }
       if (target.owner === 'neutral') {
         // Metered capture: once enough is walking, the rest stays home.
@@ -543,6 +614,7 @@ function maintain(ctx: Ctx, mine: Tower[]): void {
           continue;
         }
       }
+      if (isParry(state, tower, target)) continue; // the road duel goes on while their ribbon is up
       const reserve = reserveToHold(state, tower, target.owner === OWNER ? undefined : to);
       if (reserve > 0 && tower.units <= reserve) pushUnlink(ctx, tower, to);
     }
@@ -561,6 +633,8 @@ function maintain(ctx: Ctx, mine: Tower[]): void {
 function reinforce(ctx: Ctx, mine: Tower[]): void {
   const { state } = ctx;
   for (const tower of mine) {
+    // A streaming tower relays whatever lands on it straight onto the road: nothing to hold there.
+    if (targetsOf(ctx, tower.id).size > 0) continue;
     let deficit = holdReserve(state, tower, HOLD_MARGIN) - tower.units - (ctx.sentTo.get(tower.id) ?? 0);
     if (deficit <= 0) continue;
     const falls = fallsAtMs(state, tower);
@@ -569,17 +643,30 @@ function reinforce(ctx: Ctx, mine: Tower[]): void {
     const helpers = friendlyNeighbours(state, tower.id)
       .filter((n) => free(ctx, n.tower) && slots(ctx, n.tower) > 0 && !isLinkedTo(ctx, n.tower.id, tower.id) && n.travelMs <= deadline)
       .map((n) => {
-        const reserve = reserveToHold(state, n.tower);
+        // The helper's reserve is judged without the tower it is about to save (its fall is the threat).
+        const reserve = reserveToHold(state, n.tower, tower.id);
         const burst = Math.max(0, wholeUnits(n.tower, n.tower.units - reserve) - n.oncoming);
-        const trickle = reserve > 0 ? 0 : Math.floor((genPerSecond(n.tower, state) * Math.max(0, STREAM_HORIZON_MS - n.travelMs)) / 1000);
-        return { n, burst, help: burst + trickle };
+        const rate = reserve > 0 ? 0 : genPerSecond(n.tower, state);
+        const trickle = Math.floor((rate * Math.max(0, STREAM_HORIZON_MS - n.travelMs)) / 1000);
+        return { n, burst, rate, help: burst + trickle };
       })
       .filter((h) => h.help > 0)
       .sort((a, b) => a.n.travelMs - b.n.travelMs);
     const total = helpers.reduce((sum, h) => sum + h.help, 0);
     if (total < deficit) continue; // do not feed a tower that is lost anyway
+    // Rules v2.1: a tower under a trickle recruits nothing, so the helpers must either absorb the
+    // attack's burst (what is on the roads and still to drain) with their bursts or out-deliver the
+    // trickle with theirs — otherwise the line is a leak.
+    const bursts = helpers.reduce((sum, h) => sum + h.burst, 0);
+    const rates = helpers.reduce((sum, h) => sum + h.rate, 0);
+    const hostileBurst = Math.ceil(incomingThreat(state, tower.id) / defenceMultiplier(tower)) + HOLD_MARGIN;
+    const leak = siegeNetRate(state, tower, rates) <= 0;
+    if (leak && bursts + Math.max(0, tower.units) < hostileBurst) continue;
     for (const h of helpers) {
       if (deficit <= 0) break;
+      // Into a siege the helpers cannot turn, only a wave goes: at least one AI tick of drain, never a
+      // trickle-only helper (that is a leak, and a 1-unit source re-linking every tick is the same leak).
+      if (leak && h.burst < MIN_WAVE) continue;
       pushLink(ctx, h.n.tower, tower.id, h.burst);
       deficit -= h.help;
     }
@@ -711,7 +798,93 @@ function attack(ctx: Ctx, mine: Tower[]): void {
   const { state } = ctx;
   const targets = new Map<string, Tower>();
   for (const tower of mine) for (const n of enemyNeighbours(state, tower.id)) targets.set(n.tower.id, n.tower);
+  launchPlans(ctx, mine, targets, true);
+}
 
+/**
+ * Rules v2.1 answer to a hostile ribbon that rule 1 could not (or need not) answer with supply: stream
+ * at the stream's source. A streaming enemy tower drains to nothing and recruits nothing once hit, so
+ * it is the weakest target on the map, and its capture ends the stream (`sourceLost`). Towers other
+ * than the sieged one go first; the sieged tower joins only when its own spare — what it holds above
+ * every *other* threat — beats what is still coming down that road (`needed` counts the source's burst
+ * as garrison and the units on the road as losses): a counter without a surplus is the deadlock the
+ * GDD warns of. Holding the capture is not required: killing the stream is the point.
+ */
+function counter(ctx: Ctx, mine: Tower[]): void {
+  const { state } = ctx;
+  const targets = new Map<string, Tower>();
+  for (const tower of mine) {
+    for (const l of state.links) {
+      const from = state.towers[l.from];
+      if (l.to === tower.id && from && isEnemyOwner(from.owner)) targets.set(from.id, from);
+    }
+  }
+  if (targets.size === 0) return;
+  const calm = mine.filter((t) => !besieged(state, t));
+  launchPlans(ctx, calm, targets, false);
+  launchPlans(ctx, mine, targets, false);
+}
+
+/**
+ * Does `tower`'s garrison plus its production meet every hostile landing on it in time when all of it
+ * is sent down the road instead (a parry)? Units clash on the road, so nothing pauses recruiting; a
+ * negative balance means their surplus lands on an empty tower.
+ */
+function parryHolds(state: GameState, tower: Tower): boolean {
+  const mult = defenceMultiplier(tower);
+  const rate = genPerSecond(tower, state);
+  const hostile = landings(state, tower)
+    .filter((l) => l.hostile)
+    .sort((a, b) => a.etaMs - b.etaMs);
+  let g = tower.units;
+  let tPrev = 0;
+  for (const l of hostile) {
+    g += (rate * (l.etaMs - tPrev)) / 1000 - l.weight / mult;
+    tPrev = l.etaMs;
+    if (g < 0) return false;
+  }
+  return true;
+}
+
+/**
+ * Rules v2.1 last resort for a sieged tower that rule 1 did not reinforce and rule 2 could not answer
+ * with a surplus: stream back at the strongest hostile source whose trickle our production matches
+ * (`isParry`). Nothing lands on either side while the duel lasts, so the tower is no longer under fire
+ * and the enemy's production is spent on the road. One parry per tower, its strongest matchable ribbon.
+ */
+function parry(ctx: Ctx, mine: Tower[]): void {
+  const { state } = ctx;
+  for (const tower of mine) {
+    if (!free(ctx, tower) || !idle(ctx, tower) || !besieged(state, tower)) continue;
+    if (siegeNetRate(state, tower) + (ctx.sentTo.get(tower.id) ?? 0) / (STREAM_HORIZON_MS / 1000) > 0) continue;
+    // Rule 2a already answers a besieger that an own stream (after this tick's commands) is aimed at.
+    const countered = state.links.some((l) => l.to === tower.id && l.owner !== OWNER && [...ctx.links.values()].some((set) => set.has(l.from)));
+    if (countered) continue;
+    // The whole garrison goes down the road and meets what is already coming 1:1, and the production
+    // that follows meets the rest: what the garrison and that production cannot cover walks into an
+    // empty tower (the deadlock the GDD warns of), so the duel must never go negative.
+    if (!parryHolds(state, tower)) continue;
+    let best: Tower | undefined;
+    let bestRate = 0;
+    for (const n of enemyNeighbours(state, tower.id)) {
+      if (ctx.ended.has(`${tower.id}>${n.tower.id}`) || !isParry(state, tower, n.tower)) continue;
+      const rate = streamRateInto(state, n.tower.id, tower.id);
+      if (rate > bestRate) {
+        best = n.tower;
+        bestRate = rate;
+      }
+    }
+    if (best) pushLink(ctx, tower, best.id, 0);
+  }
+}
+
+/**
+ * Plan a stream at each of `targets` from the free idle towers among `mine` next to it (plus rear
+ * relays), and launch the plans that are covered, cheapest first. `hold` requires the capture to be
+ * holdable (rule 4); the counter rule (rule 2) waives it.
+ */
+function launchPlans(ctx: Ctx, mine: Tower[], targets: Map<string, Tower>, hold: boolean): void {
+  const { state } = ctx;
   const plans: Plan[] = [];
   for (const target of targets.values()) {
     const inbound = incomingWeight(state, target.id, OWNER);
@@ -725,14 +898,17 @@ function attack(ctx: Ctx, mine: Tower[]): void {
       if (inbound > 0 && waveSuffices(state, inbound, n)) continue;
       const exposed = exposedRoute(state, n);
       if (running && exposed) continue;
-      sources.push({ tower, n, force: spare(state, tower, target.id), linked: false, exposed });
+      const force = spare(state, tower, target.id);
+      // A column that dies on its own road (the hostile units walking it outnumber it) adds only losses.
+      if (force <= costToTake(n)) continue;
+      sources.push({ tower, n, force, linked: false, exposed });
     }
     if (!sources.some((s) => !s.linked)) continue;
-    const full = buildPlan(ctx, target, sources, inbound, true);
+    const full = buildPlan(ctx, target, sources, inbound, true, hold);
     let plan = full;
     if (full.sources.some((s) => s.exposed && !s.linked)) {
       const safeSources = sources.filter((s) => !s.exposed || s.linked);
-      const safe = safeSources.some((s) => !s.linked) ? buildPlan(ctx, target, safeSources, inbound, true) : undefined;
+      const safe = safeSources.some((s) => !s.linked) ? buildPlan(ctx, target, safeSources, inbound, true, hold) : undefined;
       if (safe && safe.force >= safe.needed && safe.deliveryMs <= full.deliveryMs * SAFE_PLAN_SLOWDOWN) plan = safe;
     }
     plans.push(plan);
@@ -807,6 +983,8 @@ export function referencePlayerCommands(state: GameState, rng: Rng, trace?: Rule
   const rules: [string, (ctx: Ctx, mine: Tower[]) => void][] = [
     ['maintain', maintain],
     ['reinforce', reinforce],
+    ['counter', counter],
+    ['parry', parry],
     ['capture', captureNeutrals],
     ['supply', supplyForward],
     ['attack', attack],

@@ -11,6 +11,8 @@ const LEVELS = await loadAllLevels();
 /*
  * Rules v2: the reference player only ever issues `link`, `unlink` and `cutBridge`. Every test pins the
  * exact command list of a tick, and the level runs assert that no `sendUnits` / `upgrade` is emitted.
+ * Rules v2.1 (2026-09-17, "under fire"): a hit tower recruits nothing, so the attack plan counts 10 s of
+ * trickle once the burst matches the defenders; pins marked "v2.1 re-pin" were re-measured deliberately.
  */
 
 const links = (cmds: Command[]) => cmds.filter((c) => c.type === 'link');
@@ -128,10 +130,12 @@ describe('reference player: attacks', () => {
         ],
       });
     expect(referencePlayerCommands(createState(level(10, 20), 1), new Rng(1))).toEqual([]);
-    // Even at 1.2 × 20 + 2 = 26 it waits: the enemy grows ~5 during the 5 s walk.
-    expect(referencePlayerCommands(createState(level(26, 20), 1), new Rng(1))).toEqual([]);
-    // 20 + 5 grown = 25 → 25 × 1.2 + 2 = 32 > 30: still waits.
-    expect(referencePlayerCommands(createState(level(30, 20), 1), new Rng(1))).toEqual([]);
+    // The enemy grows to 25 during the 5 s walk: a 24-burst is short of that, so its trickle does not count → waits.
+    expect(referencePlayerCommands(createState(level(24, 20), 1), new Rng(1))).toEqual([]);
+    // v2.1 re-pin: 25 matches the 25 it meets and the keep recruits nothing from the first landing, so
+    // 25 + 1/s × 10 s ≥ 25 × 1.2 + 2 = 32 → the stream starts (v2: 26 and even 30 waited, regen 5 counted against them).
+    expect(referencePlayerCommands(createState(level(25, 20), 1), new Rng(1))).toEqual([link('p', 'e')]);
+    expect(referencePlayerCommands(createState(level(30, 20), 1), new Rng(1))).toEqual([link('p', 'e')]);
   });
 
   it('attacks a weak adjacent enemy tower with a stream and keeps it flowing (nothing else to hold against)', () => {
@@ -180,7 +184,7 @@ describe('reference player: attacks', () => {
     expect(flanked.links).toHaveLength(0);
   });
 
-  it('hits the tower the rusher just emptied (level 1 opening) and wins in 19.8 s on seed 1', () => {
+  it('attacks the rusher head-on from the first tick (level 1 opening) and wins in 13.15 s on seed 1', () => {
     const level = LEVELS.find((l) => l.id === 1)!;
     const state = createState(level, 1);
     const playerRng = new Rng(1);
@@ -197,10 +201,12 @@ describe('reference player: attacks', () => {
       }
       step(state);
     }
-    // t = 0: camp is contested (foe 8 next to it) → wait. t = 1 s: foe streams at camp and holds 1 → attack it.
-    expect(log[0]).toEqual([1000, [link('home', 'foe')]]);
+    // v2.1 re-pin: t = 0: camp is contested (foe 8 next to it) → wait; t = 0.5 s: 12 lands on foe's 8 + 3
+    // grown, and foe recruits nothing once hit, so 12 + 10 s of trickle ≥ 11 × 1.2 + 2 → attack it at once
+    // (v2: waited until foe had emptied itself at t = 1 s, won at 19.8 s).
+    expect(log[0]).toEqual([500, [link('home', 'foe')]]);
     expect(getOutcome(state)).toBe('won');
-    expect(state.time).toBe(19_800);
+    expect(state.time).toBe(13_150);
   });
 
   it('ends a hopeless attack: a stream that can no longer flip its target is unlinked', () => {
@@ -290,13 +296,14 @@ describe('reference player: whole games', () => {
     expect(JSON.stringify(a.state)).toBe(JSON.stringify(b.state));
   });
 
-  it('an equal 1 v 1 against a rusher is a stalemate under rules v2 (both towers grow to 100, nobody attacks)', () => {
-    // p 10 vs e 10 (rusher 0.5) on a 600 px road: the rusher never attacks an equal tower and the
-    // reference player never attacks without 1.2 × superiority, which symmetric auto-upgrades never give.
+  it('an equal 1 v 1 against a rusher is decided under rules v2.1: the rusher opens, the reference player answers and wins at 19.95 s', () => {
+    // v2.1 re-pin: p 10 vs e 10 (rusher 0.5) on a 600 px road. Under v2 nobody attacked an equal tower
+    // and both grew to L3 100 (a stalemate at 120 s). Now the rusher streams at once (10 + 10 s of trickle
+    // ≥ 10 + 1.5); its source drains to 0 and the reference player's counter/parry rules take it.
     const { outcome, state } = play(makeLevel(), 1, 120_000);
-    expect(outcome).toBe('playing');
-    expect(state.towers['p']!).toMatchObject({ level: 3, units: 100 });
-    expect(state.towers['e']!).toMatchObject({ level: 3, units: 100 });
+    expect(outcome).toBe('won');
+    expect(state.time).toBe(19_950);
+    expect(state.towers['e']!.owner).toBe('player');
   });
 
   it('wins level 1 on every seed 1..100 with the game client rng streams, never issuing a legacy command', () => {
@@ -344,10 +351,11 @@ describe('reference player: tank factory sources', () => {
         }),
         1,
       );
-    // 14 weight is two tanks (10): 10 + 1 grown < 6 × 1.2 + 2 + 2 regen = 11.2 → wait.
-    expect(referencePlayerCommands(vs1(14), new Rng(1))).toEqual([]);
-    // 15 weight is three tanks: 15 + 2 grown ≥ 12.2 → the stream starts and the first unit out is a tank.
-    const state = vs1(15);
+    // 9 weight is one tank (5): short of the 6 it meets → no trickle credit, 5 < 6 × 1.2 + 2 → wait.
+    expect(referencePlayerCommands(vs1(9), new Rng(1))).toEqual([]);
+    // v2.1 re-pin: 10 weight is two tanks: 10 ≥ 6 and the target recruits nothing during the burst
+    // (v2 counted 2 regen and needed three tanks) → the stream starts and the first unit out is a tank.
+    const state = vs1(10);
     expect(referencePlayerCommands(state, new Rng(1))).toEqual([link('p', 'e')]);
     applyCommand(state, link('p', 'e'));
     for (let i = 0; i < 3; i++) step(state);
@@ -434,18 +442,22 @@ describe('reference player: bridge-aware attack planner', () => {
     expect(referencePlayerCommands(createState(level, 1), new Rng(1))).toEqual([]);
   });
 
-  it('a short stream is replaced by the stronger source over a plain road, never joined over a bridge the keep can cut', () => {
-    // b (30) streams at e (L3 keep, 20 → 30 when the stream lands, 2/s regen): hopeless on its own.
+  it('a short stream is joined by the stronger source over a plain road, never over a bridge the keep can cut', () => {
+    // b (30) streams at e (L3 keep, 20 → 30 when the stream lands). v2.1 re-pin: the keep recruits nothing
+    // once hit, so b's stream is not hopeless (v2: 2/s regen made it so and rule 0 ended it) — it is
+    // short of 1.2 × 30 + 2, and a joins it over the plain road.
     const road = createState(forkLevel({ a: 40, b: 30, units: 20, level: 3, bridge: false }), 1);
     applyCommand(road, link('b', 'e'));
     for (let i = 0; i < 10; i++) step(road);
     const rules: string[] = [];
-    expect(referencePlayerCommands(road, new Rng(1), (rule) => rules.push(rule))).toEqual([unlink('b', 'e'), link('a', 'e')]);
-    expect(rules).toEqual(['maintain', 'attack']);
+    expect(referencePlayerCommands(road, new Rng(1), (rule) => rules.push(rule))).toEqual([link('a', 'e')]);
+    expect(rules).toEqual(['attack']);
+    // Over a bridge the keep could cut, a stays home and b's stream runs on alone.
     const bridge = createState(forkLevel({ a: 40, b: 30, units: 20, level: 3 }), 1);
     applyCommand(bridge, link('b', 'e'));
     for (let i = 0; i < 10; i++) step(bridge);
-    expect(referencePlayerCommands(bridge, new Rng(1))).toEqual([unlink('b', 'e')]);
+    expect(referencePlayerCommands(bridge, new Rng(1))).toEqual([]);
+    expect(bridge.links).toHaveLength(1);
   });
 
   it('level 40 seed 6: no player unit is drowned by an enemy bridge cut, and the crown falls before 90 s', () => {

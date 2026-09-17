@@ -85,6 +85,7 @@ export function createState(level: LevelDef, seed: number, modifiers: Readonly<P
       defenceAcc: 0,
       linkCursor: 0,
       drainAccMs: 0,
+      underFireUntilMs: 0,
     };
     const tower = towers[def.id]!;
     if (tower.owner === 'player' && mods.startGarrisonBonus > 0) {

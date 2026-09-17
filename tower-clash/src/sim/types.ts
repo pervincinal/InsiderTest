@@ -60,6 +60,12 @@ export interface Tower {
   defenceAcc: number; // fortress only: fractional hostile damage carried between arrivals
   linkCursor: number; // round-robin index into this tower's outgoing links (rules v2 draining)
   drainAccMs: number; // accumulated ms toward the next unit leaving through a link
+  /**
+   * Rules v2.1 "Under fire": sim time until which the tower generates nothing, re-armed to
+   * `time + UNDER_FIRE_MS` by every hostile landing, cleared (0) by a capture. The tower is under fire
+   * while `time < underFireUntilMs` (`isUnderFire`); renderer and AI read it, only `sim/` writes it.
+   */
+  underFireUntilMs: number;
 }
 
 export interface Road {

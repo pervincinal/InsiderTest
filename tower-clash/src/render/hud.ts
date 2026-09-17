@@ -36,7 +36,7 @@ import type { Palette } from './palette';
 import { badgeY, drawCrystal, drawGoldCoin, drawVideoGlyph } from './sprites';
 import type { ToastOpts } from './economyWidgets';
 import { drawSpinner, drawToast, drawWallet } from './economyWidgets';
-import { t } from '../ui/i18n';
+import { levelLesson, levelName, t } from '../ui/i18n';
 
 /*
  * In-game HUD (ART_DIRECTION §4): glass paper bands top and bottom, level chip, timer pill, pause
@@ -341,7 +341,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, state: GameState, _view: 
   ctx.fillText(t('hud.level', { n: ui.level.id }), chip.x + 24, chip.y + 19, chip.w - 44);
   ctx.fillStyle = pal.ink;
   ctx.font = font(24);
-  ctx.fillText(ui.level.name, chip.x + 24, chip.y + 41, chip.w - 44);
+  ctx.fillText(levelName(ui.level), chip.x + 24, chip.y + 41, chip.w - 44);
 
   // timer pill (+ speed tag)
   const timer = HUD.timer;
@@ -367,21 +367,31 @@ export function drawHud(ctx: CanvasRenderingContext2D, state: GameState, _view: 
   drawButton(ctx, pal, pb, '');
   pauseGlyph(ctx, pal.ink, pb.x + pb.w / 2, pb.y + (pb.h - 4) / 2, ui.paused);
 
-  // lesson hint during the first seconds (a small translated "LESSON" caption over the English lesson text)
+  // lesson hint during the first seconds (a small "LESSON" caption over the lesson text, both in the
+  // UI language). Up to three lines at 20 px; longer lessons (band finales, translations) drop to
+  // 18 px and up to five lines rather than being cut with an ellipsis.
   if (state.time < 8000 && ui.outcome === 'playing') {
+    const lesson = levelLesson(ui.level);
     ctx.font = font(20, '500');
-    const lines = wrapText(ctx, ui.level.lesson, 620, 3);
+    let lines = wrapText(ctx, lesson, 620, 3);
+    let px = 20;
+    if (lines[lines.length - 1]?.endsWith('…')) {
+      px = 18;
+      ctx.font = font(px, '500');
+      lines = wrapText(ctx, lesson, 640, 5);
+    }
+    const lineH = px + 6;
     const captionH = 18;
-    const h = lines.length * 26 + 18 + captionH;
-    const w = Math.min(680, Math.max(...lines.map((l) => ctx.measureText(l).width)) + 48);
+    const h = lines.length * lineH + 18 + captionH;
+    const w = Math.min(690, Math.max(...lines.map((l) => ctx.measureText(l).width)) + 48);
     drawCard(ctx, pal, { x: 360 - w / 2, y: 108, w, h }, { radius: 18, edge: 4 });
     ctx.textAlign = 'center';
     ctx.fillStyle = pal.textDim;
     ctx.font = font(13, '500');
     ctx.fillText(t('hud.lesson'), 360, 108 + 14, w - 24);
     ctx.fillStyle = pal.ink;
-    ctx.font = font(20, '500');
-    lines.forEach((l, i) => ctx.fillText(l, 360, 108 + 20 + captionH + i * 26));
+    ctx.font = font(px, '500');
+    lines.forEach((l, i) => ctx.fillText(l, 360, 108 + 20 + captionH + i * lineH));
   }
 
   // bottom bar: streams · boosters · coins · menu (wallet replaces boosters + coins once the level is over)

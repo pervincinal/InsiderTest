@@ -11,6 +11,7 @@ export {
   maxLinksOf,
   linksFrom,
   isLinked,
+  isUnderFire,
   tryAutoUpgrade,
   modifiersFor,
   unitPosition,

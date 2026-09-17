@@ -56,7 +56,10 @@ describe('determinism', () => {
     expect(s.roads['a-p']!.mine).toBe(0);
     expect(s.towers['p']!.level).toBe(1); // the `upgrade` command is ignored and p drained through its link
     expect(s.towers['a']!.owner).toBe('player'); // captured through the p → a stream
-    expect(s.towers['a']!.level).toBe(3); // auto-upgraded twice on reinforcements + generation
+    // Auto-upgraded on reinforcements + generation. Rules v2.1 "under fire": enemy1's stream into `a`
+    // (tick 100 until `e` fell at 15.65 s) paused its recruiting, so it reaches L2 at 15.95 s (v2: L3 by 30 s).
+    expect(s.towers['a']!.level).toBe(2);
+    expect(s.towers['a']!.underFireUntilMs).toBeGreaterThan(0); // the scenario exercised the v2.1 rule
     expect(s.towers['e']!.owner).toBe('player');
     expect(s.links).toEqual([]); // player unlinked at tick 340; enemy1's link died with its source
     expect(s.boosters).toEqual([]);

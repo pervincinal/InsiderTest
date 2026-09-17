@@ -7,7 +7,12 @@
  *       hostile stream linked over it whose source still drains) and what is heading to `home`
  *       altogether is at least the garrison it will have when the first unit lands plus the friendly
  *       support on its way (the cut must either drown a column that alone could take the tower, or turn a
- *       lost tower into a held one); or nothing is on the bridge yet but the far tower could send a
+ *       lost tower into a held one); or a hostile stream over the bridge bleeds `home` (rules v2.1: its
+ *       trickle keeps the tower from recruiting and out-delivers the supply it gets, `siegeNetRate` ≤ 0),
+ *       the tower cannot counter it (its garrison does not outweigh the column on the bridge plus the far
+ *       garrison) and it falls within the landing horizon or holds too little to outlast a
+ *       `BLEED_PATIENCE_MS` siege — a trickle nobody can out-produce is answered with the axe; or
+ *       nothing is on the bridge yet but the far tower could send a
  *       column (`threatFrom`: its garrison, or a rival's column about to flip it) that `home` plus its
  *       support and `cover` could not stop — "about to send one" (enemy-owned far tower only; a rival
  *       column about to flip a neutral far tower is judged once it owns it);
@@ -23,6 +28,8 @@ import type { Command, GameState, Owner, Road, Tower } from '../sim/index';
 import { C } from '../sim/index';
 import {
   defenceMultiplier,
+  effectiveDefenders,
+  holdReserve,
   incomingSupport,
   incomingThreat,
   linkPending,
@@ -30,9 +37,17 @@ import {
   ownedTowers,
   projectedUnits,
   remainingMs,
+  siegeNetRate,
   threatFrom,
   travelMsFor,
 } from './common';
+
+/**
+ * Rules v2.1: a tower bleeding under a hostile stream over a bridge (nothing it recruits, nothing its
+ * supply lines out-deliver) is worth the bridge once it could not outlast a siege this long — the
+ * landing horizon: anything it holds beyond that leaves time for a counter-stream instead.
+ */
+export const BLEED_PATIENCE_MS = 10_000;
 
 export interface BridgeCutOptions {
   /** Roads `self` has already committed units to this tick (commands not yet applied): never cut those. */
@@ -140,9 +155,21 @@ export function bridgeThreatens(state: GameState, self: Owner, road: Road, home:
   if (on.weight > 0) {
     const threat = incomingThreat(state, home.id); // everything heading to home, the bridge column included
     const defence = (projectedUnits(home, on.etaMs, state) + support) * mult;
-    if (threat < defence) return false;
-    return on.weight >= defence || threat - on.weight < defence;
+    if (threat >= defence) return on.weight >= defence || threat - on.weight < defence;
   }
+  // Rules v2.1: a hostile stream over the bridge whose trickle bleeds the tower (its supply lines do
+  // not out-deliver it): cut when it falls within the horizon even with the support on its way, or
+  // when what it holds cannot outlast `BLEED_PATIENCE_MS` of that trickle.
+  const streamed = state.links.some((l) => l.roadId === road.id && l.to === home.id && l.owner !== self);
+  if (streamed) {
+    const net = siegeNetRate(state, home);
+    const held = home.units + support;
+    // A garrison that outweighs what is on the bridge and what the far tower holds answers the
+    // stream itself (a counter flips the drained source); the axe is for a tower that cannot.
+    const canCounter = held > on.weight + effectiveDefenders(far) + 1;
+    if (net <= 0 && !canCounter && (holdReserve(state, home) > held || held < (-net * BLEED_PATIENCE_MS) / 1000 + 1)) return true;
+  }
+  if (on.weight > 0) return false;
   // Nothing on the bridge: only an enemy garrison across it counts as "about to send" (a rival column
   // that is merely about to flip a neutral far tower is judged once it owns it).
   if (opts.preemptive === false || far.owner === 'neutral') return false;

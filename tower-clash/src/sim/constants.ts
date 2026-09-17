@@ -38,6 +38,13 @@ export const C = Object.freeze({
   FORTRESS_DEFENCE: 2, // attackers needed per defender
   FORTRESS_MAX_LEVEL: 2,
 
+  /**
+   * Rules v2.1 "Under fire" (GDD §2.0): a hostile landing on an owned tower pauses its production for
+   * this long; any barracks trickle (landings ≤ 1 s apart) keeps it paused, a lone tank factory
+   * (one landing / 4 s) or an L1 artillery post (2 s) lets it expire.
+   */
+  UNDER_FIRE_MS: 1500,
+
   AI_TICK_MS: 500,
 
   OVERDRIVE_MUL: 3,

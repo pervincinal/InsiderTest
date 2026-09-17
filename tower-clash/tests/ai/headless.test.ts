@@ -34,8 +34,9 @@ describe('runHeadless', () => {
     // seed could come out slower; the population must be clearly faster.
     const first = runHeadless(level1, 1, referencePlayerCommands);
     const firstBoosted = runHeadless(level1, 1, referencePlayerCommands, { modifiers: MAX_MODIFIERS });
-    expect(first).toMatchObject({ outcome: 'won', timeMs: 16_400 });
-    expect(firstBoosted).toMatchObject({ outcome: 'won', timeMs: 11_600 });
+    // v2.1 re-pin (2026-09-17): the bot attacks the rusher head-on from the first tick (v2: 16 400 / 11 600).
+    expect(first).toMatchObject({ outcome: 'won', timeMs: 18_850 });
+    expect(firstBoosted).toMatchObject({ outcome: 'won', timeMs: 12_250 });
 
     let faster = 0;
     let baseTotal = 0;

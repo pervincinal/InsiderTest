@@ -1187,6 +1187,48 @@ export interface BadgeStyle {
   stroke?: string;
   /** Scale pop for count changes (1 = rest). */
   scale?: number;
+  /**
+   * Rules v2.1 "under fire": the attacker's colour. The pill turns warm alert paper with a
+   * thicker stroke in that colour and a crossed-swords pip before the number, so "this tower is
+   * not growing" reads by shape as well as colour (colour-blind palette). Numerals stay ink.
+   */
+  underFire?: string;
+  /** Horizontal jolt in px (each hostile landing; 0 under reduced motion). */
+  shake?: number;
+}
+
+/**
+ * Crossed-swords pip: two blades crossing at (x, y) with a small guard each, `s` = half-length.
+ * Blades in `color`, guards and a thin ink outline so it holds up at 8 px on every paper tone.
+ */
+export function drawSwordsPip(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, color: string, ink: string): void {
+  ctx.save();
+  ctx.lineCap = 'round';
+  for (const dir of [1, -1]) {
+    // blade: lower-left → upper-right (dir = 1) and mirrored
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = s * 0.62;
+    ctx.beginPath();
+    ctx.moveTo(x - dir * s, y + s);
+    ctx.lineTo(x + dir * s, y - s);
+    ctx.stroke();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = s * 0.34;
+    ctx.beginPath();
+    ctx.moveTo(x - dir * s, y + s);
+    ctx.lineTo(x + dir * s, y - s);
+    ctx.stroke();
+    // guard: a short bar across the blade near the grip
+    const gx = x - dir * s * 0.55;
+    const gy = y + s * 0.55;
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = s * 0.34;
+    ctx.beginPath();
+    ctx.moveTo(gx - s * 0.38, gy - dir * s * 0.38);
+    ctx.lineTo(gx + s * 0.38, gy + dir * s * 0.38);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 /**
@@ -1196,19 +1238,28 @@ export interface BadgeStyle {
 export function drawBadge(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, text: string, full = false, style: BadgeStyle = {}): void {
   const px = 26;
   const s = style.scale ?? 1;
+  const fire = style.underFire;
+  x += style.shake ?? 0;
   ctx.font = font(px, '900');
-  const w = Math.max(50, ctx.measureText(text).width + 24) * s;
+  // under fire the pill widens to the left for the crossed-swords pip; the number keeps its size
+  const pipW = fire ? 20 * s : 0;
+  const w = Math.max(50, ctx.measureText(text).width + 24) * s + pipW;
   const h = 36 * s;
   const r: { x: number; y: number; w: number; h: number } = { x: x - w / 2, y: y - h / 2, w, h };
   ctx.fillStyle = pal.groundShadow;
   roundRect(ctx, { x: r.x + 2, y: r.y + 5, w, h }, h / 2);
   ctx.fill();
   roundRect(ctx, r, h / 2);
-  ctx.fillStyle = full ? pal.badgeFull : pal.paper;
+  ctx.fillStyle = fire ? pal.badgeAlert : full ? pal.badgeFull : pal.paper;
   ctx.fill();
-  ctx.lineWidth = 2.5;
-  ctx.strokeStyle = style.stroke ?? pal.ink;
+  ctx.lineWidth = fire ? 3.5 : 2.5;
+  ctx.strokeStyle = fire ?? style.stroke ?? pal.ink;
   ctx.stroke();
+  if (fire) {
+    // the pip sits in the widened left end; text is centred in the remaining width below
+    drawSwordsPip(ctx, r.x + h * 0.5 + 2 * s, y + 1, 6 * s, fire, pal.ink);
+    x += pipW / 2;
+  }
   // inner top highlight
   ctx.strokeStyle = 'rgba(255,255,255,0.8)';
   ctx.lineWidth = 1.5;

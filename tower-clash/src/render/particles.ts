@@ -23,7 +23,7 @@ export function prefersReducedMotion(): boolean {
   }
 }
 
-type Kind = 'confetti' | 'ring' | 'puff' | 'dust' | 'spark' | 'flash' | 'tracer' | 'plank' | 'glint' | 'coin' | 'gem';
+type Kind = 'confetti' | 'ring' | 'impact' | 'puff' | 'dust' | 'spark' | 'flash' | 'tracer' | 'plank' | 'glint' | 'coin' | 'gem';
 
 interface Particle {
   kind: Kind;
@@ -52,6 +52,29 @@ const SHAKE_MS = 320;
 const SHAKE_CYCLES = 3;
 /** Marching columns on sand: at most one dust puff per column per this many ms. */
 const DUST_INTERVAL_MS = 200;
+/** Under fire (rules v2.1): badge jolt per hostile landing (px, length) and the impact-ring rate cap per tower. */
+const HIT_PX = 3;
+const HIT_MS = 180;
+const IMPACT_INTERVAL_MS = 90;
+
+/**
+ * Who is shooting at each tower: the owner of a hostile link into it, else the owner of a hostile
+ * unit still on the road towards it (the last units of a broken stream). Pure read of the state,
+ * one pass over links and units; towers not under attack are absent from the map.
+ */
+export function hostileAttackers(state: Pick<GameState, 'towers' | 'links' | 'units'>): Map<string, Owner> {
+  const out = new Map<string, Owner>();
+  for (const l of state.links) {
+    const t = state.towers[l.to];
+    if (t && l.owner !== t.owner && !out.has(l.to)) out.set(l.to, l.owner);
+  }
+  for (const u of state.units) {
+    if (out.has(u.to)) continue;
+    const t = state.towers[u.to];
+    if (t && u.owner !== t.owner) out.set(u.to, u.owner);
+  }
+  return out;
+}
 
 /** Cheap hash → 0..1, so bursts look random without touching the sim RNG. */
 function hash(n: number): number {
@@ -74,6 +97,8 @@ export class ParticleSystem {
   private readonly captures = new Map<string, { at: number; from: Owner }>();
   private readonly aims = new Map<string, number>();
   private readonly dustAt = new Map<string, number>();
+  /** Per tower: last seen `underFireUntilMs`, wall-clock of the last hostile landing and of the last impact ring. */
+  private readonly fire = new Map<string, { until: number; hitAt: number; ringAt: number }>();
   private shakeAt = -Infinity;
   private lastMs = 0;
   private salt = 1;
@@ -132,6 +157,16 @@ export class ParticleSystem {
     return t >= 1 ? null : { from: c.from, t };
   }
 
+  /** Horizontal badge jolt (px) after a hostile landing on the tower; 0 at rest and under reduced motion. */
+  badgeHit(towerId: string, nowMs: number): number {
+    if (this.reducedMotion) return 0;
+    const f = this.fire.get(towerId);
+    if (!f) return 0;
+    const t = (nowMs - f.hitAt) / HIT_MS;
+    if (t < 0 || t >= 1) return 0;
+    return HIT_PX * (1 - t) * Math.sin(t * Math.PI * 3);
+  }
+
   /** Where an artillery tower last fired (screen-space radians); undefined until it shoots. */
   aimOf(towerId: string): number | undefined {
     return this.aims.get(towerId);
@@ -163,6 +198,43 @@ export class ParticleSystem {
       p.gravity = 400;
       p.rot = this.rnd() * Math.PI;
       p.vrot = (this.rnd() - 0.5) * 12;
+      this.push(p);
+    }
+  }
+
+  /**
+   * Rules v2.1: the sim marks a tower under fire on every hostile landing (`underFireUntilMs`
+   * moves) but emits no event for it, so the renderer watches the field. Call once per frame
+   * before the towers are drawn: a changed deadline = a landing → badge jolt and a short impact
+   * ring at the base in the attacker's colour (`attackers` from `hostileAttackers`).
+   */
+  landings(state: GameState, attackers: ReadonlyMap<string, Owner>, pal: Palette, nowMs: number): void {
+    for (const id in state.towers) {
+      const t = state.towers[id]!;
+      const until = t.underFireUntilMs;
+      const f = this.fire.get(id);
+      if (f ? f.until === until : until === 0) continue;
+      if (f) f.until = until;
+      else this.fire.set(id, { until, hitAt: -Infinity, ringAt: -Infinity });
+      if (state.time >= until) continue; // expired / cleared by a capture: not a landing
+      const rec = this.fire.get(id)!;
+      rec.hitAt = nowMs;
+      if (nowMs - rec.ringAt < IMPACT_INTERVAL_MS) continue;
+      rec.ringAt = nowMs;
+      const by = attackers.get(id);
+      this.impact(t.x, t.y, by ? pal.owners[by] : pal.ink);
+    }
+  }
+
+  /** One hostile landing: a small ring at the tower base plus a few sparks in the attacker's colour. */
+  impact(x: number, y: number, color: string): void {
+    if (this.reducedMotion) return;
+    this.push(this.make('impact', x, y, color, 300, 12));
+    for (let i = 0; i < 3; i++) {
+      const p = this.make('spark', x + (this.rnd() - 0.5) * 12, y - 2, i === 1 ? '#fffaf0' : color, 220 + this.rnd() * 80, 2.2);
+      p.vx = (this.rnd() - 0.5) * 120;
+      p.vy = -40 - this.rnd() * 90;
+      p.gravity = 360;
       this.push(p);
     }
   }
@@ -381,6 +453,14 @@ export class ParticleSystem {
           ctx.lineWidth = 8 * fade + 1;
           ctx.beginPath();
           ctx.ellipse(p.x, p.y + 4, p.size + 70 * t, (p.size + 70 * t) * 0.45, 0, 0, Math.PI * 2);
+          ctx.stroke();
+          break;
+        case 'impact':
+          ctx.globalAlpha = fade * 0.9;
+          ctx.strokeStyle = p.color;
+          ctx.lineWidth = 3.5 * fade + 1;
+          ctx.beginPath();
+          ctx.ellipse(p.x, p.y + 3, p.size + 24 * t, (p.size + 24 * t) * 0.45, 0, 0, Math.PI * 2);
           ctx.stroke();
           break;
         case 'confetti':

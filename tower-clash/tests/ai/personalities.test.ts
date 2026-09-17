@@ -15,6 +15,9 @@ const LEVELS = await loadAllLevels();
  * source is threatened below its reserve or the captured target is full. Upgrades are automatic, so no
  * personality ever issues `upgrade`, and `sendUnits` is legacy: every test below asserts the exact
  * command list, and the last block runs whole levels asserting neither legacy command is ever emitted.
+ * Rules v2.1 (2026-09-17, "under fire"): the attack test is `siegeForce ≥ costToTake + margin`, where
+ * `siegeForce` adds 10 s of the source's trickle once the burst alone matches the target's garrison.
+ * Thresholds below were re-pinned deliberately to that rule (v2 values in the comments).
  */
 
 function enemy(personality: EnemyDef['personality'], aggression: number): EnemyDef {
@@ -61,12 +64,13 @@ function bridgeDuel(enemyDef: EnemyDef, enemyUnits: number, playerUnits: number,
 }
 
 describe('rusher', () => {
-  it('links to the target only when garrison ≥ target + 3 at aggression 0', () => {
+  it('at aggression 0 (+3 margin): 9 v 10 waits (no wave, so no trickle credit), 10 v 10 links (10 + 10 s of trickle ≥ 13)', () => {
+    // v2.1 re-pin: under v2 12 v 10 waited and 13 v 10 linked (13 ≥ 10 + 3).
     const def = enemy('rusher', 0);
     // aggression 0 skips half the ticks: try several ticks per case so the gate never hides the rule.
     for (const [units, expected] of [
-      [12, 0],
-      [13, 1],
+      [9, 0],
+      [10, 1],
     ] as const) {
       const rng = new Rng(7);
       let attacks = 0;
@@ -76,24 +80,54 @@ describe('rusher', () => {
     }
   });
 
-  it('at aggression 1 never skips and needs just enough to flip the tower: 10 v 10 waits, 11 v 10 links', () => {
+  it('at aggression 1 never skips: 9 v 10 waits (a burst short of the garrison counts alone), 10 v 10 links (the trickle finishes it)', () => {
+    // v2.1 re-pin: under v2 10 v 10 waited and 11 v 10 linked (needs target + 1 in the burst alone).
     const def = enemy('rusher', 1);
-    expect(enemyCommands(duel(def, 10, 10), def, new Rng(1))).toEqual([]);
-    expect(enemyCommands(duel(def, 11, 10), def, new Rng(1))).toEqual([linkCmd('e', 'p')]);
+    expect(enemyCommands(duel(def, 9, 10), def, new Rng(1))).toEqual([]);
+    expect(enemyCommands(duel(def, 10, 10), def, new Rng(1))).toEqual([linkCmd('e', 'p')]);
   });
 
-  it('needs double the garrison against a fortress: 21 v 10 waits, 22 links', () => {
+  it('needs double the garrison against a fortress before its trickle counts: 19 v 10 waits, 20 links', () => {
+    // v2.1 re-pin: under v2 21 v 10 waited and 22 linked (20 effective defenders + 1 + the +1 margin).
     const def = enemy('rusher', 1);
     const level = makeLevel({
       enemies: [def],
       towers: [
         { id: 'p', x: 360, y: 1000, owner: 'player', units: 10, kind: 'fortress' },
-        { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 21 },
+        { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 19 },
       ],
     });
     expect(enemyCommands(createState(level, 1), def, new Rng(1))).toEqual([]);
-    level.towers[1]!.units = 22;
+    level.towers[1]!.units = 20;
     expect(enemyCommands(createState(level, 1), def, new Rng(1))).toEqual([linkCmd('e', 'p')]);
+  });
+
+  it('v2.1 acceptance 4: an L3 at 100 across from a player L3 at 100 (240 px, no other towers) links within 2 s', () => {
+    // 100 + 2/s × 10 s = 120 ≥ 100 + margin; under v2 (100 < 101) it never linked.
+    const level = (aggression: number) =>
+      makeLevel({
+        enemies: [enemy('rusher', aggression)],
+        towers: [
+          { id: 'p', x: 360, y: 1000, owner: 'player', units: 100, level: 3 },
+          { id: 'e', x: 360, y: 760, owner: 'enemy1', units: 100, level: 3 },
+        ],
+      });
+    expect(enemyCommands(createState(level(1), 1), enemy('rusher', 1), new Rng(1))).toEqual([linkCmd('e', 'p')]);
+    // At aggression 0 half the ticks are skipped: the link still comes within 2 s (4 ticks) on seed 1.
+    const state = createState(level(0), 1);
+    const def = enemy('rusher', 0);
+    const rng = new Rng(1);
+    let linkedAt = -1;
+    while (state.time <= 2000 && linkedAt < 0) {
+      if (state.time % 500 === 0) {
+        const cmds = enemyCommands(state, def, rng);
+        if (links(cmds).length) linkedAt = state.time;
+        for (const cmd of cmds) applyCommand(state, cmd);
+      }
+      step(state);
+    }
+    expect(linkedAt).toBeGreaterThanOrEqual(0);
+    expect(linkedAt).toBeLessThanOrEqual(2000);
   });
 
   it('keeps the stream while it drains, and ends it once the captured target holds SUPPLY_FULL_UNITS', () => {
@@ -117,10 +151,12 @@ describe('rusher', () => {
         expect(cmds).toEqual([{ type: 'unlink', owner: 'enemy1', from: 'e', to: 'p' }]);
       }
     }
-    expect(captureMs).toBe(6150); // the 12th unit lands on an empty tower
+    // v2.1 re-pin (sim): p recruits nothing from the first landing, so the 12th unit lands on an empty
+    // tower two ticks earlier than under v2 (6150).
+    expect(captureMs).toBe(6050);
     expect(state.towers['p']!.owner).toBe('enemy1');
-    // Unlinked on the first tick the captured tower held 5 (the trickle plus its own production).
-    expect(state.towers['p']!.units).toBe(5);
+    // Unlinked on the first tick the captured tower held ≥ 5 (the trickle plus its own production: 6 by then).
+    expect(state.towers['p']!.units).toBe(6);
     expect(unlinkMs).toBe(7000);
   });
 
@@ -173,10 +209,11 @@ describe('turtle', () => {
     expect(enemyCommands(state, def, new Rng(1))).toEqual([]);
   });
 
-  it('at max level links only with (2 − aggression) × target + 1: 15 v 10 waits at aggression 0.5, 16 links', () => {
-    const def = enemy('turtle', 0.5); // factor 1.5: needs 10 × 1.5 + 1 = 16
-    expect(enemyCommands(duel(def, 15, 10, 3), def, new Rng(1))).toEqual([]);
-    expect(enemyCommands(duel(def, 16, 10, 3), def, new Rng(1))).toEqual([linkCmd('e', 'p')]);
+  it('at max level links with siegeForce ≥ (2 − aggression) × target + 1: an L3 at 9 v 10 waits at aggression 0.5, 10 v 10 links', () => {
+    // v2.1 re-pin: factor 1.5 needs 16; a 10-burst matches the garrison and adds 2/s × 10 s = 30 (v2: 15 waited, 16 linked).
+    const def = enemy('turtle', 0.5);
+    expect(enemyCommands(duel(def, 9, 10, 3), def, new Rng(1))).toEqual([]);
+    expect(enemyCommands(duel(def, 10, 10, 3), def, new Rng(1))).toEqual([linkCmd('e', 'p')]);
   });
 
   it('a fortress is finished at L2', () => {
@@ -269,11 +306,12 @@ describe('rusher and opportunist never cut bridges', () => {
 });
 
 describe('opportunist', () => {
-  it('links when the units above its reserve of 5 can flip the target: 8 v 3 waits, 9 v 3 links', () => {
+  it('links when the units above its reserve of 5 match the target and the trickle covers the margin: 7 v 3 waits, 8 v 3 links', () => {
+    // v2.1 re-pin: 8 v 3 has 3 spare = the garrison, + 10 s of trickle ≥ 4 (v2: 8 waited, 9 linked).
     const def = enemy('opportunist', 1);
     expect(OPPORTUNIST_RESERVE).toBe(5);
-    expect(enemyCommands(duel(def, 8, 3), def, new Rng(1))).toEqual([]); // 3 spare, target 3 needs 4
-    expect(enemyCommands(duel(def, 9, 3), def, new Rng(1))).toEqual([linkCmd('e', 'p')]);
+    expect(enemyCommands(duel(def, 7, 3), def, new Rng(1))).toEqual([]); // 2 spare < 3: no wave, no credit
+    expect(enemyCommands(duel(def, 8, 3), def, new Rng(1))).toEqual([linkCmd('e', 'p')]);
   });
 
   it('targets the tower with the fewest units regardless of owner', () => {
@@ -311,8 +349,10 @@ describe('opportunist', () => {
     expect(OPPORTUNIST_MAX_LINKS).toBe(2);
     // 13 − 5 = 8 spare, half 4 ≥ 3 + 1 for both targets: two streams (p first: equal units, lower cost).
     expect(enemyCommands(createState(level(13, 2), 1), def, new Rng(1))).toEqual([linkCmd('e', 'p'), linkCmd('e', 'n')]);
-    // 12 − 5 = 7 spare: half 3 < 4 — one stream only.
-    expect(enemyCommands(createState(level(12, 2), 1), def, new Rng(1))).toEqual([linkCmd('e', 'p')]);
+    // v2.1 re-pin: 12 − 5 = 7 spare, half 3 matches each 3-garrison and half the trickle (5) covers the +1: two streams (v2: one).
+    expect(enemyCommands(createState(level(12, 2), 1), def, new Rng(1))).toEqual([linkCmd('e', 'p'), linkCmd('e', 'n')]);
+    // 10 − 5 = 5 spare: half 2 is short of a 3-garrison, so no trickle credit for the second — one stream.
+    expect(enemyCommands(createState(level(10, 2), 1), def, new Rng(1))).toEqual([linkCmd('e', 'p')]);
     // L1 allows one link however rich the tower is.
     expect(enemyCommands(createState(level(30, 1), 1), def, new Rng(1))).toEqual([linkCmd('e', 'p')]);
   });
@@ -337,10 +377,13 @@ describe('tank factories (whole tanks only)', () => {
     expect(state.units[0]).toMatchObject({ kind: 'tank', weight: 5, owner: 'enemy1' });
   });
 
-  it('turtle at max level needs the whole-tank weight to reach its threshold', () => {
-    const def = enemy('turtle', 1); // factor 1: needs target + 1
-    expect(enemyCommands(duel(def, 9, 5, 3, 'tankFactory'), def, new Rng(1))).toEqual([]);
-    expect(enemyCommands(duel(def, 10, 5, 3, 'tankFactory'), def, new Rng(1))).toEqual([linkCmd('e', 'p')]);
+  it('turtle at max level needs a whole tank matching the garrison; its trickle is discounted by what the target recruits between tanks', () => {
+    // v2.1 re-pin: factor 1 needs 5 + 1 = 6. One tank (5) matches the 5-garrison; the factory lands 2 more
+    // tanks in 10 s (10) while an L1 target recruits 2.5 s of every 4 (⌈6.25⌉ = 7): credit 3 → 8 ≥ 6.
+    // 4 weight is no tank at all. (v2: 9 waited, 10 linked.)
+    const def = enemy('turtle', 1);
+    expect(enemyCommands(duel(def, 4, 5, 3, 'tankFactory'), def, new Rng(1))).toEqual([]);
+    expect(enemyCommands(duel(def, 5, 5, 3, 'tankFactory'), def, new Rng(1))).toEqual([linkCmd('e', 'p')]);
   });
 
   it('opportunist keeps the reserve and counts only whole tanks above it', () => {

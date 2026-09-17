@@ -3,8 +3,13 @@ import type { Road } from '../../src/sim/types';
 import { COLOR_BLIND_PALETTE, DEFAULT_PALETTE, shade } from '../../src/render/palette';
 import { formatTime, isLight, wrapText } from '../../src/render/widgets';
 import { roadPoseAt } from '../../src/render/draw';
-import { ParticleSystem } from '../../src/render/particles';
-import { badgeY, towerTop } from '../../src/render/sprites';
+import { ParticleSystem, hostileAttackers } from '../../src/render/particles';
+import { badgeY, drawBadge, towerTop } from '../../src/render/sprites';
+import { makeLevel } from '../helpers';
+import { createState } from '../../src/sim/create';
+import { applyCommand } from '../../src/sim/commands';
+import { isUnderFire, step } from '../../src/sim/step';
+import { C } from '../../src/sim/constants';
 
 /** Canvas context stand-in: every method is a no-op, every property is writable. */
 function fakeCtx(): CanvasRenderingContext2D {
@@ -116,5 +121,82 @@ describe('particles', () => {
     const ps = new ParticleSystem(false);
     for (let i = 0; i < 100; i++) ps.capture(0, 0, '#fff');
     expect(ps.count).toBeLessThanOrEqual(700);
+  });
+});
+
+/* Rules v2.1 "under fire" presentation: attacker lookup, landing → impact ring + badge jolt, static tint under reduced motion. */
+describe('under fire', () => {
+  /** p (player, 100 units, L3) and e (enemy1) 240 px apart; e streams into p. */
+  function siege() {
+    const state = createState(
+      makeLevel({
+        towers: [
+          { id: 'p', x: 360, y: 1000, owner: 'player', units: 100, level: 3 },
+          { id: 'e', x: 360, y: 760, owner: 'enemy1', units: 30, level: 1 },
+        ],
+      }),
+      1,
+    );
+    applyCommand(state, { type: 'link', owner: 'enemy1', from: 'e', to: 'p' });
+    return state;
+  }
+
+  it('hostileAttackers names the link owner, then units still on the road, never friends', () => {
+    const state = siege();
+    expect(hostileAttackers(state).get('p')).toBe('enemy1');
+    expect(hostileAttackers(state).has('e')).toBe(false);
+    while (state.units.length === 0) step(state);
+    applyCommand(state, { type: 'unlink', owner: 'enemy1', from: 'e' });
+    expect(state.links).toHaveLength(0);
+    expect(hostileAttackers(state).get('p')).toBe('enemy1'); // the units already marching
+    // a friendly reinforcement is not an attacker
+    for (const u of state.units) u.owner = 'player';
+    expect(hostileAttackers(state).has('p')).toBe(false);
+  });
+
+  it('a hostile landing spawns an impact ring and jolts the badge, then both settle', () => {
+    const state = siege();
+    const fx = new ParticleSystem(false);
+    const ctx = fakeCtx();
+    let now = 1000;
+    const frame = () => {
+      fx.landings(state, hostileAttackers(state), DEFAULT_PALETTE, now);
+      fx.draw(ctx, now);
+    };
+    frame();
+    expect(fx.count).toBe(0); // nothing has landed yet
+    while (!isUnderFire(state, state.towers.p!)) {
+      step(state);
+      now += 50;
+      frame();
+    }
+    expect(fx.count).toBeGreaterThan(0);
+    expect(Math.abs(fx.badgeHit('p', now + 30))).toBeGreaterThan(0);
+    expect(fx.badgeHit('p', now + 400)).toBe(0);
+    expect(fx.badgeHit('e', now + 30)).toBe(0);
+    // the same deadline seen again is not a second landing
+    const n = fx.count;
+    fx.landings(state, hostileAttackers(state), DEFAULT_PALETTE, now + 10);
+    expect(fx.count).toBe(n);
+    // an expired deadline (production resumes) does not spawn either
+    state.time = state.towers.p!.underFireUntilMs + C.UNDER_FIRE_MS;
+    state.towers.p!.underFireUntilMs = 0;
+    fx.landings(state, hostileAttackers(state), DEFAULT_PALETTE, now + 20);
+    for (let t = now + 36; t < now + 1500; t += 16) fx.draw(ctx, t);
+    expect(fx.count).toBe(0);
+  });
+
+  it('spawns nothing and never jolts under prefers-reduced-motion; the badge still draws the static tint', () => {
+    const state = siege();
+    const fx = new ParticleSystem(true);
+    while (!isUnderFire(state, state.towers.p!)) step(state);
+    fx.landings(state, hostileAttackers(state), DEFAULT_PALETTE, 5000);
+    expect(fx.count).toBe(0);
+    expect(fx.badgeHit('p', 5010)).toBe(0);
+    const ctx = fakeCtx();
+    for (const pal of [DEFAULT_PALETTE, COLOR_BLIND_PALETTE]) {
+      expect(pal.badgeAlert).toMatch(/^#[0-9a-f]{6}$/);
+      expect(() => drawBadge(ctx, pal, 100, 100, '100', true, { underFire: pal.owners.enemy1, shake: 0 })).not.toThrow();
+    }
   });
 });

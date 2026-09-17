@@ -38,6 +38,14 @@ export function isLinked(state: Pick<GameState, 'links'>, towerId: string): bool
 }
 
 /**
+ * Rules v2.1 "Under fire": true while a hostile landing has paused the tower's production
+ * (`time < underFireUntilMs`). Pure read for the renderer and the AI.
+ */
+export function isUnderFire(state: Pick<GameState, 'time'>, tower: Pick<Tower, 'underFireUntilMs'>): boolean {
+  return state.time < tower.underFireUntilMs;
+}
+
+/**
  * Rules v2 auto-upgrade: an owned L1/L2 tower whose garrison has reached its (modified) capacity
  * gains a level at once, keeping its garrison. A linked tower never upgrades (its garrison drains).
  * At the kind's max level the garrison is clamped at capacity. Returns whether a level was gained.
@@ -119,6 +127,8 @@ function generation(state: GameState, dt: number): void {
     let frozen = false;
     for (const caster of freezeCasters) if (caster !== tower.owner) frozen = true;
     if (frozen) continue;
+    // Rules v2.1: a tower under fire recruits nothing (same mechanism as Freeze: the accumulator pauses).
+    if (isUnderFire(state, tower)) continue;
 
     const cap = capacityOf(tower, state);
     if (tower.units >= cap) {
@@ -382,6 +392,10 @@ function arrive(state: GameState, tower: Tower, unit: Unit): void {
     damage = unit.weight;
     consumedForDefenders = tower.units;
   }
+  // Rules v2.1 "Under fire": every hostile landing on an owned tower pauses its production (a
+  // fortress half-hit that removes nobody counts too); road deaths never reach here. Neutral towers
+  // never generate and are left unmarked. A capture below clears it: the new owner starts fresh.
+  if (tower.owner !== 'neutral') tower.underFireUntilMs = state.time + C.UNDER_FIRE_MS;
   if (damage > tower.units) {
     const from = tower.owner;
     tower.owner = unit.owner;
@@ -391,6 +405,7 @@ function arrive(state: GameState, tower: Tower, unit: Unit): void {
     tower.defenceAcc = 0;
     tower.drainAccMs = 0;
     tower.linkCursor = 0;
+    tower.underFireUntilMs = 0;
     state.events.push({ type: 'capture', towerId: tower.id, by: unit.owner, from });
     // The old owner's streams out of this tower die with it (the new owner may re-link).
     for (const link of linksFrom(state, tower.id)) removeLink(state, link, 'sourceLost');
