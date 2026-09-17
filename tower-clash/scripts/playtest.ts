@@ -13,7 +13,7 @@
  * Rng streams come from `rngsFor`, exactly as the game client derives them.
  */
 import { performance } from 'node:perf_hooks';
-import { LEVELS } from '../src/levels/index';
+import { loadAllLevels } from '../src/levels/index';
 import { C, DEFAULT_MODIFIERS } from '../src/sim/index';
 import type { LevelDef, PlayerModifiers } from '../src/sim/index';
 import { referencePlayerCommands } from '../src/ai/index';
@@ -110,8 +110,9 @@ export function median(values: readonly number[]): number | undefined {
   return sorted.length % 2 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
 }
 
-function selectLevels(only: number | undefined): LevelDef[] {
-  const levels = only === undefined ? LEVELS : LEVELS.filter((l) => l.id === only);
+async function selectLevels(only: number | undefined): Promise<LevelDef[]> {
+  const all = await loadAllLevels();
+  const levels = only === undefined ? all : all.filter((l) => l.id === only);
   if (levels.length === 0) {
     console.error(`No level with id ${String(only)}`);
     process.exit(1);
@@ -302,12 +303,12 @@ function runMultiSeed(levels: LevelDef[], n: number, upgrades: Upgrades): number
   return failed;
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
-  const levels = selectLevels(args.level);
+  const levels = await selectLevels(args.level);
   const failed =
     args.seeds === undefined ? runSingleSeed(levels, args.seed, args.upgrades) : runMultiSeed(levels, args.seeds, args.upgrades);
   if (failed > 0) process.exit(1);
 }
 
-main();
+await main();

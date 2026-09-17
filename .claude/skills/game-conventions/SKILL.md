@@ -20,7 +20,8 @@ tower-clash/src/
   input/      pointer events → commands
   ui/         screens (title, levelSelect, play, result), HUD, save
   audio/      WebAudio synth
-  levels/     one JSON per level: 001-first-steps.json … ; index.ts exports ordered list
+  levels/     one JSON per level: 001-first-steps.json … ; manifest.ts (generated: npm run levels:manifest) = eager
+              metadata + one import() per level; index.ts exports LEVEL_META, loadLevel(id), loadAllLevels()
 ```
 Sim time is milliseconds. `state.time` advances by exactly 50 per tick; the loop accumulates real dt and runs whole ticks. Rendering interpolates unit positions from `unit.progress` (0..1 along road).
 

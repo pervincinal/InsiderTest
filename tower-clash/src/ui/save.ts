@@ -313,3 +313,12 @@ export function isLevelUnlocked(data: SaveData, levels: readonly { id: number }[
   if (!prev) return false;
   return (data.stars[String(prev.id)] ?? 0) >= 1;
 }
+
+/** Index of the level the player is "on": first unlocked level without a clear, else the last. */
+export function currentLevelIndex(data: SaveData, levels: readonly { id: number }[]): number {
+  for (let i = 0; i < levels.length; i++) {
+    const level = levels[i]!;
+    if (isLevelUnlocked(data, levels, i) && (data.stars[String(level.id)] ?? 0) === 0) return i;
+  }
+  return Math.max(0, levels.length - 1);
+}

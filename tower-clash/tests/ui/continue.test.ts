@@ -26,7 +26,7 @@ function fakeApp(save: SaveData) {
     goAchievements() {},
     startLevel(levelId, _seed, opts) {
       starts.push({ levelId, opts });
-      return true;
+      return Promise.resolve(true);
     },
     go(screen) {
       current = screen;

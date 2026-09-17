@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { LEVELS, getLevel } from '../../src/levels/index';
+import { loadAllLevels, loadLevel } from '../../src/levels/index';
 import { C, Rng, applyCommand, createState, getOutcome, step } from '../../src/sim/index';
 import type { Command, GameState, LevelDef } from '../../src/sim/index';
 import { isAiTick, referencePlayerCommands, runAiTick } from '../../src/ai/index';
+
+const LEVELS = await loadAllLevels();
 
 /*
  * Determinism guard on real content (the existing determinism.test.ts uses a synthetic map and a
@@ -67,8 +69,8 @@ function invariantViolations(s: GameState): string[] {
 }
 
 describe('replay determinism on authored levels', () => {
-  it('level 1: reference player vs enemies for 60 s sim, same seed twice, deep-equal final state', () => {
-    const level1 = getLevel(1);
+  it('level 1: reference player vs enemies for 60 s sim, same seed twice, deep-equal final state', async () => {
+    const level1 = await loadLevel(1);
     expect(level1).toBeDefined();
     const a = play(level1!, 7, referencePlayerCommands, 60_000);
     const b = play(level1!, 7, referencePlayerCommands, 60_000);

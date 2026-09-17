@@ -4,7 +4,7 @@ import { C } from '../sim/constants';
 import { SnapshotRing, applyContinue } from '../sim/snapshot';
 import { createState } from '../sim/create';
 import { getOutcome } from '../sim/outcome';
-import { LEVELS } from '../levels/index';
+import { LEVEL_META, levelIndex } from '../levels/index';
 import { enemyCommands, isAiTick, referencePlayerCommands, rngsFor } from '../ai/index';
 import type { View } from '../render/view';
 import { applyTransform, clipToMap } from '../render/view';
@@ -313,7 +313,7 @@ export class PlayScreen implements Screen {
 
   private buildUi(): HudPlayUi {
     const outcome = getOutcome(this.state);
-    const idx = LEVELS.findIndex((l) => l.id === this.level.id);
+    const idx = levelIndex(this.level.id);
     return {
       hud: {
         boosters: allBoosterStatus(this.state, this.wallet()),
@@ -338,7 +338,7 @@ export class PlayScreen implements Screen {
       limitHintText: this.gestures.limitHintText || undefined,
       outcome,
       stars: outcome === 'won' ? starsFor(this.level, this.elapsedMs()) : 0,
-      hasNext: idx >= 0 && idx + 1 < LEVELS.length,
+      hasNext: idx >= 0 && idx + 1 < LEVEL_META.length,
       speed: this.loop.speed,
       coinsEarned: this.earnings.gold,
       coinsTotal: this.app.save.gold,
@@ -527,7 +527,7 @@ export class PlayScreen implements Screen {
       else if (inRect(PAUSE.speed, p.x, p.y)) this.toggleSpeed();
       else if (inRect(PAUSE.sound, p.x, p.y) || inRect(HUD.mute, p.x, p.y)) toggleMuted();
       else if (inRect(PAUSE.settings, p.x, p.y)) this.app.openSettings(this);
-      else if (inRect(PAUSE.retry, p.x, p.y)) this.app.startLevel(this.level.id);
+      else if (inRect(PAUSE.retry, p.x, p.y)) void this.app.startLevel(this.level.id);
       else if (inRect(PAUSE.menu, p.x, p.y) || inRect(HUD.menu, p.x, p.y)) this.app.goLevels();
       return;
     }
@@ -553,7 +553,7 @@ export class PlayScreen implements Screen {
       if (this.targeting) this.targeting = false;
       else this.app.goLevels();
     } else if (e.key === 'p' || e.key === 'P' || e.key === ' ') this.togglePause();
-    else if (e.key === 'r' || e.key === 'R') this.app.startLevel(this.level.id);
+    else if (e.key === 'r' || e.key === 'R') void this.app.startLevel(this.level.id);
     else if (e.key === '1') this.useBooster('overdrive');
     else if (e.key === '2') this.useBooster('freeze');
     else if (e.key === '3') this.useBooster('airstrike');

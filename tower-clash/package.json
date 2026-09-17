@@ -14,6 +14,7 @@
     "lint": "eslint src tests scripts",
     "test": "vitest run",
     "levels:check": "tsx scripts/levelsCheck.ts",
+    "levels:manifest": "tsx scripts/levelsManifest.ts",
     "version:sync": "node scripts/syncVersion.mjs",
     "version:check": "node scripts/syncVersion.mjs --check",
     "playtest": "tsx scripts/playtest.ts",

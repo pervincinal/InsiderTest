@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { LEVELS, getLevel } from '../../src/levels/index';
+import { LEVEL_META, getLoadedLevel, levelIndex, loadAllLevels, loadLevel } from '../../src/levels/index';
+import { checkManifest } from '../../scripts/lib/levelManifest';
 import {
   bandFor,
   validateBand,
@@ -12,6 +13,8 @@ import {
   validateTowers,
 } from '../../scripts/lib/validateLevel';
 import { makeLevel } from '../helpers';
+
+const LEVELS = await loadAllLevels();
 
 describe('shipped levels', () => {
   it('has at least one level', () => {
@@ -30,9 +33,24 @@ describe('shipped levels', () => {
     expect(ids).toEqual([...ids].sort((a, b) => a - b));
   });
 
-  it('getLevel finds levels by id', () => {
-    expect(getLevel(1)?.name).toBe(LEVELS[0]?.name);
-    expect(getLevel(9999)).toBeUndefined();
+  it('loadLevel finds levels by id and caches them; unknown ids resolve undefined', async () => {
+    const first = await loadLevel(1);
+    expect(first?.name).toBe(LEVELS[0]?.name);
+    expect(getLoadedLevel(1)).toBe(first);
+    expect(await loadLevel(1)).toBe(first);
+    expect(await loadLevel(9999)).toBeUndefined();
+    expect(getLoadedLevel(9999)).toBeUndefined();
+    expect(levelIndex(1)).toBe(0);
+    expect(levelIndex(9999)).toBe(-1);
+  });
+
+  it('LEVEL_META mirrors the level files (PERF-2 manifest is not stale)', () => {
+    expect(checkManifest()).toEqual([]);
+    expect(LEVEL_META.map((m) => m.id)).toEqual(LEVELS.map((l) => l.id));
+    for (const level of LEVELS) {
+      const meta = LEVEL_META[levelIndex(level.id)]!;
+      expect(meta).toEqual({ id: level.id, name: level.name, star3: level.star3, star2: level.star2 });
+    }
   });
 
   it('every level starts with exactly one player tower group', () => {

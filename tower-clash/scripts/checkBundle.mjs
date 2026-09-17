@@ -26,11 +26,11 @@ const noBuild = args.includes('--no-build');
 const budgetArg = args.indexOf('--budget');
 
 /**
- * Gzip budget for the eagerly loaded JavaScript, in bytes. Rules v2 (links, per-level tower
- * sprites) pushed the entry chunk to 80.4 kB; the budget is 84 kB until PERF-2 moves the level
- * JSON out of the eager chunk, then it goes back to 80 kB.
+ * Gzip budget for the eagerly loaded JavaScript, in bytes. The level bodies are per-level chunks
+ * (PERF-2, src/levels/manifest.ts) and the menu screens a lazy chunk (PERF-1), so the entry chunk
+ * is the sim + play screen + renderer + level metadata (≈ 67 kB after rules v2).
  */
-const DEFAULT_GZIP_BUDGET = 84 * 1024;
+const DEFAULT_GZIP_BUDGET = 80 * 1024;
 /** Package name fragments that must never appear in the eagerly loaded chunks. */
 const FORBIDDEN_STRINGS = ['purchases-capacitor', 'capacitor-community/admob'];
 

@@ -1,5 +1,5 @@
-import type { GameState } from './sim/types';
-import { LEVELS, getLevel } from './levels/index';
+import type { GameState, LevelDef } from './sim/types';
+import { LEVEL_META, getLoadedLevel, levelIndex, loadLevel } from './levels/index';
 import type { Palette } from './render/palette';
 import { getPalette } from './render/palette';
 import type { View } from './render/view';
@@ -7,7 +7,7 @@ import { createView, resize, toClient } from './render/view';
 import { attachPointer } from './input/pointer';
 import type { PointerPoint } from './input/pointer';
 import type { SaveData } from './ui/save';
-import { isLevelUnlocked, loadSave, writeSave } from './ui/save';
+import { currentLevelIndex, isLevelUnlocked, loadSave, writeSave } from './ui/save';
 import type { App, NativeInfoOverride, Screen, StartOptions } from './ui/screens';
 import { ResultScreen, TitleScreen, beginMapFrame, endMapFrame } from './ui/screens';
 import { PlayScreen } from './ui/play';
@@ -38,8 +38,14 @@ type LazyScreens = typeof import('./ui/lazyScreens');
 export interface TowerClashDebug {
   getState(): GameState | null;
   getScreen(): Screen['name'];
-  /** Start a level; `seed` (optional) makes the run reproducible for tests. */
-  loadLevel(id: number, seed?: number): boolean;
+  /**
+   * Start a level; `seed` (optional) makes the run reproducible for tests. Resolves true once the
+   * play screen is up (the level chunk may have to download first — PERF-2), false for an unknown
+   * id or when another navigation won meanwhile. `autoplay()`, `setSpeed()` and `economy.autoLose()`
+   * may be called right after it without awaiting: they apply to the level being started.
+   */
+  loadLevel(id: number, seed?: number): Promise<boolean>;
+  /** Hand the running (or starting) level to the reference player; false when no level is up. */
   autoplay(): boolean;
   setSpeed(n: number): void;
   getSpeed(): number;
@@ -144,6 +150,9 @@ class TowerClashApp implements App {
   private lazy: LazyScreens | null = null;
   private lazyPromise: Promise<LazyScreens> | null = null;
   private preloadQueued = false;
+  /** Level start in flight (its chunk downloading), so debug hooks can target the coming play screen. */
+  private pendingStart: Promise<PlayScreen | null> | null = null;
+  private startSeq = 0;
   nativeInfo?: NativeInfoOverride;
 
   constructor(canvas: HTMLCanvasElement, save: SaveData) {
@@ -255,11 +264,22 @@ class TowerClashApp implements App {
     );
   }
 
-  /** Warm the lazy chunk once the first frame is painted, so the first tap on SHOP / settings is instant. */
+  /**
+   * Warm the lazy chunk and the player's current level once the first frame is painted, so the
+   * first tap on SHOP / settings and the first PLAY are instant.
+   */
   private preloadLazy(): void {
     if (this.preloadQueued) return;
     this.preloadQueued = true;
-    whenIdle(() => void this.loadLazy().catch(() => undefined));
+    whenIdle(() => {
+      void this.loadLazy().catch(() => undefined);
+      this.preloadLevel(LEVEL_META[currentLevelIndex(this.save, LEVEL_META)]?.id);
+    });
+  }
+
+  /** Fetch a level chunk in the background (no-op for unknown ids; errors are swallowed, `startLevel` retries). */
+  private preloadLevel(id: number | undefined): void {
+    if (id !== undefined) void loadLevel(id).catch(() => undefined);
   }
 
   openSettings(from: Screen): void {
@@ -317,12 +337,64 @@ class TowerClashApp implements App {
     this.play?.setSpeed(this.speed);
   }
 
-  startLevel(levelId: number, seed?: number, opts?: StartOptions): boolean {
-    const level = getLevel(levelId);
-    if (!level) return false;
+  /**
+   * Start a level: at once when its chunk is in (the usual case — the current level is preloaded
+   * after the first frame and the next one when a level starts), otherwise through the spinner.
+   * A navigation or another start that happened meanwhile wins; a failed download returns to the
+   * screen the player was on. Resolves true once the play screen is current.
+   */
+  startLevel(levelId: number, seed?: number, opts?: StartOptions): Promise<boolean> {
+    const seq = ++this.startSeq;
+    const cached = getLoadedLevel(levelId);
+    if (cached) {
+      this.enterLevel(cached, seed, opts);
+      return Promise.resolve(true);
+    }
+    if (levelIndex(levelId) < 0) return Promise.resolve(false);
+    const from = this.current;
+    const loading = new LoadingScreen(this);
+    this.go(loading);
+    const start = loadLevel(levelId).then(
+      (level) => {
+        if (seq !== this.startSeq || this.current !== loading) return null; // superseded
+        if (!level) {
+          this.current = from; // no enter(): the screen never left
+          return null;
+        }
+        return this.enterLevel(level, seed, opts);
+      },
+      () => {
+        if (seq === this.startSeq && this.current === loading) this.current = from;
+        return null;
+      },
+    );
+    this.pendingStart = start;
+    void start.finally(() => {
+      if (this.pendingStart === start) this.pendingStart = null;
+    });
+    return start.then((play) => play !== null);
+  }
+
+  private enterLevel(level: LevelDef, seed: number | undefined, opts: StartOptions | undefined): PlayScreen {
     const play = new PlayScreen(this, level, seed, this.speed, opts);
     this.play = play;
     this.go(play);
+    whenIdle(() => this.preloadLevel(LEVEL_META[levelIndex(level.id) + 1]?.id)); // NEXT is instant
+    return play;
+  }
+
+  /**
+   * Debug helper: run `fn` on the current play screen, or on the one a pending `startLevel` is
+   * about to create (Playwright calls `loadLevel(); autoplay()` back to back without awaiting).
+   * False when there is neither.
+   */
+  private withPlay(fn: (play: PlayScreen) => void): boolean {
+    if (this.pendingStart) {
+      void this.pendingStart.then((play) => play && fn(play));
+      return true;
+    }
+    if (!this.play) return false;
+    fn(this.play);
     return true;
   }
 
@@ -354,10 +426,7 @@ class TowerClashApp implements App {
       getState: () => this.play?.state ?? null,
       getScreen: () => this.current.name,
       loadLevel: (id, seed) => this.startLevel(id, seed),
-      autoplay: () => {
-        this.play?.setAutoplay(true);
-        return this.play !== null;
-      },
+      autoplay: () => this.withPlay((play) => play.setAutoplay(true)),
       setSpeed: (n) => this.setSpeed(n),
       getSpeed: () => this.play?.loop.speed ?? this.speed,
       toClient: (x, y) => toClient(this.view, x, y),
@@ -371,7 +440,7 @@ class TowerClashApp implements App {
         const { earnings, achievements } = this.current.info;
         return { outcome, stars, coinsEarned, coinsTotal, crystalsEarned: earnings.crystals, achievements: achievements.unlocked.map((a) => a.id) };
       },
-      isLevelUnlocked: (id) => isLevelUnlocked(this.save, LEVELS, LEVELS.findIndex((l) => l.id === id)),
+      isLevelUnlocked: (id) => isLevelUnlocked(this.save, LEVEL_META, levelIndex(id)),
       setLevelSelectScroll: (y) => {
         const L = this.lazy;
         if (L && this.current instanceof L.LevelSelectScreen) this.current.setScroll(y);
@@ -397,9 +466,8 @@ class TowerClashApp implements App {
         }),
         openShop: (tab) => this.openShop(tab, this.backFromShop()),
         autoLose: () => {
-          if (!this.play || this.current !== this.play) return false;
-          this.play.setSuicide(true);
-          return true;
+          if (!this.pendingStart && this.current !== this.play) return false;
+          return this.withPlay((play) => play.setSuicide(true));
         },
         resultAction: (action) => {
           const cur = this.current;

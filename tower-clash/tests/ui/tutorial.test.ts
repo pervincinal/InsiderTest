@@ -3,10 +3,11 @@ import { createState } from '../../src/sim/create';
 import { applyCommand } from '../../src/sim/commands';
 import { step } from '../../src/sim/step';
 import { C } from '../../src/sim/constants';
-import { getLevel } from '../../src/levels/index';
+import { getLoadedLevel, loadAllLevels } from '../../src/levels/index';
 import { Tutorial, tutorialFor } from '../../src/ui/tutorial';
 
-const stateFor = (id: number) => createState(getLevel(id)!, 1);
+await loadAllLevels();
+const stateFor = (id: number) => createState(getLoadedLevel(id)!, 1);
 
 describe('tutorialFor', () => {
   it('exists for levels 1-3 only and is skipped once the level has a star', () => {

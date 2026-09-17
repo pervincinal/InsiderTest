@@ -4,7 +4,9 @@ import { C, Rng, applyCommand, createState, getOutcome, step } from '../../src/s
 import type { Command, GameState, LevelDef, RoadDef, TowerDef } from '../../src/sim/index';
 import { isAiTick, referencePlayerCommands, rngsFor, runAiTick } from '../../src/ai/index';
 import { MAX_DETOUR_HOPS, bridgeCutCommands, columnOnBridge, keepsRoutes, opponentHops, ownUnitsOnRoad } from '../../src/ai/bridges';
-import { LEVELS } from '../../src/levels/index';
+import { loadAllLevels } from '../../src/levels/index';
+
+const LEVELS = await loadAllLevels();
 
 const cuts = (cmds: Command[]) => cmds.filter((c) => c.type === 'cutBridge');
 const links = (cmds: Command[]) => cmds.filter((c) => c.type === 'link');

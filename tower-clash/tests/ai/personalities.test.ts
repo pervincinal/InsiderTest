@@ -5,8 +5,10 @@ import type { Command, EnemyDef, GameState, TowerKind } from '../../src/sim/inde
 import { enemyCommands, runAiTick } from '../../src/ai/index';
 import { ENEMY_MAX_LINKS, OPPORTUNIST_MAX_LINKS, OPPORTUNIST_RESERVE, SUPPLY_FULL_UNITS, supplyFull } from '../../src/ai/personalities';
 import { incomingThreat, threatReserve } from '../../src/ai/common';
-import { LEVELS } from '../../src/levels/index';
+import { loadAllLevels } from '../../src/levels/index';
 import { runHeadless } from '../../src/ai/headless';
+
+const LEVELS = await loadAllLevels();
 
 /*
  * Rules v2 (GDD §2.0 / §2.5): an enemy attack is a `link`; the stream ends with `unlink` when the

@@ -7,7 +7,7 @@ import { getOutcome } from '../../src/sim/outcome';
 import { C } from '../../src/sim/constants';
 import { SnapshotRing, applyContinue, cloneState, deepCopy, strongestPlayerTower } from '../../src/sim/snapshot';
 import type { Command, GameState } from '../../src/sim/types';
-import { getLevel } from '../../src/levels/index';
+import { loadLevel } from '../../src/levels/index';
 import { isAiTick, referencePlayerCommands, rngsFor, runAiTick } from '../../src/ai/index';
 import { run } from './util';
 
@@ -329,8 +329,8 @@ describe('rewind determinism', () => {
     expect(JSON.stringify(a)).not.toBe(JSON.stringify(original));
   });
 
-  it('level 5 with the AI: snapshot (state + AI rng) at 20 s before the end replays to the same result', () => {
-    const level = getLevel(5)!; // 36 s with the reference player on seed 7
+  it('level 5 with the AI: snapshot (state + AI rng) at 20 s before the end replays to the same result', async () => {
+    const level = (await loadLevel(5))!; // 36 s with the reference player on seed 7
     type Frame = { time: number; state: GameState; rng: { player: number; enemies: [string, number][] } };
     const ring = new SnapshotRing<Frame>(1000, 20_000);
 

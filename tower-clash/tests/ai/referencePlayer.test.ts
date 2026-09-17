@@ -4,7 +4,9 @@ import { Rng, applyCommand, createState, getOutcome, step } from '../../src/sim/
 import type { Command, GameState, LevelDef, Outcome } from '../../src/sim/index';
 import { isAiTick, referencePlayerCommands, rngsFor, runAiTick } from '../../src/ai/index';
 import { CUT_REACTION_MS, OPENING_GROW_LEVEL, SUPPLY_MIN, bridgeLoss, wantAt } from '../../src/ai/referencePlayer';
-import { LEVELS } from '../../src/levels/index';
+import { loadAllLevels } from '../../src/levels/index';
+
+const LEVELS = await loadAllLevels();
 
 /*
  * Rules v2: the reference player only ever issues `link`, `unlink` and `cutBridge`. Every test pins the

@@ -4,30 +4,20 @@
  * drawing (PERF-1, src/ui/lazyScreens.ts) and preloaded right after the first frame.
  */
 import { C } from '../sim/constants';
-import { LEVELS } from '../levels/index';
+import { LEVEL_META } from '../levels/index';
 import type { View } from '../render/view';
 import { LEVEL_MAP, levelMapMaxScroll, levelNodeCentre, levelNodeRect } from '../render/layout';
 import type { Rect } from '../render/widgets';
 import { inRect } from '../render/widgets';
 import { drawLevelSelect } from '../render/menusLevels';
 import type { PointerPoint } from '../input/pointer';
-import type { SaveData } from './save';
-import { isLevelUnlocked } from './save';
+import { currentLevelIndex, isLevelUnlocked } from './save';
 import type { App, Screen } from './screens';
 import { commanderSummary } from './upgrades';
 
 /* ---------- Level select: winding path map ---------- */
 
 const BACK = LEVEL_MAP.back;
-
-/** Index of the level the player is "on": first unlocked level without a clear, else the last. */
-export function currentLevelIndex(save: SaveData): number {
-  for (let i = 0; i < LEVELS.length; i++) {
-    const level = LEVELS[i]!;
-    if (isLevelUnlocked(save, LEVELS, i) && (save.stars[String(level.id)] ?? 0) === 0) return i;
-  }
-  return Math.max(0, LEVELS.length - 1);
-}
 
 export class LevelSelectScreen implements Screen {
   readonly name = 'levelSelect' as const;
@@ -41,13 +31,13 @@ export class LevelSelectScreen implements Screen {
   private readonly current: number;
 
   constructor(private readonly app: App) {
-    this.current = currentLevelIndex(app.save);
+    this.current = currentLevelIndex(app.save, LEVEL_META);
     // open centred on the current level
     this.setScroll(levelNodeCentre(this.current).y - C.MAP_H * 0.5);
   }
 
   private maxScroll(): number {
-    return levelMapMaxScroll(LEVELS.length, C.MAP_H);
+    return levelMapMaxScroll(LEVEL_META.length, C.MAP_H);
   }
 
   setScroll(y: number): void {
@@ -60,11 +50,11 @@ export class LevelSelectScreen implements Screen {
 
   draw(view: View, nowMs: number): void {
     drawLevelSelect(view, this.app.palette(), {
-      nodes: LEVELS.map((level, i) => ({
+      nodes: LEVEL_META.map((level, i) => ({
         id: level.id,
         name: level.name,
         stars: this.app.save.stars[String(level.id)] ?? 0,
-        unlocked: isLevelUnlocked(this.app.save, LEVELS, i),
+        unlocked: isLevelUnlocked(this.app.save, LEVEL_META, i),
       })),
       current: this.current,
       scroll: this.scroll,
@@ -115,10 +105,10 @@ export class LevelSelectScreen implements Screen {
       return;
     }
     if (p.y < LEVEL_MAP.headerH || p.y >= LEVEL_MAP.commander.y - 10) return;
-    for (let i = 0; i < LEVELS.length; i++) {
-      const level = LEVELS[i];
+    for (let i = 0; i < LEVEL_META.length; i++) {
+      const level = LEVEL_META[i];
       if (level && inRect(levelNodeRect(i, this.scroll), p.x, p.y)) {
-        if (isLevelUnlocked(this.app.save, LEVELS, i)) this.app.startLevel(level.id);
+        if (isLevelUnlocked(this.app.save, LEVEL_META, i)) void this.app.startLevel(level.id);
         return; // locked: the tap does nothing
       }
     }

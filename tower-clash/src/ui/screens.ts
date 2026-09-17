@@ -1,6 +1,6 @@
 import type { GameState, LevelDef } from '../sim/types';
 import { C } from '../sim/constants';
-import { LEVELS } from '../levels/index';
+import { LEVEL_META, levelIndex } from '../levels/index';
 import type { Palette } from '../render/palette';
 import type { View } from '../render/view';
 import { applyDeviceTransform, applyTransform, clipToMap } from '../render/view';
@@ -67,7 +67,8 @@ export interface App {
   goAchievements(back?: () => void): void;
   /** Overrides for the About block (e2e / dev): undefined = ask the providers. */
   readonly nativeInfo?: NativeInfoOverride;
-  startLevel(levelId: number, seed?: number, opts?: StartOptions): boolean;
+  /** Start a level (its chunk may have to download first); resolves true once the play screen is up. */
+  startLevel(levelId: number, seed?: number, opts?: StartOptions): Promise<boolean>;
   go(screen: Screen): void;
   /** Open the settings screen; BACK returns to `from` (title, or the paused play screen). */
   openSettings(from: Screen): void;
@@ -394,9 +395,8 @@ export class ResultScreen implements Screen {
   }
 
   private nextLevel(): void {
-    const idx = LEVELS.findIndex((l) => l.id === this.info.level.id);
-    const next = LEVELS[idx + 1];
-    if (next) this.app.startLevel(next.id);
+    const next = LEVEL_META[levelIndex(this.info.level.id) + 1];
+    if (next) void this.app.startLevel(next.id);
     else this.app.goLevels();
   }
 
@@ -405,7 +405,7 @@ export class ResultScreen implements Screen {
     this.pressed = null;
     if (!hit || !inRect(hit, p.x, p.y) || this.pending || this.leaving) return;
     const { ui, level } = this.info;
-    if (hit === RESULT.retry) this.leave(() => this.app.startLevel(level.id));
+    if (hit === RESULT.retry) this.leave(() => void this.app.startLevel(level.id));
     else if (hit === RESULT.menu || hit === HUD.menu) this.leave(() => this.app.goLevels());
     else if (hit === RESULT.next && ui.outcome === 'won' && ui.hasNext) this.leave(() => this.nextLevel());
     else if (hit === HUD.wallet) this.app.goShop('crystals', () => this.app.go(this));
@@ -442,7 +442,7 @@ export class ResultScreen implements Screen {
   private reinforce(): void {
     if (this.info.resume?.()) return;
     playSfx('upgrade');
-    this.app.startLevel(this.info.level.id, undefined, { reinforcements: true });
+    void this.app.startLevel(this.info.level.id, undefined, { reinforcements: true });
   }
 
   continueWithCrystals(): void {
@@ -490,7 +490,7 @@ export class ResultScreen implements Screen {
     else if (e.key === 'Enter') {
       const { ui, level } = this.info;
       if (ui.outcome === 'won' && ui.hasNext) this.leave(() => this.nextLevel());
-      else this.leave(() => this.app.startLevel(level.id));
+      else this.leave(() => void this.app.startLevel(level.id));
     }
   }
 }

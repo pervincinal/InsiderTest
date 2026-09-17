@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LEVELS } from '../../src/levels/index';
+import { loadLevel } from '../../src/levels/index';
 import { DEFAULT_MODIFIERS } from '../../src/sim/index';
 import type { PlayerModifiers } from '../../src/sim/index';
 import { referencePlayerCommands } from '../../src/ai/index';
@@ -9,7 +9,7 @@ import { makeLevel } from '../helpers';
 /** Every Commander track at its cap (ECONOMY.md §3.2 / catalog ADVANTAGE_LIMIT). */
 const MAX_MODIFIERS: PlayerModifiers = { productionMul: 1.2, capacityMul: 1.25, startGarrisonBonus: 5, unitSpeedMul: 1.15 };
 
-const level1 = LEVELS.find((l) => l.id === 1)!;
+const level1 = (await loadLevel(1))!;
 
 describe('runHeadless', () => {
   it('defaults to no upgrades and the 180 s budget', () => {
