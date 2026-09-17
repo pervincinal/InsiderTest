@@ -8,8 +8,8 @@
   "lesson_az": "Sədd səni də qoruyur: divar arxasındakı hücumçu onu qırmaq üçün əsgər xərcləməlidir, ona görə əvvəl açıq tərəfdə genişlən və onu zəifləyəndə qarşıla",
   "lesson_ru": "Заслон защищает и тебя: рвачу за стеной придётся тратить бойцов на её пролом, так что сначала расширяйся с открытой стороны и встречай его обескровленным",
   "lesson_tr": "Bariyer seni de korur: duvarın ardındaki saldırgan onu kırmak için asker harcamalı, o yüzden önce açık tarafta genişle ve onu kan kaybedince karşıla",
-  "star3": 25000,
-  "star2": 50000,
+  "star3": 20000,
+  "star2": 40000,
   "enemies": [
     {"owner": "enemy1", "personality": "turtle", "aggression": 0.6},
     {"owner": "enemy2", "personality": "rusher", "aggression": 0.6}

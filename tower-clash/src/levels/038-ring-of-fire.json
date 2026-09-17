@@ -16,9 +16,9 @@
     {"owner": "enemy3", "personality": "rusher", "aggression": 0.7}
   ],
   "towers": [
-    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 18, "level": 1, "kind": "barracks"},
-    {"id": "w", "x": 150, "y": 1000, "owner": "neutral", "units": 5},
-    {"id": "e", "x": 570, "y": 1000, "owner": "neutral", "units": 5},
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 20, "level": 1, "kind": "barracks"},
+    {"id": "w", "x": 150, "y": 1000, "owner": "neutral", "units": 3},
+    {"id": "e", "x": 570, "y": 1000, "owner": "neutral", "units": 3},
     {"id": "gunsw", "x": 200, "y": 800, "owner": "neutral", "units": 6, "kind": "artillery"},
     {"id": "gunse", "x": 520, "y": 800, "owner": "neutral", "units": 6, "kind": "artillery"},
     {"id": "mid", "x": 360, "y": 640, "owner": "neutral", "units": 10},

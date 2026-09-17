@@ -8,8 +8,8 @@
   "lesson_az": "Mühasirədən əvvəl topları susdur: qalanın yanındakı artilleriya postu divarı yarmaq üçün lazım olan dalğanı parçalayır",
   "lesson_ru": "Заглуши пушки до осады: артиллерия рядом с крепостью рвёт ту самую волну, что нужна тебе для прорыва",
   "lesson_tr": "Kuşatmadan önce topları sustur: kalenin yanındaki topçu mevzii tam da surları yarmak için gereken dalgayı parçalar",
-  "star3": 30000,
-  "star2": 60000,
+  "star3": 20000,
+  "star2": 40000,
   "enemies": [{ "owner": "enemy1", "personality": "opportunist", "aggression": 0.6 }],
   "towers": [
     { "id": "home", "x": 360, "y": 1160, "owner": "player", "units": 15, "level": 1, "kind": "barracks" },

@@ -8,18 +8,18 @@
   "lesson_az": "Körpülər: bir ucu sənin olan körpünü kəsmək üçün üstünə uzun bas. Üstündəki əsgərlər boğulur, arxadakı düşmən dəstəsi isə birdəfəlik ilişib qalır",
   "lesson_ru": "Мосты: удерживай мост, чей край твой, чтобы обрушить его. Бойцы на нём тонут, а вражеская колонна за ним застревает навсегда",
   "lesson_tr": "Köprüler: bir ucu senin olan köprüyü kesmek için basılı tut. Üstündeki askerler boğulur, arkasındaki düşman kolu temelli mahsur kalır",
-  "star3": 40000,
-  "star2": 80000,
+  "star3": 30000,
+  "star2": 60000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.55},
     {"owner": "enemy2", "personality": "turtle", "aggression": 0.55}
   ],
   "towers": [
-    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 14, "level": 1, "kind": "barracks"},
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 20, "level": 1, "kind": "barracks"},
     {"id": "w", "x": 150, "y": 1000, "owner": "neutral", "units": 4},
     {"id": "e", "x": 570, "y": 1000, "owner": "neutral", "units": 4},
     {"id": "bank", "x": 360, "y": 860, "owner": "neutral", "units": 8},
-    {"id": "nw", "x": 150, "y": 700, "owner": "neutral", "units": 6},
+    {"id": "nw", "x": 150, "y": 700, "owner": "neutral", "units": 10},
     {"id": "ne", "x": 570, "y": 700, "owner": "neutral", "units": 6},
     {"id": "red", "x": 250, "y": 460, "owner": "enemy1", "units": 12, "level": 1, "kind": "barracks"},
     {"id": "green", "x": 520, "y": 460, "owner": "enemy2", "units": 10, "level": 1, "kind": "barracks"},

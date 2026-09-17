@@ -8,8 +8,8 @@
   "lesson_az": "Qəsrin 2-ci səviyyədə başlayır. Üç körpü, üç rəqib: ikisini kəs və müharibən tək cəbhəli olsun",
   "lesson_ru": "Твоя цитадель начинает на уровне 2. Три моста, три соперника: обруши два — и у тебя война на один фронт",
   "lesson_tr": "Kalen 2. seviyede başlar. Üç köprü, üç rakip: ikisini kes, savaşın tek cepheli olsun",
-  "star3": 30000,
-  "star2": 60000,
+  "star3": 35000,
+  "star2": 80000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.6},
     {"owner": "enemy2", "personality": "opportunist", "aggression": 0.6},

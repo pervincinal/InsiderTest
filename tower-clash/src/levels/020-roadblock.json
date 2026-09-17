@@ -9,7 +9,7 @@
   "lesson_ru": "Заслоны: у перегороженной дороги есть прочность, и каждый боец, идущий в неё, гибнет, пока она не рухнет, — заложи лишних бойцов или иди открытой дорогой",
   "lesson_tr": "Bariyerler: duvarlı yolun canı vardır ve kırılana kadar ona giren her asker ölür, o yüzden fazladan asker hesapla ya da açık yoldan git",
   "star3": 20000,
-  "star2": 50000,
+  "star2": 40000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.45},
     {"owner": "enemy2", "personality": "opportunist", "aggression": 0.45}

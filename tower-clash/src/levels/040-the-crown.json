@@ -9,7 +9,7 @@
   "lesson_ru": "Корона: всё, чему ты научился. Расширяйся, держи стены, руби мосты, разумно плати минам и забери корону, когда три короля вымотают друг друга",
   "lesson_tr": "Taç: öğrendiğin her şey. Genişle, surları tut, köprüleri kes, mayınları akıllıca öde ve üç kral birbirini tüketince tacı al",
   "star3": 35000,
-  "star2": 70000,
+  "star2": 85000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.8},
     {"owner": "enemy2", "personality": "opportunist", "aggression": 0.8},

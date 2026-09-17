@@ -8,19 +8,19 @@
   "lesson_az": "Düşmən tank zavodu: yığdığı tankları yanındakı ən zəif qülləyə axıdır və bir 5 çəkili tank dörd əsgərlik qarnizonu çevirir. Onunla üzbəüz qülləni yığımdan yuxarı saxla və zavodu yığımı dolmamış al",
   "lesson_ru": "Вражеский танковый завод: он льёт свой запас танков в слабейшую соседнюю башню, а один танк весом 5 переворачивает гарнизон из четырёх. Держи башню напротив него выше его запаса и возьми завод, пока запас не наполнился",
   "lesson_tr": "Düşman tank fabrikası: biriktirdiği tankları yanındaki en zayıf kuleye akıtır ve 5 ağırlığında bir tank dört kişilik garnizonu çevirir. Karşısındaki kuleyi birikimin üstünde tut ve fabrikayı birikimi dolmadan al",
-  "star3": 25000,
-  "star2": 50000,
+  "star3": 20000,
+  "star2": 40000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.5},
     {"owner": "enemy2", "personality": "opportunist", "aggression": 0.5}
   ],
   "towers": [
-    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 18, "level": 1, "kind": "barracks"},
     {"id": "factory", "x": 150, "y": 1120, "owner": "player", "units": 10, "level": 1, "kind": "tankFactory"},
     {"id": "depot", "x": 130, "y": 930, "owner": "neutral", "units": 8},
     {"id": "e", "x": 570, "y": 1000, "owner": "neutral", "units": 5},
     {"id": "mid", "x": 360, "y": 900, "owner": "neutral", "units": 8},
-    {"id": "nw", "x": 150, "y": 700, "owner": "neutral", "units": 6},
+    {"id": "nw", "x": 150, "y": 700, "owner": "neutral", "units": 12},
     {"id": "ne", "x": 570, "y": 700, "owner": "neutral", "units": 6},
     {"id": "redfactory", "x": 150, "y": 460, "owner": "enemy1", "units": 10, "level": 1, "kind": "tankFactory"},
     {"id": "red", "x": 200, "y": 270, "owner": "enemy1", "units": 12, "level": 1, "kind": "barracks"},

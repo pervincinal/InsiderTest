@@ -8,8 +8,8 @@
   "lesson_az": "Qala: hər müdafiəçiyə iki hücumçu lazımdır. Axıtmazdan əvvəl qüllələrini doldur, çünki nazik axın yalnız divarları bəsləyir",
   "lesson_ru": "Крепость: два атакующих на одного защитника. Наполни башни, прежде чем лить, — тонкая струйка лишь кормит стены",
   "lesson_tr": "Kale: her savunmacıya iki saldırgan gerekir. Akıtmadan önce kulelerini doldur, ince bir sızıntı sadece surları besler",
-  "star3": 25000,
-  "star2": 50000,
+  "star3": 20000,
+  "star2": 40000,
   "enemies": [{ "owner": "enemy1", "personality": "rusher", "aggression": 0.3 }],
   "towers": [
     { "id": "home", "x": 360, "y": 1140, "owner": "player", "units": 12, "level": 1, "kind": "barracks" },
@@ -24,8 +24,8 @@
     { "a": "home", "b": "east" },
     { "a": "west", "b": "mid" },
     { "a": "east", "b": "mid" },
-    { "a": "east", "b": "flank" },
     { "a": "mid", "b": "keep" },
-    { "a": "flank", "b": "keep" }
+    { "a": "flank", "b": "keep" },
+    { "a": "flank", "b": "mid" }
   ]
 }

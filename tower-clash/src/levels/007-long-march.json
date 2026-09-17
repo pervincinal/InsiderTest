@@ -8,8 +8,8 @@
   "lesson_az": "Məsafə vaxtdır: ordunu əvvəl öndəki qülləyə axıt, çünki uzun yolda sən çatana qədər düşmən yenidən böyüyür",
   "lesson_ru": "Расстояние — это время: сначала лей войска в передовую башню, ведь на длинной дороге враг успеет отрасти до твоего прихода",
   "lesson_tr": "Mesafe zamandır: orduyu önce öndeki kuleye akıt, çünkü uzun yolda düşman sen varana kadar yeniden büyür",
-  "star3": 50000,
-  "star2": 100000,
+  "star3": 45000,
+  "star2": 90000,
   "enemies": [{ "owner": "enemy1", "personality": "turtle", "aggression": 0.4 }],
   "towers": [
     { "id": "home", "x": 360, "y": 1160, "owner": "player", "units": 14, "level": 1, "kind": "barracks" },

@@ -179,10 +179,10 @@ describe('reference player: cutBridge rule (streams)', () => {
     expect(referencePlayerCommands(a, new Rng(5))).toEqual(referencePlayerCommands(b, new Rng(9)));
   });
 
-  it('level 28 (Burn the Bridge): the player cuts a bridge on at least one of seeds 1–10 and wins all but seed 1', () => {
-    // v2.1 re-pin (2026-09-17): seed 1 is lost at 47.1 s — the rusher's chain rolls over the scattered
-    // opening (timeline in the AI engineer's report); the Level Designer re-tunes the level for v2.1.
-    const KNOWN_LOSSES = [1];
+  it('level 28 (Burn the Bridge): the player cuts a bridge on at least one of seeds 1–10 and wins every seed', () => {
+    // v2.1 re-tune (2026-09-17, Level Designer): home 20, nw 10 — the rusher chain no longer rolls over the
+    // scattered opening; the earlier seed-1 loss at 47.1 s is gone (20/20 in `npm run playtest -- --seeds 20`).
+    const KNOWN_LOSSES: number[] = [];
     const level = LEVELS.find((l) => l.id === 28)!;
     let playerCuts = 0;
     const lost: number[] = [];
