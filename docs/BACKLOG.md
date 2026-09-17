@@ -7,14 +7,15 @@ Priority = order within a section. Producer moves items; anyone may add to Bugs 
 
 ## Next (ECON — Phase B/C after accounts exist)
 - [ ] ECON-1 Phase B: real RevenueCat + AdMob keys (secrets `RC_*`, `ADMOB_*`), sandbox purchase test on a device, App Store Connect / Play products created with catalog ids — mobile-engineer + publisher (needs stakeholder accounts)
-- [ ] PERF-2 Levels JSON are 13.8 kB gzip of the eager chunk: eager `LEVEL_META` + per-level `import()` in `src/levels/index.ts` (start of PlayScreen becomes async) — level-designer + frontend
-- [ ] I18N-2 Translate level names and lessons (JSON `name_az/ru/tr`, `lesson_*`) and catalog labels (skins, achievements) — level-designer + monetization-designer + frontend
-- [ ] PUB-7 Store listing screenshots in AZ/RU/TR now that the UI is localised (captions + in-game language) — publisher
 - [ ] QA-2 Real-device pass (Android APK, iPhone via TestFlight later) — needs stakeholder's phone
 - [ ] ECON-8 `app-ads.txt` hosting needs a domain root (user-site repo or custom domain) — needs stakeholder decision
 
 ## Next
-- [ ] RULES-2.1 "Under fire" anti-stalemate rule (GDD §2.0 "Rules v2.1 (proposed)" — marked not implemented until this lands): a hostile landing pauses the target's production for `UNDER_FIRE_MS` = 1500 ms. Sim: `underFireUntilMs` per tower (snapshotted), generation check, capture reset, `C.UNDER_FIRE_MS`, acceptance tests 1–3 — gameplay-engineer. AI: `walkLandings`/`holdReserve`/`fallsAtMs` with production 0 under fire, personalities and reference player attack when `spendable + production × SIEGE_PLAN_S (10) ≥ costToTake + margin`, sieged-tower response order (reinforce → counter from another tower → counter from itself only with a surplus), acceptance test 4 — ai-engineer. Gate: `npm run playtest -- --seeds 5` with no `playing` timeouts, level 40 seed 1 won ≤ 120 s, levels 1–8 100 %; then Level Designer re-measures star clocks (expect −10…30 % on 9+) and Tech Artist draws the under-fire number/pip.
+- [ ] AI-3 Reference player vs a 1/s hose from a drained chain: `reinforce` needs `siegeNetRate > 0` and `counter` from the sieged tower needs a surplus over "what is still coming", so a permanently hosed L1 tower never answers (old level 9 seed 2: `east` falls 11.9 s, `home` 28.9 s while `flank` held 0–2 units; old 37 seed 1: home bleeds to 0 under two hoses from 2- and 0-unit sources). Teach the bot to stream at the drained source when it is the cheapest target; then re-run `--seeds 20` on 9/12/19/34/37/39 — ai-engineer
+- [ ] LV-5 Level 2 lesson line "a tower under fire cannot recruit" (GDD §2.0 v2.1 tutorial hook) + AZ/RU/TR; QA re-runs checklist R1 (fresh-save tutorial 1–3 in the browser) — level-designer + qa-engineer
+- [ ] PUB-8 Re-render store frame 06 (level 9 changed roads in 3f48a1d) and the artifact/PWA after the next content change: `npm run build && node store/tools/renderStoreShots.mjs --all --port=4185` — tech-artist
+- [ ] PUB-9 Release `tower-clash-v0.4.0`: tag from the GitHub UI on 52b3441 (this environment cannot push tags) — stakeholder / producer
+- [ ] QA-3 Scratch `diag.mts --max` hard-codes an old upgrade ladder (1.2/1.25/+5/1.15 vs shipped 1.06/1.25/+2/1.04); if the tool moves into scripts/, read the catalog — qa-engineer
 - [ ] M3-5 Perf on a real mid phone: measure, then object pooling if needed — qa-engineer
 
 ## Next (M-mobile — iOS/Android)
@@ -63,6 +64,11 @@ Priority = order within a section. Producer moves items; anyone may add to Bugs 
 - Local 2-player on one screen
 
 ## Done
+- 2026-09-17 RULES-2.1 (3e4a388) sim+ai+render: "under fire" — a hostile landing pauses the target's production 1.5 s (`Tower.underFireUntilMs`, `isUnderFire`), 14 sim + 14 AI tests; bots exploit it (`siegeForce`, counter/parry rules, drained-supply unlink, two-hop threat); peach badge with crossed-swords pip + impact ring. L3 100 vs L3 100 now flips in 14 s; the all-L3 stalemates are gone.
+- 2026-09-17 LV-4 (3f48a1d) levels: v2.1 balance (9, 12, 19, 26, 27, 28, 31, 33, 34, 37, 38, 39) + star clocks refit with the no-upgrade-flip boundary; 20 seeds 40/40, max-upgrades 20 seeds 0 failed gates, median 2★.
+- 2026-09-17 I18N-2 (235def1) level names + lessons AZ/RU/TR on all 40 levels (validated, manifest-carried), skins/achievements/upgrade labels via locale keys, banner re-wrap.
+- 2026-09-17 PUB-7 (577b894, 1b28bd0) store screenshots: 8-frame v0.4.0 set in EN/AZ/RU/TR with the in-game UI in each language, Apple 6.7/6.5 EN 9 frames; store texts/what's-new in 4 languages, README, privacy wording; version 0.4.0 build 4 (f8cf408).
+- 2026-09-17 PERF-2 (2d8cb24) level JSON lazy-loaded per level via a generated manifest (eager 80.5 → 73.7 kB gzip; 77.6 kB after I18N-2), budget back to 80 kB.
 - 2026-09-15 V2-1 (4bb3944) sim: rules v2 links and auto-upgrade — capacity ladder 25/50/100, `link`/`unlink` commands, `GameState.links`, `tryAutoUpgrade`, 120 ms round-robin `drain`, `pruneLinks` (sourceLost/roadCut/targetFull), `sendUnits`/`upgrade` kept as deprecated no-ops, snapshots include links; 36 new sim tests
 - 2026-09-15 V2-2 (4bb3944) render: per-level tower sprites (footprint, height, second storey/keep) and owner-coloured stream ribbons with chevrons, draining rings, "L{n} needed for {n} streams" hint with shake
 - 2026-09-15 V2-3 (4bb3944) ui/input: tap-to-link / tap-again-to-unlink, drag-to-link, HUD streams pill and per-tower stream chips, send-ratio toggle and setting removed, tutorial rewritten for streams (EN/AZ/RU/TR)
