@@ -8,8 +8,8 @@
  *
  *   --google
  *   store/screenshots/raw/NN-<name>.png        – uncaptioned 1080×1920 frames (viewport 360×640 @3x)
- *   store/screenshots/en/01..07.png            – captioned phone screenshots, English
- *   store/screenshots/az/01..07.png            – captioned phone screenshots, Azerbaijani
+ *   store/screenshots/en/01..08.png            – captioned phone screenshots, English
+ *   store/screenshots/az/01..08.png            – captioned phone screenshots, Azerbaijani
  *   store/feature-graphic.png                  – 1024×500 Google Play feature graphic (drawn on canvas)
  *   Google Play accepts any 9:16 size between 320 and 3840 px, so this set may be scaled down
  *   (1080×1920 → 945×1680 → …) until every file fits the size budget.
@@ -17,14 +17,14 @@
  *   --apple
  *   store/screenshots/raw-apple-6.7/NN-<name>.png – 1290×2796 frames (viewport 430×932 @3x)
  *   store/screenshots/raw-apple-6.5/NN-<name>.png – 1284×2778 frames (viewport 428×926 @3x)
- *   store/screenshots/apple-6.7/en/01..07.png     – captioned, exactly 1290×2796 (iPhone 6.7")
- *   store/screenshots/apple-6.5/en/01..07.png     – captioned, exactly 1284×2778 (iPhone 6.5")
+ *   store/screenshots/apple-6.7/en/01..09.png     – captioned, exactly 1290×2796 (iPhone 6.7"; 09 = App Store extra)
+ *   store/screenshots/apple-6.5/en/01..09.png     – captioned, exactly 1284×2778 (iPhone 6.5")
  *   store/iap-review/shop-crystals.png            – uncaptioned 1290×2796 shop frame, Crystals tab: the
  *                                                   App Store Connect "review screenshot" for every in-app
  *                                                   purchase (≥ 640×920). Without `--apple` it is written
  *                                                   from the Google set instead (1080×1920).
  *
- *   Frame 07 (ECON-7) is the shop on its Upgrades tab (Commander upgrades, paid with in-game gold) on a
+ *   Frame 08 (ECON-7) is the shop on its Upgrades tab (Commander upgrades, paid with in-game gold) on a
  *   seeded mid-game save. The public sets deliberately do not use the Crystals tab: it shows the
  *   catalogue's fallback USD prices and the web build's "Test store" line, and a fixed-currency price
  *   in a public screenshot is a consumer-law problem in the EU (STORE_LISTING.md §1.3). The IAP review
@@ -68,16 +68,27 @@ const DO_GOOGLE = flag('google') || flag('all') || !flag('apple');
 /** The IAP review frame is taken from the Apple 6.7" set (1290×2796) when it is rendered, else from the Google set (1080×1920). */
 const IAP_REVIEW_SET = DO_APPLE ? 'apple-6.7' : 'google';
 
-/** Order matters: index N becomes <lang>/0N.png. */
+/**
+ * Order matters: index N becomes <lang>/0N.png (STORE_LISTING.md §1.3 retake list, v0.4.0 set).
+ * `capture` names the frame routine in `captureRaw`; `appleOnly` frames are skipped in the Google
+ * set (8 phone screenshots max there, 10 on the App Store).
+ */
 const SHOTS = [
-  { name: 'title', en: 'Capture every tower', az: 'Bütün qüllələri tut' },
-  { name: 'level-01-tutorial', en: 'One tap to attack', az: 'Bir toxunuşla hücum' },
-  { name: 'level-05-battle', en: 'Upgrade to out-produce', az: 'Upgrade et, üstün gəl' },
-  { name: 'level-09-fortress', en: 'Storm the fortress', az: 'Qalanı ələ keçir' },
-  { name: 'level-15-citadel', en: 'Silence the guns', az: 'Topları susdur' },
-  { name: 'result-win', en: 'Three-star every level', az: 'Hər səviyyədə üç ulduz' },
-  { name: 'shop-upgrades', en: 'Boost your commander', az: 'Komandirini gücləndir', shop: 'upgrades' },
+  { name: 'title', capture: 'title', en: 'Capture every tower', az: 'Bütün qüllələri tut' },
+  { name: 'level-01-tutorial', capture: 'tutorial', en: 'Tap, and the stream flows', az: 'Vur — axın davam edir' },
+  { name: 'level-05-streams', capture: 'streams', en: 'Streams keep flowing', az: 'Axınlar dayanmır' },
+  { name: 'level-04-upgrade', capture: 'upgrade', en: 'Fill up to level up', az: 'Doldur, səviyyə qalxsın' },
+  { name: 'level-05-limit-hint', capture: 'limitHint', en: 'Bigger towers, more streams', az: 'Böyük qüllə, çox axın' },
+  { name: 'level-09-fortress', capture: 'fortress', en: 'Storm the fortress', az: 'Qalanı ələ keçir' },
+  { name: 'result-win', capture: 'result', en: 'Three-star every level', az: 'Hər səviyyədə üç ulduz' },
+  { name: 'shop-upgrades', capture: 'shop', en: 'Boost your commander', az: 'Komandirini gücləndir', shop: 'upgrades' },
+  { name: 'level-15-citadel', capture: 'citadel', en: 'Silence the guns', az: 'Topları susdur', appleOnly: true },
 ];
+/** Frames of one set, in order (the Google set drops the App-Store-only extras). */
+const shotsFor = (set) => SHOTS.filter((s) => !s.appleOnly || set.exact);
+
+/** Level layouts the frame routines tap (logical 720×1280 tower positions, from src/levels/*.json). */
+const LEVEL_5 = { home: { x: 360, y: 1140 }, west1: { x: 150, y: 860 }, east1: { x: 570, y: 860 } };
 
 /** Uncaptioned IAP review frame (Apple): the shop's Crystals tab, written by the first set rendered. */
 const IAP_REVIEW = { file: join(STORE, 'iap-review', 'shop-crystals.png'), tab: 'crystals' };
@@ -151,7 +162,7 @@ const APPLE_QUALITY_LADDER = [
 ];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const rawFile = (set, i) => join(set.rawDir, `${String(i + 1).padStart(2, '0')}-${SHOTS[i].name}.png`);
+const rawFile = (set, i) => join(set.rawDir, `${String(i + 1).padStart(2, '0')}-${shotsFor(set)[i].name}.png`);
 const outFile = (set, lang, i) => join(set.outDir(lang), `${String(i + 1).padStart(2, '0')}.png`);
 const kb = (n) => `${(n / 1024).toFixed(0)} KB`;
 
@@ -197,6 +208,25 @@ async function startPreview() {
 
 /* ---------- game driving ---------- */
 
+/**
+ * Installed in every game context (init script): the state conditions `playWhile` polls for,
+ * keyed by name so nothing is eval'd in the page. `st` is the live `GameState`.
+ */
+const FRAME_CONDITIONS = () => {
+  window.__storeShotCondition = (st, key) => {
+    switch (key) {
+      case 'bothStreams': // a player ribbon and an enemy ribbon on the roads at the same moment
+        return st.links.some((l) => l.owner === 'player') && st.links.some((l) => l.owner !== 'player');
+      case 'homeL2': // the player's home tower has just auto-upgraded
+        return (st.towers.home?.level ?? 1) >= 2;
+      case 'playerToKeep': // the player streams into the fortress
+        return st.links.some((l) => l.owner === 'player' && l.to === 'keep');
+      default:
+        throw new Error(`unknown frame condition ${key}`);
+    }
+  };
+};
+
 async function openGame(browser, set) {
   // Fresh context = fresh localStorage, so level 1 shows its tutorial and coins start at 0.
   const context = await browser.newContext({
@@ -205,6 +235,7 @@ async function openGame(browser, set) {
     isMobile: true,
     hasTouch: true,
   });
+  await context.addInitScript(FRAME_CONDITIONS);
   const page = await context.newPage();
   await page.goto(URL);
   await page.waitForFunction(() => typeof window.__towerclash?.getScreen === 'function');
@@ -270,35 +301,140 @@ async function playToResult(page, id, fastUntilMs) {
   return result;
 }
 
+/**
+ * Start `id` with a fixed seed (optionally under the reference player) at ×`speed` and poll the
+ * in-page condition `cond` (see `FRAME_CONDITIONS`) every 50 ms until it holds or sim time passes
+ * `maxMs`; then freeze at ×1 (no "×10" tag in the HUD). Returns whether the condition still holds
+ * after the freeze, so the frame really shows what it waited for.
+ */
+async function playWhile(page, id, cond, { seed = 1, autoplay = true, speed = 10, maxMs = 90_000 } = {}) {
+  await page.evaluate(
+    ({ lv, sd, sp, ap }) => {
+      window.__towerclash.setSpeed(1);
+      window.__towerclash.loadLevel(lv, sd);
+      window.__towerclash.setSpeed(sp);
+      if (ap) window.__towerclash.autoplay();
+    },
+    { lv: id, sd: seed, sp: speed, ap: autoplay },
+  );
+  await page.waitForFunction((lv) => window.__towerclash.getScreen() === 'play' && window.__towerclash.getState()?.levelId === lv, id);
+  await page
+    .waitForFunction(
+      ({ key, limit }) => {
+        const d = window.__towerclash;
+        const st = d.getState();
+        if (d.getScreen() !== 'play' || !st) return true; // level ended: stop waiting
+        if (st.time >= limit) return true;
+        return window.__storeShotCondition(st, key);
+      },
+      { key: cond, limit: maxMs },
+      { polling: 50, timeout: 120_000 },
+    )
+    .catch(() => undefined);
+  if ((await screen(page)) !== 'play') return false;
+  await page.evaluate(() => window.__towerclash.setSpeed(1));
+  await page.waitForTimeout(60);
+  return page.evaluate((key) => window.__storeShotCondition(window.__towerclash.getState(), key), cond);
+}
+
+/** Tap a logical (720×1280) point (same path as the e2e suite: `toClient` + a mouse click). */
+async function tapAt(page, p) {
+  const c = await page.evaluate(([x, y]) => window.__towerclash.toClient(x, y), [p.x, p.y]);
+  await page.mouse.click(c.x, c.y);
+}
+
+/** Run `fn` up to `attempts` times with seeds 1, 2, 3…; the frame routines use it for timing-dependent captures. */
+async function withSeeds(label, attempts, fn) {
+  for (let seed = 1; seed <= attempts; seed++) {
+    if (await fn(seed)) return;
+    console.log(`${label}: seed ${seed} did not produce the frame, retrying`);
+  }
+  throw new Error(`${label}: could not capture the frame in ${attempts} attempts`);
+}
+
+/** One routine per `SHOTS[].capture`; each leaves the page on the frame to shoot. */
+const FRAMES = {
+  title: async () => {}, // fresh context: the title demo is already animating
+
+  // level 1 on a fresh save: tutorial ring + "Tap your tower" bubble + the lesson banner
+  tutorial: async (page) => {
+    await page.evaluate(() => window.__towerclash.loadLevel(1));
+    await page.waitForTimeout(700);
+    const hint = await page.evaluate(() => window.__towerclash.getTutorialHint());
+    if (!hint) throw new Error('level 1: tutorial hint not visible on a fresh save');
+  },
+
+  // level 5 "Two Roads": a player ribbon and an enemy ribbon on the roads at the same moment
+  streams: (page) =>
+    withSeeds('level 5 streams', 4, (seed) =>
+      playWhile(page, 5, 'bothStreams', { seed, speed: 4, maxMs: 60_000 }),
+    ),
+
+  // level 4 "Build Up", no streams: the player tower fills to 25 and turns into the L2 sprite (upgrade burst)
+  upgrade: async (page) => {
+    const ok = await playWhile(page, 4, 'homeL2', { autoplay: false, speed: 1, maxMs: 60_000 });
+    if (!ok) throw new Error('level 4: home did not reach L2');
+  },
+
+  // level 5, manual: one stream from the L1 home, then a second target → "L2 needed for 2 streams" (tower shakes)
+  limitHint: async (page) => {
+    await page.evaluate(() => {
+      window.__towerclash.setSpeed(1);
+      window.__towerclash.loadLevel(5, 1);
+    });
+    await page.waitForFunction(() => window.__towerclash.getScreen() === 'play' && window.__towerclash.getState()?.levelId === 5);
+    await page.waitForTimeout(400);
+    await tapAt(page, LEVEL_5.home);
+    await page.waitForTimeout(120);
+    await tapAt(page, LEVEL_5.west1);
+    await page.waitForFunction(() => (window.__towerclash.getState()?.links ?? []).some((l) => l.owner === 'player'));
+    await page.waitForTimeout(350); // first units on the road
+    await tapAt(page, LEVEL_5.east1);
+    await page.waitForFunction(() => window.__towerclash.getLimitHint() !== null, null, { polling: 'raf', timeout: 5000 });
+    await page.waitForTimeout(120); // bubble fully faded in, tower mid-shake
+    if ((await page.evaluate(() => window.__towerclash.getLimitHint())) === null) throw new Error('level 5: limit hint gone before the capture');
+  },
+
+  // level 9 "Stone Walls": mid-battle with the player streaming into the fortress ("keep")
+  fortress: (page) =>
+    withSeeds('level 9 fortress', 4, (seed) => playWhile(page, 9, 'playerToKeep', { seed, maxMs: 70_000 })),
+
+  // level 15 "The Citadel" (App Store extra): artillery mid-battle
+  citadel: async (page) => {
+    await playUntil(page, 15, 30_000);
+  },
+
+  // the reference player wins level 1: result card with 3 stars
+  result: async (page, ctx) => {
+    ctx.result = await playToResult(page, 1, 12_000);
+  },
+
+  // shop on the seeded mid-game save (the shop is a full screen, so nothing from the result overlays it)
+  shop: async (page, ctx, shot) => {
+    if (!ctx.shopSeeded) {
+      await seedShopSave(page);
+      ctx.shopSeeded = true;
+    }
+    await openShop(page, shot.shop);
+  },
+};
+
 async function captureRaw(browser, set) {
   mkdirSync(set.rawDir, { recursive: true });
   const page = await openGame(browser, set);
   const out = (i) => rawFile(set, i);
+  const shots = shotsFor(set);
+  const ctx = { result: null, shopSeeded: false };
 
-  await page.screenshot({ path: out(0) });
-
-  await page.evaluate(() => window.__towerclash.loadLevel(1));
-  await page.waitForTimeout(700); // tutorial ring + hint bubble
-  const hint = await page.evaluate(() => window.__towerclash.getTutorialHint());
-  if (!hint) throw new Error('level 1: tutorial hint not visible on a fresh save');
-  await page.screenshot({ path: out(1) });
-
-  await playUntil(page, 5, 28_000);
-  await page.screenshot({ path: out(2) });
-  await playUntil(page, 9, 22_000);
-  await page.screenshot({ path: out(3) });
-  await playUntil(page, 15, 30_000);
-  await page.screenshot({ path: out(4) });
-
-  const result = await playToResult(page, 1, 12_000);
-  await page.screenshot({ path: out(5) });
-
-  // shop frames on the seeded save (the shop is a full screen, so nothing from the result overlays it)
-  await seedShopSave(page);
-  for (let i = 6; i < SHOTS.length; i++) {
-    await openShop(page, SHOTS[i].shop);
+  for (let i = 0; i < shots.length; i++) {
+    const shot = shots[i];
+    const frame = FRAMES[shot.capture];
+    if (!frame) throw new Error(`no capture routine "${shot.capture}" for frame ${shot.name}`);
+    await frame(page, ctx, shot);
     await page.screenshot({ path: out(i) });
+    console.log(`[${set.id}] ${String(i + 1).padStart(2, '0')}-${shot.name}`);
   }
+  const result = ctx.result;
   if (set.id === IAP_REVIEW_SET) {
     await openShop(page, IAP_REVIEW.tab);
     mkdirSync(dirname(IAP_REVIEW.file), { recursive: true });
@@ -312,7 +448,7 @@ async function captureRaw(browser, set) {
   }
 
   // every raw frame must be exactly viewport × scale; store it losslessly re-encoded
-  for (let i = 0; i < SHOTS.length; i++) {
+  for (let i = 0; i < shots.length; i++) {
     const buf = recompressPng(readFileSync(out(i)));
     const [w, h] = pngSize(buf);
     if (w !== set.out.w || h !== set.out.h) throw new Error(`${out(i)} is ${w}×${h}, expected ${set.out.w}×${set.out.h}`);
@@ -457,10 +593,11 @@ async function composeScaled(page, set) {
   const sizes = [];
   for (let scale = 1; scale >= 0.5; scale -= 0.125) {
     sizes.length = 0;
-    for (let i = 0; i < SHOTS.length; i++) {
+    const shots = shotsFor(set);
+    for (let i = 0; i < shots.length; i++) {
       const raw = readFileSync(rawFile(set, i)).toString('base64');
       for (const lang of set.langs) {
-        const b64 = await page.evaluate(composeInPage, { png: raw, caption: SHOTS[i][lang], w: set.out.w, h: set.out.h, scale });
+        const b64 = await page.evaluate(composeInPage, { png: raw, caption: shots[i][lang], w: set.out.w, h: set.out.h, scale });
         const file = outFile(set, lang, i);
         writeFileSync(file, recompressPng(Buffer.from(b64, 'base64')));
         sizes.push([file, statSync(file).size]);
@@ -478,7 +615,8 @@ async function composeScaled(page, set) {
 
 /** Apple sets: exact pixel size; per file, step down the quality ladder until it fits. */
 async function composeExact(page, set) {
-  for (let i = 0; i < SHOTS.length; i++) {
+  const shots = shotsFor(set);
+  for (let i = 0; i < shots.length; i++) {
     const raw = readFileSync(rawFile(set, i)).toString('base64');
     for (const lang of set.langs) {
       const file = outFile(set, lang, i);
@@ -487,7 +625,7 @@ async function composeExact(page, set) {
       for (const q of APPLE_QUALITY_LADDER) {
         if (q.palette && !sharp) continue;
         if (!composed.has(q.bits)) {
-          const b64 = await page.evaluate(composeInPage, { png: raw, caption: SHOTS[i][lang], w: set.out.w, h: set.out.h, scale: 1, bits: q.bits });
+          const b64 = await page.evaluate(composeInPage, { png: raw, caption: shots[i][lang], w: set.out.w, h: set.out.h, scale: 1, bits: q.bits });
           composed.set(q.bits, Buffer.from(b64, 'base64'));
         }
         const buf = q.palette ? await toPalette(composed.get(q.bits)) : recompressPng(composed.get(q.bits));
