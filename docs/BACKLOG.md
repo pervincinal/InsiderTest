@@ -14,6 +14,7 @@ Priority = order within a section. Producer moves items; anyone may add to Bugs 
 - [ ] ECON-8 `app-ads.txt` hosting needs a domain root (user-site repo or custom domain) — needs stakeholder decision
 
 ## Next
+- [ ] RULES-2.1 "Under fire" anti-stalemate rule (GDD §2.0 "Rules v2.1 (proposed)" — marked not implemented until this lands): a hostile landing pauses the target's production for `UNDER_FIRE_MS` = 1500 ms. Sim: `underFireUntilMs` per tower (snapshotted), generation check, capture reset, `C.UNDER_FIRE_MS`, acceptance tests 1–3 — gameplay-engineer. AI: `walkLandings`/`holdReserve`/`fallsAtMs` with production 0 under fire, personalities and reference player attack when `spendable + production × SIEGE_PLAN_S (10) ≥ costToTake + margin`, sieged-tower response order (reinforce → counter from another tower → counter from itself only with a surplus), acceptance test 4 — ai-engineer. Gate: `npm run playtest -- --seeds 5` with no `playing` timeouts, level 40 seed 1 won ≤ 120 s, levels 1–8 100 %; then Level Designer re-measures star clocks (expect −10…30 % on 9+) and Tech Artist draws the under-fire number/pip.
 - [ ] M3-5 Perf on a real mid phone: measure, then object pooling if needed — qa-engineer
 
 ## Next (M-mobile — iOS/Android)
@@ -62,6 +63,10 @@ Priority = order within a section. Producer moves items; anyone may add to Bugs 
 - Local 2-player on one screen
 
 ## Done
+- 2026-09-15 V2-1 (4bb3944) sim: rules v2 links and auto-upgrade — capacity ladder 25/50/100, `link`/`unlink` commands, `GameState.links`, `tryAutoUpgrade`, 120 ms round-robin `drain`, `pruneLinks` (sourceLost/roadCut/targetFull), `sendUnits`/`upgrade` kept as deprecated no-ops, snapshots include links; 36 new sim tests
+- 2026-09-15 V2-2 (4bb3944) render: per-level tower sprites (footprint, height, second storey/keep) and owner-coloured stream ribbons with chevrons, draining rings, "L{n} needed for {n} streams" hint with shake
+- 2026-09-15 V2-3 (4bb3944) ui/input: tap-to-link / tap-again-to-unlink, drag-to-link, HUD streams pill and per-tower stream chips, send-ratio toggle and setting removed, tutorial rewritten for streams (EN/AZ/RU/TR)
+- 2026-09-15 V2-4 (4bb3944) ai: rusher/turtle/opportunist and the reference player on the link model (maintain → reinforce → capture → supply → attack → cutBridge) with the threat model (linkPending / linkRate / inflowRate / landings / holdReserve / fallsAtMs); GDD §2.0 implementation notes + §2.5 rewritten to match (docs, 2026-09-15)
 - 2026-09-15 Day 3b: lazy screens (eager 74.8 kB gzip), i18n EN/AZ/RU/TR with settings picker + title chip, Nunito Cyrillic subset; reference player bridge-aware attack planning (level 40 worst 112 → 91 s, no regressions)
 - 2026-09-15 Day 3: reference player + turtle cut bridges (13 + 8 tests); levels 6/21/23 → 100/100 (medians 43/38/60 s); version 0.3.0 build 3 synced to Android/iOS; README and release notes v0.3.0 final (tag `tower-clash-v0.3.0` exists locally only: the CCR git proxy accepts pushes to the working branch, not tags — create the release from the GitHub UI)
 - 2026-09-14 Day 2b: true 20 s rewind continue with original star clock; terrain theme skins buy/equip (title + play re-lit); level 30 → 100/100; star times recomputed for 6/9/10/11/27/31/37; privacy policy v2.1 + site pages + listing aligned with no-ATT; release notes v0.3.0 status
