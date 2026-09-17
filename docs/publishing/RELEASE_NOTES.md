@@ -4,6 +4,105 @@ Semantic versioning. The version lives in `tower-clash/package.json`; native ver
 
 ---
 
+## v0.4.0 — 2026-09-17 "Streams update" (ready to tag)
+
+Proposed tag: `tower-clash-v0.4.0` (on branch `claude/tower-war-game-plan-weqwpb`), to be created by the Producer (from the GitHub UI — the git proxy accepts pushes to the working branch, not tags) on the commit that carries this section and the version bump. Native versions at this tag: Android `versionName "0.4.0"` / `versionCode 4`, iOS `MARKETING_VERSION 0.4.0` / `CURRENT_PROJECT_VERSION 4` — written by `npm run version:sync` on 2026-09-17 from `package.json` (`0.4.0`, `config.buildNumber` 4); `npm run version:check` passes. The web build is still the only public channel (GitHub Pages, checklist W3, remains a stakeholder switch); the store builds stay "v1.0 native".
+
+**Status on 2026-09-17 (Publisher check of the tree against `docs/BACKLOG.md` "Done" and `docs/GDD.md` §2.0).** The rules change is in three commits: `4bb3944` (sim + AI + UI + render: auto-upgrade, persistent streams, per-level stream limits, tutorial rewritten), `8e53c03` (all 40 levels retuned for rules v2; the commit reports `npm run playtest` at 40/40 levels won on 20/20 seeds, median 2★, max-upgrades gate median 2.0★) and `2d8cb24` (levels lazy-load). Also in the tree since v0.3.0: `9e45fc9` (in-game languages EN/AZ/RU/TR, lazy-loaded menu screens, bridge-aware reference AI). **Rules v2.1 "Under fire" (GDD §2.0, RULES-2.1) is proposed and NOT implemented** — do not describe it anywhere. A save from v0.3.0 keeps working (schema stays v3; the old `sendRatio` field is ignored).
+
+**Store "What's new" (≤ 500 characters each, counted with `node -e` on 2026-09-17; use the language that matches the listing locale — Google Play has EN + AZ listings, RU/TR are ready for the day a listing in those locales exists).**
+
+EN (459):
+```
+Streams update. Attacks are now streams: tap your tower, tap a target, and soldiers keep flowing until you tap the target again. Towers upgrade by themselves when they fill (25 → L2, 50 → L3, 100 max); a L1/L2/L3 tower can run 1/2/3 streams. Enemy streams are drawn in their colour, so you can read every attack. All 40 levels retuned, new tutorial, menus in English, Azerbaijani, Russian and Turkish, faster first load. Still no account, still plays offline.
+```
+AZ (453):
+```
+Axınlar yeniləməsi. Hücumlar indi axındır: öz qüllənə vur, hədəfə vur — əsgərlər sən hədəfə yenidən vurana qədər axır. Qüllələr dolanda özləri təkmilləşir (25 → L2, 50 → L3, maksimum 100); L1/L2/L3 qüllə 1/2/3 axın apara bilər. Düşmən axınları öz rəngində çəkilir — hər hücum bir baxışda oxunur. Bütün 40 səviyyə yenidən tənzimlənib, yeni təlimat, menyular azərbaycanca, ingiliscə, rusca və türkcə, daha sürətli ilk yüklənmə. Yenə hesabsız, yenə oflayn.
+```
+RU (475):
+```
+Обновление «Потоки». Атаки стали потоками: нажми на свою башню, затем на цель — солдаты идут непрерывно, пока ты не нажмёшь на цель ещё раз. Башни улучшаются сами, когда наполняются (25 → L2, 50 → L3, максимум 100); башня L1/L2/L3 ведёт 1/2/3 потока. Потоки врага нарисованы его цветом — каждая атака видна сразу. Все 40 уровней перенастроены, новое обучение, меню на русском, английском, азербайджанском и турецком, быстрее первая загрузка. По-прежнему без аккаунта, офлайн.
+```
+TR (472):
+```
+Akışlar güncellemesi. Saldırılar artık akış: kulene dokun, hedefe dokun — askerler sen hedefe tekrar dokunana kadar akmaya devam eder. Kuleler dolunca kendiliğinden yükselir (25 → L2, 50 → L3, en fazla 100); L1/L2/L3 kule 1/2/3 akış yürütebilir. Düşman akışları kendi renginde çizilir, her saldırı bir bakışta okunur. 40 seviyenin tamamı yeniden ayarlandı, yeni öğretici, menüler Türkçe, İngilizce, Azerbaycanca ve Rusça, daha hızlı ilk yükleme. Yine hesapsız, çevrimdışı.
+```
+
+### English
+
+Tower Clash changes how you fight. Sending is no longer a one-off wave: you open a **stream** between two towers and it keeps flowing until you close it. Towers no longer cost soldiers to upgrade: they **upgrade themselves** when they fill up. Every one of the 40 levels was retuned around these two rules.
+
+**In this build — streams (persistent attacks)**
+- Tap your tower, tap a road-connected tower: a stream opens and one soldier leaves every 0.12 s, for as long as the stream stands (newly recruited and newly arrived soldiers leave the same way, so a streaming tower does not grow). Drag from tower to tower does the same.
+- Tap the target again to stop the stream; tap the selected tower again to deselect it.
+- A **level-1 tower runs 1 stream, level 2 runs 2, level 3 runs 3** (a fortress, max level 2, runs 2). With two or three streams the soldiers are shared round-robin. At the limit the tap is refused with a short shake and the hint "L2 needed for 2 streams".
+- A stream ends by itself when its source is lost, when the road is cut, or when it feeds one of your own towers that is already full. It does **not** end on capture: it keeps supplying the tower it just took until you stop it or the tower fills.
+- Every active stream is drawn on the road as a ribbon in its owner's colour (blue for you, red / green / yellow for the enemies) with chevrons moving toward the target, so an incoming attack can be read at a glance. HUD: a **STREAMS** pill in the bottom bar and a per-tower stream chip; the SEND 100 % / 50 % toggle and the "send ratio" setting are gone.
+
+**In this build — auto-upgrade**
+- Capacity ladder **25 / 50 / 100** for L1 / L2 / L3 (fortress 37 / 75, max L2). When a tower's garrison reaches its capacity it upgrades instantly and keeps its garrison; L3 is the top and stops adding at 100. Artillery and tank factories use the same ladder.
+- Tapping a tower to upgrade it is gone — nothing costs soldiers any more. A tower that is streaming does not upgrade: stop the stream, let it fill.
+- Production per level unchanged (one soldier every 1.0 / 0.7 / 0.5 s); the Commander "capacity" upgrade still multiplies the ladder.
+- Tower sprites now show the level: a small tower at L1, a taller two-storey tower with a banner at L2, a keep with double roof and battlements at L3.
+
+**In this build — levels and tutorial**
+- All 40 levels retuned for the new rules (`8e53c03`): decisive openings instead of knife-edge symmetry (keeps start at L2 on 23 / 30 / 34 / 35 / 36; bigger neutrals on 11 / 29 / 33; smaller enemy garrisons or aggression on 5 / 12 / 15 / 20 / 31; two extra roads on 40 "The Crown"). Star clocks refit on 31 levels; every lesson line rewritten for streams and fill-to-upgrade.
+- Tutorial on levels 1–3 rewritten: level 1 "Tap your tower" → "Now tap the grey tower — the stream keeps flowing"; level 2 "Tap your tower, then the grey tower" → "Tap the target again to stop the stream"; level 3 "Let a tower fill to 25 to upgrade it — L2 can attack 2 targets". Level 1 is "First Taps", level 2 "Supply Line", level 3 "Free Real Estate".
+- Enemy AI (rusher, turtle, opportunist) and the reference bot play the stream model with a threat model (pending streams, inflow, landings); the reference bot also cuts bridges when that strands an enemy column.
+
+**In this build — languages, loading**
+- In-game **languages: English, Azerbaijani, Russian, Turkish** — menus, hints, tutorial and messages; picker in Settings ("Language") and a language chip on the title screen. Level names and lesson lines are still English (I18N-2).
+- Levels load on demand (`2d8cb24`) and the shop / achievements / settings / level-map screens load lazily: the first download is smaller (eager bundle 80.5 → 73.7 kB gzip) and a level shows the existing loading spinner for the instant it needs; the current and next levels are preloaded.
+
+**In this build — publishing**
+- Version 0.4.0 / build 4 in `package.json`, Android and iOS (`npm run version:sync`). Store listing and README rewritten for streams and auto-upgrade; the store screenshots that show the old SEND toggle are marked stale in `STORE_LISTING.md` §1.3 and a retake list is there for the Tech Artist. Privacy policy unchanged (v2.1): the game stores the same things in the same place; the "send ratio" it mentions among the saved settings no longer exists and is a wording follow-up, not a data change.
+
+**Not in this build (do not list in "What's new")**
+- Rules v2.1 "Under fire" (a tower being hit stops recruiting) — proposed in GDD §2.0, not implemented (RULES-2.1).
+- Translated level names and lessons (I18N-2); real RevenueCat / AdMob keys, store products, sandbox purchases (ECON-1, Phase B); real-device pass (QA-2, MM-1); signed release builds (MM-3).
+- New store screenshots: the frames in `tower-clash/store/screenshots/` are still the v0.3.0 renders; the retake list is in `STORE_LISTING.md` §1.3 (Tech Artist), and localised AZ/RU/TR sets are PUB-7.
+
+Still true on every build: no accounts, no analytics. The web/PWA build makes no network calls after loading and never asks for payment — its shop runs on the demo "Test store". `README.md`, `package.json` and the native projects all say 0.4.0 / build 4.
+
+### Azərbaycanca
+
+Tower Clash-də döyüş üsulu dəyişir. Göndərmə artıq birdəfəlik dalğa deyil: iki qüllə arasında **axın** açırsan və sən bağlayana qədər axır. Qüllələr təkmilləşmək üçün əsgər xərcləmir: dolanda **özləri təkmilləşir**. 40 səviyyənin hamısı bu iki qaydaya görə yenidən tənzimlənib.
+
+**Bu build-də — axınlar (davamlı hücumlar)**
+- Öz qüllənə vur, yolla bağlı qülləyə vur: axın açılır və axın durduqca hər 0.12 saniyədə bir əsgər yola düşür (yeni istehsal olunan və yeni gələn əsgərlər də eyni cür gedir, ona görə axın verən qüllə böyümür). Qüllədən qülləyə sürükləmək də eyni işi görür.
+- Axını dayandırmaq üçün hədəfə yenidən vur; seçimi ləğv etmək üçün seçilmiş qülləyə yenidən vur.
+- **1-ci səviyyə qüllə 1 axın, 2-ci səviyyə 2, 3-cü səviyyə 3 axın aparır** (qala, maksimum L2, 2 axın). İki-üç axında əsgərlər növbə ilə bölünür. Limitdə toxunuş qısa silkələnmə və "2 axın üçün L2 lazımdır" işarəsi ilə rədd edilir.
+- Axın mənbə itəndə, yol kəsiləndə və ya artıq dolu olan öz qüllənə gedəndə özü bitir. Tutmada **bitmir**: sən dayandırana və ya qüllə dolana qədər yeni tutduğu qülləni təchiz etməyə davam edir.
+- Hər aktiv axın yolun üstündə sahibinin rəngində lent kimi çəkilir (sən mavi, rəqiblər qırmızı / yaşıl / sarı), hədəfə doğru hərəkət edən oxlarla — gələn hücum bir baxışda oxunur. HUD: aşağı zolaqda **AXINLAR** nişanı və hər qüllədə axın çipi; SEND 100 % / 50 % düyməsi və "göndərmə nisbəti" parametri silinib.
+
+**Bu build-də — avtomatik təkmilləşdirmə**
+- Tutum pilləsi L1 / L2 / L3 üçün **25 / 50 / 100** (qala 37 / 75, maksimum L2). Qarnizon tutuma çatanda qüllə dərhal təkmilləşir və qarnizonunu saxlayır; L3 sondur və 100-də dayanır. Toplar və tank zavodları eyni pillədən istifadə edir.
+- Təkmilləşdirmək üçün qülləyə toxunmaq yoxdur — artıq heç nə əsgər tələb etmir. Axın verən qüllə təkmilləşmir: axını dayandır, dolmasına imkan ver.
+- Səviyyəyə görə istehsal dəyişməyib (hər 1.0 / 0.7 / 0.5 saniyədə bir əsgər); Komandirin "tutum" təkmilləşdirməsi pilləni yenə də çoxaldır.
+- Qüllə spraytları indi səviyyəni göstərir: L1-də kiçik qüllə, L2-də bayraqlı ikimərtəbəli hündür qüllə, L3-də ikiqat damlı və dişli divarlı qala.
+
+**Bu build-də — səviyyələr və təlimat**
+- 40 səviyyənin hamısı yeni qaydalara görə tənzimlənib (`8e53c03`): bıçaq kəsiyi simmetriya əvəzinə qəti açılışlar (23 / 30 / 34 / 35 / 36-da qalalar L2-dən başlayır; 11 / 29 / 33-də daha böyük neytrallar; 5 / 12 / 15 / 20 / 31-də daha kiçik düşmən qarnizonu və ya aqressiyası; 40 "The Crown"-da iki əlavə yol). 31 səviyyədə ulduz vaxtları yenidən hesablanıb; hər dərs cümləsi axınlar və dolub-təkmilləşmə üçün yenidən yazılıb.
+- 1–3-cü səviyyələrin təlimatı yenidən yazılıb: 1-ci səviyyə "Öz qüllənə vur" → "İndi boz qülləyə vur — axın davam edir"; 2-ci səviyyə "Öz qüllənə, sonra boz qülləyə vur" → "Axını dayandırmaq üçün hədəfə yenidən vur"; 3-cü səviyyə "Qüllə 25-ə dolsun ki, təkmilləşsin — L2 2 hədəfə hücum edə bilər". 1-ci səviyyə "First Taps", 2-ci "Supply Line", 3-cü "Free Real Estate".
+- Düşmən süni intellekti (hücumçu, tısbağa, fürsətçi) və istinad botu axın modeli ilə oynayır (gözləyən axınlar, daxil olan axın, enmələr); istinad botu düşmən kolonunu ilişdirmək üçün körpü də kəsir.
+
+**Bu build-də — dillər, yüklənmə**
+- Oyundaxili **dillər: ingiliscə, azərbaycanca, rusca, türkcə** — menyular, işarələr, təlimat və mesajlar; seçim Parametrlər → "Dil"-də və baş ekrandakı dil çipində. Səviyyə adları və dərs cümlələri hələ ingiliscədir (I18N-2).
+- Səviyyələr lazım olanda yüklənir (`2d8cb24`), mağaza / nailiyyətlər / parametrlər / səviyyə xəritəsi ekranları gecikmə ilə yüklənir: ilk yükləmə kiçikdir (əsas paket 80.5 → 73.7 kB gzip), səviyyə açılanda mövcud yüklənmə göstəricisi bir anlıq görünür; cari və növbəti səviyyə əvvəlcədən yüklənir.
+
+**Bu build-də — nəşr**
+- `package.json`, Android və iOS-da versiya 0.4.0 / build 4 (`npm run version:sync`). Mağaza mətni və README axınlar və avtomatik təkmilləşdirmə üçün yenidən yazılıb; köhnə SEND düyməsini göstərən mağaza skrinşotları `STORE_LISTING.md` §1.3-də köhnəlmiş kimi qeyd olunub, Texniki rəssam üçün yenidən çəkmə siyahısı oradadır. Məxfilik siyasəti dəyişməyib (v2.1): oyun eyni şeyləri eyni yerdə saxlayır; saxlanan parametrlər arasında adı çəkilən "göndərmə nisbəti" artıq yoxdur — bu, məlumat dəyişikliyi deyil, ifadə düzəlişidir.
+
+**Bu build-də yoxdur ("Yeniliklər" mətninə yazma)**
+- Qaydalar v2.1 "Atəş altında" (vurulan qüllə əsgər yığmır) — GDD §2.0-da təklif olunub, tətbiq edilməyib (RULES-2.1).
+- Tərcümə olunmuş səviyyə adları və dərslər (I18N-2); real RevenueCat / AdMob açarları, mağaza məhsulları, sandbox alışları (ECON-1, B mərhələsi); real telefonda yoxlama (QA-2, MM-1); imzalanmış release build-lər (MM-3).
+- Yeni mağaza skrinşotları: `tower-clash/store/screenshots/`-dakı kadrlar hələ v0.3.0 renderləridir; yenidən çəkmə siyahısı `STORE_LISTING.md` §1.3-dədir (Texniki rəssam), azərbaycanca/rusca/türkcə dəstlər PUB-7-dir.
+
+Hər build-də dəyişməyən: hesab və analitika yoxdur. Veb/PWA build yükləndikdən sonra şəbəkə sorğusu göndərmir və heç vaxt ödəniş istəmir — mağazası demo "Test store" üzərində işləyir. `README.md`, `package.json` və native layihələr 0.4.0 / build 4 göstərir.
+
+---
+
 ## v0.3.0 — 2026-09-15 (ready to tag)
 
 Proposed tag: `tower-clash-v0.3.0` (on branch `claude/tower-war-game-plan-weqwpb`), to be created by the Producer on the commit that carries this section and the version bump. Scope per `docs/ECONOMY.md` §8 Phase A: the economy and shop on all builds, web-safe (no store/ad SDK on the web). Native versions at this tag: Android `versionName "0.3.0"` / `versionCode 3`, iOS `MARKETING_VERSION 0.3.0` / `CURRENT_PROJECT_VERSION 3` — written by `npm run version:sync` on 2026-09-15 from `package.json` (`0.3.0`, `config.buildNumber` 3); `npm run version:check` passes. GitHub Pages (checklist W3) remains a stakeholder switch and does not block the tag: the web URL goes live when it is flipped.
