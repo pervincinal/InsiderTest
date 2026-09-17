@@ -1,17 +1,17 @@
 {
   "id": 11,
   "name": "Starve the Keep",
-  "lesson": "Starve the fortress: take the barracks that feeds it first, then the walls fall to one wave",
-  "star3": 45000,
-  "star2": 90000,
+  "lesson": "Starve the fortress: take the barracks that feeds it first, then the walls fall to your streams",
+  "star3": 30000,
+  "star2": 60000,
   "enemies": [{ "owner": "enemy1", "personality": "opportunist", "aggression": 0.4 }],
   "towers": [
     { "id": "home", "x": 360, "y": 1160, "owner": "player", "units": 16, "level": 1, "kind": "barracks" },
     { "id": "w1", "x": 150, "y": 920, "owner": "neutral", "units": 5 },
     { "id": "e1", "x": 570, "y": 920, "owner": "neutral", "units": 5 },
     { "id": "mid", "x": 360, "y": 720, "owner": "neutral", "units": 8 },
-    { "id": "nw", "x": 150, "y": 660, "owner": "neutral", "units": 6 },
-    { "id": "chapel", "x": 360, "y": 520, "owner": "neutral", "units": 6 },
+    { "id": "nw", "x": 150, "y": 660, "owner": "neutral", "units": 9 },
+    { "id": "chapel", "x": 360, "y": 520, "owner": "neutral", "units": 9 },
     { "id": "feed", "x": 560, "y": 560, "owner": "enemy1", "units": 8, "level": 1, "kind": "barracks" },
     { "id": "keep", "x": 360, "y": 330, "owner": "enemy1", "units": 8, "level": 1, "kind": "fortress" }
   ],

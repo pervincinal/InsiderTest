@@ -2,8 +2,8 @@
   "id": 17,
   "name": "Minefield",
   "lesson": "Mines: the marked road kills the first 6 units that cross it, so take the long way round or pay the toll with a few before the main column",
-  "star3": 30000,
-  "star2": 60000,
+  "star3": 20000,
+  "star2": 40000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.4},
     {"owner": "enemy2", "personality": "opportunist", "aggression": 0.4}

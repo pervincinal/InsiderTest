@@ -2,8 +2,8 @@
   "id": 25,
   "name": "Heavy Metal",
   "lesson": "Tank factory: it builds one 5-weight tank every 4 s instead of infantry. A tank kills five infantry on the road or counts as five defenders, but it is slow, so ship armour early",
-  "star3": 30000,
-  "star2": 60000,
+  "star3": 40000,
+  "star2": 80000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.4},
     {"owner": "enemy2", "personality": "turtle", "aggression": 0.4}

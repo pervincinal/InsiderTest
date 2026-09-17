@@ -2,8 +2,8 @@
   "id": 21,
   "name": "Behind the Wall",
   "lesson": "A barrier shields you too: the rusher behind the wall must spend units breaking it, so expand on the open side first and meet it when it is bled",
-  "star3": 30000,
-  "star2": 60000,
+  "star3": 25000,
+  "star2": 50000,
   "enemies": [
     {"owner": "enemy1", "personality": "turtle", "aggression": 0.6},
     {"owner": "enemy2", "personality": "rusher", "aggression": 0.6}

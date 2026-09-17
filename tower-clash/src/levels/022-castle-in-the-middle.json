@@ -2,8 +2,8 @@
   "id": 22,
   "name": "Castle in the Middle",
   "lesson": "Take the neutral fortress between two rivals: on your walls two of their attackers buy one of yours, so let both smash into it while you grow",
-  "star3": 30000,
-  "star2": 60000,
+  "star3": 45000,
+  "star2": 90000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.7},
     {"owner": "enemy2", "personality": "opportunist", "aggression": 0.7}

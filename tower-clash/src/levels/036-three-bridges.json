@@ -1,7 +1,7 @@
 {
   "id": 36,
   "name": "Three Bridges",
-  "lesson": "Three bridges, three rivals: cut two of them and you have a one-front war",
+  "lesson": "Your keep starts at level 2. Three bridges, three rivals: cut two of them and you have a one-front war",
   "star3": 30000,
   "star2": 60000,
   "enemies": [
@@ -10,7 +10,7 @@
     {"owner": "enemy3", "personality": "turtle", "aggression": 0.6}
   ],
   "towers": [
-    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 18, "level": 1, "kind": "barracks"},
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 30, "level": 2, "kind": "barracks"},
     {"id": "w", "x": 150, "y": 1000, "owner": "neutral", "units": 5},
     {"id": "e", "x": 570, "y": 1000, "owner": "neutral", "units": 5},
     {"id": "mid", "x": 360, "y": 900, "owner": "neutral", "units": 8},

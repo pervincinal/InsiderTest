@@ -2,8 +2,8 @@
   "id": 28,
   "name": "Burn the Bridge",
   "lesson": "Bridges: long-press a bridge you own an end of to cut it. Units on it drown and the enemy column behind it is stranded for good",
-  "star3": 30000,
-  "star2": 60000,
+  "star3": 40000,
+  "star2": 80000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.55},
     {"owner": "enemy2", "personality": "turtle", "aggression": 0.55}

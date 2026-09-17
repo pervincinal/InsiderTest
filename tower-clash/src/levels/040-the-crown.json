@@ -43,6 +43,8 @@
     {"a": "red", "b": "crown", "mine": 5},
     {"a": "green", "b": "crown", "mine": 5},
     {"a": "yellow", "b": "crown"},
-    {"a": "red", "b": "green"}
+    {"a": "red", "b": "green"},
+    {"a": "guns", "b": "red"},
+    {"a": "guns", "b": "green"}
   ]
 }

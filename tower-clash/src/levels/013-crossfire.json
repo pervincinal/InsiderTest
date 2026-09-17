@@ -2,8 +2,8 @@
   "id": 13,
   "name": "Crossfire",
   "lesson": "Your own guns thin every wave: hold the artillery post and make the enemy walk through its fire",
-  "star3": 35000,
-  "star2": 70000,
+  "star3": 55000,
+  "star2": 110000,
   "enemies": [{ "owner": "enemy1", "personality": "turtle", "aggression": 0.5 }],
   "towers": [
     { "id": "home", "x": 360, "y": 1150, "owner": "player", "units": 12, "level": 1, "kind": "barracks" },

@@ -1,9 +1,9 @@
 {
   "id": 9,
   "name": "Stone Walls",
-  "lesson": "Fortress: two attackers per defender. Mass one big wave, because a trickle only feeds the walls",
-  "star3": 40000,
-  "star2": 80000,
+  "lesson": "Fortress: two attackers per defender. Fill your towers before you stream in, because a thin trickle only feeds the walls",
+  "star3": 25000,
+  "star2": 50000,
   "enemies": [{ "owner": "enemy1", "personality": "rusher", "aggression": 0.3 }],
   "towers": [
     { "id": "home", "x": 360, "y": 1140, "owner": "player", "units": 12, "level": 1, "kind": "barracks" },

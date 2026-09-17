@@ -3,7 +3,7 @@
   "name": "Toll Road",
   "lesson": "A mine works both ways: sit behind a mined road and let the enemy rush pay the toll before it reaches you",
   "star3": 30000,
-  "star2": 60000,
+  "star2": 65000,
   "enemies": [
     {"owner": "enemy1", "personality": "opportunist", "aggression": 0.5},
     {"owner": "enemy2", "personality": "rusher", "aggression": 0.5}

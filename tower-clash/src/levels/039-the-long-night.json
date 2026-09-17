@@ -1,9 +1,9 @@
 {
   "id": 39,
   "name": "The Long Night",
-  "lesson": "Patience against turtles: they out-build you if you race, so upgrade to level 3 behind your walls and strike only when you are twice their size",
-  "star3": 35000,
-  "star2": 70000,
+  "lesson": "Patience against turtles: they out-build you if you race, so let your towers fill to level 3 behind your walls and strike only when you are twice their size",
+  "star3": 40000,
+  "star2": 80000,
   "enemies": [
     {"owner": "enemy1", "personality": "turtle", "aggression": 0.75},
     {"owner": "enemy2", "personality": "turtle", "aggression": 0.75},

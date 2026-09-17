@@ -1,16 +1,16 @@
 {
   "id": 34,
   "name": "Weakest Link",
-  "lesson": "The rusher hits whichever neighbour is weakest, so never leave a border tower thin: keep every frontier garrison above the enemy next to it",
-  "star3": 30000,
-  "star2": 60000,
+  "lesson": "Your keep starts at level 2, but two rushers hit whichever neighbour is weakest, so never leave a border tower thin: keep every frontier garrison above the enemy next to it",
+  "star3": 35000,
+  "star2": 70000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.45},
     {"owner": "enemy2", "personality": "rusher", "aggression": 0.45},
     {"owner": "enemy3", "personality": "turtle", "aggression": 0.45}
   ],
   "towers": [
-    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 16, "level": 1, "kind": "barracks"},
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 30, "level": 2, "kind": "barracks"},
     {"id": "w", "x": 150, "y": 1000, "owner": "neutral", "units": 5},
     {"id": "e", "x": 570, "y": 1000, "owner": "neutral", "units": 5},
     {"id": "fort", "x": 360, "y": 860, "owner": "neutral", "units": 6, "kind": "fortress"},

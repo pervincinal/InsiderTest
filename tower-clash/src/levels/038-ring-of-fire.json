@@ -2,8 +2,8 @@
   "id": 38,
   "name": "Ring of Fire",
   "lesson": "Guns you own are the best defence against three: hold the artillery posts and let the enemies march into their fire",
-  "star3": 30000,
-  "star2": 60000,
+  "star3": 25000,
+  "star2": 50000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.7},
     {"owner": "enemy2", "personality": "opportunist", "aggression": 0.7},

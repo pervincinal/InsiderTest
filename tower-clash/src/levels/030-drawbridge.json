@@ -1,15 +1,15 @@
 {
   "id": 30,
   "name": "Drawbridge",
-  "lesson": "Fight one front at a time: cut the bridge on one flank, finish the enemy on the other, then come back over the long road",
-  "star3": 40000,
-  "star2": 80000,
+  "lesson": "Your keep starts at level 2. Fight one front at a time: cut the bridge on one flank, finish the enemy on the other, then come back over the long road",
+  "star3": 20000,
+  "star2": 40000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.7},
     {"owner": "enemy2", "personality": "opportunist", "aggression": 0.7}
   ],
   "towers": [
-    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 14, "level": 1, "kind": "barracks"},
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 30, "level": 2, "kind": "barracks"},
     {"id": "factory", "x": 570, "y": 1130, "owner": "player", "units": 5, "level": 1, "kind": "tankFactory"},
     {"id": "w", "x": 150, "y": 1000, "owner": "neutral", "units": 5},
     {"id": "e", "x": 570, "y": 960, "owner": "neutral", "units": 5},

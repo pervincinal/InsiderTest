@@ -2,8 +2,8 @@
   "id": 14,
   "name": "Guns and Walls",
   "lesson": "Silence the guns before the siege: an artillery post beside a fortress shreds the very wave you need to breach it",
-  "star3": 35000,
-  "star2": 70000,
+  "star3": 30000,
+  "star2": 60000,
   "enemies": [{ "owner": "enemy1", "personality": "opportunist", "aggression": 0.6 }],
   "towers": [
     { "id": "home", "x": 360, "y": 1160, "owner": "player", "units": 15, "level": 1, "kind": "barracks" },

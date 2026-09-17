@@ -2,8 +2,8 @@
   "id": 6,
   "name": "Outpost First",
   "lesson": "The enemy holds two towers: take the weak outpost first, then the base behind it loses its shield",
-  "star3": 35000,
-  "star2": 70000,
+  "star3": 45000,
+  "star2": 90000,
   "enemies": [{ "owner": "enemy1", "personality": "opportunist", "aggression": 0.4 }],
   "towers": [
     { "id": "home", "x": 360, "y": 1140, "owner": "player", "units": 12, "level": 1, "kind": "barracks" },

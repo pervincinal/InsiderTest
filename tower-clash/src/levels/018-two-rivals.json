@@ -2,8 +2,8 @@
   "id": 18,
   "name": "Two Rivals",
   "lesson": "Two enemies fight each other too: expand on the quiet flank while the rusher throws itself at the turtle, then finish whoever is left thin",
-  "star3": 30000,
-  "star2": 60000,
+  "star3": 45000,
+  "star2": 105000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.45},
     {"owner": "enemy2", "personality": "turtle", "aggression": 0.45}

@@ -1,9 +1,9 @@
 {
   "id": 27,
   "name": "Armour Race",
-  "lesson": "Enemy tank factory: it throws its whole bank of tanks at the weakest tower next to it, and one 5-weight tank flips a garrison of four. Keep the tower facing it above the bank, and take the factory before the bank reaches 40",
-  "star3": 40000,
-  "star2": 80000,
+  "lesson": "Enemy tank factory: it streams its bank of tanks at the weakest tower next to it, and one 5-weight tank flips a garrison of four. Keep the tower facing it above the bank, and take the factory before its bank fills",
+  "star3": 25000,
+  "star2": 50000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.5},
     {"owner": "enemy2", "personality": "opportunist", "aggression": 0.5}

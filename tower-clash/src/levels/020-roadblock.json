@@ -2,21 +2,21 @@
   "id": 20,
   "name": "Roadblock",
   "lesson": "Barriers: a walled road has hit points and every unit that walks into it dies until it breaks, so budget the extra units or take the open road",
-  "star3": 30000,
-  "star2": 60000,
+  "star3": 20000,
+  "star2": 50000,
   "enemies": [
-    {"owner": "enemy1", "personality": "rusher", "aggression": 0.55},
-    {"owner": "enemy2", "personality": "opportunist", "aggression": 0.55}
+    {"owner": "enemy1", "personality": "rusher", "aggression": 0.45},
+    {"owner": "enemy2", "personality": "opportunist", "aggression": 0.45}
   ],
   "towers": [
-    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 14, "level": 1, "kind": "barracks"},
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 20, "level": 1, "kind": "barracks"},
     {"id": "left", "x": 150, "y": 980, "owner": "neutral", "units": 5},
     {"id": "right", "x": 570, "y": 980, "owner": "neutral", "units": 5},
     {"id": "mid", "x": 360, "y": 820, "owner": "neutral", "units": 8},
     {"id": "nw", "x": 150, "y": 620, "owner": "neutral", "units": 8},
     {"id": "ne", "x": 570, "y": 620, "owner": "neutral", "units": 8},
-    {"id": "red", "x": 200, "y": 400, "owner": "enemy1", "units": 10, "level": 1, "kind": "barracks"},
-    {"id": "green", "x": 520, "y": 400, "owner": "enemy2", "units": 10, "level": 1, "kind": "barracks"}
+    {"id": "red", "x": 200, "y": 400, "owner": "enemy1", "units": 8, "level": 1, "kind": "barracks"},
+    {"id": "green", "x": 520, "y": 400, "owner": "enemy2", "units": 8, "level": 1, "kind": "barracks"}
   ],
   "roads": [
     {"a": "home", "b": "left"},

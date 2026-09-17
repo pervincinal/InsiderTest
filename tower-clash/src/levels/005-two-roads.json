@@ -4,14 +4,14 @@
   "lesson": "Two routes to the enemy: hold one while you push down the other",
   "star3": 30000,
   "star2": 60000,
-  "enemies": [{ "owner": "enemy1", "personality": "rusher", "aggression": 0.5 }],
+  "enemies": [{ "owner": "enemy1", "personality": "rusher", "aggression": 0.45 }],
   "towers": [
     { "id": "home", "x": 360, "y": 1140, "owner": "player", "units": 12, "level": 1, "kind": "barracks" },
     { "id": "west1", "x": 150, "y": 860, "owner": "neutral", "units": 5 },
     { "id": "east1", "x": 570, "y": 860, "owner": "neutral", "units": 5 },
-    { "id": "west2", "x": 150, "y": 520, "owner": "neutral", "units": 6 },
-    { "id": "east2", "x": 570, "y": 520, "owner": "neutral", "units": 6 },
-    { "id": "foe", "x": 360, "y": 230, "owner": "enemy1", "units": 10, "level": 1, "kind": "barracks" }
+    { "id": "west2", "x": 150, "y": 520, "owner": "neutral", "units": 8 },
+    { "id": "east2", "x": 570, "y": 520, "owner": "neutral", "units": 8 },
+    { "id": "foe", "x": 360, "y": 230, "owner": "enemy1", "units": 8, "level": 1, "kind": "barracks" }
   ],
   "roads": [
     { "a": "home", "b": "west1" },

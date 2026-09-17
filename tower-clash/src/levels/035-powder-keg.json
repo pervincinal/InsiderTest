@@ -1,16 +1,16 @@
 {
   "id": 35,
   "name": "Powder Keg",
-  "lesson": "Mines between rivals are free kills: leave the mined roads between two enemies alone and let their own columns trigger them",
-  "star3": 30000,
-  "star2": 60000,
+  "lesson": "Your keep starts at level 2. Mines between rivals are free kills: leave the mined roads between two enemies alone and let their own columns trigger them",
+  "star3": 20000,
+  "star2": 40000,
   "enemies": [
     {"owner": "enemy1", "personality": "opportunist", "aggression": 0.5},
     {"owner": "enemy2", "personality": "rusher", "aggression": 0.5},
     {"owner": "enemy3", "personality": "rusher", "aggression": 0.5}
   ],
   "towers": [
-    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 16, "level": 1, "kind": "barracks"},
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 30, "level": 2, "kind": "barracks"},
     {"id": "w", "x": 150, "y": 1000, "owner": "neutral", "units": 5},
     {"id": "e", "x": 570, "y": 1000, "owner": "neutral", "units": 5},
     {"id": "mid", "x": 360, "y": 880, "owner": "neutral", "units": 8},

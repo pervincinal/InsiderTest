@@ -1,7 +1,7 @@
 {
   "id": 8,
   "name": "Two Bases",
-  "lesson": "You start with two bases: pool both garrisons into one push instead of attacking piecemeal",
+  "lesson": "You start with two bases: stream both into the same target instead of attacking piecemeal",
   "star3": 35000,
   "star2": 70000,
   "enemies": [{ "owner": "enemy1", "personality": "rusher", "aggression": 0.5 }],

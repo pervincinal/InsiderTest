@@ -2,8 +2,8 @@
   "id": 26,
   "name": "Steamroller",
   "lesson": "A tank shrugs off a small mine or wall: one 5-weight tank spends a 4-charge mine and rolls on where four infantry would have died",
-  "star3": 30000,
-  "star2": 60000,
+  "star3": 25000,
+  "star2": 55000,
   "enemies": [
     {"owner": "enemy1", "personality": "opportunist", "aggression": 0.45},
     {"owner": "enemy2", "personality": "rusher", "aggression": 0.45}

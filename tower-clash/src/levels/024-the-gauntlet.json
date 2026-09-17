@@ -2,8 +2,8 @@
   "id": 24,
   "name": "The Gauntlet",
   "lesson": "Band finale: read the map before you tap. Mines, walls, guns and two rivals mean the cheapest road to the finish is rarely the shortest",
-  "star3": 30000,
-  "star2": 60000,
+  "star3": 35000,
+  "star2": 70000,
   "enemies": [
     {"owner": "enemy1", "personality": "opportunist", "aggression": 0.8},
     {"owner": "enemy2", "personality": "rusher", "aggression": 0.8}

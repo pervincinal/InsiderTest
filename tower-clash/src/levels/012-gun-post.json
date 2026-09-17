@@ -2,8 +2,8 @@
   "id": 12,
   "name": "Gun Post",
   "lesson": "Artillery shells every unit that passes within its range: take the post before you march past it, or go around",
-  "star3": 30000,
-  "star2": 60000,
+  "star3": 20000,
+  "star2": 40000,
   "enemies": [{ "owner": "enemy1", "personality": "rusher", "aggression": 0.5 }],
   "towers": [
     { "id": "home", "x": 360, "y": 1150, "owner": "player", "units": 14, "level": 1, "kind": "barracks" },
@@ -11,8 +11,8 @@
     { "id": "east", "x": 580, "y": 880, "owner": "neutral", "units": 5 },
     { "id": "mid", "x": 360, "y": 820, "owner": "neutral", "units": 6 },
     { "id": "nw", "x": 140, "y": 480, "owner": "neutral", "units": 6 },
-    { "id": "post", "x": 470, "y": 520, "owner": "neutral", "units": 3, "kind": "artillery" },
-    { "id": "base", "x": 360, "y": 230, "owner": "enemy1", "units": 12, "level": 1, "kind": "barracks" }
+    { "id": "post", "x": 470, "y": 520, "owner": "neutral", "units": 6, "kind": "artillery" },
+    { "id": "base", "x": 360, "y": 230, "owner": "enemy1", "units": 10, "level": 1, "kind": "barracks" }
   ],
   "roads": [
     { "a": "home", "b": "west" },

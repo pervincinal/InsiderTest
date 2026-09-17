@@ -1,9 +1,9 @@
 {
   "id": 7,
   "name": "Long March",
-  "lesson": "Distance is time: stage your army at the forward tower, because a long road lets the enemy regrow before you land",
-  "star3": 35000,
-  "star2": 70000,
+  "lesson": "Distance is time: stream your army into the forward tower first, because a long road lets the enemy regrow before you land",
+  "star3": 50000,
+  "star2": 100000,
   "enemies": [{ "owner": "enemy1", "personality": "turtle", "aggression": 0.4 }],
   "towers": [
     { "id": "home", "x": 360, "y": 1160, "owner": "player", "units": 14, "level": 1, "kind": "barracks" },

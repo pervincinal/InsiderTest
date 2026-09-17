@@ -2,8 +2,8 @@
   "id": 32,
   "name": "Siege Works",
   "lesson": "Band finale: your factory, their walls and guns, and a river between. Cut what threatens you, pay the mines with a few scouts, and break the keeps one at a time",
-  "star3": 30000,
-  "star2": 60000,
+  "star3": 25000,
+  "star2": 50000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.8},
     {"owner": "enemy2", "personality": "opportunist", "aggression": 0.8}
