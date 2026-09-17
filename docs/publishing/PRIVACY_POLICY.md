@@ -17,7 +17,7 @@ This page is hosted publicly (planned address: `https://pervincinal.github.io/In
 
 **The short version.** The web version of Tower Clash does not collect, store or transmit any personal data. There are no accounts, no analytics, no advertising, no purchases and no network requests after the game has loaded. Your progress lives only on your own device.
 
-**What the game stores, and where.** The game remembers your progress (stars per level, gold and crystals earned in play, upgrades, skins, daily-reward streak, and your settings: send ratio, colour-blind palette, sound, reduced motion). This is saved in the browser's local storage on your device. It never leaves the device. Clearing the browser's site data or removing the installed web app deletes it completely.
+**What the game stores, and where.** The game remembers your progress (stars per level, gold and crystals earned in play, upgrades, skins, daily-reward streak, and your settings: language, colour-blind palette, sound, reduced motion). This is saved in the browser's local storage on your device. It never leaves the device. Clearing the browser's site data or removing the installed web app deletes it completely.
 
 **What the web version does not do.**
 - It does not connect to the internet after the first page load; it works fully offline.
@@ -126,7 +126,7 @@ Bu səhifə açıq şəkildə yerləşdirilir (planlaşdırılan ünvan: `https:
 
 **Qısa versiya.** Tower Clash-in veb versiyası heç bir şəxsi məlumat toplamır, saxlamır və ötürmür. Hesab, analitika, reklam, alış yoxdur; oyun yükləndikdən sonra heç bir şəbəkə sorğusu göndərilmir. İrəliləyişiniz yalnız öz cihazınızda saxlanılır.
 
-**Oyun nəyi və harada saxlayır.** Oyun irəliləyişinizi yadda saxlayır: hər səviyyə üzrə ulduzlar, oyunda qazanılan qızıl və kristallar, təkmilləşdirmələr, görünüşlər (skinlər), gündəlik mükafat seriyası və parametrləriniz (göndərmə nisbəti, rəng korluğu palitrası, səs, azaldılmış hərəkət). Bu məlumat brauzerin yerli yaddaşında, cihazınızda saxlanılır. Cihazdan kənara çıxmır. Brauzerin sayt məlumatlarını təmizləmək və ya quraşdırılmış veb tətbiqi silmək bu məlumatı tamamilə silir.
+**Oyun nəyi və harada saxlayır.** Oyun irəliləyişinizi yadda saxlayır: hər səviyyə üzrə ulduzlar, oyunda qazanılan qızıl və kristallar, təkmilləşdirmələr, görünüşlər (skinlər), gündəlik mükafat seriyası və parametrləriniz (dil, rəng korluğu palitrası, səs, azaldılmış hərəkət). Bu məlumat brauzerin yerli yaddaşında, cihazınızda saxlanılır. Cihazdan kənara çıxmır. Brauzerin sayt məlumatlarını təmizləmək və ya quraşdırılmış veb tətbiqi silmək bu məlumatı tamamilə silir.
 
 **Veb versiyası nə etmir.**
 - İlk yüklənmədən sonra internetə qoşulmur; tam oflayn işləyir.

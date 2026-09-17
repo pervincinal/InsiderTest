@@ -5,10 +5,10 @@
 Play in the browser: **https://pervincinal.github.io/InsiderTest/** (active once GitHub Pages is enabled in repo settings — see [`../docs/DEPLOY.md`](../docs/DEPLOY.md))
 
 <p align="center">
-  <img src="store/screenshots/en/02.png" width="30%" alt="Level 1 with the tutorial hint">
-  <img src="store/screenshots/en/04.png" width="30%" alt="Level 9 with a fortress: Storm the fortress">
-  <img src="store/screenshots/en/06.png" width="30%" alt="Result screen with three stars: Three-star every level">
-  <img src="store/screenshots/en/07.png" width="30%" alt="Shop, Commander upgrades tab: Boost your commander">
+  <img src="store/screenshots/en/02.png" width="30%" alt="Level 1 with the tutorial hint: Tap, and the stream flows">
+  <img src="store/screenshots/en/04.png" width="30%" alt="A tower filling to 25 and upgrading to level 2: Fill up to level up">
+  <img src="store/screenshots/en/06.png" width="30%" alt="Level 9 with a fortress: Storm the fortress">
+  <img src="store/screenshots/en/07.png" width="30%" alt="Result screen with three stars: Three-star every level">
 </p>
 
 ## How to play
@@ -16,7 +16,7 @@ Play in the browser: **https://pervincinal.github.io/InsiderTest/** (active once
 1. Tap a **blue** tower to select it, then tap any tower connected by a road. A **stream** opens: soldiers leave one by one and keep coming until you tap the target again (dragging from tower to tower works too).
 2. Friendly towers are reinforced; hostile towers lose one defender per attacker. Reduce a garrison below zero and the tower flips to you — the stream keeps supplying it until you stop it or the tower is full.
 3. Towers **upgrade themselves** when they fill: 25 soldiers → level 2, 50 → level 3 (100 max). Higher levels recruit faster and may run more streams — **1 / 2 / 3 streams at level 1 / 2 / 3** (the hint "L2 needed for 2 streams" tells you when you hit the limit). A streaming tower does not grow, so close the stream when you want it to level up.
-4. Enemy streams are drawn on the roads in their colour — read them, then answer them: reinforce the threatened tower or hit the attacker's emptied source.
+4. Enemy streams are drawn on the roads in their colour — read them, then answer them: reinforce the threatened tower or hit the attacker's emptied source. A tower under attack stops recruiting (its count badge turns peach with a crossed-swords pip), so an unanswered stream eventually takes it.
 5. **Fortresses** (level 9 onwards) halve the damage of every attack; **artillery** (level 12 onwards) shoots soldiers that walk into its range.
 6. From level 17 you face **two enemies** (three from level 33) who also fight each other; **mines** kill the first soldiers to cross a road and **barriers** must be worn down or walked around.
 7. **Tank factories** (level 25 onwards) build tanks that weigh five soldiers but crawl; **bridges** can be cut with a long press — the column on it drowns and the enemy behind it is stranded.
@@ -24,6 +24,8 @@ Play in the browser: **https://pervincinal.github.io/InsiderTest/** (active once
 9. Three **boosters** in the bottom bar, paid with gold: Overdrive (×3 production for 10 s), Freeze (enemies stop producing for 5 s), Airstrike (−10 units on one enemy tower).
 
 Keyboard on desktop: `P` / `Space` pause, `Esc` back to the level list, `M` mute.
+
+Menus, hints, the tutorial, level names and lesson lines are in English, Azerbaijani, Russian and Turkish (Settings → Language); every one of the 40 levels carries its name and lesson in all four.
 
 ## Between battles
 
@@ -89,14 +91,14 @@ Brauzerdə oyna: **https://pervincinal.github.io/InsiderTest/** (repo parametrl�
 1. **Mavi** qülləyə toxunub seç, sonra yolla bağlı istənilən qülləyə toxun. **Axın** açılır: əsgərlər bir-bir çıxır və sən hədəfə yenidən toxunana qədər gəlməyə davam edir (qüllədən qülləyə sürükləmək də işləyir).
 2. Dost qüllələr güclənir; düşmən qüllələrində hər hücumçu bir müdafiəçini aparır. Qarnizon sıfırın altına düşəndə qüllə sənə keçir — axın sən dayandırana və ya qüllə dolana qədər onu təchiz etməyə davam edir.
 3. Qüllələr dolanda **özləri təkmilləşir**: 25 əsgər → 2-ci səviyyə, 50 → 3-cü səviyyə (maksimum 100). Yüksək səviyyə daha sürətli əsgər yığır və daha çox axın apara bilir — **1 / 2 / 3-cü səviyyədə 1 / 2 / 3 axın** (limitə çatanda "2 axın üçün L2 lazımdır" işarəsi çıxır). Axın verən qüllə böyümür, ona görə səviyyəsi qalxsın istəyirsənsə axını bağla.
-4. Düşmən axınları yolların üstündə öz rəngində çəkilir — oxu və cavab ver: təhdid altındakı qülləni gücləndir və ya hücumçunun boşalmış mənbəyini vur.
+4. Düşmən axınları yolların üstündə öz rəngində çəkilir — oxu və cavab ver: təhdid altındakı qülləni gücləndir və ya hücumçunun boşalmış mənbəyini vur. Hücum altındakı qüllə əsgər yığmır (say nişanı şaftalı rəngə keçir, üstündə çarpaz qılınc işarəsi), ona görə cavabsız qalan axın onu gec-tez alır.
 5. **Qalalar** (9-cu səviyyədən) hər hücumun zərərini yarıya endirir; **toplar** (12-ci səviyyədən) mənzilinə girən əsgərləri vurur.
 6. 17-ci səviyyədən **iki rəqib** (33-cü səviyyədən üç) — onlar bir-biri ilə də vuruşur; **minalar** yoldan ilk keçən əsgərləri məhv edir, **sədlər** aşındırılmalı və ya yan keçilməlidir.
 7. **Tank zavodları** (25-ci səviyyədən) beş əsgər ağırlığında, amma yavaş tanklar istehsal edir; **körpülər** uzun basışla kəsilir — körpüdəki kolon batır, arxadakı düşmən ilişib qalır.
 8. Tez qalib gəl — daha çox ulduz (3 / 2 / 1). Ulduzlar növbəti səviyyəni açır və ilk keçiddə **qızıl** qazandırır; təkrar oyunlar və ulduz yaxşılaşdırmaları bir az da verir.
 9. Aşağı zolaqda qızılla ödənilən üç **gücləndirici**: Overdrive (10 saniyə ×3 istehsal), Freeze (rəqiblər 5 saniyə istehsal etmir), Airstrike (bir düşmən qülləsindən −10 əsgər).
 
-Masaüstündə klaviatura: `P` / `Space` pauza, `Esc` səviyyə siyahısına, `M` səsi söndürür. Menyular, işarələr və təlimat azərbaycanca, ingiliscə, rusca və türkcədir (Parametrlər → Dil); səviyyə adları ingiliscədir.
+Masaüstündə klaviatura: `P` / `Space` pauza, `Esc` səviyyə siyahısına, `M` səsi söndürür. Menyular, işarələr, təlimat, səviyyə adları və dərs cümlələri azərbaycanca, ingiliscə, rusca və türkcədir (Parametrlər → Dil); 40 səviyyənin hər birinin adı və dərsi dörd dildədir.
 
 ## Döyüşlər arasında
 

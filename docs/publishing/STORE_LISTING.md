@@ -2,7 +2,7 @@
 
 Owner: Publisher. This is the listing for the **first store submission**, which per `docs/ECONOMY.md` §8 is the native build with RevenueCat purchases and AdMob ads (Phase B, "v1.0 native"). The web/PWA build keeps no ads and no purchases and has no store listing. Character counts are verified with `node -e` (§5); limits are the stricter of Google Play and App Store.
 
-**Status of the claims (2026-09-17, v0.4.0 "Streams update").** Everything described below is committed: the economy and shop (v0.3.0, `docs/BACKLOG.md` "Done" Sprint 3 + Day 2/2b), the in-game languages EN/AZ/RU/TR (`9e45fc9`) and **rules v2** (`docs/GDD.md` §2.0; commits `4bb3944`, `8e53c03`, `2d8cb24`): attacks are persistent **streams** (tap your tower, tap a target, the stream keeps flowing until you stop it; a L1/L2/L3 tower runs 1/2/3 streams), towers **upgrade automatically** when the garrison fills (25 → L2, 50 → L3, 100 max), the SEND 100 % / 50 % toggle and the paid tap-to-upgrade are gone, all 40 levels retuned, levels load on demand. **Rules v2.1 "Under fire" is proposed in the GDD and not implemented — never describe it.** The screenshot files in `tower-clash/store/screenshots/` still show the v0.3.0 rules (§1.3 lists which frames are stale and what to retake). If a build is submitted *without* the economy, use the ad-free wording kept in §1.4.
+**Status of the claims (2026-09-17, v0.4.0 "Streams update").** Everything described below is committed: the economy and shop (v0.3.0, `docs/BACKLOG.md` "Done" Sprint 3 + Day 2/2b), the in-game languages EN/AZ/RU/TR (`9e45fc9`) and **rules v2** (`docs/GDD.md` §2.0; commits `4bb3944`, `8e53c03`, `2d8cb24`): attacks are persistent **streams** (tap your tower, tap a target, the stream keeps flowing until you stop it; a L1/L2/L3 tower runs 1/2/3 streams), towers **upgrade automatically** when the garrison fills (25 → L2, 50 → L3, 100 max), the SEND 100 % / 50 % toggle and the paid tap-to-upgrade are gone, all 40 levels retuned, levels load on demand. Also in the build since the same day: **rules v2.1 "Under fire"** (`3e4a388`, GDD §2.0): a hostile soldier landing on a tower pauses that tower's recruiting for 1.5 s, so an unanswered enemy stream eventually takes any tower; the count badge turns peach with a crossed-swords pip while it lasts — described in the long description with one line (§1.1 / §1.2 "A tower under attack…") and one clause in the "What's new" texts, nothing more (no numbers in public texts; the level 2 lesson and the star clocks have not been re-measured for it yet). **Level names and lessons are in EN/AZ/RU/TR** (`235def1`, I18N-2). The screenshot files in `tower-clash/store/screenshots/` are the v0.4.0 retake (`577b894`, §1.3). If a build is submitted *without* the economy, use the ad-free wording kept in §1.4.
 
 What must NOT be claimed: leaderboards, multiplayer, cloud save, more than 40 levels, subscriptions, loot boxes, tablet support (phone-only listing), "no ads" / "no purchases" for the store builds, and — since rules v2 — "send half / send all", a send-ratio switch or upgrading a tower by tapping / paying soldiers.
 
@@ -30,6 +30,7 @@ HOW IT PLAYS
 • Tap a blue tower, then tap any connected tower: a stream of soldiers starts flowing there — and keeps flowing until you tap the target again. Drag from tower to tower works too.
 • Towers upgrade themselves: let one fill to 25 soldiers and it becomes level 2, at 50 level 3 (100 max). Bigger towers recruit faster and run more streams — one at level 1, two at level 2, three at level 3.
 • A streaming tower sends every new recruit onward and stops growing — close the stream when you want it to level up.
+• A tower under attack stops recruiting — answer every enemy stream, or the tower falls.
 • Enemy streams are drawn on the road in their colour, so you always see where the next attack comes from — and where to answer it.
 
 40 HAND-MADE LEVELS
@@ -61,7 +62,7 @@ HONEST BY DESIGN
 • Optional purchases only: crystal packs, a Starter Pack, Remove Ads and a Premium Bundle. No subscriptions, no loot boxes.
 • A short ad between levels at most every third level, never during a battle, and never in the first five levels. Rewarded videos are always your choice. One purchase removes the between-level ads for good.
 
-Menus, hints and the tutorial are in English, Azerbaijani, Russian and Turkish; level names are in English.
+Menus, hints, the tutorial, level names and lessons are in English, Azerbaijani, Russian and Turkish.
 ```
 
 ### 1.2 Full description — Azerbaijani (≤ 4000)
@@ -73,6 +74,7 @@ NECƏ OYNANIR
 • Mavi qülləyə toxun, sonra yolla bağlı istənilən qülləyə toxun: ora əsgər axını başlayır — və sən hədəfə yenidən toxunana qədər davam edir. Qüllədən qülləyə sürükləmək də işləyir.
 • Qüllələr özləri təkmilləşir: biri 25 əsgərə dolsun — 2-ci səviyyə olur, 50-də 3-cü səviyyə (maksimum 100). Böyük qüllə daha sürətli əsgər yığır və daha çox axın aparır — 1-ci səviyyədə bir, 2-cidə iki, 3-cüdə üç.
 • Axın verən qüllə hər yeni əsgəri irəli göndərir və böyümür — səviyyəsi qalxsın istəyirsənsə axını bağla.
+• Hücum altındakı qüllə əsgər yığmır — hər düşmən axınına cavab ver, yoxsa qüllə düşər.
 • Düşmən axınları yolun üstündə öz rəngində çəkilir — növbəti hücumun haradan gəldiyini və hara cavab verəcəyini həmişə görürsən.
 
 40 ƏL İLƏ HAZIRLANMIŞ SƏVİYYƏ
@@ -104,7 +106,7 @@ DÜRÜST OYUN
 • Yalnız könüllü alışlar: kristal paketləri, Başlanğıc paketi, Reklamları sil və Premium paket. Abunəlik yoxdur, loot box yoxdur.
 • Səviyyələr arasında qısa reklam ən çox hər üçüncü səviyyədə, heç vaxt döyüş zamanı və heç vaxt ilk beş səviyyədə. Mükafatlı videolar həmişə sənin seçimindir. Bir alış səviyyələr arası reklamları həmişəlik silir.
 
-Qeyd: menyular, işarələr və təlimat azərbaycanca, ingiliscə, rusca və türkcədir; səviyyə adları ingiliscədir.
+Qeyd: menyular, işarələr, təlimat, səviyyə adları və dərslər azərbaycanca, ingiliscə, rusca və türkcədir.
 ```
 
 ### 1.3 Graphic assets (all rendered from the game by `tower-clash/store/tools/renderStoreShots.mjs`)
@@ -113,37 +115,26 @@ Qeyd: menyular, işarələr və təlimat azərbaycanca, ingiliscə, rusca və t�
 |---|---|---|
 | App icon | 512×512 PNG, 32-bit | `tower-clash/public/icons/icon-512.png` (same mark as `resources/icon.svg`) |
 | Feature graphic | 1024×500 PNG/JPG | `tower-clash/store/feature-graphic.png` (144 KB) |
-| Phone screenshots | 2–8, 9:16, 320–3840 px | `tower-clash/store/screenshots/en/01..07.png` and `az/01..07.png`, 1080×1920, each < 600 KB |
+| Phone screenshots | 2–8, 9:16, 320–3840 px | `tower-clash/store/screenshots/en/01..08.png` and `az/01..08.png`, 1080×1920, each < 600 KB (v0.4.0 retake, `577b894`) |
 | IAP review screenshot (Apple only, not shown on any store page) | ≥ 640×920 | `tower-clash/store/iap-review/shop-crystals.png`, 1290×2796, uncaptioned shop Crystals tab (see §6.1) |
 
-Screenshot order and captions (same frames in every set). **Status after rules v2 (2026-09-17, Publisher check of `store/screenshots/raw/*.png`):** frames 02–05 are play frames rendered under the v0.3.0 rules — they show the removed **SEND 100 % / 50 %** toggle at the bottom left and (02) the old hint "Tap your tower, then tap a target to send everyone" — and **must not be uploaded**. Frames 01, 06 and 07 show screens that did not change (title, result, shop) but are re-rendered in the same batch so the set is consistent (the title screen now carries a language chip top-right; the play HUD shows a STREAMS pill where the toggle was — compare `e2e/__screenshots__/look3-tutorial.png` and `look3-streams.png`).
+Screenshot order and captions (same frames in every set; the `SHOTS` table in `renderStoreShots.mjs` is the source of truth). **Status (2026-09-17, v0.4.0 retake by the Tech Artist, commit `577b894`; Publisher check of `store/screenshots/raw/*.png` and `en/`, `az/`):** all eight frames are rules-v2 renders — STREAMS pill in the HUD, no SEND toggle, the new tutorial hint on 02 — and the set is ready to upload. Google Play allows up to 8 phone screenshots, App Store up to 10 (frame 09 is App Store only).
 
-| # | Frame (current files) | EN caption | AZ caption | Status |
+| # | Frame (raw file name) | EN caption | AZ caption | Status |
 |---|---|---|---|---|
-| 01 | Title screen | Capture every tower | Bütün qüllələri tut | valid; re-render (language chip) |
-| 02 | Level 1 with tutorial hint | One tap to attack | Bir toxunuşla hücum | **stale** — SEND toggle, old hint |
-| 03 | Level 5 mid-battle | Upgrade to out-produce | Upgrade et, üstün gəl | **stale** — SEND toggle; caption describes the removed paid upgrade |
-| 04 | Level 9 (first fortress) | Storm the fortress | Qalanı ələ keçir | **stale** — SEND toggle |
-| 05 | Level 15 (artillery citadel) | Silence the guns | Topları susdur | **stale** — SEND toggle |
-| 06 | Result screen, 3 stars | Three-star every level | Hər səviyyədə üç ulduz | valid; re-render |
-| 07 | Shop, **Upgrades** tab (five Commander tracks, gold prices, seeded mid-game save: 1450 gold, 140 crystals, Production tier 2, Capacity tier 1) | Boost your commander | Komandirini gücləndir | valid; re-render |
+| 01 | Title screen with the language chip (`01-title`) | Capture every tower | Bütün qüllələri tut | done |
+| 02 | Level 1 "First Taps" on a fresh save, tutorial hint "Tap your tower" and the lesson banner (`02-level-01-tutorial`) | Tap, and the stream flows | Vur — axın davam edir | done |
+| 03 | Level 5 "Two Roads": a blue player stream and a red enemy stream on the roads at the same moment (`03-level-05-streams`) | Streams keep flowing | Axınlar dayanmır | done |
+| 04 | Level 4 "Build-up": a player tower reaching 25 and turning into the L2 sprite (`04-level-04-upgrade`) | Fill up to level up | Doldur, səviyyə qalxsın | done |
+| 05 | Level 5: the limit hint "L2 needed for 2 streams" on an L1 tower that already runs one stream (`05-level-05-limit-hint`) | Bigger towers, more streams | Böyük qüllə, çox axın | done |
+| 06 | Level 9 "Stone Walls" (first fortress), player stream into the fortress (`06-level-09-fortress`) | Storm the fortress | Qalanı ələ keçir | done |
+| 07 | Result screen, 3 stars (`07-result-win`) | Three-star every level | Hər səviyyədə üç ulduz | done |
+| 08 | Shop, **Upgrades** tab (five Commander tracks, gold prices, seeded mid-game save) (`08-shop-upgrades`) | Boost your commander | Komandirini gücləndir | done |
+| 09 | Level 15 (artillery citadel) — **App Store sets only** (`09-level-15-citadel`) | Silence the guns | Topları susdur | done (Apple 6.7" / 6.5" only; not in the Google set, which stays at 8) |
 
-**Retake list for the Tech Artist (v0.4.0 set, `store/tools/renderStoreShots.mjs` — extend `SHOTS` and the frame capture; Google Play allows up to 8 phone screenshots, App Store up to 10, so the set grows from 7 to 8).** Every frame is a real render of the game; captions are drawn on canvas as before. Both stores need ≥ 2 frames; keep the order below.
+The README embeds `store/screenshots/en/02,04,06,07.png` (tutorial, upgrade, fortress, result) with matching alt texts; `LAUNCH_CHECKLIST.md` G10 / A11 list the same files. Localised AZ/RU/TR in-game language sets (the game's UI in those languages, not just the caption) are PUB-7 and can be rendered in the same run by switching the language through the settings before capturing. None of the frames shows the v2.1 under-fire badge — no frame catches a hostile landing on an owned tower (03: the red stream is still on the road; 06: the blue column has not reached the fortress; 09: the citadel fires at a neutral, which never recruits) — so the set claims nothing about the rule either way; a frame with the peach badge can join a future set (PUB-6).
 
-| # | Frame to capture | How (debug hooks in `window.__towerclash`) | EN caption | AZ caption |
-|---|---|---|---|---|
-| 01 | Title screen | fresh context, as today | Capture every tower | Bütün qüllələri tut |
-| 02 | Level 1 on a fresh save with the tutorial hint "Tap your tower" and the lesson banner "…the stream keeps flowing until you stop it" | `loadLevel(1)` on a fresh context (already done for the current 02; the hint text changed) | Tap, and the stream flows | Vur — axın davam edir |
-| 03 | **Streams in both colours**: a blue player ribbon and a red enemy ribbon on the roads at the same moment, chevrons visible (level 5 "Two Roads" or level 8) | `loadLevel(5)`, `autoplay()`, capture mid-battle while `state.links` has ≥ 1 player and ≥ 1 enemy link (add a small poll instead of the fixed-time capture) | Streams keep flowing | Axınlar dayanmır |
-| 04 | **A tower upgrading**: the moment a player tower reaches 25 and turns into the L2 sprite (upgrade burst, "25" badge, two-storey tower next to an L1) | `loadLevel(4)` "Build-up" (no early pressure), no links, capture on the first `upgrade` event of a player tower | Fill up to level up | Doldur, səviyyə qalxsın |
-| 05 | **The limit hint** "L2 needed for 2 streams" with a shaking L1 tower that already runs one stream | select an L1 tower with one link and tap a second connected tower; `getLimitHint()` returns the text; capture within the hint's display time | Bigger towers, more streams | Böyük qüllə, çox axın |
-| 06 | Level 9 (first fortress), player stream into the fortress | `loadLevel(9)`, `autoplay()`, mid-battle | Storm the fortress | Qalanı ələ keçir |
-| 07 | Result screen, 3 stars | as today | Three-star every level | Hər səviyyədə üç ulduz |
-| 08 | Shop, Upgrades tab (seeded save, as today) | as today | Boost your commander | Komandirini gücləndir |
-
-Level 15 (artillery citadel, old 05) is dropped from the Google set to stay within 8; keep it as an optional 09 for the App Store (≤ 10) with the caption "Silence the guns" / "Topları susdur". After the retake: update the README `<img>` alt texts (they embed `store/screenshots/en/02,04,06,07.png` — renumbered to 02, 06, 07, 08), this table, and the file list in `LAUNCH_CHECKLIST.md` G10 / A11; localised AZ/RU/TR in-game language sets are PUB-7 and can be rendered in the same run by switching the language through the settings before capturing.
-
-Frame 08 (old 07) deliberately shows the Upgrades tab and not the Crystals tab: the crystal packs display the catalogue's fallback USD prices (the store SDK localises them only on a device) and, in the web build, a "Test store" line. Screenshots never show a price in a fixed currency (a hard-coded "$0.99" in a screenshot is a consumer-law problem in the EU), so the Crystals tab is used only for the private App Store Connect review screenshot (§6.1). Follow-up: (PUB-6) add frames from levels 17+ (two enemies, mines, a cut bridge, three enemies).
+Frame 08 deliberately shows the Upgrades tab and not the Crystals tab: the crystal packs display the catalogue's fallback USD prices (the store SDK localises them only on a device) and, in the web build, a "Test store" line. Screenshots never show a price in a fixed currency (a hard-coded "$0.99" in a screenshot is a consumer-law problem in the EU), so the Crystals tab is used only for the private App Store Connect review screenshot (§6.1). Follow-up: (PUB-6) add frames from levels 17+ (two enemies, mines, a cut bridge, three enemies).
 
 ### 1.4 Alternative wording for an ad-free / purchase-free build
 
@@ -183,10 +174,10 @@ App Store screenshots (exact device sizes, rendered by `node store/tools/renderS
 
 | Device size | Requirement | File |
 |---|---|---|
-| iPhone 6.7" | 1290×2796 | `tower-clash/store/screenshots/apple-6.7/en/01..07.png` |
-| iPhone 6.5" | 1284×2778 | `tower-clash/store/screenshots/apple-6.5/en/01..07.png` |
+| iPhone 6.7" | 1290×2796 | `tower-clash/store/screenshots/apple-6.7/en/01..09.png` (v0.4.0 retake, `577b894`) |
+| iPhone 6.5" | 1284×2778 | `tower-clash/store/screenshots/apple-6.5/en/01..09.png` (v0.4.0 retake, `577b894`) |
 
-Same frames and captions as the Google set (English only — Azerbaijani is not an App Store locale). **The current 6.7" / 6.5" files 02–05 are stale for the same reason as the Google set (§1.3: SEND toggle, old hint) and must be re-rendered with `--apple` after the retake; the App Store set may carry the optional 09 (level 15).** iPad screenshots are not needed if the app is marked iPhone-only in App Store Connect (recommended; the game is portrait phone-first).
+Same frames and captions as the Google set (English only — Azerbaijani is not an App Store locale), plus the App-Store-only frame 09 (level 15 artillery citadel, "Silence the guns"), rendered at the exact device sizes by `--apple`; the set is current with rules v2 and ready to upload (9 of the 10 allowed). iPad screenshots are not needed if the app is marked iPhone-only in App Store Connect (recommended; the game is portrait phone-first).
 
 Review notes for App Review (paste into "Notes"): *Single-player offline game, no account needed. In-app purchases are one-time products handled by StoreKit through RevenueCat; "Restore Purchases" is in the shop screen. Ads are Google AdMob; the app never requests App Tracking Transparency (no `NSUserTrackingUsageDescription` in Info.plist) and always requests non-personalised ads on iOS, so the IDFA is not used — App Privacy "Tracking" is answered No (see §6.4). Sandbox tester: none required — all content is available without purchase.*
 
