@@ -3,7 +3,7 @@
 Priority = order within a section. Producer moves items; anyone may add to Bugs / Icebox.
 
 ## In progress (today)
-(empty — next sprint picks from "Next")
+- [ ] DAILY-1 (in progress today) Daily Challenge v1 — GDD §7 (written 2026-09-18; picker `src/daily/challenge.ts` + tests exist): one deterministic match per UTC day from the pool 9–40 (FNV-1a of `YYYY-MM-DD`, fixed seed, one of five player-side twists: plain / lean ×0.85 production / fast feet ×1.25 speed / thin walls ×0.8 capacity / reinforced +5 start), upgrades and boosters off, unlock at level 8 ≥ 1★, first win 30 gold + 10/★ + 5 crystals, UTC streak, local best, replays pay nothing — owners: frontend-engineer (map card, HUD "Daily · <level>", result line, `save.challenge`, no booster bar / continue / skip / ×2 in a daily; GDD §7.3) + monetization-designer (ECONOMY.md §2.1 row + §6.1/§6.2 done in the working tree; GDD §7 rules: unlimited free attempts, no `rv_double_gold`, no `rv_daily_retry`/Freeze exception in v1, streak milestones approved for Phase C) + ai-engineer (`npm run playtest -- --daily 2026-09-18 --days 60 --seeds 5` exists in the working tree — run it, paste the per-day table here; add `--twist <id>` for the pool × twist gate, GDD §7.5 items 2–3) + qa-engineer (save unit tests §7.5 item 4, equal-modifiers test item 5, e2e card at 360×640 item 6). Promoted from Icebox "Daily challenge map with seed".
 
 ## Next (ECON — Phase B/C after accounts exist)
 - [ ] ECON-1 Phase B: real RevenueCat + AdMob keys (secrets `RC_*`, `ADMOB_*`), sandbox purchase test on a device, App Store Connect / Play products created with catalog ids — mobile-engineer + publisher (needs stakeholder accounts)
@@ -71,7 +71,6 @@ Priority = order within a section. Producer moves items; anyone may add to Bugs 
   - 2026-09-18 (QA): **fixed** — the file was never committed and is gone from the working tree: `git ls-files | grep -i 'look2.*spec'` → empty, `ls tower-clash/e2e/*.tmp.spec.ts` → none. Regression test: `tests/repo/hygiene.test.ts` "tower-clash/e2e (BUG-6)" fails on any `*.tmp|scratch|wip|local.spec.ts` under e2e/, on a spec without an `expect(`, or on a hard-coded absolute output path.
 
 ## Icebox
-- Daily challenge map with seed
 - Replays (command log is already deterministic)
 - Local 2-player on one screen
 

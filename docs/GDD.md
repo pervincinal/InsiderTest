@@ -161,6 +161,7 @@ Coins: 10 per star earned, first-clear only.
 - Progression bands: 1–8 one enemy, barracks only; 9–16 fortress + artillery; 17–24 two enemies + mines/barriers; 25–32 tank factory + bridges; 33–40 three enemies, everything. Target 40 levels for v1.0.
 - Every level must be winnable by the scripted "reference player" (see `playtest` skill) in under 3 min and must not be winnable by doing nothing.
 - No level is a mirror match: the player must be able to reach a production edge before any enemy can (a neutral closer to the player than to every enemy, or more starting towers/units). Two equal towers streaming at each other annihilate on the road and never resolve (§2.0 v2.1 caveat).
+- Levels 9–40 are also the Daily Challenge pool (§7). Every one of them must stay winnable by the reference player under **every** twist in §7.2 (≥ 4 of 5 seeds per level × twist, under 3 min, never `playing` at 180 s). Retuning a pool level re-runs that gate (`npm run playtest -- --twist <id> --seeds 5`, flag to add — until then the AI Engineer drives `runDaily`/`runHeadless` with the twist's modifiers from a test); a level that fails under a twist is fixed in the level, never by dropping the twist.
 
 ## 4. Presentation
 - Flat vector look: rounded towers with crown pips for level, unit dots with owner colour, roads as light grey lines, water/void as dark blue. Font: system sans, bold numerals.
@@ -174,3 +175,114 @@ Coins: 10 per star earned, first-clear only.
 
 ## 6. Out of scope for v1.0
 Multiplayer, ads, real-money purchases, 3D, account systems.
+
+## 7. Daily Challenge (v1, 2026-09-18)
+
+Code: `tower-clash/src/daily/challenge.ts` (pure picker, no `Date`), tests `tower-clash/tests/daily/challenge.test.ts`. UI, save and result handling: Frontend Engineer, from this section. Backlog item DAILY-1.
+
+### 7.1 Purpose
+A retention hook in the Tower War "daily map" mould: one fixed match per day that every player in the world plays with the same level, the same seed and the same handicap, so "did you beat today's?" is a real question and the answer is comparable. It reuses only vocabulary the game already has (a level from the campaign, the player-side modifiers the sim already supports for commander upgrades) — no new mechanic, no new tower, no new hazard. It also gives a player who has finished the campaign a reason to come back for 2–3 minutes a day (pillar 4), and it is deterministic, so the reference bot can prove every day's map is winnable before the day arrives.
+
+### 7.2 Rules
+
+**Day key.** The challenge is keyed by the UTC calendar day, `dayKey = YYYY-MM-DD` of `new Date()` in UTC (`dayKeyOf`). One challenge per key. Time zone is UTC **by design** (one map for everyone, one reset for everyone); the card says so (§7.3).
+
+**Picker (`challengeFor(dayKey)`).** Everything derives from `h = FNV-1a-32(dayKey)` (offset `0x811c9dc5`, prime `0x01000193`, `Math.imul`, unsigned):
+| Field | Rule | Note |
+|---|---|---|
+| Pool | the levels with id 9 … 40 in manifest order — **32** levels | tutorial band 1–8 excluded: no lesson, no handicap on a lesson |
+| `levelId` | `pool[h mod 32]` | changing which ids exist in 9–40 re-maps every future day; changing a level's content does not |
+| `seed` | `(h mod 1 000 000) + 1` | fixed for the day: same enemy decisions for everyone (§2.5 bots are deterministic per seed) |
+| `twist` | `TWISTS[FNV-1a-32(dayKey + "#twist") mod 5]` | second hash so the twist does not correlate with the level |
+| Malformed key | throws | the UI never passes anything but `dayKeyOf(now)` |
+
+Worked example (pin it in tests): `2026-09-18` → level 18 (Two Rivals), seed 233226, twist Plain; `2026-09-19` → level 31, seed 455607, Fast feet; `2026-09-20` → level 19, seed 266987, Fast feet. Over the 60 days from 2026-09-18 the picker visits 27 distinct levels and every twist 9–15 times; over October 2026 ≥ 15 distinct levels and all 5 twists (unit test).
+
+**Twists** — exactly one per day, applied as the **player's** `PlayerModifiers` (§2.0 implementation: enemies always run the defaults; a captured tower takes its new owner's ladder the moment it flips):
+| id | Display name | Modifier | What the player sees |
+|---|---|---|---|
+| `plain` | Plain | none (`DEFAULT_MODIFIERS`) | the campaign level as shipped, upgrades off |
+| `lean` | Lean | `productionMul` 0.9 | player interval ÷ 0.9: barracks L1/L2/L3 = 1.11 / 0.78 / 0.56 s (0.90 / 1.29 / 1.80 units/s); artillery half of that; tank factory one tank / 4.44 s. (0.85 in the first draft: the 60-day sweep lost 15 of 60 lean runs, 0.9 loses 8 — see §7.5) |
+| `fastFeet` | Fast feet | `unitSpeedMul` 1.25 | player infantry 150 px/s, tanks 105 px/s (applied at spawn; a 240 px road takes 1.6 s instead of 2.0 s). The only twist that is a pure buff |
+| `thinWalls` | Thin walls | `capacityMul` 0.8 | player ladder 20 / 40 / 80 (fortress 29 / 60; artillery and tank factory 20 / 40 / 80). Towers auto-upgrade at the smaller capacity, so L2 and L3 come sooner, but a finished keep holds 80 and a supply line ends (`targetFull`) at 80 |
+| `reinforced` | Reinforced | `startGarrisonBonus` 5 | +5 units on every player-owned tower at match start, capped at that tower's capacity |
+
+Rationale: the five twists are the four modifier axes the sim already validates in `createState` plus the unmodified case; two are handicaps (Lean, Thin walls), two are buffs (Fast feet, Reinforced), so the daily is sometimes harder and sometimes easier than the campaign clear. Numbers are chosen so the reference player still wins the whole pool under each (§3, §7.5); anything stronger than ×0.9 / ×0.8 failed levels in the 33–40 band in the 60-day sweep and in earlier commander-upgrade sweeps.
+
+**Equal for everyone.** In a daily match `state.modifiers` is **exactly** the twist's modifiers: commander upgrades (ECONOMY.md §3.2) are not applied whatever the save holds; the booster bar is hidden and booster commands are ignored; "Reinforcements" continue (ECONOMY.md §3.5, rewind + Freeze + 15 infantry) is not offered; the level skip is not offered; the rewarded "×2 gold" is not offered on the daily result. Speed ×2 and pause are allowed (the star clock is sim time). Skins and terrain themes apply (cosmetic). Tutorial overlays never show.
+
+**Unlock.** The card is locked until `save.stars['8'] ≥ 1` (level 8 cleared with any stars). Locked card text: "Clear level 8 to unlock". Rationale: by level 8 the player knows links, under fire and the star clock; the pool starts at 9.
+
+**Locked levels.** The daily may pick a level the player has not reached. It is playable as the daily anyway and **writes nothing into campaign progress**: no `stars[levelId]`, no level unlock, no first-clear gold, no milestone / band / achievement, no `defeats` counter, no drill pay. The campaign is the campaign; the daily is a separate ledger (`save.challenge`).
+
+**Rewards — first win of the day only.**
+| Item | Amount |
+|---|---|
+| Gold | `30 + 10 × stars`, stars clamped to 0…3 → a win pays **40 / 50 / 60** for 1★ / 2★ / 3★ (`goldReward`) |
+| Crystals | **5** |
+| Replays the same day | 0 gold, 0 crystals; the local best may improve |
+| Loss | nothing; **unlimited free retries**, the reward stays available until 00:00 UTC |
+Stars use the level's own `star3` / `star2` clocks unchanged (§2.4); a twist may make 3★ easier or harder that day, that is the point — a Fast feet day on a star-clock boundary level (12, 14, 28, 40 per ECONOMY.md §6.1) is a near-certain 3★ and pays 60, accepted. **Attempts:** unlimited, free, all day (Monetization asked for a ruling): a one-attempt rule would make a 2-minute level a coin flip and punish exactly the returning player the feature exists for; the loss writes nothing, not even a defeat counter. The `rv_daily_retry` idea (a second attempt with a free Freeze) only makes sense under a one-attempt rule and breaks "equal for everyone", so it is **not** in v1 (§7.6). `rv_double_gold` is not offered on the daily result (ECONOMY.md §6.1 agrees). Yearly ceiling for a player who wins every day at 3★: 21 900 gold + 1 825 crystals — comparable to the login streak (ECONOMY.md §2.1: 330 gold + 20 crystals per week), intentionally the larger of the two because it costs a real match.
+
+**Streak.** `save.challenge.streak` counts consecutive UTC days with a first win. On the first win for day `D`: `streak = (lastWinDay == D − 1 day) ? streak + 1 : 1`, `lastWinDay = D`. Displayed value: `min(streak, 99)`, and **0** when `lastWinDay` is neither today nor yesterday (the streak is broken; the stored number is simply overwritten by the next win). It is independent of the login-reward streak (`save.daily`, local calendar day, ECONOMY.md §2.1) — two counters, two rules, never merged in v1.
+
+**Local best.** `save.challenge.best[dayKey] = { stars, timeMs }`, updated when a result is better (more stars, then lower time). Only the **30 most recent day keys** are kept (`CHALLENGE_BEST_KEEP`, pruned on write and on normalize; keys sort chronologically as strings) so the save stays bounded; there is no history screen in v1 (§7.6). "Done today" = `lastWinDay == today` or `today in best`.
+
+**Save schema.** `SaveData.challenge: { lastWinDay: string | null; streak: number; best: Record<string, { stars: number; timeMs: number }> }`, added without a schema bump (as `achievements` was). Normalize: `lastWinDay` must match `^\d{4}-\d{2}-\d{2}$` or become `null`; `streak` a non-negative integer (stored uncapped, shown capped at 99); `best` keys validated the same way, `stars` clamped to 0…3, `timeMs` a non-negative integer, entries beyond the 30 newest dropped. Code: `src/ui/save.ts` (`ChallengeState`), rules in `src/ui/daily.ts` (`recordChallengeResult`, `shownStreak`, `challengeDone`, `challengeUnlocked`, `msToUtcMidnight`).
+
+### 7.3 UI contract
+**Level-map card** (level select, above the level-1 tile so it is the first thing after the header):
+| Element | Content |
+|---|---|
+| Title | "Daily challenge" |
+| Level | the day's level name, localised (`LEVEL_META` names) |
+| Twist | display name + one-line effect, e.g. "Thin walls · your towers hold 20 % less" |
+| Reward | "30 gold + 10 per star · 5 crystals" (after the win: "claimed") |
+| Countdown | "Resets in HH:MM:SS (00:00 UTC)" — to the next UTC midnight, ticking once per second; at zero the card re-reads `challengeFor(dayKeyOf(now))` in place, no reload |
+| Streak | "Streak: N" with N as defined in §7.2 (0 shown as "Streak: 0") |
+| DONE badge | shown when `best[today]` exists with a win, with today's stars, e.g. "DONE ★★☆" |
+| Locked state | dimmed, "Clear level 8 to unlock", not tappable |
+Layout: the card **fits at 360 CSS px viewport width** with all elements visible, no clipped or wrapped-into-a-third-line text, tap target ≥ 44 px high. Tapping starts the match from `challengeFor(dayKeyOf(new Date()))` — the `dayKey` is captured at that moment and travels with the match (§7.4).
+
+**HUD.** Title reads "Daily · <level name>" instead of "Level N". No booster bar. Pause menu: Resume, Restart, Speed ×2, Level select (returns to the map).
+
+**Result screen.** One extra line under the stars:
+- first win: "Daily challenge · <Twist> · +50 gold · +5 crystals · Streak 4";
+- win, already claimed today: "Daily challenge · <Twist> · claimed today · Best 3★ 1:12";
+- loss: "Daily challenge · <Twist> · no reward yet today".
+Buttons: **Retry** and **Map** only (no Next, no Reinforcements, no ×2 gold).
+
+**Strings.** Locale keys `daily.title`, `daily.twist.<id>`, `daily.twist.<id>.desc`, `daily.reward`, `daily.claimed`, `daily.resets`, `daily.streak`, `daily.done`, `daily.locked`, `daily.hud`, `daily.result.first`, `daily.result.claimed`, `daily.result.loss` in EN / AZ / RU / TR like every other string.
+
+**Debug surface** (for e2e): the app resolves "today" once per read (`App.dayKey()`); `window.__towerclash.daily.setDayKey(dayKey)` overrides it so a spec can pin a day, roll it over and check the card, and `window.__towerclash.daily.challengeFor(dayKey)` exposes the picker.
+
+### 7.4 Edge cases
+- **Day rolls over mid-match.** The `dayKey` captured when the match started is the one the result is booked against: the win counts for the day it was **started** (pays that day's reward if not yet claimed, updates that day's best, sets `lastWinDay` to that day). The card afterwards already shows the new day, not done. A win for `D` recorded on `D + 1` still lets `D + 1` extend the streak (`lastWinDay == D`).
+- **Time zone.** UTC by design; the card says "resets at 00:00 UTC" and shows the countdown, so a player in Baku sees the reset at 04:00 local and is not surprised. The login streak stays on the local calendar day — documented asymmetry, revisit in v2.
+- **Local clock.** There is no server; the device clock is trusted. Setting the clock forward yields at most one 60-gold + 5-crystal reward per faked day, less than one rewarded ad — accepted for v1, noted for the leaderboard (v2).
+- **Level not unlocked.** Playable as the daily; does not unlock it or anything else (§7.2 "Locked levels").
+- **Level not loadable** (manifest missing the id, network failure on the lazy level chunk): the card shows the error toast the campaign uses and stays tappable; nothing is written.
+- **Pool edits.** Adding or removing an id in 9–40 re-maps every future day (the mod changes). Do it only with a note in the daily report, never mid-day.
+- **Same level as the campaign level in progress.** Allowed; the two runs are separate matches and separate ledgers.
+- **Replay after the reward.** Free, unlimited, pays nothing, can improve the local best; the result line says "claimed today".
+
+### 7.5 Acceptance criteria
+1. **Picker (exists, `tests/daily/challenge.test.ts`)** — deterministic; level in 9…40; seed ≥ 1; twist from `TWISTS`; ≥ 15 distinct levels and all 5 twists over 2026-10; malformed key throws; `dayKeyOf` is UTC; `goldReward(0/3/9)` = 30/60/60. Add the pins: `2026-09-18` → level 18, seed 233226, `plain`.
+2. **Reference bot, 60 days (AI Engineer).** `npm run playtest -- --daily 2026-09-18 --days 60 --seeds 5` (`scripts/lib/daily.ts`): for each of the 60 days from 2026-09-18, the day's level with `state.modifiers` = the day's twist, no upgrades, over K = 5 seeds = the day's fixed seed, fixed + 1, … fixed + 4. Gate **per day**: the fixed seed is won **and** wins / K ≥ 90 % — with K = 5 that is 5/5; every win under 180 s (`HEADLESS_MAX_MS`), nothing `playing`. `--no-twist` is the control that tells a twist-caused loss from a level-caused one: a day that fails with the twist and passes without it is a §3 level fix under that twist, a day that fails both is a plain level bug. The per-day table goes into the backlog entry; re-run whenever a pool level or the AI changes.
+3. **Pool × twist (AI Engineer, Level Designer fixes).** `npm run playtest -- --twist <id> --seeds 5` (flag to add) for each of the 5 twists: every level 9–40 wins ≥ 4/5 seeds under every twist, under 180 s (§3). A failing level is retuned, the twist stays. Until the flag exists, item 2 over 60 days is the shipping gate; item 3 is the completeness gate before v1.0.
+4. **Save (QA, unit).** First win pays `30 + 10 × stars` gold and 5 crystals once; a second win the same day pays 0/0 and updates `best` only when better; streak 1 → 2 → 3 on consecutive UTC days, back to 1 after a missed day, unaffected by `save.daily`; a match started on `D` and won on `D + 1` books against `D`; a loss changes nothing; normalize clamps hostile input and keeps only the 30 newest `best` keys.
+5. **Equal for everyone (QA, unit + e2e).** A save with every commander upgrade at its cap and a fresh save produce identical `getState().modifiers` in the daily (= the twist); booster commands in a daily are ignored; the booster bar, Reinforcements, skip and ×2 offers are absent.
+6. **Card (QA, e2e at 360×640 and 390×844 CSS px).** Locked before level 8 has a star; unlocked after; all elements of §7.3 visible inside the viewport with no clipped text; countdown ticks; tapping loads `challengeFor(today)` (level, seed and modifiers match); HUD shows "Daily · <name>"; an autoplay win writes `save.challenge`, pays once, shows the DONE badge and the streak.
+7. **Budget.** Eager bundle stays ≤ 80 kB gzip (PERF-2); the card adds no new font or asset.
+
+### 7.6 v2 ideas (not in v1)
+- **Weekly leaderboard** (time / stars per day, top 100) — needs an account and a server-side clock; §6 rules accounts out of v1.0. Design when accounts exist; the fixed seed and modifiers make results comparable already.
+- **Enemy-side mutators** (e.g. "Alarmed": enemy aggression +0.2; "Rich": enemy production ×1.15) — needs `PlayerModifiers` per owner in the sim and modifier-aware bots; a sim + AI item, not a docs one.
+- **Streak milestones** (ECONOMY.md §6.2 proposal: day 3 / 7 / 30 → 5 / 20 / 100 crystals, chips on the card) — economy says ≈ 1 crystal a day, inside the no-price-change band; design-approved for Phase C once `save.challenge` has shipped and 2 weeks of streak data exist. No streak-shield product without a Publisher read on loss-aversion wording.
+- **One attempt + `rv_daily_retry`** (ECONOMY.md §6.2: a second attempt with a free Freeze for an ad or 10 crystals) — rejected for v1 (unlimited free retries, no booster in the daily, §7.2). Re-evaluate only with telemetry showing attempts per day ≫ 3 and a leaderboard that needs an "assisted" flag.
+- **Challenge achievements** — "7-day challenge streak", "30 daily wins"; cheap once `save.challenge` exists; sized by Monetization.
+- **Twist guarantees** — never the same twist on consecutive days, never the same level within 14 days (a small rejection loop over the hash).
+- **Yesterday's map** — a second card, no reward, for players who missed the day.
+- **Share card** — a screenshot with day key, twist and stars; the day key makes it verifiable by anyone with the game.
+- **Unify the streak day** — move the login streak to UTC as well, or both to local; one rule for both counters.
+- **Reset notification** on mobile at 00:00 UTC (Capacitor local notifications; opt-in in Settings).
