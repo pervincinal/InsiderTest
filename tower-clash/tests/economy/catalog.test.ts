@@ -148,6 +148,19 @@ describe('economy catalog (docs/ECONOMY.md)', () => {
       else expect(s.costCrystals).toBe(0);
     }
     expect(SKINS.filter((s) => s.source === 'premium').map((s) => s.id).sort()).toEqual(['helmet_royal', 'roof_gold']);
+    // every shop skin sits in the 80–200 crystal band of ECONOMY.md §3.3, including the M3-2 silhouettes
+    for (const s of SKINS.filter((s) => s.source === 'shop')) {
+      expect(s.costCrystals, s.id).toBeGreaterThanOrEqual(80);
+      expect(s.costCrystals, s.id).toBeLessThanOrEqual(200);
+    }
+    expect(SKINS.filter((s) => s.category === 'towerShape').map((s) => [s.id, s.costCrystals])).toEqual([
+      ['tower_keep', 150],
+      ['tower_watchtower', 200],
+    ]);
+    expect(SKINS.filter((s) => s.category === 'unitShape').map((s) => [s.id, s.costCrystals])).toEqual([
+      ['unit_shieldwall', 120],
+      ['unit_robots', 150],
+    ]);
     expect(CRYSTAL_SERVICES.levelSkip.costCrystals).toBeGreaterThan(CRYSTAL_SERVICES.continue.costCrystals);
   });
 

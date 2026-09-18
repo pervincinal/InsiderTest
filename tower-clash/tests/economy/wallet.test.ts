@@ -20,7 +20,8 @@ import {
 } from '../../src/economy/wallet';
 import { boosterDiscount, boosterPrice, equippedSkin, interstitialsDisabled, ownsProduct, shopSkins, skinFamily, spriteSkinId, visibleProducts } from '../../src/economy/entitlements';
 import { HELMET_SKINS, ROOF_SKINS, THEME_IDS } from '../../src/render/sprites';
-import { buyUpgrade, commanderSummary, modifiersFromSave, upgradeCost, upgradeTier } from '../../src/ui/upgrades';
+import { commanderSummary, modifiersFromSave, upgradeTier } from '../../src/ui/upgrades';
+import { buyUpgrade, upgradeCost } from '../../src/ui/shopUpgrades';
 import { CONVERSION, CRYSTAL_SERVICES, EARN_RULES, IAP_PRODUCTS, SKINS } from '../../src/economy/catalog';
 import type { StoreProvider } from '../../src/economy/store';
 import { makeLevel } from '../helpers';
@@ -298,6 +299,9 @@ describe('skins', () => {
     expect(skinFamily({ category: 'terrainTheme' })).toBe('theme');
     expect(skinFamily({ category: 'towerRoof' })).toBe('roof');
     expect(skinFamily({ category: 'unitHelmet' })).toBe('helmet');
+    // silhouette skins (M3-2) share the roof / helmet slot
+    expect(skinFamily({ category: 'towerShape' })).toBe('roof');
+    expect(skinFamily({ category: 'unitShape' })).toBe('helmet');
   });
 
   it('the save keeps an equipped theme only when owned; a v3 save without the slot loads as none', () => {

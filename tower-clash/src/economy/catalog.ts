@@ -168,7 +168,11 @@ export const ADVANTAGE_LIMIT = {
   totalBoosterDiscount: 0.3,
 } as const satisfies Record<UpgradeEffectKind, number> & { totalBoosterDiscount: number };
 
-export type SkinCategory = 'towerRoof' | 'unitHelmet' | 'terrainTheme';
+/**
+ * `towerShape` / `unitShape` (backlog M3-2) are silhouette skins: they replace the whole building /
+ * soldier, so they equip into the same save slot as a roof / helmet (one look per family).
+ */
+export type SkinCategory = 'towerRoof' | 'unitHelmet' | 'terrainTheme' | 'towerShape' | 'unitShape';
 
 export interface SkinDef {
   readonly id: string;
@@ -192,6 +196,10 @@ export const SKINS = [
   { id: 'theme_dusk', label: 'Dusk', category: 'terrainTheme', costCrystals: 150, source: 'shop' },
   { id: 'theme_winter_night', label: 'Winter night', category: 'terrainTheme', costCrystals: 200, source: 'shop' },
   { id: 'theme_neon', label: 'Neon', category: 'terrainTheme', costCrystals: 200, source: 'shop' },
+  { id: 'tower_keep', label: 'Round keep', category: 'towerShape', costCrystals: 150, source: 'shop' },
+  { id: 'tower_watchtower', label: 'Watchtower', category: 'towerShape', costCrystals: 200, source: 'shop' },
+  { id: 'unit_shieldwall', label: 'Shield bearers', category: 'unitShape', costCrystals: 120, source: 'shop' },
+  { id: 'unit_robots', label: 'Clockwork robots', category: 'unitShape', costCrystals: 150, source: 'shop' },
 ] as const satisfies readonly SkinDef[];
 
 /** Crystal-priced services (ECONOMY.md §3.1, §3.4, §3.5). */

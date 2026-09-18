@@ -6,9 +6,11 @@
  */
 import type { View } from '../render/view';
 import type { Rect } from '../render/widgets';
-import { inRect, segmentAt } from '../render/widgets';
+import { inRect } from '../render/widgets';
+import { segmentAt } from '../render/menuWidgets';
 import type { ShopTab } from '../render/layout';
-import { SHOP, SHOP_TABS, shopBuyRect, shopConvertSegRect, shopPackRect, shopRowRect, shopSkinRect } from '../render/layout';
+import { SHOP_TABS } from '../render/layout';
+import { SHOP, shopBuyRect, shopConvertSegRect, shopPackRect, shopRowRect, shopSkinRect } from '../render/menuLayout';
 import type { ShopBundleCard, ShopConvertCard, ShopCrateCard, ShopPackCard, ShopSkinCard, ShopUpgradeCard } from '../render/menusShop';
 import { drawShop } from '../render/menusShop';
 import { ParticleSystem } from '../render/particles';
@@ -18,7 +20,8 @@ import { getStore } from '../economy/store';
 import { CONVERSION_PACKS, buyBoosterCrate, conversionGold, convertCrystals, grantProduct, restorePurchases, spendCrystals } from '../economy/wallet';
 import { CONVERSION, CRYSTAL_SERVICES } from '../economy/catalog';
 import { ownsProduct, shopSkins, skinFamily, spriteSkinId, visibleProducts } from '../economy/entitlements';
-import { UPGRADE_DEFS, UPGRADE_GLYPH, buyUpgrade, upgradeCost, upgradeEffectText, upgradeTier } from './upgrades';
+import { UPGRADE_DEFS, upgradeTier } from './upgrades';
+import { UPGRADE_GLYPH, buyUpgrade, upgradeCost, upgradeEffectText } from './shopUpgrades';
 import type { SkinFamily } from './save';
 import { writeSave } from './save';
 import type { App, Screen } from './screens';
@@ -176,6 +179,8 @@ export class ShopScreen implements Screen {
         ['towerRoof', 'shop.roofs'],
         ['unitHelmet', 'shop.helmets'],
         ['terrainTheme', 'shop.themes'],
+        ['towerShape', 'shop.towers'],
+        ['unitShape', 'shop.units'],
       ] as const) {
         const list = shopSkins().filter((s) => s.category === category);
         out.skinHeaders.push({ label: t(key), y: top });

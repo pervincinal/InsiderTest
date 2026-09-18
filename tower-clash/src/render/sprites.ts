@@ -3,7 +3,7 @@ import type { Palette, Tones } from './palette';
 import { shade } from './palette';
 import { TANK_RADIUS } from './layout';
 import { drawBoltGlyph, font, roundRect } from './widgets';
-import { SHADOW_DX, SHADOW_DY, drawThemeSwatch } from './terrain';
+import { SHADOW_DX, SHADOW_DY } from './terrain';
 
 /*
  * Clay building and soldier sprites (ART_DIRECTION §3), canvas primitives only. Anchor (x, y) is
@@ -52,15 +52,48 @@ export interface TowerSkin {
   theme?: string;
 }
 
-export const ROOF_SKINS = ['roof.default', 'roof.gold', 'roof.iron', 'roof.slate', 'roof.tent', 'roof.pagoda', 'roof.onion'] as const;
-export const HELMET_SKINS = ['helmet.default', 'helmet.plume', 'helmet.bronze', 'helmet.viking', 'helmet.knight', 'helmet.samurai', 'helmet.royal'] as const;
+/** Values of `TowerSkin.roof`: roof materials, plus the tower silhouettes (`tower.*`, M3-2) that replace the whole building. */
+export const ROOF_SKINS = ['roof.default', 'roof.gold', 'roof.iron', 'roof.slate', 'roof.tent', 'roof.pagoda', 'roof.onion', 'tower.keep', 'tower.watchtower'] as const;
+/** Values of `TowerSkin.helmet`: helmets, plus the unit silhouettes (`unit.*`, M3-2) that reshape soldiers and tanks. */
+export const HELMET_SKINS = ['helmet.default', 'helmet.plume', 'helmet.bronze', 'helmet.viking', 'helmet.knight', 'helmet.samurai', 'helmet.royal', 'unit.shieldwall', 'unit.robots'] as const;
 export { THEME_IDS } from './palette';
 
-const RIM = 'rgba(255, 250, 240, 0.55)';
-const INK_LINE = 'rgba(30, 42, 68, 0.18)';
-const TAU = Math.PI * 2;
+/*
+ * Silhouette skins (`tower.*` / `unit.*`) are drawn by src/render/skinShapes.ts, a lazy chunk
+ * (the eager bundle sits on its 80 kB budget). The first draw that needs one kicks off the import
+ * and falls back to the default look until it lands — a frame or two on first use; the shop preview
+ * and `loadShapeSkins()` warm it earlier.
+ */
+export interface ShapeSkinDrawers {
+  tower: (ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, kind: TowerKind, x: number, y: number, level: number, o: TowerDrawOptions, skinId: string) => void;
+  unit: (ctx: CanvasRenderingContext2D, pal: Palette, st: UnitStyle, x: number, y: number, kind: UnitKind, dx: number, dy: number, id: number, nowMs: number, motion: boolean, scale: number, skinId: string) => void;
+}
+
+let shapeSkins: ShapeSkinDrawers | null = null;
+let shapeSkinsPromise: Promise<ShapeSkinDrawers> | null = null;
+
+/** True for the silhouette skin ids that live in the lazy chunk. */
+export function isShapeSkin(id: string | undefined): id is string {
+  return id !== undefined && (id.startsWith('tower.') || id.startsWith('unit.'));
+}
+
+/** Load the silhouette skin drawers (idempotent; resolves immediately once loaded). */
+export function loadShapeSkins(): Promise<ShapeSkinDrawers> {
+  shapeSkinsPromise ??= import('./skinShapes').then((m) => (shapeSkins = m.SHAPE_SKINS));
+  return shapeSkinsPromise;
+}
+
+/** The drawers if loaded; otherwise starts the load and returns null (caller draws the default look). */
+function shapeSkinsNow(): ShapeSkinDrawers | null {
+  if (!shapeSkins) void loadShapeSkins().catch(() => undefined);
+  return shapeSkins;
+}
+
+export const RIM = 'rgba(255, 250, 240, 0.55)';
+export const INK_LINE = 'rgba(30, 42, 68, 0.18)';
+export const TAU = Math.PI * 2;
 /** Cream canvas stripes of the tent skin (paper, and paper in shadow). */
-const STRIPE: Tones = { lit: '#fffaf0', mid: '#fff3dc', shade: '#e2d3b8' };
+export const STRIPE: Tones = { lit: '#fffaf0', mid: '#fff3dc', shade: '#e2d3b8' };
 /** Blue-grey slate tiles (lighter and bluer than the gun-metal iron roof). */
 const SLATE: Tones = { lit: '#b3bede', mid: '#7481ad', shade: '#4d5578' };
 /** Bronze helmet clay. */
@@ -106,7 +139,7 @@ function roofStyle(pal: Palette, owner: Tones, skin?: TowerSkin): RoofStyle {
 }
 
 /** Level index 0..2 clamped, for the per-level geometry tables. */
-function tier(level: number): 0 | 1 | 2 {
+export function tier(level: number): 0 | 1 | 2 {
   return level >= 3 ? 2 : level === 2 ? 1 : 0;
 }
 
@@ -180,7 +213,7 @@ export function drawTowerShadow(ctx: CanvasRenderingContext2D, pal: Palette, x: 
 }
 
 /** Clay cylinder: three vertical tone bands, rim light on the left edge, lit top disc. */
-function cylinder(ctx: CanvasRenderingContext2D, tones: Tones, x: number, top: number, bottom: number, r: number, ry: number, rows = 2, topLift = 0.25): void {
+export function cylinder(ctx: CanvasRenderingContext2D, tones: Tones, x: number, top: number, bottom: number, r: number, ry: number, rows = 2, topLift = 0.25): void {
   ctx.fillStyle = tones.mid;
   ctx.beginPath();
   ctx.moveTo(x - r, top);
@@ -236,7 +269,7 @@ function cylinder(ctx: CanvasRenderingContext2D, tones: Tones, x: number, top: n
 }
 
 /** Owner-coloured cone roof: three facets, shaded underside, rim light on the lit edge. */
-function cone(ctx: CanvasRenderingContext2D, tones: Tones, x: number, base: number, apex: number, rx: number, ry: number, stripes?: Tones): void {
+export function cone(ctx: CanvasRenderingContext2D, tones: Tones, x: number, base: number, apex: number, rx: number, ry: number, stripes?: Tones): void {
   // overhang underside
   ctx.fillStyle = tones.shade;
   ctx.beginPath();
@@ -315,7 +348,7 @@ function dome(ctx: CanvasRenderingContext2D, tones: Tones, x: number, base: numb
  * Owner-coloured trim under a skinned roof's eave (drawn before the roof, so only its front rim
  * shows): a shade ellipse with a mid ellipse on top and a lit sliver on the upper-left.
  */
-function ownerBand(ctx: CanvasRenderingContext2D, tones: Tones, x: number, y: number, rx: number, ry: number): void {
+export function ownerBand(ctx: CanvasRenderingContext2D, tones: Tones, x: number, y: number, rx: number, ry: number): void {
   ctx.fillStyle = tones.shade;
   ctx.beginPath();
   ctx.ellipse(x, y + 3, rx, ry, 0, 0, TAU);
@@ -508,7 +541,7 @@ function roof(ctx: CanvasRenderingContext2D, pal: Palette, owner: Tones, style: 
 }
 
 /** Flag on a pole; the free edge waves. */
-function flag(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, top: number, height: number, nowMs: number, motion: boolean): void {
+export function flag(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, top: number, height: number, nowMs: number, motion: boolean): void {
   ctx.strokeStyle = pal.stoneTones.shade;
   ctx.lineWidth = 3;
   ctx.lineCap = 'round';
@@ -541,7 +574,7 @@ function flag(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: numb
 }
 
 /** 1–3 gold gems set into a plinth front, with a travelling glint. */
-function gems(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, level: number, nowMs: number, motion: boolean): void {
+export function gems(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, level: number, nowMs: number, motion: boolean): void {
   const glint = motion ? ((nowMs / 1400 + x * 0.01) % 1) * (level + 1) - 0.5 : -1;
   for (let i = 0; i < level; i++) {
     const px = x + (i - (level - 1) / 2) * 14;
@@ -578,12 +611,12 @@ function gems(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number,
 }
 
 /** Short wide stone base; gems live on its front. */
-function plinth(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, r: number, h: number): void {
+export function plinth(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, r: number, h: number): void {
   cylinder(ctx, pal.stoneTones, x, y - h, y + 2, r, r * 0.4, 0, 0);
 }
 
 /** Arched doorway in the body's shade tone. */
-function door(ctx: CanvasRenderingContext2D, pal: Palette, x: number, bottom: number, hw: number, h: number): void {
+export function door(ctx: CanvasRenderingContext2D, pal: Palette, x: number, bottom: number, hw: number, h: number): void {
   ctx.fillStyle = pal.stoneTones.shade;
   ctx.beginPath();
   ctx.moveTo(x - hw, bottom);
@@ -595,7 +628,7 @@ function door(ctx: CanvasRenderingContext2D, pal: Palette, x: number, bottom: nu
 }
 
 /** Tent awning at the base (left front) in owner cloth, `s` scales it. */
-function awning(ctx: CanvasRenderingContext2D, tones: Tones, x: number, y: number, s: number): void {
+export function awning(ctx: CanvasRenderingContext2D, tones: Tones, x: number, y: number, s: number): void {
   const tri = (ax: number, bx: number, cx: number, color: string): void => {
     ctx.fillStyle = color;
     ctx.beginPath();
@@ -619,7 +652,7 @@ function awning(ctx: CanvasRenderingContext2D, tones: Tones, x: number, y: numbe
 }
 
 /** Stone ledge ring where the second storey starts (L2): underside shade, mid, lit top, rim. */
-function ledge(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, r: number, ry: number): void {
+export function ledge(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, r: number, ry: number): void {
   const st = pal.stoneTones;
   ctx.fillStyle = st.shade;
   ctx.beginPath();
@@ -644,7 +677,7 @@ function ledge(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number
  * Hanging owner-coloured banner on a gold rod (L2): swallowtail hem that sways, lit stripe on the
  * left, a paper emblem dot. Reads as "second storey" even at phone size.
  */
-function banner(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, top: number, w: number, h: number, nowMs: number, motion: boolean): void {
+export function banner(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, top: number, w: number, h: number, nowMs: number, motion: boolean): void {
   const sway = motion ? Math.sin(nowMs / 320 + x * 0.05) * 1.6 : 0;
   const hw = w / 2;
   const cloth = (ox: number, oy: number, color: string): void => {
@@ -698,7 +731,7 @@ function withAlphaInk(alpha: number): string {
  * Merlons along one half of a rim (`back` = the far half, drawn before whatever stands on the rim;
  * front half drawn after so it overlaps the roof skirt). Battlements of the L3 keep.
  */
-function crenelsHalf(ctx: CanvasRenderingContext2D, pal: Palette, x: number, top: number, r: number, ry: number, n: number, back: boolean, size = 10): void {
+export function crenelsHalf(ctx: CanvasRenderingContext2D, pal: Palette, x: number, top: number, r: number, ry: number, n: number, back: boolean, size = 10): void {
   const a0 = back ? Math.PI : 0;
   for (let i = 0; i < n; i++) {
     const a = a0 + ((i + 0.5) / n) * Math.PI;
@@ -774,7 +807,7 @@ function crenels(ctx: CanvasRenderingContext2D, pal: Palette, x: number, top: nu
 }
 
 /** Half of the fortress wall ring (back half behind the keep, front half in front of it). */
-function wallRing(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, front: boolean, rx = 46, ry = 19): void {
+export function wallRing(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, front: boolean, rx = 46, ry = 19): void {
   const st = pal.stoneTones;
   const a0 = front ? 0 : Math.PI;
   const a1 = front ? Math.PI : Math.PI * 2;
@@ -902,16 +935,20 @@ function drawArtillery(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones
   }
   if (style.rivets) rivets(ctx, style.tones, x, dy, rx, ry);
   // barrel tracks the last target; longer and heavier per level
-  const a = o.aim ?? -0.6;
-  const len = [26, 30, 36][k]!;
-  const bw = [9, 10, 12][k]!;
+  barrel(ctx, pal, x, dy - 6, o.aim ?? -0.6, [26, 30, 36][k]!, [9, 10, 12][k]!);
+  gems(ctx, pal, x + (k >= 1 ? 4 : -2), y - bh * 0.45, level, o.nowMs, o.motion);
+  flag(ctx, pal, tones, x - br + 3, y - bh - [26, 30, 34][k]!, [22, 26, 28][k]!, o.nowMs, o.motion);
+}
+
+/** Gun barrel from the pivot (x, y) along `a` (screen radians): metal shade under mid, lit line, pivot cap. */
+export function barrel(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, a: number, len: number, bw: number): void {
   const bx = x + Math.cos(a) * len;
-  const by = dy - 6 + Math.sin(a) * len * 0.73;
+  const by = y + Math.sin(a) * len * 0.73;
   ctx.lineCap = 'round';
   ctx.strokeStyle = pal.metal.shade;
   ctx.lineWidth = bw;
   ctx.beginPath();
-  ctx.moveTo(x, dy - 6);
+  ctx.moveTo(x, y);
   ctx.lineTo(bx, by);
   ctx.stroke();
   ctx.strokeStyle = pal.metal.mid;
@@ -920,15 +957,13 @@ function drawArtillery(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones
   ctx.strokeStyle = pal.metal.lit;
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(x + Math.cos(a) * 6 - 1, dy - 8 + Math.sin(a) * 4);
+  ctx.moveTo(x + Math.cos(a) * 6 - 1, y - 2 + Math.sin(a) * 4);
   ctx.lineTo(bx - 1, by - 2);
   ctx.stroke();
   ctx.fillStyle = pal.metal.shade;
   ctx.beginPath();
-  ctx.arc(x, dy - 6, bw * 0.6, 0, Math.PI * 2);
+  ctx.arc(x, y, bw * 0.6, 0, Math.PI * 2);
   ctx.fill();
-  gems(ctx, pal, x + (k >= 1 ? 4 : -2), y - bh * 0.45, level, o.nowMs, o.motion);
-  flag(ctx, pal, tones, x - br + 3, y - bh - [26, 30, 34][k]!, [22, 26, 28][k]!, o.nowMs, o.motion);
 }
 
 /** Two-tier hip roof with curling eaves across the factory deck (pagoda skin); `hw` = deck half width. */
@@ -1026,7 +1061,7 @@ function sawTeeth(ctx: CanvasRenderingContext2D, style: RoofStyle, x: number, to
 }
 
 /** Chimney with a drifting smoke puff (cool grey reads on cream, sand, snow and dark rock alike). */
-function chimney(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, top: number, bottom: number, w: number, nowMs: number, motion: boolean, phase = 0): void {
+export function chimney(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, top: number, bottom: number, w: number, nowMs: number, motion: boolean, phase = 0): void {
   const st = pal.stoneTones;
   ctx.fillStyle = st.shade;
   ctx.fillRect(x, top, w, bottom - top);
@@ -1140,6 +1175,14 @@ function drawFactory(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, 
 }
 
 function drawKind(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, kind: TowerKind, x: number, y: number, level: number, o: TowerDrawOptions): void {
+  const shape = o.skin?.roof;
+  if (isShapeSkin(shape)) {
+    const drawers = shapeSkinsNow();
+    if (drawers) {
+      drawers.tower(ctx, pal, tones, kind, x, y, level, o, shape);
+      return;
+    }
+  }
   switch (kind) {
     case 'fortress':
       drawFortress(ctx, pal, tones, x, y, level, o);
@@ -1288,7 +1331,7 @@ export function drawRoofIcon(ctx: CanvasRenderingContext2D, pal: Palette, color:
 
 /* ---------- units ---------- */
 
-interface UnitStyle {
+export interface UnitStyle {
   lit: string;
   mid: string;
   shade: string;
@@ -1300,7 +1343,7 @@ interface UnitStyle {
 const styleCache = new WeakMap<Palette, Map<Owner, UnitStyle>>();
 
 /** Pre-tinted colours per owner (computed once per palette; no per-frame colour maths on units). */
-function unitStyle(pal: Palette, owner: Owner): UnitStyle {
+export function unitStyle(pal: Palette, owner: Owner): UnitStyle {
   let m = styleCache.get(pal);
   if (!m) {
     m = new Map();
@@ -1315,7 +1358,7 @@ function unitStyle(pal: Palette, owner: Owner): UnitStyle {
   return s;
 }
 
-function capsule(ctx: CanvasRenderingContext2D, x: number, top: number, bottom: number, r: number): void {
+export function capsule(ctx: CanvasRenderingContext2D, x: number, top: number, bottom: number, r: number): void {
   ctx.beginPath();
   ctx.moveTo(x - r, top);
   ctx.arc(x, top, r, Math.PI, 0);
@@ -1345,6 +1388,13 @@ export function drawUnitSprite(
   helmet?: string,
 ): void {
   const st = unitStyle(pal, owner);
+  if (isShapeSkin(helmet)) {
+    const drawers = shapeSkinsNow();
+    if (drawers) {
+      drawers.unit(ctx, pal, st, x, y, kind, dx, dy, id, nowMs, motion, scale, helmet);
+      return;
+    }
+  }
   if (kind === 'tank') {
     const s = TANK_RADIUS * scale;
     const rock = motion ? Math.sin(nowMs / 160 + id) * 0.9 : 0;
@@ -1557,7 +1607,7 @@ function drawHelmet(ctx: CanvasRenderingContext2D, pal: Palette, st: UnitStyle, 
 
 const GLINT = 'rgba(255, 255, 255, 0.85)';
 
-function poly(ctx: CanvasRenderingContext2D, pts: readonly (readonly [number, number])[], x: number, y: number, s: number, close = true): void {
+export function poly(ctx: CanvasRenderingContext2D, pts: readonly (readonly [number, number])[], x: number, y: number, s: number, close = true): void {
   ctx.beginPath();
   for (let i = 0; i < pts.length; i++) {
     const p = pts[i]!;
@@ -1576,7 +1626,7 @@ function glyphShadow(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: 
 }
 
 /** Clay disc: shaded rim below, coloured face, inner top highlight. Base of the badges. */
-function clayDisc(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, r: number, tones: Tones): void {
+export function clayDisc(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, r: number, tones: Tones): void {
   glyphShadow(ctx, pal, x, y, r);
   ctx.fillStyle = tones.shade;
   ctx.beginPath();
@@ -1698,59 +1748,6 @@ export function drawCrystal(ctx: CanvasRenderingContext2D, pal: Palette, x: numb
 }
 
 /** Coin positions (in coin radii) and the coin radius (in `size`) for 1–5 coins. */
-const PILE: readonly { r: number; at: readonly (readonly [number, number])[] }[] = [
-  { r: 0.5, at: [[0, 0]] },
-  { r: 0.33, at: [[0.62, -0.12], [-0.62, 0.12]] },
-  { r: 0.27, at: [[0, -0.6], [0.98, 0.55], [-0.98, 0.55]] },
-  { r: 0.22, at: [[0, -0.8], [1.95, 0.7], [0, 0.7], [-1.95, 0.7]] },
-  { r: 0.22, at: [[0.98, -0.75], [-0.98, -0.75], [1.95, 0.7], [0, 0.7], [-1.95, 0.7]] },
-];
-
-/** Pile of `count` (1–5) gold coins inside a `size` × `size` tile centred on (x, y). */
-export function drawGoldPile(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, size: number, count: number): void {
-  const spec = PILE[Math.max(1, Math.min(5, Math.round(count))) - 1]!;
-  const r = spec.r * size;
-  if (spec.at.length > 1) {
-    ctx.fillStyle = pal.groundShadow;
-    ctx.beginPath();
-    ctx.ellipse(x + size * 0.04, y + size * 0.42, size * 0.5, size * 0.13, 0, 0, TAU);
-    ctx.fill();
-  }
-  for (const [cx, cy] of spec.at) drawGoldCoin(ctx, pal, x + cx * r, y + cy * r, r);
-}
-
-/** Gem positions (in gem radii), tilt (radians) and radius (in `size`) for 1–5 gems. */
-const CLUSTER: readonly { r: number; at: readonly (readonly [number, number, number])[] }[] = [
-  { r: 0.48, at: [[0, 0, 0]] },
-  { r: 0.36, at: [[-0.6, 0.1, -0.35], [0.6, 0.05, 0.3]] },
-  { r: 0.3, at: [[-0.95, 0.45, -0.45], [0.95, 0.45, 0.45], [0, -0.35, 0]] },
-  { r: 0.26, at: [[-1.4, 0.55, -0.55], [1.4, 0.55, 0.55], [-0.45, -0.4, -0.15], [0.55, -0.35, 0.2]] },
-  { r: 0.24, at: [[-1.6, 0.7, -0.6], [1.6, 0.7, 0.6], [-0.75, 0.1, -0.3], [0.8, 0.1, 0.3], [0, -0.7, 0]] },
-];
-
-/** Cluster of `count` (1–5) crystals inside a `size` × `size` tile centred on (x, y). */
-export function drawCrystalCluster(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, size: number, count: number): void {
-  const spec = CLUSTER[Math.max(1, Math.min(5, Math.round(count))) - 1]!;
-  const r = spec.r * size;
-  if (spec.at.length > 1) {
-    ctx.fillStyle = pal.groundShadow;
-    ctx.beginPath();
-    ctx.ellipse(x + size * 0.04, y + size * 0.42, size * 0.5, size * 0.13, 0, 0, TAU);
-    ctx.fill();
-  }
-  for (const [cx, cy, tilt] of spec.at) {
-    if (tilt === 0) {
-      drawCrystal(ctx, pal, x + cx * r, y + cy * r, r);
-      continue;
-    }
-    ctx.save();
-    ctx.translate(x + cx * r, y + cy * r);
-    ctx.rotate(tilt);
-    drawCrystal(ctx, pal, 0, 0, r);
-    ctx.restore();
-  }
-}
-
 /**
  * Wooden treasure chest with gold straps; `size` is its width. Open: the lid tips back and coins +
  * a crystal show over the rim (starter pack / reward). The anchor (x, y) is the chest centre.
@@ -1863,99 +1860,6 @@ export function drawTreasureChest(ctx: CanvasRenderingContext2D, pal: Palette, x
   ctx.beginPath();
   ctx.moveTo(bx + 1, by + rad);
   ctx.lineTo(bx + 1, by + bh - rad);
-  ctx.stroke();
-}
-
-/** Paper disc with an ink television, crossed out in red: "remove ads". */
-export function drawNoAdsBadge(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, r: number): void {
-  clayDisc(ctx, pal, x, y, r, { lit: '#ffffff', mid: pal.paper, shade: pal.panelBorder });
-  // television: antenna, ink body, sky screen, feet
-  ctx.strokeStyle = pal.ink;
-  ctx.lineWidth = Math.max(1.5, r * 0.1);
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(x - r * 0.28, y - r * 0.62);
-  ctx.lineTo(x, y - r * 0.3);
-  ctx.lineTo(x + r * 0.28, y - r * 0.62);
-  ctx.stroke();
-  ctx.fillStyle = pal.ink;
-  roundRect(ctx, { x: x - r * 0.52, y: y - r * 0.32, w: r * 1.04, h: r * 0.78 }, r * 0.12);
-  ctx.fill();
-  ctx.fillStyle = '#bfe8ff';
-  roundRect(ctx, { x: x - r * 0.42, y: y - r * 0.22, w: r * 0.84, h: r * 0.58 }, r * 0.08);
-  ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.7)';
-  roundRect(ctx, { x: x - r * 0.4, y: y - r * 0.2, w: r * 0.3, h: r * 0.18 }, r * 0.05);
-  ctx.fill();
-  ctx.fillStyle = pal.ink;
-  ctx.fillRect(x - r * 0.3, y + r * 0.46, r * 0.14, r * 0.1);
-  ctx.fillRect(x + r * 0.16, y + r * 0.46, r * 0.14, r * 0.1);
-  // prohibition ring + slash (shade offset under it for the clay lift)
-  const ring = (dx: number, dy: number, color: string): void => {
-    ctx.strokeStyle = color;
-    ctx.lineWidth = Math.max(2, r * 0.17);
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.arc(x + dx, y + dy, r * 0.78, 0, TAU);
-    ctx.moveTo(x + dx - r * 0.55, y + dy - r * 0.55);
-    ctx.lineTo(x + dx + r * 0.55, y + dy + r * 0.55);
-    ctx.stroke();
-  };
-  ring(r * 0.04, r * 0.07, shade(pal.forbid, -0.35));
-  ring(0, 0, pal.forbid);
-  ctx.strokeStyle = RIM;
-  ctx.lineWidth = Math.max(1, r * 0.06);
-  ctx.beginPath();
-  ctx.arc(x, y, r * 0.72, Math.PI * 0.95, Math.PI * 1.5);
-  ctx.stroke();
-}
-
-/** Gold clay crown on a blue disc: the premium bundle. */
-export function drawCrownBadge(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, r: number): void {
-  clayDisc(ctx, pal, x, y, r, pal.ownerTones.player);
-  const g = pal.goldTones;
-  const crown: readonly (readonly [number, number])[] = [
-    [-0.6, 0.4],
-    [-0.6, -0.35],
-    [-0.28, -0.05],
-    [0, -0.6],
-    [0.28, -0.05],
-    [0.6, -0.35],
-    [0.6, 0.4],
-  ];
-  ctx.lineJoin = 'round';
-  // shade copy offset, then mid, then the lit left third
-  ctx.fillStyle = g.shade;
-  poly(ctx, crown, x + r * 0.05, y + r * 0.1, r);
-  ctx.fill();
-  ctx.fillStyle = g.mid;
-  poly(ctx, crown, x, y, r);
-  ctx.fill();
-  ctx.fillStyle = g.lit;
-  poly(ctx, [[-0.6, 0.4], [-0.6, -0.35], [-0.28, -0.05], [-0.1, -0.4], [-0.14, 0.4]], x, y, r);
-  ctx.fill();
-  ctx.fillStyle = g.shade;
-  poly(ctx, [[0.6, 0.4], [0.6, -0.35], [0.4, -0.15], [0.42, 0.4]], x, y, r);
-  ctx.fill();
-  // base band
-  ctx.fillStyle = g.shade;
-  ctx.fillRect(x - r * 0.6, y + r * 0.22, r * 1.2, r * 0.18);
-  ctx.fillStyle = g.lit;
-  ctx.fillRect(x - r * 0.6, y + r * 0.2, r * 1.2, r * 0.05);
-  // pearls on the points and a crystal in the band
-  ctx.fillStyle = g.lit;
-  for (const px of [-0.6, 0, 0.6]) {
-    ctx.beginPath();
-    ctx.arc(x + px * r, y + (px === 0 ? -0.6 : -0.35) * r, r * 0.09, 0, TAU);
-    ctx.fill();
-  }
-  drawCrystal(ctx, pal, x, y + r * 0.03, r * 0.16);
-  ctx.strokeStyle = RIM;
-  ctx.lineWidth = Math.max(1, r * 0.06);
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(x - r * 0.57, y + r * 0.3);
-  ctx.lineTo(x - r * 0.57, y - r * 0.3);
   ctx.stroke();
 }
 
@@ -2131,37 +2035,4 @@ export function drawUpgradeGlyph(ctx: CanvasRenderingContext2D, pal: Palette, x:
       break;
     }
   }
-}
-
-/**
- * Skin card preview inside a `size` × `size` tile centred on (x, y). `roof.*` ids draw a player
- * L2 barracks wearing that roof; `helmet.*` ids draw a large player soldier wearing that helmet;
- * `theme.*` ids draw a miniature island in that theme with a player barracks and two soldiers on
- * it. Unknown ids fall back to the default of their family.
- */
-export function drawSkinPreview(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, size: number, skinId: string): void {
-  ctx.save();
-  if (skinId.startsWith('helmet.')) {
-    const s = size / 30;
-    ctx.translate(x + size * 0.02, y + size * 0.36);
-    ctx.scale(s, s);
-    drawUnitSprite(ctx, pal, 0, 0, 'player', 'infantry', 1, 0, 0, 0, false, 1, skinId);
-  } else if (skinId.startsWith('theme.')) {
-    drawThemeSwatch(ctx, pal, x, y, size, skinId);
-    const s = size / 250;
-    ctx.translate(x - size * 0.1, y + size * 0.2);
-    ctx.scale(s, s);
-    drawTowerShadow(ctx, pal, 0, 0, 'barracks');
-    drawTowerSprite(ctx, pal, { x: 0, y: 0, owner: 'player', kind: 'barracks', level: 1 }, { nowMs: 0, motion: false });
-    drawUnitSprite(ctx, pal, 58, 26, 'player', 'infantry', 1, 0, 1, 0, false, 1.6);
-    drawUnitSprite(ctx, pal, 84, 14, 'player', 'infantry', 1, 0, 2, 0, false, 1.6);
-  } else {
-    // an L2 barracks (storey ledge + banner) so the roof reads at its full size
-    const s = size / 150;
-    ctx.translate(x + size * 0.06, y + size * 0.42);
-    ctx.scale(s, s);
-    drawTowerShadow(ctx, pal, 0, 0, 'barracks', 2);
-    drawTowerSprite(ctx, pal, { x: 0, y: 0, owner: 'player', kind: 'barracks', level: 2 }, { nowMs: 0, motion: false, skin: { roof: skinId } });
-  }
-  ctx.restore();
 }

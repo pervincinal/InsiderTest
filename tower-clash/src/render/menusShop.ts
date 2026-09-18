@@ -12,18 +12,20 @@ import {
   drawGlassBand,
   drawPill,
   drawRoundButton,
-  drawSegmented,
   drawSnowflakeGlyph,
   fitFontPx,
   font,
   roundRect,
 } from './widgets';
+import { drawSegmented } from './menuWidgets';
 import type { ShopTab } from './layout';
-import { SHOP, SHOP_TABS, shopBuyRect, shopRowBuyRect } from './layout';
+import { SHOP_TABS } from './layout';
+import { SHOP, shopBuyRect, shopRowBuyRect } from './menuLayout';
 import type { UpgradeKind } from './sprites';
 import type { ToastOpts } from './economyWidgets';
 import { drawSpinner, drawToast, drawWallet, formatAmount } from './economyWidgets';
-import { drawCrownBadge, drawCrystal, drawCrystalCluster, drawGoldCoin, drawNoAdsBadge, drawSkinPreview, drawTreasureChest, drawUpgradeGlyph } from './sprites';
+import { drawCrystal, drawGoldCoin, drawTreasureChest, drawUpgradeGlyph } from './sprites';
+import { drawCrownBadge, drawCrystalCluster, drawNoAdsBadge, drawSkinPreview } from './spritesShop';
 import { beginFrame, drawWater } from './menus';
 import type { TranslationKey } from '../ui/i18n';
 import { t } from '../ui/i18n';

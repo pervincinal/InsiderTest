@@ -61,7 +61,8 @@ export function skinById(id: string): SkinDef | undefined {
 /**
  * Catalog skin id → sprite skin id: every catalog look has a dedicated sprite named after it
  * (`roof_slate` → `roof.slate`, `helmet_viking` → `helmet.viking`, `theme_winter_night` →
- * `theme.winter_night`; see `ROOF_SKINS` / `HELMET_SKINS` / `THEME_IDS` in `src/render/sprites.ts`).
+ * `theme.winter_night`, `tower_keep` → `tower.keep`, `unit_robots` → `unit.robots`; see `ROOF_SKINS` /
+ * `HELMET_SKINS` / `THEME_IDS` in `src/render/sprites.ts`).
  */
 export function spriteSkinId(catalogId: string): string {
   return catalogId.replace('_', '.');
@@ -79,7 +80,16 @@ export function shopSkins(): SkinDef[] {
   return [...(SKINS as readonly SkinDef[])];
 }
 
-/** The family slot a catalog skin equips into. */
+/** The family slot a catalog skin equips into (silhouette skins share the roof / helmet slot, M3-2). */
 export function skinFamily(skin: Pick<SkinDef, 'category'>): SkinFamily {
-  return skin.category === 'towerRoof' ? 'roof' : skin.category === 'unitHelmet' ? 'helmet' : 'theme';
+  switch (skin.category) {
+    case 'towerRoof':
+    case 'towerShape':
+      return 'roof';
+    case 'unitHelmet':
+    case 'unitShape':
+      return 'helmet';
+    default:
+      return 'theme';
+  }
 }
