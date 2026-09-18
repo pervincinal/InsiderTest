@@ -17,8 +17,8 @@
     { "id": "east", "x": 570, "y": 900, "owner": "neutral", "units": 4 },
     { "id": "fort", "x": 360, "y": 700, "owner": "neutral", "units": 5, "kind": "fortress" },
     { "id": "spare", "x": 150, "y": 560, "owner": "neutral", "units": 6 },
-    { "id": "outpost", "x": 560, "y": 430, "owner": "enemy1", "units": 8, "level": 1, "kind": "barracks" },
-    { "id": "base", "x": 220, "y": 280, "owner": "enemy1", "units": 15, "level": 1, "kind": "barracks" }
+    { "id": "outpost", "x": 560, "y": 430, "owner": "enemy1", "units": 6, "level": 1, "kind": "barracks" },
+    { "id": "base", "x": 220, "y": 280, "owner": "enemy1", "units": 10, "level": 1, "kind": "barracks" }
   ],
   "roads": [
     { "a": "home", "b": "west" },

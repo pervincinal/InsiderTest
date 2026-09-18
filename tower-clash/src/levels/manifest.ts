@@ -59,7 +59,7 @@ export const LEVEL_MANIFEST: readonly LevelManifestEntry[] = [
   { id: 35, name: 'Powder Keg', name_az: 'Barıt Anbarı', name_ru: 'Бочка пороха', name_tr: 'Barut Fıçısı', star3: 20000, star2: 40000, load: () => import('./035-powder-keg.json').then(def) },
   { id: 36, name: 'Three Bridges', name_az: 'Üç Körpü', name_ru: 'Три моста', name_tr: 'Üç Köprü', star3: 35000, star2: 80000, load: () => import('./036-three-bridges.json').then(def) },
   { id: 37, name: 'Tank Country', name_az: 'Tank Ölkəsi', name_ru: 'Страна танков', name_tr: 'Tank Ülkesi', star3: 25000, star2: 50000, load: () => import('./037-tank-country.json').then(def) },
-  { id: 38, name: 'Ring of Fire', name_az: 'Atəş Halqası', name_ru: 'Кольцо огня', name_tr: 'Ateş Çemberi', star3: 25000, star2: 50000, load: () => import('./038-ring-of-fire.json').then(def) },
+  { id: 38, name: 'Ring of Fire', name_az: 'Atəş Halqası', name_ru: 'Кольцо огня', name_tr: 'Ateş Çemberi', star3: 20000, star2: 40000, load: () => import('./038-ring-of-fire.json').then(def) },
   { id: 39, name: 'The Long Night', name_az: 'Uzun Gecə', name_ru: 'Долгая ночь', name_tr: 'Uzun Gece', star3: 35000, star2: 70000, load: () => import('./039-the-long-night.json').then(def) },
   { id: 40, name: 'The Crown', name_az: 'Tac', name_ru: 'Корона', name_tr: 'Taç', star3: 35000, star2: 85000, load: () => import('./040-the-crown.json').then(def) },
 ];
