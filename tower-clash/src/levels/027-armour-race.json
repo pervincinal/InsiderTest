@@ -17,7 +17,7 @@
   "towers": [
     {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 18, "level": 1, "kind": "barracks"},
     {"id": "factory", "x": 150, "y": 1120, "owner": "player", "units": 10, "level": 1, "kind": "tankFactory"},
-    {"id": "depot", "x": 130, "y": 930, "owner": "neutral", "units": 8},
+    {"id": "depot", "x": 130, "y": 930, "owner": "neutral", "units": 6},
     {"id": "e", "x": 570, "y": 1000, "owner": "neutral", "units": 5},
     {"id": "mid", "x": 360, "y": 900, "owner": "neutral", "units": 8},
     {"id": "nw", "x": 150, "y": 700, "owner": "neutral", "units": 12},
