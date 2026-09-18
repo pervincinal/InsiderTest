@@ -3,7 +3,7 @@ import { makeLevel } from '../helpers';
 import { Rng, applyCommand, createState, getOutcome, step } from '../../src/sim/index';
 import type { Command, GameState, LevelDef, Outcome } from '../../src/sim/index';
 import { isAiTick, referencePlayerCommands, rngsFor, runAiTick } from '../../src/ai/index';
-import { CUT_REACTION_MS, OPENING_GROW_LEVEL, SUPPLY_MIN, bridgeLoss, wantAt } from '../../src/ai/referencePlayer';
+import { CUT_REACTION_MS, OPENING_GROW_LEVEL, SUPPLY_MIN, bridgeLoss, capped, wantAt } from '../../src/ai/referencePlayer';
 import { loadAllLevels } from '../../src/levels/index';
 
 const LEVELS = await loadAllLevels();
@@ -219,6 +219,119 @@ describe('reference player: attacks', () => {
     const state = createState(level, 1);
     applyCommand(state, link('p', 'e')); // a human tapped it: 3 units against 60
     expect(referencePlayerCommands(state, new Rng(1))).toEqual([unlink('p', 'e')]);
+  });
+});
+
+describe('reference player: capped surplus (AI-4)', () => {
+  /**
+   * A finished keep at 100 next to a 60-unit L3 keep 240 px away, flanked by an 80-unit L3 keep on
+   * another road: the strict reserve against the flank's possible column (80 + 4 grown + 1 − 4 regrown
+   * = 81) leaves a 19-unit burst against a target that needs 64 × 1.2 + 2 ≈ 79 at landing, so the
+   * strict rule waits forever while the tower makes nothing. Capped, the garrison is surplus: 100 ≥ 79.
+   */
+  const cappedLevel = (target = 60): LevelDef =>
+    makeLevel({
+      enemies: [{ owner: 'enemy1', personality: 'turtle', aggression: 0 }],
+      towers: [
+        { id: 'p', x: 360, y: 1000, owner: 'player', units: 100, level: 3 },
+        { id: 'e', x: 360, y: 760, owner: 'enemy1', units: target, level: 3 },
+        { id: 'f', x: 120, y: 1000, owner: 'enemy1', units: 80, level: 3 },
+      ],
+      roads: [
+        { a: 'p', b: 'e' },
+        { a: 'p', b: 'f' },
+      ],
+    });
+
+  it('capped(): a keep at its capacity and top level only', () => {
+    const state = createState(cappedLevel(), 1);
+    expect(capped(state, state.towers['p']!)).toBe(true);
+    expect(capped(state, state.towers['e']!)).toBe(false); // 60 of 100
+    expect(capped(state, { ...state.towers['p']!, level: 2, units: 50 })).toBe(false); // an L2 at 50 upgrades, it is never "full"
+  });
+
+  it('a capped L3 at 100 attacks the 60-unit keep 240 px away within 2 s on its whole garrison', () => {
+    const state = createState(cappedLevel(), 1);
+    const ticks = drive(state, 2000);
+    const linkTicks = [...ticks.entries()].filter(([, cmds]) => links(cmds).length > 0).map(([t]) => t);
+    expect(linkTicks.length).toBeGreaterThan(0);
+    expect(linkTicks[0]).toBeLessThanOrEqual(1500);
+    expect(ticks.get(linkTicks[0]!)).toEqual([link('p', 'e')]);
+    expect(state.links.map((l) => `${l.from}>${l.to}`)).toEqual(['p>e']);
+  });
+
+  it('keeps the wave going below the strict reserve while what it still holds is what flips the target, and takes it', () => {
+    const state = createState(cappedLevel(), 1);
+    const ticks = drive(state, 12_000);
+    // Once below capacity the strict reserve (81) is back; rule 0d would end the stream at 81 units
+    // and waste the 19 on the road. `waveStillNeeded` keeps it up: at 4 s p holds ~74 and streams on.
+    expect(ticks.get(4000)).toEqual([]);
+    expect(state.towers['e']!.owner).toBe('player');
+    expect(state.time).toBe(12_000);
+    // Never a suicide: the strict reserve returns after the capture (p regrows unlinked).
+    expect(state.links.filter((l) => l.from === 'p' && l.to === 'e')).toHaveLength(0);
+    expect(state.towers['p']!.owner).toBe('player');
+  });
+
+  it('does not launch an uncovered plan just because it is capped: 100 vs 90 waits', () => {
+    // 90 grows to 94 by landing: 94 × 1.2 + 2 = 114.8 > 100 → waits, exactly as an uncapped tower would.
+    const state = createState(cappedLevel(90), 1);
+    const ticks = drive(state, 3000);
+    for (const cmds of ticks.values()) expect(cmds).toEqual([]);
+    expect(state.links).toHaveLength(0);
+  });
+
+  it('lateral supply: a capped front keep with nothing to attack streams its surplus into the emptier front neighbour', () => {
+    // e at 100 behind barriers of 80: no plan clears (≥ 122 + 80 needed). a can throw 100 − 21 (the
+    // column e could push through its barrier: 100 − 80 = 20, + 1) sideways into b (60 → capacity).
+    const level = makeLevel({
+      enemies: [{ owner: 'enemy1', personality: 'turtle', aggression: 0 }],
+      towers: [
+        { id: 'a', x: 240, y: 1000, owner: 'player', units: 100, level: 3 },
+        { id: 'b', x: 480, y: 1000, owner: 'player', units: 60, level: 3 },
+        { id: 'e', x: 360, y: 700, owner: 'enemy1', units: 100, level: 3 },
+      ],
+      roads: [
+        { a: 'a', b: 'b' },
+        { a: 'a', b: 'e', barrier: 80 },
+        { a: 'b', b: 'e', barrier: 80 },
+      ],
+    });
+    const state = createState(level, 1);
+    const first = referencePlayerCommands(state, new Rng(1));
+    expect(first).toEqual([link('a', 'b')]);
+    for (const cmd of first) applyCommand(state, cmd);
+    const ticks = drive(state, 2000);
+    // Rule 0b keeps a lateral line up while the source is a finished keep still ≥ 60 % full.
+    expect(ticks.get(500)).toEqual([]);
+    expect(ticks.get(1000)).toEqual([]);
+    expect(state.links.some((l) => l.from === 'a' && l.to === 'b')).toBe(true);
+    expect(state.towers['a']!.units).toBeLessThan(100);
+    expect(state.towers['b']!.units).toBeGreaterThan(60);
+    // The source produces again: after the first tick it is below capacity, so it recruits (2/s at L3).
+    const before = state.towers['a']!.units;
+    applyCommand(state, unlink('a', 'b'));
+    step(state, 1000);
+    expect(state.towers['a']!.units).toBeGreaterThan(before);
+  });
+
+  it('a capped keep with nothing to attack and no neighbour to fill issues nothing (a full front is a stalemate, not a leak)', () => {
+    const level = makeLevel({
+      enemies: [{ owner: 'enemy1', personality: 'turtle', aggression: 0 }],
+      towers: [
+        { id: 'a', x: 240, y: 1000, owner: 'player', units: 100, level: 3 },
+        { id: 'b', x: 480, y: 1000, owner: 'player', units: 100, level: 3 },
+        { id: 'e', x: 360, y: 700, owner: 'enemy1', units: 100, level: 3 },
+      ],
+      roads: [
+        { a: 'a', b: 'b' },
+        { a: 'a', b: 'e', barrier: 80 },
+        { a: 'b', b: 'e', barrier: 80 },
+      ],
+    });
+    const state = createState(level, 1);
+    const ticks = drive(state, 2000);
+    for (const cmds of ticks.values()) expect(cmds).toEqual([]);
   });
 });
 

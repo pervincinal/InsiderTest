@@ -1,11 +1,13 @@
 /**
  * Daily Challenge playtest (`npm run playtest -- --daily YYYY-MM-DD [--days N] [--seeds K]`): the
  * reference player on each day's challenge exactly as the client builds it — `challengeFor(dayKey)`'s
- * level, fixed seed and twist modifiers, no Commander upgrades. Pure and importable from tests; the
- * printing and the exit code live in scripts/playtest.ts.
+ * level, fixed seed and twist modifiers, no Commander upgrades. Pool × twist sweep
+ * (`npm run playtest -- --twist <id> [--seeds K]`, GDD §7.5 item 3): every pool level under one twist
+ * over seeds 1..K, gate ≥ `TWIST_WIN_RATE` per level. Pure and importable from tests; the printing and
+ * the exit code live in scripts/playtest.ts.
  */
-import { challengeFor } from '../../src/daily/challenge';
-import type { DailyChallenge } from '../../src/daily/challenge';
+import { POOL_FROM, POOL_TO, TWISTS, challengeFor } from '../../src/daily/challenge';
+import type { DailyChallenge, Twist } from '../../src/daily/challenge';
 import { DEFAULT_MODIFIERS } from '../../src/sim/index';
 import type { LevelDef, PlayerModifiers } from '../../src/sim/index';
 import { referencePlayerCommands } from '../../src/ai/index';
@@ -14,6 +16,8 @@ import type { RunResult } from '../../src/ai/headless';
 
 /** Gate over the K seeds around the fixed one (the fixed seed itself must always be won). */
 export const DAILY_WIN_RATE = 0.9;
+/** Pool × twist gate (GDD §7.5 item 3): every pool level wins at least this share of its seeds under every twist (4/5 at K = 5). */
+export const TWIST_WIN_RATE = 0.8;
 
 const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -99,5 +103,69 @@ export function runDaily(challenge: DailyChallenge, level: LevelDef, seedCount: 
     losers,
     ticks,
     ok: fixed.outcome === 'won' && wins / seedCount >= DAILY_WIN_RATE,
+  };
+}
+
+/** The twist with this id, or undefined (`--twist` validation). */
+export function twistById(id: string): Twist | undefined {
+  return TWISTS.find((t) => t.id === id);
+}
+
+/** Is the level in the daily pool (ids `POOL_FROM`…`POOL_TO`)? */
+export function inPool(level: Pick<LevelDef, 'id'>): boolean {
+  return level.id >= POOL_FROM && level.id <= POOL_TO;
+}
+
+export interface TwistRow {
+  level: LevelDef;
+  twist: Twist;
+  seeds: number[];
+  /** One result per entry of `seeds`. */
+  results: RunResult[];
+  wins: number;
+  stars: (0 | 1 | 2 | 3)[];
+  medianMs: number | undefined;
+  worstMs: number | undefined;
+  losers: number[];
+  ticks: number;
+  /** wins / K >= TWIST_WIN_RATE. */
+  ok: boolean;
+}
+
+/**
+ * Reference player on one pool level under one twist over seeds 1..`seedCount` (the campaign seeds,
+ * not a day's fixed one: the sweep asks whether the level is winnable under the twist at all). Refuses
+ * a level outside the pool.
+ */
+export function runTwist(level: LevelDef, twist: Twist, seedCount: number): TwistRow {
+  if (!inPool(level)) throw new Error(`daily: level ${level.id} is not in the challenge pool (${POOL_FROM}-${POOL_TO})`);
+  if (!Number.isInteger(seedCount) || seedCount < 1) throw new Error(`daily: bad seed count ${String(seedCount)}`);
+  const seeds = Array.from({ length: seedCount }, (_, i) => i + 1);
+  const results: RunResult[] = [];
+  const stars: (0 | 1 | 2 | 3)[] = [];
+  const winTimes: number[] = [];
+  const losers: number[] = [];
+  let ticks = 0;
+  for (const seed of seeds) {
+    const r = runHeadless(level, seed, referencePlayerCommands, { modifiers: twist.modifiers });
+    results.push(r);
+    stars.push(starsFor(level, r));
+    ticks += r.ticks;
+    if (r.outcome === 'won') winTimes.push(r.timeMs);
+    else losers.push(seed);
+  }
+  const wins = winTimes.length;
+  return {
+    level,
+    twist,
+    seeds,
+    results,
+    wins,
+    stars,
+    medianMs: median(winTimes),
+    worstMs: winTimes.length ? Math.max(...winTimes) : undefined,
+    losers,
+    ticks,
+    ok: wins / seedCount >= TWIST_WIN_RATE,
   };
 }

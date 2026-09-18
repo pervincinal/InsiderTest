@@ -1,6 +1,7 @@
 /**
  * `npm run playtest [-- --level N] [-- --seed S] [-- --seeds N] [-- --upgrades none|max]`
  * `npm run playtest -- --daily YYYY-MM-DD [--days N] [--seeds K] [--no-twist]`
+ * `npm run playtest -- --twist <plain|lean|fastFeet|thinWalls|reinforced> [--seeds K]`
  * Headless balance run: for every level (or one), simulate (a) the reference player vs the enemies and
  * (b) an idle player vs the enemies, 50 ms ticks, AI every 500 ms, up to 180 s of sim time.
  *
@@ -17,6 +18,9 @@
  * fixed one (seed, seed+1, …). One row per day: level, twist, fixed-seed result, wins/K, median win
  * time, stars at the fixed seed. Gates: every day's fixed-seed run is won and wins/K ≥ 90 %.
  * `--no-twist` runs the same days and seeds without the twist — the control for blaming a twist or a level.
+ * Twist mode (`--twist <id>`, GDD §7.5 item 3): the reference player on every pool level (9–40) with
+ * that twist's modifiers over seeds 1..K (`--seeds K`, default 5). One row per level; gate per level:
+ * wins/K ≥ 80 % (4/5 at K = 5), every win under 180 s.
  * Rng streams come from `rngsFor`, exactly as the game client derives them.
  */
 import { performance } from 'node:perf_hooks';
@@ -28,8 +32,10 @@ import { HEADLESS_MAX_MS, runHeadless, starsFor } from '../src/ai/headless';
 import type { RunResult } from '../src/ai/headless';
 import { COMMANDER_UPGRADES } from '../src/economy/catalog';
 import type { UpgradeEffectKind } from '../src/economy/catalog';
-import { DAILY_WIN_RATE, dailyPlan, runDaily } from './lib/daily';
-import type { DailyRow } from './lib/daily';
+import { DAILY_WIN_RATE, TWIST_WIN_RATE, dailyPlan, inPool, runDaily, runTwist, twistById } from './lib/daily';
+import type { DailyRow, TwistRow } from './lib/daily';
+import { TWISTS } from '../src/daily/challenge';
+import type { Twist } from '../src/daily/challenge';
 
 export { runHeadless } from '../src/ai/headless';
 
@@ -55,6 +61,8 @@ interface Args {
   days: number;
   /** `--no-twist`: daily mode without the twist modifiers (control run). */
   twist: boolean;
+  /** `--twist <id>`: pool × twist sweep under this twist. */
+  twistId?: Twist['id'];
 }
 
 function parseArgs(argv: string[]): Args {
@@ -65,6 +73,7 @@ function parseArgs(argv: string[]): Args {
   let daily: string | undefined;
   let days = 1;
   let twist = true;
+  let twistId: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
     const next = argv[i + 1];
@@ -81,6 +90,8 @@ function parseArgs(argv: string[]): Args {
     else if (arg === '--days' && next !== undefined) days = Number(next);
     else if (arg.startsWith('--days=')) days = Number(arg.slice('--days='.length));
     else if (arg === '--no-twist') twist = false;
+    else if (arg === '--twist' && next !== undefined) twistId = next;
+    else if (arg.startsWith('--twist=')) twistId = arg.slice('--twist='.length);
   }
   if (level !== undefined && !Number.isInteger(level)) throw new Error(`bad --level ${String(level)}`);
   if (!Number.isInteger(seed)) throw new Error(`bad --seed ${String(seed)}`);
@@ -88,7 +99,10 @@ function parseArgs(argv: string[]): Args {
   if (upgrades !== 'none' && upgrades !== 'max') throw new Error(`bad --upgrades ${upgrades} (none|max)`);
   if (daily !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(daily)) throw new Error(`bad --daily ${daily} (YYYY-MM-DD)`);
   if (!Number.isInteger(days) || days < 1) throw new Error(`bad --days ${String(days)}`);
-  return { level, seed, seeds, upgrades, daily, days, twist };
+  const twistDef = twistId === undefined ? undefined : twistById(twistId);
+  if (twistId !== undefined && !twistDef) throw new Error(`bad --twist ${twistId} (${TWISTS.map((t) => t.id).join('|')})`);
+  if (twistDef && daily !== undefined) throw new Error('--twist and --daily are separate modes');
+  return { level, seed, seeds, upgrades, daily, days, twist, twistId: twistDef?.id };
 }
 
 /** Sum of a track's per-tier effect at its max tier, from the catalog; 0 when no track has that effect. */
@@ -394,8 +408,52 @@ async function runDailyMode(from: string, days: number, k: number, twist: boolea
   return failed.length;
 }
 
+/**
+ * Twist mode: the reference player on every pool level under one twist over seeds 1..K. Gate per
+ * level: wins/K >= TWIST_WIN_RATE (GDD §7.5 item 3: 4/5 at K = 5).
+ */
+async function runTwistMode(twistId: Twist['id'], k: number): Promise<number> {
+  const twist = twistById(twistId)!;
+  const levels = (await loadAllLevels()).filter(inPool);
+  const header = `${pad('lvl', 4)} ${pad('name', 20)} ${pad('wins', 6)} ${pad('3*/2*/1*/0*', 12)} ${pad('median', 8)} ${pad('worst', 8)} ${pad('gate', 6)} losing seeds`;
+  console.log(
+    `playtest twist=${twist.id} (${fmtModifiers(twist.modifiers)})  pool lvl ${levels[0]?.id ?? '-'}-${levels[levels.length - 1]?.id ?? '-'}  seeds=1..${k}  upgrades=none  max=${fmtTime(MAX_MS)}  gate: wins/K >= ${Math.round(TWIST_WIN_RATE * 100)}%`,
+  );
+  console.log(header);
+  console.log('-'.repeat(header.length));
+  const rows: TwistRow[] = [];
+  let totalTicks = 0;
+  const t0 = performance.now();
+  for (const level of levels) {
+    const row = runTwist(level, twist, k);
+    rows.push(row);
+    totalTicks += row.ticks;
+    const counts: StarCounts = [0, 0, 0, 0];
+    for (const s of row.stars) counts[s]++;
+    const medianT = row.medianMs === undefined ? '-' : fmtTime(row.medianMs);
+    const worst = row.worstMs === undefined ? '-' : fmtTime(row.worstMs);
+    const losers = row.losers.length ? row.losers.join(',') : '-';
+    console.log(
+      `${pad(String(level.id), 4)} ${pad(level.name, 20)} ${pad(`${row.wins}/${k}`, 6)} ${pad(fmtStarCounts(counts), 12)} ${pad(medianT, 8)} ${pad(worst, 8)} ${pad(row.ok ? 'ok' : 'FAIL', 6)} ${losers}`,
+    );
+  }
+  const elapsed = (performance.now() - t0) / 1000;
+  console.log('-'.repeat(header.length));
+  const failed = rows.filter((r) => !r.ok);
+  const totalWins = rows.reduce((n, r) => n + r.wins, 0);
+  console.log(`${rows.length} level(s) x ${k} seed(s) under ${twist.id}: wins ${totalWins}/${rows.length * k} (${((100 * totalWins) / (rows.length * k)).toFixed(1)}%)`);
+  for (const r of failed) console.log(`  FAIL lvl ${r.level.id} ${r.level.name} [${twist.id}]: ${r.wins}/${k} < ${Math.round(TWIST_WIN_RATE * 100)}% (lost ${r.losers.join(',')})`);
+  console.log(`${failed.length} failed level(s). perf: ${totalTicks} ticks in ${elapsed.toFixed(2)}s = ${Math.round(totalTicks / Math.max(elapsed, 1e-6))} ticks/s`);
+  return failed.length;
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
+  if (args.twistId !== undefined) {
+    const failed = await runTwistMode(args.twistId, args.seeds ?? 5);
+    if (failed > 0) process.exit(1);
+    return;
+  }
   if (args.daily !== undefined) {
     const failed = await runDailyMode(args.daily, args.days, args.seeds ?? 1, args.twist);
     if (failed > 0) process.exit(1);

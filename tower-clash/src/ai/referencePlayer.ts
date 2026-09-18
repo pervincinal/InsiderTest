@@ -47,9 +47,20 @@
  *      (`bridgeLoss`), and the plan without such sources is preferred when it reaches `needed` within
  *      +30 % of the exposed plan's delivery time (`SAFE_PLAN_SLOWDOWN`); a running stream is never joined
  *      over an exposed route,
- *   5) cut a bridge it owns an end of (`bridges.ts`) when a hostile column or stream on it — or the
+ *   5) lateral supply (AI-4) — a capped keep (`capped`: top level and at capacity, so it makes nothing
+ *      while it waits) that nothing above could use streams its surplus over the strict reserve into
+ *      the emptiest friendly neighbour not farther from the enemy than itself, so the garrison keeps
+ *      working and the keep produces again; rule 0b keeps the line up (`lateralSupplyGoesOn`), rule 0d
+ *      ends it at the strict reserve,
+ *   6) cut a bridge it owns an end of (`bridges.ts`) when a hostile column or stream on it — or the
  *      garrison about to come over it — would take the tower and the reinforcements above cannot save it,
  *      provided no own units or streams use the bridge and every enemy tower stays reachable.
+ *
+ * Capped surplus (AI-4, 2026-09-18): a capped keep's reserve for an attack or counter is `cappedReserve`
+ * (only what visibly comes down its other roads — waiting has zero value for a tower that cannot grow)
+ * and its plan is judged on the burst alone; one tick later the keep is below capacity and the strict
+ * reserve is back, so rule 0d keeps a finished keep's attack going below that reserve only while what it
+ * still holds is the part of the running plan that flips the target (`waveStillNeeded`).
  *
  * Commander upgrades (`state.modifiers`) are part of what the bot sees: its own capacities, production
  * and march times include them (via `capacityOf` / `modifiersFor` through the shared helpers), enemy
@@ -326,10 +337,34 @@ function hoseReserve(state: GameState, tower: Tower, sourceId: string): number {
   return holdReserve(state, tower, HOLD_MARGIN, undefined, sourceId);
 }
 
-/** Reserve of `tower` for a stream at the enemy tower `targetId`: `hoseReserve` when that target bleeds it, else `reserveToHold`. */
+/**
+ * A tower that cannot grow: at its top level and at capacity, so its production is thrown away every
+ * tick it sits there (rules v2: an L1/L2 at capacity upgrades at once, only a finished keep stays full).
+ */
+export function capped(state: GameState, tower: Tower): boolean {
+  return atMaxLevel(tower) && tower.units >= capacityOf(tower, state);
+}
+
+/**
+ * Capped surplus (AI-4, 2026-09-18): the reserve a *capped* tower keeps for a stream at `targetId`.
+ * The strict reserve (`reserveToHold`) holds units back against columns an enemy neighbour *could*
+ * throw, and pays for it with the production the tower would have made meanwhile — but a capped tower
+ * makes none: waiting has zero value, the position can only change by acting. So a capped tower's
+ * whole garrison is surplus except what the landings visibly coming down its other roads take
+ * (`holdReserve` without the target's road, whose traffic `costToTake` nets out) — the same reading
+ * as `hoseReserve`. Judged again every tick from the state alone: the tick after the stream starts the
+ * tower is below capacity and the strict reserve is back, which is why rule 0d keeps an attack going
+ * below it only while what the source still holds is what flips the target (`waveStillNeeded`).
+ */
+function cappedReserve(state: GameState, tower: Tower, targetId: string): number {
+  return holdReserve(state, tower, HOLD_MARGIN, undefined, targetId);
+}
+
+/** Reserve of `tower` for a stream at the enemy tower `targetId`: `hoseReserve` when that target bleeds it, `cappedReserve` when it cannot grow, else `reserveToHold`. */
 function streamReserve(ctx: Ctx, tower: Tower, targetId: string): number {
   const { state } = ctx;
   if (hosedBy(state, tower, targetId) && bleeds(ctx, tower)) return hoseReserve(state, tower, targetId);
+  if (capped(state, tower)) return cappedReserve(state, tower, targetId);
   return reserveToHold(state, tower, targetId);
 }
 
@@ -387,8 +422,15 @@ interface Source {
   n: Neighbour;
   /** Weight the source adds if it starts streaming now (0 when it already streams: that is in `inbound`). */
   force: number;
-  /** Units the source keeps at home for this stream (`reserveToHold`, or `hoseReserve` for a hosed tower). */
+  /** Units the source keeps at home for this stream (`reserveToHold`, `hoseReserve` for a hosed tower, `cappedReserve` for a capped one). */
   reserve: number;
+  /**
+   * The source's production runs into the stream for the siege phase: nothing forces it to keep a
+   * reserve. False for a capped source (AI-4): its whole garrison is the wave, but the tick after it
+   * starts it is below capacity and its strict reserve is back, so a plan that counted its trickle
+   * would be judged short by rule 0a at once — a capped tower attacks on its burst alone.
+   */
+  trickles: boolean;
   /** Already streaming into the target. */
   linked: boolean;
   /** The route is a bridge the target could cut (`exposedRoute`). */
@@ -503,7 +545,7 @@ function evaluatePlan(ctx: Ctx, target: Tower, sources: Source[], inbound: numbe
   // A source with nothing to hold back keeps producing into the stream — unless its route is cut under
   // it. Rules v2.1: that trickle keeps landing on a target that recruits nothing, so the plan runs
   // `SIEGE_PLAN_MS` past the burst (within `MAX_STREAM_MS`) when there is a trickle at all.
-  const trickling = sources.filter((s) => !s.exposed && s.reserve <= 0);
+  const trickling = sources.filter((s) => !s.exposed && s.trickles && s.reserve <= 0);
   let trickle = 0;
   for (const s of trickling) trickle += genPerSecond(s.tower, state);
   // Rules v2.1: nothing is recruited during the burst (a landing every 120 ms) and only what the gap
@@ -565,7 +607,7 @@ function streamingSources(ctx: Ctx, target: Tower): Source[] {
     if (!tower || !isLinkedTo(ctx, tower.id, target.id)) continue;
     const n = neighbours(state, tower.id).find((x) => x.tower.id === target.id);
     if (!n) continue;
-    out.push({ tower, n, force: 0, reserve: streamReserve(ctx, tower, target.id), linked: true, exposed: exposedRoute(state, n) });
+    out.push({ tower, n, force: 0, reserve: streamReserve(ctx, tower, target.id), trickles: true, linked: true, exposed: exposedRoute(state, n) });
   }
   return out;
 }
@@ -622,6 +664,30 @@ function isParry(state: GameState, tower: Tower, source: Tower): boolean {
   return theirs > 0 && genPerSecond(tower, state) >= theirs;
 }
 
+/**
+ * Rule 0d, capped surplus (AI-4): is what the finished keep `tower` still holds the part of its attack
+ * on the enemy `target` that flips it? The stream at `target` is judged as it runs (its sources'
+ * garrisons pending, the units on the road inbound): it must still flip the target with the remainder
+ * (rule 0a would end it otherwise) and be short without it. Then stopping at the strict reserve would
+ * waste the wave already on the road — a stream launched from a capped keep on its whole garrison is
+ * exactly this case one tick later, when the keep is below capacity and the strict reserve is back.
+ * Only a top-level tower can be capped, so only a top-level source gets this (an L1/L2 source keeps
+ * the plain meter: measured on level 27 seed 704403 under lean, one extra tick of an L1 counter past
+ * its reserve turned a 150 s win into a 100 s loss). Captures of neutrals keep their own meter (0c).
+ */
+function waveStillNeeded(ctx: Ctx, tower: Tower, target: Tower): boolean {
+  const { state } = ctx;
+  if (!isEnemyOwner(target.owner) || !atMaxLevel(tower)) return false;
+  const link = state.links.find((l) => l.owner === OWNER && l.from === tower.id && l.to === target.id);
+  if (!link) return false;
+  const remaining = linkPending(state, link);
+  if (remaining <= 0) return false;
+  const sources = streamingSources(ctx, target);
+  if (sources.length === 0) return false;
+  const plan = buildPlan(ctx, target, sources, incomingWeight(state, target.id, OWNER), false, false);
+  return plan.force >= plan.toFlip && plan.force - remaining < plan.toFlip;
+}
+
 function maintain(ctx: Ctx, mine: Tower[]): void {
   const { state } = ctx;
   // (a) hopeless attacks: everything this owner streams into an enemy tower, judged per target.
@@ -647,7 +713,8 @@ function maintain(ctx: Ctx, mine: Tower[]): void {
         const threatened = holdReserve(state, target, HOLD_MARGIN, link) > target.units;
         const relay = attacks(ctx, target) && relayStillNeeded(ctx, target, tower);
         const supply = atMaxLevel(tower) && isRear(ctx, tower) && (ctx.hops.get(target.id) ?? Infinity) < (ctx.hops.get(tower.id) ?? Infinity);
-        if (!threatened && !relay && !supply && target.units >= wantAt(state, target)) {
+        const lateral = lateralSupplyGoesOn(ctx, tower, target);
+        if (!threatened && !relay && !supply && !lateral && target.units >= wantAt(state, target)) {
           pushUnlink(ctx, tower, to);
           continue;
         }
@@ -668,7 +735,7 @@ function maintain(ctx: Ctx, mine: Tower[]): void {
       }
       if (isParry(state, tower, target)) continue; // the road duel goes on while their ribbon is up
       const reserve = target.owner === OWNER ? reserveToHold(state, tower) : streamReserve(ctx, tower, to);
-      if (reserve > 0 && tower.units <= reserve) pushUnlink(ctx, tower, to);
+      if (reserve > 0 && tower.units <= reserve && !waveStillNeeded(ctx, tower, target)) pushUnlink(ctx, tower, to);
     }
   }
 }
@@ -819,6 +886,55 @@ function supplyForward(ctx: Ctx, mine: Tower[]): void {
   }
 }
 
+/* ---------- Rule 6: lateral supply (capped surplus) ---------- */
+
+/**
+ * Lateral supply (AI-4): a capped tower (`capped`) that no rule above could use — nothing to attack,
+ * nothing to counter — streams its surplus over the strict reserve into the emptiest friendly
+ * neighbour that is not farther from the enemy than itself (a rear keep already ships forward, rule 4;
+ * this is the front tower's version, sideways to another front tower or to a neighbour at the same
+ * distance). The units are not lost, the neighbour gets closer to an attack of its own, and the source
+ * produces again the moment it is below capacity: two finished keeps at 100 + 100 make nothing, one
+ * that pours into the other makes its full rate. Rule 0d ends the stream at the strict reserve (a
+ * wave, not a leak); rule 0b keeps it up meanwhile (`lateralSupplyGoesOn`); the sim ends it when the
+ * neighbour is full.
+ */
+function supplyLateral(ctx: Ctx, mine: Tower[]): void {
+  const { state } = ctx;
+  for (const tower of mine) {
+    if (!free(ctx, tower) || !idle(ctx, tower) || !capped(state, tower)) continue;
+    const myHops = ctx.hops.get(tower.id);
+    if (myHops === undefined) continue;
+    if (incomingThreat(state, tower.id) > 0) continue;
+    const surplus = spare(state, tower);
+    if (surplus <= 0) continue;
+    const beside = friendlyNeighbours(state, tower.id).filter(
+      (n) =>
+        (ctx.hops.get(n.tower.id) ?? Infinity) <= myHops &&
+        n.tower.units < capacityOf(n.tower, state) &&
+        !isLinkedTo(ctx, tower.id, n.tower.id) &&
+        !ctx.ended.has(`${tower.id}>${n.tower.id}`),
+    );
+    const target = pick(ctx, beside, (n) => n.tower.units);
+    if (!target) continue;
+    pushLink(ctx, tower, target.tower.id, surplus);
+  }
+}
+
+/**
+ * Rule 0b: does a lateral supply line from `tower` into the own `target` go on? While the source is a
+ * finished keep still at or above `SUPPLY_FILL` of its capacity and the target is not farther from the
+ * enemy than it — the source cannot grow much anyway, and rule 0d meters the stream at the strict
+ * reserve. Judged from the state alone, so a line that rule 6 started is the same line the tick after.
+ */
+function lateralSupplyGoesOn(ctx: Ctx, tower: Tower, target: Tower): boolean {
+  const { state } = ctx;
+  if (!atMaxLevel(tower) || tower.units < capacityOf(tower, state) * SUPPLY_FILL) return false;
+  const myHops = ctx.hops.get(tower.id);
+  if (myHops === undefined || (ctx.hops.get(target.id) ?? Infinity) > myHops) return false;
+  return incomingThreat(state, tower.id) <= 0;
+}
+
 /* ---------- Rule 4: attack ---------- */
 
 /**
@@ -953,7 +1069,7 @@ function launchPlans(ctx: Ctx, mine: Tower[], targets: Map<string, Tower>, hold:
       const force = wholeUnits(tower, tower.units - reserve);
       // A column that dies on its own road (the hostile units walking it outnumber it) adds only losses.
       if (force <= costToTake(n)) continue;
-      sources.push({ tower, n, force, reserve, linked: false, exposed });
+      sources.push({ tower, n, force, reserve, trickles: !capped(state, tower), linked: false, exposed });
     }
     if (!sources.some((s) => !s.linked)) continue;
     const full = buildPlan(ctx, target, sources, inbound, true, hold);
@@ -1040,6 +1156,7 @@ export function referencePlayerCommands(state: GameState, rng: Rng, trace?: Rule
     ['capture', captureNeutrals],
     ['supply', supplyForward],
     ['attack', attack],
+    ['lateral', supplyLateral],
     ['cutBridge', cutBridges],
   ];
   for (const [name, rule] of rules) {

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { challengeFor, TWISTS } from '../../src/daily/challenge';
 import { loadLevel } from '../../src/levels/index';
 import { DEFAULT_MODIFIERS, createState } from '../../src/sim/index';
-import { DAILY_WIN_RATE, addDays, dailyPlan, dailySeeds, runDaily } from '../../scripts/lib/daily';
+import { DAILY_WIN_RATE, TWIST_WIN_RATE, addDays, dailyPlan, dailySeeds, inPool, runDaily, runTwist, twistById } from '../../scripts/lib/daily';
 
 /*
  * The daily playtest must run exactly the match the client builds for a day: `challengeFor`'s level
@@ -95,5 +95,46 @@ describe('daily playtest runner', () => {
     const c = challengeFor('2026-09-18');
     const other = (await loadLevel(c.levelId === 9 ? 10 : 9))!;
     expect(() => runDaily(c, other, 1)).toThrow(/not the .* challenge/);
+  });
+
+  it('twistById resolves every twist id and nothing else', () => {
+    for (const t of TWISTS) expect(twistById(t.id)).toBe(t);
+    expect(twistById('plain')!.modifiers).toEqual(DEFAULT_MODIFIERS);
+    expect(twistById('Lean')).toBeUndefined();
+    expect(twistById('')).toBeUndefined();
+  });
+
+  it('inPool is the daily pool, ids 9…40', () => {
+    expect(inPool({ id: 8 })).toBe(false);
+    expect(inPool({ id: 9 })).toBe(true);
+    expect(inPool({ id: 40 })).toBe(true);
+    expect(inPool({ id: 41 })).toBe(false);
+  });
+
+  it('runTwist plays a pool level over seeds 1..K with the twist on state.modifiers and gates at 80 %', async () => {
+    const twist = twistById('lean')!;
+    const level = (await loadLevel(9))!;
+    const row = runTwist(level, twist, 2);
+    expect(row.level).toBe(level);
+    expect(row.twist).toBe(twist);
+    expect(row.seeds).toEqual([1, 2]);
+    expect(row.results).toHaveLength(2);
+    for (const r of row.results) expect(r.modifiers).toEqual(twist.modifiers);
+    expect(row.results[0]!.modifiers).toEqual(createState(level, 1, twist.modifiers).modifiers);
+    expect(row.wins).toBe(row.results.filter((r) => r.outcome === 'won').length);
+    expect(row.losers).toEqual(row.seeds.filter((_, i) => row.results[i]!.outcome !== 'won'));
+    expect(row.stars).toHaveLength(2);
+    expect(row.ticks).toBe(row.results[0]!.ticks + row.results[1]!.ticks);
+    expect(row.ok).toBe(row.wins / 2 >= TWIST_WIN_RATE);
+    if (row.wins === 2) expect(row.worstMs).toBe(Math.max(row.results[0]!.timeMs, row.results[1]!.timeMs));
+    expect(TWIST_WIN_RATE).toBe(0.8); // 4/5 at K = 5 (GDD §7.5 item 3)
+  });
+
+  it('runTwist refuses a level outside the pool and a bad seed count', async () => {
+    const twist = twistById('plain')!;
+    const tutorial = (await loadLevel(8))!;
+    expect(() => runTwist(tutorial, twist, 1)).toThrow(/not in the challenge pool/);
+    const pool = (await loadLevel(9))!;
+    expect(() => runTwist(pool, twist, 0)).toThrow(/bad seed count/);
   });
 });
