@@ -9,8 +9,9 @@ import type { App, Screen, StartOptions } from '../../src/ui/screens';
 import { ResultScreen } from '../../src/ui/screens';
 import { PlayScreen } from '../../src/ui/play';
 import type { DailyChallenge } from '../../src/daily/challenge';
-import { REWARD, TWISTS, UNLOCK_AFTER_LEVEL, goldReward } from '../../src/daily/challenge';
+import { REWARD, STREAK_MILESTONES, TWISTS, UNLOCK_AFTER_LEVEL, goldReward } from '../../src/daily/challenge';
 import { challengeDone, challengeUnlocked, msToUtcMidnight, previousDayKey, recordChallengeResult, shownStreak } from '../../src/ui/daily';
+import { nextStreakMilestone } from '../../src/ui/levelSelect';
 import { makeLevel } from '../helpers';
 
 /*
@@ -103,7 +104,7 @@ describe('recordChallengeResult (reward once per day, streak, best)', () => {
     expect(first).toMatchObject({ won: true, stars: 3, firstWin: true, gold: goldReward(3), crystals: REWARD.crystals, streak: 1, best: { stars: 3, timeMs: 20_000 } });
     expect(save.gold).toBe(100 + 60);
     expect(save.crystals).toBe(3 + 5);
-    expect(save.challenge).toEqual({ lastWinDay: DAY, streak: 1, best: { [DAY]: { stars: 3, timeMs: 20_000 } } });
+    expect(save.challenge).toEqual({ lastWinDay: DAY, streak: 1, best: { [DAY]: { stars: 3, timeMs: 20_000 } }, milestones: [] });
     expect(save.stars['999']).toBeUndefined();
     expect(save.milestones).toEqual([]);
     expect(challengeDone(save, DAY)).toBe(true);
@@ -133,17 +134,17 @@ describe('recordChallengeResult (reward once per day, streak, best)', () => {
   });
 
   it('streak: +1 after a win yesterday, back to 1 after a gap, capped at 99 when shown', () => {
-    save.challenge = { lastWinDay: YESTERDAY, streak: 4, best: {} };
+    save.challenge = { lastWinDay: YESTERDAY, streak: 4, best: {}, milestones: [] };
     expect(shownStreak(save, DAY)).toBe(4);
     expect(recordChallengeResult(save, challenge(), level, 'won', 20_000).streak).toBe(5);
     expect(save.challenge.streak).toBe(5);
 
-    save.challenge = { lastWinDay: '2026-09-10', streak: 4, best: {} };
+    save.challenge = { lastWinDay: '2026-09-10', streak: 4, best: {}, milestones: [] };
     expect(shownStreak(save, DAY)).toBe(0); // broken
     expect(recordChallengeResult(save, challenge(), level, 'won', 20_000).streak).toBe(1);
     expect(save.challenge.streak).toBe(1);
 
-    save.challenge = { lastWinDay: YESTERDAY, streak: 150, best: {} };
+    save.challenge = { lastWinDay: YESTERDAY, streak: 150, best: {}, milestones: [] };
     expect(shownStreak(save, DAY)).toBe(99);
     expect(recordChallengeResult(save, challenge(), level, 'won', 20_000).streak).toBe(99);
     expect(save.challenge.streak).toBe(151); // the save keeps the real count
@@ -156,6 +157,82 @@ describe('recordChallengeResult (reward once per day, streak, best)', () => {
     expect(keys.length).toBe(30);
     expect(keys[0]).toBe('2026-08-03');
     expect(keys[keys.length - 1]).toBe(DAY);
+  });
+});
+
+describe('streak milestones (ECONOMY.md §6.2: day 3 / 7 / 30 → +5 / +20 / +100 crystals, once per streak run)', () => {
+  const level: LevelDef = makeLevel({ star3: 30_000, star2: 60_000 });
+  /** A live streak of `streak` days (won yesterday) with `milestones` already paid in this run. */
+  const at = (streak: number, milestones: number[] = []) => {
+    save.challenge = { lastWinDay: YESTERDAY, streak, best: {}, milestones };
+  };
+  const win = (dayKey = DAY) => recordChallengeResult(save, challenge({ dayKey }), level, 'won', 20_000);
+
+  it('table matches the economy doc', () => {
+    expect(STREAK_MILESTONES).toEqual([
+      [3, 5],
+      [7, 20],
+      [30, 100],
+    ]);
+  });
+
+  it('2 → 3 pays +5 on top of the reward, once (a replay the same day pays nothing)', () => {
+    at(2);
+    expect(win()).toMatchObject({ firstWin: true, streak: 3, milestone: 5, crystals: REWARD.crystals + 5, gold: goldReward(3) });
+    expect(save.crystals).toBe(3 + REWARD.crystals + 5);
+    expect(save.challenge.milestones).toEqual([3]);
+    expect(win()).toMatchObject({ firstWin: false, milestone: 0, crystals: 0 });
+    expect(save.crystals).toBe(3 + REWARD.crystals + 5);
+  });
+
+  it('3 → 4 pays 0; 6 → 7 pays +20; 29 → 30 pays +100', () => {
+    at(3, [3]);
+    expect(win()).toMatchObject({ streak: 4, milestone: 0, crystals: REWARD.crystals });
+    expect(save.crystals).toBe(3 + REWARD.crystals);
+    expect(save.challenge.milestones).toEqual([3]);
+    at(6, [3]);
+    expect(win()).toMatchObject({ streak: 7, milestone: 20, crystals: REWARD.crystals + 20 });
+    expect(save.crystals).toBe(3 + 2 * REWARD.crystals + 20);
+    expect(save.challenge.milestones).toEqual([3, 7]);
+    at(29, [3, 7]);
+    expect(win()).toMatchObject({ streak: 30, milestone: 100, crystals: REWARD.crystals + 100 });
+    expect(save.crystals).toBe(3 + 3 * REWARD.crystals + 120);
+    expect(save.challenge.milestones).toEqual([3, 7, 30]);
+  });
+
+  it('a broken streak forgets the paid milestones: back to 1, and day 3 pays +5 again', () => {
+    save.challenge = { lastWinDay: '2026-09-10', streak: 5, best: {}, milestones: [3] };
+    expect(win()).toMatchObject({ streak: 1, milestone: 0, crystals: REWARD.crystals });
+    expect(save.challenge.milestones).toEqual([]);
+    expect(win('2026-09-19')).toMatchObject({ streak: 2, milestone: 0 });
+    expect(win('2026-09-20')).toMatchObject({ streak: 3, milestone: 5, crystals: REWARD.crystals + 5 });
+    expect(save.challenge.milestones).toEqual([3]);
+    expect(save.crystals).toBe(3 + 3 * REWARD.crystals + 5);
+  });
+
+  it('nothing retroactive: a pre-milestone save at streak 4 is paid at day 7, not for day 3', () => {
+    at(4);
+    expect(win()).toMatchObject({ streak: 5, milestone: 0 });
+    expect(save.challenge.milestones).toEqual([]);
+  });
+
+  it('a loss at streak 2 pays nothing and keeps the run', () => {
+    at(2);
+    const before = JSON.stringify(save);
+    expect(recordChallengeResult(save, challenge(), level, 'lost', 90_000)).toMatchObject({ won: false, milestone: 0, crystals: 0, streak: 2 });
+    expect(JSON.stringify(save)).toBe(before);
+  });
+
+  it('nextStreakMilestone names the first milestone above the shown streak', () => {
+    expect(nextStreakMilestone(save, DAY)).toEqual([3, 5]);
+    at(2);
+    expect(nextStreakMilestone(save, DAY)).toEqual([3, 5]);
+    at(3, [3]);
+    expect(nextStreakMilestone(save, DAY)).toEqual([7, 20]);
+    at(30, [3, 7, 30]);
+    expect(nextStreakMilestone(save, DAY)).toBeNull();
+    save.challenge = { lastWinDay: '2026-09-10', streak: 7, best: {}, milestones: [3, 7] }; // broken
+    expect(nextStreakMilestone(save, DAY)).toEqual([3, 5]);
   });
 });
 

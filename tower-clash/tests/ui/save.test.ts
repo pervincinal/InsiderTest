@@ -124,17 +124,18 @@ describe('save schema v3 (M3-3 + economy Phase A)', () => {
 
 describe('save.challenge (Daily Challenge, GDD §7)', () => {
   it('defaults to never played and is normalised like the other optional blocks', () => {
-    expect(defaultSave().challenge).toEqual({ lastWinDay: null, streak: 0, best: {} });
-    expect(normalizeSave({ version: 3 }).challenge).toEqual({ lastWinDay: null, streak: 0, best: {} });
+    expect(defaultSave().challenge).toEqual({ lastWinDay: null, streak: 0, best: {}, milestones: [] });
+    expect(normalizeSave({ version: 3 }).challenge).toEqual({ lastWinDay: null, streak: 0, best: {}, milestones: [] });
     const s = normalizeSave({
       challenge: {
         lastWinDay: '2026-09-18',
         streak: 3.7,
         best: { '2026-09-18': { stars: 9, timeMs: 45_500.9 }, '2026-09-17': { stars: 'x', timeMs: 1 }, 'not-a-day': { stars: 1, timeMs: 1 }, '2026-09-16': null },
+        milestones: [3, 3, 'x', 7.9],
       },
     });
-    expect(s.challenge).toEqual({ lastWinDay: '2026-09-18', streak: 3, best: { '2026-09-18': { stars: 3, timeMs: 45_500 } } });
-    expect(normalizeSave({ challenge: { lastWinDay: '18/09/2026', streak: -2 } }).challenge).toEqual({ lastWinDay: null, streak: 0, best: {} });
+    expect(s.challenge).toEqual({ lastWinDay: '2026-09-18', streak: 3, best: { '2026-09-18': { stars: 3, timeMs: 45_500 } }, milestones: [3, 7] });
+    expect(normalizeSave({ challenge: { lastWinDay: '18/09/2026', streak: -2 } }).challenge).toEqual({ lastWinDay: null, streak: 0, best: {}, milestones: [] });
   });
 
   it('keeps only the newest 30 best entries', async () => {

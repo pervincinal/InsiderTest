@@ -30,6 +30,13 @@ export const TWISTS: readonly Twist[] = Object.freeze([
 /** Rewards for the first win of the day (ECONOMY.md §3.x): base + per star. */
 export const REWARD = Object.freeze({ gold: 30, goldPerStar: 10, crystals: 5 });
 
+/** Streak milestones (ECONOMY.md §6.2): `[day, crystals]`, paid once per streak run when the streak reaches `day`. */
+export const STREAK_MILESTONES = [
+  [3, 5],
+  [7, 20],
+  [30, 100],
+] as const;
+
 export interface DailyChallenge {
   dayKey: string; // YYYY-MM-DD (UTC)
   levelId: number;

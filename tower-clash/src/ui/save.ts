@@ -62,6 +62,8 @@ export interface ChallengeState {
   streak: number;
   /** Best result per day key: most stars, then the fastest clock. */
   best: Record<string, ChallengeBest>;
+  /** Streak-milestone days (`STREAK_MILESTONES`) already paid in the current run; cleared when the streak restarts. */
+  milestones: number[];
 }
 
 export interface ChallengeBest {
@@ -131,7 +133,7 @@ export function defaultSave(): SaveData {
     skins: { owned: [], equipped: { roof: null, helmet: null, theme: null } },
     charges: { overdrive: 0, freeze: 0, airstrike: 0 },
     daily: { lastClaimDay: null, streak: 0 },
-    challenge: { lastWinDay: null, streak: 0, best: {} },
+    challenge: { lastWinDay: null, streak: 0, best: {}, milestones: [] },
     adCounters: { day: '', rewardedByPlacement: {}, levelsCompleted: 0 },
     purchases: [],
     milestones: [],
@@ -163,6 +165,11 @@ function countMap(v: unknown, max = Infinity): Record<string, number> {
     if (n !== null) out[k] = Math.min(max, n);
   }
   return out;
+}
+
+/** Distinct non-negative integers, order kept (`skips`, `challenge.milestones`). */
+function intList(v: unknown): number[] {
+  return Array.isArray(v) ? [...new Set(v.map(nonNegInt).filter((n): n is number => n !== null))] : [];
 }
 
 function dayString(v: unknown): string {
@@ -230,7 +237,7 @@ export function normalizeSave(raw: unknown): SaveData {
   if (isRecord(raw.challenge)) {
     const c = raw.challenge;
     const day = dayString(c.lastWinDay);
-    out.challenge = { lastWinDay: day || null, streak: nonNegInt(c.streak) ?? 0, best: challengeBestMap(c.best) };
+    out.challenge = { lastWinDay: day || null, streak: nonNegInt(c.streak) ?? 0, best: challengeBestMap(c.best), milestones: intList(c.milestones) };
   }
   if (isRecord(raw.adCounters)) {
     const a = raw.adCounters;
@@ -240,7 +247,7 @@ export function normalizeSave(raw: unknown): SaveData {
   out.milestones = stringList(raw.milestones);
   if (isRecord(raw.replayGold)) out.replayGold = { day: dayString(raw.replayGold.day), earned: nonNegInt(raw.replayGold.earned) ?? 0 };
   out.defeats = countMap(raw.defeats);
-  out.skips = Array.isArray(raw.skips) ? [...new Set(raw.skips.map(nonNegInt).filter((n): n is number => n !== null))] : [];
+  out.skips = intList(raw.skips);
   if (isRecord(raw.achievements)) out.achievements = { unlocked: stringList(raw.achievements.unlocked) };
   if (isRecord(raw.settings)) {
     const s = raw.settings;

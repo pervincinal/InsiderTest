@@ -326,7 +326,9 @@ export class ResultScreen implements Screen {
 
   enter(): void {
     onResultShown(this.app.ads);
-    const text = achievementToastText(this.info.achievements);
+    const d = this.info.daily;
+    // the daily result line (hud.ts) carries the crystal total; the milestone itself is named by a toast
+    const text = achievementToastText(this.info.achievements) ?? (d?.milestone ? t('daily.milestone', { day: d.streak, crystals: d.milestone }) : null);
     if (text) this.toast.show(text, 'ok', performance.now(), 3500);
   }
 

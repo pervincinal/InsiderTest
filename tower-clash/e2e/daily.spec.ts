@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url';
  * has a star; a tap starts today's challenge (fixed level, seed and twist); the first win of the day
  * pays `goldReward(stars)` gold + 5 crystals through the wallet and never touches the level's stars;
  * a replay the same day pays nothing; the card shows DONE; a win the next UTC day makes the streak 2.
+ * Streak milestones (DAILY-2, ECONOMY.md §6.2): the third consecutive first win pays +5 crystals once
+ * (`save.challenge.milestones` = [3]) and the card pill names the next bonus.
  * "Today" comes from `window.__towerclash.setDayKey`, so the run is deterministic.
  *
  * Like smoke.spec.ts this file imports nothing from src/; hit regions mirror src/render/layout.ts
@@ -19,9 +21,12 @@ const LEVEL_MAP_DAILY = { x: 30, y: 112, w: 660, h: 104 };
 const RESULT_NEXT = { x: 84, y: 780, w: 170, h: 72 };
 const REWARD = { gold: 30, goldPerStar: 10, crystals: 5 };
 const UNLOCK_AFTER_LEVEL = 8;
-// Two consecutive days the reference player wins at the fixed seed (`npm run playtest -- --daily 2026-09-27 --days 2`).
+/** Day-3 streak milestone (src/daily/challenge.ts STREAK_MILESTONES). */
+const MILESTONE_DAY3 = 5;
+// Three consecutive days the reference player wins at the fixed seed (`npm run playtest -- --daily 2026-09-27 --days 3`).
 const DAY_A = '2026-09-27';
 const DAY_B = '2026-09-28';
+const DAY_C = '2026-09-29';
 
 const SHOTS = fileURLToPath(new URL('./__screenshots__/', import.meta.url));
 const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}${name}.png`, scale: 'css' });
@@ -36,7 +41,7 @@ interface SaveShape {
   gold: number;
   crystals: number;
   stars: Record<string, number>;
-  challenge: { lastWinDay: string | null; streak: number; best: Record<string, { stars: number; timeMs: number }> };
+  challenge: { lastWinDay: string | null; streak: number; best: Record<string, { stars: number; timeMs: number }>; milestones: number[] };
 }
 const screen = (page: Page) => page.evaluate(() => window.__towerclash.getScreen());
 const save = (page: Page) => page.evaluate(() => JSON.parse(JSON.stringify(window.__towerclash.economy.getSave())) as SaveShape);
@@ -162,6 +167,59 @@ test.describe('daily challenge', () => {
     expect(final.challenge.lastWinDay).toBe(DAY_B);
     expect(final.gold).toBe(afterReplay.gold + REWARD.gold + REWARD.goldPerStar * dayB.stars);
     expect(final.crystals).toBe(afterReplay.crystals + REWARD.crystals);
+    expect(errors).toEqual([]);
+  });
+
+  test('streak milestone: three consecutive first wins pay the day-3 bonus once; the card names the next bonus', async ({ page }) => {
+    test.slow();
+    const stars: Record<string, number> = {};
+    for (let id = 1; id <= UNLOCK_AFTER_LEVEL; id++) stars[String(id)] = 1;
+    const errors = await boot(page, { version: 3, stars, gold: 100, crystals: 3 }, DAY_A);
+    await tapRect(page, TITLE_PLAY);
+    await expect.poll(() => screen(page)).toBe('levelSelect');
+    expect(await page.evaluate(() => window.__towerclash.getText('daily.streakNext'))).toContain('{day}');
+    expect((await save(page)).challenge.milestones).toEqual([]);
+
+    let crystals = 3;
+    for (const [i, day] of [DAY_A, DAY_B, DAY_C].entries()) {
+      await page.evaluate((key) => window.__towerclash.setDayKey(key), day);
+      expect((await daily(page)).streak).toBe(i);
+      await page.evaluate(() => void window.__towerclash.daily.start());
+      await expect.poll(() => screen(page)).toBe('play');
+      await winRunningChallenge(page);
+      const bonus = i === 2 ? MILESTONE_DAY3 : 0;
+      const result = (await page.evaluate(() => window.__towerclash.getResult()))!;
+      expect(result.crystalsEarned).toBe(REWARD.crystals + bonus);
+      crystals += REWARD.crystals + bonus;
+      const s = await save(page);
+      expect(s.crystals).toBe(crystals);
+      expect(s.challenge.streak).toBe(i + 1);
+      expect(s.challenge.lastWinDay).toBe(day);
+      expect(s.challenge.milestones).toEqual(i === 2 ? [3] : []);
+    }
+    await page.waitForTimeout(2200); // card slide + count-up; the milestone toast is still up (3.5 s)
+    await shot(page, 'look3-daily-milestone');
+
+    // a replay on day 3 pays nothing and keeps the milestone paid
+    await page.evaluate(() => void window.__towerclash.daily.start());
+    await expect.poll(() => screen(page)).toBe('play');
+    await winRunningChallenge(page);
+    expect((await page.evaluate(() => window.__towerclash.getResult()))!.crystalsEarned).toBe(0);
+    const afterReplay = await save(page);
+    expect(afterReplay.crystals).toBe(crystals);
+    expect(afterReplay.challenge.milestones).toEqual([3]);
+
+    // back on the map: streak 3, the pill names the day-7 bonus
+    await tapRect(page, RESULT_NEXT);
+    await expect.poll(() => screen(page)).toBe('levelSelect');
+    expect((await daily(page)).streak).toBe(3);
+    await page.waitForTimeout(300);
+    await shot(page, 'look3-daily-card-streak');
+
+    // a missed day breaks the streak: shown 0, the day-3 bonus is on offer again (paid days clear on the next win)
+    await page.evaluate((key) => window.__towerclash.setDayKey(key), '2026-10-01');
+    expect((await daily(page)).streak).toBe(0);
+    expect((await save(page)).challenge.milestones).toEqual([3]);
     expect(errors).toEqual([]);
   });
 });

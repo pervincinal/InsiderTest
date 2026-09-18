@@ -5,12 +5,14 @@
  * and the debug override (`setDayKey`) makes the e2e deterministic.
  *
  * The challenge is a separate path from `recordResult`: a challenge win never awards level stars,
- * first-clear gold, replay gold, milestones or achievements — the reward is `goldReward(stars)` +
- * `REWARD.crystals`, paid through the wallet on the first win of the day only.
+ * first-clear gold, replay gold, level milestones or achievements — the reward is `goldReward(stars)` +
+ * `REWARD.crystals`, paid through the wallet on the first win of the day only, plus a one-time
+ * streak-milestone bonus (`STREAK_MILESTONES`, ECONOMY.md §6.2) when that first win brings the streak
+ * to day 3 / 7 / 30. A broken streak forgets the paid milestones, so a rebuilt run earns them again.
  */
 import type { LevelDef } from '../sim/types';
 import type { DailyChallenge } from '../daily/challenge';
-import { REWARD, UNLOCK_AFTER_LEVEL, goldReward } from '../daily/challenge';
+import { REWARD, STREAK_MILESTONES, UNLOCK_AFTER_LEVEL, goldReward } from '../daily/challenge';
 import { earnCrystals, earnGold } from '../economy/wallet';
 import type { ChallengeBest, SaveData } from './save';
 import { pruneChallengeBest, starsFor, writeSave } from './save';
@@ -57,7 +59,10 @@ export interface DailyOutcome {
   /** First win of the day: the reward below was paid. */
   firstWin: boolean;
   gold: number;
+  /** Crystals paid: `REWARD.crystals` + `milestone`. */
   crystals: number;
+  /** Streak-milestone bonus included in `crystals` (0 unless this win brought the streak to 3 / 7 / 30). */
+  milestone: number;
   /** Streak after this result (0 on a loss when no streak is live). */
   streak: number;
   /** Best result of the day after this result, or null (never won today). */
@@ -73,12 +78,13 @@ function better(a: ChallengeBest, b: ChallengeBest | undefined): boolean {
 /**
  * Record a finished challenge match. A loss changes nothing (no defeat counters: the challenge
  * has no continue or skip). A win updates the day's best; the first win of the day advances the
- * streak (+1 when yesterday was won, else back to 1) and pays the reward once.
+ * streak (+1 when yesterday was won, else back to 1 and the paid milestones are forgotten) and pays
+ * the reward once, plus the milestone bonus when the new streak is a milestone day not yet paid.
  */
 export function recordChallengeResult(save: SaveData, challenge: DailyChallenge, level: Pick<LevelDef, 'star3' | 'star2'>, outcome: 'won' | 'lost', timeMs: number): DailyOutcome {
   const { dayKey } = challenge;
   const c = save.challenge;
-  const out: DailyOutcome = { dayKey, won: outcome === 'won', stars: 0, firstWin: false, gold: 0, crystals: 0, streak: shownStreak(save, dayKey), best: c.best[dayKey] ?? null };
+  const out: DailyOutcome = { dayKey, won: outcome === 'won', stars: 0, firstWin: false, gold: 0, crystals: 0, milestone: 0, streak: shownStreak(save, dayKey), best: c.best[dayKey] ?? null };
   if (outcome !== 'won') return out;
   const stars = starsFor(level, timeMs);
   out.stars = stars;
@@ -89,9 +95,15 @@ export function recordChallengeResult(save: SaveData, challenge: DailyChallenge,
   if (c.lastWinDay !== dayKey) {
     out.firstWin = true;
     c.streak = c.lastWinDay === previousDayKey(dayKey) ? c.streak + 1 : 1;
+    if (c.streak === 1) c.milestones = []; // a new run: the milestones are on offer again
     c.lastWinDay = dayKey;
+    const m = STREAK_MILESTONES.find(([day]) => day === c.streak && !c.milestones.includes(day));
+    if (m) {
+      c.milestones.push(m[0]);
+      out.milestone = m[1];
+    }
     out.gold = goldReward(stars);
-    out.crystals = REWARD.crystals;
+    out.crystals = REWARD.crystals + out.milestone;
     earnGold(save, out.gold);
     earnCrystals(save, out.crystals);
   }

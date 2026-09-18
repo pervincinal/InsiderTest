@@ -18,12 +18,22 @@ import type { App, Screen } from './screens';
 import { Toast } from './screens';
 import { commanderSummary } from './upgrades';
 import type { DailyChallenge } from '../daily/challenge';
-import { REWARD, UNLOCK_AFTER_LEVEL, challengeFor, goldReward } from '../daily/challenge';
+import { REWARD, STREAK_MILESTONES, UNLOCK_AFTER_LEVEL, challengeFor, goldReward } from '../daily/challenge';
 import { challengeDone, challengeUnlocked, msToUtcMidnight, shownStreak } from './daily';
+import type { SaveData } from './save';
 
 /* ---------- Level select: winding path map ---------- */
 
 const BACK = LEVEL_MAP.back;
+
+/**
+ * The next streak milestone (`[day, crystals]`, ECONOMY.md §6.2) above the shown streak, or null past
+ * the last one. Lives here rather than in daily.ts so the eager bundle does not carry it (only the card reads it).
+ */
+export function nextStreakMilestone(save: SaveData, dayKey: string): readonly [number, number] | null {
+  const s = shownStreak(save, dayKey);
+  return STREAK_MILESTONES.find(([day]) => day > s) ?? null;
+}
 
 export class LevelSelectScreen implements Screen {
   readonly name = 'levelSelect' as const;
@@ -80,6 +90,7 @@ export class LevelSelectScreen implements Screen {
       gold: goldReward(3),
       crystals: REWARD.crystals,
       streak: shownStreak(save, ch.dayKey),
+      nextBonus: nextStreakMilestone(save, ch.dayKey),
       done: challengeDone(save, ch.dayKey),
       best: save.challenge.best[ch.dayKey] ?? null,
       countdown,

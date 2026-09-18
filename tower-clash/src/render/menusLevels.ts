@@ -38,6 +38,8 @@ export interface DailyCardOpts {
   crystals: number;
   /** Consecutive days won (0 = none / broken). */
   streak: number;
+  /** Next streak milestone `[day, crystals]` (ECONOMY.md §6.2), or null past the last one. */
+  nextBonus: readonly [number, number] | null;
   /** Won today. */
   done: boolean;
   /** Best result today, when won. */
@@ -118,9 +120,10 @@ function drawDailyCard(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, d: 
   ctx.fillStyle = d.unlocked ? pal.ink : pal.textDim;
   ctx.font = font(fitFontPx(ctx, line2, 19, d.unlocked ? textW : r.w - (left - r.x) - 24, '500'), '500');
   ctx.fillText(line2, left, r.y + 56, d.unlocked ? textW : r.w - (left - r.x) - 24);
-  // line 3: reward (best when done) + streak pill; the countdown while locked
+  // line 3: reward (best when done) + streak pill (wider when it names the next bonus); the countdown while locked
   if (d.unlocked) {
     let x = left;
+    const wide = d.nextBonus ? 70 : 0;
     if (d.done && d.best) {
       ctx.fillStyle = pal.textDim;
       ctx.font = font(17, '500');
@@ -130,16 +133,19 @@ function drawDailyCard(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, d: 
       drawCrystal(ctx, pal, x + 30, r.y + 84, 9);
       x += 46;
       ctx.fillStyle = pal.ink;
-      ctx.font = font(fitFontPx(ctx, t('daily.reward', { gold: d.gold, crystals: d.crystals }), 17, textW - 46, '500'), '500');
-      ctx.fillText(t('daily.reward', { gold: d.gold, crystals: d.crystals }), x, r.y + 84, textW - 46);
+      const reward = t('daily.reward', { gold: d.gold, crystals: d.crystals });
+      ctx.font = font(fitFontPx(ctx, reward, 17, textW - 46 - wide, '500'), '500');
+      ctx.fillText(reward, x, r.y + 84, textW - 46 - wide);
     }
-    if (d.streak > 0) {
-      const sp: Rect = { x: pill.x, y: r.y + 66, w: rightW, h: 30 };
-      drawPill(ctx, sp, pal.owners.player, shade(pal.owners.player, -0.35), 2);
+    if (d.streak > 0 || d.nextBonus) {
+      const live = d.streak > 0;
+      const sp: Rect = { x: pill.x - wide, y: r.y + 66, w: rightW + wide, h: 30 };
+      drawPill(ctx, sp, live ? pal.owners.player : pal.paper, live ? shade(pal.owners.player, -0.35) : undefined, 2);
       ctx.textAlign = 'center';
-      ctx.fillStyle = pal.paper;
-      ctx.font = font(16);
-      ctx.fillText(t('daily.streak', { n: d.streak }), sp.x + sp.w / 2, sp.y + sp.h / 2 + 1, sp.w - 16);
+      ctx.fillStyle = live ? pal.paper : pal.textDim;
+      const label = d.nextBonus ? t('daily.streakNext', { n: d.streak, day: d.nextBonus[0], crystals: d.nextBonus[1] }) : t('daily.streak', { n: d.streak });
+      ctx.font = font(fitFontPx(ctx, label, 16, sp.w - 16));
+      ctx.fillText(label, sp.x + sp.w / 2, sp.y + sp.h / 2 + 1, sp.w - 16);
       ctx.textAlign = 'left';
     }
   } else {
