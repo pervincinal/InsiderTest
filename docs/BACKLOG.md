@@ -3,7 +3,7 @@
 Priority = order within a section. Producer moves items; anyone may add to Bugs / Icebox.
 
 ## In progress (today)
-- [ ] DAILY-1 (in progress today) Daily Challenge v1 — GDD §7 (written 2026-09-18; picker `src/daily/challenge.ts` + tests exist): one deterministic match per UTC day from the pool 9–40 (FNV-1a of `YYYY-MM-DD`, fixed seed, one of five player-side twists: plain / lean ×0.85 production / fast feet ×1.25 speed / thin walls ×0.8 capacity / reinforced +5 start), upgrades and boosters off, unlock at level 8 ≥ 1★, first win 30 gold + 10/★ + 5 crystals, UTC streak, local best, replays pay nothing — owners: frontend-engineer (map card, HUD "Daily · <level>", result line, `save.challenge`, no booster bar / continue / skip / ×2 in a daily; GDD §7.3) + monetization-designer (ECONOMY.md §2.1 row + §6.1/§6.2 done in the working tree; GDD §7 rules: unlimited free attempts, no `rv_double_gold`, no `rv_daily_retry`/Freeze exception in v1, streak milestones approved for Phase C) + ai-engineer (`npm run playtest -- --daily 2026-09-18 --days 60 --seeds 5` exists in the working tree — run it, paste the per-day table here; add `--twist <id>` for the pool × twist gate, GDD §7.5 items 2–3) + qa-engineer (save unit tests §7.5 item 4, equal-modifiers test item 5, e2e card at 360×640 item 6). Promoted from Icebox "Daily challenge map with seed".
+(empty — next sprint picks from "Next")
 
 ## Next (ECON — Phase B/C after accounts exist)
 - [ ] ECON-1 Phase B: real RevenueCat + AdMob keys (secrets `RC_*`, `ADMOB_*`), sandbox purchase test on a device, App Store Connect / Play products created with catalog ids — mobile-engineer + publisher (needs stakeholder accounts)
@@ -11,6 +11,8 @@ Priority = order within a section. Producer moves items; anyone may add to Bugs 
 - [ ] ECON-8 `app-ads.txt` hosting needs a domain root (user-site repo or custom domain) — needs stakeholder decision
 
 ## Next
+- [ ] PERF-3 Terrain re-blit dominates the throttled frame (Tech Artist ablation at CPU 4×, level 40: no terrain 100 → 67 ms, no HUD → 83 ms, towers ≤ 1 vsync): keep the cached ground on a second static canvas under the game canvas (or dirty rects), then HUD on its own layer redrawn on change; sprite cache only after that (scratch impl in the session notes gave 7–14 %) — tech-artist + frontend
+- [ ] DAILY-2 Streak milestones day 3/7/30 → 5/20/100 crystals (ECONOMY §6.2, GDD §7.6, Phase C) and a `--twist` gate row in CI — monetization-designer + frontend + qa
 - [ ] PUB-9 Release `tower-clash-v0.4.0`: tag from the GitHub UI on the current head (52b3441 or later) (this environment cannot push tags) — stakeholder / producer
 - [ ] QA-3 Scratch `diag.mts --max` hard-codes an old upgrade ladder (1.2/1.25/+5/1.15 vs shipped 1.06/1.25/+2/1.04); if the tool moves into scripts/, read the catalog — qa-engineer
 - [ ] M3-5 Perf on a real mid phone: measure, then object pooling if needed — qa-engineer
@@ -75,6 +77,8 @@ Priority = order within a section. Producer moves items; anyone may add to Bugs 
 - Local 2-player on one screen
 
 ## Done
+- 2026-09-18 DAILY-1 (01f3701, 1323695, 41c64c0, 6ea495d, b52491d, 288618f, c2353a1) Daily Challenge v1: deterministic level/seed/twist per UTC day (pool 9–40, five twists), level-map card with countdown/streak/DONE, rewards 30 + 10/star gold + 5 crystals once a day, save.challenge, e2e daily.spec, 17 i18n keys × 4; playtest `--daily` and `--twist` modes; GDD §7 + ECONOMY model; levels 10/13/15/27/31/34/38 retuned so every pool level is ≥ 49/50 on every twist; 60-day sweep 60/60 days, 300/300 runs. AI-4: capped keeps attack on burst alone + lateral supply (never fires in the campaign).
+- 2026-09-18 M3-5 (measured, no code): tower sprite cache built and reverted (rAF median 116.6 → 100 ms = 14 %, task time 7 %); real cost is the full-screen terrain blit + HUD → PERF-3.
 - 2026-09-18 AI-3 (3b66c42) reference player answers a hose from a drained source: `hoseReserve` (only landings from other roads count while the ribbon's source is drained and the tower bleeds), 3 tests; old level 37 seed 1 now won at 41 s; old level 9 seeds 2–3 are a level problem (no answer exists), fixed by 3f48a1d.
 - 2026-09-18 LV-5 (1750354) level 2 lesson teaches "a tower under fire cannot recruit — answer every red stream" in EN/AZ/RU/TR; QA e2e `tutorial.spec.ts` plays tutorials 1–3 by touch on a fresh save and checks a cleared level shows none (checklist R1 done).
 - 2026-09-18 PUB-8 (50041a4) store frame 06 re-rendered on the current level 9 map and now shows the under-fire badge (capture waits for a player tower under fire); QA closed BUG-3 residual (wallet guard), BUG-4/5/6 verified fixed, hygiene guard for scratch specs; M3-5 measured (script 9–15 % of frame at CPU 4×, no pooling needed).
