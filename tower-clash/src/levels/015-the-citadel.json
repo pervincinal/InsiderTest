@@ -12,14 +12,14 @@
   "star2": 70000,
   "enemies": [{ "owner": "enemy1", "personality": "rusher", "aggression": 0.7 }],
   "towers": [
-    { "id": "home", "x": 360, "y": 1170, "owner": "player", "units": 15, "level": 1, "kind": "barracks" },
+    { "id": "home", "x": 360, "y": 1170, "owner": "player", "units": 17, "level": 1, "kind": "barracks" },
     { "id": "west", "x": 140, "y": 950, "owner": "neutral", "units": 5 },
     { "id": "east", "x": 580, "y": 950, "owner": "neutral", "units": 5 },
     { "id": "bastion", "x": 360, "y": 880, "owner": "neutral", "units": 5, "kind": "fortress" },
     { "id": "nw", "x": 150, "y": 640, "owner": "neutral", "units": 8 },
     { "id": "ne", "x": 570, "y": 640, "owner": "neutral", "units": 8 },
     { "id": "guns", "x": 360, "y": 560, "owner": "enemy1", "units": 2, "level": 1, "kind": "artillery" },
-    { "id": "outpost", "x": 580, "y": 380, "owner": "enemy1", "units": 3, "level": 1, "kind": "barracks" },
+    { "id": "outpost", "x": 580, "y": 380, "owner": "enemy1", "units": 4, "level": 1, "kind": "barracks" },
     { "id": "citadel", "x": 360, "y": 230, "owner": "enemy1", "units": 10, "level": 1, "kind": "fortress" }
   ],
   "roads": [
