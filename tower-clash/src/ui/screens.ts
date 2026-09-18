@@ -27,6 +27,8 @@ import { equippedSkin } from '../economy/entitlements';
 import type { Language } from './i18n';
 import { currentLanguage, nextLanguage, t } from './i18n';
 import { achievementName } from './catalogText';
+import type { DailyChallenge } from '../daily/challenge';
+import type { DailyOutcome } from './daily';
 
 /** A screen owns drawing and input while it is current. */
 export interface Screen {
@@ -51,6 +53,12 @@ export interface StartOptions {
    * with +15 starting infantry on every player tower; the new attempt offers no second continue.
    */
   reinforcements?: boolean;
+  /**
+   * Daily Challenge (GDD §7): the twist's modifiers replace the commander upgrades, boosters and
+   * continues are off, the result goes through `recordChallengeResult` instead of `recordResult`.
+   * `App.startLevel` is called with the challenge's own seed.
+   */
+  challenge?: DailyChallenge;
 }
 
 /** What screens may ask of the application shell. */
@@ -77,6 +85,8 @@ export interface App {
   setSpeed(n: number): void;
   /** Switch the UI language and persist it (settings picker, title chip). */
   setLanguage(code: Language): void;
+  /** Today's UTC day key for the Daily Challenge (`dayKeyOf(new Date())`, or the debug override). */
+  dayKey(): string;
 }
 
 /** Test/dev override of what the native providers report for the settings About block. */
@@ -277,6 +287,10 @@ export interface ResultInfo {
    * False = no usable snapshot; the result screen then restarts the level with the bonus garrison.
    */
   resume?: () => boolean;
+  /** Daily Challenge match (GDD §7): NEXT returns to the map, RETRY keeps the seed and twist. */
+  challenge?: DailyChallenge;
+  /** What the challenge result did (reward paid once, streak, best of the day). */
+  daily?: DailyOutcome;
 }
 
 const DOUBLE_GOLD = AD_PLACEMENTS.find((p) => p.id === 'rv_double_gold')!;
@@ -337,8 +351,10 @@ export class ResultScreen implements Screen {
   extras(): ResultExtras {
     const save = this.app.save;
     const e = this.info.earnings;
-    const continueOffered = !this.won && !this.info.continued;
+    const continueOffered = !this.won && !this.info.continued && !this.info.challenge;
+    const d = this.info.daily;
     return {
+      daily: d ? { won: d.won, firstWin: d.firstWin, gold: d.gold, crystals: d.crystals, streak: d.streak, best: d.best } : undefined,
       crystalsEarned: e.crystals,
       notes: e.notes.map(translateNote),
       replayCapped: e.replayCapped,
@@ -346,7 +362,7 @@ export class ResultScreen implements Screen {
       doubled: this.doubled,
       continueCrystals: continueOffered ? CRYSTAL_SERVICES.continue.costCrystals : null,
       continueAd: continueOffered && canShowRewarded(this.app.ads, save, CONTINUE_AD.id),
-      skipCrystals: this.skipOffered() ? CRYSTAL_SERVICES.levelSkip.costCrystals : null,
+      skipCrystals: this.skipOffered() && !this.info.challenge ? CRYSTAL_SERVICES.levelSkip.costCrystals : null,
       pending: this.pending,
     };
   }
@@ -397,16 +413,22 @@ export class ResultScreen implements Screen {
 
   private nextLevel(): void {
     const next = LEVEL_META[levelIndex(this.info.level.id) + 1];
-    if (next) void this.app.startLevel(next.id);
+    if (next && !this.info.challenge) void this.app.startLevel(next.id);
     else this.app.goLevels();
+  }
+
+  /** Same level again; a challenge keeps its seed and twist. */
+  private retry(): void {
+    const { level, challenge } = this.info;
+    void this.app.startLevel(level.id, challenge?.seed, challenge ? { challenge } : undefined);
   }
 
   up(p: PointerPoint): void {
     const hit = this.pressed;
     this.pressed = null;
     if (!hit || !inRect(hit, p.x, p.y) || this.pending || this.leaving) return;
-    const { ui, level } = this.info;
-    if (hit === RESULT.retry) this.leave(() => void this.app.startLevel(level.id));
+    const { ui } = this.info;
+    if (hit === RESULT.retry) this.leave(() => this.retry());
     else if (hit === RESULT.menu || hit === HUD.menu) this.leave(() => this.app.goLevels());
     else if (hit === RESULT.next && ui.outcome === 'won' && ui.hasNext) this.leave(() => this.nextLevel());
     else if (hit === HUD.wallet) this.app.goShop('crystals', () => this.app.go(this));
@@ -489,9 +511,9 @@ export class ResultScreen implements Screen {
     if (this.pending || this.leaving) return;
     if (e.key === 'Escape') this.leave(() => this.app.goLevels());
     else if (e.key === 'Enter') {
-      const { ui, level } = this.info;
+      const { ui } = this.info;
       if (ui.outcome === 'won' && ui.hasNext) this.leave(() => this.nextLevel());
-      else this.leave(() => void this.app.startLevel(level.id));
+      else this.leave(() => this.retry());
     }
   }
 }

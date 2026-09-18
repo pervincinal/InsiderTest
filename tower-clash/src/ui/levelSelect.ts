@@ -4,17 +4,22 @@
  * drawing (PERF-1, src/ui/lazyScreens.ts) and preloaded right after the first frame.
  */
 import { C } from '../sim/constants';
-import { LEVEL_META } from '../levels/index';
-import { levelName } from './i18n';
+import { LEVEL_META, getLevelMeta } from '../levels/index';
+import { levelName, t } from './i18n';
 import type { View } from '../render/view';
 import { LEVEL_MAP, levelMapMaxScroll, levelNodeCentre, levelNodeRect } from '../render/layout';
 import type { Rect } from '../render/widgets';
-import { inRect } from '../render/widgets';
+import { formatTime, inRect } from '../render/widgets';
+import type { DailyCardOpts } from '../render/menusLevels';
 import { drawLevelSelect } from '../render/menusLevels';
 import type { PointerPoint } from '../input/pointer';
 import { currentLevelIndex, isLevelUnlocked } from './save';
 import type { App, Screen } from './screens';
+import { Toast } from './screens';
 import { commanderSummary } from './upgrades';
+import type { DailyChallenge } from '../daily/challenge';
+import { REWARD, UNLOCK_AFTER_LEVEL, challengeFor, goldReward } from '../daily/challenge';
+import { challengeDone, challengeUnlocked, msToUtcMidnight, shownStreak } from './daily';
 
 /* ---------- Level select: winding path map ---------- */
 
@@ -30,6 +35,10 @@ export class LevelSelectScreen implements Screen {
   private dragging = false;
   private pressed: Rect | null = null;
   private readonly current: number;
+  private readonly toast = new Toast();
+  private nowMs = 0;
+  /** Today's challenge, recomputed only when the day key changes (midnight, debug override). */
+  private challenge: DailyChallenge | null = null;
 
   constructor(private readonly app: App) {
     this.current = currentLevelIndex(app.save, LEVEL_META);
@@ -49,7 +58,46 @@ export class LevelSelectScreen implements Screen {
     return this.scroll;
   }
 
+  /** The challenge for the app's current day key. */
+  private todaysChallenge(): DailyChallenge {
+    const dayKey = this.app.dayKey();
+    if (!this.challenge || this.challenge.dayKey !== dayKey) this.challenge = challengeFor(dayKey);
+    return this.challenge;
+  }
+
+  /** Card state; the only clock read of this screen (once per frame, for the countdown). */
+  private dailyCard(): DailyCardOpts {
+    const ch = this.todaysChallenge();
+    const save = this.app.save;
+    const meta = getLevelMeta(ch.levelId);
+    const remaining = msToUtcMidnight(Date.now());
+    const countdown = remaining >= 3_600_000 ? t('daily.newIn', { h: Math.ceil(remaining / 3_600_000) }) : t('daily.newInTime', { time: formatTime(remaining) });
+    return {
+      unlocked: challengeUnlocked(save),
+      unlockLevel: UNLOCK_AFTER_LEVEL,
+      levelName: meta ? levelName(meta) : String(ch.levelId),
+      twist: t(`daily.twist.${ch.twist.id}`),
+      gold: goldReward(3),
+      crystals: REWARD.crystals,
+      streak: shownStreak(save, ch.dayKey),
+      done: challengeDone(save, ch.dayKey),
+      best: save.challenge.best[ch.dayKey] ?? null,
+      countdown,
+    };
+  }
+
+  /** Tap on the daily card: start today's challenge, or explain the lock. */
+  private tapDaily(): void {
+    const ch = this.todaysChallenge();
+    if (!challengeUnlocked(this.app.save)) {
+      this.toast.show(t('daily.locked', { n: UNLOCK_AFTER_LEVEL }), 'error', this.nowMs);
+      return;
+    }
+    void this.app.startLevel(ch.levelId, ch.seed, { challenge: ch });
+  }
+
   draw(view: View, nowMs: number): void {
+    this.nowMs = nowMs;
     drawLevelSelect(view, this.app.palette(), {
       nodes: LEVEL_META.map((level, i) => ({
         id: level.id,
@@ -65,8 +113,10 @@ export class LevelSelectScreen implements Screen {
       gold: this.app.save.gold,
       crystals: this.app.save.crystals,
       commander: commanderSummary(this.app.save),
+      daily: this.dailyCard(),
       nowMs,
       pressed: this.pressed,
+      toast: this.toast.opts(nowMs),
     });
   }
 
@@ -75,7 +125,7 @@ export class LevelSelectScreen implements Screen {
     this.downY = p.y;
     this.scrollAtDown = this.scroll;
     this.dragging = false;
-    this.pressed = [BACK, LEVEL_MAP.wallet, LEVEL_MAP.commander].find((r) => inRect(r, p.x, p.y)) ?? null;
+    this.pressed = [BACK, LEVEL_MAP.wallet, LEVEL_MAP.commander, LEVEL_MAP.daily].find((r) => inRect(r, p.x, p.y)) ?? null;
   }
 
   move(p: PointerPoint): void {
@@ -103,6 +153,10 @@ export class LevelSelectScreen implements Screen {
     }
     if (inRect(LEVEL_MAP.commander, p.x, p.y)) {
       this.app.goShop('upgrades', () => this.app.goLevels());
+      return;
+    }
+    if (inRect(LEVEL_MAP.daily, p.x, p.y)) {
+      this.tapDaily();
       return;
     }
     if (p.y < LEVEL_MAP.headerH || p.y >= LEVEL_MAP.commander.y - 10) return;

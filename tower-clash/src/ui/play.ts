@@ -32,6 +32,8 @@ import { recordResult, spendGold } from '../economy/wallet';
 import type { MatchSummary } from '../economy/achievements';
 import { L3_LEVEL, emptyMatch, evaluateAchievements } from '../economy/achievements';
 import { CRYSTAL_SERVICES } from '../economy/catalog';
+import type { DailyChallenge } from '../daily/challenge';
+import { recordChallengeResult } from './daily';
 import { isMuted, onPlayerCommand, onSimEvents, onSimFrame, playSfx, resetAudioLevel, toggleMuted } from '../audio/index';
 import { hapticCapture } from '../native/index';
 import { t } from './i18n';
@@ -89,6 +91,8 @@ export class PlayScreen implements Screen {
   readonly match: MatchSummary = emptyMatch();
   /** Bridges the player asked to cut; a `bridgeCut` event on one of them counts as the player's. */
   private readonly cutRequests = new Set<string>();
+  /** Daily Challenge match (GDD §7): fixed twist modifiers, no upgrades, boosters and continues off. */
+  readonly challenge: DailyChallenge | null;
 
   constructor(
     private readonly app: App,
@@ -97,7 +101,8 @@ export class PlayScreen implements Screen {
     speed = 1,
     opts: StartOptions = {},
   ) {
-    this.continued = opts.reinforcements === true;
+    this.challenge = opts.challenge ?? null;
+    this.continued = opts.reinforcements === true && !this.challenge;
     this.loop = new GameLoop({
       beforeTick: (s) => this.runAi(s),
       onEvents: (ev) => {
@@ -108,7 +113,8 @@ export class PlayScreen implements Screen {
     this.loop.speed = speed;
     // Commander upgrades are sim input, fixed for the whole match. The bonus garrison is only the
     // fallback continue (no usable snapshot): the normal continue rewinds instead (`resumeFromSnapshot`).
-    const modifiers = modifiersFromSave(app.save, this.continued ? CRYSTAL_SERVICES.continue.bonusInfantry : 0);
+    // A challenge is equal for everyone: the twist's modifiers stand in for the commander upgrades.
+    const modifiers = this.challenge ? { ...this.challenge.twist.modifiers } : modifiersFromSave(app.save, this.continued ? CRYSTAL_SERVICES.continue.bonusInfantry : 0);
     this.loop.load(createState(level, seed, modifiers));
     resetAudioLevel();
     const rngs = rngsFor(seed, level.enemies);
@@ -316,7 +322,8 @@ export class PlayScreen implements Screen {
     const idx = levelIndex(this.level.id);
     return {
       hud: {
-        boosters: allBoosterStatus(this.state, this.wallet()),
+        boosters: this.challenge ? [] : allBoosterStatus(this.state, this.wallet()),
+        challenge: this.challenge ? { twist: t(`daily.twist.${this.challenge.twist.id}`) } : undefined,
         targeting: this.targeting,
         muted: isMuted(),
         pressedBooster: this.pressedBooster,
@@ -338,7 +345,7 @@ export class PlayScreen implements Screen {
       limitHintText: this.gestures.limitHintText || undefined,
       outcome,
       stars: outcome === 'won' ? starsFor(this.level, this.elapsedMs()) : 0,
-      hasNext: idx >= 0 && idx + 1 < LEVEL_META.length,
+      hasNext: this.challenge ? true : idx >= 0 && idx + 1 < LEVEL_META.length,
       speed: this.loop.speed,
       coinsEarned: this.earnings.gold,
       coinsTotal: this.app.save.gold,
@@ -350,9 +357,19 @@ export class PlayScreen implements Screen {
     const outcome = getOutcome(this.state);
     if (outcome === 'playing') return;
     const elapsed = this.elapsedMs();
-    this.earnings = recordResult(this.app.save, this.level, outcome, elapsed);
     this.match.outcome = outcome;
     this.match.timeMs = elapsed;
+    if (this.challenge) {
+      // Separate path (GDD §7): no level stars, first-clear gold, milestones or achievements — the
+      // daily reward is paid once per day by `recordChallengeResult`.
+      const daily = recordChallengeResult(this.app.save, this.challenge, this.level, outcome, elapsed);
+      this.earnings = { stars: daily.stars, gold: daily.gold, crystals: daily.crystals, notes: [], replayCapped: false };
+      const ui = this.buildUi();
+      this.gestures.reset();
+      this.app.go(new ResultScreen(this.app, { state: this.state, level: this.level, ui, earnings: this.earnings, continued: this.continued, achievements: { unlocked: [], crystals: 0 }, challenge: this.challenge, daily }));
+      return;
+    }
+    this.earnings = recordResult(this.app.save, this.level, outcome, elapsed);
     const achievements = evaluateAchievements(this.app.save, this.match);
     const ui = this.buildUi(); // after recordResult so the totals are final
     this.gestures.reset();
@@ -367,6 +384,11 @@ export class PlayScreen implements Screen {
         resume: () => this.resumeFromSnapshot(),
       }),
     );
+  }
+
+  /** Restart this level; a challenge keeps its seed and twist. */
+  restart(): void {
+    void this.app.startLevel(this.level.id, this.challenge?.seed, this.challenge ? { challenge: this.challenge } : undefined);
   }
 
   draw(view: View, nowMs: number): void {
@@ -409,6 +431,10 @@ export class PlayScreen implements Screen {
    */
   useBooster(kind: BoosterKind): boolean {
     if (this.loop.paused || this.loop.finished) return false;
+    if (this.challenge) {
+      this.toast.show(t('daily.noBoosters'), 'error', this.nowMs);
+      return false;
+    }
     const status = boosterStatus(this.state, kind, this.wallet());
     if (status.adOffer && !status.active) {
       void this.freeCharge(kind);
@@ -527,7 +553,7 @@ export class PlayScreen implements Screen {
       else if (inRect(PAUSE.speed, p.x, p.y)) this.toggleSpeed();
       else if (inRect(PAUSE.sound, p.x, p.y) || inRect(HUD.mute, p.x, p.y)) toggleMuted();
       else if (inRect(PAUSE.settings, p.x, p.y)) this.app.openSettings(this);
-      else if (inRect(PAUSE.retry, p.x, p.y)) void this.app.startLevel(this.level.id);
+      else if (inRect(PAUSE.retry, p.x, p.y)) this.restart();
       else if (inRect(PAUSE.menu, p.x, p.y) || inRect(HUD.menu, p.x, p.y)) this.app.goLevels();
       return;
     }
@@ -553,7 +579,7 @@ export class PlayScreen implements Screen {
       if (this.targeting) this.targeting = false;
       else this.app.goLevels();
     } else if (e.key === 'p' || e.key === 'P' || e.key === ' ') this.togglePause();
-    else if (e.key === 'r' || e.key === 'R') void this.app.startLevel(this.level.id);
+    else if (e.key === 'r' || e.key === 'R') this.restart();
     else if (e.key === '1') this.useBooster('overdrive');
     else if (e.key === '2') this.useBooster('freeze');
     else if (e.key === '3') this.useBooster('airstrike');

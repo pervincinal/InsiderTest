@@ -34,6 +34,7 @@ function fakeApp(save: SaveData) {
     openSettings() {},
     setSpeed() {},
     setLanguage() {},
+    dayKey: () => '2026-09-18',
   };
   return { app, starts, current: () => current };
 }

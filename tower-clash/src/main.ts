@@ -26,6 +26,9 @@ import type { FakeStoreOptions } from './economy/providers/fakeStore';
 import { configureFakeStore } from './economy/providers/fakeStore';
 import { grantProduct } from './economy/wallet';
 import type { GrantResult } from './economy/wallet';
+import type { DailyChallenge } from './daily/challenge';
+import { challengeFor, dayKeyOf } from './daily/challenge';
+import { challengeDone, challengeUnlocked, shownStreak } from './ui/daily';
 
 /**
  * The level map, shop, achievements and settings screens (and the menu drawing they need) are a
@@ -71,6 +74,15 @@ export interface TowerClashDebug {
   /** Open the shop (default tab: crystals) from the current screen; resolves once it is on screen (perf/e2e hook). */
   openShop(tab?: ShopTab): Promise<void>;
   aiAvailable: boolean;
+  /** Override "today" (UTC `YYYY-MM-DD`) for the Daily Challenge; null returns to the real clock. */
+  setDayKey(key: string | null): void;
+  /** Daily Challenge (GDD §7) test surface. */
+  daily: {
+    /** The challenge for `dayKey` (default: today / the override) and the save's progress on it. */
+    get(dayKey?: string): DailyDebugInfo;
+    /** Start the challenge for `dayKey` (default: today / the override); resolves like `loadLevel`. */
+    start(dayKey?: string): Promise<boolean>;
+  };
   /** Economy test surface (Phase A): the live save, direct grants, fake ads, fake-store knobs. */
   economy: {
     getSave(): SaveData;
@@ -98,6 +110,15 @@ export interface TowerClashDebug {
     /** What the settings About block shows, or null when not on the settings screen. */
     getAboutInfo(): { version: string; supportId: string | null; privacyOptions: boolean } | null;
   };
+}
+
+export interface DailyDebugInfo {
+  challenge: DailyChallenge;
+  unlocked: boolean;
+  done: boolean;
+  streak: number;
+  lastWinDay: string | null;
+  best: { stars: number; timeMs: number } | null;
 }
 
 declare global {
@@ -154,6 +175,8 @@ class TowerClashApp implements App {
   private pendingStart: Promise<PlayScreen | null> | null = null;
   private startSeq = 0;
   nativeInfo?: NativeInfoOverride;
+  /** Debug override of the Daily Challenge day (e2e determinism). */
+  private dayKeyOverride: string | null = null;
 
   constructor(canvas: HTMLCanvasElement, save: SaveData) {
     this.view = createView(canvas);
@@ -337,6 +360,17 @@ class TowerClashApp implements App {
     this.play?.setSpeed(this.speed);
   }
 
+  /** Today's UTC day key (the UI's only clock read for the challenge), or the debug override. */
+  dayKey(): string {
+    return this.dayKeyOverride ?? dayKeyOf(new Date());
+  }
+
+  /** Start the Daily Challenge of `dayKey` (default: today) with its fixed seed and twist. */
+  startChallenge(dayKey = this.dayKey()): Promise<boolean> {
+    const challenge = challengeFor(dayKey);
+    return this.startLevel(challenge.levelId, challenge.seed, { challenge });
+  }
+
   /**
    * Start a level: at once when its chunk is in (the usual case — the current level is preloaded
    * after the first frame and the next one when a level starts), otherwise through the spinner.
@@ -453,6 +487,17 @@ class TowerClashApp implements App {
       back: () => this.onBack(),
       openShop: (tab = 'crystals') => this.openShop(tab, this.backFromShop()),
       aiAvailable: true,
+      setDayKey: (key) => {
+        this.dayKeyOverride = key;
+      },
+      daily: {
+        get: (dayKey = this.dayKey()) => {
+          const challenge = challengeFor(dayKey);
+          const c = this.save.challenge;
+          return { challenge, unlocked: challengeUnlocked(this.save), done: challengeDone(this.save, dayKey), streak: shownStreak(this.save, dayKey), lastWinDay: c.lastWinDay, best: c.best[dayKey] ?? null };
+        },
+        start: (dayKey) => this.startChallenge(dayKey),
+      },
       economy: {
         getSave: () => this.save,
         grant: (productId) => grantProduct(this.save, productId, `debug-${Date.now()}-${Math.random()}`),

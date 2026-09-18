@@ -74,6 +74,8 @@ export interface HudExtras {
   /** Result-card rect currently held down. */
   pressed?: Rect | null;
   toast?: ToastOpts | null;
+  /** Daily Challenge match (GDD §7): the level chip reads "Daily · name" over the twist's name. */
+  challenge?: { twist: string };
 }
 
 export interface ResultExtras {
@@ -94,6 +96,15 @@ export interface ResultExtras {
   skipCrystals: number | null;
   /** An ad / purchase is in flight: buttons show a spinner and ignore taps. */
   pending: boolean;
+  /** Daily Challenge result (GDD §7): the reward line (first win) or the day's best (replay). */
+  daily?: {
+    won: boolean;
+    firstWin: boolean;
+    gold: number;
+    crystals: number;
+    streak: number;
+    best: { stars: number; timeMs: number } | null;
+  };
 }
 
 export type HudPlayUi = PlayUi & {
@@ -331,17 +342,18 @@ export function drawHud(ctx: CanvasRenderingContext2D, state: GameState, _view: 
   drawGlassBand(ctx, HUD.topBar);
   drawGlassBand(ctx, HUD.bottomBar);
 
-  // level chip: small "LEVEL n" over the name
+  // level chip: small "LEVEL n" over the name (a challenge: the twist's name over "Daily · name")
   const chip = HUD.levelChip;
-  drawPill(ctx, chip, pal.paper);
+  drawPill(ctx, chip, pal.paper, hud?.challenge ? pal.gold : undefined);
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = pal.textDim;
+  ctx.fillStyle = hud?.challenge ? pal.goldShade : pal.textDim;
   ctx.font = font(14, '500');
-  ctx.fillText(t('hud.level', { n: ui.level.id }), chip.x + 24, chip.y + 19, chip.w - 44);
+  ctx.fillText(hud?.challenge ? hud.challenge.twist : t('hud.level', { n: ui.level.id }), chip.x + 24, chip.y + 19, chip.w - 44);
   ctx.fillStyle = pal.ink;
-  ctx.font = font(24);
-  ctx.fillText(levelName(ui.level), chip.x + 24, chip.y + 41, chip.w - 44);
+  const chipTitle = hud?.challenge ? t('daily.chip', { name: levelName(ui.level) }) : levelName(ui.level);
+  ctx.font = font(fitFontPx(ctx, chipTitle, 24, chip.w - 44));
+  ctx.fillText(chipTitle, chip.x + 24, chip.y + 41, chip.w - 44);
 
   // timer pill (+ speed tag)
   const timer = HUD.timer;
@@ -416,6 +428,8 @@ export function drawHud(ctx: CanvasRenderingContext2D, state: GameState, _view: 
     ctx.textAlign = 'center';
     ctx.fillText(text, 360, pill.y + pill.h / 2 + 1, w - 20);
   }
+  // transient status while playing (free charge added, "not in the daily challenge"); overlays draw their own
+  if (hud?.toast && ui.outcome === 'playing' && !ui.paused) drawToast(ctx, pal, hud.toast);
   ctx.restore();
 }
 
@@ -549,13 +563,19 @@ function drawResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: Pla
     }
     ctx.fillStyle = pal.textDim;
     ctx.font = font(18, '500');
-    const note = ex?.notes.length
-      ? ex.notes.join(' · ')
-      : ex?.replayCapped
-        ? t('result.replayCapped')
-        : ui.coinsEarned > 0
-          ? t('result.goldTotal', { n: ui.coinsTotal })
-          : t('result.alreadyCleared', { n: ui.coinsTotal });
+    const daily = ex?.daily;
+    const note = daily
+      ? daily.firstWin
+        ? t('daily.resultWon', { gold: daily.gold, crystals: daily.crystals, streak: daily.streak })
+        : t('daily.resultBest', { stars: daily.best?.stars ?? ui.stars, time: formatTime(daily.best?.timeMs ?? clockOf(ui, state)) })
+      : ex?.notes.length
+        ? ex.notes.join(' · ')
+        : ex?.replayCapped
+          ? t('result.replayCapped')
+          : ui.coinsEarned > 0
+            ? t('result.goldTotal', { n: ui.coinsTotal })
+            : t('result.alreadyCleared', { n: ui.coinsTotal });
+    ctx.font = font(fitFontPx(ctx, note, 18, card.w - 60, '500'), '500');
     ctx.fillText(note, 360, card.y + 416, card.w - 60);
   } else {
     ctx.fillStyle = pal.textDim;

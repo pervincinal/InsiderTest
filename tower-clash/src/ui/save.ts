@@ -51,6 +51,27 @@ export interface DailyState {
   streak: number;
 }
 
+/**
+ * Daily Challenge progress (GDD §7): the last UTC day won, the consecutive-day streak and the best
+ * result per day key (only the most recent `CHALLENGE_BEST_KEEP` days are kept).
+ */
+export interface ChallengeState {
+  /** UTC day key (`YYYY-MM-DD`) of the last challenge win, or null. */
+  lastWinDay: string | null;
+  /** Consecutive UTC days with a win (0 before the first). */
+  streak: number;
+  /** Best result per day key: most stars, then the fastest clock. */
+  best: Record<string, ChallengeBest>;
+}
+
+export interface ChallengeBest {
+  stars: number;
+  timeMs: number;
+}
+
+/** How many day keys `challenge.best` keeps (the most recent ones). */
+export const CHALLENGE_BEST_KEEP = 30;
+
 export interface AdCounters {
   /** Calendar day the rewarded counters belong to; a new day resets them. */
   day: string;
@@ -81,6 +102,8 @@ export interface SaveData {
   skins: SkinState;
   charges: BoosterCharges;
   daily: DailyState;
+  /** Daily Challenge progress (GDD §7). Added without a schema bump: missing = never played. */
+  challenge: ChallengeState;
   adCounters: AdCounters;
   /** Store transaction ids (and `owned:<productId>` markers) already granted — never grant twice. */
   purchases: string[];
@@ -108,6 +131,7 @@ export function defaultSave(): SaveData {
     skins: { owned: [], equipped: { roof: null, helmet: null, theme: null } },
     charges: { overdrive: 0, freeze: 0, airstrike: 0 },
     daily: { lastClaimDay: null, streak: 0 },
+    challenge: { lastWinDay: null, streak: 0, best: {} },
     adCounters: { day: '', rewardedByPlacement: {}, levelsCompleted: 0 },
     purchases: [],
     milestones: [],
@@ -145,6 +169,29 @@ function dayString(v: unknown): string {
   return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : '';
 }
 
+/** Well-formed `challenge.best` entries only (valid day key, stars 0..3, finite time), pruned to the newest keys. */
+function challengeBestMap(v: unknown): Record<string, ChallengeBest> {
+  const out: Record<string, ChallengeBest> = {};
+  if (!isRecord(v)) return out;
+  for (const [k, raw] of Object.entries(v)) {
+    if (!dayString(k) || !isRecord(raw)) continue;
+    const stars = nonNegInt(raw.stars);
+    const timeMs = nonNegInt(raw.timeMs);
+    if (stars === null || timeMs === null) continue;
+    out[k] = { stars: Math.min(3, stars), timeMs };
+  }
+  return pruneChallengeBest(out);
+}
+
+/** Keep only the `CHALLENGE_BEST_KEEP` most recent day keys (keys sort chronologically as strings). */
+export function pruneChallengeBest(best: Record<string, ChallengeBest>, keep = CHALLENGE_BEST_KEEP): Record<string, ChallengeBest> {
+  const keys = Object.keys(best).sort();
+  if (keys.length <= keep) return best;
+  const out: Record<string, ChallengeBest> = {};
+  for (const k of keys.slice(keys.length - keep)) out[k] = best[k]!;
+  return out;
+}
+
 /**
  * Parse untrusted JSON (any schema version) into a well-formed v3 SaveData, filling gaps with
  * defaults. v1 had no `version` and no `reducedMotion`; v2 stored gold as `coins`; every economy
@@ -179,6 +226,11 @@ export function normalizeSave(raw: unknown): SaveData {
     const d = raw.daily;
     const day = dayString(d.lastClaimDay);
     out.daily = { lastClaimDay: day || null, streak: Math.min(7, nonNegInt(d.streak) ?? 0) };
+  }
+  if (isRecord(raw.challenge)) {
+    const c = raw.challenge;
+    const day = dayString(c.lastWinDay);
+    out.challenge = { lastWinDay: day || null, streak: nonNegInt(c.streak) ?? 0, best: challengeBestMap(c.best) };
   }
   if (isRecord(raw.adCounters)) {
     const a = raw.adCounters;

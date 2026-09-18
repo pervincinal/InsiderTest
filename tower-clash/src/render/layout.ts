@@ -185,6 +185,8 @@ export const LEVEL_MAP = Object.freeze({
   wallet: { x: 402, y: 24, w: 300, h: 52 } as Rect,
   /** Commander summary chip at the bottom (tap → shop, upgrades tab). */
   commander: { x: 60, y: 1206, w: 600, h: 54 } as Rect,
+  /** Daily Challenge card (GDD §7): sticky under the header, over the scrolling map (tap → start). */
+  daily: { x: 30, y: 112, w: 660, h: 104 } as Rect,
   /** Node radius (hit rect is the 2r square). */
   nodeR: 46,
   /** Content-space y of the first node and the vertical step between nodes. */

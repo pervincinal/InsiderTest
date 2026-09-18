@@ -21,7 +21,7 @@ export interface Twist {
 
 export const TWISTS: readonly Twist[] = Object.freeze([
   { id: 'plain', modifiers: DEFAULT_MODIFIERS },
-  { id: 'lean', modifiers: { ...DEFAULT_MODIFIERS, productionMul: 0.85 } },
+  { id: 'lean', modifiers: { ...DEFAULT_MODIFIERS, productionMul: 0.9 } },
   { id: 'fastFeet', modifiers: { ...DEFAULT_MODIFIERS, unitSpeedMul: 1.25 } },
   { id: 'thinWalls', modifiers: { ...DEFAULT_MODIFIERS, capacityMul: 0.8 } },
   { id: 'reinforced', modifiers: { ...DEFAULT_MODIFIERS, startGarrisonBonus: 5 } },

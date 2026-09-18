@@ -3,10 +3,11 @@ import type { Palette } from './palette';
 import { shade } from './palette';
 import type { View } from './view';
 import type { Rect } from './widgets';
-import { drawButton, drawExtrudedText, drawFlag, drawGlassBand, drawLock, drawPill, drawStars, fitFontPx, font, withShadow } from './widgets';
+import { drawButton, drawCard, drawExtrudedText, drawFlag, drawGlassBand, drawLock, drawPill, drawStar, drawStars, fitFontPx, font, formatTime, withShadow } from './widgets';
 import { LEVEL_MAP, levelNodeCentre, levelNodeRect } from './layout';
-import { drawWallet } from './economyWidgets';
-import { drawUpgradeGlyph } from './sprites';
+import type { ToastOpts } from './economyWidgets';
+import { drawToast, drawWallet } from './economyWidgets';
+import { drawCrystal, drawGoldCoin, drawUpgradeGlyph } from './sprites';
 import { beginFrame, drawWater, motion } from './menus';
 import { t } from '../ui/i18n';
 
@@ -24,6 +25,27 @@ export interface LevelNode {
   unlocked: boolean;
 }
 
+/** Daily Challenge card (GDD §7), sticky under the header. */
+export interface DailyCardOpts {
+  unlocked: boolean;
+  /** Level whose first star opens the challenge (shown while locked). */
+  unlockLevel: number;
+  levelName: string;
+  /** Translated twist name. */
+  twist: string;
+  /** First-win reward: gold at 3★ and the crystals. */
+  gold: number;
+  crystals: number;
+  /** Consecutive days won (0 = none / broken). */
+  streak: number;
+  /** Won today. */
+  done: boolean;
+  /** Best result today, when won. */
+  best: { stars: number; timeMs: number } | null;
+  /** Time to the next challenge ("New in 12:34" / "New challenge in 5h"). */
+  countdown: string;
+}
+
 export interface LevelSelectOpts {
   nodes: LevelNode[];
   /** Index of the "current" level (first unlocked without a clear, or the last level). */
@@ -36,8 +58,96 @@ export interface LevelSelectOpts {
   crystals: number;
   /** One-line commander summary, or null when no upgrade is owned. */
   commander: string | null;
+  /** Daily Challenge card state (drawn at `LEVEL_MAP.daily`). */
+  daily: DailyCardOpts;
   nowMs: number;
   pressed?: Rect | null;
+  toast?: ToastOpts | null;
+}
+
+/**
+ * Daily Challenge card: clay card with a gold star badge (grey lock while locked), the title with a
+ * countdown / DONE pill at the right, the level · twist line and the reward (or today's best) with
+ * the streak pill. Sticky: drawn in screen space over the scrolling map.
+ */
+function drawDailyCard(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, d: DailyCardOpts, pressed: boolean): void {
+  ctx.save();
+  if (pressed) ctx.translate(0, 2);
+  drawCard(ctx, pal, r, { radius: 22, edge: 5 });
+  // badge
+  const bx = r.x + 48;
+  const by = r.y + (r.h - 5) / 2;
+  const badge = !d.unlocked ? pal.owners.neutral : d.done ? pal.gold : pal.owners.player;
+  ctx.beginPath();
+  ctx.arc(bx, by + 4, 30, 0, Math.PI * 2);
+  ctx.fillStyle = shade(badge, -0.4);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(bx, by, 30, 0, Math.PI * 2);
+  const g = ctx.createLinearGradient(bx - 30, by - 30, bx + 15, by + 30);
+  g.addColorStop(0, shade(badge, 0.28));
+  g.addColorStop(1, shade(badge, -0.08));
+  ctx.fillStyle = g;
+  ctx.fill();
+  if (d.unlocked) drawStar(ctx, pal, bx, by + 1, 17, true);
+  else drawLock(ctx, shade(pal.owners.neutral, -0.4), bx, by + 1, 22);
+
+  const left = r.x + 96;
+  const rightW = 176;
+  const textW = r.w - (left - r.x) - rightW - 24;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  // title + the right-hand pill (DONE / countdown)
+  const title = t('daily.title');
+  ctx.fillStyle = d.unlocked ? pal.ink : pal.textDim;
+  ctx.font = font(fitFontPx(ctx, title, 21, textW));
+  ctx.fillText(title, left, r.y + 26, textW);
+  const pill: Rect = { x: r.x + r.w - rightW - 14, y: r.y + 12, w: rightW, h: 32 };
+  if (d.unlocked) {
+    const done = d.done;
+    drawPill(ctx, pill, done ? pal.gold : pal.paper, done ? pal.goldShade : undefined, 2);
+    ctx.textAlign = 'center';
+    const label = done ? t('daily.done') : d.countdown;
+    ctx.fillStyle = done ? pal.ink : pal.textDim;
+    ctx.font = font(fitFontPx(ctx, label, 17, pill.w - 20, done ? '700' : '500'), done ? '700' : '500');
+    ctx.fillText(label, pill.x + pill.w / 2, pill.y + pill.h / 2 + 1, pill.w - 20);
+    ctx.textAlign = 'left';
+  }
+  // line 2: level · twist, or the unlock hint
+  const line2 = d.unlocked ? `${d.levelName} · ${d.twist}` : t('daily.locked', { n: d.unlockLevel });
+  ctx.fillStyle = d.unlocked ? pal.ink : pal.textDim;
+  ctx.font = font(fitFontPx(ctx, line2, 19, d.unlocked ? textW : r.w - (left - r.x) - 24, '500'), '500');
+  ctx.fillText(line2, left, r.y + 56, d.unlocked ? textW : r.w - (left - r.x) - 24);
+  // line 3: reward (best when done) + streak pill; the countdown while locked
+  if (d.unlocked) {
+    let x = left;
+    if (d.done && d.best) {
+      ctx.fillStyle = pal.textDim;
+      ctx.font = font(17, '500');
+      ctx.fillText(t('daily.best', { stars: d.best.stars, time: formatTime(d.best.timeMs) }), x, r.y + 84, textW);
+    } else {
+      drawGoldCoin(ctx, pal, x + 9, r.y + 84, 9);
+      drawCrystal(ctx, pal, x + 30, r.y + 84, 9);
+      x += 46;
+      ctx.fillStyle = pal.ink;
+      ctx.font = font(fitFontPx(ctx, t('daily.reward', { gold: d.gold, crystals: d.crystals }), 17, textW - 46, '500'), '500');
+      ctx.fillText(t('daily.reward', { gold: d.gold, crystals: d.crystals }), x, r.y + 84, textW - 46);
+    }
+    if (d.streak > 0) {
+      const sp: Rect = { x: pill.x, y: r.y + 66, w: rightW, h: 30 };
+      drawPill(ctx, sp, pal.owners.player, shade(pal.owners.player, -0.35), 2);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = pal.paper;
+      ctx.font = font(16);
+      ctx.fillText(t('daily.streak', { n: d.streak }), sp.x + sp.w / 2, sp.y + sp.h / 2 + 1, sp.w - 16);
+      ctx.textAlign = 'left';
+    }
+  } else {
+    ctx.fillStyle = pal.textDim;
+    ctx.font = font(16, '500');
+    ctx.fillText(d.countdown, left, r.y + 84, r.w - (left - r.x) - 24);
+  }
+  ctx.restore();
 }
 
 /** Content-space bottom of the island for `count` nodes. */
@@ -286,6 +396,8 @@ export function drawLevelSelect(view: View, pal: Palette, o: LevelSelectOpts): v
   const title = t('levels.title');
   drawExtrudedText(ctx, title, 290, 50, fitFontPx(ctx, title, 40, 220), { face: pal.paper, side: shade(pal.owners.player, -0.25), outline: pal.ink, depth: 4 });
   drawWallet(ctx, pal, o.walletRect, o.gold, o.crystals, { pressed: o.pressed === o.walletRect });
+  // daily challenge card, sticky under the header (tap → start)
+  drawDailyCard(ctx, pal, LEVEL_MAP.daily, o.daily, o.pressed === LEVEL_MAP.daily);
   // commander summary chip (tap → upgrades)
   const cr = o.commanderRect;
   drawButton(ctx, pal, cr, '', { fontPx: 18, pressed: o.pressed === cr, flat: true });
@@ -298,5 +410,6 @@ export function drawLevelSelect(view: View, pal: Palette, o: LevelSelectOpts): v
   ctx.fillStyle = o.commander ? pal.ink : pal.textDim;
   ctx.font = font(17, '500');
   ctx.fillText(o.commander ?? t('levels.noUpgrades'), cr.x + 190, cr.y + (cr.h - 4) / 2 + 1, cr.w - 204);
+  if (o.toast) drawToast(ctx, pal, o.toast);
   ctx.restore();
 }

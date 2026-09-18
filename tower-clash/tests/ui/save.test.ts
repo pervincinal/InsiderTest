@@ -121,3 +121,34 @@ describe('save schema v3 (M3-3 + economy Phase A)', () => {
     expect(spendCoins(s, -1)).toBe(false);
   });
 });
+
+describe('save.challenge (Daily Challenge, GDD §7)', () => {
+  it('defaults to never played and is normalised like the other optional blocks', () => {
+    expect(defaultSave().challenge).toEqual({ lastWinDay: null, streak: 0, best: {} });
+    expect(normalizeSave({ version: 3 }).challenge).toEqual({ lastWinDay: null, streak: 0, best: {} });
+    const s = normalizeSave({
+      challenge: {
+        lastWinDay: '2026-09-18',
+        streak: 3.7,
+        best: { '2026-09-18': { stars: 9, timeMs: 45_500.9 }, '2026-09-17': { stars: 'x', timeMs: 1 }, 'not-a-day': { stars: 1, timeMs: 1 }, '2026-09-16': null },
+      },
+    });
+    expect(s.challenge).toEqual({ lastWinDay: '2026-09-18', streak: 3, best: { '2026-09-18': { stars: 3, timeMs: 45_500 } } });
+    expect(normalizeSave({ challenge: { lastWinDay: '18/09/2026', streak: -2 } }).challenge).toEqual({ lastWinDay: null, streak: 0, best: {} });
+  });
+
+  it('keeps only the newest 30 best entries', async () => {
+    const { CHALLENGE_BEST_KEEP, pruneChallengeBest } = await import('../../src/ui/save');
+    expect(CHALLENGE_BEST_KEEP).toBe(30);
+    const best: Record<string, { stars: number; timeMs: number }> = {};
+    for (let d = 1; d <= 31; d++) best[`2026-07-${String(d).padStart(2, '0')}`] = { stars: 1, timeMs: d };
+    best['2026-08-01'] = { stars: 2, timeMs: 5 };
+    const pruned = pruneChallengeBest(best);
+    const keys = Object.keys(pruned).sort();
+    expect(keys.length).toBe(30);
+    expect(keys[0]).toBe('2026-07-03');
+    expect(keys[29]).toBe('2026-08-01');
+    expect(normalizeSave({ challenge: { best } }).challenge.best).toEqual(pruned);
+    expect(pruneChallengeBest({ '2026-07-01': { stars: 1, timeMs: 1 } })).toEqual({ '2026-07-01': { stars: 1, timeMs: 1 } });
+  });
+});
