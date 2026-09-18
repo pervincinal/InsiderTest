@@ -21,7 +21,7 @@
     {"id": "nw", "x": 150, "y": 700, "owner": "neutral", "units": 8},
     {"id": "ne", "x": 570, "y": 700, "owner": "neutral", "units": 8},
     {"id": "guns", "x": 250, "y": 520, "owner": "enemy1", "units": 4, "level": 1, "kind": "artillery"},
-    {"id": "camp", "x": 470, "y": 520, "owner": "enemy1", "units": 6, "level": 1, "kind": "barracks"},
+    {"id": "camp", "x": 470, "y": 520, "owner": "enemy1", "units": 5, "level": 1, "kind": "barracks"},
     {"id": "keep", "x": 360, "y": 260, "owner": "enemy1", "units": 10, "level": 1, "kind": "fortress"}
   ],
   "roads": [
