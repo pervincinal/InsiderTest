@@ -4,7 +4,7 @@ import { shade } from './palette';
 import type { View } from './view';
 import type { Rect } from './widgets';
 import { drawButton, drawCard, drawExtrudedText, drawGlassBand, drawPill, drawRoundButton, drawTrophyGlyph, fitFontPx, font, roundRect } from './widgets';
-import { ACHIEVEMENTS_LAYOUT } from './layout';
+import { ACHIEVEMENTS_LAYOUT } from './menuLayout';
 import type { ToastOpts } from './economyWidgets';
 import { drawToast } from './economyWidgets';
 import { drawCrystal } from './sprites';

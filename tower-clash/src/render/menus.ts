@@ -152,28 +152,6 @@ export function drawWater(ctx: CanvasRenderingContext2D, pal: Palette, nowMs: nu
   }
 }
 
-/* ---------- glyphs for the settings row ---------- */
-
-/** Three owner-coloured clay dots: the colour-blind palette toggle. */
-export function paletteGlyph(ctx: CanvasRenderingContext2D, pal: Palette, cx: number, cy: number, s: number): void {
-  const colours = [pal.owners.player, pal.owners.enemy1, pal.owners.enemy2];
-  colours.forEach((c, i) => {
-    const x = cx + (i - 1) * s * 0.85;
-    ctx.fillStyle = shade(c, -0.35);
-    ctx.beginPath();
-    ctx.arc(x + 1, cy + 2, s * 0.4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = c;
-    ctx.beginPath();
-    ctx.arc(x, cy, s * 0.4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
-    ctx.beginPath();
-    ctx.arc(x - s * 0.12, cy - s * 0.14, s * 0.13, 0, Math.PI * 2);
-    ctx.fill();
-  });
-}
-
 /* ---------- Title ---------- */
 
 export interface DailyChestOpts {

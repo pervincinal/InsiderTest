@@ -393,9 +393,10 @@ export class PlayScreen implements Screen {
 
   draw(view: View, nowMs: number): void {
     const ui = this.buildUi();
-    drawGame(view.ctx, this.state, view, ui, nowMs);
-    this.effects.length = 0; // legacy flat ring/puff list: particles.ts renders these now
     const step = this.tutorialStep();
+    // the tutorial bubble paints over the HUD, so those frames keep the single-canvas path
+    drawGame(view.ctx, this.state, view, ui, nowMs, !step);
+    this.effects.length = 0; // legacy flat ring/puff list: particles.ts renders these now
     if (step) {
       const ctx = view.ctx;
       ctx.save();

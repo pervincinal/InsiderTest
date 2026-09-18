@@ -8,6 +8,7 @@ import { applyDeviceTransform, applyTransform, clipToMap } from './view';
 import { HUD } from './layout';
 import { font, roundRect } from './widgets';
 import { drawHud, drawOverlays } from './hud';
+import { blankLayer, paintGround, paintHud } from './layers';
 import type { TerrainSpec } from './terrain';
 import { drawTerrain, drawTerrainOverlay } from './terrain';
 import type { TowerSkin } from './sprites';
@@ -784,26 +785,40 @@ function terrainSpec(state: GameState, theme: string | undefined): TerrainSpec {
 }
 
 
-/** Draw one frame. Reads state and ui; never mutates either. `nowMs` drives purely visual motion. */
-export function drawGame(ctx: CanvasRenderingContext2D, state: GameState, view: View, ui: PlayUi, nowMs = 0): void {
+/**
+ * Draw one frame. Reads state and ui; never mutates either. `nowMs` drives purely visual motion.
+ * With `layered` (play screen, no tutorial) and `view.layers` present, the ground and the HUD live
+ * on their own static canvases (PERF-3) while the level is running: this canvas is cleared, the
+ * world is drawn transparent over the ground layer and `drawHud` only repaints when its inputs
+ * change. Overlays (pause / result) dim the HUD, so those frames fall back to the single canvas.
+ */
+export function drawGame(ctx: CanvasRenderingContext2D, state: GameState, view: View, ui: PlayUi, nowMs = 0, layered = false): void {
   const pal = ui.palette;
   const theme = ui.skin?.theme;
-
-  // Letterbox bars in device space (deep water, themed), then the map in logical space.
-  applyDeviceTransform(view);
-  ctx.fillStyle = theme ? themeFor(theme).letterbox : pal.letterbox;
-  ctx.fillRect(0, 0, view.cssW, view.cssH);
-
-  ctx.save();
-  applyTransform(view);
-  clipToMap(view);
+  const letterbox = theme ? themeFor(theme).letterbox : pal.letterbox;
   const motion = motionAllowed();
   const spec = terrainSpec(state, theme);
   // capture shake moves the whole world (not the HUD)
   const shake = motion ? (ui.particles?.shake(nowMs) ?? { dx: 0, dy: 0 }) : { dx: 0, dy: 0 };
+  const layers = layered && ui.outcome === 'playing' && !ui.paused ? view.layers : undefined;
+
+  // Letterbox bars in device space (deep water, themed), then the map in logical space.
+  applyDeviceTransform(view);
+  if (layers) {
+    paintGround(layers.ground, view, pal, spec, letterbox);
+    ctx.clearRect(0, 0, view.cssW, view.cssH);
+  } else {
+    ctx.fillStyle = letterbox;
+    ctx.fillRect(0, 0, view.cssW, view.cssH);
+  }
+
+  ctx.save();
+  applyTransform(view);
+  clipToMap(view);
   ctx.save();
   if (shake.dx || shake.dy) ctx.translate(shake.dx, shake.dy);
-  drawTerrain(ctx, view, pal, spec);
+  // a shaking frame re-blits the ground here so the whole world moves together (the layer stays put)
+  if (!layers || shake.dx || shake.dy) drawTerrain(ctx, view, pal, spec);
   drawTerrainOverlay(ctx, pal, spec, nowMs, motion);
 
   for (const road of Object.values(state.roads)) {
@@ -820,8 +835,12 @@ export function drawGame(ctx: CanvasRenderingContext2D, state: GameState, view: 
     ctx.fillStyle = 'rgba(120, 130, 150, 0.28)';
     ctx.fillRect(0, 0, C.MAP_W, C.MAP_H);
   }
-  drawHud(ctx, state, view, ui, nowMs);
-  if (ui.outcome !== 'playing' || ui.paused) drawOverlays(ctx, state, view, ui, nowMs);
+  if (layers) paintHud(layers.hud, view, state, ui, nowMs);
+  else {
+    blankLayer(view.layers?.hud);
+    drawHud(ctx, state, view, ui, nowMs);
+    if (ui.outcome !== 'playing' || ui.paused) drawOverlays(ctx, state, view, ui, nowMs);
+  }
 
   ctx.restore();
 }

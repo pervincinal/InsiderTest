@@ -4,7 +4,7 @@
  * gets its star goals paid here). Loaded lazily with its drawing (PERF-1, src/ui/lazyScreens.ts).
  */
 import type { View } from '../render/view';
-import { ACHIEVEMENTS_LAYOUT, achievementRowRect, achievementsMaxScroll } from '../render/layout';
+import { ACHIEVEMENTS_LAYOUT, achievementRowRect, achievementsMaxScroll } from '../render/menuLayout';
 import type { Rect } from '../render/widgets';
 import { inRect } from '../render/widgets';
 import type { AchievementRow } from '../render/menusAchievements';

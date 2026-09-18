@@ -4,6 +4,7 @@ import type { Palette } from './render/palette';
 import { getPalette } from './render/palette';
 import type { View } from './render/view';
 import { createView, resize, toClient } from './render/view';
+import { blankLayer, createLayers } from './render/layers';
 import { attachPointer } from './input/pointer';
 import type { PointerPoint } from './input/pointer';
 import type { SaveData } from './ui/save';
@@ -180,6 +181,8 @@ class TowerClashApp implements App {
 
   constructor(canvas: HTMLCanvasElement, save: SaveData) {
     this.view = createView(canvas);
+    this.view.layers = createLayers(canvas);
+    resize(this.view);
     this.save = save;
     this.current = new TitleScreen(this);
     initAudio(this.save);
@@ -450,6 +453,7 @@ class TowerClashApp implements App {
     const dt = this.lastFrame ? now - this.lastFrame : 0;
     this.lastFrame = now;
     this.current.update?.(dt, now);
+    if (this.current.name !== 'play') blankLayer(this.view.layers?.hud); // menus paint over the ground layer; nothing may paint over them
     this.current.draw(this.view, now);
     this.preloadLazy(); // after the first paint; a no-op from then on
     requestAnimationFrame((f) => this.frame(f));

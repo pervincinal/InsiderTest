@@ -36,7 +36,7 @@ import type { Palette } from './palette';
 import { badgeY, drawCrystal, drawGoldCoin, drawVideoGlyph } from './sprites';
 import type { ToastOpts } from './economyWidgets';
 import { drawSpinner, drawToast, drawWallet } from './economyWidgets';
-import { levelLesson, levelName, t } from '../ui/i18n';
+import { currentLanguage, levelLesson, levelName, t } from '../ui/i18n';
 
 /*
  * In-game HUD (ART_DIRECTION §4): glass paper bands top and bottom, level chip, timer pill, pause
@@ -431,6 +431,32 @@ export function drawHud(ctx: CanvasRenderingContext2D, state: GameState, _view: 
   // transient status while playing (free charge added, "not in the daily challenge"); overlays draw their own
   if (hud?.toast && ui.outcome === 'playing' && !ui.paused) drawToast(ctx, pal, hud.toast);
   ctx.restore();
+}
+
+/**
+ * Cache key of everything `drawHud` paints (PERF-3 HUD layer): changes exactly when the HUD would
+ * look different — clock once a second, counts / balances / booster states on change, per frame
+ * only while something animates (cooldown ring pulse, targeting rings, a toast).
+ */
+export function hudKey(state: GameState, ui: PlayUi, nowMs: number): string {
+  const hud = extrasOf(ui);
+  let k =
+    `${currentLanguage()}|${ui.palette.owners.enemy1}|${ui.level.id}|${hud?.challenge?.twist ?? ''}|${formatTime(clockOf(ui, state))}|${ui.speed}|` +
+    `${hud?.muted ? 1 : 0}${ui.paused ? 1 : 0}${state.time < 8000 ? 1 : 0}${ui.selectedTowerId ? 1 : 0}|${ui.outcome}|${hud?.streams ?? 0}|${ui.coinsTotal}|${hud?.pressedBooster ?? ''}`;
+  if (hud) {
+    for (const b of hud.boosters) {
+      k += `|${b.kind}${b.affordable ? 1 : 0}${b.active ? 1 : 0}${b.adOffer ? 1 : 0}:${b.charges}:${b.cost}`;
+      if (b.active && b.durationMs > 0) k += `:${nowMs}`;
+    }
+    if (hud.targeting) k += `|T${nowMs}`;
+    if (hud.toast) k += `|toast:${hud.toast.kind}:${hud.toast.t}:${hud.toast.y ?? ''}:${hud.toast.text}`;
+    if (hud.wallet && ui.outcome !== 'playing') k += `|w${hud.wallet.gold}:${hud.wallet.crystals}:${hud.pressed === HUD.wallet ? 1 : 0}`;
+  }
+  for (const l of state.links) {
+    const tw = state.towers[l.from];
+    if (tw) k += `|${l.from}:${tw.owner}:${tw.kind}:${tw.level}${ui.selectedTowerId === tw.id ? '*' : ''}`;
+  }
+  return k;
 }
 
 /* ---------- overlays ---------- */

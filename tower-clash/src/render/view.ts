@@ -1,4 +1,6 @@
 import { C } from '../sim/constants';
+import type { Layers } from './layers';
+import { resizeLayers } from './layers';
 
 /** Device safe-area insets in CSS px (notch / home indicator / rounded corners). */
 export interface SafeInsets {
@@ -24,6 +26,8 @@ export interface View {
   offsetX: number; // CSS px, left edge of the logical map
   offsetY: number;
   insets: SafeInsets;
+  /** Static ground / HUD canvases stacked with the game canvas (PERF-3); absent in tests. */
+  layers?: Layers;
 }
 
 export function createView(canvas: HTMLCanvasElement): View {
@@ -88,6 +92,7 @@ export function resize(view: View): void {
   if (view.canvas.height !== pxH) view.canvas.height = pxH;
   view.canvas.style.width = `${cssW}px`;
   view.canvas.style.height = `${cssH}px`;
+  if (view.layers) resizeLayers(view.layers, view.canvas);
 }
 
 /** Client (CSS px, relative to viewport) → logical map coordinates. May fall outside 0..720/0..1280. */
