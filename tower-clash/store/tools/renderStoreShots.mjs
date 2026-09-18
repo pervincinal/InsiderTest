@@ -244,6 +244,11 @@ const FRAME_CONDITIONS = () => {
         return (st.towers.home?.level ?? 1) >= 2;
       case 'playerToKeep': // the player streams into the fortress
         return st.links.some((l) => l.owner === 'player' && l.to === 'keep');
+      case 'fortressUnderFire': // …while the fortress's counter-stream keeps a player tower under fire (swords badge)
+        return (
+          st.links.some((l) => l.owner === 'player' && l.to === 'keep') &&
+          Object.values(st.towers).some((t) => t.owner === 'player' && st.time < t.underFireUntilMs)
+        );
       default:
         throw new Error(`unknown frame condition ${key}`);
     }
@@ -404,13 +409,18 @@ async function tapAt(page, p) {
   await page.mouse.click(c.x, c.y);
 }
 
-/** Run `fn` up to `attempts` times with seeds 1, 2, 3…; the frame routines use it for timing-dependent captures. */
-async function withSeeds(label, attempts, fn) {
+/**
+ * Run `fn` up to `attempts` times with seeds 1, 2, 3…; the frame routines use it for timing-dependent
+ * captures. Returns whether a seed produced the frame; throws instead when `required` (the default).
+ */
+async function withSeeds(label, attempts, fn, { required = true } = {}) {
   for (let seed = 1; seed <= attempts; seed++) {
-    if (await fn(seed)) return;
+    if (await fn(seed)) return true;
     console.log(`${label}: seed ${seed} did not produce the frame, retrying`);
   }
-  throw new Error(`${label}: could not capture the frame in ${attempts} attempts`);
+  if (required) throw new Error(`${label}: could not capture the frame in ${attempts} attempts`);
+  console.log(`${label}: not captured in ${attempts} attempts, falling back`);
+  return false;
 }
 
 /** One routine per `SHOTS[].capture`; each leaves the page on the frame to shoot. */
@@ -456,9 +466,16 @@ const FRAMES = {
     if ((await page.evaluate(() => window.__towerclash.getLimitHint())) === null) throw new Error('level 5: limit hint gone before the capture');
   },
 
-  // level 9 "Stone Walls": mid-battle with the player streaming into the fortress ("keep")
-  fortress: (page) =>
-    withSeeds('level 9 fortress', 4, (seed) => playWhile(page, 9, 'playerToKeep', { seed, maxMs: 70_000 })),
+  // level 9 "Stone Walls": mid-battle with the player streaming into the fortress ("keep"). Preferred
+  // take: at the same moment the keep's counter-stream has a player tower (mid) under fire, so the
+  // frame also shows the under-fire badge (enemy-coloured pill with the crossed-swords pip; the sim
+  // holds it for UNDER_FIRE_MS = 1.5 s after every landing). Polled at ×4 so the 50 ms poll sees the
+  // overlap; when no seed lines the two up, the plain "streaming into the keep" frame is taken.
+  fortress: async (page) => {
+    const opts = (seed) => ({ seed, speed: 4, maxMs: 70_000 });
+    const hit = await withSeeds('level 9 fortress under fire', 4, (seed) => playWhile(page, 9, 'fortressUnderFire', opts(seed)), { required: false });
+    if (!hit) await withSeeds('level 9 fortress', 4, (seed) => playWhile(page, 9, 'playerToKeep', opts(seed)));
+  },
 
   // level 15 "The Citadel" (App Store extra): artillery mid-battle
   citadel: async (page) => {
