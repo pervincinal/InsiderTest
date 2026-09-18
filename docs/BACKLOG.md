@@ -11,8 +11,9 @@ Priority = order within a section. Producer moves items; anyone may add to Bugs 
 - [ ] ECON-8 `app-ads.txt` hosting needs a domain root (user-site repo or custom domain) — needs stakeholder decision
 
 ## Next
-- [ ] PERF-3 Terrain re-blit dominates the throttled frame (Tech Artist ablation at CPU 4×, level 40: no terrain 100 → 67 ms, no HUD → 83 ms, towers ≤ 1 vsync): keep the cached ground on a second static canvas under the game canvas (or dirty rects), then HUD on its own layer redrawn on change; sprite cache only after that (scratch impl in the session notes gave 7–14 %) — tech-artist + frontend
-- [ ] DAILY-2 Streak milestones day 3/7/30 → 5/20/100 crystals (ECONOMY §6.2, GDD §7.6, Phase C) and a `--twist` gate row in CI — monetization-designer + frontend + qa
+- [ ] LV-8 Lean-twist tail: 19 Toll Road 44/50 and 20 Roadblock 43/50 at K=50 (above the 80 % gate, below the 45/50 house rule) — level-designer
+- [ ] MM-4 PERF-3 memory on device: three viewport canvases ≈ 2 × 8–12 MB extra at DPR 3; confirm on a real phone with MM-1, fall back to two layers if a low-end device stutters — mobile-engineer
+- [ ] DOCS-2 GDD §7.6 still lists streak milestones under v2 ideas and §7.3 lacks `daily.streakNext` / `daily.milestone`; PERF-4 (tower sprite cache, 7–14 %) stays optional after PERF-3 — game-designer / tech-artist
   - 2026-09-18 (QA) **CI gates done** — `.github/workflows/tower-clash-ci.yml` runs, after the headless playtest, "Daily challenge gate" (`npm run playtest -- --daily $(date -u +%F) --days 30 --seeds 3`, 2.4 s locally) and "Twist pool gate" (all five twists at `--seeds 5`, ≈ 2.6 s each; K = 5 is the GDD §7.5 gate 4/5 — at K = 3 the 80 % rule demands 3/3 and level 18 loses seed 1 under lean, so the requested `--seeds 3` would be red). Documented in `.claude/skills/playtest/SKILL.md`. The streak-milestone part stays open (monetization + frontend).
 - [ ] PUB-9 Release `tower-clash-v0.4.0`: tag from the GitHub UI on the current head (52b3441 or later) (this environment cannot push tags) — stakeholder / producer
 - [ ] M3-5 Perf on a real mid phone: measure, then object pooling if needed — qa-engineer
@@ -36,7 +37,6 @@ Priority = order within a section. Producer moves items; anyone may add to Bugs 
 ## Later (M2 — content & feel)
 
 ## Later (M3 — meta & polish)
-- [ ] M3-2 Skins (2 tower shapes, 2 unit shapes) bought with coins
 - [ ] M3-5 Performance: 400 units at 60 fps on mid phone (object pooling, dirty rects if needed)
 
 ## Later (M4 — release)
@@ -82,6 +82,10 @@ Priority = order within a section. Producer moves items; anyone may add to Bugs 
 - Local 2-player on one screen
 
 ## Done
+- 2026-09-18 PERF-3 (03f62eb) ground / game / HUD on three stacked canvases: CPU 4× level 40 rAF median 133 → 67 ms (−50 %), task time −37 %, pixel diff < 0.1 %; menu-only code moved to the lazy chunk (eager 79.5 kB).
+- 2026-09-18 DAILY-2 (d14e358, 1304498) streak milestones day 3/7/30 → 5/20/100 crystals once per streak run, card shows the next bonus; CI gates: daily 30 days × 3 seeds and all five twists × 32 levels × 5 seeds (~15 s).
+- 2026-09-18 M3-2 (ccfa9fe) four silhouette skins (Round keep 150, Watchtower 200, Shield bearers 120, Clockwork robots 150 crystals) in a lazy chunk with shop previews.
+- 2026-09-18 BUG-7 (d3981e6) level 16 lean 30/50 → 50/50; QA-3 (1304498) `maxedModifiers()` in src/economy/maxUpgrades.ts pinned to the catalog.
 - 2026-09-18 QA-3 (no commit yet) `maxedModifiers()` moved out of `scripts/playtest.ts` into `src/economy/maxUpgrades.ts` (with `maxedTiers()`, `maxedEffect(kind)`): the one catalog-derived "every Commander track at its cap" ladder for `--upgrades max` and any future tool (playtest.ts re-exports it; scratch `diag.mts` is not moved into the repo — it should import this helper instead of typing 1.2/1.25/+5/1.15). Regression test `tests/economy/maxUpgrades.test.ts` pins it to the catalog's max tiers, to `ADVANTAGE_LIMIT` (1.06 / 1.25 / +2 / 1.04) and to the game's `modifiersFromSave` at max tiers; the stale "at its cap" fixture comment in `tests/ai/modifiers.test.ts` now says it is the pre-retune fixture.
 - 2026-09-18 DAILY-1 (01f3701, 1323695, 41c64c0, 6ea495d, b52491d, 288618f, c2353a1) Daily Challenge v1: deterministic level/seed/twist per UTC day (pool 9–40, five twists), level-map card with countdown/streak/DONE, rewards 30 + 10/star gold + 5 crystals once a day, save.challenge, e2e daily.spec, 17 i18n keys × 4; playtest `--daily` and `--twist` modes; GDD §7 + ECONOMY model; levels 10/13/15/27/31/34/38 retuned so every pool level is ≥ 49/50 on every twist; 60-day sweep 60/60 days, 300/300 runs. AI-4: capped keeps attack on burst alone + lateral supply (never fires in the campaign).
 - 2026-09-18 M3-5 (measured, no code): tower sprite cache built and reverted (rAF median 116.6 → 100 ms = 14 %, task time 7 %); real cost is the full-screen terrain blit + HUD → PERF-3.
