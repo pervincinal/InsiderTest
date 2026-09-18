@@ -22,6 +22,7 @@ Play in the browser: **https://pervincinal.github.io/InsiderTest/** (active once
 7. **Tank factories** (level 25 onwards) build tanks that weigh five soldiers but crawl; **bridges** can be cut with a long press — the column on it drowns and the enemy behind it is stranded.
 8. Win faster for more stars (3 / 2 / 1). Stars unlock the next level and pay **gold** on the first clear; replays and star improvements pay a little more.
 9. Three **boosters** in the bottom bar, paid with gold: Overdrive (×3 production for 10 s), Freeze (enemies stop producing for 5 s), Airstrike (−10 units on one enemy tower).
+10. **Daily Challenge** (card at the top of the level map, unlocked after level 8): one fixed level, seed and twist per UTC day for everyone — Plain, Lean (−10 % production), Fast feet (+25 % march speed), Thin walls (−20 % capacity) or Reinforced (+5 soldiers at start). Upgrades and boosters are off, retries are free, and the first win of the day pays 30 + 10 × stars gold and 5 crystals; a streak counts consecutive days won.
 
 Keyboard on desktop: `P` / `Space` pause, `Esc` back to the level list, `M` mute.
 
@@ -97,6 +98,7 @@ Brauzerdə oyna: **https://pervincinal.github.io/InsiderTest/** (repo parametrl�
 7. **Tank zavodları** (25-ci səviyyədən) beş əsgər ağırlığında, amma yavaş tanklar istehsal edir; **körpülər** uzun basışla kəsilir — körpüdəki kolon batır, arxadakı düşmən ilişib qalır.
 8. Tez qalib gəl — daha çox ulduz (3 / 2 / 1). Ulduzlar növbəti səviyyəni açır və ilk keçiddə **qızıl** qazandırır; təkrar oyunlar və ulduz yaxşılaşdırmaları bir az da verir.
 9. Aşağı zolaqda qızılla ödənilən üç **gücləndirici**: Overdrive (10 saniyə ×3 istehsal), Freeze (rəqiblər 5 saniyə istehsal etmir), Airstrike (bir düşmən qülləsindən −10 əsgər).
+10. **Gündəlik Çağırış** (səviyyə xəritəsinin başındakı kart, 8-ci səviyyədən sonra açılır): hər UTC günü hamı üçün eyni səviyyə, seed və fənd — Adi, Qənaətli (−10 % istehsal), Cəld ayaq (+25 % yürüş sürəti), Nazik divar (−20 % tutum) və ya Möhkəmləndirilmiş (başlanğıcda +5 əsgər). Təkmilləşdirmələr və gücləndiricilər söndürülür, təkrar cəhdlər pulsuzdur, günün ilk qələbəsi 30 + 10 × ulduz qızıl və 5 kristal verir; seriya ardıcıl qalib günləri sayır.
 
 Masaüstündə klaviatura: `P` / `Space` pauza, `Esc` səviyyə siyahısına, `M` səsi söndürür. Menyular, işarələr, təlimat, səviyyə adları və dərs cümlələri azərbaycanca, ingiliscə, rusca və türkcədir (Parametrlər → Dil); 40 səviyyənin hər birinin adı və dərsi dörd dildədir.
 

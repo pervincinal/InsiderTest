@@ -4,6 +4,34 @@ Semantic versioning. The version lives in `tower-clash/package.json`; native ver
 
 ---
 
+## v0.4.1 — unreleased
+
+Everything on the branch after the v0.4.0 texts and screenshots (`52b3441`, 2026-09-17), per `git log --oneline 52b3441..HEAD` on 2026-09-18. No version bump yet: `package.json` is still 0.4.0 / build 4, so the Mobile Engineer runs `npm run version:sync` when the Producer decides this is a tagged release rather than part of the v0.4.0 tag. Save schema unchanged (v3; `challenge` added without a bump, like `achievements`).
+
+### English
+
+- **Daily Challenge** (`d54ae6e`, `01f3701`, `41c64c0`; GDD §7): one fixed match per UTC day for every player — a level from 9–40, a fixed seed and one of five twists (Plain, Lean −10 % production, Fast feet +25 % march speed, Thin walls −20 % capacity, Reinforced +5 soldiers at start). Card at the top of the level map with a countdown to 00:00 UTC, streak and today's best; unlocks after level 8. First win of the day pays 30 + 10 × stars gold and 5 crystals; retries are free and unlimited; Commander upgrades and boosters are off in the daily so everyone plays the same match. Campaign progress is untouched.
+- **Daily-pool level pass** (`6ea495d`, `b52491d`, `c2353a1`): levels 10, 13, 15, 27, 31, 34 and 38 retuned so every pool level holds up under every twist (50/50 seeds per twist on the touched levels; a 60-day daily sweep with 0 failed days).
+- **Under-fire lesson** (`1750354`, LV-5): level 2 now teaches that a tower under fire cannot recruit — answer every red stream (EN/AZ/RU/TR).
+- **Reference bot** (`3b66c42` AI-3, `288618f` AI-4): answers a hose from a drained source (hose reserve), and a capped tower keeps its attack on a burst alone while supplying sideways — the bot that verifies every level and every daily.
+- **Store frame 06** (`50041a4`, PUB-8): re-rendered on the current level 9 map, now showing the under-fire badge.
+- **Verification** (`1323695`, `288618f`, `239cb9c`, `2c2c511`): `npm run playtest -- --daily <day> --days N --seeds K` and `-- --twist <id>` gates for the daily; tutorial e2e for levels 1–3; continue e2e pinned to level 15 seed 2; both daily gates run in CI.
+
+Store "What's new" candidate (EN, 196): `Daily Challenge: one fixed level, seed and twist per day for everyone — clear level 8 to unlock, first win pays gold and crystals, free retries. Level 2 teaches "under fire". Seven levels retuned.`
+
+### Azərbaycanca
+
+- **Gündəlik Çağırış** (`d54ae6e`, `01f3701`, `41c64c0`; GDD §7): hər UTC günü üçün bütün oyunçulara eyni bir döyüş — 9–40 arası bir səviyyə, sabit seed və beş "fənd"dən biri (Adi, Qənaətli −10 % istehsal, Cəld ayaq +25 % yürüş sürəti, Nazik divar −20 % tutum, Möhkəmləndirilmiş başlanğıcda +5 əsgər). Səviyyə xəritəsinin başında kart: 00:00 UTC-yə geri sayım, seriya və bugünkü ən yaxşı nəticə; 8-ci səviyyədən sonra açılır. Günün ilk qələbəsi 30 + 10 × ulduz qızıl və 5 kristal verir; təkrar cəhdlər pulsuz və limitsiz; hamı eyni döyüşü oynasın deyə gündəlikdə Komandir təkmilləşdirmələri və gücləndiricilər söndürülür. Kampaniya irəliləyişinə toxunulmur.
+- **Gündəlik hovuz üçün səviyyə keçidi** (`6ea495d`, `b52491d`, `c2353a1`): 10, 13, 15, 27, 31, 34 və 38-ci səviyyələr hər fənd altında dayanıqlı olsun deyə yenidən tənzimlənib (toxunulan səviyyələrdə hər fənddə 50/50 seed; 60 günlük gündəlik yoxlamada 0 uğursuz gün).
+- **"Atəş altında" dərsi** (`1750354`, LV-5): 2-ci səviyyə indi atəş altındakı qüllənin əsgər yığa bilmədiyini öyrədir — hər qırmızı axına cavab ver (EN/AZ/RU/TR).
+- **İstinad botu** (`3b66c42` AI-3, `288618f` AI-4): boşalmış mənbədən gələn axına cavab verir (axın ehtiyatı), dolu qüllə tək partlayışda hücumunu saxlayıb yana təchizat verir — hər səviyyəni və hər gündəliyi yoxlayan bot.
+- **Mağaza kadrı 06** (`50041a4`, PUB-8): cari 9-cu səviyyə xəritəsində yenidən çəkilib, indi "atəş altında" nişanı görünür.
+- **Yoxlama** (`1323695`, `288618f`, `239cb9c`, `2c2c511`): gündəlik üçün `npm run playtest -- --daily <gün> --days N --seeds K` və `-- --twist <id>` qapıları; 1–3-cü səviyyələr üçün təlimat e2e; davam e2e-si 15-ci səviyyə seed 2-yə bağlanıb; hər iki gündəlik qapısı CI-da işləyir.
+
+Mağaza "Yeniliklər" namizədi (AZ, 227): `Gündəlik Çağırış: hər gün hamı üçün eyni səviyyə, seed və fənd — açmaq üçün 8-ci səviyyəni keç, ilk qələbə qızıl və kristal verir, təkrar cəhdlər pulsuz. 2-ci səviyyə "atəş altında"nı öyrədir. Yeddi səviyyə yenidən tənzimlənib.`
+
+---
+
 ## v0.4.0 — 2026-09-17 "Streams update" (ready to tag)
 
 Proposed tag: `tower-clash-v0.4.0` (on branch `claude/tower-war-game-plan-weqwpb`), to be created by the Producer (from the GitHub UI — the git proxy accepts pushes to the working branch, not tags) on the commit that carries this section and the version bump. Native versions at this tag: Android `versionName "0.4.0"` / `versionCode 4`, iOS `MARKETING_VERSION 0.4.0` / `CURRENT_PROJECT_VERSION 4` — written by `npm run version:sync` on 2026-09-17 from `package.json` (`0.4.0`, `config.buildNumber` 4); `npm run version:check` passes. The web build is still the only public channel (GitHub Pages, checklist W3, remains a stakeholder switch); the store builds stay "v1.0 native".
