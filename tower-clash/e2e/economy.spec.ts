@@ -65,7 +65,7 @@ const LOSING_LEVEL = 12;
 // after the full rewind window (~27 s of sim time) so the continue really goes back 20 s (tests/ui/continue.test.ts)
 const CONTINUE_REWIND_MS = 20_000;
 const REWIND_LEVEL = 15;
-const REWIND_SEED = 3;
+const REWIND_SEED = 2; // seed 3 wins under rules v2.1 + the level-15 retune (the trickle pauses enemy production); seed 2 loses at 68 s
 
 async function tapRect(page: Page, r: R): Promise<void> {
   const c = await page.evaluate(([x, y]) => window.__towerclash.toClient(x, y), [r.x + r.w / 2, r.y + r.h / 2] as const);
