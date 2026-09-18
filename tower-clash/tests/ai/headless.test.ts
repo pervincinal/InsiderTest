@@ -65,7 +65,7 @@ describe('runHeadless', () => {
     // Two towers, no road: nothing can ever happen.
     const stalemate = makeLevel({ roads: [] });
     const r = runHeadless(stalemate, 1, referencePlayerCommands, { maxMs: 10_000 });
-    expect(r).toEqual({ outcome: 'playing', timeMs: 10_000, ticks: 200 });
+    expect(r).toEqual({ outcome: 'playing', timeMs: 10_000, ticks: 200, modifiers: DEFAULT_MODIFIERS });
   });
 });
 

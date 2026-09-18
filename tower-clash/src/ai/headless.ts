@@ -19,6 +19,8 @@ export interface RunResult {
   /** Sim time when the match ended (or the budget ran out), ms. */
   timeMs: number;
   ticks: number;
+  /** The player modifiers the match was created with (`state.modifiers`, normalised by the sim). */
+  modifiers: Readonly<PlayerModifiers>;
 }
 
 export interface RunOptions {
@@ -46,11 +48,11 @@ export function runHeadless(level: LevelDef, seed: number, player: PlayerBot, op
     ticks++;
     outcome = getOutcome(state);
   }
-  return { outcome, timeMs: state.time, ticks };
+  return { outcome, timeMs: state.time, ticks, modifiers: state.modifiers };
 }
 
 /** Stars a finished match earns on its level: 3/2/1 for a win by the level's clocks, 0 for anything else. */
-export function starsFor(level: LevelDef, result: RunResult): 0 | 1 | 2 | 3 {
+export function starsFor(level: LevelDef, result: Omit<RunResult, 'modifiers'>): 0 | 1 | 2 | 3 {
   if (result.outcome !== 'won') return 0;
   if (result.timeMs <= level.star3) return 3;
   if (result.timeMs <= level.star2) return 2;
