@@ -12,7 +12,7 @@ import { genPerSecond, neighbours, projectedUnits, travelMsFor, unitSpeedFor } f
  */
 
 const mods = (over: Partial<PlayerModifiers>): PlayerModifiers => ({ ...DEFAULT_MODIFIERS, ...over });
-/** Every Commander track at its cap (ECONOMY.md §3.2). */
+/** A deliberately strong fixture (the pre-retune 2026-09-13 caps) so every effect is visible; the shipped ladder is `maxedModifiers()` in src/economy/maxUpgrades.ts (QA-3). */
 const MAX: PlayerModifiers = { productionMul: 1.2, capacityMul: 1.25, startGarrisonBonus: 5, unitSpeedMul: 1.15 };
 
 const links = (cmds: Command[]) => cmds.filter((c) => c.type === 'link');

@@ -49,6 +49,21 @@ jobs:
       - name: Headless playtest (reference player on every level)
         run: npm run playtest
 
+      # Daily Challenge gate (GDD §7.5): the reference player on today's and the next 29 days' challenges
+      # (`challengeFor`: level 9–40, fixed seed, twist, no upgrades) over 3 seeds each. Every day's fixed
+      # seed must be won and wins/K >= 90 %. Exit 1 on any failed day. Measured 2.4 s locally.
+      - name: Daily challenge gate (30 days x 3 seeds)
+        run: npm run playtest -- --daily $(date -u +%F) --days 30 --seeds 3
+
+      # Twist pool gate (GDD §7.5 item 3): every pool level (9–40) under each twist over seeds 1..5,
+      # gate per level wins/K >= 80 % (4/5). K = 5 is the GDD gate; K = 3 would demand 3/3, which is
+      # stricter than the spec. Exit 1 on any failed level. Measured ~2.6 s per twist locally.
+      - name: Twist pool gate (5 twists x 32 levels x 5 seeds)
+        run: |
+          for twist in plain lean fastFeet thinWalls reinforced; do
+            npm run playtest -- --twist "$twist" --seeds 5 || exit 1
+          done
+
       - name: Build
         run: npm run build
 

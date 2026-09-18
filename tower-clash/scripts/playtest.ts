@@ -30,8 +30,7 @@ import type { LevelDef, PlayerModifiers } from '../src/sim/index';
 import { referencePlayerCommands } from '../src/ai/index';
 import { HEADLESS_MAX_MS, runHeadless, starsFor } from '../src/ai/headless';
 import type { RunResult } from '../src/ai/headless';
-import { COMMANDER_UPGRADES } from '../src/economy/catalog';
-import type { UpgradeEffectKind } from '../src/economy/catalog';
+import { maxedModifiers } from '../src/economy/maxUpgrades';
 import { DAILY_WIN_RATE, TWIST_WIN_RATE, dailyPlan, inPool, runDaily, runTwist, twistById } from './lib/daily';
 import type { DailyRow, TwistRow } from './lib/daily';
 import { TWISTS } from '../src/daily/challenge';
@@ -105,25 +104,8 @@ function parseArgs(argv: string[]): Args {
   return { level, seed, seeds, upgrades, daily, days, twist, twistId: twistDef?.id };
 }
 
-/** Sum of a track's per-tier effect at its max tier, from the catalog; 0 when no track has that effect. */
-function maxedEffect(kind: UpgradeEffectKind): number {
-  let total = 0;
-  for (const def of COMMANDER_UPGRADES) if (def.effect.kind === kind) total += def.effect.perTier * def.maxTier;
-  return Math.round(total * 1e4) / 1e4; // 0.03 × 5 and friends: keep the doc's round numbers
-}
-
-/**
- * Every Commander track at its cap, as the sim consumes it: production +20 %, capacity +25 %, +5
- * starting garrison, march speed +15 % with the shipped catalog (`ADVANTAGE_LIMIT` in catalog.ts).
- */
-export function maxedModifiers(): PlayerModifiers {
-  return {
-    productionMul: 1 + maxedEffect('productionMul'),
-    capacityMul: 1 + maxedEffect('capacityMul'),
-    startGarrisonBonus: maxedEffect('startingGarrison'),
-    unitSpeedMul: 1 + maxedEffect('marchSpeedMul'),
-  };
-}
+/** Re-exported for tools that used to read the max ladder from here (QA-3: the catalog is the source). */
+export { maxedModifiers } from '../src/economy/maxUpgrades';
 
 export function modifiersFor(upgrades: Upgrades): Readonly<PlayerModifiers> {
   return upgrades === 'max' ? maxedModifiers() : DEFAULT_MODIFIERS;
