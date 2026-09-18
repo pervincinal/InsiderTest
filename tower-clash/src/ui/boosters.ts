@@ -44,8 +44,12 @@ export interface BoosterStatus {
   durationMs: number;
 }
 
-function walletOf(w: number | BoosterWallet): BoosterWallet {
-  return typeof w === 'number' ? { gold: w } : w;
+/**
+ * Normalise the wallet argument. A missing wallet (a plumbing mistake upstream — BUG-3) reads as
+ * "no gold, no charges" instead of throwing inside the draw loop and freezing the game.
+ */
+function walletOf(w: number | BoosterWallet | undefined): BoosterWallet {
+  return typeof w === 'number' ? { gold: w } : (w ?? { gold: 0 });
 }
 
 export function boosterStatus(state: Pick<GameState, 'boosters' | 'time'>, kind: BoosterKind, wallet: number | BoosterWallet): BoosterStatus {

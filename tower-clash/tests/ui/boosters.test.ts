@@ -24,6 +24,15 @@ describe('booster bar model (M3-1, GDD §2.6)', () => {
     expect(canUseBooster(state, 'freeze', 10)).toBe(false);
   });
 
+  it('BUG-3 regression: a missing wallet reads as "no gold" instead of throwing inside the draw loop', () => {
+    // src/ui/play.ts once passed `save.coins` after the rename to `gold`: `walletOf(undefined)` threw
+    // "reading 'prices'" on every frame and froze every level. The guard must keep the bar drawable.
+    const status = boosterStatus(idle, 'overdrive', undefined as never);
+    expect(status).toMatchObject({ kind: 'overdrive', cost: C.BOOSTER_COST.overdrive, charges: 0, affordable: false, adOffer: false, active: false });
+    expect(allBoosterStatus(idle, undefined as never).map((s) => s.affordable)).toEqual([false, false, false]);
+    expect(canUseBooster(idle, 'airstrike', undefined as never)).toBe(false);
+  });
+
   it("an enemy's booster does not count as the player's", () => {
     const state = { boosters: [{ type: 'freeze' as const, owner: 'enemy1' as const, untilMs: 9000 }], time: 4000 };
     expect(boosterStatus(state, 'freeze', 100).active).toBe(false);
