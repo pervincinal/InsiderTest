@@ -341,3 +341,62 @@ describe('reference player: answers to a siege (rules 0b′, 1, 2a, 2b, 6)', () 
     expect(cmdsOf(full).filter((c) => c.type === 'cutBridge')).toEqual([]);
   });
 });
+
+describe('reference player: rule 2a hose answer (AI-3) — a drained source is countered without a reserve for columns that might come', () => {
+  /**
+   * p — e (enemy, drained, streams at p over 240 px) and p — k (an enemy garrison next door). Both roads
+   * are 2 s. k never streams; it only makes p's strict reserve (`reserveToHold`: k's possible column +
+   * what the hose still lands + 1) swallow the whole garrison.
+   */
+  const hosed = (pUnits: number, eUnits: number, eLevel: 1 | 2 | 3, kUnits: number, ticks = 20) => {
+    const state = createState(
+      makeLevel({
+        towers: [
+          { id: 'p', x: 360, y: 1000, owner: 'player', units: pUnits },
+          { id: 'e', x: 360, y: 760, owner: 'enemy1', units: eUnits, level: eLevel },
+          { id: 'k', x: 120, y: 1000, owner: 'enemy1', units: kUnits },
+        ],
+        roads: [
+          { a: 'p', b: 'e' },
+          { a: 'p', b: 'k' },
+        ],
+      }),
+      1,
+    );
+    applyCommand(state, link('e', 'p', 'enemy1'));
+    for (let i = 0; i < ticks; i++) step(state); // e drains its unit and starts trickling; p recruits meanwhile
+    return state;
+  };
+
+  it('the strict reserve books the neighbour column, the hose reserve only what lands from other roads', () => {
+    const state = hosed(12, 1, 2, 10); // after 1 s: p 13, e 0 (L2: 1.43/s down the road), 2 units walking
+    const p = state.towers['p']!;
+    expect(state.towers['e']!.units).toBe(0);
+    expect(p.units).toBe(13);
+    expect(siegeNetRate(state, p)).toBeCloseTo(-1.43, 2); // p (1/s) recruits nothing under the trickle: it bleeds
+    // What the landing model asks p to hold: 13 with the hose counted, 0 without its road (k sends nothing).
+    expect(holdReserve(state, p)).toBe(13);
+    expect(holdReserve(state, p, 1, undefined, 'e')).toBe(0);
+  });
+
+  it('p counters the drained L2 source it could not parry (v2.1 alone: nothing — reserve 13 + 1 for k, spare < 0)', () => {
+    const state = hosed(12, 1, 2, 10);
+    const rules: string[] = [];
+    expect(cmdsOf(state, rules)).toEqual([link('p', 'e')]);
+    expect(rules).toEqual(['counter']);
+    // Deterministic: the same state gives the same answer on a fresh rng.
+    expect(cmdsOf(state)).toEqual([link('p', 'e')]);
+    // 7 units (5 + 2 s of recruiting before the first landing) still cover 2 on the road + the trickle over the crossing.
+    expect(cmdsOf(hosed(6, 1, 2, 10))).toEqual([link('p', 'e')]);
+  });
+
+  it('too small a garrison does not counter (it would die on the road), and a fresh burst is no hose: the strict reserve stays', () => {
+    // p 5 (4 + 1 recruited): short of the 2 walking + 1.43/s × (2 s + its own drain) → no counter, no parry (1/s < 1.43/s).
+    expect(cmdsOf(hosed(4, 1, 2, 10))).toEqual([]);
+    // e holds 8 (a burst a rusher re-aims in one tick, 2 ticks after linking): p keeps its reserve against k and answers nothing.
+    const burst = hosed(12, 8, 2, 10, 2);
+    expect(burst.towers['e']!.units).toBe(8);
+    expect(cmdsOf(burst)).toEqual([]);
+  });
+});
+

@@ -35,8 +35,13 @@
  *      target recruits nothing while landings are < `UNDER_FIRE_MS` apart — and what the captured tower
  *      needs to be held). A drained enemy source at 0 is the weakest target there is: streaming at it from
  *      a tower next to it — or from the sieged tower itself when its garrison exceeds what is still
- *      coming down that road (`spare` with the attacker excluded, `needed` counting its burst and the
- *      units on the road) — is how a hostile ribbon is answered. Bridge-aware: a bridge into an enemy
+ *      coming down that road (`needed` counting the source's burst and the units on the road) — is how a
+ *      hostile ribbon is answered. The sieged tower's spare is judged against its strict reserve
+ *      (`reserveToHold`: every column an enemy neighbour could throw) unless the ribbon is a *hose* — its
+ *      source drained (`DRAINED_UNITS`) and the tower bleeding under it (`siegeNetRate` ≤ 0) — in which
+ *      case a reserve against columns that might come is worth nothing to a tower that falls for certain,
+ *      and it keeps only what the landings visibly coming down its other roads take (`hoseReserve`,
+ *      AI-3): the hose ends the moment its source is captured (`sourceLost`). Bridge-aware: a bridge into an enemy
  *      keep that could cut it (a finished keep — the turtle's rule) is an exposed route; a stream over it
  *      is planned as losing everything landing later than one AI tick after its first unit steps on
  *      (`bridgeLoss`), and the plan without such sources is preferred when it reaches `needed` within
@@ -278,6 +283,56 @@ function spare(state: GameState, tower: Tower, exclude?: string): number {
   return wholeUnits(tower, tower.units - reserveToHold(state, tower, exclude));
 }
 
+/** Is a hostile stream (a ribbon of another owner) aimed at the tower? */
+function besieged(state: GameState, tower: Tower): boolean {
+  return state.links.some((l) => l.to === tower.id && l.owner !== tower.owner);
+}
+
+/** A source with nothing whole left to send: it only relays its production (a tank factory below one tank counts). */
+function drained(tower: Tower): boolean {
+  return wholeUnits(tower, tower.units) <= DRAINED_UNITS;
+}
+
+/**
+ * Is the tower under a *hose* from the enemy tower `sourceId`: a stream whose source is drained, so
+ * what comes down that road is only the source's production (plus what chains through it) — a burst
+ * that a rusher could re-aim in one tick is not a hose, and the sieged tower keeps its strict reserve
+ * against it (`launchPlans` still counts the pending burst as `costToTake` either way).
+ */
+function hosedBy(state: GameState, tower: Tower, sourceId: string): boolean {
+  const source = state.towers[sourceId];
+  return !!source && drained(source) && state.links.some((l) => l.to === tower.id && l.from === sourceId && l.owner !== tower.owner);
+}
+
+/**
+ * Rules v2.1: does the tower bleed under the streams aimed at it — its own recruiting (nothing under a
+ * barracks trickle) plus its supply, including what this tick's reinforcements pour in, does not cover
+ * the hostile trickle? A bleeding tower falls for certain unless something ends the stream.
+ */
+function bleeds(ctx: Ctx, tower: Tower): boolean {
+  return besieged(ctx.state, tower) && siegeNetRate(ctx.state, tower) + (ctx.sentTo.get(tower.id) ?? 0) / (STREAM_HORIZON_MS / 1000) <= 0;
+}
+
+/**
+ * Rules v2.1 hose answer (AI-3): the reserve a tower keeps while it counter-streams at the drained
+ * source of a stream that bleeds it. Such a tower falls for certain if it sits on its garrison, so a
+ * reserve against columns an enemy neighbour *might* throw is worth nothing to it — it keeps only what
+ * the landings visibly coming down its *other* roads take (`holdReserve` without the besieger's road;
+ * the besieger's units on the road are what the counter meets head-on). The moment the hose ends — its
+ * source captured (`sourceLost`) or unlinked — `hosedBy` is false again and the strict reserve
+ * (`reserveToHold`) is back, which is what ends the stream (rule 0d) once the source is taken.
+ */
+function hoseReserve(state: GameState, tower: Tower, sourceId: string): number {
+  return holdReserve(state, tower, HOLD_MARGIN, undefined, sourceId);
+}
+
+/** Reserve of `tower` for a stream at the enemy tower `targetId`: `hoseReserve` when that target bleeds it, else `reserveToHold`. */
+function streamReserve(ctx: Ctx, tower: Tower, targetId: string): number {
+  const { state } = ctx;
+  if (hosedBy(state, tower, targetId) && bleeds(ctx, tower)) return hoseReserve(state, tower, targetId);
+  return reserveToHold(state, tower, targetId);
+}
+
 function pick<T>(ctx: Ctx, items: T[], score: (item: T) => number): T | undefined {
   let best: T[] = [];
   let bestScore = Infinity;
@@ -332,6 +387,8 @@ interface Source {
   n: Neighbour;
   /** Weight the source adds if it starts streaming now (0 when it already streams: that is in `inbound`). */
   force: number;
+  /** Units the source keeps at home for this stream (`reserveToHold`, or `hoseReserve` for a hosed tower). */
+  reserve: number;
   /** Already streaming into the target. */
   linked: boolean;
   /** The route is a bridge the target could cut (`exposedRoute`). */
@@ -446,7 +503,7 @@ function evaluatePlan(ctx: Ctx, target: Tower, sources: Source[], inbound: numbe
   // A source with nothing to hold back keeps producing into the stream — unless its route is cut under
   // it. Rules v2.1: that trickle keeps landing on a target that recruits nothing, so the plan runs
   // `SIEGE_PLAN_MS` past the burst (within `MAX_STREAM_MS`) when there is a trickle at all.
-  const trickling = sources.filter((s) => !s.exposed && reserveToHold(state, s.tower, target.id) <= 0);
+  const trickling = sources.filter((s) => !s.exposed && s.reserve <= 0);
   let trickle = 0;
   for (const s of trickling) trickle += genPerSecond(s.tower, state);
   // Rules v2.1: nothing is recruited during the burst (a landing every 120 ms) and only what the gap
@@ -508,7 +565,7 @@ function streamingSources(ctx: Ctx, target: Tower): Source[] {
     if (!tower || !isLinkedTo(ctx, tower.id, target.id)) continue;
     const n = neighbours(state, tower.id).find((x) => x.tower.id === target.id);
     if (!n) continue;
-    out.push({ tower, n, force: 0, linked: true, exposed: exposedRoute(state, n) });
+    out.push({ tower, n, force: 0, reserve: streamReserve(ctx, tower, target.id), linked: true, exposed: exposedRoute(state, n) });
   }
   return out;
 }
@@ -544,11 +601,6 @@ function relayStillNeeded(ctx: Ctx, tower: Tower, relay: Tower): boolean {
 export function wantAt(state: GameState, tower: Tower): number {
   if (enemyNeighbours(state, tower.id).length === 0 && incomingThreat(state, tower.id) <= 0) return 0;
   return Math.min(SUPPLY_MAX, Math.max(SUPPLY_MIN, reserveToHold(state, tower)));
-}
-
-/** Is a hostile stream (a ribbon of another owner) aimed at the tower? */
-function besieged(state: GameState, tower: Tower): boolean {
-  return state.links.some((l) => l.to === tower.id && l.owner !== tower.owner);
 }
 
 /** Units per second the enemy tower `from` streams into `to` right now (0 without such a ribbon). */
@@ -615,7 +667,7 @@ function maintain(ctx: Ctx, mine: Tower[]): void {
         }
       }
       if (isParry(state, tower, target)) continue; // the road duel goes on while their ribbon is up
-      const reserve = reserveToHold(state, tower, target.owner === OWNER ? undefined : to);
+      const reserve = target.owner === OWNER ? reserveToHold(state, tower) : streamReserve(ctx, tower, to);
       if (reserve > 0 && tower.units <= reserve) pushUnlink(ctx, tower, to);
     }
   }
@@ -855,8 +907,7 @@ function parryHolds(state: GameState, tower: Tower): boolean {
 function parry(ctx: Ctx, mine: Tower[]): void {
   const { state } = ctx;
   for (const tower of mine) {
-    if (!free(ctx, tower) || !idle(ctx, tower) || !besieged(state, tower)) continue;
-    if (siegeNetRate(state, tower) + (ctx.sentTo.get(tower.id) ?? 0) / (STREAM_HORIZON_MS / 1000) > 0) continue;
+    if (!free(ctx, tower) || !idle(ctx, tower) || !bleeds(ctx, tower)) continue;
     // Rule 2a already answers a besieger that an own stream (after this tick's commands) is aimed at.
     const countered = state.links.some((l) => l.to === tower.id && l.owner !== OWNER && [...ctx.links.values()].some((set) => set.has(l.from)));
     if (countered) continue;
@@ -898,10 +949,11 @@ function launchPlans(ctx: Ctx, mine: Tower[], targets: Map<string, Tower>, hold:
       if (inbound > 0 && waveSuffices(state, inbound, n)) continue;
       const exposed = exposedRoute(state, n);
       if (running && exposed) continue;
-      const force = spare(state, tower, target.id);
+      const reserve = streamReserve(ctx, tower, target.id);
+      const force = wholeUnits(tower, tower.units - reserve);
       // A column that dies on its own road (the hostile units walking it outnumber it) adds only losses.
       if (force <= costToTake(n)) continue;
-      sources.push({ tower, n, force, linked: false, exposed });
+      sources.push({ tower, n, force, reserve, linked: false, exposed });
     }
     if (!sources.some((s) => !s.linked)) continue;
     const full = buildPlan(ctx, target, sources, inbound, true, hold);
