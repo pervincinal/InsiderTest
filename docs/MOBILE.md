@@ -310,3 +310,70 @@ Reverting to option B (personalised ads on iOS) would need: the ATT call back in
 - Monetization (§8): create the RevenueCat / AdMob accounts and the products; add the In-App Purchase capability in Xcode; rewrite the privacy policy; the Android workflow has not yet been run with the AdMob (Kotlin) and RevenueCat modules — the next push validates the Gradle build on CI (no Android SDK in the development sandbox).
 - ECON-2 UI side: the Settings "Privacy options" entry and the About "Support ID" row still have to be wired by the Frontend Engineer against the three methods in §8.1; the provider side is done.
 - Privacy policy / store listing wording for "no tracking" (§8.7 steps 2–3) — Publisher.
+
+## 9. Performance and memory on the device (MM-4 / PERF-3)
+
+Since PERF-3 the game paints three full-screen `<canvas>` elements stacked on top of each other
+(`#ground`, `#game`, `#hud`, see `src/render/layers.ts`). Each one holds a backing store of
+`CSS width × CSS height × dpr² × 4` bytes, where `dpr` is the device pixel ratio the game decides
+to use (`src/render/view.ts`, `resize()`), and the cached ground image of the current level
+(`src/render/terrain.ts`, `getTerrain`) is a fourth canvas of `720 × 1280 × (dpr · scale)² × 4`
+bytes (the last four levels stay cached). The canvases are the only large allocations in the
+app: the JS heap is 3–5 MB, the DOM has ~50 nodes.
+
+### 9.1 Measured (headless, 2026-09-19)
+
+Chromium headless shell via Playwright + CDP (`Memory.getDOMCounters`, `performance.memory`
+with `--enable-precise-memory-info`, canvas sizes read from the DOM), level 15 on screen.
+No phone was available; the numbers below are the exact backing-store sizes the browser
+allocates, the per-canvas cost on a device is the same (GPU-backed canvases may hold a second
+copy for compositing, so budget up to 2× for the three layers).
+
+| viewport (CSS px) | device DPR | uncapped canvas | 3 layers | + terrain cache | after cap (canvas) | 3 layers | + terrain |
+|---|---|---|---|---|---|---|---|
+| Pixel 5, 393 × 727 | 2.75 | 1081 × 1999 | 24.7 MB | + 7.8 MB | native 2 → 786 × 1454 | 13.1 MB | + 4.1 MB |
+| Pixel 7 WebView, 412 × 839 | 2.625 | 1082 × 2202 | 27.3 MB | + 8.3 MB | native 2 → 824 × 1678 | 15.8 MB | + 4.8 MB |
+| iPhone-class, 390 × 844 (1170 × 2532) | 3 | 1170 × 2532 | 33.9 MB | + 9.7 MB | native 2 → 780 × 1688 | 15.1 MB | + 4.3 MB |
+| same, in a browser / PWA | 3 | 1170 × 2532 | 33.9 MB | + 9.7 MB | web 2.5 → 975 × 2110 | 23.5 MB | + 6.7 MB |
+
+Uncapped, an iPhone 15 Pro Max class screen (430 × 932 @ 3) would be 3 × 14.4 = 43 MB for the
+layers alone, plus 12 MB of terrain — above the 40 MB line the backlog set for MM-4, so the cap
+below is on by default.
+
+### 9.2 What the build does about it: a DPR cap
+
+`src/render/view.ts` exports `DPR_CAP = { native: 2, web: 2.5, max: 3 }`:
+
+- inside the Capacitor shell (iOS / Android) the canvases are allocated at most at 2× the CSS
+  size; a 390 px wide phone still gets 1.08 device px per logical px of the 720 × 1280 map, so
+  no artwork is downsampled;
+- in a browser / PWA the cap is 2.5 (browsers manage canvas memory themselves, and DPR-3
+  phones keep a sharper picture);
+- `max` (3) is the hard ceiling either way; DPR 3.5 phones were already clamped to 3 before.
+
+Look: at 1× the three variants are indistinguishable. Zoomed 3×, the native cap shows roughly
+one device pixel of extra anti-alias fringe on HUD text and tower badges (the compositor
+upscales 1.5×); the web cap (2.5, 1.2× upscale) is practically identical to uncapped. On a
+460 ppi screen this is the "small softness" MM-4 accepted. Unit test: `tests/render/view.test.ts`.
+
+### 9.3 Checking it on a real phone (for the MM-1 / QA-2 device pass)
+
+1. Install the debug APK (section 2) or open the PWA and play level 15 and level 40 for two
+   minutes each; note any stutter when many units clash.
+2. Compare the look with the cap lifted: open the PWA URL with `?dprcap=3` appended (the shell
+   cannot take a URL; on Android use Chrome on the same phone with the GitHub Pages URL). Text
+   should look the same at arm's length; a difference visible only with the nose on the glass
+   is fine.
+3. Android memory: Android Studio → Profiler → Memory while the game runs, or
+   `adb shell dumpsys meminfo com.pervincinal.towerclash` — look at *Graphics* and *Native*;
+   the three layers at DPR 2 should add roughly 15 MB (up to 30 MB if double-buffered).
+4. If a low-end phone still stutters (median frame > 33 ms in play, `chrome://inspect` →
+   Performance on the WebView): first try `?dprcap=1.5` in Chrome on that phone. If that fixes
+   it, lower `DPR_CAP.native`. If it does not, the fallback plan is **two layers**: merge the
+   HUD into the game canvas (`paintHud` drawn every frame, drop `#hud` from `index.html` and
+   `createLayers`), which saves one full-screen composite per frame and one backing store; the
+   ground layer must stay because it is what made PERF-3 a −50 % win.
+
+Overrides for testing: `?dprcap=N` in the page URL (1..3) or `setDprCap(N)` from
+`src/render/view.ts` followed by `resize(view)` (console / tests).
+

@@ -1,4 +1,5 @@
 import { C } from '../sim/constants';
+import { isNative } from '../native';
 import type { Layers } from './layers';
 import { resizeLayers } from './layers';
 
@@ -28,6 +29,51 @@ export interface View {
   insets: SafeInsets;
   /** Static ground / HUD canvases stacked with the game canvas (PERF-3); absent in tests. */
   layers?: Layers;
+}
+
+/**
+ * Device-pixel-ratio cap (MM-4). Every viewport canvas (ground / game / HUD, PERF-3) holds
+ * cssW × cssH × dpr² × 4 bytes and the terrain cache another 720 × 1280 × (dpr · scale)² × 4 per
+ * level (up to four levels). Measured headless at 390 × 844 CSS px (iPhone-class, 1170 × 2532
+ * device px): DPR 3 → 3 × 11.3 MB + 9.7 MB terrain ≈ 44 MB; DPR 2.5 → 3 × 7.8 + 6.7 ≈ 30 MB;
+ * DPR 2 → 3 × 5.0 + 4.3 ≈ 19 MB. The map is authored at 720 × 1280 logical px, so on a 390 px wide
+ * phone DPR 2 still gives 1.08 device px per logical px (the art is never downsampled).
+ *   native (Capacitor shell): 2 — the WebView shares the app process' memory budget and low-end
+ *     GPUs are fill-rate bound compositing three full-screen layers every frame;
+ *   web / PWA: 2.5 — browsers manage canvas memory themselves; keep DPR-3 phones sharper;
+ *   max: hard ceiling either way (DPR 3.5 phones such as the Pixel 9 Pro XL were already clamped).
+ * `?dprcap=N` in the page URL overrides the cap (1..max) for an on-device A/B without a rebuild;
+ * `setDprCap` does the same from code (tests / debug console), followed by `resize(view)`.
+ */
+export const DPR_CAP = { native: 2, web: 2.5, max: 3 } as const;
+
+let dprCapOverride: number | undefined;
+
+/** Force a cap (undefined = back to the platform default). Call `resize(view)` afterwards. */
+export function setDprCap(cap: number | undefined): void {
+  dprCapOverride = cap === undefined || !Number.isFinite(cap) ? undefined : Math.min(DPR_CAP.max, Math.max(1, cap));
+}
+
+/** `?dprcap=N` from the page URL, or undefined. Read once per resize; cheap. */
+function urlDprCap(): number | undefined {
+  if (typeof location === 'undefined' || !location.search) return undefined;
+  const v = parseFloat(new URLSearchParams(location.search).get('dprcap') ?? '');
+  return Number.isFinite(v) && v > 0 ? Math.min(DPR_CAP.max, Math.max(1, v)) : undefined;
+}
+
+/**
+ * The backing-store scale for a reported `devicePixelRatio`: clamped to 1..DPR_CAP.max, then to
+ * the platform cap (`native` inside a Capacitor shell, `web` otherwise) unless overridden.
+ */
+export function effectiveDpr(devicePixelRatio: number, native: boolean = isNative(), override = dprCapOverride ?? urlDprCap()): number {
+  const raw = Number.isFinite(devicePixelRatio) && devicePixelRatio > 0 ? devicePixelRatio : 1;
+  const cap = override ?? (native ? DPR_CAP.native : DPR_CAP.web);
+  return Math.max(1, Math.min(DPR_CAP.max, cap, raw));
+}
+
+/** Bytes held by one viewport canvas at `dpr` (Σ over the three layers = 3 × this). */
+export function canvasBytes(cssW: number, cssH: number, dpr: number): number {
+  return Math.round(cssW * dpr) * Math.round(cssH * dpr) * 4;
 }
 
 export function createView(canvas: HTMLCanvasElement): View {
@@ -74,7 +120,7 @@ export function readSafeInsets(el: Element | null): SafeInsets {
 export function resize(view: View): void {
   const cssW = Math.max(1, window.innerWidth);
   const cssH = Math.max(1, window.innerHeight);
-  const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+  const dpr = effectiveDpr(window.devicePixelRatio || 1);
   const insets = readSafeInsets(view.canvas.parentElement);
   // Never let insets eat more than half the viewport (defensive against bogus values).
   const usableW = Math.max(cssW / 2, cssW - insets.left - insets.right);
