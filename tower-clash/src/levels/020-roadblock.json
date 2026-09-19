@@ -19,8 +19,8 @@
     {"id": "left", "x": 150, "y": 980, "owner": "neutral", "units": 5},
     {"id": "right", "x": 570, "y": 980, "owner": "neutral", "units": 5},
     {"id": "mid", "x": 360, "y": 820, "owner": "neutral", "units": 8},
-    {"id": "nw", "x": 150, "y": 620, "owner": "neutral", "units": 8},
-    {"id": "ne", "x": 570, "y": 620, "owner": "neutral", "units": 8},
+    {"id": "nw", "x": 150, "y": 620, "owner": "neutral", "units": 10},
+    {"id": "ne", "x": 570, "y": 620, "owner": "neutral", "units": 10},
     {"id": "red", "x": 200, "y": 400, "owner": "enemy1", "units": 8, "level": 1, "kind": "barracks"},
     {"id": "green", "x": 520, "y": 400, "owner": "enemy2", "units": 8, "level": 1, "kind": "barracks"}
   ],
