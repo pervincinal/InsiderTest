@@ -4,13 +4,15 @@ Working title: **Tower Clash** (a Tower War–style capture-the-towers RTS). Pla
 
 ## 1. Vision
 
-A one-thumb real-time strategy game where every decision is simple arithmetic and every level is under three minutes. The player captures every enemy tower on a map by sending garrisoned units along roads, choosing between upgrading, expanding, and defending.
+A one-thumb real-time strategy game where every decision is simple arithmetic and every level is under three minutes. The player captures every enemy tower on a map by opening **streams** of garrisoned units along roads (§2.0), choosing between letting a tower fill (it upgrades itself when full), expanding, and defending.
 
 Design pillars:
-1. **Readable** — numbers on towers, colour = owner, nothing hidden.
-2. **Tense** — sending units empties the tower; the AI punishes greed.
-3. **Escalating vocabulary** — a new building or hazard roughly every 8–10 levels.
-4. **Short & replayable** — 3-star clock per level.
+1. **Readable** — numbers on towers, colour = owner, nothing hidden (every stream, friendly or hostile, is a visible ribbon).
+2. **Tense** — a streaming tower drains and stops growing, and a tower under fire recruits nothing; the AI punishes greed.
+3. **Escalating vocabulary** — a new building or hazard roughly every 8 levels (§3).
+4. **Short & replayable** — 3-star clock per level, plus one Daily Challenge a day (§7).
+
+Rules history: v1 (2026-09-13: send half/all, paid upgrades), **v2** (2026-09-15: streams + auto-upgrade, §2.0), **v2.1** (2026-09-17: under fire, §2.0). §2.1–§2.6 below are written against v2.1; where a v1 sentence is kept for context it is marked "(v1, superseded by §2.0)".
 
 ## 2. Core rules (authoritative — engineers implement exactly this)
 
@@ -60,10 +62,10 @@ Design pillars:
 - Why 1500 ms: any barracks trickle keeps a tower under fire (landings ≤ 1.0 s apart at L1), while a tank factory alone (one landing / 4 s) or an L1 artillery post (2.0 s) does not.
 - Resulting arithmetic: from the first landing the target regenerates nothing, so a stream flips a garrison `G` when its `G + 1`-th unit lands — units sent = source garrison + its production × time, one every 120 ms while the garrison lasts. 100 vs 100 (240 px road): the 101st unit leaves at 12.1 s and lands at ≈ 14 s (v2: never). An unanswered L1 25-stream (burst 25, then 1/s) kills an L3 keep at ≈ 78 s (v2: dents it to 78). A defender answers a hostile ribbon by (in this order) reinforcing from a neighbour (a supply stream out-delivers any trickle from a lower level), counter-streaming from **another** tower at the attacker's drained source (it is at 0 and under no fire), or counter-streaming from the sieged tower itself only when its garrison exceeds what is still coming (`linkPending` + weight on the road) — units meet on the road 1:1 and the remainder flips the empty source.
 - Mirror-match caveat: two equal towers streaming at each other annihilate on the road and both sit at 0 for ever — under v2, v2.1 and every candidate above (the fixed point is symmetric). v2.1 makes the first mover win a mirror match when the other side does not counter-stream within the travel time. Shipped levels are never mirror matches (§3).
-- Presentation (Tech Artist): while under fire the garrison number is drawn in the attacker's colour with a small crossed-swords pip; the production pip is hidden. Tutorial (Level Designer): level 2's lesson gains "a tower under fire cannot recruit — answer every red stream".
+- Presentation (Tech Artist, shipped 3e4a388): while under fire the badge turns alert paper with a thicker stroke in the **attacker's** colour and a crossed-swords pip before the number (shape, not only colour); each landing jolts the badge and drops an impact ring (static tint only under reduced motion) — `docs/ART_DIRECTION.md` §3. Tutorial (Level Designer, shipped 1750354): level 2's lesson reads "Take the middle and keep supplying it from home: a tower under fire cannot recruit, so answer every red stream" (EN/AZ/RU/TR).
 - AI (AI Engineer): `walkLandings` uses production 0 from the first hostile landing while landings are < `UNDER_FIRE_MS` apart (so `holdReserve`/`fallsAtMs` see the siege); personalities link when `spendable + genPerSecond(source) × SIEGE_PLAN_S ≥ costToTake + margin`, **`SIEGE_PLAN_S = 10`** (the trickle they are willing to wait for); the reference player's attack rule adds the same term; a sieged tower's response follows the order above (never counter-stream from the sieged tower without a surplus — that is the deadlock).
 
-**Acceptance (before the marker above is removed).**
+**Acceptance (before the marker above is removed).** Status 2026-09-19: 1–5 met (3e4a388: `tests/sim/underFire.test.ts` 1, 2a, 2b, 3a, 3b; `tests/ai/underFire.test.ts`; playtest 40/40 at 20 seeds), 6 met (3f48a1d re-clocked 9, 12, 19, 26, 27, 28, 31, 33, 34, 37, 38, 39). v2.1 is the shipped rule set; the "proposed" marker stays only as the date of the proposal.
 1. Sim test: L3 100 links into an enemy L3 100 over a 240 px road, no other towers, no AI: the target flips between 13 s and 16 s (v2: never, min garrison 0).
 2. Sim test: enemy L1 25 links into a player L3 100 over a 240 px road (a) unanswered: the player tower falls between 70 s and 90 s (v2: never, min 78); (b) a player L3 100 neighbour links into it at t = 5 s: it is back at 100 by t = 25 s and that supply line ends with `targetFull`.
 3. Sim test: a tank factory trickle alone (one tank / 4 s) leaves the target regenerating between landings (`underFireUntilMs` expires); snapshots restore the field.
@@ -83,27 +85,27 @@ Design pillars:
 | `units` | integer garrison, ≥ 0 |
 | `level` | 1..3 |
 
-- Generation (owned, non-neutral): barracks L1/L2/L3 produce 1 unit every **1.0 / 0.7 / 0.5 s** up to capacity **30 / 50 / 80**. Neutral towers never generate.
-- Upgrade: player taps an already-selected own tower (or the UI "▲" button). Cost **10** (L1→2), **20** (L2→3) units, paid from the garrison; refused if garrison < cost. Upgrading is instant.
-- Capture keeps the tower's level.
-- `fortress`: capacity ×1.5, and hostile weight is halved through a defence accumulator (**2 attackers remove 1 defender**; a 5-weight tank removes 2.5, the half carries over). Cannot be upgraded past L2.
-- `artillery`: generates at half rate; every **0.8 s** kills 1 hostile unit within **140 px**. Capacity 40.
-- `tankFactory`: produces a **tank** (weight 5, speed ×0.7) every 4 s instead of infantry; capacity counted in weight (max 40).
+- Generation (owned, non-neutral): barracks L1/L2/L3 produce 1 unit every **1.0 / 0.7 / 0.5 s** (`GEN_MS`) up to capacity **25 / 50 / 100** (`CAPACITY`, §2.0 ladder; every kind uses it). Neutral towers never generate. A tower under fire (§2.0 v2.1) or frozen (§2.6) generates nothing. *(v1, superseded by §2.0: capacity 30 / 50 / 80.)*
+- Upgrade (§2.0): **automatic and free** — a L1 or L2 tower whose garrison reaches its capacity becomes L+1 on the spot, garrison kept; a tower with ≥ 1 outgoing stream never upgrades (it drains instead). L3 is the top; the garrison caps at 100 and production stops adding. *(v1, superseded by §2.0: tap the selected tower to pay 10 / 20 units; the `upgrade` command is now a no-op kept for replays.)*
+- Capture keeps the tower's level and clears its under-fire window; the new owner's modifiers (§2.7) apply from that tick.
+- `fortress`: capacity ×1.5 (**37 / 75**), and hostile weight is halved through a defence accumulator (**2 attackers remove 1 defender**; a 5-weight tank removes 2.5, the half carries over). Max **L2**, so at most 2 streams.
+- `artillery`: generates at half rate (interval ×2: 2.0 / 1.4 / 1.0 s); every **0.8 s** kills 1 hostile unit within **140 px**. Capacity: the ladder (25 / 50 / 100). *(v1: capacity 40.)*
+- `tankFactory`: produces a **tank** (weight 5, speed ×0.7) every **4 s** at every level instead of infantry; capacity counted in weight on the same ladder (25 / 50 / 100, so 5 / 10 / 20 tanks); a stream sends a whole tank while ≥ 5 weight is garrisoned, otherwise one infantry. *(v1: max 40.)*
 
-### 2.3 Sending units
-- Interaction: tap own tower (select, highlight), tap a road-connected tower (target). Sends **all** garrisoned units (Tower War feel). A UI toggle can switch to 50 %. Tapping the same tower again upgrades it.
-- Units leave the tower one every **0.12 s**, walk at **120 px/s** along the road. Each unit has `weight` (infantry 1, tank 5).
+### 2.3 Sending units (streams — §2.0 is authoritative for the link rules)
+- Interaction: tap own tower (select, highlight), tap a road-connected tower = open a **stream** to it (tap again = close it; drag tower → tower also opens one). A tower runs at most `level` streams (L1 1, L2 2, L3 3); the tap beyond that is refused with a shake and the hint "L{n} needed for {n} streams". Tap the selected tower again = deselect. *(v1, superseded by §2.0: one tap sent all garrisoned units, a "SEND 100 % / 50 %" toggle halved it, and tapping the selected tower upgraded it. There is no send-ratio toggle and no manual upgrade.)*
+- A stream drains its source: units leave one every **0.12 s** (`LEAVE_INTERVAL_MS`, round-robin over the source's streams) and walk at **120 px/s** (`UNIT_SPEED`) along the road. Each unit has `weight` (infantry 1, tank 5). The stream keeps flowing (the source's production included) until closed, the road is cut, the source changes owner, or the friendly target is full.
 - Arrival at friendly tower: `units += weight` (capped at capacity; overflow lost).
 - Arrival at hostile tower: `units -= weight` (fortress: `weight/2` via the accumulator). If damage exceeds the garrison (strictly greater) the tower flips: `owner = attacker`, `units = remaining weight` (fortress remainder = `weight − 2×defenders`). Equal damage leaves the tower at 0 under the old owner.
 - Two units of different owners on the same road: when they cross, the lighter dies and the heavier loses that weight (equal weights: both die).
 - Mine on a road (at its midpoint) kills the first `mine.charges` weight passing, then disappears; a unit heavier than the remaining charges survives and spends the mine.
 - Barrier on a road (at its midpoint): `hp` must be reduced to 0 by units walking into it (each unit spends its weight and dies); a unit heavier than the remaining hp breaks through and continues with `weight − hp`.
-- Bridge road: an owner of an endpoint tower may **cut** it (long-press road). Units in transit on it die. Cannot be rebuilt.
+- Bridge road (`kind: "bridge"`): an owner of an endpoint tower may **cut** it (long-press the road, **500 ms**, `LONG_PRESS_MS`; the turtle and the reference player cut too, §2.5). Units in transit on it die, streams over it end (`roadCut`). Cannot be rebuilt.
 
 ### 2.4 Win / lose
-- Win: no tower is owned by any enemy and no enemy units are in transit.
+- Win: no tower is owned by any enemy and no enemy units are in transit (legacy send queues included).
 - Lose: player owns no tower and has no units in transit.
-- Stars: 3 if time ≤ `level.star3`, 2 if ≤ `level.star2`, else 1.
+- Stars: 3 if time ≤ `level.star3`, 2 if ≤ `level.star2`, else 1 (`starsFor`). Time is **sim time**: pause and speed ×2 do not change it; a Continue (ECONOMY.md §3.5) rewinds the sim 20 s but keeps the original clock. Clocks are derived per level from the reference player's median (`level-authoring` skill); the current values are in `src/levels/manifest.ts` (15–50 s for 3★).
 
 ### 2.5 AI (rules v2 link model; `src/ai/`; every bot ticks every `AI_TICK_MS` = 0.5 s)
 Everything below reads only what a human sees on screen: garrisons, levels, owners, ribbons (links) and units on roads. No bot issues `sendUnits` or `upgrade`. Enemies also fight each other.
@@ -151,31 +153,55 @@ Everything below reads only what a human sees on screen: garrisons, levels, owne
 
 Bots are pure functions of the visible state; "how long a source has been at 0" is therefore read as "the source is drained (≤ `DRAINED_UNITS`) and the target still bleeds", not remembered.
 
-### 2.6 Boosters (meta, spent coins)
-- **Overdrive**: ×3 production for 10 s (cost 30 coins).
-- **Freeze**: every owner except the caster stops generating for 5 s (40 coins).
-- **Airstrike**: remove 10 units from one enemy tower (50 coins).
-Coins: 10 per star earned, first-clear only.
+### 2.6 Boosters (meta, paid in gold)
+- **Overdrive**: ×3 production for 10 s (**30 gold**).
+- **Freeze**: every owner except the caster stops generating for 5 s (**40 gold**).
+- **Airstrike**: remove 10 units from one enemy tower (**50 gold**).
+A pre-paid **charge** (booster crate, rewarded ad) is consumed before gold; the gold price takes the commander discount (§2.7) and the premium discount, together capped at −30 %, rounded up. Boosters are unavailable in the Daily Challenge (§7.2). *(v1: "coins" — the currency is **gold** since save schema v3, 2026-09-13.)*
+Gold: **10 per star on the first clear**, 10 per newly earned star on a replay, 3 per star on any other replay (≤ 100 gold a day); the full earn/sink model and the second currency (crystals: skins, skip, continue, crate) live in `docs/ECONOMY.md` §2–§3. *(v1: "10 per star, first-clear only".)*
+
+### 2.7 Player modifiers (commander upgrades and daily twists)
+The sim carries `state.modifiers: PlayerModifiers` for the **player** owner only (enemies always run the defaults); a tower or unit uses the modifiers of its *current* owner, so a captured tower switches ladders the moment it flips. Four axes, validated in `createState`:
+| Field | Effect in the sim | Campaign ceiling (`ADVANTAGE_LIMIT`, ECONOMY.md §3.2) | Daily twist value (§7.2) |
+|---|---|---|---|
+| `productionMul` | generation interval ÷ value (stacks with Overdrive) | 1.06 | 0.9 (Lean) |
+| `capacityMul` | capacity × value, floored, min 1 — auto-upgrade and `targetFull` use the modified capacity | 1.25 | 0.8 (Thin walls) |
+| `startGarrisonBonus` | + units on every player tower at start, capped at capacity | +2 | +5 (Reinforced) |
+| `unitSpeedMul` | unit speed × value, applied at spawn | 1.04 | 1.25 (Fast feet) |
+Commander upgrades are bought with gold in the shop (five tracks, 1 100 gold each; the fifth track is a booster discount and touches no sim number). Design rule: with every track maxed the reference player's median over 40 levels × 20 seeds must stay ≤ 2.5★ (`npm run playtest -- --upgrades max --seeds 20`, currently 2.0★); if it fails, the tier effects shrink, never the prices. In a Daily Challenge `state.modifiers` is exactly the twist, whatever the save holds.
 
 ## 3. Level design
-- Levels are JSON in `tower-clash/src/levels/`. Schema in `tower-clash/src/sim/types.ts` (`LevelDef`).
-- Progression bands: 1–8 one enemy, barracks only; 9–16 fortress + artillery; 17–24 two enemies + mines/barriers; 25–32 tank factory + bridges; 33–40 three enemies, everything. Target 40 levels for v1.0.
-- Every level must be winnable by the scripted "reference player" (see `playtest` skill) in under 3 min and must not be winnable by doing nothing.
+- Levels are JSON in `tower-clash/src/levels/` (`NNN-kebab-name.json`, loaded lazily per level through the generated `manifest.ts`, which also carries names, lessons and star clocks in EN/AZ/RU/TR). Schema in `tower-clash/src/sim/types.ts` (`LevelDef`): towers (`kind`, `owner`, `units`, `level`), roads (`kind: "road" | "bridge"`, optional `waypoints`, `mine`, `barrier`), enemies (`personality`, `aggression`), `lesson`, `star3`, `star2`.
+- Progression bands (**40 levels shipped**; re-checked against the JSON on 2026-09-19 — the vocabulary of a band stays available in every later band):
+
+| Band | Levels | New vocabulary | Enemies | Towers per level | Player start | Enemy aggression | Also present |
+|---|---|---|---|---|---|---|---|
+| Tutorial | 1–8 | tap-to-stream, supply lines, under fire, auto-upgrade at 25, two roads | 1 (rusher / opportunist / turtle alternate) | 3–8 | 1 tower (2 in level 8) | 0.2 → 0.5 | barracks only, no hazards |
+| Walls & guns | 9–16 | **fortress** (9, 10, 11, 14, 15, 16), **artillery** (12, 13, 14, 15, 16) | 1 | 6–9 | 1 | 0.3 → 0.8 | — |
+| Two rivals | 17–24 | **second enemy** (all 8), **mines** (17, 18, 19, 21, 22, 24), **barriers** (20–24) | 2 | 8–10 | 1 (level 23 starts at L2) | 0.4 → 0.8 | fortress 21–24, artillery 22, 24 |
+| Iron & water | 25–32 | **tank factory** (25, 26, 27, 30, 31, 32), **bridges** (28, 29, 30, 31, 32) | 2 | 9–11 | 2 towers except 28, 29; home at L2 in 30 | 0.4 → 0.8 | fortress 30–32, artillery 31, 32, mines 26, 32, barriers 26, 30–32 |
+| Three kings | 33–40 | **third enemy** (all 8); everything mixed | 3 | 10–12 | 1 (2 in 37, 40); L2 starts in 34, 35, 36 | 0.4 → 0.8 | fortress 34, 37, 39, 40; tanks 37, 40; artillery 38, 40; bridges 36, 40; mines 35, 38, 39, 40; barriers 35, 38–40 |
+
+Every band ramps aggression from ≈ 0.4 back up to 0.8 (the tutorial from 0.2), so the first level of a band is a breather that shows the new piece. Personalities are mixed inside a band (33–40 use rusher/opportunist/turtle in 33, 36, 40, two rushers in 34, 35, 37, two turtles in 39). Starting garrisons: player 12–40 units in total, enemy 6–52 — the enemy usually starts with more units, the player with the closer neutrals (mirror-match rule below).
+- Every level must be winnable by the scripted "reference player" (see `playtest` skill) in under 3 min (`HEADLESS_MAX_MS` = 180 s) and must not be winnable by doing nothing. Every level carries a one-line `lesson` shown at the start (levels 1–3 also drive the tutorial overlay).
 - No level is a mirror match: the player must be able to reach a production edge before any enemy can (a neutral closer to the player than to every enemy, or more starting towers/units). Two equal towers streaming at each other annihilate on the road and never resolve (§2.0 v2.1 caveat).
-- Levels 9–40 are also the Daily Challenge pool (§7). Every one of them must stay winnable by the reference player under **every** twist in §7.2 (≥ 4 of 5 seeds per level × twist, under 3 min, never `playing` at 180 s). Retuning a pool level re-runs that gate (`npm run playtest -- --twist <id> --seeds 5`, flag to add — until then the AI Engineer drives `runDaily`/`runHeadless` with the twist's modifiers from a test); a level that fails under a twist is fixed in the level, never by dropping the twist.
+- Levels 9–40 are also the Daily Challenge pool (§7). Every one of them must stay winnable by the reference player under **every** twist in §7.2 (≥ 4 of 5 seeds per level × twist, under 3 min, never `playing` at 180 s). Retuning a pool level re-runs that gate (`npm run playtest -- --twist <id> --seeds 5`, shipped 2026-09-18 and run by CI for all five twists; the Level Designer's house rule is ≥ 45/50 at `--seeds 50`); a level that fails under a twist is fixed in the level, never by dropping the twist.
 
 ## 4. Presentation
-- Flat vector look: rounded towers with crown pips for level, unit dots with owner colour, roads as light grey lines, water/void as dark blue. Font: system sans, bold numerals.
-- Juice: capture flash, unit death puff, upgrade pulse, screen-shake on capture (subtle). Sound synthesised with WebAudio (no assets).
-- Screens: Title → Level select (grid with stars) → Play (HUD: level, timer, pause, booster bar) → Result (stars, coins, next/retry).
-- Save: `localStorage` key `towerclash.save.v2` (v1 migrated on first load) — stars per level, coins, settings.
+- Look: "Sunlit Clay Islands" (`docs/ART_DIRECTION.md` v2, stakeholder request 2026-09-13) — soft-3D clay towers on island plateaus, one biome per band (grass, autumn, desert, snow, volcanic), warm key light with long shadows, all canvas primitives, no images. *(v1: "flat vector look, crown pips, system sans" — superseded.)* Tower sprite = kind + level (L1 small, L2 second storey and banner, L3 keep with battlements) + gold gems for the level; the garrison badge turns alert-coloured with a crossed-swords pip while under fire (§2.0 v2.1). Streams are owner-coloured ribbons with chevrons (§2.0). Font: Fredoka 700/500 (bundled, OFL), Nunito for Cyrillic; numerals ≥ 24 px, contrast ≥ 4.5:1. Colour-blind palette and `prefers-reduced-motion` are honoured everywhere.
+- Juice: capture squash + confetti, unit death puff, upgrade gem glint, impact ring on a landing under fire, subtle screen nudge on capture. Sound synthesised with WebAudio (no assets, mute in settings / M key).
+- Screens: Title → Level map (winding path with stars; the Daily Challenge card sits above level 1, §7.3) → Play (HUD: level chip or "Daily · name", timer, pause, streams pill, booster bar) → Result (stars, gold/crystals, next/retry, daily line). Also Shop, Settings and Achievements (lazy-loaded screens), and the pause menu (Resume, Restart, Speed ×2, Level select).
+- Skins (cosmetic only, crystals, ECONOMY.md §3.3): 7 tower roofs, 7 soldier helmets, 3 terrain themes, and since 2026-09-18 two **tower silhouettes** (Round keep, Watchtower) and two **unit silhouettes** (Shield bearers, Clockwork robots) that replace the whole building / soldier while keeping the level silhouette readable; one skin per family equipped; the silhouette drawers live in a lazy chunk.
+- Languages: EN / AZ / RU / TR for every string, level name and lesson.
+- Save: `localStorage` key **`towerclash.save.v3`** (v1 and v2 migrated on first load) — stars per level, gold, crystals, commander upgrades, skins, achievements, daily reward, `challenge` (§7.2), settings. *(v1: `towerclash.save.v2`, coins.)*
 
 ## 5. Technical
-- `sim/` is pure, deterministic, frame-rate independent (fixed 50 ms step, seeded RNG), no DOM. `render/` draws state, `input/` maps pointer events to sim commands, `ai/` produces commands. Tests: Vitest for sim/ai, Playwright (Chromium preinstalled) for smoke + screenshots.
-- Performance budget: 60 fps with 400 units in transit on a mid-range phone.
+- `sim/` is pure, deterministic, frame-rate independent (fixed 50 ms step, seeded RNG), no DOM; a match is reproducible from level + seed + modifiers + command log, and a 20 s snapshot ring backs the Continue rewind. `render/` draws state, `input/` maps pointer events to sim commands, `ai/` produces commands, `economy/` holds the catalog, `daily/` the challenge picker. Tests: Vitest for sim/ai/ui/economy, Playwright (Chromium preinstalled, plus an Android WebView project) for smoke, content, perf, tutorial, daily and screenshots; CI also runs the headless playtest, the daily gate (30 days × 3 seeds) and the twist gate (5 twists × 32 levels × 5 seeds).
+- Rendering (PERF-3, 2026-09-18): **three stacked canvases** — `#ground` (terrain, drawn once per level/palette/resolution), `#game` (cleared every frame: towers, units, ribbons, particles), `#hud` (redrawn only when its content changes). Menus paint over the ground layer. Level JSON (PERF-2) and the shop/achievements/settings/level-map screens and silhouette skins load lazily; the eager bundle must stay ≤ **80 kB gzip** (CI check).
+- Performance budget: 60 fps with 400 units in transit on a mid-range phone (design target, unchanged). Measured 2026-09-18 headless at CPU 4×: level 40 frame median 133 → 67 ms after PERF-3; script is 9–15 % of the frame, the rest is rasterisation; the on-device half waits for a real phone (backlog MM-1 / M3-5).
 
 ## 6. Out of scope for v1.0
-Multiplayer, ads, real-money purchases, 3D, account systems.
+Multiplayer, 3D, account systems, any server (so no leaderboard, no server clock, no cloud save). *(v1 text also listed "ads, real-money purchases" — superseded 2026-09-13 by the stakeholder-requested economy: the game has a gold/crystal wallet, an IAP catalog and ad placements (`docs/ECONOMY.md`, `src/economy/catalog.ts`). On the web build the store is a demo "Test store" and there are no ads; real purchases and ads need the store accounts of ECONOMY Phase B.)* Design constraint that stays: **no purchasable advantage beyond §2.7's ceiling**, and every level is winnable by the reference player with zero upgrades.
 
 ## 7. Daily Challenge (v1, 2026-09-18)
 
@@ -202,8 +228,8 @@ Worked example (pin it in tests): `2026-09-18` → level 18 (Two Rivals), seed 2
 **Twists** — exactly one per day, applied as the **player's** `PlayerModifiers` (§2.0 implementation: enemies always run the defaults; a captured tower takes its new owner's ladder the moment it flips):
 | id | Display name | Modifier | What the player sees |
 |---|---|---|---|
-| `plain` | Plain | none (`DEFAULT_MODIFIERS`) | the campaign level as shipped, upgrades off |
-| `lean` | Lean | `productionMul` 0.9 | player interval ÷ 0.9: barracks L1/L2/L3 = 1.11 / 0.78 / 0.56 s (0.90 / 1.29 / 1.80 units/s); artillery half of that; tank factory one tank / 4.44 s. (0.85 in the first draft: the 60-day sweep lost 15 of 60 lean runs, 0.9 loses 8 — see §7.5) |
+| `plain` | Classic (EN; draft name "Plain") | none (`DEFAULT_MODIFIERS`) | the campaign level as shipped, upgrades off |
+| `lean` | Lean rations (EN; draft name "Lean") | `productionMul` 0.9 | player interval ÷ 0.9: barracks L1/L2/L3 = 1.11 / 0.78 / 0.56 s (0.90 / 1.29 / 1.80 units/s); artillery half of that; tank factory one tank / 4.44 s. (0.85 in the first draft: the 60-day sweep lost 15 of 60 lean runs, 0.9 loses 8 — see §7.5) |
 | `fastFeet` | Fast feet | `unitSpeedMul` 1.25 | player infantry 150 px/s, tanks 105 px/s (applied at spawn; a 240 px road takes 1.6 s instead of 2.0 s). The only twist that is a pure buff |
 | `thinWalls` | Thin walls | `capacityMul` 0.8 | player ladder 20 / 40 / 80 (fortress 29 / 60; artillery and tank factory 20 / 40 / 80). Towers auto-upgrade at the smaller capacity, so L2 and L3 come sooner, but a finished keep holds 80 and a supply line ends (`targetFull`) at 80 |
 | `reinforced` | Reinforced | `startGarrisonBonus` 5 | +5 units on every player-owned tower at match start, capped at that tower's capacity |
@@ -230,37 +256,36 @@ Stars use the level's own `star3` / `star2` clocks unchanged (§2.4); a twist ma
 
 **Local best.** `save.challenge.best[dayKey] = { stars, timeMs }`, updated when a result is better (more stars, then lower time). Only the **30 most recent day keys** are kept (`CHALLENGE_BEST_KEEP`, pruned on write and on normalize; keys sort chronologically as strings) so the save stays bounded; there is no history screen in v1 (§7.6). "Done today" = `lastWinDay == today` or `today in best`.
 
-**Save schema.** `SaveData.challenge: { lastWinDay: string | null; streak: number; best: Record<string, { stars: number; timeMs: number }> }`, added without a schema bump (as `achievements` was). Normalize: `lastWinDay` must match `^\d{4}-\d{2}-\d{2}$` or become `null`; `streak` a non-negative integer (stored uncapped, shown capped at 99); `best` keys validated the same way, `stars` clamped to 0…3, `timeMs` a non-negative integer, entries beyond the 30 newest dropped. Code: `src/ui/save.ts` (`ChallengeState`), rules in `src/ui/daily.ts` (`recordChallengeResult`, `shownStreak`, `challengeDone`, `challengeUnlocked`, `msToUtcMidnight`).
+**Save schema.** `SaveData.challenge: { lastWinDay: string | null; streak: number; best: Record<string, { stars: number; timeMs: number }>; milestones: number[] }`, added without a schema bump (as `achievements` was). `milestones` = the streak-milestone days (3 / 7 / 30) already paid in the current run; cleared when a first win starts a new run (`streak` back to 1). Normalize: `lastWinDay` must match `^\d{4}-\d{2}-\d{2}$` or become `null`; `streak` a non-negative integer (stored uncapped, shown capped at 99); `best` keys validated the same way, `stars` clamped to 0…3, `timeMs` a non-negative integer, entries beyond the 30 newest dropped; `milestones` distinct non-negative integers. Code: `src/ui/save.ts` (`ChallengeState`), rules in `src/ui/daily.ts` (`recordChallengeResult`, `shownStreak`, `challengeDone`, `challengeUnlocked`, `msToUtcMidnight`), constants in `src/daily/challenge.ts` (`REWARD`, `STREAK_MILESTONES`, `UNLOCK_AFTER_LEVEL`).
 
 ### 7.3 UI contract
 **Level-map card** (level select, above the level-1 tile so it is the first thing after the header):
 | Element | Content |
 |---|---|
-| Title | "Daily challenge" |
-| Level | the day's level name, localised (`LEVEL_META` names) |
-| Twist | display name + one-line effect, e.g. "Thin walls · your towers hold 20 % less" |
-| Reward | "30 gold + 10 per star · 5 crystals" (after the win: "claimed") |
-| Countdown | "Resets in HH:MM:SS (00:00 UTC)" — to the next UTC midnight, ticking once per second; at zero the card re-reads `challengeFor(dayKeyOf(now))` in place, no reload |
-| Streak | "Streak: N" with N as defined in §7.2 (0 shown as "Streak: 0") |
-| DONE badge | shown when `best[today]` exists with a win, with today's stars, e.g. "DONE ★★☆" |
-| Locked state | dimmed, "Clear level 8 to unlock", not tappable |
-Layout: the card **fits at 360 CSS px viewport width** with all elements visible, no clipped or wrapped-into-a-third-line text, tap target ≥ 44 px high. Tapping starts the match from `challengeFor(dayKeyOf(new Date()))` — the `dayKey` is captured at that moment and travels with the match (§7.4).
+| Title | "DAILY CHALLENGE" (`daily.title`) with a star badge (lock while locked) |
+| Level · twist | line 2: "<level name> · <twist name>" — level name localised (`LEVEL_META`), twist display name (`daily.twist.<id>`: Classic / Lean rations / Fast feet / Thin walls / Reinforced). The one-line twist effect of the first draft is **not** shown (fits 360 px better; the lesson banner in play explains the map) |
+| Reward | line 3 before the win: gold + crystal glyphs and "up to +60 gold · +5 crystals" (`daily.reward`, computed from `goldReward(3)` and `REWARD.crystals`); after the win: "Best 3★ · 1:12" (`daily.best`) |
+| Countdown | right-hand pill: "New challenge in Nh" above one hour, then "New in MM:SS" (`daily.newIn` / `daily.newInTime`) — to the next UTC midnight, read once per frame; at zero the card re-reads `challengeFor(dayKeyOf(now))` in place, no reload. The pill turns into the DONE badge once won |
+| Streak | pill under the countdown: "Streak N" (`daily.streak`, blue while the streak is live, N as defined in §7.2) or, while a milestone is still ahead, **"Streak N · +C at day D"** (`daily.streakNext`, the next `STREAK_MILESTONES` entry above N: +5 at day 3, +20 at day 7, +100 at day 30; nothing past day 30). Shown whenever N > 0 or a milestone is ahead, so a fresh player sees "Streak 0 · +5 at day 3" |
+| DONE badge | gold pill "DONE" (`daily.done`) replaces the countdown when `challengeDone` (won today) |
+| Locked state | dimmed, "Clear level 8 to unlock" (`daily.locked`) on line 2, the countdown on line 3; tapping shows the same text as a toast |
+Layout: the card **fits at 360 CSS px viewport width** with all elements visible, no clipped or wrapped-into-a-third-line text (fonts shrink to fit, `fitFontPx`), tap target ≥ 44 px high. Tapping starts the match from `challengeFor(dayKeyOf(new Date()))` — the `dayKey` is captured at that moment and travels with the match (§7.4).
 
-**HUD.** Title reads "Daily · <level name>" instead of "Level N". No booster bar. Pause menu: Resume, Restart, Speed ×2, Level select (returns to the map).
+**HUD.** The level chip reads "Daily · <level name>" (`daily.chip`) over the twist's name instead of "LEVEL N" over the name. No booster bar; a booster hotkey answers "Not in the daily challenge" (`daily.noBoosters`). Pause menu: Resume, Restart, Speed ×2, Level select (returns to the map).
 
 **Result screen.** One extra line under the stars:
-- first win: "Daily challenge · <Twist> · +50 gold · +5 crystals · Streak 4";
-- win, already claimed today: "Daily challenge · <Twist> · claimed today · Best 3★ 1:12";
-- loss: "Daily challenge · <Twist> · no reward yet today".
+- first win: "Daily challenge done · +50 gold +5 crystals · streak 4" (`daily.resultWon`; the crystal figure includes a milestone bonus when one was paid);
+- win, already claimed today (or a loss): "Daily challenge · best today 3★ · 1:12" (`daily.resultBest`, today's best; on a loss with no win today it shows this attempt's stars and time);
+- **milestone toast** on the first win that reaches day 3 / 7 / 30: "Day 7 streak bonus · +20 crystals" (`daily.milestone`), in the achievement-toast slot (an achievement unlocked on the same result wins the slot).
 Buttons: **Retry** and **Map** only (no Next, no Reinforcements, no ×2 gold).
 
-**Strings.** Locale keys `daily.title`, `daily.twist.<id>`, `daily.twist.<id>.desc`, `daily.reward`, `daily.claimed`, `daily.resets`, `daily.streak`, `daily.done`, `daily.locked`, `daily.hud`, `daily.result.first`, `daily.result.claimed`, `daily.result.loss` in EN / AZ / RU / TR like every other string.
+**Strings** (shipped, 19 keys, EN / AZ / RU / TR): `daily.title`, `daily.chip`, `daily.twist.plain|lean|fastFeet|thinWalls|reinforced`, `daily.reward`, `daily.streak`, `daily.streakNext`, `daily.milestone`, `daily.done`, `daily.best`, `daily.locked`, `daily.newIn`, `daily.newInTime`, `daily.noBoosters`, `daily.resultWon`, `daily.resultBest`. *(First draft names `daily.twist.<id>.desc`, `daily.claimed`, `daily.resets`, `daily.hud`, `daily.result.*` were not used; the shipped names above are the contract.)*
 
 **Debug surface** (for e2e): the app resolves "today" once per read (`App.dayKey()`); `window.__towerclash.daily.setDayKey(dayKey)` overrides it so a spec can pin a day, roll it over and check the card, and `window.__towerclash.daily.challengeFor(dayKey)` exposes the picker.
 
 ### 7.4 Edge cases
 - **Day rolls over mid-match.** The `dayKey` captured when the match started is the one the result is booked against: the win counts for the day it was **started** (pays that day's reward if not yet claimed, updates that day's best, sets `lastWinDay` to that day). The card afterwards already shows the new day, not done. A win for `D` recorded on `D + 1` still lets `D + 1` extend the streak (`lastWinDay == D`).
-- **Time zone.** UTC by design; the card says "resets at 00:00 UTC" and shows the countdown, so a player in Baku sees the reset at 04:00 local and is not surprised. The login streak stays on the local calendar day — documented asymmetry, revisit in v2.
+- **Time zone.** UTC by design; the card shows the countdown to the reset, so a player in Baku sees it land at 04:00 local. *(Deviation, 2026-09-19: the shipped card does not print "UTC" anywhere — `daily.newIn` / `daily.newInTime` are a bare countdown. Design asks Frontend to add "(00:00 UTC)" to the countdown pill's tooltip line or the locked-state line 3 when it fits at 360 px; the countdown alone is acceptable for v1.)* The login streak stays on the local calendar day — documented asymmetry, revisit in v2.
 - **Local clock.** There is no server; the device clock is trusted. Setting the clock forward yields at most one 60-gold + 5-crystal reward per faked day, less than one rewarded ad — accepted for v1, noted for the leaderboard (v2).
 - **Level not unlocked.** Playable as the daily; does not unlock it or anything else (§7.2 "Locked levels").
 - **Level not loadable** (manifest missing the id, network failure on the lazy level chunk): the card shows the error toast the campaign uses and stays tappable; nothing is written.
@@ -280,7 +305,7 @@ Buttons: **Retry** and **Map** only (no Next, no Reinforcements, no ×2 gold).
 ### 7.6 v2 ideas (not in v1)
 - **Weekly leaderboard** (time / stars per day, top 100) — needs an account and a server-side clock; §6 rules accounts out of v1.0. Design when accounts exist; the fixed seed and modifiers make results comparable already.
 - **Enemy-side mutators** (e.g. "Alarmed": enemy aggression +0.2; "Rich": enemy production ×1.15) — needs `PlayerModifiers` per owner in the sim and modifier-aware bots; a sim + AI item, not a docs one.
-- **Streak milestones** (ECONOMY.md §6.2 proposal: day 3 / 7 / 30 → 5 / 20 / 100 crystals, chips on the card) — economy says ≈ 1 crystal a day, inside the no-price-change band; design-approved for Phase C once `save.challenge` has shipped and 2 weeks of streak data exist. No streak-shield product without a Publisher read on loss-aversion wording.
+- ~~Streak milestones~~ — **shipped 2026-09-18** (DAILY-2, §7.2 rewards table, §7.3 streak pill and toast): day 3 / 7 / 30 → 5 / 20 / 100 crystals once per streak run. Still v2: a **streak shield** (ECONOMY.md §6.2: 20 crystals, once per 30 days) — not without a Publisher read on loss-aversion wording; and whether day 30 should repeat at 60 / 90 (economy's proposal said yes, v1 pays it once per run — a design decision to revisit with 30 days of streak data).
 - **One attempt + `rv_daily_retry`** (ECONOMY.md §6.2: a second attempt with a free Freeze for an ad or 10 crystals) — rejected for v1 (unlimited free retries, no booster in the daily, §7.2). Re-evaluate only with telemetry showing attempts per day ≫ 3 and a leaderboard that needs an "assisted" flag.
 - **Challenge achievements** — "7-day challenge streak", "30 daily wins"; cheap once `save.challenge` exists; sized by Monetization.
 - **Twist guarantees** — never the same twist on consecutive days, never the same level within 14 days (a small rejection loop over the hash).
