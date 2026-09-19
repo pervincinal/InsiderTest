@@ -7,7 +7,8 @@ import { drawButton, drawCard, drawExtrudedText, drawFlag, drawGlassBand, drawLo
 import { LEVEL_MAP, levelNodeCentre, levelNodeRect } from './layout';
 import type { ToastOpts } from './economyWidgets';
 import { drawToast, drawWallet } from './economyWidgets';
-import { drawCrystal, drawGoldCoin, drawUpgradeGlyph } from './sprites';
+import { drawCrystal, drawGoldCoin } from './sprites';
+import { drawUpgradeGlyph } from './spritesShop';
 import { beginFrame, drawWater, motion } from './menus';
 import { t } from '../ui/i18n';
 

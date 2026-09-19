@@ -222,4 +222,33 @@ test.describe('daily challenge', () => {
     expect((await save(page)).challenge.milestones).toEqual([3]);
     expect(errors).toEqual([]);
   });
+  test('RETRY / restart after the UTC rollover does not replay the stale day: the map opens with the "new challenge" toast (BUG-9)', async ({ page }) => {
+    const stars: Record<string, number> = {};
+    for (let id = 1; id <= UNLOCK_AFTER_LEVEL; id++) stars[String(id)] = 1;
+    const errors = await boot(page, { version: 3, stars, gold: 100, crystals: 3 }, DAY_A);
+    await tapRect(page, TITLE_PLAY);
+    await expect.poll(() => screen(page)).toBe('levelSelect');
+    const info = await daily(page);
+    await tapRect(page, LEVEL_MAP_DAILY);
+    await expect.poll(() => screen(page)).toBe('play');
+    // midnight passes while the match runs; the pause menu's restart (R) re-reads the day
+    await page.evaluate((key) => window.__towerclash.setDayKey(key), DAY_B);
+    await page.keyboard.press('r');
+    await expect.poll(() => screen(page)).toBe('levelSelect');
+    expect(await page.evaluate(() => window.__towerclash.getState())).toBeNull();
+    expect(await page.evaluate(() => window.__towerclash.getToast())).toBe(await page.evaluate(() => window.__towerclash.getText('daily.newReady')));
+    // the card now offers day B; a tap starts it, not day A's run
+    expect((await daily(page)).challenge.dayKey).toBe(DAY_B);
+    await tapRect(page, LEVEL_MAP_DAILY);
+    await expect.poll(() => screen(page)).toBe('play');
+    const seed = await page.evaluate(() => window.__towerclash.getState()!.seed);
+    expect(seed).toBe((await daily(page)).challenge.seed);
+    expect(seed).not.toBe(info.challenge.seed);
+    // same day: R restarts the challenge in place
+    await page.keyboard.press('r');
+    await expect.poll(() => screen(page)).toBe('play');
+    expect(await page.evaluate(() => window.__towerclash.getState()!.seed)).toBe(seed);
+    expect((await save(page)).challenge.lastWinDay).toBeNull();
+    expect(errors).toEqual([]);
+  });
 });

@@ -16,6 +16,21 @@ import { REWARD, STREAK_MILESTONES, UNLOCK_AFTER_LEVEL, goldReward } from '../da
 import { earnCrystals, earnGold } from '../economy/wallet';
 import type { ChallengeBest, SaveData } from './save';
 import { pruneChallengeBest, starsFor, writeSave } from './save';
+import type { App } from './screens';
+import { t } from './i18n';
+
+/**
+ * RETRY (result screen) / restart (pause menu): the same level and seed again. A Daily Challenge
+ * whose UTC day has passed is not replayed (its win would book against yesterday, BUG-9): the
+ * level map opens with a notice and the player starts today's from the card.
+ */
+export function restartLevel(app: App, levelId: number, challenge: DailyChallenge | null | undefined): void {
+  if (challenge && challenge.dayKey !== app.dayKey()) {
+    app.goLevels(t('daily.newReady'));
+    return;
+  }
+  void app.startLevel(levelId, challenge?.seed, challenge ? { challenge } : undefined);
+}
 
 /** Streak shown on the card / result is capped here (the save keeps the real count). */
 export const STREAK_SHOWN_MAX = 99;

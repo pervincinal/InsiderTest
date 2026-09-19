@@ -45,7 +45,7 @@ export class LevelSelectScreen implements Screen {
   private dragging = false;
   private pressed: Rect | null = null;
   private readonly current: number;
-  private readonly toast = new Toast();
+  readonly toast = new Toast();
   private nowMs = 0;
   /** Today's challenge, recomputed only when the day key changes (midnight, debug override). */
   private challenge: DailyChallenge | null = null;

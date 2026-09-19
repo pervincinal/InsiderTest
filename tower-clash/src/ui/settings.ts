@@ -39,7 +39,7 @@ export class SettingsScreen implements Screen {
   private pressed: Rect | null = null;
   private confirming = false;
   private nowMs = 0;
-  private readonly toast = new Toast();
+  readonly toast = new Toast();
   /** About block: support id from the store and the ads SDK's privacy-options requirement (native only). */
   private supportId: string | null = null;
   private privacyRequired = false;

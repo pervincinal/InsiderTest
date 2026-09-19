@@ -55,7 +55,7 @@ export const SHADOW_DY = 0.4;
 type Pt = { x: number; y: number };
 
 /** Tiny deterministic generator (mulberry32) so decorations never depend on the sim RNG. */
-function makeRng(seed: number): () => number {
+export function makeRng(seed: number): () => number {
   let a = seed >>> 0 || 1;
   return () => {
     a = (a + 0x6d2b79f5) >>> 0;
@@ -204,7 +204,7 @@ function propShadow(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: n
   ctx.fill();
 }
 
-function drawBush(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, y: number, s: number): void {
+export function drawBush(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, y: number, s: number): void {
   propShadow(ctx, pal, x, y + s * 0.5, s * 1.1, s * 1.4);
   const lobes: [number, number, number][] = [
     [-s * 0.55, s * 0.1, s * 0.7],
@@ -330,7 +330,7 @@ function drawRock(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: num
   ctx.restore();
 }
 
-function drawDots(ctx: CanvasRenderingContext2D, colors: readonly string[], x: number, y: number, rng: () => number): void {
+export function drawDots(ctx: CanvasRenderingContext2D, colors: readonly string[], x: number, y: number, rng: () => number): void {
   for (let i = 0; i < 4; i++) {
     const px = x + (rng() - 0.5) * 30;
     const py = y + (rng() - 0.5) * 22;
@@ -641,101 +641,4 @@ export function drawTerrainOverlay(ctx: CanvasRenderingContext2D, pal: Palette, 
     ctx.fill();
   }
   ctx.globalAlpha = 1;
-}
-
-/* ---------- shop swatch ---------- */
-
-/**
- * Miniature island inside a rounded `size` × `size` tile centred on (x, y), coloured by a theme
- * (`drawSkinPreview` for `theme.*` ids): water, island bevel, one road, a bush, the theme's
- * sparkles / specks and its ambient wash. Sprites are added by the caller so they stay untinted.
- */
-export function drawThemeSwatch(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, size: number, themeId: string): void {
-  const theme = themeFor(themeId);
-  const biome = themedBiome(pal.biomes.grass, theme, 'grass');
-  const half = size / 2;
-  const rad = size * 0.16;
-  const rng = makeRng(77);
-  ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(x - half + rad, y - half);
-  ctx.arcTo(x + half, y - half, x + half, y + half, rad);
-  ctx.arcTo(x + half, y + half, x - half, y + half, rad);
-  ctx.arcTo(x - half, y + half, x - half, y - half, rad);
-  ctx.arcTo(x - half, y - half, x + half, y - half, rad);
-  ctx.closePath();
-  ctx.clip();
-  const g = ctx.createLinearGradient(0, y - half, 0, y + half);
-  g.addColorStop(0, theme.waterTop);
-  g.addColorStop(1, theme.waterBottom);
-  ctx.fillStyle = g;
-  ctx.fillRect(x - half, y - half, size, size);
-  // island: drop shadow, foam, cliff bands, grass lip, plateau
-  const ix = x;
-  const iy = y + size * 0.1;
-  const irx = size * 0.4;
-  const iry = size * 0.26;
-  const cliff = size * 0.07;
-  const blob = (dy: number, color: string, k = 1): void => {
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.ellipse(ix, iy + dy, irx * k, iry * k, 0, 0, Math.PI * 2);
-    ctx.fill();
-  };
-  blob(cliff + size * 0.06, pal.groundShadow, 1.04);
-  ctx.strokeStyle = pal.foam;
-  ctx.lineWidth = size * 0.03;
-  ctx.beginPath();
-  ctx.ellipse(ix, iy + cliff, irx, iry, 0, 0, Math.PI * 2);
-  ctx.stroke();
-  blob(cliff, shade(biome.cliff.shade, -0.28));
-  blob(cliff * 0.66, biome.cliff.shade);
-  blob(cliff * 0.3, biome.cliff.lit);
-  blob(size * 0.012, biome.grass.shade);
-  blob(0, biome.grass.mid);
-  ctx.fillStyle = biome.grass.lit;
-  ctx.globalAlpha = 0.35;
-  ctx.beginPath();
-  ctx.ellipse(ix - irx * 0.3, iy - iry * 0.3, irx * 0.45, iry * 0.4, -0.4, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.globalAlpha = 1;
-  // road across the island
-  const road: Pt[] = [
-    { x: ix - irx * 0.75, y: iy + iry * 0.35 },
-    { x: ix - irx * 0.2, y: iy - iry * 0.1 },
-    { x: ix + irx * 0.35, y: iy + iry * 0.05 },
-    { x: ix + irx * 0.8, y: iy - iry * 0.35 },
-  ];
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.beginPath();
-  road.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
-  ctx.strokeStyle = biome.path.shade;
-  ctx.lineWidth = size * 0.1;
-  ctx.stroke();
-  ctx.strokeStyle = biome.path.lit;
-  ctx.lineWidth = size * 0.072;
-  ctx.stroke();
-  drawBush(ctx, pal, biome.bush, ix + irx * 0.45, iy + iry * 0.5, size * 0.07);
-  drawDots(ctx, biome.dots, ix - irx * 0.55, iy - iry * 0.3, rng);
-  // sparkles on the water, specks on the island (static: the shop never animates them)
-  ctx.fillStyle = theme.waterSparkle;
-  for (let i = 0; i < 7; i++) {
-    const sx = x - half + rng() * size;
-    const sy = y - half + (i < 4 ? rng() * size * 0.16 : size * 0.86 + rng() * size * 0.1);
-    ctx.fillRect(sx, sy, size * 0.06, size * 0.014);
-  }
-  if (theme.glow) {
-    ctx.fillStyle = theme.glow;
-    for (let i = 0; i < 9; i++) {
-      ctx.beginPath();
-      ctx.arc(ix + (rng() - 0.5) * irx * 1.5, iy + (rng() - 0.5) * iry * 1.5, size * 0.012 + rng() * size * 0.01, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-  if (theme.ambient) {
-    ctx.fillStyle = theme.ambient;
-    ctx.fillRect(x - half, y - half, size, size);
-  }
-  ctx.restore();
 }

@@ -1,5 +1,6 @@
 import type { GameState, LevelDef } from './sim/types';
-import { LEVEL_META, getLoadedLevel, levelIndex, loadLevel } from './levels/index';
+import { LEVEL_META, getLoadedLevel, levelChunkKey, levelIndex, loadLevel } from './levels/index';
+import { chunkFailures, chunkRecoverable, loadChunk, reloadOnce } from './lazyChunk';
 import type { Palette } from './render/palette';
 import { getPalette } from './render/palette';
 import type { View } from './render/view';
@@ -37,6 +38,7 @@ import { challengeDone, challengeUnlocked, shownStreak } from './ui/daily';
  * Only types cross this boundary statically — see scripts/checkBundle.mjs.
  */
 type LazyScreens = typeof import('./ui/lazyScreens');
+const LAZY_SCREENS_KEY = 'lazyScreens';
 
 /** Test/debug surface for Playwright. */
 export interface TowerClashDebug {
@@ -61,6 +63,8 @@ export interface TowerClashDebug {
   /** Current UI language code and a translation lookup (I18N e2e). */
   getLanguage(): string;
   getText(key: string): string;
+  /** Text of the current screen's toast while it is on screen, or null. */
+  getToast(): string | null;
   /** Result screen numbers, or null when not on the result screen. */
   getResult(): { outcome: string; stars: number; coinsEarned: number; coinsTotal: number; crystalsEarned: number; achievements: string[] } | null;
   /** Level-select lock state for a level id (undefined id → false). */
@@ -251,10 +255,10 @@ class TowerClashApp implements App {
 
   /* ----- lazy screens (PERF-1) ----- */
 
-  /** The lazy chunk, fetched once; a failed fetch is retried on the next call. */
+  /** The lazy chunk, fetched once; a failed fetch is retried on the next call (src/lazyChunk.ts). */
   private loadLazy(): Promise<LazyScreens> {
     if (!this.lazyPromise) {
-      this.lazyPromise = import('./ui/lazyScreens')
+      this.lazyPromise = loadChunk(LAZY_SCREENS_KEY, () => import('./ui/lazyScreens'))
         .then((m) => {
           this.lazy = m;
           return m;
@@ -285,9 +289,26 @@ class TowerClashApp implements App {
         if (this.current === loading) this.go(make(screens));
       },
       () => {
-        if (this.current === loading) this.current = from; // no enter(): the screen never left
+        if (this.current !== loading) return;
+        this.current = from; // no enter(): the screen never left
+        this.chunkFailed(LAZY_SCREENS_KEY, from);
       },
     );
+  }
+
+  /**
+   * A user-initiated chunk download failed (BUG-8): tell the player on the screen they are back
+   * on — the next tap re-fetches. When the chunk keeps failing and the browser never named its URL
+   * (the module map keeps the first failure, so a plain retry can never succeed), reload the page
+   * once per session — only from the title / level map, never over a match or a result.
+   */
+  private chunkFailed(key: string, from: Screen): void {
+    const idle = from.name === 'title' || from.name === 'levelSelect';
+    if (idle && chunkFailures(key) > 1 && !chunkRecoverable(key) && navigator.onLine !== false && reloadOnce()) {
+      location.reload();
+      return;
+    }
+    from.toast?.show(t('common.loadFailed'), 'error');
   }
 
   /**
@@ -337,9 +358,13 @@ class TowerClashApp implements App {
     return false;
   }
 
-  goLevels(): void {
+  goLevels(notice?: string): void {
     this.play = null;
-    void this.goLazy((L) => new L.LevelSelectScreen(this));
+    void this.goLazy((L) => {
+      const map = new L.LevelSelectScreen(this);
+      if (notice) map.toast.show(notice, 'ok', performance.now(), 3500);
+      return map;
+    });
   }
 
   goShop(tab: ShopTab = 'crystals', back: () => void = () => this.goTitle()): void {
@@ -401,7 +426,10 @@ class TowerClashApp implements App {
         return this.enterLevel(level, seed, opts);
       },
       () => {
-        if (seq === this.startSeq && this.current === loading) this.current = from;
+        if (seq === this.startSeq && this.current === loading) {
+          this.current = from;
+          this.chunkFailed(levelChunkKey(levelId), from);
+        }
         return null;
       },
     );
@@ -472,6 +500,7 @@ class TowerClashApp implements App {
       getLimitHint: () => (this.current === this.play && this.play?.gestures.limitHint ? this.play.gestures.limitHintText : null),
       getLanguage: () => currentLanguage(),
       getText: (key) => t(key as TranslationKey),
+      getToast: () => this.current.toast?.opts(performance.now())?.text ?? null,
       getResult: () => {
         if (!(this.current instanceof ResultScreen)) return null;
         const { outcome, stars, coinsEarned, coinsTotal } = this.current.info.ui;

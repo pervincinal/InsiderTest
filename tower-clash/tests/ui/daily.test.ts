@@ -12,6 +12,7 @@ import type { DailyChallenge } from '../../src/daily/challenge';
 import { REWARD, STREAK_MILESTONES, TWISTS, UNLOCK_AFTER_LEVEL, goldReward } from '../../src/daily/challenge';
 import { challengeDone, challengeUnlocked, msToUtcMidnight, previousDayKey, recordChallengeResult, shownStreak } from '../../src/ui/daily';
 import { nextStreakMilestone } from '../../src/ui/levelSelect';
+import { t } from '../../src/ui/i18n';
 import { makeLevel } from '../helpers';
 
 /*
@@ -41,8 +42,8 @@ function fakeApp(save: SaveData) {
     goTitle() {
       nav.push('title');
     },
-    goLevels() {
-      nav.push('levels');
+    goLevels(notice?: string) {
+      nav.push(notice ? `levels:${notice}` : 'levels');
     },
     goShop() {},
     goAchievements() {},
@@ -393,14 +394,44 @@ describe('UTC day rollover during a match (GDD §7.5 item 4)', () => {
     expect(shownStreak(save, today)).toBe(0);
   });
 
-  it('RETRY after the rollover replays the stale day (documented: the result screen keeps the challenge it was built with)', () => {
+  it('pause-menu restart after the rollover does not replay the stale day: the level map opens with the "new challenge" notice (BUG-9)', () => {
     let today = DAY;
-    const { app, starts } = fakeApp(save);
+    const { app, starts, nav } = fakeApp(save);
     app.dayKey = () => today;
     const ch: DailyChallenge = { dayKey: DAY, levelId: 9, seed: 5, twist: LEAN };
     const play = new PlayScreen(app, makeLevel({ id: 9 }), ch.seed, 1, { challenge: ch });
+    play.restart(); // same day: a plain restart with the seed and the challenge
+    expect(starts).toEqual([{ levelId: 9, seed: 5, opts: { challenge: ch } }]);
     today = '2026-09-19';
     play.restart();
-    expect(starts).toEqual([{ levelId: 9, seed: 5, opts: { challenge: ch } }]);
+    expect(starts.length).toBe(1);
+    expect(nav).toEqual([`levels:${t('daily.newReady')}`]);
+    expect(t('daily.newReady')).toBe('New daily challenge is ready');
+  });
+
+  it('result-screen RETRY after the rollover goes to the map too; a campaign level is unaffected', () => {
+    let today = DAY;
+    const { app, starts, nav, current } = fakeApp(save);
+    app.dayKey = () => today;
+    const ch: DailyChallenge = { dayKey: DAY, levelId: 9, seed: 5, twist: LEAN };
+    const level = makeLevel({ id: 9, star3: 30_000, star2: 60_000 });
+    const play = new PlayScreen(app, level, ch.seed, 1, { challenge: ch });
+    app.go(play);
+    for (const tower of Object.values(play.state.towers)) tower.owner = 'player';
+    play.state.units = [];
+    play.state.queues = [];
+    play.state.links = [];
+    play.update(250, 250);
+    const result = current() as ResultScreen;
+    expect(result).toBeInstanceOf(ResultScreen);
+    expect(save.challenge.lastWinDay).toBe(DAY);
+    today = '2026-09-19';
+    (result as unknown as { retry(): void }).retry();
+    expect(starts).toEqual([]);
+    expect(nav).toEqual([`levels:${t('daily.newReady')}`]);
+    // a campaign level keeps restarting whatever the day
+    const campaign = new PlayScreen(app, makeLevel({ id: 3 }), 1, 1);
+    campaign.restart();
+    expect(starts).toEqual([{ levelId: 3, seed: undefined, opts: undefined }]); // a campaign restart rolls a fresh seed
   });
 });

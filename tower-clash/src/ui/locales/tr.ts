@@ -11,6 +11,7 @@ export const tr: Dictionary = {
   'common.watch': 'İZLE',
   'common.on': 'AÇIK',
   'common.off': 'KAPALI',
+  'common.loadFailed': 'Yüklenemedi — bağlantını kontrol et',
   'amount.gold': '+{n} altın',
   'amount.crystals': '+{n} kristal',
 
@@ -44,6 +45,7 @@ export const tr: Dictionary = {
   'daily.newIn': 'Yeni meydan okuma {h} sa sonra',
   'daily.newInTime': 'Yeni: {time}',
   'daily.noBoosters': 'Günlük meydan okumada yok',
+  'daily.newReady': 'Yeni günlük meydan okuma hazır',
   'daily.resultWon': 'Günlük meydan okuma tamam · +{gold} altın +{crystals} kristal · seri {streak}',
   'daily.streakNext': 'Seri {n} · {day}. gün +{crystals}',
   'daily.milestone': '{day}. gün seri bonusu · +{crystals} kristal',

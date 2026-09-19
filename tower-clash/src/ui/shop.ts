@@ -81,7 +81,7 @@ export class ShopScreen implements Screen {
   private convertIdx = 0;
   private confirmConvert: { crystals: number; gold: number } | null = null;
   private nowMs = 0;
-  private readonly toast = new Toast();
+  readonly toast = new Toast();
   private readonly particles = new ParticleSystem();
   private readonly prices = new Map<string, string>();
   private hits: Hit[] = [];

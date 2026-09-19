@@ -33,7 +33,7 @@ import type { MatchSummary } from '../economy/achievements';
 import { L3_LEVEL, emptyMatch, evaluateAchievements } from '../economy/achievements';
 import { CRYSTAL_SERVICES } from '../economy/catalog';
 import type { DailyChallenge } from '../daily/challenge';
-import { recordChallengeResult } from './daily';
+import { recordChallengeResult, restartLevel } from './daily';
 import { isMuted, onPlayerCommand, onSimEvents, onSimFrame, playSfx, resetAudioLevel, toggleMuted } from '../audio/index';
 import { hapticCapture } from '../native/index';
 import { t } from './i18n';
@@ -84,7 +84,7 @@ export class PlayScreen implements Screen {
   private rewoundMs = 0;
   /** A rewarded video for a free booster charge is in flight (sim paused meanwhile). */
   private adPending = false;
-  private readonly toast = new Toast();
+  readonly toast = new Toast();
   /** Debug (e2e): throw every garrison at the enemy each AI tick so the level is lost quickly. */
   private suicide = false;
   /** Facts about this match for the achievement rules (ECON-4), collected from sim events. */
@@ -388,7 +388,7 @@ export class PlayScreen implements Screen {
 
   /** Restart this level; a challenge keeps its seed and twist. */
   restart(): void {
-    void this.app.startLevel(this.level.id, this.challenge?.seed, this.challenge ? { challenge: this.challenge } : undefined);
+    restartLevel(this.app, this.level.id, this.challenge);
   }
 
   draw(view: View, nowMs: number): void {

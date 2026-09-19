@@ -29,6 +29,7 @@ import { currentLanguage, nextLanguage, t } from './i18n';
 import { achievementName } from './catalogText';
 import type { DailyChallenge } from '../daily/challenge';
 import type { DailyOutcome } from './daily';
+import { restartLevel } from './daily';
 
 /** A screen owns drawing and input while it is current. */
 export interface Screen {
@@ -44,6 +45,8 @@ export interface Screen {
   key?(e: KeyboardEvent): void;
   /** Mouse wheel / trackpad scroll in logical px (positive = content moves up). */
   wheel?(dy: number): void;
+  /** Status pill of the screen, when it has one (the app shell reports a failed chunk download on it). */
+  readonly toast?: Toast;
 }
 
 /** Per-attempt options for `App.startLevel`. */
@@ -69,7 +72,8 @@ export interface App {
   readonly ads: AdSession;
   palette(): Palette;
   goTitle(): void;
-  goLevels(): void;
+  /** Open the level map; `notice` is shown as a toast on it (e.g. a stale Daily Challenge, BUG-9). */
+  goLevels(notice?: string): void;
   /** Open the shop on `tab`; BACK runs `back` (default: the title). */
   goShop(tab?: ShopTab, back?: () => void): void;
   /** Open the achievements screen; BACK runs `back` (default: the title). */
@@ -159,7 +163,7 @@ const DAILY_CHEST_PLACEMENT = AD_PLACEMENTS.find((p) => p.id === 'rv_daily_chest
 export class TitleScreen implements Screen {
   readonly name = 'title' as const;
   private pressed: Rect | null = null;
-  private readonly toast = new Toast();
+  readonly toast = new Toast();
   private nowMs = 0;
   private pendingAd = false;
   constructor(private readonly app: App) {}
@@ -317,7 +321,7 @@ export class ResultScreen implements Screen {
   private doubled = false;
   private leaving = false;
   private nowMs = 0;
-  private readonly toast = new Toast();
+  readonly toast = new Toast();
 
   constructor(
     private readonly app: App,
@@ -419,10 +423,9 @@ export class ResultScreen implements Screen {
     else this.app.goLevels();
   }
 
-  /** Same level again; a challenge keeps its seed and twist. */
+  /** Same level again; a challenge keeps its seed and twist (unless its UTC day has passed — `restartLevel`). */
   private retry(): void {
-    const { level, challenge } = this.info;
-    void this.app.startLevel(level.id, challenge?.seed, challenge ? { challenge } : undefined);
+    restartLevel(this.app, this.info.level.id, this.info.challenge);
   }
 
   up(p: PointerPoint): void {

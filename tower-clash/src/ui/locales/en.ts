@@ -16,6 +16,7 @@ export const en = {
   'common.watch': 'WATCH',
   'common.on': 'ON',
   'common.off': 'OFF',
+  'common.loadFailed': "Couldn't load — check your connection",
   'amount.gold': '+{n} gold',
   'amount.crystals': '+{n} crystals',
 
@@ -49,6 +50,7 @@ export const en = {
   'daily.newIn': 'New challenge in {h}h',
   'daily.newInTime': 'New in {time}',
   'daily.noBoosters': 'Not in the daily challenge',
+  'daily.newReady': 'New daily challenge is ready',
   'daily.resultWon': 'Daily challenge done · +{gold} gold +{crystals} crystals · streak {streak}',
   'daily.streakNext': 'Streak {n} · +{crystals} at day {day}',
   'daily.milestone': 'Day {day} streak bonus · +{crystals} crystals',

@@ -292,6 +292,7 @@ Buttons: **Retry** and **Map** only (no Next, no Reinforcements, no ×2 gold).
 - **Pool edits.** Adding or removing an id in 9–40 re-maps every future day (the mod changes). Do it only with a note in the daily report, never mid-day.
 - **Same level as the campaign level in progress.** Allowed; the two runs are separate matches and separate ledgers.
 - **Replay after the reward.** Free, unlimited, pays nothing, can improve the local best; the result line says "claimed today".
+- **RETRY / restart after the rollover** (BUG-9, 2026-09-19). The result screen's RETRY and the pause menu's restart re-read the day key: when the challenge's day has passed they do not replay it (a win would book against yesterday) — the level map opens with the toast "New daily challenge is ready" (`daily.newReady`) and the player starts today's from the card. Campaign retries are unaffected.
 
 ### 7.5 Acceptance criteria
 1. **Picker (exists, `tests/daily/challenge.test.ts`)** — deterministic; level in 9…40; seed ≥ 1; twist from `TWISTS`; ≥ 15 distinct levels and all 5 twists over 2026-10; malformed key throws; `dayKeyOf` is UTC; `goldReward(0/3/9)` = 30/60/60. Add the pins: `2026-09-18` → level 18, seed 233226, `plain`.

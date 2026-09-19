@@ -4,11 +4,12 @@
  * tones + rim light, key light upper-left, flat blue-ink drop shadow to the lower-right. Currency
  * coins / crystals, the treasure chest and the video glyph stay in sprites.ts (HUD, title, result).
  */
-import type { Palette } from './palette';
-import { shade } from './palette';
-import { roundRect } from './widgets';
-import { drawThemeSwatch } from './terrain';
-import { RIM, TAU, clayDisc, drawCrystal, drawGoldCoin, drawTowerShadow, drawTowerSprite, drawUnitSprite, poly } from './sprites';
+import type { Palette, Tones } from './palette';
+import { shade, themeFor, themedBiome } from './palette';
+import { drawBoltGlyph, roundRect } from './widgets';
+import { drawBush, drawDots, makeRng } from './terrain';
+import type { UpgradeKind } from './sprites';
+import { RIM, TAU, clayDisc, cone, drawCrystal, drawGoldCoin, drawTowerShadow, drawTowerSprite, drawUnitSprite, poly } from './sprites';
 
 const PILE: readonly { r: number; at: readonly (readonly [number, number])[] }[] = [
   { r: 0.5, at: [[0, 0]] },
@@ -194,4 +195,239 @@ export function drawSkinPreview(ctx: CanvasRenderingContext2D, pal: Palette, x: 
     drawTowerSprite(ctx, pal, { x: 0, y: 0, owner: 'player', kind: 'barracks', level: 2 }, { nowMs: 0, motion: false, skin: { roof: skinId } });
   }
   ctx.restore();
+}
+
+/* ---------- theme swatch (moved from terrain.ts: only the shop preview draws it) ---------- */
+/* ---------- shop swatch ---------- */
+
+/**
+ * Miniature island inside a rounded `size` × `size` tile centred on (x, y), coloured by a theme
+ * (`drawSkinPreview` for `theme.*` ids): water, island bevel, one road, a bush, the theme's
+ * sparkles / specks and its ambient wash. Sprites are added by the caller so they stay untinted.
+ */
+export function drawThemeSwatch(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, size: number, themeId: string): void {
+  const theme = themeFor(themeId);
+  const biome = themedBiome(pal.biomes.grass, theme, 'grass');
+  const half = size / 2;
+  const rad = size * 0.16;
+  const rng = makeRng(77);
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(x - half + rad, y - half);
+  ctx.arcTo(x + half, y - half, x + half, y + half, rad);
+  ctx.arcTo(x + half, y + half, x - half, y + half, rad);
+  ctx.arcTo(x - half, y + half, x - half, y - half, rad);
+  ctx.arcTo(x - half, y - half, x + half, y - half, rad);
+  ctx.closePath();
+  ctx.clip();
+  const g = ctx.createLinearGradient(0, y - half, 0, y + half);
+  g.addColorStop(0, theme.waterTop);
+  g.addColorStop(1, theme.waterBottom);
+  ctx.fillStyle = g;
+  ctx.fillRect(x - half, y - half, size, size);
+  // island: drop shadow, foam, cliff bands, grass lip, plateau
+  const ix = x;
+  const iy = y + size * 0.1;
+  const irx = size * 0.4;
+  const iry = size * 0.26;
+  const cliff = size * 0.07;
+  const blob = (dy: number, color: string, k = 1): void => {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.ellipse(ix, iy + dy, irx * k, iry * k, 0, 0, Math.PI * 2);
+    ctx.fill();
+  };
+  blob(cliff + size * 0.06, pal.groundShadow, 1.04);
+  ctx.strokeStyle = pal.foam;
+  ctx.lineWidth = size * 0.03;
+  ctx.beginPath();
+  ctx.ellipse(ix, iy + cliff, irx, iry, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  blob(cliff, shade(biome.cliff.shade, -0.28));
+  blob(cliff * 0.66, biome.cliff.shade);
+  blob(cliff * 0.3, biome.cliff.lit);
+  blob(size * 0.012, biome.grass.shade);
+  blob(0, biome.grass.mid);
+  ctx.fillStyle = biome.grass.lit;
+  ctx.globalAlpha = 0.35;
+  ctx.beginPath();
+  ctx.ellipse(ix - irx * 0.3, iy - iry * 0.3, irx * 0.45, iry * 0.4, -0.4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  // road across the island
+  const road: { x: number; y: number }[] = [
+    { x: ix - irx * 0.75, y: iy + iry * 0.35 },
+    { x: ix - irx * 0.2, y: iy - iry * 0.1 },
+    { x: ix + irx * 0.35, y: iy + iry * 0.05 },
+    { x: ix + irx * 0.8, y: iy - iry * 0.35 },
+  ];
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  road.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+  ctx.strokeStyle = biome.path.shade;
+  ctx.lineWidth = size * 0.1;
+  ctx.stroke();
+  ctx.strokeStyle = biome.path.lit;
+  ctx.lineWidth = size * 0.072;
+  ctx.stroke();
+  drawBush(ctx, pal, biome.bush, ix + irx * 0.45, iy + iry * 0.5, size * 0.07);
+  drawDots(ctx, biome.dots, ix - irx * 0.55, iy - iry * 0.3, rng);
+  // sparkles on the water, specks on the island (static: the shop never animates them)
+  ctx.fillStyle = theme.waterSparkle;
+  for (let i = 0; i < 7; i++) {
+    const sx = x - half + rng() * size;
+    const sy = y - half + (i < 4 ? rng() * size * 0.16 : size * 0.86 + rng() * size * 0.1);
+    ctx.fillRect(sx, sy, size * 0.06, size * 0.014);
+  }
+  if (theme.glow) {
+    ctx.fillStyle = theme.glow;
+    for (let i = 0; i < 9; i++) {
+      ctx.beginPath();
+      ctx.arc(ix + (rng() - 0.5) * irx * 1.5, iy + (rng() - 0.5) * iry * 1.5, size * 0.012 + rng() * size * 0.01, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  if (theme.ambient) {
+    ctx.fillStyle = theme.ambient;
+    ctx.fillRect(x - half, y - half, size, size);
+  }
+  ctx.restore();
+}
+
+/* ---------- upgrade glyphs (moved from sprites.ts: only the level map and the shop draw them) ---------- */
+/** Small cone-roof icon (level tiles, legend). */
+export function drawRoofIcon(ctx: CanvasRenderingContext2D, pal: Palette, color: string, x: number, y: number, s: number): void {
+  const st = pal.stoneTones;
+  ctx.fillStyle = st.mid;
+  ctx.fillRect(x - s * 0.5, y - s * 0.2, s, s * 0.9);
+  ctx.fillStyle = st.shade;
+  ctx.fillRect(x + s * 0.15, y - s * 0.2, s * 0.35, s * 0.9);
+  ctx.fillStyle = st.lit;
+  ctx.fillRect(x - s * 0.5, y - s * 0.2, s * 0.2, s * 0.9);
+  cone(ctx, { lit: shade(color, 0.3), mid: color, shade: shade(color, -0.3) }, x, y - s * 0.2, y - s * 1.1, s * 0.7, s * 0.2);
+}
+
+/** Small gold "+" bubble (upper-right of an upgrade glyph). */
+function plusBubble(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, r: number): void {
+  const g = pal.goldTones;
+  ctx.fillStyle = g.shade;
+  ctx.beginPath();
+  ctx.arc(x + r * 0.08, y + r * 0.12, r, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = g.mid;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = pal.ink;
+  ctx.lineWidth = Math.max(1.5, r * 0.28);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x - r * 0.5, y);
+  ctx.lineTo(x + r * 0.5, y);
+  ctx.moveTo(x, y - r * 0.5);
+  ctx.lineTo(x, y + r * 0.5);
+  ctx.stroke();
+}
+
+/** Thick clay arrow pointing up (shade offset, mid, lit edge). */
+function upArrow(ctx: CanvasRenderingContext2D, tones: Tones, x: number, y: number, r: number): void {
+  const pts: readonly (readonly [number, number])[] = [
+    [0, -0.5],
+    [0.5, 0.05],
+    [0.2, 0.05],
+    [0.2, 0.5],
+    [-0.2, 0.5],
+    [-0.2, 0.05],
+    [-0.5, 0.05],
+  ];
+  ctx.lineJoin = 'round';
+  ctx.fillStyle = tones.shade;
+  poly(ctx, pts, x + r * 0.08, y + r * 0.12, r);
+  ctx.fill();
+  ctx.fillStyle = tones.mid;
+  poly(ctx, pts, x, y, r);
+  ctx.fill();
+  ctx.fillStyle = tones.lit;
+  poly(ctx, [[0, -0.5], [-0.5, 0.05], [-0.2, 0.05], [-0.2, 0.5], [-0.05, 0.5], [-0.05, -0.2]], x, y, r);
+  ctx.fill();
+}
+
+/**
+ * Commander upgrade icons on a paper disc: production = cog with a gold up-arrow, capacity = tower
+ * with a "+" bubble, garrison = three soldiers, booster = gold bolt, speed = double chevron.
+ */
+export function drawUpgradeGlyph(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, r: number, kind: UpgradeKind): void {
+  clayDisc(ctx, pal, x, y, r, { lit: '#ffffff', mid: pal.paper, shade: pal.panelBorder });
+  const blue = pal.ownerTones.player;
+  switch (kind) {
+    case 'production': {
+      // cog: 8 teeth as thick radial strokes, shade copy offset, then the wheel
+      const m = pal.metal;
+      const teeth = (dx: number, dy: number, color: string): void => {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = r * 0.26;
+        ctx.lineCap = 'butt';
+        ctx.beginPath();
+        for (let i = 0; i < 8; i++) {
+          const a = (i / 8) * TAU + Math.PI / 8;
+          ctx.moveTo(x + dx + Math.cos(a) * r * 0.42, y + dy + Math.sin(a) * r * 0.42);
+          ctx.lineTo(x + dx + Math.cos(a) * r * 0.66, y + dy + Math.sin(a) * r * 0.66);
+        }
+        ctx.stroke();
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(x + dx, y + dy, r * 0.5, 0, TAU);
+        ctx.fill();
+      };
+      teeth(r * 0.06, r * 0.1, m.shade);
+      teeth(0, 0, m.mid);
+      ctx.strokeStyle = m.lit;
+      ctx.lineWidth = r * 0.1;
+      ctx.beginPath();
+      ctx.arc(x, y, r * 0.42, Math.PI * 0.9, Math.PI * 1.6);
+      ctx.stroke();
+      ctx.fillStyle = pal.paper;
+      ctx.beginPath();
+      ctx.arc(x, y, r * 0.3, 0, TAU);
+      ctx.fill();
+      upArrow(ctx, pal.goldTones, x, y, r * 0.5);
+      break;
+    }
+    case 'capacity':
+      drawRoofIcon(ctx, pal, blue.mid, x - r * 0.12, y + r * 0.2, r * 0.62);
+      plusBubble(ctx, pal, x + r * 0.42, y - r * 0.4, r * 0.26);
+      break;
+    case 'garrison': {
+      const s = r / 17;
+      drawUnitSprite(ctx, pal, x - r * 0.42, y + r * 0.42, 'player', 'infantry', 1, 0, 1, 0, false, s);
+      drawUnitSprite(ctx, pal, x + r * 0.42, y + r * 0.42, 'player', 'infantry', 1, 0, 2, 0, false, s);
+      drawUnitSprite(ctx, pal, x, y + r * 0.55, 'player', 'infantry', 1, 0, 3, 0, false, s);
+      break;
+    }
+    case 'booster':
+      drawBoltGlyph(ctx, pal.gold, x + r * 0.05, y + r * 0.1, r * 0.62, pal.goldShade);
+      drawBoltGlyph(ctx, pal.gold, x, y, r * 0.62, pal.goldShade);
+      break;
+    case 'speed': {
+      // double chevron: shade copy, mid, thin lit edge
+      const chev = (dx: number, dy: number, color: string, wdt: number): void => {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = wdt;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        for (const ox of [-0.42, 0.1]) {
+          ctx.moveTo(x + dx + ox * r, y + dy - r * 0.45);
+          ctx.lineTo(x + dx + (ox + 0.4) * r, y + dy);
+          ctx.lineTo(x + dx + ox * r, y + dy + r * 0.45);
+        }
+        ctx.stroke();
+      };
+      chev(r * 0.06, r * 0.1, blue.shade, r * 0.26);
+      chev(0, 0, blue.mid, r * 0.26);
+      chev(-r * 0.04, -r * 0.05, blue.lit, r * 0.08);
+      break;
+    }
+  }
 }

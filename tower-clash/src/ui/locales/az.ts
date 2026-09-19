@@ -11,6 +11,7 @@ export const az: Dictionary = {
   'common.watch': 'İZLƏ',
   'common.on': 'AÇIQ',
   'common.off': 'BAĞLI',
+  'common.loadFailed': 'Yüklənmədi — bağlantını yoxla',
   'amount.gold': '+{n} qızıl',
   'amount.crystals': '+{n} kristal',
 
@@ -44,6 +45,7 @@ export const az: Dictionary = {
   'daily.newIn': 'Yeni çağırış {h} saata',
   'daily.newInTime': 'Yeni: {time}',
   'daily.noBoosters': 'Günlük çağırışda yoxdur',
+  'daily.newReady': 'Yeni günlük çağırış hazırdır',
   'daily.resultWon': 'Günlük çağırış tamam · +{gold} qızıl +{crystals} kristal · seriya {streak}',
   'daily.streakNext': 'Seriya {n} · {day}-cü gün +{crystals}',
   'daily.milestone': '{day}-cü gün seriya bonusu · +{crystals} kristal',

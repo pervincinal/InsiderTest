@@ -4,9 +4,12 @@ import type { Page } from '@playwright/test';
 /*
  * Lazy chunks under a failing network (PERF-1 lazy screens, PERF-2 per-level JSON, M3-2 silhouette
  * skins). A chunk that fails to download must never leave the player stuck or throw: the tap
- * returns to the screen it came from, the level plays with the default look, and no uncaught
- * error reaches `window.onerror`. The requests are aborted with `page.route`; the service worker is
- * blocked so the cache-first strategy cannot serve them from a previous run.
+ * returns to the screen it came from with a toast, the level plays with the default look, and no
+ * uncaught error reaches `window.onerror`. Once the network is back the chunk must load again
+ * (BUG-8): the browser's module map pins the failed URL, so src/lazyChunk.ts re-fetches it under a
+ * `?r=<time>` query. The requests are aborted with `page.route` (query included, so the re-fetch
+ * is aborted as long as the route is on); the service worker is blocked so the cache-first
+ * strategy cannot serve them from a previous run.
  */
 
 test.use({ serviceWorkers: 'block' });
@@ -14,9 +17,14 @@ test.use({ serviceWorkers: 'block' });
 const SAVE_KEY = 'towerclash.save.v3';
 // src/render/layout.ts — TITLE.play
 const TITLE_PLAY = { x: 180, y: 640, w: 360, h: 96 };
+const LEVEL3_CHUNK = /\/assets\/003-[^/?]*\.js(\?.*)?$/;
+const MENU_CHUNK = /\/assets\/lazyScreens-[^/?]*\.js(\?.*)?$/;
+const SKIN_CHUNK = /\/assets\/skinShapes-[^/?]*\.js(\?.*)?$/;
 
 const screen = (page: Page) => page.evaluate(() => window.__towerclash.getScreen());
 const simTime = (page: Page) => page.evaluate(() => window.__towerclash.getState()?.time ?? -1);
+const toast = (page: Page) => page.evaluate(() => window.__towerclash.getToast());
+const text = (page: Page, key: string) => page.evaluate((k) => window.__towerclash.getText(k), key);
 
 async function boot(page: Page, seeded: Record<string, unknown> = { version: 3 }): Promise<string[]> {
   const pageErrors: string[] = [];
@@ -34,9 +42,9 @@ async function tapRect(page: Page, r: { x: number; y: number; w: number; h: numb
 }
 
 test.describe('lazy chunks under a failing network', () => {
-  test('level chunk: a failed download returns to the screen the player was on; the level opens once the network is back', async ({ page }) => {
+  test('level chunk: a failed download returns to the screen the player was on with a toast; the level opens once the network is back', async ({ page }) => {
     const aborted: string[] = [];
-    await page.route(/\/assets\/003-[^/]*\.js$/, (route) => {
+    await page.route(LEVEL3_CHUNK, (route) => {
       aborted.push(route.request().url());
       void route.abort('failed');
     });
@@ -45,43 +53,62 @@ test.describe('lazy chunks under a failing network', () => {
     expect(aborted.length).toBeGreaterThanOrEqual(1);
     await expect.poll(() => screen(page)).toBe('title');
     expect(await page.evaluate(() => window.__towerclash.getState())).toBeNull();
+    expect(await toast(page)).toBe(await text(page, 'common.loadFailed'));
+    // a second tap while still offline re-fetches under a fresh URL (module map) and fails again with the toast
+    const before = aborted.length;
+    expect(await page.evaluate(() => window.__towerclash.loadLevel(3, 1))).toBe(false);
+    expect(aborted.length).toBeGreaterThan(before);
+    expect(aborted[aborted.length - 1]).toMatch(/003-[^/?]*\.js\?r=\d+$/);
+    await expect.poll(() => screen(page)).toBe('title');
+    expect(await toast(page)).toBe(await text(page, 'common.loadFailed'));
     // the rest of the game is untouched: another level still opens
     expect(await page.evaluate(() => window.__towerclash.loadLevel(1, 1))).toBe(true);
     await expect.poll(() => screen(page)).toBe('play');
     await expect.poll(() => simTime(page)).toBeGreaterThan(200);
     expect(errors).toEqual([]);
 
-    // Network back. Chromium's module map remembers a failed module fetch for the life of the page,
-    // so `loadLevel(3)` keeps resolving false until a reload (BACKLOG BUG-8: the game must reload or
-    // re-fetch under a fresh URL and tell the player). Whatever the outcome, level 1 keeps running
-    // and nothing throws; the outcome is recorded so the day BUG-8 lands this line can pin `true`.
-    await page.unroute(/\/assets\/003-[^/]*\.js$/);
-    const t1 = await simTime(page);
-    const retry = await page.evaluate(() => window.__towerclash.loadLevel(3, 1));
-    test.info().annotations.push({ type: 'lazy', description: `level 3 after the network came back: loadLevel → ${retry}` });
+    // Network back: the re-fetch under `?r=` gets through the pinned module-map entry and level 3 opens (BUG-8).
+    await page.unroute(LEVEL3_CHUNK);
+    const fetched = page.waitForResponse((r) => LEVEL3_CHUNK.test(r.url()) && r.url().includes('?r='));
+    expect(await page.evaluate(() => window.__towerclash.loadLevel(3, 1))).toBe(true);
+    expect((await fetched).ok()).toBe(true);
     await expect.poll(() => screen(page)).toBe('play');
-    expect(await page.evaluate(() => window.__towerclash.getState()?.levelId)).toBe(retry ? 3 : 1);
-    await expect.poll(() => simTime(page)).toBeGreaterThan(retry ? 0 : t1);
+    expect(await page.evaluate(() => window.__towerclash.getState()?.levelId)).toBe(3);
+    await expect.poll(() => simTime(page)).toBeGreaterThan(0);
     expect(errors).toEqual([]);
   });
 
-  test('menu chunk (lazyScreens): PLAY returns to the title when the download fails, no throw', async ({ page }) => {
-    await page.route(/\/assets\/lazyScreens-[^/]*\.js$/, (route) => void route.abort('failed'));
+  test('menu chunk (lazyScreens): PLAY returns to the title with a toast when the download fails, no throw; opens once the network is back', async ({ page }) => {
+    const aborted: string[] = [];
+    await page.route(MENU_CHUNK, (route) => {
+      aborted.push(route.request().url());
+      void route.abort('failed');
+    });
     const errors = await boot(page);
     await tapRect(page, TITLE_PLAY);
     // the spinner screen may show briefly; the navigation is abandoned and the title is current again
     await expect.poll(() => screen(page), { timeout: 5_000 }).toBe('title');
     await page.waitForTimeout(300);
     expect(await screen(page)).toBe('title');
+    expect(await toast(page)).toBe(await text(page, 'common.loadFailed'));
     // the debug openShop goes through the same path and resolves (does not hang) on failure
     await page.evaluate(() => window.__towerclash.openShop());
     expect(await screen(page)).toBe('title');
+    // the idle preload failed first, so every user attempt since is a `?r=` re-fetch, aborted here
+    // (the preload and the openShop attempt race the assertions, so poll instead of counting once)
+    await expect.poll(() => aborted.length, { timeout: 5_000 }).toBeGreaterThanOrEqual(3);
+    await expect.poll(() => aborted.filter((u) => u.includes('?r=')).length, { timeout: 5_000 }).toBeGreaterThanOrEqual(1);
+    expect(errors).toEqual([]);
+
+    await page.unroute(MENU_CHUNK);
+    await tapRect(page, TITLE_PLAY);
+    await expect.poll(() => screen(page), { timeout: 5_000 }).toBe('levelSelect');
     expect(errors).toEqual([]);
   });
 
-  test('skinShapes chunk: an equipped silhouette skin whose chunk fails still plays with the default look', async ({ page }) => {
+  test('skinShapes chunk: an equipped silhouette skin whose chunk fails still plays with the default look; the chunk is re-fetched once the network is back', async ({ page }) => {
     const aborted: string[] = [];
-    await page.route(/\/assets\/skinShapes-[^/]*\.js$/, (route) => {
+    await page.route(SKIN_CHUNK, (route) => {
       aborted.push(route.request().url());
       void route.abort('failed');
     });
@@ -97,6 +124,16 @@ test.describe('lazy chunks under a failing network', () => {
     });
     await expect.poll(() => screen(page), { timeout: 75_000, intervals: [250] }).toBe('result');
     expect((await page.evaluate(() => window.__towerclash.getResult()))?.outcome).toBe('won');
+    // draw-time retries are throttled (src/lazyChunk.ts RETRY_AFTER_MS): a match at ×10 asks a handful of times, not once per frame
+    expect(aborted.length).toBeLessThan(30);
+    expect(errors).toEqual([]);
+
+    // Network back: the next level's first skinned frame re-fetches the chunk under `?r=` and it lands.
+    await page.unroute(SKIN_CHUNK);
+    const fetched = page.waitForResponse((r) => SKIN_CHUNK.test(r.url()) && r.url().includes('?r='), { timeout: 15_000 });
+    expect(await page.evaluate(() => window.__towerclash.loadLevel(2, 1))).toBe(true);
+    expect((await fetched).ok()).toBe(true);
+    await expect.poll(() => screen(page)).toBe('play');
     expect(errors).toEqual([]);
   });
 });

@@ -5,6 +5,7 @@
  * play screen can be built synchronously from `getLoadedLevel` once a level is in.
  */
 import type { LevelDef } from '../sim/types';
+import { loadChunk } from '../lazyChunk';
 import { LEVEL_MANIFEST } from './manifest';
 import type { LevelManifestEntry } from './manifest';
 
@@ -33,9 +34,15 @@ export function getLevelMeta(id: number): LevelMeta | undefined {
 const cache = new Map<number, LevelDef>();
 const pending = new Map<number, Promise<LevelDef>>();
 
+/** `loadChunk` key of a level's chunk (`chunkFailures` / `chunkRecoverable` in the app shell). */
+export function levelChunkKey(id: number): string {
+  return `level:${id}`;
+}
+
 /**
  * Fetch a level (once; later calls resolve from the cache). Resolves `undefined` for an unknown
- * id. A failed download is forgotten so the next call retries.
+ * id. A failed download is forgotten so the next call retries — under a fresh URL when the browser
+ * named it (src/lazyChunk.ts), since the module map keeps the failed one.
  */
 export function loadLevel(id: number): Promise<LevelDef | undefined> {
   const cached = cache.get(id);
@@ -44,8 +51,7 @@ export function loadLevel(id: number): Promise<LevelDef | undefined> {
   if (!entry) return Promise.resolve(undefined);
   let inFlight = pending.get(id);
   if (!inFlight) {
-    inFlight = entry
-      .load()
+    inFlight = loadChunk(levelChunkKey(id), entry.load, { unwrap: (m) => (m as { default: LevelDef }).default })
       .then((level) => {
         cache.set(id, level);
         return level;

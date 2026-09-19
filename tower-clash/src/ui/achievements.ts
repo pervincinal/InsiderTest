@@ -26,7 +26,7 @@ export class AchievementsScreen implements Screen {
   private dragging = false;
   private pressed: Rect | null = null;
   private nowMs = 0;
-  private readonly toast = new Toast();
+  readonly toast = new Toast();
 
   constructor(
     private readonly app: App,

@@ -11,6 +11,7 @@ export const ru: Dictionary = {
   'common.watch': 'СМОТРЕТЬ',
   'common.on': 'ВКЛ',
   'common.off': 'ВЫКЛ',
+  'common.loadFailed': 'Не удалось загрузить — проверь соединение',
   'amount.gold': '+{n} золота',
   'amount.crystals': '+{n} кристаллов',
 
@@ -44,6 +45,7 @@ export const ru: Dictionary = {
   'daily.newIn': 'Новый вызов через {h} ч',
   'daily.newInTime': 'Новый через {time}',
   'daily.noBoosters': 'В ежедневном вызове недоступно',
+  'daily.newReady': 'Новый ежедневный вызов готов',
   'daily.resultWon': 'Вызов пройден · +{gold} золота +{crystals} кристаллов · серия {streak}',
   'daily.streakNext': 'Серия {n} · день {day}: +{crystals}',
   'daily.milestone': 'Бонус за {day}-й день серии · +{crystals} кристаллов',
