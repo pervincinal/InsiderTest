@@ -77,9 +77,14 @@ export function isShapeSkin(id: string | undefined): id is string {
   return id !== undefined && (id.startsWith('tower.') || id.startsWith('unit.'));
 }
 
-/** Load the silhouette skin drawers (idempotent; resolves immediately once loaded). */
+/** Load the silhouette skin drawers (idempotent; resolves immediately once loaded; a failed fetch is retried on the next call). */
 export function loadShapeSkins(): Promise<ShapeSkinDrawers> {
-  shapeSkinsPromise ??= import('./skinShapes').then((m) => (shapeSkins = m.SHAPE_SKINS));
+  shapeSkinsPromise ??= import('./skinShapes')
+    .then((m) => (shapeSkins = m.SHAPE_SKINS))
+    .catch((err: unknown) => {
+      shapeSkinsPromise = null; // a failed download is forgotten so the next draw / call retries
+      throw err;
+    });
   return shapeSkinsPromise;
 }
 

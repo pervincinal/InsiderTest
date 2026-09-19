@@ -61,6 +61,11 @@ export function resizeLayers(layers: Layers, game: HTMLCanvasElement): void {
     if (c.height !== game.height) c.height = game.height;
     c.style.width = game.style.width;
     c.style.height = game.style.height;
+    // Setting width/height clears a canvas, but a same-size resize (orientationchange before the
+    // metrics change, visualViewport echo of a window resize) leaves the pixels: clear explicitly so
+    // `key === ''` always means "blank" — `blankLayer` skips the clear on an empty key.
+    layer.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    layer.ctx.clearRect(0, 0, c.width, c.height);
     layer.key = '';
   }
 }

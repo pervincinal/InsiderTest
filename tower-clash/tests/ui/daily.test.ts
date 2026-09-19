@@ -361,3 +361,46 @@ describe('PlayScreen in challenge mode', () => {
     expect((result as ResultScreen).extras().continueCrystals).toBeNull();
   });
 });
+
+describe('UTC day rollover during a match (GDD §7.5 item 4)', () => {
+  it('a challenge started on D and won on D + 1 books against D; the map then shows D + 1 with the streak alive', async () => {
+    const { LevelSelectScreen } = await import('../../src/ui/levelSelect');
+    const { challengeFor } = await import('../../src/daily/challenge');
+    let today = DAY;
+    const { app } = fakeApp(save);
+    app.dayKey = () => today;
+    const ch = challengeFor(DAY);
+    const level = makeLevel({ id: ch.levelId });
+    const play = new PlayScreen(app, level, ch.seed, 1, { challenge: ch });
+    expect(play.challenge?.dayKey).toBe(DAY);
+    today = '2026-09-19'; // midnight passes while the match runs
+    const out = recordChallengeResult(save, play.challenge!, level, 'won', 20_000);
+    expect(out.dayKey).toBe(DAY);
+    expect(out.firstWin).toBe(true);
+    expect(save.challenge.lastWinDay).toBe(DAY);
+    expect(save.challenge.streak).toBe(1);
+    expect(save.gold).toBe(100 + goldReward(3));
+    // the level map re-reads the day key every frame: D + 1 is a fresh, undone challenge and the streak (won "yesterday") is alive
+    expect(challengeDone(save, today)).toBe(false);
+    expect(shownStreak(save, today)).toBe(1);
+    const map = new LevelSelectScreen(app);
+    const card = (map as unknown as { todaysChallenge(): DailyChallenge }).todaysChallenge();
+    expect(card.dayKey).toBe('2026-09-19');
+    expect(card).toEqual(challengeFor('2026-09-19'));
+    // and a second rollover swaps the card again without a new screen
+    today = '2026-09-20';
+    expect((map as unknown as { todaysChallenge(): DailyChallenge }).todaysChallenge().dayKey).toBe('2026-09-20');
+    expect(shownStreak(save, today)).toBe(0);
+  });
+
+  it('RETRY after the rollover replays the stale day (documented: the result screen keeps the challenge it was built with)', () => {
+    let today = DAY;
+    const { app, starts } = fakeApp(save);
+    app.dayKey = () => today;
+    const ch: DailyChallenge = { dayKey: DAY, levelId: 9, seed: 5, twist: LEAN };
+    const play = new PlayScreen(app, makeLevel({ id: 9 }), ch.seed, 1, { challenge: ch });
+    today = '2026-09-19';
+    play.restart();
+    expect(starts).toEqual([{ levelId: 9, seed: 5, opts: { challenge: ch } }]);
+  });
+});
