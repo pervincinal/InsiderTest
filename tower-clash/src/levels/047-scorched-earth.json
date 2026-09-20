@@ -1,0 +1,52 @@
+{
+  "id": 47,
+  "name": "Scorched Earth",
+  "name_az": "Yanmış Torpaq",
+  "name_ru": "Выжженная земля",
+  "name_tr": "Yakılmış Toprak",
+  "lesson": "Barriers eat men, guns eat streams: break a wall with a wave, never a trickle, and park your own guns at the breach so the counter-attack dies on the road",
+  "lesson_az": "Səddlər əsgər yeyir, toplar axın: divarı damcı ilə yox, dalğa ilə yar və öz toplarını yarığa qoy ki, əks-hücum yolda ölsün",
+  "lesson_ru": "Барьеры едят людей, пушки едят потоки: ломай стену волной, а не струйкой, и ставь свои пушки у пролома, чтобы контратака умерла на дороге",
+  "lesson_tr": "Bariyerler asker yer, toplar akış: duvarı damlayla değil dalgayla kır ve kendi toplarını gediğe kur ki karşı saldırı yolda ölsün",
+  "star3": 40000,
+  "star2": 80000,
+  "enemies": [
+    {"owner": "enemy1", "personality": "rusher", "aggression": 0.8},
+    {"owner": "enemy2", "personality": "opportunist", "aggression": 0.8},
+    {"owner": "enemy3", "personality": "turtle", "aggression": 0.8}
+  ],
+  "towers": [
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 18, "level": 1, "kind": "barracks"},
+    {"id": "guns", "x": 150, "y": 1100, "owner": "player", "units": 6, "level": 1, "kind": "artillery"},
+    {"id": "w", "x": 150, "y": 900, "owner": "neutral", "units": 6},
+    {"id": "mid", "x": 360, "y": 940, "owner": "neutral", "units": 8},
+    {"id": "ne", "x": 570, "y": 880, "owner": "neutral", "units": 6},
+    {"id": "nw", "x": 150, "y": 700, "owner": "neutral", "units": 8},
+    {"id": "n", "x": 360, "y": 720, "owner": "neutral", "units": 10, "kind": "artillery"},
+    {"id": "redguns", "x": 150, "y": 480, "owner": "enemy1", "units": 8, "level": 1, "kind": "artillery"},
+    {"id": "red", "x": 150, "y": 260, "owner": "enemy1", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "greenguns", "x": 570, "y": 640, "owner": "enemy2", "units": 8, "level": 1, "kind": "artillery"},
+    {"id": "green", "x": 570, "y": 420, "owner": "enemy2", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "yellow", "x": 360, "y": 460, "owner": "enemy3", "units": 14, "level": 1, "kind": "fortress"}
+  ],
+  "roads": [
+    {"a": "home", "b": "guns"},
+    {"a": "home", "b": "mid"},
+    {"a": "guns", "b": "w"},
+    {"a": "w", "b": "mid"},
+    {"a": "mid", "b": "ne"},
+    {"a": "w", "b": "nw"},
+    {"a": "mid", "b": "n"},
+    {"a": "nw", "b": "n"},
+    {"a": "ne", "b": "n"},
+    {"a": "nw", "b": "redguns", "barrier": 8},
+    {"a": "ne", "b": "greenguns", "barrier": 8},
+    {"a": "n", "b": "yellow", "barrier": 10},
+    {"a": "redguns", "b": "red"},
+    {"a": "redguns", "b": "yellow"},
+    {"a": "greenguns", "b": "green"},
+    {"a": "greenguns", "b": "yellow"},
+    {"a": "red", "b": "yellow"},
+    {"a": "green", "b": "yellow"}
+  ]
+}

@@ -9,7 +9,7 @@ export const MAP_W = 720;
 export const MAP_H = 1280;
 export const EDGE_MARGIN = 90;
 export const MIN_TOWER_DISTANCE = 150;
-export const MAX_LEVEL_ID = 40;
+export const MAX_LEVEL_ID = 50;
 
 /** Languages a level's `name` / `lesson` are translated into (I18N-2): `name_az`, `lesson_ru`, … */
 export const LEVEL_TEXT_LANGS = ['az', 'ru', 'tr'] as const;
@@ -35,7 +35,7 @@ export interface BandRules {
   bridges: boolean;
 }
 
-/** Progression bands from GDD §3, keyed by level id. */
+/** Progression bands from GDD §3, keyed by level id (1–8, 9–16, 17–24, 25–32, 33–40, 41–50). */
 export function bandFor(id: number): BandRules | undefined {
   if (id >= 1 && id <= 8) {
     return { name: '1-8', maxEnemies: 1, kinds: ['barracks'], mines: false, barriers: false, bridges: false };
@@ -63,8 +63,12 @@ export function bandFor(id: number): BandRules | undefined {
   if (id >= 25 && id <= 32) {
     return { name: '25-32', maxEnemies: 2, kinds: TOWER_KINDS, mines: true, barriers: true, bridges: true };
   }
-  if (id >= 33 && id <= MAX_LEVEL_ID) {
+  if (id >= 33 && id <= 40) {
     return { name: '33-40', maxEnemies: 3, kinds: TOWER_KINDS, mines: true, barriers: true, bridges: true };
+  }
+  if (id >= 41 && id <= MAX_LEVEL_ID) {
+    // Grand Campaign (LV-9): no new vocabulary, everything from the earlier bands mixed.
+    return { name: '41-50', maxEnemies: 3, kinds: TOWER_KINDS, mines: true, barriers: true, bridges: true };
   }
   return undefined;
 }

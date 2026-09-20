@@ -1,0 +1,51 @@
+{
+  "id": 48,
+  "name": "Kings' Council",
+  "name_az": "Krallar Şurası",
+  "name_ru": "Совет королей",
+  "name_tr": "Krallar Meclisi",
+  "lesson": "Your keep starts at level 2, but three kings on level-2 thrones start bigger than you: take the courts they quarrel over, grow your keep to level 3, and strike the king the other two have bled first",
+  "lesson_az": "Qəsrin 2-ci səviyyədə başlayır, amma 2-ci səviyyəli taxtdakı üç kral səndən böyük başlayır: dalaşdıqları həyətləri al, qəsrini 3-cü səviyyəyə böyüt və əvvəlcə o birilərinin qanatdığı kralı vur",
+  "lesson_ru": "Твоя цитадель начинает на уровне 2, но три короля на тронах уровня 2 начинают крупнее тебя: бери дворы, за которые они грызутся, расти цитадель до уровня 3 и бей первым того короля, которого двое других уже обескровили",
+  "lesson_tr": "Kalen 2. seviyede başlar ama 2. seviye tahtlardaki üç kral senden büyük başlar: kavga ettikleri avluları al, kaleni 3. seviyeye büyüt ve önce diğer ikisinin kanattığı kralı vur",
+  "star3": 30000,
+  "star2": 70000,
+  "enemies": [
+    {"owner": "enemy1", "personality": "rusher", "aggression": 0.8},
+    {"owner": "enemy2", "personality": "opportunist", "aggression": 0.8},
+    {"owner": "enemy3", "personality": "turtle", "aggression": 0.8}
+  ],
+  "towers": [
+    {"id": "home", "x": 360, "y": 1150, "owner": "player", "units": 40, "level": 2, "kind": "barracks"},
+    {"id": "w", "x": 150, "y": 1010, "owner": "neutral", "units": 5},
+    {"id": "e", "x": 570, "y": 1010, "owner": "neutral", "units": 5},
+    {"id": "court", "x": 360, "y": 930, "owner": "neutral", "units": 10, "kind": "fortress"},
+    {"id": "nw", "x": 150, "y": 800, "owner": "neutral", "units": 8},
+    {"id": "ne", "x": 570, "y": 800, "owner": "neutral", "units": 8},
+    {"id": "n", "x": 360, "y": 700, "owner": "neutral", "units": 10},
+    {"id": "redking", "x": 130, "y": 560, "owner": "enemy1", "units": 30, "level": 2, "kind": "barracks"},
+    {"id": "greenking", "x": 590, "y": 560, "owner": "enemy2", "units": 30, "level": 2, "kind": "barracks"},
+    {"id": "yellowking", "x": 360, "y": 440, "owner": "enemy3", "units": 30, "level": 2, "kind": "barracks"},
+    {"id": "crown", "x": 360, "y": 200, "owner": "neutral", "units": 12}
+  ],
+  "roads": [
+    {"a": "home", "b": "w"},
+    {"a": "home", "b": "e"},
+    {"a": "home", "b": "court"},
+    {"a": "w", "b": "court"},
+    {"a": "e", "b": "court"},
+    {"a": "w", "b": "nw"},
+    {"a": "e", "b": "ne"},
+    {"a": "court", "b": "n"},
+    {"a": "nw", "b": "n"},
+    {"a": "ne", "b": "n"},
+    {"a": "nw", "b": "redking"},
+    {"a": "ne", "b": "greenking"},
+    {"a": "n", "b": "yellowking"},
+    {"a": "redking", "b": "yellowking"},
+    {"a": "greenking", "b": "yellowking"},
+    {"a": "redking", "b": "crown"},
+    {"a": "greenking", "b": "crown"},
+    {"a": "yellowking", "b": "crown"}
+  ]
+}

@@ -198,10 +198,12 @@ describe('validator rules', () => {
 
   it('applies band rules by level id', () => {
     expect(bandFor(0)).toBeUndefined();
-    expect(bandFor(41)).toBeUndefined();
+    expect(bandFor(51)).toBeUndefined();
     expect(bandFor(8)?.maxEnemies).toBe(1);
     expect(bandFor(20)?.maxEnemies).toBe(2);
     expect(bandFor(40)?.maxEnemies).toBe(3);
+    expect(bandFor(41)?.name).toBe('41-50');
+    expect(bandFor(50)?.maxEnemies).toBe(3);
 
     const fortressEarly = makeLevel({
       id: 3,

@@ -34,7 +34,7 @@ the HUD level chip (206 px at 24 px bold — about 15 Latin / 15 Cyrillic charac
 (English fallback); the manifest carries the translated names, so run `npm run levels:manifest` after editing them.
 
 ## Naming & order
-`NNN-kebab-name.json`; `src/levels/manifest.ts` lists them in play order and is generated — after adding, renaming or re-clocking a level run `npm run levels:manifest` (`npm run levels:check` fails while it is stale). Bands (GDD §3): 1–8 barracks only, 1 enemy · 9–16 fortress/artillery · 17–24 two enemies, mines/barriers · 25–32 tank factory, bridges · 33–40 three enemies.
+`NNN-kebab-name.json`; `src/levels/manifest.ts` lists them in play order and is generated — after adding, renaming or re-clocking a level run `npm run levels:manifest` (`npm run levels:check` fails while it is stale). Bands (GDD §3): 1–8 barracks only, 1 enemy · 9–16 fortress/artillery · 17–24 two enemies, mines/barriers · 25–32 tank factory, bridges · 33–40 three enemies · 41–50 Grand Campaign (everything mixed, no new vocabulary).
 
 ## Gates before finishing
 1. `npm run levels:check` — schema, connectivity (graph connected), ids unique, features allowed in the band.

@@ -1,0 +1,51 @@
+{
+  "id": 45,
+  "name": "Three Fronts",
+  "name_az": "Üç Cəbhə",
+  "name_ru": "Три фронта",
+  "name_tr": "Üç Cephe",
+  "lesson": "Your keep starts at level 2. Three fronts, one army: wall off two of them with the fortress and the guns, and attack on the third, where the weakest king stands",
+  "lesson_az": "Qəsrin 2-ci səviyyədə başlayır. Üç cəbhə, bir ordu: ikisini qala və toplarla bağla, üçüncüdə isə ən zəif kralın durduğu yerdə hücum et",
+  "lesson_ru": "Твоя цитадель начинает на уровне 2. Три фронта, одна армия: два из них закрой крепостью и пушками, а бей на третьем, где стоит слабейший король",
+  "lesson_tr": "Kalen 2. seviyede başlar. Üç cephe, tek ordu: ikisini kale ve toplarla kapat, üçüncüde ise en zayıf kralın durduğu yerde saldır",
+  "star3": 35000,
+  "star2": 70000,
+  "enemies": [
+    {"owner": "enemy1", "personality": "rusher", "aggression": 0.75},
+    {"owner": "enemy2", "personality": "turtle", "aggression": 0.75},
+    {"owner": "enemy3", "personality": "opportunist", "aggression": 0.75}
+  ],
+  "towers": [
+    {"id": "home", "x": 360, "y": 1120, "owner": "player", "units": 30, "level": 2, "kind": "barracks"},
+    {"id": "w", "x": 180, "y": 1000, "owner": "neutral", "units": 5},
+    {"id": "e", "x": 540, "y": 1000, "owner": "neutral", "units": 5},
+    {"id": "wall", "x": 360, "y": 900, "owner": "neutral", "units": 8, "kind": "fortress"},
+    {"id": "red", "x": 110, "y": 820, "owner": "enemy1", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "green", "x": 610, "y": 820, "owner": "enemy2", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "nw", "x": 200, "y": 660, "owner": "neutral", "units": 8},
+    {"id": "ne", "x": 520, "y": 660, "owner": "neutral", "units": 8},
+    {"id": "guns", "x": 360, "y": 700, "owner": "neutral", "units": 6, "kind": "artillery"},
+    {"id": "yellow", "x": 360, "y": 460, "owner": "enemy3", "units": 14, "level": 1, "kind": "barracks"},
+    {"id": "crown", "x": 360, "y": 220, "owner": "neutral", "units": 12}
+  ],
+  "roads": [
+    {"a": "home", "b": "w"},
+    {"a": "home", "b": "e"},
+    {"a": "home", "b": "wall"},
+    {"a": "w", "b": "wall"},
+    {"a": "e", "b": "wall"},
+    {"a": "w", "b": "red"},
+    {"a": "red", "b": "nw"},
+    {"a": "e", "b": "green"},
+    {"a": "green", "b": "ne"},
+    {"a": "wall", "b": "guns"},
+    {"a": "nw", "b": "guns"},
+    {"a": "ne", "b": "guns"},
+    {"a": "guns", "b": "yellow", "barrier": 6},
+    {"a": "nw", "b": "yellow"},
+    {"a": "ne", "b": "yellow"},
+    {"a": "yellow", "b": "crown"},
+    {"a": "nw", "b": "crown"},
+    {"a": "ne", "b": "crown"}
+  ]
+}

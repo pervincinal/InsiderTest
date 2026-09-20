@@ -1,0 +1,53 @@
+{
+  "id": 42,
+  "name": "Siege Engine",
+  "name_az": "Mühasirə Maşını",
+  "name_ru": "Осадная машина",
+  "name_tr": "Kuşatma Aracı",
+  "lesson": "Enemy guns eat a thin stream one man at a time: take a gun post with one full wave from next door, then turn its fire on the keeps behind it",
+  "lesson_az": "Düşmən topları nazik axını bir-bir yeyir: top postunu qonşu qüllədən bir dolu dalğa ilə al, sonra onun atəşini arxadakı qəsrlərə çevir",
+  "lesson_ru": "Вражеские пушки съедают тонкий поток по одному: бери орудийный пост одной полной волной от соседа, а потом направь его огонь на замки позади",
+  "lesson_tr": "Düşman topları ince akışı tek tek yer: top mevzisini yandaki kuleden tek bir dolu dalgayla al, sonra ateşini arkadaki kalelere çevir",
+  "star3": 30000,
+  "star2": 60000,
+  "enemies": [
+    {"owner": "enemy1", "personality": "rusher", "aggression": 0.65},
+    {"owner": "enemy2", "personality": "rusher", "aggression": 0.65},
+    {"owner": "enemy3", "personality": "turtle", "aggression": 0.65}
+  ],
+  "towers": [
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 20, "level": 1, "kind": "barracks"},
+    {"id": "w", "x": 150, "y": 1030, "owner": "neutral", "units": 5},
+    {"id": "e", "x": 570, "y": 1030, "owner": "neutral", "units": 5},
+    {"id": "fort", "x": 360, "y": 930, "owner": "neutral", "units": 8, "kind": "fortress"},
+    {"id": "nw", "x": 150, "y": 830, "owner": "neutral", "units": 12},
+    {"id": "ne", "x": 570, "y": 830, "owner": "neutral", "units": 12},
+    {"id": "gunw", "x": 200, "y": 640, "owner": "enemy1", "units": 8, "level": 1, "kind": "artillery"},
+    {"id": "gune", "x": 520, "y": 640, "owner": "enemy2", "units": 8, "level": 1, "kind": "artillery"},
+    {"id": "engine", "x": 360, "y": 540, "owner": "enemy3", "units": 12, "level": 1, "kind": "artillery"},
+    {"id": "red", "x": 150, "y": 400, "owner": "enemy1", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "green", "x": 570, "y": 400, "owner": "enemy2", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "crown", "x": 360, "y": 240, "owner": "neutral", "units": 14, "kind": "fortress"}
+  ],
+  "roads": [
+    {"a": "home", "b": "w"},
+    {"a": "home", "b": "e"},
+    {"a": "home", "b": "fort"},
+    {"a": "w", "b": "fort"},
+    {"a": "e", "b": "fort"},
+    {"a": "w", "b": "nw"},
+    {"a": "e", "b": "ne"},
+    {"a": "fort", "b": "nw"},
+    {"a": "fort", "b": "ne"},
+    {"a": "nw", "b": "gunw", "mine": 4},
+    {"a": "ne", "b": "gune", "mine": 4},
+    {"a": "fort", "b": "engine", "mine": 5},
+    {"a": "gunw", "b": "engine"},
+    {"a": "gune", "b": "engine"},
+    {"a": "gunw", "b": "red"},
+    {"a": "gune", "b": "green"},
+    {"a": "engine", "b": "crown"},
+    {"a": "red", "b": "crown"},
+    {"a": "green", "b": "crown"}
+  ]
+}
