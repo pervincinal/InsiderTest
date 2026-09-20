@@ -28,9 +28,10 @@ import type { FakeStoreOptions } from './economy/providers/fakeStore';
 import { configureFakeStore } from './economy/providers/fakeStore';
 import { grantProduct } from './economy/wallet';
 import type { GrantResult } from './economy/wallet';
-import type { DailyChallenge } from './daily/challenge';
-import { challengeFor, dayKeyOf } from './daily/challenge';
+import type { DailyChallenge, WeeklyChallenge } from './daily/challenge';
+import { challengeFor, dayKeyOf, weekKeyOf, weeklyFor } from './daily/challenge';
 import { challengeDone, challengeUnlocked, shownStreak } from './ui/daily';
+import { shownWeekStreak, weeklyDone, weeklyTargetDone, weeklyUnlocked } from './ui/weekly';
 
 /**
  * The level map, shop, achievements and settings screens (and the menu drawing they need) are a
@@ -88,6 +89,17 @@ export interface TowerClashDebug {
     /** Start the challenge for `dayKey` (default: today / the override); resolves like `loadLevel`. */
     start(dayKey?: string): Promise<boolean>;
   };
+  /** Override "this week" (a Monday UTC `YYYY-MM-DD`; any day is mapped to its Monday) for the Weekly Challenge; null returns to the real clock. */
+  setWeekKey(key: string | null): void;
+  /** Weekly Challenge (GDD §8) test surface. */
+  weekly: {
+    /** The weekly for `weekKey` (default: this week / the override) and the save's progress on it. */
+    get(weekKey?: string): WeeklyDebugInfo;
+    /** Start the weekly for `weekKey` (default: this week / the override); resolves like `loadLevel`. */
+    start(weekKey?: string): Promise<boolean>;
+    /** The level-map card's active tab, or null when the map is not open. */
+    tab(): 'daily' | 'weekly' | null;
+  };
   /** Economy test surface (Phase A): the live save, direct grants, fake ads, fake-store knobs. */
   economy: {
     getSave(): SaveData;
@@ -124,6 +136,17 @@ export interface DailyDebugInfo {
   streak: number;
   lastWinDay: string | null;
   best: { stars: number; timeMs: number } | null;
+}
+
+export interface WeeklyDebugInfo {
+  challenge: WeeklyChallenge;
+  unlocked: boolean;
+  done: boolean;
+  /** The 3★ target crystals of this week are paid. */
+  target: boolean;
+  streak: number;
+  lastWinWeek: string | null;
+  best: { stars: number; timeMs: number; target: boolean } | null;
 }
 
 declare global {
@@ -182,6 +205,8 @@ class TowerClashApp implements App {
   nativeInfo?: NativeInfoOverride;
   /** Debug override of the Daily Challenge day (e2e determinism). */
   private dayKeyOverride: string | null = null;
+  /** Debug override of the Weekly Challenge week (a Monday key). */
+  private weekKeyOverride: string | null = null;
 
   constructor(canvas: HTMLCanvasElement, save: SaveData) {
     this.view = createView(canvas);
@@ -399,6 +424,17 @@ class TowerClashApp implements App {
     return this.startLevel(challenge.levelId, challenge.seed, { challenge });
   }
 
+  /** This week's Monday UTC key (the UI's only clock read for the weekly), or the debug override. */
+  weekKey(): string {
+    return this.weekKeyOverride ?? weekKeyOf(new Date());
+  }
+
+  /** Start the Weekly Challenge of `weekKey` (default: this week) with its fixed seed and twist. */
+  startWeekly(weekKey = this.weekKey()): Promise<boolean> {
+    const weekly = weeklyFor(weekKey);
+    return this.startLevel(weekly.levelId, weekly.seed, { weekly });
+  }
+
   /**
    * Start a level: at once when its chunk is in (the usual case — the current level is preloaded
    * after the first frame and the next one when a level starts), otherwise through the spinner.
@@ -530,6 +566,21 @@ class TowerClashApp implements App {
           return { challenge, unlocked: challengeUnlocked(this.save), done: challengeDone(this.save, dayKey), streak: shownStreak(this.save, dayKey), lastWinDay: c.lastWinDay, best: c.best[dayKey] ?? null };
         },
         start: (dayKey) => this.startChallenge(dayKey),
+      },
+      setWeekKey: (key) => {
+        this.weekKeyOverride = key === null ? null : weekKeyOf(new Date(`${key}T12:00:00Z`));
+      },
+      weekly: {
+        get: (weekKey = this.weekKey()) => {
+          const challenge = weeklyFor(weekKey);
+          const w = this.save.weekly;
+          return { challenge, unlocked: weeklyUnlocked(this.save), done: weeklyDone(this.save, weekKey), target: weeklyTargetDone(this.save, weekKey), streak: shownWeekStreak(this.save, weekKey), lastWinWeek: w.lastWinWeek, best: w.best[weekKey] ?? null };
+        },
+        start: (weekKey) => this.startWeekly(weekKey),
+        tab: () => {
+          const L = this.lazy;
+          return L && this.current instanceof L.LevelSelectScreen ? this.current.getCardTab() : null;
+        },
       },
       economy: {
         getSave: () => this.save,

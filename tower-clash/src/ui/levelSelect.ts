@@ -10,21 +10,28 @@ import type { View } from '../render/view';
 import { LEVEL_MAP, levelMapMaxScroll, levelNodeCentre, levelNodeRect } from '../render/layout';
 import type { Rect } from '../render/widgets';
 import { formatTime, inRect } from '../render/widgets';
-import type { DailyCardOpts } from '../render/menusLevels';
+import type { DailyCardOpts, WeeklyCardOpts } from '../render/menusLevels';
 import { drawLevelSelect } from '../render/menusLevels';
 import type { PointerPoint } from '../input/pointer';
 import { currentLevelIndex, isLevelUnlocked } from './save';
 import type { App, Screen } from './screens';
 import { Toast } from './screens';
 import { commanderSummary } from './upgrades';
-import type { DailyChallenge } from '../daily/challenge';
-import { REWARD, STREAK_MILESTONES, UNLOCK_AFTER_LEVEL, challengeFor, goldReward } from '../daily/challenge';
+import type { DailyChallenge, WeeklyChallenge } from '../daily/challenge';
+import { REWARD, STREAK_MILESTONES, UNLOCK_AFTER_LEVEL, WEEKLY_REWARD, WEEKLY_UNLOCK_AFTER_LEVEL, challengeFor, goldReward, weeklyFor } from '../daily/challenge';
 import { challengeDone, challengeUnlocked, msToUtcMidnight, shownStreak } from './daily';
+import { msToNextMonday, shownWeekStreak, weeklyDone, weeklyTargetDone, weeklyUnlocked } from './weekly';
 import type { SaveData } from './save';
 
 /* ---------- Level select: winding path map ---------- */
 
 const BACK = LEVEL_MAP.back;
+const HOUR_MS = 3_600_000;
+const DAY_MS = 24 * HOUR_MS;
+
+export type CardTab = 'daily' | 'weekly';
+/** The challenge card's tab (GDD §8.2): remembered for the session only, never saved. */
+let cardTab: CardTab = 'daily';
 
 /**
  * The next streak milestone (`[day, crystals]`, ECONOMY.md §6.2) above the shown streak, or null past
@@ -49,6 +56,8 @@ export class LevelSelectScreen implements Screen {
   private nowMs = 0;
   /** Today's challenge, recomputed only when the day key changes (midnight, debug override). */
   private challenge: DailyChallenge | null = null;
+  /** This week's challenge, recomputed only when the week key changes (Monday 00:00 UTC, debug override). */
+  private weekly: WeeklyChallenge | null = null;
 
   constructor(private readonly app: App) {
     this.current = currentLevelIndex(app.save, LEVEL_META);
@@ -75,13 +84,25 @@ export class LevelSelectScreen implements Screen {
     return this.challenge;
   }
 
-  /** Card state; the only clock read of this screen (once per frame, for the countdown). */
+  /** The weekly for the app's current week key. */
+  private thisWeeks(): WeeklyChallenge {
+    const weekKey = this.app.weekKey();
+    if (!this.weekly || this.weekly.weekKey !== weekKey) this.weekly = weeklyFor(weekKey);
+    return this.weekly;
+  }
+
+  getCardTab(): CardTab {
+    return cardTab;
+  }
+
+  /** Card state; the only clock read of this screen (once per frame, for the countdowns). */
   private dailyCard(): DailyCardOpts {
     const ch = this.todaysChallenge();
     const save = this.app.save;
     const meta = getLevelMeta(ch.levelId);
-    const remaining = msToUtcMidnight(Date.now());
-    const countdown = remaining >= 3_600_000 ? t('daily.newIn', { h: Math.ceil(remaining / 3_600_000) }) : t('daily.newInTime', { time: formatTime(remaining) });
+    const now = Date.now();
+    const remaining = msToUtcMidnight(now);
+    const countdown = remaining >= HOUR_MS ? t('daily.newIn', { h: Math.ceil(remaining / HOUR_MS) }) : t('daily.newInTime', { time: formatTime(remaining) });
     return {
       unlocked: challengeUnlocked(save),
       unlockLevel: UNLOCK_AFTER_LEVEL,
@@ -94,11 +115,51 @@ export class LevelSelectScreen implements Screen {
       done: challengeDone(save, ch.dayKey),
       best: save.challenge.best[ch.dayKey] ?? null,
       countdown,
+      tab: cardTab,
+      weekly: this.weeklyCard(now),
     };
   }
 
-  /** Tap on the daily card: start today's challenge, or explain the lock. */
+  /** The weekly face of the card (GDD §8.2): countdown to Monday 00:00 UTC in days, hours, then MM:SS. */
+  private weeklyCard(now: number): WeeklyCardOpts {
+    const w = this.thisWeeks();
+    const save = this.app.save;
+    const meta = getLevelMeta(w.levelId);
+    const remaining = msToNextMonday(now);
+    const days = Math.floor(remaining / DAY_MS);
+    const countdown =
+      days >= 1
+        ? t('weekly.newInDays', { d: days, h: Math.floor((remaining % DAY_MS) / HOUR_MS) })
+        : remaining >= HOUR_MS
+          ? t('weekly.newIn', { h: Math.ceil(remaining / HOUR_MS) })
+          : t('daily.newInTime', { time: formatTime(remaining) });
+    return {
+      unlocked: weeklyUnlocked(save),
+      unlockLevel: WEEKLY_UNLOCK_AFTER_LEVEL,
+      levelName: meta ? levelName(meta) : String(w.levelId),
+      twist: t(`daily.twist.${w.twist.id}`),
+      gold: WEEKLY_REWARD.gold,
+      crystals: WEEKLY_REWARD.crystals,
+      streak: shownWeekStreak(save, w.weekKey),
+      done: weeklyDone(save, w.weekKey),
+      target: weeklyTargetDone(save, w.weekKey),
+      targetMs: w.targetMs,
+      best: save.weekly.best[w.weekKey] ?? null,
+      countdown,
+    };
+  }
+
+  /** Tap on the challenge card: start today's / this week's challenge, or explain the lock. */
   private tapDaily(): void {
+    if (cardTab === 'weekly') {
+      const w = this.thisWeeks();
+      if (!weeklyUnlocked(this.app.save)) {
+        this.toast.show(t('weekly.locked', { n: WEEKLY_UNLOCK_AFTER_LEVEL }), 'error', this.nowMs);
+        return;
+      }
+      void this.app.startLevel(w.levelId, w.seed, { weekly: w });
+      return;
+    }
     const ch = this.todaysChallenge();
     if (!challengeUnlocked(this.app.save)) {
       this.toast.show(t('daily.locked', { n: UNLOCK_AFTER_LEVEL }), 'error', this.nowMs);
@@ -136,7 +197,7 @@ export class LevelSelectScreen implements Screen {
     this.downY = p.y;
     this.scrollAtDown = this.scroll;
     this.dragging = false;
-    this.pressed = [BACK, LEVEL_MAP.wallet, LEVEL_MAP.commander, LEVEL_MAP.daily].find((r) => inRect(r, p.x, p.y)) ?? null;
+    this.pressed = [BACK, LEVEL_MAP.wallet, LEVEL_MAP.commander, LEVEL_MAP.dailyTabDaily, LEVEL_MAP.dailyTabWeekly, LEVEL_MAP.daily].find((r) => inRect(r, p.x, p.y)) ?? null;
   }
 
   move(p: PointerPoint): void {
@@ -164,6 +225,10 @@ export class LevelSelectScreen implements Screen {
     }
     if (inRect(LEVEL_MAP.commander, p.x, p.y)) {
       this.app.goShop('upgrades', () => this.app.goLevels());
+      return;
+    }
+    if (inRect(LEVEL_MAP.dailyTabDaily, p.x, p.y) || inRect(LEVEL_MAP.dailyTabWeekly, p.x, p.y)) {
+      cardTab = inRect(LEVEL_MAP.dailyTabWeekly, p.x, p.y) ? 'weekly' : 'daily';
       return;
     }
     if (inRect(LEVEL_MAP.daily, p.x, p.y)) {

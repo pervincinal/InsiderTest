@@ -11,7 +11,7 @@
  * to day 3 / 7 / 30. A broken streak forgets the paid milestones, so a rebuilt run earns them again.
  */
 import type { LevelDef } from '../sim/types';
-import type { DailyChallenge } from '../daily/challenge';
+import type { DailyChallenge, WeeklyChallenge } from '../daily/challenge';
 import { REWARD, STREAK_MILESTONES, UNLOCK_AFTER_LEVEL, goldReward } from '../daily/challenge';
 import { earnCrystals, earnGold } from '../economy/wallet';
 import type { ChallengeBest, SaveData } from './save';
@@ -22,14 +22,19 @@ import { t } from './i18n';
 /**
  * RETRY (result screen) / restart (pause menu): the same level and seed again. A Daily Challenge
  * whose UTC day has passed is not replayed (its win would book against yesterday, BUG-9): the
- * level map opens with a notice and the player starts today's from the card.
+ * level map opens with a notice and the player starts today's from the card. A Weekly Challenge
+ * (GDD §8) does the same after the Monday 00:00 UTC rollover.
  */
-export function restartLevel(app: App, levelId: number, challenge: DailyChallenge | null | undefined): void {
+export function restartLevel(app: App, levelId: number, challenge: DailyChallenge | null | undefined, weekly?: WeeklyChallenge | null): void {
   if (challenge && challenge.dayKey !== app.dayKey()) {
     app.goLevels(t('daily.newReady'));
     return;
   }
-  void app.startLevel(levelId, challenge?.seed, challenge ? { challenge } : undefined);
+  if (weekly && weekly.weekKey !== app.weekKey()) {
+    app.goLevels(t('weekly.newReady'));
+    return;
+  }
+  void app.startLevel(levelId, challenge?.seed ?? weekly?.seed, challenge ? { challenge } : weekly ? { weekly } : undefined);
 }
 
 /** Streak shown on the card / result is capped here (the save keeps the real count). */

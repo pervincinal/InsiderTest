@@ -126,6 +126,9 @@ export const LEVEL_MAP = Object.freeze({
   commander: { x: 60, y: 1206, w: 600, h: 54 } as Rect,
   /** Daily Challenge card (GDD §7): sticky under the header, over the scrolling map (tap → start). */
   daily: { x: 30, y: 112, w: 660, h: 104 } as Rect,
+  /** DAILY / WEEKLY tabs in the card's title row (GDD §8.2): 44 px tap targets over a 36 px segmented pill. */
+  dailyTabDaily: { x: 126, y: 118, w: 118, h: 44 } as Rect,
+  dailyTabWeekly: { x: 244, y: 118, w: 118, h: 44 } as Rect,
   /** Node radius (hit rect is the 2r square). */
   nodeR: 46,
   /** Content-space y of the first node and the vertical step between nodes. */

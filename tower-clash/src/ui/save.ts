@@ -74,6 +74,23 @@ export interface ChallengeBest {
 /** How many day keys `challenge.best` keeps (the most recent ones). */
 export const CHALLENGE_BEST_KEEP = 30;
 
+/**
+ * Weekly Challenge progress (GDD §8): the last week (Monday UTC key) won, the consecutive-week
+ * streak and the best result per week key (the newest `WEEKLY_BEST_KEEP` weeks, src/daily/challenge.ts).
+ */
+export interface WeeklyState {
+  /** Monday UTC day key (`YYYY-MM-DD`) of the last weekly win, or null. */
+  lastWinWeek: string | null;
+  /** Consecutive weeks with a win (0 before the first). */
+  streak: number;
+  /** Best result per week key: most stars, then the fastest clock; `target` = the 3★ crystals were paid. */
+  best: Record<string, WeeklyBest>;
+}
+
+export interface WeeklyBest extends ChallengeBest {
+  target: boolean;
+}
+
 export interface AdCounters {
   /** Calendar day the rewarded counters belong to; a new day resets them. */
   day: string;
@@ -106,6 +123,8 @@ export interface SaveData {
   daily: DailyState;
   /** Daily Challenge progress (GDD §7). Added without a schema bump: missing = never played. */
   challenge: ChallengeState;
+  /** Weekly Challenge progress (GDD §8). Added without a schema bump: missing = never played. */
+  weekly: WeeklyState;
   adCounters: AdCounters;
   /** Store transaction ids (and `owned:<productId>` markers) already granted — never grant twice. */
   purchases: string[];
@@ -134,6 +153,7 @@ export function defaultSave(): SaveData {
     charges: { overdrive: 0, freeze: 0, airstrike: 0 },
     daily: { lastClaimDay: null, streak: 0 },
     challenge: { lastWinDay: null, streak: 0, best: {}, milestones: [] },
+    weekly: { lastWinWeek: null, streak: 0, best: {} },
     adCounters: { day: '', rewardedByPlacement: {}, levelsCompleted: 0 },
     purchases: [],
     milestones: [],
@@ -176,6 +196,12 @@ function dayString(v: unknown): string {
   return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : '';
 }
 
+/** A well-formed day key that is a Monday (UTC) — the only keys `weekly` may carry. */
+function mondayString(v: unknown): string {
+  const day = dayString(v);
+  return day && new Date(`${day}T00:00:00Z`).getUTCDay() === 1 ? day : '';
+}
+
 /** Well-formed `challenge.best` entries only (valid day key, stars 0..3, finite time), pruned to the newest keys. */
 function challengeBestMap(v: unknown): Record<string, ChallengeBest> {
   const out: Record<string, ChallengeBest> = {};
@@ -190,11 +216,28 @@ function challengeBestMap(v: unknown): Record<string, ChallengeBest> {
   return pruneChallengeBest(out);
 }
 
-/** Keep only the `CHALLENGE_BEST_KEEP` most recent day keys (keys sort chronologically as strings). */
-export function pruneChallengeBest(best: Record<string, ChallengeBest>, keep = CHALLENGE_BEST_KEEP): Record<string, ChallengeBest> {
+/** `weekly.best`: Monday keys only, `target` a strict boolean, the newest `WEEKLY_BEST_KEEP` (12) kept. */
+function weeklyBestMap(v: unknown): Record<string, WeeklyBest> {
+  const out: Record<string, WeeklyBest> = {};
+  if (!isRecord(v)) return out;
+  for (const [k, raw] of Object.entries(v)) {
+    if (!mondayString(k) || !isRecord(raw)) continue;
+    const stars = nonNegInt(raw.stars);
+    const timeMs = nonNegInt(raw.timeMs);
+    if (stars === null || timeMs === null) continue;
+    out[k] = { stars: Math.min(3, stars), timeMs, target: raw.target === true };
+  }
+  return pruneChallengeBest(out, WEEKLY_BEST_KEEP_KEYS);
+}
+
+/** `WEEKLY_BEST_KEEP` (src/daily/challenge.ts) restated here so the save layer imports nothing above it. */
+const WEEKLY_BEST_KEEP_KEYS = 12;
+
+/** Keep only the `keep` most recent day keys (keys sort chronologically as strings); default `CHALLENGE_BEST_KEEP`. */
+export function pruneChallengeBest<T>(best: Record<string, T>, keep = CHALLENGE_BEST_KEEP): Record<string, T> {
   const keys = Object.keys(best).sort();
   if (keys.length <= keep) return best;
-  const out: Record<string, ChallengeBest> = {};
+  const out: Record<string, T> = {};
   for (const k of keys.slice(keys.length - keep)) out[k] = best[k]!;
   return out;
 }
@@ -238,6 +281,10 @@ export function normalizeSave(raw: unknown): SaveData {
     const c = raw.challenge;
     const day = dayString(c.lastWinDay);
     out.challenge = { lastWinDay: day || null, streak: nonNegInt(c.streak) ?? 0, best: challengeBestMap(c.best), milestones: intList(c.milestones) };
+  }
+  if (isRecord(raw.weekly)) {
+    const w = raw.weekly;
+    out.weekly = { lastWinWeek: mondayString(w.lastWinWeek) || null, streak: nonNegInt(w.streak) ?? 0, best: weeklyBestMap(w.best) };
   }
   if (isRecord(raw.adCounters)) {
     const a = raw.adCounters;

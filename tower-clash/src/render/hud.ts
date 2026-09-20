@@ -74,8 +74,8 @@ export interface HudExtras {
   /** Result-card rect currently held down. */
   pressed?: Rect | null;
   toast?: ToastOpts | null;
-  /** Daily Challenge match (GDD §7): the level chip reads "Daily · name" over the twist's name. */
-  challenge?: { twist: string };
+  /** Daily / Weekly Challenge match (GDD §7, §8): the level chip reads "Daily · name" / "Weekly · name" over the twist's name. */
+  challenge?: { twist: string; weekly?: boolean };
 }
 
 export interface ResultExtras {
@@ -102,6 +102,13 @@ export interface ResultExtras {
     firstWin: boolean;
     gold: number;
     crystals: number;
+    streak: number;
+    best: { stars: number; timeMs: number } | null;
+  };
+  /** Weekly Challenge result (GDD §8): the gold line (first win of the week) or the week's best. */
+  weekly?: {
+    firstWin: boolean;
+    gold: number;
     streak: number;
     best: { stars: number; timeMs: number } | null;
   };
@@ -351,7 +358,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, state: GameState, _view: 
   ctx.font = font(14, '500');
   ctx.fillText(hud?.challenge ? hud.challenge.twist : t('hud.level', { n: ui.level.id }), chip.x + 24, chip.y + 19, chip.w - 44);
   ctx.fillStyle = pal.ink;
-  const chipTitle = hud?.challenge ? t('daily.chip', { name: levelName(ui.level) }) : levelName(ui.level);
+  const chipTitle = hud?.challenge ? t(hud.challenge.weekly ? 'weekly.chip' : 'daily.chip', { name: levelName(ui.level) }) : levelName(ui.level);
   ctx.font = font(fitFontPx(ctx, chipTitle, 24, chip.w - 44));
   ctx.fillText(chipTitle, chip.x + 24, chip.y + 41, chip.w - 44);
 
@@ -590,11 +597,16 @@ function drawResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: Pla
     ctx.fillStyle = pal.textDim;
     ctx.font = font(18, '500');
     const daily = ex?.daily;
+    const weekly = ex?.weekly;
     const note = daily
       ? daily.firstWin
         ? t('daily.resultWon', { gold: daily.gold, crystals: daily.crystals, streak: daily.streak })
         : t('daily.resultBest', { stars: daily.best?.stars ?? ui.stars, time: formatTime(daily.best?.timeMs ?? clockOf(ui, state)) })
-      : ex?.notes.length
+      : weekly
+        ? weekly.firstWin
+          ? t('weekly.resultWon', { gold: weekly.gold, streak: weekly.streak })
+          : t('weekly.resultBest', { stars: weekly.best?.stars ?? ui.stars, time: formatTime(weekly.best?.timeMs ?? clockOf(ui, state)) })
+        : ex?.notes.length
         ? ex.notes.join(' · ')
         : ex?.replayCapped
           ? t('result.replayCapped')

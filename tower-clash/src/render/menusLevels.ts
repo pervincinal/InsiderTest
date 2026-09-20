@@ -26,27 +26,42 @@ export interface LevelNode {
   unlocked: boolean;
 }
 
-/** Daily Challenge card (GDD §7), sticky under the header. */
-export interface DailyCardOpts {
+/** What the daily and the weekly faces of the challenge card share. */
+export interface ChallengeCardFace {
   unlocked: boolean;
   /** Level whose first star opens the challenge (shown while locked). */
   unlockLevel: number;
   levelName: string;
   /** Translated twist name. */
   twist: string;
-  /** First-win reward: gold at 3★ and the crystals. */
+  /** First-win reward: gold (at 3★ for the daily) and the crystals. */
   gold: number;
   crystals: number;
-  /** Consecutive days won (0 = none / broken). */
+  /** Consecutive days / weeks won (0 = none / broken). */
   streak: number;
+  /** Won today / this week. */
+  done: boolean;
+  /** Best result today / this week, when won. */
+  best: { stars: number; timeMs: number } | null;
+  /** Time to the next challenge, naming the reset ("New in 12:34 (00:00 UTC)" / "New in 3d 4h (Mon 00:00 UTC)"). */
+  countdown: string;
+}
+
+/** Daily Challenge card (GDD §7), sticky under the header; carries the weekly face (GDD §8) behind its second tab. */
+export interface DailyCardOpts extends ChallengeCardFace {
   /** Next streak milestone `[day, crystals]` (ECONOMY.md §6.2), or null past the last one. */
   nextBonus: readonly [number, number] | null;
-  /** Won today. */
-  done: boolean;
-  /** Best result today, when won. */
-  best: { stars: number; timeMs: number } | null;
-  /** Time to the next challenge, naming the reset ("New in 12:34 (00:00 UTC)" / "New in 5h (00:00 UTC)"). */
-  countdown: string;
+  /** Which face is showing (the tab is remembered per session by the screen). */
+  tab: 'daily' | 'weekly';
+  weekly: WeeklyCardOpts;
+}
+
+/** Weekly Challenge face (GDD §8.2). */
+export interface WeeklyCardOpts extends ChallengeCardFace {
+  /** The 3★ target crystals of this week are paid (★ pip on the DONE badge, plain "Best" line). */
+  target: boolean;
+  /** The level's 3★ clock, ms. */
+  targetMs: number;
 }
 
 export interface LevelSelectOpts {
@@ -71,15 +86,41 @@ export interface LevelSelectOpts {
 /** Width of the countdown pill (the DONE badge and the streak pill keep the 176 px right column). */
 const COUNTDOWN_W = 250;
 
+/** DAILY / WEEKLY segmented control in the card's title row (hit rects: `LEVEL_MAP.dailyTabDaily` / `dailyTabWeekly`). */
+function drawCardTabs(ctx: CanvasRenderingContext2D, pal: Palette, active: 'daily' | 'weekly', dim: boolean, pressed: Rect | null): void {
+  const tabs: readonly ['daily' | 'weekly', Rect][] = [
+    ['daily', LEVEL_MAP.dailyTabDaily],
+    ['weekly', LEVEL_MAP.dailyTabWeekly],
+  ];
+  const frame: Rect = { x: LEVEL_MAP.dailyTabDaily.x, y: LEVEL_MAP.dailyTabDaily.y + 4, w: LEVEL_MAP.dailyTabDaily.w + LEVEL_MAP.dailyTabWeekly.w, h: 36 };
+  drawPill(ctx, frame, shade(pal.paper, -0.08), undefined, 2);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (const [id, hit] of tabs) {
+    const on = id === active;
+    const seg: Rect = { x: hit.x + 3, y: frame.y + 3, w: hit.w - 6, h: frame.h - 6 };
+    if (on) drawPill(ctx, seg, pressed === hit ? shade(pal.owners.player, -0.15) : pal.owners.player, shade(pal.owners.player, -0.35), 2);
+    const label = t(id === 'daily' ? 'daily.title' : 'weekly.title');
+    ctx.fillStyle = on ? pal.paper : dim ? pal.textDim : pal.ink;
+    ctx.font = font(fitFontPx(ctx, label, 17, seg.w - 14));
+    ctx.fillText(label, seg.x + seg.w / 2, seg.y + seg.h / 2 + 1, seg.w - 14);
+  }
+  ctx.textAlign = 'left';
+}
+
 /**
- * Daily Challenge card: clay card with a gold star badge (grey lock while locked), the title with a
- * countdown / DONE pill at the right, the level · twist line and the reward (or today's best) with
- * the streak pill. Sticky: drawn in screen space over the scrolling map.
+ * Challenge card: clay card with a gold star badge (grey lock while locked), the DAILY / WEEKLY tabs
+ * with a countdown / DONE pill at the right, the level · twist line and the reward (or the best) with
+ * the streak pill. Sticky: drawn in screen space over the scrolling map. The weekly face (GDD §8.2)
+ * shows "+100 gold · +20 crystals at 3★", the 3★ target beside the best until it is reached, and a
+ * ★ pip on the DONE badge once the target crystals are paid.
  */
-function drawDailyCard(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, d: DailyCardOpts, pressed: boolean): void {
+function drawDailyCard(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, o: DailyCardOpts, pressed: Rect | null): void {
   ctx.save();
-  if (pressed) ctx.translate(0, 2);
+  if (pressed === r) ctx.translate(0, 2);
   drawCard(ctx, pal, r, { radius: 22, edge: 5 });
+  const weekly = o.tab === 'weekly';
+  const d: ChallengeCardFace = weekly ? o.weekly : o;
   // badge
   const bx = r.x + 48;
   const by = r.y + (r.h - 5) / 2;
@@ -103,55 +144,60 @@ function drawDailyCard(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, d: 
   const textW = r.w - (left - r.x) - rightW - 24;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  // title + the right-hand pill (DONE / countdown)
-  const title = t('daily.title');
-  const titleW = d.unlocked && !d.done ? r.w - (left - r.x) - COUNTDOWN_W - 24 : textW;
-  ctx.fillStyle = d.unlocked ? pal.ink : pal.textDim;
-  ctx.font = font(fitFontPx(ctx, title, 21, titleW));
-  ctx.fillText(title, left, r.y + 26, titleW);
+  // title row: the DAILY / WEEKLY tabs + the right-hand pill (DONE / countdown)
+  drawCardTabs(ctx, pal, o.tab, !d.unlocked, pressed);
   const pill: Rect = { x: r.x + r.w - rightW - 14, y: r.y + 12, w: rightW, h: 32 };
   if (d.unlocked) {
     const done = d.done;
     // The countdown names the reset ("New in 12:34 (00:00 UTC)", GDD §7.4), so its pill is wider
-    // than the DONE badge / streak column; the title still has ≥ 290 px beside it.
+    // than the DONE badge / streak column; the tabs still have ≥ 290 px beside it.
     const cd: Rect = done ? pill : { x: r.x + r.w - COUNTDOWN_W - 14, y: pill.y, w: COUNTDOWN_W, h: pill.h };
     drawPill(ctx, cd, done ? pal.gold : pal.paper, done ? pal.goldShade : undefined, 2);
     ctx.textAlign = 'center';
     const label = done ? t('daily.done') : d.countdown;
+    // the weekly's DONE badge carries a ★ pip once the 3★ target crystals are paid (GDD §8.2)
+    const pip = done && weekly && o.weekly.target;
     ctx.fillStyle = done ? pal.ink : pal.textDim;
-    ctx.font = font(fitFontPx(ctx, label, 17, cd.w - 20, done ? '700' : '500'), done ? '700' : '500');
-    ctx.fillText(label, cd.x + cd.w / 2, cd.y + cd.h / 2 + 1, cd.w - 20);
+    ctx.font = font(fitFontPx(ctx, label, 17, cd.w - 20 - (pip ? 28 : 0), done ? '700' : '500'), done ? '700' : '500');
+    ctx.fillText(label, cd.x + cd.w / 2 - (pip ? 12 : 0), cd.y + cd.h / 2 + 1, cd.w - 20);
+    if (pip) drawStar(ctx, pal, cd.x + cd.w - 26, cd.y + cd.h / 2, 10, true);
     ctx.textAlign = 'left';
   }
   // line 2: level · twist, or the unlock hint
-  const line2 = d.unlocked ? `${d.levelName} · ${d.twist}` : t('daily.locked', { n: d.unlockLevel });
+  const line2 = d.unlocked ? `${d.levelName} · ${d.twist}` : t(weekly ? 'weekly.locked' : 'daily.locked', { n: d.unlockLevel });
   ctx.fillStyle = d.unlocked ? pal.ink : pal.textDim;
   ctx.font = font(fitFontPx(ctx, line2, 19, d.unlocked ? textW : r.w - (left - r.x) - 24, '500'), '500');
   ctx.fillText(line2, left, r.y + 56, d.unlocked ? textW : r.w - (left - r.x) - 24);
   // line 3: reward (best when done) + streak pill (wider when it names the next bonus); the countdown while locked
   if (d.unlocked) {
     let x = left;
-    const wide = d.nextBonus ? 70 : 0;
+    const nextBonus = weekly ? null : o.nextBonus;
+    const wide = nextBonus ? 70 : 0;
     if (d.done && d.best) {
       ctx.fillStyle = pal.textDim;
       ctx.font = font(17, '500');
-      ctx.fillText(t('daily.best', { stars: d.best.stars, time: formatTime(d.best.timeMs) }), x, r.y + 84, textW);
+      const best =
+        weekly && !o.weekly.target
+          ? t('weekly.best', { stars: d.best.stars, time: formatTime(d.best.timeMs), target: formatTime(o.weekly.targetMs) })
+          : t('daily.best', { stars: d.best.stars, time: formatTime(d.best.timeMs) });
+      ctx.font = font(fitFontPx(ctx, best, 17, textW, '500'), '500');
+      ctx.fillText(best, x, r.y + 84, textW);
     } else {
       drawGoldCoin(ctx, pal, x + 9, r.y + 84, 9);
       drawCrystal(ctx, pal, x + 30, r.y + 84, 9);
       x += 46;
       ctx.fillStyle = pal.ink;
-      const reward = t('daily.reward', { gold: d.gold, crystals: d.crystals });
+      const reward = t(weekly ? 'weekly.reward' : 'daily.reward', { gold: d.gold, crystals: d.crystals });
       ctx.font = font(fitFontPx(ctx, reward, 17, textW - 46 - wide, '500'), '500');
       ctx.fillText(reward, x, r.y + 84, textW - 46 - wide);
     }
-    if (d.streak > 0 || d.nextBonus) {
+    if (d.streak > 0 || nextBonus || weekly) {
       const live = d.streak > 0;
       const sp: Rect = { x: pill.x - wide, y: r.y + 66, w: rightW + wide, h: 30 };
       drawPill(ctx, sp, live ? pal.owners.player : pal.paper, live ? shade(pal.owners.player, -0.35) : undefined, 2);
       ctx.textAlign = 'center';
       ctx.fillStyle = live ? pal.paper : pal.textDim;
-      const label = d.nextBonus ? t('daily.streakNext', { n: d.streak, day: d.nextBonus[0], crystals: d.nextBonus[1] }) : t('daily.streak', { n: d.streak });
+      const label = weekly ? t('weekly.streak', { n: d.streak }) : nextBonus ? t('daily.streakNext', { n: d.streak, day: nextBonus[0], crystals: nextBonus[1] }) : t('daily.streak', { n: d.streak });
       ctx.font = font(fitFontPx(ctx, label, 16, sp.w - 16));
       ctx.fillText(label, sp.x + sp.w / 2, sp.y + sp.h / 2 + 1, sp.w - 16);
       ctx.textAlign = 'left';
@@ -411,7 +457,7 @@ export function drawLevelSelect(view: View, pal: Palette, o: LevelSelectOpts): v
   drawExtrudedText(ctx, title, 290, 50, fitFontPx(ctx, title, 40, 220), { face: pal.paper, side: shade(pal.owners.player, -0.25), outline: pal.ink, depth: 4 });
   drawWallet(ctx, pal, o.walletRect, o.gold, o.crystals, { pressed: o.pressed === o.walletRect });
   // daily challenge card, sticky under the header (tap → start)
-  drawDailyCard(ctx, pal, LEVEL_MAP.daily, o.daily, o.pressed === LEVEL_MAP.daily);
+  drawDailyCard(ctx, pal, LEVEL_MAP.daily, o.daily, o.pressed ?? null);
   // commander summary chip (tap → upgrades)
   const cr = o.commanderRect;
   drawButton(ctx, pal, cr, '', { fontPx: 18, pressed: o.pressed === cr, flat: true });

@@ -32,8 +32,9 @@ import { recordResult, spendGold } from '../economy/wallet';
 import type { MatchSummary } from '../economy/achievements';
 import { L3_LEVEL, emptyMatch, evaluateAchievements } from '../economy/achievements';
 import { CRYSTAL_SERVICES } from '../economy/catalog';
-import type { DailyChallenge } from '../daily/challenge';
+import type { DailyChallenge, WeeklyChallenge } from '../daily/challenge';
 import { recordChallengeResult, restartLevel } from './daily';
+import { recordWeeklyResult } from './weekly';
 import { isMuted, onPlayerCommand, onSimEvents, onSimFrame, playSfx, resetAudioLevel, toggleMuted } from '../audio/index';
 import { hapticCapture } from '../native/index';
 import { t } from './i18n';
@@ -93,6 +94,8 @@ export class PlayScreen implements Screen {
   private readonly cutRequests = new Set<string>();
   /** Daily Challenge match (GDD §7): fixed twist modifiers, no upgrades, boosters and continues off. */
   readonly challenge: DailyChallenge | null;
+  /** Weekly Challenge match (GDD §8): the same fixed-match rules as `challenge`, booked per week. */
+  readonly weekly: WeeklyChallenge | null;
 
   constructor(
     private readonly app: App,
@@ -102,7 +105,8 @@ export class PlayScreen implements Screen {
     opts: StartOptions = {},
   ) {
     this.challenge = opts.challenge ?? null;
-    this.continued = opts.reinforcements === true && !this.challenge;
+    this.weekly = opts.weekly ?? null;
+    this.continued = opts.reinforcements === true && !this.fixed;
     this.loop = new GameLoop({
       beforeTick: (s) => this.runAi(s),
       onEvents: (ev) => {
@@ -114,7 +118,8 @@ export class PlayScreen implements Screen {
     // Commander upgrades are sim input, fixed for the whole match. The bonus garrison is only the
     // fallback continue (no usable snapshot): the normal continue rewinds instead (`resumeFromSnapshot`).
     // A challenge is equal for everyone: the twist's modifiers stand in for the commander upgrades.
-    const modifiers = this.challenge ? { ...this.challenge.twist.modifiers } : modifiersFromSave(app.save, this.continued ? CRYSTAL_SERVICES.continue.bonusInfantry : 0);
+    const twist = this.challenge?.twist ?? this.weekly?.twist;
+    const modifiers = twist ? { ...twist.modifiers } : modifiersFromSave(app.save, this.continued ? CRYSTAL_SERVICES.continue.bonusInfantry : 0);
     this.loop.load(createState(level, seed, modifiers));
     resetAudioLevel();
     const rngs = rngsFor(seed, level.enemies);
@@ -317,13 +322,19 @@ export class PlayScreen implements Screen {
     };
   }
 
+  /** A daily or weekly challenge: equal for everyone (no upgrades, boosters, continue, skip; NEXT → the map). */
+  private get fixed(): boolean {
+    return this.challenge !== null || this.weekly !== null;
+  }
+
   private buildUi(): HudPlayUi {
     const outcome = getOutcome(this.state);
     const idx = levelIndex(this.level.id);
+    const twist = this.challenge?.twist ?? this.weekly?.twist;
     return {
       hud: {
-        boosters: this.challenge ? [] : allBoosterStatus(this.state, this.wallet()),
-        challenge: this.challenge ? { twist: t(`daily.twist.${this.challenge.twist.id}`) } : undefined,
+        boosters: this.fixed ? [] : allBoosterStatus(this.state, this.wallet()),
+        challenge: twist ? { twist: t(`daily.twist.${twist.id}`), weekly: this.weekly !== null } : undefined,
         targeting: this.targeting,
         muted: isMuted(),
         pressedBooster: this.pressedBooster,
@@ -345,7 +356,7 @@ export class PlayScreen implements Screen {
       limitHintText: this.gestures.limitHintText || undefined,
       outcome,
       stars: outcome === 'won' ? starsFor(this.level, this.elapsedMs()) : 0,
-      hasNext: this.challenge ? true : idx >= 0 && idx + 1 < LEVEL_META.length,
+      hasNext: this.fixed ? true : idx >= 0 && idx + 1 < LEVEL_META.length,
       speed: this.loop.speed,
       coinsEarned: this.earnings.gold,
       coinsTotal: this.app.save.gold,
@@ -370,6 +381,15 @@ export class PlayScreen implements Screen {
       this.app.go(new ResultScreen(this.app, { state: this.state, level: this.level, ui, earnings: this.earnings, continued: this.continued, achievements: { unlocked: [], crystals: 0 }, challenge: this.challenge, daily }));
       return;
     }
+    if (this.weekly) {
+      // Same separate path for the weekly (GDD §8): gold once per week, crystals once at the 3★ target.
+      const weeklyOutcome = recordWeeklyResult(this.app.save, this.weekly, this.level, outcome, elapsed);
+      this.earnings = { stars: weeklyOutcome.stars, gold: weeklyOutcome.gold, crystals: weeklyOutcome.crystals, notes: [], replayCapped: false };
+      const ui = this.buildUi();
+      this.gestures.reset();
+      this.app.go(new ResultScreen(this.app, { state: this.state, level: this.level, ui, earnings: this.earnings, continued: this.continued, achievements: { unlocked: [], crystals: 0 }, weekly: this.weekly, weeklyOutcome }));
+      return;
+    }
     this.earnings = recordResult(this.app.save, this.level, outcome, elapsed);
     const achievements = evaluateAchievements(this.app.save, this.match);
     const ui = this.buildUi(); // after recordResult so the totals are final
@@ -389,7 +409,7 @@ export class PlayScreen implements Screen {
 
   /** Restart this level; a challenge keeps its seed and twist. */
   restart(): void {
-    restartLevel(this.app, this.level.id, this.challenge);
+    restartLevel(this.app, this.level.id, this.challenge, this.weekly);
   }
 
   draw(view: View, nowMs: number): void {
@@ -433,8 +453,8 @@ export class PlayScreen implements Screen {
    */
   useBooster(kind: BoosterKind): boolean {
     if (this.loop.paused || this.loop.finished) return false;
-    if (this.challenge) {
-      this.toast.show(t('daily.noBoosters'), 'error', this.nowMs);
+    if (this.fixed) {
+      this.toast.show(t(this.weekly ? 'weekly.noBoosters' : 'daily.noBoosters'), 'error', this.nowMs);
       return false;
     }
     const status = boosterStatus(this.state, kind, this.wallet());

@@ -27,9 +27,10 @@ import { equippedSkin } from '../economy/entitlements';
 import type { Language } from './i18n';
 import { currentLanguage, nextLanguage, t } from './i18n';
 import { achievementName } from './catalogText';
-import type { DailyChallenge } from '../daily/challenge';
+import type { DailyChallenge, WeeklyChallenge } from '../daily/challenge';
 import type { DailyOutcome } from './daily';
 import { restartLevel } from './daily';
+import type { WeeklyOutcome } from './weekly';
 
 /** A screen owns drawing and input while it is current. */
 export interface Screen {
@@ -62,6 +63,8 @@ export interface StartOptions {
    * `App.startLevel` is called with the challenge's own seed.
    */
   challenge?: DailyChallenge;
+  /** Weekly Challenge (GDD §8): as `challenge`, booked by `recordWeeklyResult` against its Monday key. */
+  weekly?: WeeklyChallenge;
 }
 
 /** What screens may ask of the application shell. */
@@ -91,6 +94,8 @@ export interface App {
   setLanguage(code: Language): void;
   /** Today's UTC day key for the Daily Challenge (`dayKeyOf(new Date())`, or the debug override). */
   dayKey(): string;
+  /** This week's Monday UTC key for the Weekly Challenge (`weekKeyOf(new Date())`, or the debug override). */
+  weekKey(): string;
 }
 
 /** Test/dev override of what the native providers report for the settings About block. */
@@ -295,6 +300,9 @@ export interface ResultInfo {
   challenge?: DailyChallenge;
   /** What the challenge result did (reward paid once, streak, best of the day). */
   daily?: DailyOutcome;
+  /** Weekly Challenge match (GDD §8): same buttons as a daily; `weeklyOutcome` is what the result did. */
+  weekly?: WeeklyChallenge;
+  weeklyOutcome?: WeeklyOutcome;
 }
 
 const DOUBLE_GOLD = AD_PLACEMENTS.find((p) => p.id === 'rv_double_gold')!;
@@ -331,8 +339,12 @@ export class ResultScreen implements Screen {
   enter(): void {
     onResultShown(this.app.ads);
     const d = this.info.daily;
+    const w = this.info.weeklyOutcome;
     // the daily result line (hud.ts) carries the crystal total; the milestone itself is named by a toast
-    const text = achievementToastText(this.info.achievements) ?? (d?.milestone ? t('daily.milestone', { day: d.streak, crystals: d.milestone }) : null);
+    // (the weekly's 3★ target bonus takes the same slot, GDD §8.2)
+    const text =
+      achievementToastText(this.info.achievements) ??
+      (d?.milestone ? t('daily.milestone', { day: d.streak, crystals: d.milestone }) : w?.targetHit ? t('weekly.resultTarget', { crystals: w.crystals }) : null);
     if (text) this.toast.show(text, 'ok', performance.now(), 3500);
   }
 
@@ -357,10 +369,13 @@ export class ResultScreen implements Screen {
   extras(): ResultExtras {
     const save = this.app.save;
     const e = this.info.earnings;
-    const continueOffered = !this.won && !this.info.continued && !this.info.challenge;
+    const fixed = !!(this.info.challenge ?? this.info.weekly);
+    const continueOffered = !this.won && !this.info.continued && !fixed;
     const d = this.info.daily;
+    const w = this.info.weeklyOutcome;
     return {
       daily: d ? { won: d.won, firstWin: d.firstWin, gold: d.gold, crystals: d.crystals, streak: d.streak, best: d.best } : undefined,
+      weekly: w ? { firstWin: w.firstWin, gold: w.gold, streak: w.streak, best: w.best } : undefined,
       crystalsEarned: e.crystals,
       notes: e.notes.map(translateNote),
       replayCapped: e.replayCapped,
@@ -368,7 +383,7 @@ export class ResultScreen implements Screen {
       doubled: this.doubled,
       continueCrystals: continueOffered ? CRYSTAL_SERVICES.continue.costCrystals : null,
       continueAd: continueOffered && canShowRewarded(this.app.ads, save, CONTINUE_AD.id),
-      skipCrystals: this.skipOffered() && !this.info.challenge ? CRYSTAL_SERVICES.levelSkip.costCrystals : null,
+      skipCrystals: this.skipOffered() && !fixed ? CRYSTAL_SERVICES.levelSkip.costCrystals : null,
       pending: this.pending,
     };
   }
@@ -419,13 +434,13 @@ export class ResultScreen implements Screen {
 
   private nextLevel(): void {
     const next = LEVEL_META[levelIndex(this.info.level.id) + 1];
-    if (next && !this.info.challenge) void this.app.startLevel(next.id);
+    if (next && !this.info.challenge && !this.info.weekly) void this.app.startLevel(next.id);
     else this.app.goLevels();
   }
 
-  /** Same level again; a challenge keeps its seed and twist (unless its UTC day has passed — `restartLevel`). */
+  /** Same level again; a challenge keeps its seed and twist (unless its UTC day / week has passed — `restartLevel`). */
   private retry(): void {
-    restartLevel(this.app, this.info.level.id, this.info.challenge);
+    restartLevel(this.app, this.info.level.id, this.info.challenge, this.info.weekly);
   }
 
   up(p: PointerPoint): void {
