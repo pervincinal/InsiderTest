@@ -4,31 +4,115 @@ Semantic versioning. The version lives in `tower-clash/package.json`; native ver
 
 ---
 
-## v0.4.1 — unreleased
+## v1.0.0 — release candidate (unreleased)
 
-Everything on the branch after the v0.4.0 texts and screenshots (`52b3441`, 2026-09-17), per `git log --oneline 52b3441..HEAD` on 2026-09-18. No version bump yet: `package.json` is still 0.4.0 / build 4, so the Mobile Engineer runs `npm run version:sync` when the Producer decides this is a tagged release rather than part of the v0.4.0 tag. Save schema unchanged (v3; `challenge` added without a bump, like `achievements`).
+Proposed tag: `tower-clash-v1.0.0` (on branch `claude/tower-war-game-plan-weqwpb`), to be created by the Producer from the GitHub UI (the git proxy accepts pushes to the working branch, not tags) on the commit that carries this section **and** the version bump. Scope: everything on the branch after the v0.4.0 texts and screenshots (`52b3441`, 2026-09-17) — the former "v0.4.1 — unreleased" notes, folded in here on 2026-09-20 (M4-3) and extended with the commits up to `bcec4e7` (2026-09-19). **No version bump yet:** `package.json` is still `0.4.0` / build 4, so before tagging the Mobile Engineer sets `1.0.0` / `config.buildNumber` 5 and runs `npm run version:sync` (Android `versionName "1.0.0"` / `versionCode 5`, iOS `MARKETING_VERSION 1.0.0` / `CURRENT_PROJECT_VERSION 5`; `npm run version:check` must pass). Save schema unchanged (v3; `challenge` and its `milestones` were added without a bump, like `achievements`). The 1.0 gate — tag, Pages, TestFlight / Play testing, privacy URL live — is `LAUNCH_CHECKLIST.md` §8; the first four weeks after the tag are `POST_LAUNCH.md`.
+
+**Which channel gets what.** The web/PWA build (GitHub Pages) can carry 1.0.0 the day it is tagged: it has no ads, no purchases and no network calls after loading. The Google Play / App Store builds are "v1.0 native" (`docs/ECONOMY.md` §8 Phase B): the same code with RevenueCat and AdMob keys injected by the release job — they cannot be uploaded before the stakeholder's accounts and secrets exist (`LAUNCH_CHECKLIST.md` §2, §3, §5, §6), but nothing in *this* section depends on them.
+
+**Status on 2026-09-20 (Publisher check of the tree against `docs/BACKLOG.md` "Done" 2026-09-18 … 09-19 and `docs/GDD.md` §7).** `npm run check` 620 unit tests, e2e 67 + 4 WebView, `npm run playtest` 40/40 levels, daily gate 60 days 60/60 (300/300 runs at 5 seeds), twist gate: no pool level below 47/50 on any twist at 50 seeds, eager bundle 79.3 kB gzip (limit 80) — figures from `reports/2026-09-19.md`. The build has **40 levels**. Later on 2026-09-20 the Level Designer's band-5 drafts `041-twin-rivers.json` … `050-the-crown-reforged.json` appeared in `tower-clash/src/levels/` as **untracked work in progress** (LV-9): not in the generated `manifest.ts` (the game cannot load them), `npm run levels:check` still reports "40 level(s) valid", no `name_az/ru/tr` or `lesson_*` yet, star clocks at the 40 / 80 s placeholders, level 41 with two enemies against the brief's three — and GDD §3 "Band 5" defines the pack as a **post-1.0 free content update**. They are therefore **not** in this build and no public text says 50 — see "Planned for 1.0.1". GDD §8 "Weekly Challenge" exists since 2026-09-20 as a proposal (WEEKLY-1, "not implemented") and is not mentioned in any public text either.
+
+**Store "What's new" (≤ 500 characters each, counted with `node -e` on 2026-09-20 — EN 495, AZ 494, RU 499, TR 488; use the language of the listing locale). On the very first store submission the field is optional on Google Play and free-form on the App Store; the same text serves as the update note for the web/PWA channel.**
+
+EN (495):
+```
+Tower Clash 1.0. Daily Challenge: one fixed level, seed and twist per day, the same for everyone — clear level 8 to unlock. The first win of the day pays gold and crystals, retries are free, and a 3-, 7- and 30-day win streak pays bonus crystals. Four new skins: Round keep, Watchtower, Shield bearers, Clockwork robots. Level 2 teaches "under fire"; ten levels retuned; smoother drawing on phones; a level that fails to download is retried with a message. Still no account, still plays offline.
+```
+AZ (494):
+```
+Tower Clash 1.0. Günlük Çağırış: hər gün hamı üçün eyni səviyyə, seed və fənd — açmaq üçün 8-ci səviyyəni keç. Günün ilk qələbəsi qızıl və kristal verir, təkrar cəhdlər pulsuz, 3, 7 və 30 günlük qələbə seriyası bonus kristal verir. Dörd yeni görünüş: Dairəvi qala, Gözətçi qülləsi, Qalxan daşıyanlar, Mexaniki robotlar. 2-ci səviyyə "atəş altında"nı öyrədir; on səviyyə yenidən tənzimlənib; telefonda daha rəvan çəkilir; yüklənməyən səviyyə mesajla yenidən yüklənir. Yenə hesabsız, yenə oflayn.
+```
+RU (499):
+```
+Tower Clash 1.0. Ежедневный вызов: каждый день один уровень, seed и условие — одинаковые для всех; открывается после 8-го уровня. Первая победа дня даёт золото и кристаллы, повторы бесплатны, серия побед в 3, 7 и 30 дней даёт бонусные кристаллы. Четыре новых облика: Круглый донжон, Сторожевая башня, Щитоносцы, Заводные роботы. Уровень 2 учит «под огнём»; десять уровней перенастроены; плавнее отрисовка на телефонах; незагрузившийся уровень запрашивается заново. По-прежнему без аккаунта и офлайн.
+```
+TR (489):
+```
+Tower Clash 1.0. Günlük Meydan Okuma: her gün herkes için aynı seviye, seed ve kural — açmak için 8. seviyeyi geç. Günün ilk zaferi altın ve kristal verir, tekrar denemeler ücretsiz, 3, 7 ve 30 günlük zafer serisi bonus kristal verir. Dört yeni görünüm: Yuvarlak kale, Gözetleme kulesi, Kalkan taşıyıcılar, Kurmalı robotlar. 2. seviye "ateş altında"yı öğretir; on seviye yeniden ayarlandı; telefonda daha akıcı çizim; inmeyen seviye mesajla yeniden denenir. Yine hesapsız, yine çevrimdışı.
+```
+(Skin and twist names are the in-game labels from `src/ui/locales/{en,az,ru,tr}.ts`.)
 
 ### English
 
-- **Daily Challenge** (`d54ae6e`, `01f3701`, `41c64c0`; GDD §7): one fixed match per UTC day for every player — a level from 9–40, a fixed seed and one of five twists (Plain, Lean −10 % production, Fast feet +25 % march speed, Thin walls −20 % capacity, Reinforced +5 soldiers at start). Card at the top of the level map with a countdown to 00:00 UTC, streak and today's best; unlocks after level 8. First win of the day pays 30 + 10 × stars gold and 5 crystals; retries are free and unlimited; Commander upgrades and boosters are off in the daily so everyone plays the same match. Campaign progress is untouched.
-- **Daily-pool level pass** (`6ea495d`, `b52491d`, `c2353a1`): levels 10, 13, 15, 27, 31, 34 and 38 retuned so every pool level holds up under every twist (50/50 seeds per twist on the touched levels; a 60-day daily sweep with 0 failed days).
-- **Under-fire lesson** (`1750354`, LV-5): level 2 now teaches that a tower under fire cannot recruit — answer every red stream (EN/AZ/RU/TR).
-- **Reference bot** (`3b66c42` AI-3, `288618f` AI-4): answers a hose from a drained source (hose reserve), and a capped tower keeps its attack on a burst alone while supplying sideways — the bot that verifies every level and every daily.
-- **Store frame 06** (`50041a4`, PUB-8): re-rendered on the current level 9 map, now showing the under-fire badge.
-- **Verification** (`1323695`, `288618f`, `239cb9c`, `2c2c511`): `npm run playtest -- --daily <day> --days N --seeds K` and `-- --twist <id>` gates for the daily; tutorial e2e for levels 1–3; continue e2e pinned to level 15 seed 2; both daily gates run in CI.
+Tower Clash 1.0 is the "Streams update" (v0.4.0) plus one week of content and hardening: a Daily Challenge with streak milestones, four silhouette skins, a level-2 lesson for "under fire", ten levels retuned so the daily pool holds under every twist, and a renderer that draws on three canvases. Nothing in the rules changed since v0.4.0.
 
-Store "What's new" candidate (EN, 196): `Daily Challenge: one fixed level, seed and twist per day for everyone — clear level 8 to unlock, first win pays gold and crystals, free retries. Level 2 teaches "under fire". Seven levels retuned.`
+**In this build — Daily Challenge (GDD §7)**
+- One fixed match per UTC day for every player (`d54ae6e`, `01f3701`, `41c64c0`): a level from 9–40, a fixed seed and one of five twists — Classic, Lean rations (−10 % production), Fast feet (+25 % march speed), Thin walls (−20 % capacity), Reinforced (+5 soldiers on every tower at start). Card at the top of the level map with a countdown to 00:00 UTC, streak and today's best; unlocks after level 8.
+- First win of the day pays 30 + 10 × stars gold and 5 crystals; retries are free and unlimited; Commander upgrades, boosters, Reinforcements, level skip and the ×2-gold ad are off in the daily so everyone plays the same match. Campaign progress is untouched (separate ledger `save.challenge`).
+- **Streak milestones** (`d14e358`, DAILY-2; ECONOMY.md §6.2): the first win that brings the streak to day 3 / 7 / 30 pays +5 / +20 / +100 crystals once per streak run; the card shows the next bonus ("Streak 2 · +5 at day 3"), the result line the crystal total, a toast names the bonus.
+- After the UTC rollover, RETRY and the pause menu's restart no longer replay yesterday's challenge: the level map opens with "New daily challenge is ready" (`30bab54`, BUG-9).
+- Verified before it ships: `npm run playtest -- --daily <day> --days N --seeds K` and `-- --twist <id>` (`1323695`, `288618f`); CI runs the daily (30 days × 3 seeds) and twist (5 × 32 × 5) gates on every push (`1304498`).
+
+**In this build — levels**
+- **Daily-pool level pass** (`6ea495d`, `b52491d`, `c2353a1`, `d3981e6`, `dad05b8`): levels **10, 13, 15, 16, 19, 20, 27, 31, 34 and 38** retuned so every pool level holds under every twist — no level below 47/50 seeds on any twist at 50 seeds; 60-day daily sweep 60/60 days, 300/300 runs. Lessons, names, personalities and star clocks unchanged (plain-twist medians moved < 10 %).
+- **Under-fire lesson** (`1750354`, LV-5): level 2 "Supply Line" now teaches that a tower under fire cannot recruit — answer every red stream (EN/AZ/RU/TR).
+
+**In this build — skins**
+- Four **silhouette skins** (`ccfa9fe`, M3-2), bought with crystals in the Skins tab and previewed in the shop: two tower silhouettes — **Round keep** (150) and **Watchtower** (200) — and two unit silhouettes — **Shield bearers** (120) and **Clockwork robots** (150). They replace the whole building / soldier while the level silhouette (L1 / L2 / L3) stays readable; team colours and readability rules are unchanged. 21 skins in total now (7 roofs, 7 helmets, 3 terrain themes, 4 silhouettes). The drawers live in a lazy chunk, so the first download did not grow.
+
+**In this build — rendering and loading**
+- **Three stacked canvases** (`03f62eb`, PERF-3): ground (drawn once per level), game (every frame), HUD (only when it changes). Measured headless at CPU 4× on level 40: frame median 133 → 67 ms, task time −37 %, pixel diff < 0.1 %.
+- **DPR cap** (`ed9f8bf`, MM-4): native 2 / web 2.5 (`?dprcap=N` override); iPhone-class canvas memory 33.9 → 15.1 MB. Text at cap 2 is one device pixel softer only at 3× zoom.
+- **Lazy chunk recovery** (`30bab54`, BUG-8): a level, skin or screen chunk that failed to download once is re-fetched under a fresh URL on the next tap and the screen shows "Couldn't load — check your connection"; a chunk that keeps failing reloads the page once per session from the title / map only. Same-size resize no longer leaves a stale HUD layer over pause / result / map (`f0d7903`).
+
+**In this build — AI**
+- Reference bot (`3b66c42` AI-3, `288618f` AI-4): answers a hose from a drained source (hose reserve); a capped tower keeps its attack on a burst alone while supplying sideways. The bot that verifies every level and every daily; the campaign enemy AI is unchanged.
+
+**In this build — verification and docs**
+- Tutorial e2e for levels 1–3 on a fresh save (`239cb9c`, checklist R1 done); continue e2e pinned to level 15 seed 2 (`2c2c511`); hostile-save, i18n-key and rollover unit tests, layers + lazy e2e (`f0d7903`); `maxedModifiers()` helper pinned to the catalog (`1304498`). 620 unit tests, 71 e2e.
+- Store frame 06 re-rendered on the current level 9 map, showing the under-fire badge (`50041a4`, PUB-8). GDD brought in line with the shipped game — §2.7 modifiers, §3 band table from the JSON, §7 daily (`aaa48b1`, DOCS-2). The hosted `public/privacy.html` now lists "language" instead of the removed "send ratio" in both languages (checklist R4 closed; policy version stays 2.1).
+
+**Planned for 1.0.1 (not in this build — do not list in "What's new")**
+- **10 new Grand Campaign levels (41–50, band 5)** — GDD §3 "Band 5" (LV-9): no new mechanic, three enemies, ≥ 1 bridge and ≥ 1 mine per level, 10–12 towers, aggression 0.6 → 0.9, 3★ clocks 25–50 s, a free update that unlocks when level 40 has a star; band-5 full-3★ bonus 20 crystals, 50-level milestone 60 crystals, new achievement "Clear level 50" 10 crystals; **not** in the daily pool (`POOL_TO` stays 40; the pool grows only in a later release-day commit with the GDD §3 five-step acceptance). Draft JSON in the working tree on 2026-09-20 (status paragraph above). When the pack is committed, in the manifest and through its gates (`--seeds 20` ≥ 95 % with the idle player never winning, every twist ≥ 4/5, `--upgrades max` median ≤ 2.5★, names and lessons in all four languages): `STORE_LISTING.md` bumps every "40 levels" claim to 50 (TODO line at its top), the README follows, and the 1.0.1 what's-new leads with "10 new Grand Campaign levels".
+- **Weekly challenge** (GDD §8, proposed 2026-09-20, WEEKLY-1, not implemented): one fixed match per ISO week keyed by the UTC Monday, pool 33 … `POOL_TO`, always one of the four non-plain twists, 100 gold on the first win and 20 crystals once for beating the level's 3★ clock, a week streak, a WEEKLY tab on the daily card, unlock after level 32 — 1.1 candidate, `POST_LAUNCH.md` §6.2.
+- "(00:00 UTC)" in the daily card's countdown (`daily.newIn` / `daily.newInTime`, GDD §7.4) — in the Frontend Engineer's working tree on 2026-09-20, uncommitted; moves to "In this build" the day it is committed. The day-30 question is closed: the milestone pays once per streak run, no repeat at 60 / 90 (GDD §7.2 "Day 30", DAILY-3, 2026-09-20) — nothing to ship.
+
+**Not in this build (needs the stakeholder)**
+- Real RevenueCat / AdMob keys, store products, sandbox purchases (ECON-1, Phase B); real-device pass (QA-2, MM-1); signed release builds (MM-3); `app-ads.txt` at a site root (ECON-8).
+- Localised AZ/RU/TR App Store screenshot sets (Apple sets are EN only, by design); frames from levels 17+ (PUB-6).
+
+Still true on every build: no accounts, no analytics. The web/PWA build makes no network calls after loading and never asks for payment — its shop runs on the demo "Test store". `README.md`, `package.json` and the native projects say 0.4.0 / build 4 until the bump above.
 
 ### Azərbaycanca
 
-- **Gündəlik Çağırış** (`d54ae6e`, `01f3701`, `41c64c0`; GDD §7): hər UTC günü üçün bütün oyunçulara eyni bir döyüş — 9–40 arası bir səviyyə, sabit seed və beş "fənd"dən biri (Adi, Qənaətli −10 % istehsal, Cəld ayaq +25 % yürüş sürəti, Nazik divar −20 % tutum, Möhkəmləndirilmiş başlanğıcda +5 əsgər). Səviyyə xəritəsinin başında kart: 00:00 UTC-yə geri sayım, seriya və bugünkü ən yaxşı nəticə; 8-ci səviyyədən sonra açılır. Günün ilk qələbəsi 30 + 10 × ulduz qızıl və 5 kristal verir; təkrar cəhdlər pulsuz və limitsiz; hamı eyni döyüşü oynasın deyə gündəlikdə Komandir təkmilləşdirmələri və gücləndiricilər söndürülür. Kampaniya irəliləyişinə toxunulmur.
-- **Gündəlik hovuz üçün səviyyə keçidi** (`6ea495d`, `b52491d`, `c2353a1`): 10, 13, 15, 27, 31, 34 və 38-ci səviyyələr hər fənd altında dayanıqlı olsun deyə yenidən tənzimlənib (toxunulan səviyyələrdə hər fənddə 50/50 seed; 60 günlük gündəlik yoxlamada 0 uğursuz gün).
-- **"Atəş altında" dərsi** (`1750354`, LV-5): 2-ci səviyyə indi atəş altındakı qüllənin əsgər yığa bilmədiyini öyrədir — hər qırmızı axına cavab ver (EN/AZ/RU/TR).
-- **İstinad botu** (`3b66c42` AI-3, `288618f` AI-4): boşalmış mənbədən gələn axına cavab verir (axın ehtiyatı), dolu qüllə tək partlayışda hücumunu saxlayıb yana təchizat verir — hər səviyyəni və hər gündəliyi yoxlayan bot.
-- **Mağaza kadrı 06** (`50041a4`, PUB-8): cari 9-cu səviyyə xəritəsində yenidən çəkilib, indi "atəş altında" nişanı görünür.
-- **Yoxlama** (`1323695`, `288618f`, `239cb9c`, `2c2c511`): gündəlik üçün `npm run playtest -- --daily <gün> --days N --seeds K` və `-- --twist <id>` qapıları; 1–3-cü səviyyələr üçün təlimat e2e; davam e2e-si 15-ci səviyyə seed 2-yə bağlanıb; hər iki gündəlik qapısı CI-da işləyir.
+Tower Clash 1.0 = "Axınlar yeniləməsi" (v0.4.0) + bir həftəlik məzmun və möhkəmləndirmə: seriya mükafatlı Günlük Çağırış, dörd siluet görünüşü, 2-ci səviyyədə "atəş altında" dərsi, günlük hovuz hər fənd altında dayanıqlı olsun deyə on səviyyənin yenidən tənzimlənməsi və üç kanvasda çəkən renderer. v0.4.0-dan bəri qaydalarda heç nə dəyişməyib.
 
-Mağaza "Yeniliklər" namizədi (AZ, 227): `Gündəlik Çağırış: hər gün hamı üçün eyni səviyyə, seed və fənd — açmaq üçün 8-ci səviyyəni keç, ilk qələbə qızıl və kristal verir, təkrar cəhdlər pulsuz. 2-ci səviyyə "atəş altında"nı öyrədir. Yeddi səviyyə yenidən tənzimlənib.`
+**Bu build-də — Günlük Çağırış (GDD §7)**
+- Hər UTC günü üçün bütün oyunçulara eyni bir döyüş (`d54ae6e`, `01f3701`, `41c64c0`): 9–40 arası bir səviyyə, sabit seed və beş fənddən biri — Klassik, Az ərzaq (−10 % istehsal), Sürətli addım (+25 % yürüş sürəti), Nazik divarlar (−20 % tutum), Möhkəmləndirilmiş (başlanğıcda hər qüllədə +5 əsgər). Səviyyə xəritəsinin başında kart: 00:00 UTC-yə geri sayım, seriya və bugünkü ən yaxşı nəticə; 8-ci səviyyədən sonra açılır.
+- Günün ilk qələbəsi 30 + 10 × ulduz qızıl və 5 kristal verir; təkrar cəhdlər pulsuz və limitsiz; hamı eyni döyüşü oynasın deyə gündəlikdə Komandir təkmilləşdirmələri, gücləndiricilər, Əlavə qüvvə, səviyyə keçmə və ×2 qızıl reklamı söndürülür. Kampaniya irəliləyişinə toxunulmur (ayrıca `save.challenge` dəftəri).
+- **Seriya mükafatları** (`d14e358`, DAILY-2; ECONOMY.md §6.2): seriyanı 3 / 7 / 30-cu günə çatdıran ilk qələbə hər seriya üçün bir dəfə +5 / +20 / +100 kristal verir; kart növbəti bonusu göstərir ("Seriya 2 · 3-cü gündə +5"), nəticə sətri kristal cəmini, bildiriş bonusun adını.
+- UTC gecə yarısından sonra RETRY və pauza menyusundakı yenidən başlatma dünənki çağırışı təkrarlamır: səviyyə xəritəsi "Yeni günlük çağırış hazırdır" bildirişi ilə açılır (`30bab54`, BUG-9).
+- Çıxmazdan əvvəl yoxlanılır: `npm run playtest -- --daily <gün> --days N --seeds K` və `-- --twist <id>` (`1323695`, `288618f`); CI hər push-da gündəlik (30 gün × 3 seed) və fənd (5 × 32 × 5) qapılarını işlədir (`1304498`).
+
+**Bu build-də — səviyyələr**
+- **Günlük hovuz üçün səviyyə keçidi** (`6ea495d`, `b52491d`, `c2353a1`, `d3981e6`, `dad05b8`): **10, 13, 15, 16, 19, 20, 27, 31, 34 və 38**-ci səviyyələr hər fənd altında dayanıqlı olsun deyə yenidən tənzimlənib — 50 seed-də heç bir hovuz səviyyəsi heç bir fənddə 47/50-dən aşağı deyil; 60 günlük gündəlik yoxlama 60/60 gün, 300/300 oyun. Dərslər, adlar, xarakterlər və ulduz vaxtları dəyişməyib (adi fənddə median vaxtlar < 10 % dəyişib).
+- **"Atəş altında" dərsi** (`1750354`, LV-5): 2-ci səviyyə "Supply Line" indi atəş altındakı qüllənin əsgər yığa bilmədiyini öyrədir — hər qırmızı axına cavab ver (EN/AZ/RU/TR).
+
+**Bu build-də — görünüşlər**
+- Dörd **siluet görünüşü** (`ccfa9fe`, M3-2), Görünüşlər tabında kristalla alınır və mağazada önizlənir: iki qüllə silueti — **Dairəvi qala** (150) və **Gözətçi qülləsi** (200) — və iki əsgər silueti — **Qalxan daşıyanlar** (120) və **Mexaniki robotlar** (150). Bütün binanı / əsgəri əvəz edir, amma səviyyə silueti (L1 / L2 / L3) oxunaqlı qalır; komanda rəngləri və oxunaqlılıq qaydaları dəyişməyib. İndi cəmi 21 görünüş (7 dam, 7 dəbilqə, 3 relyef mövzusu, 4 siluet). Çəkən kod gecikmə ilə yüklənən hissədədir, ona görə ilk yükləmə böyüməyib.
+
+**Bu build-də — çəkilmə və yüklənmə**
+- **Üç üst-üstə kanvas** (`03f62eb`, PERF-3): torpaq (hər səviyyədə bir dəfə), oyun (hər kadrda), HUD (yalnız dəyişəndə). Headless ölçmə, CPU 4×, 40-cı səviyyə: kadr medianı 133 → 67 ms, tapşırıq vaxtı −37 %, piksel fərqi < 0.1 %.
+- **DPR limiti** (`ed9f8bf`, MM-4): native 2 / veb 2.5 (`?dprcap=N` ilə dəyişdirilir); iPhone sinfi kanvas yaddaşı 33.9 → 15.1 MB. Limit 2-də mətn yalnız 3× böyütmədə bir cihaz pikseli yumşaqdır.
+- **Gecikmə ilə yüklənən hissələrin bərpası** (`30bab54`, BUG-8): bir dəfə yüklənməyən səviyyə, görünüş və ya ekran hissəsi növbəti toxunuşda təzə ünvanla yenidən istənilir və ekran "Yüklənmədi — bağlantını yoxla" göstərir; davamlı yüklənməyən hissə sessiyada bir dəfə, yalnız baş ekrandan / xəritədən səhifəni yeniləyir. Eyni ölçülü resize artıq pauza / nəticə / xəritə üstündə köhnə HUD qatı qoymur (`f0d7903`).
+
+**Bu build-də — süni intellekt**
+- İstinad botu (`3b66c42` AI-3, `288618f` AI-4): boşalmış mənbədən gələn axına cavab verir (axın ehtiyatı); dolu qüllə tək partlayışda hücumunu saxlayıb yana təchizat verir. Hər səviyyəni və hər gündəliyi yoxlayan bot; kampaniyanın düşmən süni intellekti dəyişməyib.
+
+**Bu build-də — yoxlama və sənədlər**
+- Təzə save ilə 1–3-cü səviyyələrin təlimat e2e-si (`239cb9c`, siyahı R1 bitib); davam e2e-si 15-ci səviyyə seed 2-yə bağlanıb (`2c2c511`); zərərli save, tərcümə açarı və gün keçidi unit testləri, qat + gecikmə e2e-ləri (`f0d7903`); `maxedModifiers()` köməkçisi kataloqa bağlanıb (`1304498`). 620 unit test, 71 e2e.
+- Mağaza kadrı 06 cari 9-cu səviyyə xəritəsində yenidən çəkilib, "atəş altında" nişanı görünür (`50041a4`, PUB-8). GDD çıxan oyunla uyğunlaşdırılıb — §2.7 modifikatorlar, §3 band cədvəli JSON-dan, §7 gündəlik (`aaa48b1`, DOCS-2). Yerləşdirilən `public/privacy.html` hər iki dildə silinmiş "göndərmə nisbəti" əvəzinə "dil" göstərir (siyahı R4 bağlanıb; siyasət versiyası 2.1 qalır).
+
+**1.0.1 üçün planlaşdırılır (bu build-də yoxdur — "Yeniliklər" mətninə yazma)**
+- **10 yeni Böyük Kampaniya səviyyəsi (41–50, 5-ci band)** — GDD §3 "Band 5" (LV-9): yeni mexanika yoxdur, üç rəqib, hər səviyyədə ≥ 1 körpü və ≥ 1 mina, 10–12 qüllə, aqressiya 0.6 → 0.9, 3★ vaxtları 25–50 s, 40-cı səviyyədə ulduz olanda açılan pulsuz yeniləmə; 5-ci bandın tam 3★ bonusu 20 kristal, 50 səviyyə mərhələsi 60 kristal, yeni nailiyyət "50-ci səviyyəni keç" 10 kristal; günlük hovuzda **deyil** (`POOL_TO` 40 qalır; hovuz yalnız sonrakı buraxılış günündə, GDD §3-ün beş addımlıq qəbulu ilə böyüyür). 2026-09-20-də qaralama JSON-lar işçi ağacdadır: `manifest.ts`-də yoxdur (oyun onları yükləyə bilmir), `npm run levels:check` hələ "40 valid" deyir, AZ/RU/TR adlar yoxdur, ulduz vaxtları 40 / 80 s yer tutucudur. Paket commit olunub, manifestə düşüb, qapılardan keçəndə (`--seeds 20` ≥ 95 %, hər fənddə ≥ 4/5, `--upgrades max` median ≤ 2.5★, dörd dildə ad və dərs): `STORE_LISTING.md`-də hər "40 səviyyə" iddiası 50-yə qaldırılır (faylın başındakı TODO sətri), README ardınca, 1.0.1 "Yeniliklər" mətni "10 yeni Böyük Kampaniya səviyyəsi" ilə başlayır.
+- **Həftəlik çağırış** (GDD §8, 2026-09-20 təklifi, WEEKLY-1, hələ yazılmayıb): UTC bazar ertəsi ilə açarlanan həftədə bir sabit döyüş, hovuz 33 … `POOL_TO`, həmişə dörd qeyri-adi fənddən biri, ilk qələbəyə 100 qızıl və səviyyənin 3★ vaxtını keçəndə bir dəfə 20 kristal, həftə seriyası, günlük kartda WEEKLY tabı, 32-ci səviyyədən sonra açılır — 1.1 namizədi, `POST_LAUNCH.md` §6.2.
+- Günlük kartın geri sayımında "(00:00 UTC)" (`daily.newIn` / `daily.newInTime`, GDD §7.4) — 2026-09-20-də Frontend mühəndisinin işçi ağacında, commit olunmayıb; commit olunan gün "Bu build-də"yə keçir. 30-cu gün sualı bağlanıb: mükafat hər seriyada bir dəfə verilir, 60 / 90-da təkrar yoxdur (GDD §7.2 "Day 30", DAILY-3, 2026-09-20) — çıxarılacaq bir şey yoxdur.
+
+**Bu build-də yoxdur (tərəf-müqabil lazımdır)**
+- Real RevenueCat / AdMob açarları, mağaza məhsulları, sandbox alışları (ECON-1, B mərhələsi); real telefonda yoxlama (QA-2, MM-1); imzalanmış release build-lər (MM-3); sayt kökündə `app-ads.txt` (ECON-8).
+- App Store üçün AZ/RU/TR skrinşot dəstləri (Apple dəstləri qəsdən yalnız EN-dir); 17+ səviyyələrdən kadrlar (PUB-6).
+
+Hər build-də dəyişməyən: hesab və analitika yoxdur. Veb/PWA build yükləndikdən sonra şəbəkə sorğusu göndərmir və heç vaxt ödəniş istəmir — mağazası demo "Test store" üzərində işləyir. Yuxarıdakı bump-a qədər `README.md`, `package.json` və native layihələr 0.4.0 / build 4 göstərir.
 
 ---
 

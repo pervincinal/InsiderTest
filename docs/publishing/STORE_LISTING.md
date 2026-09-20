@@ -6,6 +6,10 @@ Owner: Publisher. This is the listing for the **first store submission**, which 
 
 What must NOT be claimed: leaderboards, multiplayer, cloud save, more than 40 levels, subscriptions, loot boxes, tablet support (phone-only listing), "no ads" / "no purchases" for the store builds, and — since rules v2 — "send half / send all", a send-ratio switch or upgrading a tower by tapping / paying soldiers.
 
+**Addendum 2026-09-20 (v1.0.0 release candidate, `RELEASE_NOTES.md`).** Also in the tree and claimable: the **Daily Challenge** with streak milestones (GDD §7; one bullet added below in §1.1 / §1.2), four **silhouette skins** (Round keep, Watchtower, Shield bearers, Clockwork robots — 21 skins in total; the "tower, helmet and island skins" wording stays true), level 2's under-fire lesson, ten pool levels retuned, three-canvas rendering. Not claimable: a weekly challenge (GDD §8 is a proposal), levels beyond 40.
+
+**TODO (Publisher, 1.0.1) — bump "40 levels" to "50 levels" only when `tower-clash/src/levels/041-*.json` … `050-*.json` exist (on 2026-09-20 the manifest holds 001–040; the ten band-5 drafts `041-twin-rivers.json` … `050-the-crown-reforged.json` sit in the folder as untracked work in progress — not in `manifest.ts`, `npm run levels:check` says "40 level(s) valid", no AZ/RU/TR names, placeholder star clocks — and GDD §3 "Band 5" defines the pack as a post-1.0 free update, LV-9; so every public text stays at 40 for 1.0.0).** Places to change together, then re-run §5: this status line and the "more than 40 levels" clause above; §1 Google Play short description EN/AZ ("40 levels" → "50 levels", "40 səviyyə" → "50 səviyyə" — same length, 76 / 75 stay); §1.1 heading "40 HAND-MADE LEVELS" and §1.2 "40 ƏL İLƏ HAZIRLANMIŞ SƏVİYYƏ" (+ one bullet for the band-5 vocabulary, e.g. "Levels 41–50: the Grand Campaign — every mechanic, three enemies, the toughest maps"); §2 App Store promotional text EN/AZ ("40 levels" / "40 səviyyəlik" — 150 / 158 chars stay); §3 ASO secondary keyword "40 levels"; §5 count script strings; `tower-clash/README.md` ("40 hand-made levels", "every one of the 40 levels"); `RELEASE_NOTES.md` v1.0.1 what's-new "10 new Grand Campaign levels". Do not touch the biome list ("FIVE ISLANDS") unless the Tech Artist ships a sixth biome — GDD §3 says 41–50 inherit the volcanic palette until then. Do not add "weekly challenge" until GDD §8 is implemented (WEEKLY-1).
+
 ---
 
 ## 1. Google Play
@@ -42,6 +46,7 @@ HOW IT PLAYS
 • Tank factories (from level 25): a tank weighs five soldiers but crawls — send it first and let the infantry catch up.
 • Bridges you can cut with a long press: the column on it drowns and the enemy behind it is stranded.
 • Beat every level for three stars: the faster you win, the more stars you earn. Stars unlock the next level and pay gold.
+• Daily Challenge: one fixed level, seed and twist per day, the same for everyone — free retries, gold and crystals for the first win, bonus crystals for a 3-, 7- and 30-day win streak.
 
 GOLD, CRYSTALS AND UPGRADES
 • Gold is earned by playing — stars, replays and daily rewards — and buys Overdrive (×3 production for 10 s), Freeze (enemies stop producing for 5 s), Airstrike (−10 soldiers on one enemy tower) and permanent Commander upgrades (production, capacity, starting garrison, march speed, cheaper boosters).
@@ -86,6 +91,7 @@ NECƏ OYNANIR
 • Tank zavodları (25-ci səviyyədən): tank beş əsgər ağırlığındadır, amma yavaş gedir — əvvəl onu göndər, piyada arxadan çatsın.
 • Uzun basışla kəsilə bilən körpülər: körpüdəki kolon batır, arxadakı düşmən ilişib qalır.
 • Hər səviyyədə üç ulduz qazan: nə qədər tez qalib gəlsən, o qədər çox ulduz. Ulduzlar növbəti səviyyəni açır və qızıl qazandırır.
+• Günlük Çağırış: hər gün hamı üçün eyni səviyyə, seed və fənd — pulsuz təkrar cəhdlər, ilk qələbəyə qızıl və kristal, 3, 7 və 30 günlük qələbə seriyasına bonus kristal.
 
 QIZIL, KRİSTAL VƏ TƏKMİLLƏŞDİRMƏLƏR
 • Qızıl oyunla qazanılır — ulduzlar, təkrar oyunlar və gündəlik mükafatlar — və Overdrive (10 saniyə ×3 istehsal), Freeze (rəqiblər 5 saniyə istehsal etmir), Airstrike (bir düşmən qülləsindən −10 əsgər) və daimi Komandir təkmilləşdirmələri (istehsal, tutum, başlanğıc qarnizon, yürüş sürəti, ucuz gücləndiricilər) üçün xərclənir.
@@ -232,7 +238,7 @@ console.log("subtitle AZ", c("Bütün qüllələri tut"));
 console.log("keywords EN", c("tower,war,strategy,rts,capture,conquer,castle,army,offline,tap,casual,defense,attack,soldiers"));
 '
 ```
-Results on 2026-09-13: 76 / 75 / 150 / 158 / 19 / 93. IAP names and descriptions in §6.1 were counted the same way (≤ 30 / ≤ 45).
+Results on 2026-09-13: 76 / 75 / 150 / 158 / 19 / 93. IAP names and descriptions in §6.1 were counted the same way (≤ 30 / ≤ 45). Full descriptions §1.1 / §1.2 on 2026-09-20, after the Daily Challenge bullet: **3665 / 3650** (limit 4000).
 
 ---
 
