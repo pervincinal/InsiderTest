@@ -14,7 +14,7 @@ export interface Tones {
   shade: string;
 }
 
-/** Level bands (§3): 1–8 grass, 9–16 autumn, 17–24 sand, 25–32 snow, 33–40 volcanic. */
+/** Level bands (§3): 1–8 grass, 9–16 autumn, 17–24 sand, 25–32 snow, 33+ volcanic (41–50 inherit it until a band-6 biome is designed). */
 export type Biome = 'grass' | 'autumn' | 'sand' | 'snow' | 'volcanic';
 
 export interface BiomeColors {

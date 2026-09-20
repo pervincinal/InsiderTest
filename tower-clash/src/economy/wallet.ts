@@ -193,7 +193,7 @@ export function levelsCleared(save: SaveData): number {
   return Object.values(save.stars).filter((s) => s >= 1).length;
 }
 
-/** Index (0..4) of the band a level id belongs to, or -1. */
+/** Index (0..5) of the band a level id belongs to, or -1. */
 export function bandOf(levelId: number): number {
   return EARN_RULES.bands.findIndex(([a, b]) => levelId >= a && levelId <= b);
 }

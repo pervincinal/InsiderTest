@@ -7,7 +7,8 @@ import type { Page } from '@playwright/test';
  * Content check: every authored level in src/levels/*.json must load in the real browser build
  * through the debug surface (`window.__towerclash.loadLevel(id)`), land on the play screen with the
  * right levelId, tick the sim forward, and produce no console errors / uncaught exceptions.
- * Screenshots are taken for a fixed set of milestone ids (1, 8, 16, 24, 32, 40) when they exist, so
+ * Screenshots are taken for a fixed set of milestone ids (1 and the last level of every band: 8, 16,
+ * 24, 32, 40, 50) when they exist, so
  * new content from the Level Designer is picked up automatically and missing ids are skipped.
  *
  * Levels are discovered from the filesystem (not imported from src/) for the same reason as
@@ -25,7 +26,7 @@ const LEVEL_FILES = readdirSync(LEVELS_DIR)
   .filter((f) => /^\d{3}-.*\.json$/.test(f))
   .sort();
 const LEVELS: LevelJson[] = LEVEL_FILES.map((f) => JSON.parse(readFileSync(new URL(f, LEVELS_DIR), 'utf8')) as LevelJson);
-const SCREENSHOT_IDS = [1, 8, 16, 24, 32, 40];
+const SCREENSHOT_IDS = [1, 8, 16, 24, 32, 40, 50];
 
 const SHOTS = fileURLToPath(new URL('./__screenshots__/', import.meta.url));
 const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}content-${name}.png`, scale: 'css' });
@@ -89,7 +90,7 @@ test.describe('Tower Clash content: every authored level loads', () => {
   test('screenshot milestones that do not exist yet are reported, not failed', () => {
     const ids = new Set(LEVELS.map((l) => l.id));
     const missing = SCREENSHOT_IDS.filter((id) => !ids.has(id));
-    // informational only: the Level Designer is still authoring 16–40
+    // informational only: the Level Designer is still authoring the next band (41–50 as of 2026-09-20)
     test.info().annotations.push({ type: 'missing-screenshot-levels', description: missing.join(', ') || 'none' });
     expect(SCREENSHOT_IDS.filter((id) => ids.has(id))).toContain(1);
   });

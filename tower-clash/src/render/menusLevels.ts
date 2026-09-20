@@ -45,7 +45,7 @@ export interface DailyCardOpts {
   done: boolean;
   /** Best result today, when won. */
   best: { stars: number; timeMs: number } | null;
-  /** Time to the next challenge ("New in 12:34" / "New challenge in 5h"). */
+  /** Time to the next challenge, naming the reset ("New in 12:34 (00:00 UTC)" / "New in 5h (00:00 UTC)"). */
   countdown: string;
 }
 
@@ -67,6 +67,9 @@ export interface LevelSelectOpts {
   pressed?: Rect | null;
   toast?: ToastOpts | null;
 }
+
+/** Width of the countdown pill (the DONE badge and the streak pill keep the 176 px right column). */
+const COUNTDOWN_W = 250;
 
 /**
  * Daily Challenge card: clay card with a gold star badge (grey lock while locked), the title with a
@@ -102,18 +105,22 @@ function drawDailyCard(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, d: 
   ctx.textBaseline = 'middle';
   // title + the right-hand pill (DONE / countdown)
   const title = t('daily.title');
+  const titleW = d.unlocked && !d.done ? r.w - (left - r.x) - COUNTDOWN_W - 24 : textW;
   ctx.fillStyle = d.unlocked ? pal.ink : pal.textDim;
-  ctx.font = font(fitFontPx(ctx, title, 21, textW));
-  ctx.fillText(title, left, r.y + 26, textW);
+  ctx.font = font(fitFontPx(ctx, title, 21, titleW));
+  ctx.fillText(title, left, r.y + 26, titleW);
   const pill: Rect = { x: r.x + r.w - rightW - 14, y: r.y + 12, w: rightW, h: 32 };
   if (d.unlocked) {
     const done = d.done;
-    drawPill(ctx, pill, done ? pal.gold : pal.paper, done ? pal.goldShade : undefined, 2);
+    // The countdown names the reset ("New in 12:34 (00:00 UTC)", GDD §7.4), so its pill is wider
+    // than the DONE badge / streak column; the title still has ≥ 290 px beside it.
+    const cd: Rect = done ? pill : { x: r.x + r.w - COUNTDOWN_W - 14, y: pill.y, w: COUNTDOWN_W, h: pill.h };
+    drawPill(ctx, cd, done ? pal.gold : pal.paper, done ? pal.goldShade : undefined, 2);
     ctx.textAlign = 'center';
     const label = done ? t('daily.done') : d.countdown;
     ctx.fillStyle = done ? pal.ink : pal.textDim;
-    ctx.font = font(fitFontPx(ctx, label, 17, pill.w - 20, done ? '700' : '500'), done ? '700' : '500');
-    ctx.fillText(label, pill.x + pill.w / 2, pill.y + pill.h / 2 + 1, pill.w - 20);
+    ctx.font = font(fitFontPx(ctx, label, 17, cd.w - 20, done ? '700' : '500'), done ? '700' : '500');
+    ctx.fillText(label, cd.x + cd.w / 2, cd.y + cd.h / 2 + 1, cd.w - 20);
     ctx.textAlign = 'left';
   }
   // line 2: level · twist, or the unlock hint

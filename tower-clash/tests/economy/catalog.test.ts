@@ -125,10 +125,14 @@ describe('economy catalog (docs/ECONOMY.md)', () => {
     const weekCrystals = EARN_RULES.dailyReward.reduce((s, d) => s + d.crystals, 0);
     expect(weekGold).toBe(330);
     expect(weekCrystals).toBe(20);
-    expect(Object.values(EARN_RULES.crystalsPerMilestone).reduce((a, b) => a + b, 0)).toBe(150);
-    expect(EARN_RULES.bands.length).toBe(5);
-    expect(EARN_RULES.bands.at(-1)![1]).toBe(40);
-    expect(ACHIEVEMENTS.reduce((s, a) => s + a.crystals, 0)).toBe(85);
+    // Band 5 (GDD §3, 2026-09-20): milestones 150 → 210, six bands ending at 50, achievements 85 → 95.
+    expect(Object.values(EARN_RULES.crystalsPerMilestone).reduce((a, b) => a + b, 0)).toBe(210);
+    expect(EARN_RULES.crystalsPerMilestone[50]).toBe(EARN_RULES.crystalsPerMilestone[40]); // a second finale, not a bigger one
+    expect(EARN_RULES.bands.length).toBe(6);
+    expect(EARN_RULES.bands.at(-1)).toEqual([41, 50]);
+    for (let i = 1; i < EARN_RULES.bands.length; i++) expect(EARN_RULES.bands[i]![0]).toBe(EARN_RULES.bands[i - 1]![1] + 1); // contiguous
+    expect(ACHIEVEMENTS.reduce((s, a) => s + a.crystals, 0)).toBe(95);
+    expect(ACHIEVEMENTS.find((a) => a.id === 'grand_campaign')).toMatchObject({ label: 'Clear level 50', crystals: 10 });
   });
 
   it('conversion is crystals → gold only and the currencies map to save fields', () => {

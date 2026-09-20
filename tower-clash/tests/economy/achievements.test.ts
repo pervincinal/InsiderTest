@@ -3,6 +3,7 @@ import type { SaveData } from '../../src/ui/save';
 import { SAVE_KEY, defaultSave, loadSaveFrom, normalizeSave, resetProgress, setSaveStorageForTests } from '../../src/ui/save';
 import type { MatchSummary } from '../../src/economy/achievements';
 import {
+  GRAND_CAMPAIGN_LEVEL,
   L3_LEVEL,
   SPEEDRUN_MS,
   achievementCrystalsEarned,
@@ -13,6 +14,7 @@ import {
   threeStarLevels,
 } from '../../src/economy/achievements';
 import { ACHIEVEMENTS } from '../../src/economy/catalog';
+import { LEVEL_META } from '../../src/levels/index';
 
 function memStore() {
   const m = new Map<string, string>();
@@ -61,17 +63,32 @@ describe('unlock rules', () => {
     expect(L3_LEVEL).toBe(3);
   });
 
-  it('star goals come from the save: 10 / 20 / 40 levels at 3★, with or without a match', () => {
+  it('star goals come from the save: 10 / 20 / every level at 3★, with or without a match', () => {
     for (let id = 1; id <= 9; id++) save.stars[String(id)] = 3;
     save.stars['10'] = 2;
     expect(threeStarLevels(save)).toBe(9);
     expect(ids(evaluateAchievements(save))).toEqual([]);
     save.stars['10'] = 3;
     expect(ids(evaluateAchievements(save))).toEqual(['stars_10']);
-    for (let id = 11; id <= 40; id++) save.stars[String(id)] = 3;
+    for (const level of LEVEL_META.slice(10, -1)) save.stars[String(level.id)] = 3;
+    expect(ids(evaluateAchievements(save))).toEqual(['stars_20']); // one short of the campaign
+    save.stars[String(LEVEL_META.at(-1)!.id)] = 3;
     const r = evaluateAchievements(save, win());
-    expect(ids(r)).toEqual(['first_win', 'stars_20', 'stars_40', 'flawless']);
+    expect(ids(r)).toEqual(['first_win', 'stars_40', 'flawless']);
     expect(save.crystals).toBe(10 + 5 + 10 + 20 + 10);
+  });
+
+  it('grand_campaign fires on a won match on level 50 only — not on level 49, a defeat on 50, or a skip of 50', () => {
+    expect(GRAND_CAMPAIGN_LEVEL).toBe(50);
+    expect(ids(evaluateAchievements(save, win({ levelId: 49, lostTower: true })))).toEqual(['first_win']);
+    expect(ids(evaluateAchievements(save, { ...emptyMatch(), levelId: 50, outcome: 'lost' }))).toEqual([]);
+    save.stars['50'] = 1; // a level skip grants 1★ without a match
+    expect(ids(evaluateAchievements(save))).toEqual([]);
+    const r = evaluateAchievements(save, win({ levelId: 50, lostTower: true }));
+    expect(ids(r)).toEqual(['grand_campaign']);
+    expect(r.crystals).toBe(10);
+    expect(save.crystals).toBe(5 + 10);
+    expect(evaluateAchievements(save, win({ levelId: 50, lostTower: true }))).toEqual({ unlocked: [], crystals: 0 });
   });
 
   it('nothing unlocks without a match on a fresh save', () => {
@@ -101,13 +118,14 @@ describe('once-only grants', () => {
     expect(evaluateAchievements(reloaded, win({ lostTower: true }))).toEqual({ unlocked: [], crystals: 0 });
   });
 
-  it('every catalog achievement can be granted exactly once in total (85 crystals)', () => {
-    for (let id = 1; id <= 40; id++) save.stars[String(id)] = 3;
-    const all = evaluateAchievements(save, win({ timeMs: 1000, upgradedToL3: true, capturedFortress: true, capturedTankFactory: true, cutBridge: true }));
+  it('every catalog achievement can be granted exactly once in total (95 crystals)', () => {
+    for (const level of LEVEL_META) save.stars[String(level.id)] = 3;
+    const everything = win({ levelId: GRAND_CAMPAIGN_LEVEL, timeMs: 1000, upgradedToL3: true, capturedFortress: true, capturedTankFactory: true, cutBridge: true });
+    const all = evaluateAchievements(save, everything);
     expect(ids(all)).toEqual(ACHIEVEMENTS.map((a) => a.id));
-    expect(all.crystals).toBe(85);
-    expect(evaluateAchievements(save, win({ timeMs: 1000, upgradedToL3: true, capturedFortress: true, capturedTankFactory: true, cutBridge: true })).crystals).toBe(0);
-    expect(save.crystals).toBe(85);
+    expect(all.crystals).toBe(95);
+    expect(evaluateAchievements(save, everything).crystals).toBe(0);
+    expect(save.crystals).toBe(95);
   });
 });
 
@@ -120,13 +138,14 @@ describe('progress and presentation', () => {
     expect(p.find((a) => a.id === 'first_win')).toMatchObject({ current: 1, target: 1, unlocked: true, crystals: 5 });
     expect(p.find((a) => a.id === 'flawless')).toMatchObject({ current: 0, target: 1, unlocked: false });
     expect(p.find((a) => a.id === 'stars_10')).toMatchObject({ current: 7, target: 10, unlocked: false });
-    expect(p.find((a) => a.id === 'stars_40')).toMatchObject({ current: 7, target: 40, unlocked: false });
+    expect(p.find((a) => a.id === 'stars_40')).toMatchObject({ current: 7, target: LEVEL_META.length, unlocked: false });
     for (let id = 8; id <= 25; id++) save.stars[String(id)] = 3;
     evaluateAchievements(save);
     const q = achievementProgress(save);
     expect(q.find((a) => a.id === 'stars_10')).toMatchObject({ current: 10, target: 10, unlocked: true }); // capped at the target once unlocked
     expect(q.find((a) => a.id === 'stars_20')).toMatchObject({ current: 20, target: 20, unlocked: true });
-    expect(q.find((a) => a.id === 'stars_40')).toMatchObject({ current: 25, target: 40, unlocked: false });
+    expect(q.find((a) => a.id === 'stars_40')).toMatchObject({ current: 25, target: LEVEL_META.length, unlocked: false });
+    expect(LEVEL_META.length, 'the campaign is longer than the 20★ goal, so stars_40 is the long-tail goal').toBeGreaterThan(25);
   });
 
   it('the toast names one or two achievements and counts more', () => {

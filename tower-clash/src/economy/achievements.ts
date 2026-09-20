@@ -1,7 +1,7 @@
 /**
- * Achievements (ECONOMY.md §2.1, `catalog.ACHIEVEMENTS`): ten one-time goals paid in crystals.
+ * Achievements (ECONOMY.md §2.1, `catalog.ACHIEVEMENTS`): eleven one-time goals paid in crystals.
  * Three count 3★ levels in the save; the rest are facts about a single finished match that the
- * play screen collects into a `MatchSummary`. `evaluateAchievements` grants each id exactly once
+ * play screen collects into a `MatchSummary` (including which level it was: `grand_campaign`). `evaluateAchievements` grants each id exactly once
  * (the save's `achievements.unlocked` list is the ledger) and persists through `writeSave`.
  * Pure over `SaveData` — no DOM, no clock.
  *
@@ -9,12 +9,15 @@
  */
 import type { SaveData } from '../ui/save';
 import { writeSave } from '../ui/save';
+import { LEVEL_META } from '../levels/index';
 import type { AchievementDef } from './catalog';
 import { ACHIEVEMENTS } from './catalog';
 
 /** What one finished match tells the achievement rules (collected from sim events by the play screen). */
 export interface MatchSummary {
   outcome: 'won' | 'lost';
+  /** Campaign level id of the match (0 = unknown; the daily challenge never reaches the rules). */
+  levelId: number;
   /** Sim time of the result in ms. */
   timeMs: number;
   /** An enemy captured a tower the player owned at some point. */
@@ -31,7 +34,7 @@ export interface MatchSummary {
 }
 
 export function emptyMatch(): MatchSummary {
-  return { outcome: 'lost', timeMs: 0, lostTower: false, upgradedToL3: false, capturedFortress: false, capturedTankFactory: false, cutBridge: false };
+  return { outcome: 'lost', levelId: 0, timeMs: 0, lostTower: false, upgradedToL3: false, capturedFortress: false, capturedTankFactory: false, cutBridge: false };
 }
 
 /** "Win in under 30 s" (`speedrunner` label in the catalog). */
@@ -40,8 +43,18 @@ export const SPEEDRUN_MS = 30_000;
 /** Tower level that satisfies `first_l3`. */
 export const L3_LEVEL = 3;
 
-/** Achievements that count 3★ levels: id → target. */
-const STAR_TARGETS: Readonly<Record<string, number>> = { stars_10: 10, stars_20: 20, stars_40: 40 };
+/**
+ * Level whose *win* satisfies `grand_campaign` ("Clear level 50", GDD §3 band 5). A fixed id, not
+ * `LEVEL_META.at(-1)`: the label names the level, and a level skip (1★ without a win) must not pay it.
+ */
+export const GRAND_CAMPAIGN_LEVEL = 50;
+
+/**
+ * Achievements that count 3★ levels: id → target. `stars_40` is "every level at 3★": its target is
+ * the campaign length (`LEVEL_META.length`, 40 when it was named), so new bands raise the bar
+ * without touching the id in the save ledger or the catalog.
+ */
+const STAR_TARGETS: Readonly<Record<string, number>> = { stars_10: 10, stars_20: 20, stars_40: LEVEL_META.length };
 
 export interface AchievementProgress {
   id: string;
@@ -79,6 +92,8 @@ function matchSatisfies(id: string, m: MatchSummary): boolean {
       return m.outcome === 'won' && !m.lostTower;
     case 'speedrunner':
       return m.outcome === 'won' && m.timeMs < SPEEDRUN_MS;
+    case 'grand_campaign':
+      return m.outcome === 'won' && m.levelId === GRAND_CAMPAIGN_LEVEL;
     default:
       return false;
   }

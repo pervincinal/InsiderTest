@@ -358,6 +358,7 @@ export class PlayScreen implements Screen {
     if (outcome === 'playing') return;
     const elapsed = this.elapsedMs();
     this.match.outcome = outcome;
+    this.match.levelId = this.level.id;
     this.match.timeMs = elapsed;
     if (this.challenge) {
       // Separate path (GDD §7): no level stars, first-clear gold, milestones or achievements — the

@@ -91,7 +91,9 @@ test.describe('lazy chunks under a failing network', () => {
     await page.waitForTimeout(300);
     expect(await screen(page)).toBe('title');
     expect(await toast(page)).toBe(await text(page, 'common.loadFailed'));
-    // the debug openShop goes through the same path and resolves (does not hang) on failure
+    // the debug openShop goes through the same path and resolves (does not hang) on failure;
+    // wait out the chunk back-off first so this attempt really issues a `?r=` re-fetch
+    await page.waitForTimeout(3_300);
     await page.evaluate(() => window.__towerclash.openShop());
     expect(await screen(page)).toBe('title');
     // the idle preload failed first, so every user attempt since is a `?r=` re-fetch, aborted here

@@ -56,16 +56,24 @@ export const EARN_RULES = {
   /** Replay with no new star: 3 gold per star, capped per calendar day. */
   goldPerStarReplay: 3,
   replayGoldDailyCap: 100,
-  /** Crystals for total levels cleared. */
-  crystalsPerMilestone: { 10: 20, 20: 30, 30: 40, 40: 60 },
-  /** Crystals when every level of a band (8 levels) is at 3★. */
+  /**
+   * Crystals for total levels cleared (210 in all). 50 pays the same 60 as 40: the Grand Campaign is a
+   * second finale, not a bigger one (GDD §3 band 5, 2026-09-20).
+   */
+  crystalsPerMilestone: { 10: 20, 20: 30, 30: 40, 40: 60, 50: 60 },
+  /**
+   * Crystals when every level of a band is at 3★ — the same 20 for every band although band 5 has 10
+   * levels, not 8: the band bonus is the long-tail goal, not pay per level (per-level dilution is deliberate).
+   */
   crystalsPerFullBand3Star: 20,
+  /** Six bands; `bandOf` in wallet.ts indexes them 0..5 (one level skip per band → 6 per campaign). */
   bands: [
     [1, 8],
     [9, 16],
     [17, 24],
     [25, 32],
     [33, 40],
+    [41, 50],
   ],
   /** 7-day login streak; resets after a missed calendar day, loops after day 7. */
   dailyReward: [
@@ -102,9 +110,12 @@ export const ACHIEVEMENTS = [
   { id: 'first_tank', label: 'Capture a tank factory', crystals: 5 },
   { id: 'stars_10', label: 'Ten 3★ levels', crystals: 10 },
   { id: 'stars_20', label: 'Twenty 3★ levels', crystals: 10 },
+  /** Target = campaign length (`LEVEL_META.length`, 50 with band 5); the id stays for the save ledger. */
   { id: 'stars_40', label: 'Every level at 3★', crystals: 20 },
   { id: 'flawless', label: 'Win without losing a tower', crystals: 10 },
   { id: 'speedrunner', label: 'Win in under 30 s', crystals: 10 },
+  /** Band 5 finale (GDD §3, 2026-09-20): a won match on level 50 — a skip does not count. Total 85 → 95. */
+  { id: 'grand_campaign', label: 'Clear level 50', crystals: 10 },
 ] as const satisfies readonly AchievementDef[];
 
 // ---------------------------------------------------------------------------------------------
