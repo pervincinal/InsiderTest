@@ -104,11 +104,12 @@ describe('daily playtest runner', () => {
     expect(twistById('')).toBeUndefined();
   });
 
-  it('inPool is the daily pool, ids 9…40', () => {
+  it('inPool is the daily pool, ids 9…50', () => {
     expect(inPool({ id: 8 })).toBe(false);
     expect(inPool({ id: 9 })).toBe(true);
     expect(inPool({ id: 40 })).toBe(true);
-    expect(inPool({ id: 41 })).toBe(false);
+    expect(inPool({ id: 50 })).toBe(true);
+    expect(inPool({ id: 51 })).toBe(false);
   });
 
   it('runTwist plays a pool level over seeds 1..K with the twist on state.modifiers and gates at 80 %', async () => {
