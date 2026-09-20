@@ -22,15 +22,15 @@
     {"id": "mid", "x": 360, "y": 880, "owner": "neutral", "units": 8},
     {"id": "nw", "x": 150, "y": 760, "owner": "neutral", "units": 12},
     {"id": "ne", "x": 570, "y": 760, "owner": "neutral", "units": 12},
-    {"id": "n", "x": 360, "y": 640, "owner": "neutral", "units": 8},
+    {"id": "n", "x": 360, "y": 640, "owner": "neutral", "units": 14},
     {"id": "red", "x": 130, "y": 440, "owner": "enemy1", "units": 12, "level": 1, "kind": "barracks"},
     {"id": "yellow", "x": 360, "y": 400, "owner": "enemy3", "units": 14, "level": 1, "kind": "fortress"},
     {"id": "green", "x": 590, "y": 440, "owner": "enemy2", "units": 12, "level": 1, "kind": "barracks"},
     {"id": "crown", "x": 360, "y": 200, "owner": "neutral", "units": 10}
   ],
   "roads": [
-    {"a": "home", "b": "w", "barrier": 6},
-    {"a": "home", "b": "e", "barrier": 6},
+    {"a": "home", "b": "w", "barrier": 4},
+    {"a": "home", "b": "e", "barrier": 4},
     {"a": "home", "b": "mid", "kind": "bridge", "waypoints": [{"x": 300, "y": 1060}, {"x": 420, "y": 960}]},
     {"a": "w", "b": "nw"},
     {"a": "e", "b": "ne"},
