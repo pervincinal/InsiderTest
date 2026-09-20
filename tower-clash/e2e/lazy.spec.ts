@@ -98,7 +98,9 @@ test.describe('lazy chunks under a failing network', () => {
     expect(await screen(page)).toBe('title');
     // the idle preload failed first, so every user attempt since is a `?r=` re-fetch, aborted here
     // (the preload and the openShop attempt race the assertions, so poll instead of counting once)
-    await expect.poll(() => aborted.length, { timeout: 5_000 }).toBeGreaterThanOrEqual(3);
+    // the PLAY attempt and the openShop attempt are the two guaranteed requests; the idle preload
+    // may or may not have fired before the taps, so only the user-driven `?r=` re-fetch is asserted
+    await expect.poll(() => aborted.length, { timeout: 5_000 }).toBeGreaterThanOrEqual(2);
     await expect.poll(() => aborted.filter((u) => u.includes('?r=')).length, { timeout: 5_000 }).toBeGreaterThanOrEqual(1);
     expect(errors).toEqual([]);
 
