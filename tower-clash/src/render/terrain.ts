@@ -552,7 +552,7 @@ interface Sparkle {
 interface Ambient {
   clouds: Cloud[];
   sparkles: Sparkle[];
-  /** Specks over the plateau, only drawn for themes with `glow`. */
+  /** Specks over the plateau, only drawn for themes with `glow` (`TerrainTheme.drawGlow`). */
   specks: Sparkle[];
 }
 
@@ -613,21 +613,7 @@ export function drawTerrainOverlay(ctx: CanvasRenderingContext2D, pal: Palette, 
     const x = ((s.x + t * 6 + i * 0.1) % (C.MAP_W + 20)) - 10;
     ctx.fillRect(x - s.len / 2, s.y, s.len, 2.5);
   }
-  if (theme.glow) {
-    // fireflies / snow motes / neon dust: slow twinkle, a gentle drift when motion is allowed
-    ctx.fillStyle = theme.glow;
-    for (let i = 0; i < amb.specks.length; i++) {
-      const s = amb.specks[i]!;
-      const tw = 0.5 + 0.5 * Math.sin(t * 1.1 + s.phase);
-      if (tw < 0.2) continue;
-      ctx.globalAlpha = tw * 0.9;
-      const y = s.y + Math.sin(t * 0.7 + s.phase) * 4;
-      const x = s.x + Math.cos(t * 0.5 + s.phase * 1.3) * 5;
-      ctx.beginPath();
-      ctx.arc(x, y, s.len, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
+  if (theme.drawGlow) theme.drawGlow(ctx, amb.specks, t); // fireflies / snow motes / neon dust (theme chunk)
   ctx.globalAlpha = theme.cloudAlpha;
   ctx.fillStyle = pal.groundShadow;
   const span = C.MAP_W + 560;

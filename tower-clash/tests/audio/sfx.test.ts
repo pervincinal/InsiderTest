@@ -11,6 +11,7 @@ import {
   initAudio,
   isAudioUnlocked,
   isMuted,
+  loadSfxRecipes,
   onPlayerCommand,
   onSimEvents,
   onSimFrame,
@@ -31,12 +32,14 @@ let ctx: FakeAudioContext;
 let save: SaveData;
 let persisted: SaveData[];
 
-function setup(sound = true): void {
+async function setup(sound = true): Promise<void> {
   ctx = new FakeAudioContext();
   save = defaultSave();
   save.settings.sound = sound;
   persisted = [];
   initAudio(save, { factory: () => ctx, persist: (s) => persisted.push(s) });
+  // the recipes are a lazy chunk (src/audio/recipes.ts); the tests below play synchronously
+  await loadSfxRecipes();
 }
 
 /** Longest scheduled voice in seconds, measured from the context clock. */
@@ -71,8 +74,8 @@ describe('unlock', () => {
 });
 
 describe('mute', () => {
-  it('starts muted when settings.sound is false and plays nothing', () => {
-    setup(false);
+  it('starts muted when settings.sound is false and plays nothing', async () => {
+    await setup(false);
     unlockAudio();
     expect(isMuted()).toBe(true);
     expect(playSfx('capture', { capture: 'gain' })).toBe(false);

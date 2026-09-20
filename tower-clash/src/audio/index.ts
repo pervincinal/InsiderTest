@@ -5,10 +5,11 @@ import { writeSave } from '../ui/save';
 import type { AudioContextFactory, AudioContextLike } from './synth';
 import { Synth } from './synth';
 import type { SfxName, SfxOptions } from './sfx';
-import { ArrivalTracker, SfxPlayer, sfxForEvents } from './sfx';
+import { ArrivalTracker, SfxPlayer, loadSfxRecipes, sfxForEvents } from './sfx';
 
 export type { SfxName, SfxOptions, SfxCall, CaptureKind } from './sfx';
-export { sfxForEvents, sendPitchHz, ArrivalTracker, SfxPlayer, RATE_LIMIT_S, SEND_PITCH_CAP } from './sfx';
+export { sfxForEvents, sendPitchHz, loadSfxRecipes, ArrivalTracker, SfxPlayer, RATE_LIMIT_S, SEND_PITCH_CAP } from './sfx';
+export type { SfxRecipe } from './sfx';
 export { Synth } from './synth';
 export type { AudioContextLike, AudioContextFactory } from './synth';
 
@@ -53,11 +54,19 @@ export function initAudio(save: SaveData, opts: InitAudioOptions = {}): void {
   mod.save = save;
   if (opts.persist) mod.persist = opts.persist;
   mod.synth.setMuted(!save.settings.sound);
+  if (save.settings.sound) warmRecipes();
+}
+
+/** Start fetching the recipes chunk so the first tap already has its click (never awaited; failures retry on play / unlock). */
+function warmRecipes(): void {
+  void loadSfxRecipes().catch(() => undefined);
 }
 
 /** Create/resume the AudioContext. Call from a pointerdown/keydown handler. */
 export function unlockAudio(): boolean {
-  return mod.synth.unlock();
+  const ok = mod.synth.unlock();
+  if (ok && !mod.synth.muted) warmRecipes();
+  return ok;
 }
 
 /** True once an AudioContext exists. */

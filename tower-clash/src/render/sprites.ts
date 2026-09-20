@@ -60,15 +60,37 @@ export const HELMET_SKINS = ['helmet.default', 'helmet.plume', 'helmet.bronze', 
 export { THEME_IDS } from './palette';
 
 /*
- * Silhouette skins (`tower.*` / `unit.*`) are drawn by src/render/skinShapes.ts, a lazy chunk
- * (the eager bundle sits on its 80 kB budget). The first draw that needs one kicks off the import
- * and falls back to the default look until it lands — a frame or two on first use; the shop preview
+ * Silhouette skins (`tower.*` / `unit.*`), the cosmetic roof materials (gold / iron / slate / tent /
+ * pagoda / onion) and the helmet skins are drawn by src/render/skinShapes.ts, a lazy chunk (the
+ * eager bundle sits on its 80 kB budget). The first draw that needs one kicks off the import and
+ * falls back to the default look until it lands — a frame or two on first use; the shop preview
  * and `loadShapeSkins()` warm it earlier.
  */
 export interface ShapeSkinDrawers {
   tower: (ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, kind: TowerKind, x: number, y: number, level: number, o: TowerDrawOptions, skinId: string) => void;
   unit: (ctx: CanvasRenderingContext2D, pal: Palette, st: UnitStyle, x: number, y: number, kind: UnitKind, dx: number, dy: number, id: number, nowMs: number, motion: boolean, scale: number, skinId: string) => void;
+  /** Cosmetic roof materials (`LAZY_ROOFS`): how a skin changes the roof, then its parts — owner band, tent stripes, tiered pagoda, onion bulb, the factory's hip roof, slate courses, iron rivets. */
+  roofStyle: (pal: Palette, owner: Tones, id: string) => RoofStyle;
+  ownerBand: (ctx: CanvasRenderingContext2D, tones: Tones, x: number, y: number, rx: number, ry: number) => void;
+  coneStripes: (ctx: CanvasRenderingContext2D, x: number, base: number, apex: number, rx: number, ry: number, stripes: Tones) => void;
+  domeStripes: (ctx: CanvasRenderingContext2D, x: number, base: number, rx: number, ry: number, stripes: Tones) => void;
+  pagoda: (ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, base: number, height: number, rx: number, ry: number, tiers?: number) => void;
+  onion: (ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, base: number, height: number, rx: number, ry: number) => void;
+  factoryPagoda: (ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, top: number, pulse: number, hw?: number) => void;
+  factoryOnion: (ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, top: number, pulse: number, hw: number) => void;
+  factoryRivets: (ctx: CanvasRenderingContext2D, tones: Tones, x: number, top: number, hw: number) => void;
+  domeRoof: (ctx: CanvasRenderingContext2D, tones: Tones, x: number, base: number, height: number, rx: number, ry: number, stripes?: Tones) => void;
+  sawTeeth: (ctx: CanvasRenderingContext2D, style: RoofStyle, x: number, top: number, hw: number, n: number, h: number, dim?: boolean) => void;
+  shingles: (ctx: CanvasRenderingContext2D, tones: Tones, x: number, base: number, height: number, rx: number, ry: number) => void;
+  rivets: (ctx: CanvasRenderingContext2D, tones: Tones, x: number, y: number, rx: number, ry: number) => void;
+  /** Helmet skins (`LAZY_HELMETS`); unknown ids draw the default cap. */
+  helmet: (ctx: CanvasRenderingContext2D, pal: Palette, st: UnitStyle, id: string, hx: number, hy: number, s: number, dx: number) => void;
 }
+
+/** Roof ids whose parts (owner band, stripes, rivets, shingles, pagoda, onion) live in the lazy chunk. */
+const LAZY_ROOFS: ReadonlySet<string> = new Set(['roof.gold', 'roof.iron', 'roof.slate', 'roof.tent', 'roof.pagoda', 'roof.onion']);
+/** Helmet ids drawn by the lazy chunk (the default cap is eager). */
+const LAZY_HELMETS: ReadonlySet<string> = new Set(['helmet.plume', 'helmet.bronze', 'helmet.viking', 'helmet.knight', 'helmet.samurai', 'helmet.royal']);
 
 const SKIN_CHUNK = 'skinShapes';
 let shapeSkins: ShapeSkinDrawers | null = null;
@@ -103,23 +125,24 @@ function shapeSkinsNow(): ShapeSkinDrawers | null {
   return shapeSkins;
 }
 
+/** The loaded drawers. Only reached for a `RoofStyle` that `roofStyle` produced after the chunk landed. */
+function parts(): ShapeSkinDrawers {
+  return shapeSkins as ShapeSkinDrawers;
+}
+
 export const RIM = 'rgba(255, 250, 240, 0.55)';
 export const INK_LINE = 'rgba(30, 42, 68, 0.18)';
 export const TAU = Math.PI * 2;
 /** Cream canvas stripes of the tent skin (paper, and paper in shadow). */
 export const STRIPE: Tones = { lit: '#fffaf0', mid: '#fff3dc', shade: '#e2d3b8' };
-/** Blue-grey slate tiles (lighter and bluer than the gun-metal iron roof). */
-const SLATE: Tones = { lit: '#b3bede', mid: '#7481ad', shade: '#4d5578' };
-/** Bronze helmet clay. */
-const BRONZE: Tones = { lit: '#f0c070', mid: '#c98a3e', shade: '#8a5a24' };
 
 /**
  * How a skin changes the owner-coloured roof. Every non-default material keeps an owner-coloured
  * band at the roof base (and the flag) so ownership still reads at a glance in both palettes.
  */
-type RoofShape = 'cone' | 'dome' | 'pagoda' | 'onion';
+export type RoofShape = 'cone' | 'dome' | 'pagoda' | 'onion';
 
-interface RoofStyle {
+export interface RoofStyle {
   tones: Tones;
   /** Alternate facets in these tones (tent). */
   stripes?: Tones;
@@ -134,22 +157,13 @@ interface RoofStyle {
 }
 
 function roofStyle(pal: Palette, owner: Tones, skin?: TowerSkin): RoofStyle {
-  switch (skin?.roof) {
-    case 'roof.gold':
-      return { tones: pal.goldTones, shape: 'dome', rivets: false, shingles: false, band: true };
-    case 'roof.iron':
-      return { tones: pal.metal, shape: 'cone', rivets: true, shingles: false, band: true };
-    case 'roof.slate':
-      return { tones: SLATE, shape: 'cone', rivets: false, shingles: true, band: true };
-    case 'roof.tent':
-      return { tones: owner, stripes: STRIPE, shape: 'cone', rivets: false, shingles: false, band: false };
-    case 'roof.pagoda':
-      return { tones: owner, shape: 'pagoda', rivets: false, shingles: false, band: false };
-    case 'roof.onion':
-      return { tones: owner, shape: 'onion', rivets: false, shingles: false, band: false };
-    default:
-      return { tones: owner, shape: 'cone', rivets: false, shingles: false, band: false };
+  const id = skin?.roof;
+  if (id !== undefined && LAZY_ROOFS.has(id)) {
+    // material in the lazy chunk: the default cone until it lands (the call starts the download)
+    const drawers = shapeSkinsNow();
+    if (drawers) return drawers.roofStyle(pal, owner, id);
   }
+  return { tones: owner, shape: 'cone', rivets: false, shingles: false, band: false };
 }
 
 /** Level index 0..2 clamped, for the per-level geometry tables. */
@@ -301,15 +315,7 @@ export function cone(ctx: CanvasRenderingContext2D, tones: Tones, x: number, bas
   facet(Math.PI, 0, tones.mid);
   facet(Math.PI, Math.PI * 0.68, tones.lit);
   facet(Math.PI * 0.3, 0, tones.shade);
-  if (stripes) {
-    // every other wedge of the front half in canvas, lit on the left and shaded on the right
-    const n = 6;
-    for (let i = 1; i < n; i += 2) {
-      const a0 = Math.PI - (i / n) * Math.PI;
-      const a1 = Math.PI - ((i + 1) / n) * Math.PI;
-      facet(a0, a1, a0 > Math.PI * 0.6 ? stripes.lit : a0 > Math.PI * 0.4 ? stripes.mid : stripes.shade);
-    }
-  }
+  if (stripes) parts().coneStripes(ctx, x, base, apex, rx, ry, stripes); // tent skin (lazy chunk)
   ctx.strokeStyle = RIM;
   ctx.lineWidth = 2;
   ctx.lineCap = 'round';
@@ -320,7 +326,7 @@ export function cone(ctx: CanvasRenderingContext2D, tones: Tones, x: number, bas
 }
 
 /** Half-dome (gold skin, artillery bunker): three facets and a rim arc on the upper-left. */
-function dome(ctx: CanvasRenderingContext2D, tones: Tones, x: number, base: number, rx: number, ry: number, stripes?: Tones): void {
+export function dome(ctx: CanvasRenderingContext2D, tones: Tones, x: number, base: number, rx: number, ry: number, stripes?: Tones): void {
   ctx.fillStyle = tones.mid;
   ctx.beginPath();
   ctx.ellipse(x, base, rx, ry, 0, Math.PI, 0, false);
@@ -338,19 +344,7 @@ function dome(ctx: CanvasRenderingContext2D, tones: Tones, x: number, base: numb
   ctx.lineTo(x, base);
   ctx.closePath();
   ctx.fill();
-  if (stripes) {
-    const n = 6;
-    for (let i = 1; i < n; i += 2) {
-      const a0 = Math.PI + (i / n) * Math.PI;
-      const a1 = Math.PI + ((i + 1) / n) * Math.PI;
-      ctx.fillStyle = i < 2 ? stripes.lit : i < 4 ? stripes.mid : stripes.shade;
-      ctx.beginPath();
-      ctx.moveTo(x, base);
-      ctx.ellipse(x, base, rx, ry, 0, a0, a1, false);
-      ctx.closePath();
-      ctx.fill();
-    }
-  }
+  if (stripes) parts().domeStripes(ctx, x, base, rx, ry, stripes); // tent skin (lazy chunk)
   ctx.strokeStyle = RIM;
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -358,200 +352,24 @@ function dome(ctx: CanvasRenderingContext2D, tones: Tones, x: number, base: numb
   ctx.stroke();
 }
 
-/**
- * Owner-coloured trim under a skinned roof's eave (drawn before the roof, so only its front rim
- * shows): a shade ellipse with a mid ellipse on top and a lit sliver on the upper-left.
- */
-export function ownerBand(ctx: CanvasRenderingContext2D, tones: Tones, x: number, y: number, rx: number, ry: number): void {
-  ctx.fillStyle = tones.shade;
-  ctx.beginPath();
-  ctx.ellipse(x, y + 3, rx, ry, 0, 0, TAU);
-  ctx.fill();
-  ctx.fillStyle = tones.mid;
-  ctx.beginPath();
-  ctx.ellipse(x, y + 1, rx, ry, 0, 0, TAU);
-  ctx.fill();
-  ctx.strokeStyle = tones.lit;
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.ellipse(x, y, rx - 1, ry - 1, 0, Math.PI * 0.6, Math.PI * 1.1);
-  ctx.stroke();
-}
-
-/** Rivet dots along an eave (iron skin). */
-function rivets(ctx: CanvasRenderingContext2D, tones: Tones, x: number, y: number, rx: number, ry: number): void {
-  ctx.fillStyle = tones.lit;
-  for (let i = 0; i < 5; i++) {
-    const a = Math.PI + ((i + 0.5) / 5) * Math.PI;
-    ctx.beginPath();
-    ctx.arc(x + Math.cos(a) * rx * 0.85, y + Math.sin(a) * ry * 0.85 - 2, 1.6, 0, TAU);
-    ctx.fill();
-  }
-}
-
-/** Tile courses across the front of a cone (slate skin): ink lines with a lit edge on the left. */
-function shingles(ctx: CanvasRenderingContext2D, tones: Tones, x: number, base: number, height: number, rx: number, ry: number): void {
-  ctx.lineCap = 'butt';
-  for (const f of [0.22, 0.44, 0.66]) {
-    const k = 1 - f;
-    const cy = base - height * f;
-    ctx.strokeStyle = tones.shade;
-    ctx.lineWidth = 2.2;
-    ctx.beginPath();
-    ctx.ellipse(x, cy, rx * k, ry * k, 0, 0.05, Math.PI - 0.05);
-    ctx.stroke();
-    ctx.strokeStyle = tones.lit;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.ellipse(x, cy - 1.5, rx * k, ry * k, 0, Math.PI * 0.5, Math.PI * 0.95);
-    ctx.stroke();
-  }
-}
-
-/** Gold finial: short spike topped by a ball (pagoda / onion). */
-function finial(ctx: CanvasRenderingContext2D, pal: Palette, x: number, apex: number, size: number): void {
-  ctx.strokeStyle = pal.goldShade;
-  ctx.lineCap = 'round';
-  ctx.lineWidth = Math.max(1.5, size * 0.5);
-  ctx.beginPath();
-  ctx.moveTo(x, apex + 1);
-  ctx.lineTo(x, apex - size * 1.6);
-  ctx.stroke();
-  ctx.fillStyle = pal.goldShade;
-  ctx.beginPath();
-  ctx.arc(x + size * 0.15, apex - size * 1.6 + size * 0.2, size, 0, TAU);
-  ctx.fill();
-  ctx.fillStyle = pal.gold;
-  ctx.beginPath();
-  ctx.arc(x, apex - size * 1.6, size, 0, TAU);
-  ctx.fill();
-  ctx.fillStyle = '#fff3c4';
-  ctx.beginPath();
-  ctx.arc(x - size * 0.3, apex - size * 1.6 - size * 0.3, size * 0.35, 0, TAU);
-  ctx.fill();
-}
-
-/** Front eave lip whose ends curl upward (pagoda): shade lip, then a lit rim just above it. */
-function eaveLip(ctx: CanvasRenderingContext2D, tones: Tones, x: number, b: number, rx: number, ry: number): void {
-  ctx.lineCap = 'round';
-  for (const [dy, w, color] of [
-    [0, 3.2, tones.shade],
-    [-1.2, 1.4, tones.lit],
-  ] as const) {
-    ctx.strokeStyle = color;
-    ctx.lineWidth = w;
-    ctx.beginPath();
-    ctx.moveTo(x - rx - 4, b - 5 + dy);
-    ctx.quadraticCurveTo(x - rx + 2, b + ry * 1.05 + dy, x, b + ry + 1 + dy);
-    ctx.quadraticCurveTo(x + rx - 2, b + ry * 1.05 + dy, x + rx + 4, b - 5 + dy);
-    ctx.stroke();
-  }
-}
-
-/**
- * Pagoda: `tiers` stacked cone eaves shrinking upward with short stone walls between them, the
- * eave ends curling up, a gold finial on top. Total height ≈ `height` × 1.05, so the badge clears it.
- */
-function pagoda(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, base: number, height: number, rx: number, ry: number, tiers = 3): void {
-  const step = tiers === 2 ? 0.4 : 0.27;
-  const eave = tiers === 2 ? 0.42 : 0.26;
-  const shrink = tiers === 2 ? 0.34 : 0.28;
-  let apex = base;
-  for (let i = 0; i < tiers; i++) {
-    const k = 1 - i * shrink;
-    const b = base - i * height * step;
-    const trx = rx * k + 2;
-    const try_ = Math.max(2, ry * k);
-    apex = b - height * eave;
-    cone(ctx, tones, x, b, apex, trx, try_);
-    eaveLip(ctx, tones, x, b, trx, try_);
-    if (i < tiers - 1) {
-      // wall stub carrying the next tier
-      const nrx = (rx * (1 - (i + 1) * shrink) + 2) * 0.78;
-      cylinder(ctx, pal.stoneTones, x, b - height * step - 1, b - height * eave * 0.55, nrx, Math.max(1.5, try_ * 0.6), 0, 0.15);
-    }
-  }
-  finial(ctx, pal, x, apex + 1, Math.max(2.2, rx * 0.11));
-}
-
-/**
- * Onion dome: a bulb that swells past the eave then draws to a point, three vertical tone bands,
- * faint rib lines, a rim light on the upper-left and a gold finial. Height ≈ `height` × 1.05.
- */
-function onion(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, base: number, height: number, rx: number, ry: number): void {
-  const h = height * 0.98;
-  const bulge = rx * 1.2;
-  const rb = rx * 0.9;
-  const trace = (): void => {
-    ctx.beginPath();
-    ctx.moveTo(x - rb, base);
-    ctx.bezierCurveTo(x - bulge * 1.2, base - h * 0.4, x - rx * 0.36, base - h * 0.74, x, base - h);
-    ctx.bezierCurveTo(x + rx * 0.36, base - h * 0.74, x + bulge * 1.2, base - h * 0.4, x + rb, base);
-    ctx.ellipse(x, base, rb, ry, 0, 0, Math.PI, false);
-    ctx.closePath();
-  };
-  // eave underside
-  ctx.fillStyle = tones.shade;
-  ctx.beginPath();
-  ctx.ellipse(x, base, rx + 3, ry + 1.5, 0, 0, TAU);
-  ctx.fill();
-  trace();
-  ctx.fillStyle = tones.mid;
-  ctx.fill();
-  ctx.save();
-  trace();
-  ctx.clip();
-  ctx.fillStyle = tones.lit;
-  ctx.fillRect(x - bulge - 4, base - h - 4, bulge + 4 - rx * 0.42, h + ry + 8);
-  ctx.fillStyle = tones.shade;
-  ctx.fillRect(x + rx * 0.3, base - h - 4, bulge + 4, h + ry + 8);
-  // ribs
-  ctx.strokeStyle = INK_LINE;
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  for (const f of [-0.5, 0, 0.5]) {
-    ctx.moveTo(x, base - h + 2);
-    ctx.quadraticCurveTo(x + bulge * f * 1.3, base - h * 0.45, x + rb * f, base + ry * 0.9);
-  }
-  ctx.stroke();
-  ctx.restore();
-  ctx.strokeStyle = RIM;
-  ctx.lineWidth = 2;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(x - 2, base - h + 4);
-  ctx.bezierCurveTo(x - rx * 0.4, base - h * 0.72, x - bulge * 1.05, base - h * 0.42, x - rb + 2, base - 1);
-  ctx.stroke();
-  finial(ctx, pal, x, base - h + 1, Math.max(2.2, rx * 0.11));
-}
-
 /** Cone, dome, pagoda or onion roof per skin, with its owner band / rivets / shingles. */
 function roof(ctx: CanvasRenderingContext2D, pal: Palette, owner: Tones, style: RoofStyle, x: number, base: number, height: number, rx: number, ry: number): void {
-  if (style.band) ownerBand(ctx, owner, x, base + 2, rx + 4, ry + 2);
+  if (style.band) parts().ownerBand(ctx, owner, x, base + 2, rx + 4, ry + 2);
   switch (style.shape) {
     case 'dome':
-      // eave in the roof material, then the dome, then a finial ball
-      ctx.fillStyle = style.tones.shade;
-      ctx.beginPath();
-      ctx.ellipse(x, base, rx + 3, ry + 1.5, 0, 0, TAU);
-      ctx.fill();
-      dome(ctx, style.tones, x, base, rx * 0.9, height * 0.95, style.stripes);
-      ctx.fillStyle = style.tones.lit;
-      ctx.beginPath();
-      ctx.arc(x, base - height * 0.95 - 2, 3.5, 0, TAU);
-      ctx.fill();
+      parts().domeRoof(ctx, style.tones, x, base, height, rx, ry, style.stripes);
       break;
     case 'pagoda':
-      pagoda(ctx, pal, style.tones, x, base, height, rx, ry);
+      parts().pagoda(ctx, pal, style.tones, x, base, height, rx, ry);
       break;
     case 'onion':
-      onion(ctx, pal, style.tones, x, base, height, rx, ry);
+      parts().onion(ctx, pal, style.tones, x, base, height, rx, ry);
       break;
     default:
       cone(ctx, style.tones, x, base, base - height, rx, ry, style.stripes);
-      if (style.shingles) shingles(ctx, style.tones, x, base, height, rx, ry);
+      if (style.shingles) parts().shingles(ctx, style.tones, x, base, height, rx, ry);
   }
-  if (style.rivets) rivets(ctx, style.tones, x, base, rx, ry);
+  if (style.rivets) parts().rivets(ctx, style.tones, x, base, rx, ry);
 }
 
 /** Flag on a pole; the free edge waves. */
@@ -767,10 +585,10 @@ export function crenelsHalf(ctx: CanvasRenderingContext2D, pal: Palette, x: numb
  * stands through. Tent stripes carry over; band skins get the owner band under it.
  */
 function skirtRoof(ctx: CanvasRenderingContext2D, owner: Tones, style: RoofStyle, x: number, base: number, rx: number, ry: number, height: number): void {
-  if (style.band) ownerBand(ctx, owner, x, base + 2, rx + 3, ry + 1.5);
+  if (style.band) parts().ownerBand(ctx, owner, x, base + 2, rx + 3, ry + 1.5);
   cone(ctx, style.tones, x, base, base - height, rx, ry, style.stripes);
-  if (style.shingles) shingles(ctx, style.tones, x, base, height, rx, ry);
-  if (style.rivets) rivets(ctx, style.tones, x, base, rx, ry);
+  if (style.shingles) parts().shingles(ctx, style.tones, x, base, height, rx, ry);
+  if (style.rivets) parts().rivets(ctx, style.tones, x, base, rx, ry);
 }
 
 function drawBarracks(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, y: number, level: number, o: TowerDrawOptions): void {
@@ -932,12 +750,12 @@ function drawArtillery(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones
   const rx = [19, 22, 25][k]! * pulse;
   const ry = [14, 17, 19][k]! * pulse;
   const style = roofStyle(pal, tones, o.skin);
-  if (style.band) ownerBand(ctx, tones, x, dy, rx + 2, 6);
-  if (style.shape === 'pagoda') pagoda(ctx, pal, style.tones, x, dy, ry * 1.3, rx, 7, 2);
-  else if (style.shape === 'onion') onion(ctx, pal, style.tones, x, dy, ry * 1.5, rx, 7);
+  if (style.band) parts().ownerBand(ctx, tones, x, dy, rx + 2, 6);
+  if (style.shape === 'pagoda') parts().pagoda(ctx, pal, style.tones, x, dy, ry * 1.3, rx, 7, 2);
+  else if (style.shape === 'onion') parts().onion(ctx, pal, style.tones, x, dy, ry * 1.5, rx, 7);
   else {
     dome(ctx, style.tones, x, dy, rx, ry, style.stripes);
-    if (style.shingles) shingles(ctx, style.tones, x, dy, ry, rx, rx * 0.5);
+    if (style.shingles) parts().shingles(ctx, style.tones, x, dy, ry, rx, rx * 0.5);
     if (k === 2) {
       // L3 double roof: observation cupola on the dome
       dome(ctx, style.tones, x, dy - ry + 3, rx * 0.34, ry * 0.36);
@@ -947,7 +765,7 @@ function drawArtillery(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones
       ctx.fill();
     }
   }
-  if (style.rivets) rivets(ctx, style.tones, x, dy, rx, ry);
+  if (style.rivets) parts().rivets(ctx, style.tones, x, dy, rx, ry);
   // barrel tracks the last target; longer and heavier per level
   barrel(ctx, pal, x, dy - 6, o.aim ?? -0.6, [26, 30, 36][k]!, [9, 10, 12][k]!);
   gems(ctx, pal, x + (k >= 1 ? 4 : -2), y - bh * 0.45, level, o.nowMs, o.motion);
@@ -980,97 +798,30 @@ export function barrel(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y
   ctx.fill();
 }
 
-/** Two-tier hip roof with curling eaves across the factory deck (pagoda skin); `hw` = deck half width. */
-function factoryPagoda(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, top: number, pulse: number, hw = 32): void {
-  const tier_ = (b: number, w0: number, w1: number, h: number): void => {
-    // underside lip, mid face, lit left facet, shade right facet
-    ctx.fillStyle = tones.shade;
-    ctx.fillRect(x - w0 - 2, b - 1, (w0 + 2) * 2, 4);
-    ctx.fillStyle = tones.mid;
-    ctx.beginPath();
-    ctx.moveTo(x - w0, b);
-    ctx.lineTo(x - w1, b - h);
-    ctx.lineTo(x + w1, b - h);
-    ctx.lineTo(x + w0, b);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = tones.lit;
-    ctx.beginPath();
-    ctx.moveTo(x - w0, b);
-    ctx.lineTo(x - w1, b - h);
-    ctx.lineTo(x - w1 + 8, b - h);
-    ctx.lineTo(x - w0 + 10, b);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = tones.shade;
-    ctx.beginPath();
-    ctx.moveTo(x + w0, b);
-    ctx.lineTo(x + w1, b - h);
-    ctx.lineTo(x + w1 - 6, b - h);
-    ctx.lineTo(x + w0 - 8, b);
-    ctx.closePath();
-    ctx.fill();
-    // curling eave ends
-    ctx.lineCap = 'round';
-    ctx.strokeStyle = tones.shade;
-    ctx.lineWidth = 3.2;
-    ctx.beginPath();
-    ctx.moveTo(x - w0 - 5, b - 5);
-    ctx.quadraticCurveTo(x - w0 + 1, b + 2, x, b + 2);
-    ctx.quadraticCurveTo(x + w0 - 1, b + 2, x + w0 + 5, b - 5);
-    ctx.stroke();
-    ctx.strokeStyle = tones.lit;
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    ctx.moveTo(x - w0 - 5, b - 6);
-    ctx.quadraticCurveTo(x - w0 + 1, b + 1, x, b + 1);
-    ctx.stroke();
-  };
-  const s = hw / 32;
-  tier_(top, 38 * s, 26 * s, 11 * pulse * s);
-  // wall stub
-  ctx.fillStyle = pal.stoneTones.mid;
-  ctx.fillRect(x - 20 * s, top - 16 * pulse * s, 40 * s, 6 * pulse * s);
-  ctx.fillStyle = pal.stoneTones.lit;
-  ctx.fillRect(x - 20 * s, top - 16 * pulse * s, 6 * s, 6 * pulse * s);
-  tier_(top - 15 * pulse * s, 24 * s, 10 * s, 10 * pulse * s);
-  // ridge + finial
-  ctx.fillStyle = tones.shade;
-  ctx.fillRect(x - 11 * s, top - 27 * pulse * s, 22 * s, 3);
-  finial(ctx, pal, x, top - 26 * pulse * s, 2.4 * s);
-}
-
-/** Saw-tooth roof row across a factory deck: `n` teeth over `x-hw..x+hw` rising `h` from `top`. */
+/** Saw-tooth roof row across a factory deck: `n` teeth over `x-hw..x+hw` rising `h` from `top` (tent stripes / slate courses: the chunk). */
 function sawTeeth(ctx: CanvasRenderingContext2D, style: RoofStyle, x: number, top: number, hw: number, n: number, h: number, dim = false): void {
+  if (style.stripes || style.shingles) {
+    parts().sawTeeth(ctx, style, x, top, hw, n, h, dim);
+    return;
+  }
   const rt = style.tones;
   const tw = (hw * 2) / n;
   for (let i = 0; i < n; i++) {
     const sx = x - hw + i * tw;
-    const striped = style.stripes && i % 2 === 1;
-    ctx.fillStyle = dim ? rt.shade : striped ? style.stripes!.mid : rt.mid;
+    ctx.fillStyle = dim ? rt.shade : rt.mid;
     ctx.beginPath();
     ctx.moveTo(sx, top);
     ctx.lineTo(sx + tw * 0.4, top - h);
     ctx.lineTo(sx + tw, top);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = dim ? rt.mid : striped ? style.stripes!.lit : rt.lit;
+    ctx.fillStyle = dim ? rt.mid : rt.lit;
     ctx.beginPath();
     ctx.moveTo(sx, top);
     ctx.lineTo(sx + tw * 0.4, top - h);
     ctx.lineTo(sx + tw * 0.4, top);
     ctx.closePath();
     ctx.fill();
-    if (style.shingles && !dim) {
-      ctx.strokeStyle = INK_LINE;
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      for (const hh of [h * 0.3, h * 0.6]) {
-        ctx.moveTo(sx + (tw * 0.4 * hh) / h, top - hh);
-        ctx.lineTo(sx + tw - (tw * 0.6 * hh) / h, top - hh);
-      }
-      ctx.stroke();
-    }
   }
 }
 
@@ -1143,14 +894,8 @@ function drawFactory(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, 
   const rt = style.tones;
   const teeth = style.shape === 'pagoda' || style.shape === 'onion' ? 0 : [3, 3, 4][k]!;
   const th = [13, 16, 18][k]! * pulse;
-  if (style.shape === 'pagoda') factoryPagoda(ctx, pal, rt, x, top, pulse, hw);
-  else if (style.shape === 'onion') {
-    ctx.fillStyle = rt.shade;
-    ctx.fillRect(x - hw, top - 4, hw * 2, 4);
-    ctx.fillStyle = rt.mid;
-    ctx.fillRect(x - hw, top - 6, hw * 2, 4);
-    onion(ctx, pal, rt, x - hw * 0.19, top - 6, 22 * pulse * (hw / 32), 15 * pulse * (hw / 32), 5 * (hw / 32));
-  }
+  if (style.shape === 'pagoda') parts().factoryPagoda(ctx, pal, rt, x, top, pulse, hw);
+  else if (style.shape === 'onion') parts().factoryOnion(ctx, pal, rt, x, top, pulse, hw);
   if (teeth) {
     if (k === 2) {
       // L3 double roof: a second row of teeth stepped back and up, peaks showing between the front ones
@@ -1171,14 +916,7 @@ function drawFactory(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, 
     ctx.fillStyle = style.band ? tones.mid : rt.shade;
     ctx.fillRect(x - hw, top - 1, hw * 2, 3);
   }
-  if (style.rivets) {
-    ctx.fillStyle = rt.lit;
-    for (let i = 0; i < 4; i++) {
-      ctx.beginPath();
-      ctx.arc(x - hw * 0.75 + i * hw * 0.5, top - 5, 1.6, 0, TAU);
-      ctx.fill();
-    }
-  }
+  if (style.rivets) parts().factoryRivets(ctx, rt, x, top, hw);
   // chimney(s) + smoke: one from L1, twin stacks at L3
   const cw = [10, 12, 11][k]!;
   const ch = [28, 32, 38][k]!;
@@ -1467,135 +1205,28 @@ export function drawUnitSprite(
   drawHelmet(ctx, pal, st, helmet, x + lean * 0.6, hy, scale, dx);
 }
 
-/** Cream plume trailing back from the crest (2 strokes: shade outline + paper). */
-function plume(ctx: CanvasRenderingContext2D, outline: string, px: number, py: number, back: number, s: number, big = 1): void {
-  ctx.lineCap = 'round';
-  ctx.strokeStyle = outline;
-  ctx.lineWidth = 3.6 * s * big;
+/** Owner-coloured (or skin-coloured) cap: the upper half-disc of the helmet, closed along the brow. */
+export function helmetCap(ctx: CanvasRenderingContext2D, color: string, hx: number, capY: number, r: number): void {
+  ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.moveTo(px, py);
-  ctx.quadraticCurveTo(px + back * 0.3, py - 5 * s * big, px + back, py - 3 * s * big);
-  ctx.stroke();
-  ctx.strokeStyle = STRIPE.lit;
-  ctx.lineWidth = 2 * s * big;
-  ctx.stroke();
+  ctx.arc(hx, capY, r, Math.PI * 0.95, Math.PI * 2.05);
+  ctx.closePath();
+  ctx.fill();
 }
 
 /**
- * Helmet skins at soldier scale (`s` = 1 is a 20 px soldier, ≈ 10 px on a 360 px phone), so each
- * one is a colour plus a single silhouette feature: bronze = bronze cap + nose guard, viking =
- * cream horns, knight = steel great helm with a visor slit, samurai = wide brim + gold crest,
- * royal = gold rim + plume. Bodies stay owner-coloured so ownership never depends on the helmet.
+ * Helmet: the owner-coloured cap by default; the equipped skin (`LAZY_HELMETS`) once the
+ * skinShapes chunk is loaded (the first draw starts the download and draws the cap meanwhile).
  */
 function drawHelmet(ctx: CanvasRenderingContext2D, pal: Palette, st: UnitStyle, id: string | undefined, hx: number, hy: number, s: number, dx: number): void {
-  const capY = hy - 0.8 * s;
-  const cap = (color: string, r = 4.5 * s): void => {
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.arc(hx, capY, r, Math.PI * 0.95, Math.PI * 2.05);
-    ctx.closePath();
-    ctx.fill();
-  };
-  switch (id) {
-    case 'helmet.plume':
-      cap(st.helmet);
-      plume(ctx, st.shade, hx, hy - 5 * s, -dx * 6 * s, s);
-      break;
-    case 'helmet.bronze':
-      cap(BRONZE.mid);
-      ctx.strokeStyle = BRONZE.lit;
-      ctx.lineWidth = 1.3 * s;
-      ctx.beginPath();
-      ctx.arc(hx, capY, 3.4 * s, Math.PI * 1.05, Math.PI * 1.6);
-      ctx.stroke();
-      // nose guard
-      ctx.fillStyle = BRONZE.shade;
-      ctx.fillRect(hx - 0.6 * s, capY - 0.5 * s, 1.2 * s, 3.4 * s);
-      break;
-    case 'helmet.viking': {
-      cap(st.helmet);
-      // two cream horns curving outward and up
-      ctx.lineCap = 'round';
-      for (const [w, color] of [
-        [2.6 * s, st.shade],
-        [1.4 * s, STRIPE.lit],
-      ] as const) {
-        ctx.strokeStyle = color;
-        ctx.lineWidth = w;
-        ctx.beginPath();
-        ctx.moveTo(hx - 3.4 * s, capY - 1.2 * s);
-        ctx.quadraticCurveTo(hx - 6.2 * s, capY - 2.2 * s, hx - 5.2 * s, capY - 6 * s);
-        ctx.moveTo(hx + 3.4 * s, capY - 1.2 * s);
-        ctx.quadraticCurveTo(hx + 6.2 * s, capY - 2.2 * s, hx + 5.2 * s, capY - 6 * s);
-        ctx.stroke();
-      }
-      break;
+  if (id !== undefined && LAZY_HELMETS.has(id)) {
+    const drawers = shapeSkinsNow();
+    if (drawers) {
+      drawers.helmet(ctx, pal, st, id, hx, hy, s, dx);
+      return;
     }
-    case 'helmet.knight': {
-      // full steel helm over the face, dark visor slit, lit rim, owner-coloured crest ridge
-      const m = pal.metal;
-      ctx.fillStyle = m.mid;
-      ctx.beginPath();
-      ctx.arc(hx, hy - 0.3 * s, 4.7 * s, 0, TAU);
-      ctx.fill();
-      ctx.fillStyle = m.shade;
-      ctx.fillRect(hx - 3.6 * s, hy - 0.9 * s, 7.2 * s, 1.5 * s);
-      ctx.strokeStyle = m.lit;
-      ctx.lineWidth = 1.3 * s;
-      ctx.beginPath();
-      ctx.arc(hx, hy - 0.3 * s, 3.6 * s, Math.PI * 1.02, Math.PI * 1.6);
-      ctx.stroke();
-      ctx.fillStyle = st.mid;
-      ctx.fillRect(hx - 0.9 * s, hy - 6.4 * s, 1.8 * s, 2.6 * s);
-      break;
-    }
-    case 'helmet.samurai': {
-      // wide flared brim under the cap and a gold crescent crest above it
-      ctx.fillStyle = st.shade;
-      ctx.beginPath();
-      ctx.ellipse(hx, capY + 0.9 * s, 6.4 * s, 1.7 * s, 0, 0, TAU);
-      ctx.fill();
-      cap(st.helmet);
-      ctx.strokeStyle = st.lit;
-      ctx.lineWidth = 1 * s;
-      ctx.beginPath();
-      ctx.ellipse(hx, capY + 0.5 * s, 6 * s, 1.5 * s, 0, Math.PI * 1.05, Math.PI * 1.5);
-      ctx.stroke();
-      ctx.lineCap = 'round';
-      for (const [w, color] of [
-        [2.4 * s, pal.goldShade],
-        [1.2 * s, pal.gold],
-      ] as const) {
-        ctx.strokeStyle = color;
-        ctx.lineWidth = w;
-        ctx.beginPath();
-        ctx.moveTo(hx, capY - 3 * s);
-        ctx.quadraticCurveTo(hx - 2.6 * s, capY - 4.4 * s, hx - 4 * s, capY - 7.2 * s);
-        ctx.moveTo(hx, capY - 3 * s);
-        ctx.quadraticCurveTo(hx + 2.6 * s, capY - 4.4 * s, hx + 4 * s, capY - 7.2 * s);
-        ctx.stroke();
-      }
-      break;
-    }
-    case 'helmet.royal':
-      cap(st.helmet);
-      // gold rim along the cap edge (shade under, gold on top) and a taller plume
-      ctx.lineCap = 'butt';
-      ctx.strokeStyle = pal.goldShade;
-      ctx.lineWidth = 2 * s;
-      ctx.beginPath();
-      ctx.arc(hx, capY + 0.4 * s, 4.2 * s, Math.PI * 0.98, Math.PI * 2.02);
-      ctx.stroke();
-      ctx.strokeStyle = pal.gold;
-      ctx.lineWidth = 1.2 * s;
-      ctx.beginPath();
-      ctx.arc(hx, capY, 4.2 * s, Math.PI * 0.98, Math.PI * 2.02);
-      ctx.stroke();
-      plume(ctx, pal.goldShade, hx, hy - 5.2 * s, -dx * 7 * s, s, 1.2);
-      break;
-    default:
-      cap(st.helmet);
   }
+  helmetCap(ctx, st.helmet, hx, hy - 0.8 * s, 4.5 * s);
 }
 
 /* ---------- economy & shop glyphs ---------- */

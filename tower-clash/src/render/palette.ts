@@ -1,4 +1,5 @@
 import type { Owner } from '../sim/types';
+import { chunkBackoff, loadChunk } from '../lazyChunk';
 
 /*
  * Colours for everything drawn — the single source (docs/ART_DIRECTION.md §2, "Sunlit Clay
@@ -299,6 +300,14 @@ const shadeCache = new Map<string, string>();
 export const THEME_IDS = ['theme.default', 'theme.dusk', 'theme.winter_night', 'theme.neon'] as const;
 export type ThemeId = (typeof THEME_IDS)[number];
 
+/** One glow speck of the terrain overlay (`terrain.ts` Sparkle). */
+export interface Speck {
+  x: number;
+  y: number;
+  len: number;
+  phase: number;
+}
+
 export interface TerrainTheme {
   id: ThemeId;
   /** Map water gradient (top → bottom), letterbox water and sparkle colour. */
@@ -324,109 +333,63 @@ export interface TerrainTheme {
   cloudAlpha: number;
   /** Twinkling specks over the plateau (fireflies / snow / neon motes); undefined = none. */
   glow?: string;
+  /** Draws the `glow` specks (terrain overlay; `specks` from the ambient cache, `t` seconds of motion). */
+  drawGlow?: (ctx: CanvasRenderingContext2D, specks: readonly Speck[], t: number) => void;
+  /** Biome colours re-lit by this theme (`themedBiome`); absent on the untinted default. */
+  relight?: (biome: BiomeColors, biomeId: string) => BiomeColors;
 }
 
-const THEMES: Record<ThemeId, TerrainTheme> = Object.freeze({
-  'theme.default': {
-    id: 'theme.default',
-    waterTop: '#3fb6de',
-    waterBottom: '#8ee2f5',
-    letterbox: '#1f8fc2',
-    waterSparkle: 'rgba(232, 251, 255, 0.6)',
-    tint: '#ffffff',
-    tintAmount: 0,
-    pathTintAmount: 0,
-    cloudAlpha: 0.5,
-  },
-  'theme.dusk': {
-    id: 'theme.dusk',
-    waterTop: '#f2a067',
-    waterBottom: '#3d4f9c',
-    letterbox: '#d97a4e',
-    waterSparkle: 'rgba(255, 236, 200, 0.65)',
-    tint: '#ff8a4a',
-    tintAmount: 0.24,
-    pathTintAmount: 0.14,
-    ambient: 'rgba(255, 120, 60, 0.1)',
-    cloudAlpha: 0.32,
-  },
-  'theme.winter_night': {
-    id: 'theme.winter_night',
-    waterTop: '#0a1530',
-    waterBottom: '#1b3f78',
-    letterbox: '#060d20',
-    waterSparkle: 'rgba(214, 236, 255, 0.75)',
-    tint: '#22305e',
-    tintAmount: 0.48,
-    pathTintAmount: 0.3,
-    dots: ['#fffaf0', '#c9dcff', '#8fb4ff'],
-    ambient: 'rgba(10, 20, 60, 0.14)',
-    cloudAlpha: 0.22,
-    glow: 'rgba(224, 240, 255, 0.85)',
-  },
-  'theme.neon': {
-    id: 'theme.neon',
-    waterTop: '#0d0620',
-    waterBottom: '#2c1264',
-    letterbox: '#07031a',
-    waterSparkle: 'rgba(90, 255, 240, 0.8)',
-    tint: '#2b1352',
-    tintAmount: 0.72,
-    bushTint: '#7a3cff',
-    bushTintAmount: 0.45,
-    pathTintAmount: 0,
-    path: { lit: '#3b2a6c', shade: '#ff4fd8' },
-    dots: ['#4ffff0', '#ff4fd8', '#ffe14f'],
-    ambient: 'rgba(140, 40, 220, 0.08)',
-    cloudAlpha: 0.2,
-    glow: 'rgba(90, 255, 240, 0.8)',
-  },
+/**
+ * The untinted default theme. The three cosmetic themes (dusk, winter night, neon) live in
+ * src/render/themes.ts, a lazy chunk: `themeFor` returns this default until it lands, and the
+ * first call for a cosmetic id starts the download (the terrain cache is keyed by theme id, so the
+ * ground re-renders once the theme is in).
+ */
+export const DEFAULT_THEME: TerrainTheme = Object.freeze({
+  id: 'theme.default',
+  waterTop: '#3fb6de',
+  waterBottom: '#8ee2f5',
+  letterbox: '#1f8fc2',
+  waterSparkle: 'rgba(232, 251, 255, 0.6)',
+  tint: '#ffffff',
+  tintAmount: 0,
+  pathTintAmount: 0,
+  cloudAlpha: 0.5,
+
 });
 
-/** Theme for a sprite id; unknown / undefined ids give the untinted default. */
+const THEME_CHUNK = 'themes';
+type LazyThemes = Readonly<Partial<Record<string, TerrainTheme>>>;
+let lazyThemes: LazyThemes | null = null;
+let lazyThemesPromise: Promise<LazyThemes> | null = null;
+
+/** Load the cosmetic themes (idempotent; a failed download is forgotten so the next call retries). */
+export function loadThemes(): Promise<LazyThemes> {
+  lazyThemesPromise ??= loadChunk(THEME_CHUNK, () => import('./themes'))
+    .then((m) => (lazyThemes = m.LAZY_THEMES))
+    .catch((err: unknown) => {
+      lazyThemesPromise = null;
+      throw err;
+    });
+  return lazyThemesPromise;
+}
+
+/**
+ * Theme for a sprite id; unknown / undefined ids give the untinted default, and so does a cosmetic
+ * id until its chunk has loaded (the call starts the download; draw time backs off after a failure).
+ */
 export function themeFor(id: string | undefined): TerrainTheme {
-  return (id && (THEMES as Record<string, TerrainTheme>)[id]) || THEMES['theme.default'];
+  if (!id || id === 'theme.default' || !(THEME_IDS as readonly string[]).includes(id)) return DEFAULT_THEME;
+  if (!lazyThemes) {
+    if (!chunkBackoff(THEME_CHUNK)) void loadThemes().catch(() => undefined);
+    return DEFAULT_THEME;
+  }
+  return lazyThemes[id] ?? DEFAULT_THEME;
 }
 
-/** Linear mix of two #rrggbb colours (t = 0 → a, t = 1 → b). Memoised. */
-export function mix(a: string, b: string, t: number): string {
-  if (t <= 0) return a;
-  const key = `${a}~${b}~${t}`;
-  const hit = shadeCache.get(key);
-  if (hit !== undefined) return hit;
-  const na = parseInt(a.slice(1), 16);
-  const nb = parseInt(b.slice(1), 16);
-  const ch = (shift: number): number => {
-    const va = (na >> shift) & 0xff;
-    const vb = (nb >> shift) & 0xff;
-    return Math.max(0, Math.min(255, Math.round(va + (vb - va) * t)));
-  };
-  const out = `#${((ch(16) << 16) | (ch(8) << 8) | ch(0)).toString(16).padStart(6, '0')}`;
-  if (shadeCache.size < 512) shadeCache.set(key, out);
-  return out;
-}
-
-const mixTones = (t: Tones, tint: string, k: number): Tones => (k > 0 ? { lit: mix(t.lit, tint, k), mid: mix(t.mid, tint, k), shade: mix(t.shade, tint, k) } : t);
-
-const themedBiomeCache = new Map<string, BiomeColors>();
-
-/** Biome colours re-lit by a theme (memoised per biome object identity and theme). */
+/** Biome colours re-lit by a theme (memoised in the theme chunk); the default theme leaves them untouched. */
 export function themedBiome(biome: BiomeColors, theme: TerrainTheme, biomeId = ''): BiomeColors {
-  if (theme.tintAmount === 0 && !theme.path && !theme.dots) return biome;
-  const key = `${theme.id}|${biomeId}|${biome.grass.mid}`;
-  const hit = themedBiomeCache.get(key);
-  if (hit) return hit;
-  const bushTint = theme.bushTint ?? theme.tint;
-  const bushK = theme.bushTintAmount ?? theme.tintAmount;
-  const out: BiomeColors = {
-    grass: mixTones(biome.grass, theme.tint, theme.tintAmount),
-    cliff: { lit: mix(biome.cliff.lit, theme.tint, theme.tintAmount), shade: mix(biome.cliff.shade, theme.tint, theme.tintAmount) },
-    path: theme.path ?? { lit: mix(biome.path.lit, theme.tint, theme.pathTintAmount), shade: mix(biome.path.shade, theme.tint, theme.pathTintAmount) },
-    bush: mixTones(biome.bush, bushTint, bushK),
-    dots: theme.dots ?? biome.dots,
-  };
-  themedBiomeCache.set(key, out);
-  return out;
+  return theme.relight ? theme.relight(biome, biomeId) : biome;
 }
 
 /** Lighten (amount > 0) or darken (amount < 0) a #rrggbb colour. amount in -1..1. Memoised. */

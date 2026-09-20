@@ -1,9 +1,10 @@
 import type { GameState, Owner, SimEvent } from '../sim/types';
 import type { Synth } from './synth';
+import { chunkBackoff, loadChunk } from '../lazyChunk';
 
 /**
- * Sound-effect recipes on top of the synth, plus the pure mapping from sim events to sounds.
- * Every sound is ≤ 400 ms except `won`/`lost`. Nothing here touches the DOM.
+ * Sound-effect player (rate limits; the recipes are a lazy chunk, src/audio/recipes.ts) plus the pure
+ * mapping from sim events to sounds. Nothing here touches the DOM.
  */
 
 export type SfxName =
@@ -55,15 +56,44 @@ export function sendPitchHz(count: number): number {
   return SEND_BASE_HZ * Math.pow(2, (SEND_OCTAVE_SPAN * (n - 1)) / (SEND_PITCH_CAP - 1));
 }
 
+/** Sound-effect recipes; loaded lazily (`loadSfxRecipes`). */
+export type SfxRecipe = (synth: Synth, name: SfxName, opts: SfxOptions) => void;
+
+const RECIPES_CHUNK = 'sfxRecipes';
+let recipe: SfxRecipe | null = null;
+let recipePromise: Promise<SfxRecipe> | null = null;
+
+/**
+ * Load the recipes chunk (idempotent; resolves at once when loaded; a failed download is forgotten
+ * so the next call retries — src/lazyChunk.ts re-fetches under a fresh URL).
+ */
+export function loadSfxRecipes(): Promise<SfxRecipe> {
+  recipePromise ??= loadChunk(RECIPES_CHUNK, () => import('./recipes'))
+    .then((m) => (recipe = m.playRecipe))
+    .catch((err: unknown) => {
+      recipePromise = null;
+      throw err;
+    });
+  return recipePromise;
+}
+
+/** The recipes if loaded; otherwise starts the load (with a back-off after a failure) and returns null. */
+function recipeNow(): SfxRecipe | null {
+  if (!recipe && !chunkBackoff(RECIPES_CHUNK)) void loadSfxRecipes().catch(() => undefined);
+  return recipe;
+}
+
 /** Plays named sounds through a synth, applying per-sound rate limits. */
 export class SfxPlayer {
   private lastPlayed = new Map<SfxName, number>();
 
   constructor(private readonly synth: Synth) {}
 
-  /** Returns true when the sound was actually scheduled (false: muted, no context, rate-limited). */
+  /** Returns true when the sound was actually scheduled (false: muted, no context, recipes not loaded yet, rate-limited). */
   play(name: SfxName, opts: SfxOptions = {}): boolean {
     if (!this.synth.context || this.synth.muted) return false;
+    const play = recipeNow();
+    if (!play) return false;
     const limit = RATE_LIMIT_S[name];
     const now = this.synth.now();
     if (limit !== undefined) {
@@ -71,75 +101,8 @@ export class SfxPlayer {
       if (last !== undefined && now - last < limit - LIMIT_EPS_S) return false;
       this.lastPlayed.set(name, now);
     }
-    this.recipe(name, opts);
+    play(this.synth, name, opts);
     return true;
-  }
-
-  private recipe(name: SfxName, opts: SfxOptions): void {
-    const s = this.synth;
-    switch (name) {
-      case 'send':
-        s.blip(sendPitchHz(opts.count ?? 1), 60, 'triangle', { gain: 0.22 });
-        return;
-      case 'arrive':
-        s.blip(760, 28, 'sine', { gain: 0.08 });
-        return;
-      case 'capture':
-        playCapture(s, opts.capture ?? 'other');
-        return;
-      case 'upgrade':
-        // Sparkle arpeggio: four quick sine notes stepping up a major chord.
-        [880, 1108.7, 1318.5, 1760].forEach((hz, i) => s.blip(hz, 120, 'sine', { gain: 0.16, delayS: i * 0.06 }));
-        return;
-      case 'unitDied':
-        s.noiseBurst(70, 700, { gain: 0.14 });
-        return;
-      case 'artillery':
-        s.sweep(170, 40, 260, 'sine', { gain: 0.5 });
-        s.noiseBurst(120, 350, { gain: 0.25 });
-        return;
-      case 'bridgeCut':
-        // Wood crack: bright noise snap then a short low body knock.
-        s.noiseBurst(90, 2600, { gain: 0.35, filter: 'bandpass' });
-        s.noiseBurst(220, 500, { gain: 0.2, delayS: 0.03 });
-        s.blip(95, 150, 'square', { gain: 0.12, delayS: 0.02 });
-        return;
-      case 'won':
-        // 4-note fanfare: C5 E5 G5 C6, the last held.
-        [523.3, 659.3, 784, 1046.5].forEach((hz, i) => {
-          const last = i === 3;
-          s.blip(hz, last ? 520 : 160, 'triangle', { gain: 0.3, delayS: i * 0.15 });
-          s.blip(hz / 2, last ? 520 : 160, 'sine', { gain: 0.14, delayS: i * 0.15 });
-        });
-        return;
-      case 'lost':
-        // Descending minor: E5 D5 C5 A4, slowing down.
-        [659.3, 587.3, 523.3, 440].forEach((hz, i) =>
-          s.blip(hz, i === 3 ? 600 : 220, 'sawtooth', { gain: 0.14, delayS: i * 0.22 }),
-        );
-        return;
-      case 'button':
-        s.blip(1400, 24, 'square', { gain: 0.08 });
-        return;
-    }
-  }
-}
-
-function playCapture(s: Synth, kind: CaptureKind): void {
-  switch (kind) {
-    case 'gain':
-      // Two-note rising major chime.
-      s.blip(659.3, 140, 'triangle', { gain: 0.28 });
-      s.blip(1046.5, 220, 'triangle', { gain: 0.28, delayS: 0.11 });
-      return;
-    case 'loss':
-      // Low thud.
-      s.sweep(140, 45, 240, 'sine', { gain: 0.45 });
-      s.noiseBurst(90, 250, { gain: 0.2 });
-      return;
-    case 'other':
-      s.blip(330, 90, 'triangle', { gain: 0.1 });
-      return;
   }
 }
 

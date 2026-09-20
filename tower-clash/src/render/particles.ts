@@ -4,6 +4,7 @@ import { roadPointAt } from '../sim/step';
 import type { Palette } from './palette';
 import { DEFAULT_PALETTE, shade } from './palette';
 import { reducedMotionOverride } from '../ui/motion';
+import { chunkBackoff, loadChunk } from '../lazyChunk';
 
 /*
  * Purely visual particles and per-tower motion state driven by sim events (ART_DIRECTION §5).
@@ -23,9 +24,9 @@ export function prefersReducedMotion(): boolean {
   }
 }
 
-type Kind = 'confetti' | 'ring' | 'impact' | 'puff' | 'dust' | 'spark' | 'flash' | 'tracer' | 'plank' | 'glint' | 'coin' | 'gem';
+export type Kind = 'confetti' | 'ring' | 'impact' | 'puff' | 'dust' | 'spark' | 'flash' | 'tracer' | 'plank' | 'glint' | 'coin' | 'gem';
 
-interface Particle {
+export interface Particle {
   kind: Kind;
   x: number;
   y: number;
@@ -91,7 +92,46 @@ function backOut(t: number): number {
   return 1 + (c1 + 1) * u * u * u + c1 * u * u;
 }
 
-export class ParticleSystem {
+/** Spawner surface of `ParticleSystem` that the economy bursts use. */
+export interface BurstHost {
+  rnd(): number;
+  make(kind: Kind, x: number, y: number, color: string, life: number, size: number): Particle;
+  push(p: Particle): void;
+}
+
+/**
+ * Purchase / reward bursts (`coin`, `gem`) live in src/render/particlesEconomy.ts, a lazy chunk: the
+ * first frame a system draws warms it, `coinBurst` / `crystalBurst` spawn through it (on landing, in
+ * the rare case it is not in yet), and `draw` paints those two kinds through it.
+ */
+export interface EconomyBursts {
+  coin(host: BurstHost, x: number, y: number, n: number, pal: Palette): void;
+  crystal(host: BurstHost, x: number, y: number, n: number, pal: Palette): void;
+  /** Paint one `coin` / `gem` particle (`t` = age fraction, `fade` = 1 − t). */
+  draw(ctx: CanvasRenderingContext2D, p: Particle, t: number, fade: number): void;
+}
+
+const ECONOMY_CHUNK = 'particlesEconomy';
+let economy: EconomyBursts | null = null;
+let economyPromise: Promise<EconomyBursts> | null = null;
+
+/** Load the economy bursts (idempotent; a failed download is forgotten so the next call retries). */
+export function loadEconomyBursts(): Promise<EconomyBursts> {
+  economyPromise ??= loadChunk(ECONOMY_CHUNK, () => import('./particlesEconomy'))
+    .then((m) => (economy = m.ECONOMY_BURSTS))
+    .catch((err: unknown) => {
+      economyPromise = null;
+      throw err;
+    });
+  return economyPromise;
+}
+
+/** Start the download unless one failed a moment ago (draw-time back-off). */
+function warmEconomyBursts(): void {
+  if (!economy && !chunkBackoff(ECONOMY_CHUNK)) void loadEconomyBursts().catch(() => undefined);
+}
+
+export class ParticleSystem implements BurstHost {
   private readonly ps: Particle[] = [];
   private readonly pulses = new Map<string, number>();
   private readonly captures = new Map<string, { at: number; from: Owner }>();
@@ -102,6 +142,7 @@ export class ParticleSystem {
   private shakeAt = -Infinity;
   private lastMs = 0;
   private salt = 1;
+  private warmed = false;
 
   constructor(readonly reducedMotion: boolean = prefersReducedMotion()) {}
 
@@ -109,16 +150,17 @@ export class ParticleSystem {
     return this.ps.length;
   }
 
-  private rnd(): number {
+  /** Deterministic per-system noise (spawner surface, see `BurstHost`). */
+  rnd(): number {
     this.salt = (this.salt + 1) | 0;
     return hash(this.salt * 2654435761);
   }
 
-  private push(p: Particle): void {
+  push(p: Particle): void {
     if (this.ps.length < MAX_PARTICLES) this.ps.push(p);
   }
 
-  private make(kind: Kind, x: number, y: number, color: string, life: number, size: number): Particle {
+  make(kind: Kind, x: number, y: number, color: string, life: number, size: number): Particle {
     return { kind, x, y, vx: 0, vy: 0, age: 0, life, size, color, color2: color, rot: 0, vrot: 0, gravity: 0, x2: x, y2: y };
   }
 
@@ -325,50 +367,19 @@ export class ParticleSystem {
    */
   coinBurst(x: number, y: number, n: number, pal: Palette = DEFAULT_PALETTE): void {
     if (this.reducedMotion) return;
-    const g = pal.goldTones;
-    for (let i = 0; i < n; i++) {
-      const p = this.make('coin', x, y, g.mid, 850 + this.rnd() * 500, 5 + this.rnd() * 3);
-      p.color2 = g.shade;
-      const a = -Math.PI / 2 + (this.rnd() - 0.5) * 1.5;
-      const sp = 180 + this.rnd() * 260;
-      p.vx = Math.cos(a) * sp;
-      p.vy = Math.sin(a) * sp;
-      p.gravity = 560;
-      p.rot = this.rnd() * Math.PI;
-      p.vrot = 7 + this.rnd() * 9;
-      this.push(p);
-    }
-    for (let i = 0; i < Math.min(8, n); i++) {
-      const p = this.make('glint', x + (this.rnd() - 0.5) * 30, y - this.rnd() * 20, g.lit, 380 + this.rnd() * 260, 3 + this.rnd() * 3);
-      p.vy = -40 - this.rnd() * 60;
-      p.vrot = 6;
-      this.push(p);
-    }
+    this.burst((b) => b.coin(this, x, y, n, pal));
   }
 
   /** Purchase / reward: `n` crystals scatter from (x, y) in a slower, floatier arc with sparkles. */
   crystalBurst(x: number, y: number, n: number, pal: Palette = DEFAULT_PALETTE): void {
     if (this.reducedMotion) return;
-    const c = pal.crystal;
-    for (let i = 0; i < n; i++) {
-      const p = this.make('gem', x, y, c.mid, 950 + this.rnd() * 550, 5 + this.rnd() * 4);
-      p.color2 = c.shade;
-      const a = -Math.PI / 2 + (this.rnd() - 0.5) * 1.8;
-      const sp = 150 + this.rnd() * 220;
-      p.vx = Math.cos(a) * sp;
-      p.vy = Math.sin(a) * sp;
-      p.gravity = 380;
-      p.rot = (this.rnd() - 0.5) * 0.8;
-      p.vrot = (this.rnd() - 0.5) * 6;
-      this.push(p);
-    }
-    for (let i = 0; i < Math.min(10, n + 2); i++) {
-      const p = this.make('glint', x + (this.rnd() - 0.5) * 36, y - this.rnd() * 24, i % 2 ? c.lit : '#fffaf0', 420 + this.rnd() * 300, 3 + this.rnd() * 4);
-      p.vy = -50 - this.rnd() * 70;
-      p.vx = (this.rnd() - 0.5) * 40;
-      p.vrot = 6;
-      this.push(p);
-    }
+    this.burst((b) => b.crystal(this, x, y, n, pal));
+  }
+
+  /** Spawn through the economy chunk: at once when loaded, else when it lands (skipped after a fresh failure). */
+  private burst(spawn: (b: EconomyBursts) => void): void {
+    if (economy) spawn(economy);
+    else if (!chunkBackoff(ECONOMY_CHUNK)) void loadEconomyBursts().then(spawn).catch(() => undefined);
   }
 
   /** Victory: confetti rains from the top of the map in the player colours and gold. */
@@ -427,6 +438,10 @@ export class ParticleSystem {
 
   /** Step by wall-clock time and paint. Expects the logical transform to be active. */
   draw(ctx: CanvasRenderingContext2D, nowMs: number): void {
+    if (!this.warmed && !this.reducedMotion) {
+      this.warmed = true;
+      warmEconomyBursts();
+    }
     const dt = this.lastMs ? Math.min(64, Math.max(0, nowMs - this.lastMs)) : 16;
     this.lastMs = nowMs;
     if (!this.ps.length) return;
@@ -529,47 +544,10 @@ export class ParticleSystem {
           ctx.lineTo(p.x2, p.y2);
           ctx.stroke();
           break;
-        case 'coin': {
-          // spinning coin: an ellipse whose width follows cos(rot), edge tone offset below
-          ctx.globalAlpha = Math.min(1, fade * 2.5);
-          const rx = Math.max(p.size * 0.16, Math.abs(Math.cos(p.rot)) * p.size);
-          ctx.fillStyle = p.color2;
-          ctx.beginPath();
-          ctx.ellipse(p.x + 1, p.y + 2, rx, p.size, 0, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = p.color;
-          ctx.beginPath();
-          ctx.ellipse(p.x, p.y, rx, p.size, 0, 0, Math.PI * 2);
-          ctx.fill();
+        case 'coin':
+        case 'gem':
+          economy?.draw(ctx, p, t, fade);
           break;
-        }
-        case 'gem': {
-          // tumbling gem: lit left half, violet right half (4 corners rotated by rot)
-          ctx.globalAlpha = Math.min(1, fade * 2.5);
-          const c = Math.cos(p.rot);
-          const sn = Math.sin(p.rot);
-          const w = p.size * 0.7;
-          const h = p.size;
-          const tx = p.x - sn * -h;
-          const ty = p.y + c * -h;
-          const bx = p.x - sn * h;
-          const by = p.y + c * h;
-          ctx.fillStyle = p.color;
-          ctx.beginPath();
-          ctx.moveTo(tx, ty);
-          ctx.lineTo(p.x + c * -w, p.y + sn * -w);
-          ctx.lineTo(bx, by);
-          ctx.closePath();
-          ctx.fill();
-          ctx.fillStyle = p.color2;
-          ctx.beginPath();
-          ctx.moveTo(tx, ty);
-          ctx.lineTo(p.x + c * w, p.y + sn * w);
-          ctx.lineTo(bx, by);
-          ctx.closePath();
-          ctx.fill();
-          break;
-        }
       }
     }
     ctx.restore();
