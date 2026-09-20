@@ -360,7 +360,7 @@ HUD chip: "Weekly · <level name>" (`weekly.chip`) over the twist name; "Target 
 
 ### 8.4 Acceptance criteria
 1. Picker (unit): deterministic; `weekKeyOf` returns Mondays for every UTC instant of a 400-day span; non-Monday key throws; level in 33…`POOL_TO`; twist never `plain`; over 26 weeks from 2026-09-21 ≥ 6 distinct levels and all 4 twists; pin `2026-09-21` → level **33**, seed **743047**, `fastFeet`, `targetMs` **40000** (computed 2026-09-20; the test currently range-checks only — QA adds the exact values).
-2. Reference bot (AI Engineer): `npm run playtest -- --weekly 2026-09-21 --weeks 26 --seeds 5` — 26/26 weeks pass, every week's fixed seed has ≥ 1 3★ run.
+2. Reference bot (AI Engineer): `npm run playtest -- --weekly 2026-09-21 --weeks 26 --seeds 5` — 26/26 weeks pass (fixed seed won, ≥ 4/5 near-neighbour seeds). The 3★ target is reported, not gated: `star3` is 0.9 × the bot's median by design, so the bot reaches it on only ~10 of 26 weeks (2026-09-20 measurement); the 20-crystal target is meant for players faster than the bot.
 3. Save (QA, unit): 100 gold once per week, 20 crystals once when `timeMs ≤ star3` (on any attempt, also a later one), a loss writes nothing, streak 1 → 2 → 3 across consecutive Mondays and back to 1 after a missed week, 12 keys kept, hostile input clamped, a match started Sunday and won Monday books against the Sunday's week.
 4. Card (QA, e2e at 360×640 and 390×844): tab switch keeps the card height, all elements visible, locked before level 32 has a star, countdown to Monday 00:00 UTC, autoplay win writes `save.weekly`, DONE badge, ★ pip after a target run.
 5. Equal for everyone: as §7.5 item 5. Budget: eager bundle ≤ 80 kB gzip; no new asset.

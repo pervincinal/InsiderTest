@@ -1,7 +1,8 @@
 /**
  * `npm run playtest [-- --level N] [-- --seed S] [-- --seeds N] [-- --upgrades none|max]`
  * `npm run playtest -- --daily YYYY-MM-DD [--days N] [--seeds K] [--no-twist]`
- * `npm run playtest -- --twist <plain|lean|fastFeet|thinWalls|reinforced> [--seeds K]`
+ * `npm run playtest -- --weekly YYYY-MM-DD(Monday) [--weeks N] [--seeds K] [--no-twist]`
+ * `npm run playtest -- --twist <plain|lean|fastFeet|thinWalls|reinforced> [--seeds K] [--pool a-b]`
  * Headless balance run: for every level (or one), simulate (a) the reference player vs the enemies and
  * (b) an idle player vs the enemies, 50 ms ticks, AI every 500 ms, up to 180 s of sim time.
  *
@@ -18,9 +19,15 @@
  * fixed one (seed, seed+1, …). One row per day: level, twist, fixed-seed result, wins/K, median win
  * time, stars at the fixed seed. Gates: every day's fixed-seed run is won and wins/K ≥ 90 %.
  * `--no-twist` runs the same days and seeds without the twist — the control for blaming a twist or a level.
- * Twist mode (`--twist <id>`, GDD §7.5 item 3): the reference player on every pool level (9–40) with
- * that twist's modifiers over seeds 1..K (`--seeds K`, default 5). One row per level; gate per level:
- * wins/K ≥ 80 % (4/5 at K = 5), every win under 180 s.
+ * Weekly mode (`--weekly M`, GDD §8): the reference player on each week's Weekly Challenge
+ * (`weeklyFor`: level 33–POOL_TO, fixed seed, a non-plain twist, 3★ target = the level's `star3`) for
+ * the Monday M and the next N−1 weeks (`--weeks N`, default 1), K seeds from the fixed one (`--seeds K`,
+ * default 1). One row per week: level, twist, fixed-seed result, wins/K, median, best time vs the target
+ * and which seed(s) reach it. Gates per week: fixed seed won, wins/K ≥ 90 %, and at least one of the K
+ * seeds finishes ≤ targetMs (else "level/clock item" for the Level Designer). A non-Monday key is an error.
+ * Twist mode (`--twist <id>`, GDD §7.5 item 3): the reference player on every pool level (`--pool a-b`,
+ * default POOL_FROM–POOL_TO) with that twist's modifiers over seeds 1..K (`--seeds K`, default 5). One
+ * row per level; gate per level: wins/K ≥ 80 % (4/5 at K = 5), every win under 180 s.
  * Rng streams come from `rngsFor`, exactly as the game client derives them.
  */
 import { performance } from 'node:perf_hooks';
@@ -31,9 +38,9 @@ import { referencePlayerCommands } from '../src/ai/index';
 import { HEADLESS_MAX_MS, runHeadless, starsFor } from '../src/ai/headless';
 import type { RunResult } from '../src/ai/headless';
 import { maxedModifiers } from '../src/economy/maxUpgrades';
-import { DAILY_WIN_RATE, TWIST_WIN_RATE, dailyPlan, inPool, runDaily, runTwist, twistById } from './lib/daily';
-import type { DailyRow, TwistRow } from './lib/daily';
-import { TWISTS } from '../src/daily/challenge';
+import { DAILY_WIN_RATE, DEFAULT_POOL, TWIST_WIN_RATE, WEEKLY_WIN_RATE, dailyPlan, inPool, parsePool, runDaily, runTwist, runWeekly, twistById, weeklyPlan } from './lib/daily';
+import type { DailyRow, PoolRange, TwistRow, WeeklyRow } from './lib/daily';
+import { TWISTS, isMondayKey } from '../src/daily/challenge';
 import type { Twist } from '../src/daily/challenge';
 
 export { runHeadless } from '../src/ai/headless';
@@ -62,6 +69,12 @@ interface Args {
   twist: boolean;
   /** `--twist <id>`: pool × twist sweep under this twist. */
   twistId?: Twist['id'];
+  /** `--pool a-b`: level id range for the twist sweep (default `DEFAULT_POOL`). */
+  pool: Readonly<PoolRange>;
+  /** `--weekly M`: first Monday key of the weekly-challenge sweep. */
+  weekly?: string;
+  /** `--weeks N`: number of consecutive weeks from `weekly`. */
+  weeks: number;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -73,6 +86,9 @@ function parseArgs(argv: string[]): Args {
   let days = 1;
   let twist = true;
   let twistId: string | undefined;
+  let poolSpec: string | undefined;
+  let weekly: string | undefined;
+  let weeks = 1;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
     const next = argv[i + 1];
@@ -91,6 +107,12 @@ function parseArgs(argv: string[]): Args {
     else if (arg === '--no-twist') twist = false;
     else if (arg === '--twist' && next !== undefined) twistId = next;
     else if (arg.startsWith('--twist=')) twistId = arg.slice('--twist='.length);
+    else if (arg === '--pool' && next !== undefined) poolSpec = next;
+    else if (arg.startsWith('--pool=')) poolSpec = arg.slice('--pool='.length);
+    else if (arg === '--weekly' && next !== undefined) weekly = next;
+    else if (arg.startsWith('--weekly=')) weekly = arg.slice('--weekly='.length);
+    else if (arg === '--weeks' && next !== undefined) weeks = Number(next);
+    else if (arg.startsWith('--weeks=')) weeks = Number(arg.slice('--weeks='.length));
   }
   if (level !== undefined && !Number.isInteger(level)) throw new Error(`bad --level ${String(level)}`);
   if (!Number.isInteger(seed)) throw new Error(`bad --seed ${String(seed)}`);
@@ -98,10 +120,18 @@ function parseArgs(argv: string[]): Args {
   if (upgrades !== 'none' && upgrades !== 'max') throw new Error(`bad --upgrades ${upgrades} (none|max)`);
   if (daily !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(daily)) throw new Error(`bad --daily ${daily} (YYYY-MM-DD)`);
   if (!Number.isInteger(days) || days < 1) throw new Error(`bad --days ${String(days)}`);
+  if (weekly !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(weekly)) throw new Error(`bad --weekly ${weekly} (YYYY-MM-DD, a Monday)`);
+  if (weekly !== undefined && !isMondayKey(weekly)) {
+    throw new Error(`bad --weekly ${weekly}: not a Monday (UTC). The weekly key is the week's Monday, e.g. 2026-09-21 (\`date -u -d "-$(( $(date -u +%u) - 1 )) days" +%F\`).`);
+  }
+  if (!Number.isInteger(weeks) || weeks < 1) throw new Error(`bad --weeks ${String(weeks)}`);
   const twistDef = twistId === undefined ? undefined : twistById(twistId);
   if (twistId !== undefined && !twistDef) throw new Error(`bad --twist ${twistId} (${TWISTS.map((t) => t.id).join('|')})`);
-  if (twistDef && daily !== undefined) throw new Error('--twist and --daily are separate modes');
-  return { level, seed, seeds, upgrades, daily, days, twist, twistId: twistDef?.id };
+  const modes = [twistDef ? '--twist' : undefined, daily !== undefined ? '--daily' : undefined, weekly !== undefined ? '--weekly' : undefined].filter((m) => m !== undefined);
+  if (modes.length > 1) throw new Error(`${modes.join(' and ')} are separate modes`);
+  const pool = poolSpec === undefined ? DEFAULT_POOL : parsePool(poolSpec);
+  if (poolSpec !== undefined && !twistDef) throw new Error('--pool only applies to --twist');
+  return { level, seed, seeds, upgrades, daily, days, twist, twistId: twistDef?.id, pool, weekly, weeks };
 }
 
 /** Re-exported for tools that used to read the max ladder from here (QA-3: the catalog is the source). */
@@ -391,15 +421,100 @@ async function runDailyMode(from: string, days: number, k: number, twist: boolea
 }
 
 /**
- * Twist mode: the reference player on every pool level under one twist over seeds 1..K. Gate per
- * level: wins/K >= TWIST_WIN_RATE (GDD §7.5 item 3: 4/5 at K = 5).
+ * Weekly mode (GDD §8): the reference player on each week's challenge (level 33+, fixed seed, non-plain
+ * twist, no upgrades) over K seeds from the fixed one. Gate per week: fixed seed won, wins/K >= 90 %
+ * and at least one seed within the 3★ target (`weekly.targetMs` = the level's `star3`).
  */
-async function runTwistMode(twistId: Twist['id'], k: number): Promise<number> {
+async function runWeeklyMode(from: string, weeks: number, k: number, twist: boolean): Promise<number> {
+  const plan = weeklyPlan(from, weeks);
+  const header = `${pad('week', 10)} ${pad('lvl', 4)} ${pad('name', 20)} ${pad('twist', 10)} ${pad('fixed seed', 24)} ${pad('wins', 6)} ${pad('median', 8)} ${pad('best / target', 16)} ${pad('3* by', 12)} ${pad('gate', 6)} losing seeds`;
+  console.log(
+    `playtest weekly  ${from} +${weeks - 1} week(s)  seeds=K=${k} (fixed, fixed+1, …)  twist=${twist ? 'on' : 'OFF (control)'}  upgrades=none  max=${fmtTime(MAX_MS)}  gate: fixed seed won, wins/K >= ${Math.round(WEEKLY_WIN_RATE * 100)}%, >= 1 seed <= 3* target`,
+  );
+  console.log(header);
+  console.log('-'.repeat(header.length));
+
+  const rows: WeeklyRow[] = [];
+  let totalTicks = 0;
+  const t0 = performance.now();
+  for (const challenge of plan) {
+    const level = await loadLevel(challenge.levelId);
+    if (!level) {
+      console.error(`No level with id ${challenge.levelId} for week ${challenge.weekKey}`);
+      process.exit(1);
+    }
+    const row = runWeekly(challenge, level, k, twist);
+    rows.push(row);
+    totalTicks += row.ticks;
+    const fixed =
+      row.fixed.outcome === 'won'
+        ? `won ${fmtTime(row.fixed.timeMs)} ${starGlyphs(row.fixedStars)} (seed ${challenge.seed})`
+        : `${row.fixed.outcome} ${fmtTime(row.fixed.timeMs)} (seed ${challenge.seed})`;
+    const medianT = row.medianMs === undefined ? '-' : fmtTime(row.medianMs);
+    const best = `${row.bestMs === undefined ? '-' : fmtTime(row.bestMs)} / ${fmtTime(challenge.targetMs)}`;
+    const by = row.fixedOnTarget ? 'fixed' : row.targetSeeds.length ? `seed ${row.targetSeeds[0]}` : 'NONE';
+    const gate = row.ok ? 'ok' : 'FAIL';
+    const losers = row.losers.length ? row.losers.join(',') : '-';
+    console.log(
+      `${pad(challenge.weekKey, 10)} ${pad(String(level.id), 4)} ${pad(level.name, 20)} ${pad(challenge.twist.id, 10)} ${pad(fixed, 24)} ${pad(`${row.wins}/${k}`, 6)} ${pad(medianT, 8)} ${pad(best, 16)} ${pad(`${by} (${row.targetSeeds.length}/${k})`, 12)} ${pad(gate, 6)} ${losers}`,
+    );
+  }
+  const elapsed = (performance.now() - t0) / 1000;
+  console.log('-'.repeat(header.length));
+
+  const failed = rows.filter((r) => !r.ok);
+  const fixedLost = rows.filter((r) => r.fixed.outcome !== 'won');
+  const fixedOnTarget = rows.filter((r) => r.fixedOnTarget);
+  const anyOnTarget = rows.filter((r) => r.targetOk);
+  const totalRuns = rows.length * k;
+  const totalWins = rows.reduce((n, r) => n + r.wins, 0);
+  const totalOnTarget = rows.reduce((n, r) => n + r.targetSeeds.length, 0);
+  const starCounts: StarCounts = [0, 0, 0, 0];
+  for (const r of rows) starCounts[r.fixedStars]++;
+  const byTwist = new Map<string, { weeks: number; wins: number; runs: number; onTarget: number }>();
+  for (const r of rows) {
+    const t = byTwist.get(r.challenge.twist.id) ?? { weeks: 0, wins: 0, runs: 0, onTarget: 0 };
+    t.weeks++;
+    t.wins += r.wins;
+    t.runs += k;
+    t.onTarget += r.targetSeeds.length;
+    byTwist.set(r.challenge.twist.id, t);
+  }
+  const levelsUsed = new Set(rows.map((r) => r.level.id));
+  console.log(
+    `${rows.length} week(s) over ${levelsUsed.size} level(s): fixed seed won ${rows.length - fixedLost.length}/${rows.length}, all seeds ${totalWins}/${totalRuns} (${((100 * totalWins) / totalRuns).toFixed(1)}%), fixed-seed stars 3*/2*/1*/0* = ${fmtStarCounts(starCounts)}; 3* target: fixed seed ${fixedOnTarget.length}/${rows.length}, any seed ${anyOnTarget.length}/${rows.length}, runs ${totalOnTarget}/${totalRuns}`,
+  );
+  for (const [id, t] of byTwist) {
+    console.log(`  twist ${pad(id, 10)} ${t.weeks} week(s), wins ${t.wins}/${t.runs} (${((100 * t.wins) / t.runs).toFixed(1)}%), on target ${t.onTarget}/${t.runs}`);
+  }
+  for (const r of failed) {
+    const why: string[] = [];
+    if (r.fixed.outcome !== 'won') why.push(`fixed seed ${r.challenge.seed} ${r.fixed.outcome}`);
+    if (r.wins / k < WEEKLY_WIN_RATE) why.push(`${r.wins}/${k} < ${Math.round(WEEKLY_WIN_RATE * 100)}%`);
+    // the 3★ target is reported, not gated (star3 sits at 0.9 × the bot's median by design)
+    console.log(`  FAIL ${r.challenge.weekKey} lvl ${r.level.id} ${r.level.name} [${r.challenge.twist.id}]: ${why.join('; ')}`);
+  }
+  console.log(
+    `${failed.length} failed week(s). perf: ${totalTicks} ticks in ${elapsed.toFixed(2)}s = ${Math.round(totalTicks / Math.max(elapsed, 1e-6))} ticks/s`,
+  );
+  return failed.length;
+}
+
+/**
+ * Twist mode: the reference player on every pool level under one twist over seeds 1..K. Gate per
+ * level: wins/K >= TWIST_WIN_RATE (GDD §7.5 item 3: 4/5 at K = 5). `pool` is the id range swept
+ * (`--pool a-b`, default the daily pool).
+ */
+async function runTwistMode(twistId: Twist['id'], k: number, pool: Readonly<PoolRange>): Promise<number> {
   const twist = twistById(twistId)!;
-  const levels = (await loadAllLevels()).filter(inPool);
+  const levels = (await loadAllLevels()).filter((l) => inPool(l, pool));
+  if (levels.length === 0) {
+    console.error(`No levels in --pool ${pool.from}-${pool.to}`);
+    process.exit(1);
+  }
   const header = `${pad('lvl', 4)} ${pad('name', 20)} ${pad('wins', 6)} ${pad('3*/2*/1*/0*', 12)} ${pad('median', 8)} ${pad('worst', 8)} ${pad('gate', 6)} losing seeds`;
   console.log(
-    `playtest twist=${twist.id} (${fmtModifiers(twist.modifiers)})  pool lvl ${levels[0]?.id ?? '-'}-${levels[levels.length - 1]?.id ?? '-'}  seeds=1..${k}  upgrades=none  max=${fmtTime(MAX_MS)}  gate: wins/K >= ${Math.round(TWIST_WIN_RATE * 100)}%`,
+    `playtest twist=${twist.id} (${fmtModifiers(twist.modifiers)})  pool lvl ${pool.from}-${pool.to} (${levels.length} level(s): ${levels[0]?.id ?? '-'}-${levels[levels.length - 1]?.id ?? '-'})  seeds=1..${k}  upgrades=none  max=${fmtTime(MAX_MS)}  gate: wins/K >= ${Math.round(TWIST_WIN_RATE * 100)}%`,
   );
   console.log(header);
   console.log('-'.repeat(header.length));
@@ -407,7 +522,7 @@ async function runTwistMode(twistId: Twist['id'], k: number): Promise<number> {
   let totalTicks = 0;
   const t0 = performance.now();
   for (const level of levels) {
-    const row = runTwist(level, twist, k);
+    const row = runTwist(level, twist, k, pool);
     rows.push(row);
     totalTicks += row.ticks;
     const counts: StarCounts = [0, 0, 0, 0];
@@ -432,7 +547,12 @@ async function runTwistMode(twistId: Twist['id'], k: number): Promise<number> {
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   if (args.twistId !== undefined) {
-    const failed = await runTwistMode(args.twistId, args.seeds ?? 5);
+    const failed = await runTwistMode(args.twistId, args.seeds ?? 5, args.pool);
+    if (failed > 0) process.exit(1);
+    return;
+  }
+  if (args.weekly !== undefined) {
+    const failed = await runWeeklyMode(args.weekly, args.weeks, args.seeds ?? 1, args.twist);
     if (failed > 0) process.exit(1);
     return;
   }

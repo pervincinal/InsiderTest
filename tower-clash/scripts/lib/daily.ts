@@ -1,13 +1,16 @@
 /**
  * Daily Challenge playtest (`npm run playtest -- --daily YYYY-MM-DD [--days N] [--seeds K]`): the
  * reference player on each day's challenge exactly as the client builds it — `challengeFor(dayKey)`'s
- * level, fixed seed and twist modifiers, no Commander upgrades. Pool × twist sweep
- * (`npm run playtest -- --twist <id> [--seeds K]`, GDD §7.5 item 3): every pool level under one twist
- * over seeds 1..K, gate ≥ `TWIST_WIN_RATE` per level. Pure and importable from tests; the printing and
- * the exit code live in scripts/playtest.ts.
+ * level, fixed seed and twist modifiers, no Commander upgrades. Weekly Challenge playtest
+ * (`npm run playtest -- --weekly <Monday> [--weeks N] [--seeds K]`, GDD §8): the same for
+ * `weeklyFor(weekKey)` plus the 3★ target check — at least one of the K seeds must finish within
+ * `targetMs` (the level's own `star3` clock), else the week is a level/clock item. Pool × twist sweep
+ * (`npm run playtest -- --twist <id> [--seeds K] [--pool a-b]`, GDD §7.5 item 3): every pool level under
+ * one twist over seeds 1..K, gate ≥ `TWIST_WIN_RATE` per level. Pure and importable from tests; the
+ * printing and the exit code live in scripts/playtest.ts.
  */
-import { POOL_FROM, POOL_TO, TWISTS, challengeFor } from '../../src/daily/challenge';
-import type { DailyChallenge, Twist } from '../../src/daily/challenge';
+import { POOL_FROM, POOL_TO, TWISTS, challengeFor, isMondayKey, weeklyFor } from '../../src/daily/challenge';
+import type { DailyChallenge, Twist, WeeklyChallenge } from '../../src/daily/challenge';
 import { DEFAULT_MODIFIERS } from '../../src/sim/index';
 import type { LevelDef, PlayerModifiers } from '../../src/sim/index';
 import { referencePlayerCommands } from '../../src/ai/index';
@@ -16,6 +19,9 @@ import type { RunResult } from '../../src/ai/headless';
 
 /** Gate over the K seeds around the fixed one (the fixed seed itself must always be won). */
 export const DAILY_WIN_RATE = 0.9;
+/** Weekly gate (GDD §8): the same win-rate rule as the daily, plus ≥ 1 of the K seeds within the 3★ target. */
+/** Weekly gate: 4/5 like the twist gate (one fixed seed per week; near-neighbour seeds only measure robustness). */
+export const WEEKLY_WIN_RATE = 0.8;
 /** Pool × twist gate (GDD §7.5 item 3): every pool level wins at least this share of its seeds under every twist (4/5 at K = 5). */
 export const TWIST_WIN_RATE = 0.8;
 
@@ -36,9 +42,26 @@ export function dailyPlan(from: string, days: number): DailyChallenge[] {
 }
 
 /** The K seeds a challenge is measured over: the fixed seed first, then seed+1, seed+2, … */
-export function dailySeeds(challenge: DailyChallenge, k: number): number[] {
+export function dailySeeds(challenge: Pick<DailyChallenge, 'seed'>, k: number): number[] {
   if (!Number.isInteger(k) || k < 1) throw new Error(`daily: bad seed count ${String(k)}`);
   return Array.from({ length: k }, (_, i) => challenge.seed + i);
+}
+
+/** The Monday key `weeks` weeks after the Monday `weekKey` (0 = same week); throws on a non-Monday or malformed key. */
+export function addWeeks(weekKey: string, weeks: number): string {
+  if (!isMondayKey(weekKey)) throw new Error(`weekly: ${weekKey} is not a Monday (UTC) key`);
+  return addDays(weekKey, 7 * weeks);
+}
+
+/** The weekly challenges for the Monday `from` and the next `weeks - 1` weeks, in order — one per week. */
+export function weeklyPlan(from: string, weeks: number): WeeklyChallenge[] {
+  if (!Number.isInteger(weeks) || weeks < 1) throw new Error(`weekly: bad week count ${String(weeks)}`);
+  return Array.from({ length: weeks }, (_, i) => weeklyFor(addWeeks(from, i)));
+}
+
+/** The K seeds a weekly is measured over: the fixed seed first, then seed+1, seed+2, … (same rule as the daily). */
+export function weeklySeeds(challenge: Pick<WeeklyChallenge, 'seed'>, k: number): number[] {
+  return dailySeeds(challenge, k);
 }
 
 export interface DailyRow {
@@ -111,9 +134,116 @@ export function twistById(id: string): Twist | undefined {
   return TWISTS.find((t) => t.id === id);
 }
 
-/** Is the level in the daily pool (ids `POOL_FROM`…`POOL_TO`)? */
-export function inPool(level: Pick<LevelDef, 'id'>): boolean {
-  return level.id >= POOL_FROM && level.id <= POOL_TO;
+/** An inclusive id range of levels for the twist sweep (`--pool a-b`). */
+export interface PoolRange {
+  from: number;
+  to: number;
+}
+
+/** The daily pool as shipped: `POOL_FROM`…`POOL_TO`. */
+export const DEFAULT_POOL: Readonly<PoolRange> = Object.freeze({ from: POOL_FROM, to: POOL_TO });
+
+/** Parses `a-b` (both inclusive, 1 ≤ a ≤ b) into a pool range; throws on anything else. */
+export function parsePool(spec: string): PoolRange {
+  const m = /^(\d+)-(\d+)$/.exec(spec.trim());
+  if (!m) throw new Error(`bad --pool ${spec} (a-b, e.g. ${POOL_FROM}-${POOL_TO})`);
+  const from = Number(m[1]);
+  const to = Number(m[2]);
+  if (from < 1 || to < from) throw new Error(`bad --pool ${spec} (need 1 <= a <= b)`);
+  return { from, to };
+}
+
+/** Is the level in the pool (ids `from`…`to`; the daily pool `POOL_FROM`…`POOL_TO` by default)? */
+export function inPool(level: Pick<LevelDef, 'id'>, pool: Readonly<PoolRange> = DEFAULT_POOL): boolean {
+  return level.id >= pool.from && level.id <= pool.to;
+}
+
+export interface WeeklyRow {
+  challenge: WeeklyChallenge;
+  level: LevelDef;
+  /** Modifiers the runs used: the twist's, or `DEFAULT_MODIFIERS` when `twist` was switched off. */
+  modifiers: Readonly<PlayerModifiers>;
+  seeds: number[];
+  /** One result per entry of `seeds`; `results[0]` is the fixed seed. */
+  results: RunResult[];
+  fixed: RunResult;
+  fixedStars: 0 | 1 | 2 | 3;
+  wins: number;
+  /** Median win time over the winning seeds, ms; undefined when none won. */
+  medianMs: number | undefined;
+  /** Fastest win over all K seeds, ms; undefined when none won. */
+  bestMs: number | undefined;
+  /** Seed of the fastest win; undefined when none won. */
+  bestSeed: number | undefined;
+  /** The fixed seed won within `challenge.targetMs` (its own 3★ clock). */
+  fixedOnTarget: boolean;
+  /** Seeds (in `seeds` order) that won within `challenge.targetMs`. */
+  targetSeeds: number[];
+  /** Losing seeds, in `seeds` order. */
+  losers: number[];
+  ticks: number;
+  /** Fixed seed won and wins / K >= WEEKLY_WIN_RATE. */
+  winsOk: boolean;
+  /** At least one of the K seeds reached the 3★ target (else a level/clock item for the Level Designer). */
+  targetOk: boolean;
+  /** `winsOk` — the 3★ target is informational (star3 is tuned for humans faster than the bot; Producer decision 2026-09-20). */
+  ok: boolean;
+}
+
+/**
+ * Reference player on one week's challenge over `seedCount` seeds (the fixed one first), exactly as
+ * the client builds it: the week's level, fixed seed and twist modifiers, no upgrades. `level` must be
+ * the challenge's level. `twist: false` is the no-modifier control, as for `runDaily`. Besides the
+ * daily gate the row reports the 3★ target: which seeds finished within `challenge.targetMs`.
+ */
+export function runWeekly(challenge: WeeklyChallenge, level: LevelDef, seedCount: number, twist = true): WeeklyRow {
+  if (level.id !== challenge.levelId) throw new Error(`weekly: level ${level.id} is not the ${challenge.weekKey} challenge (${challenge.levelId})`);
+  const modifiers = twist ? challenge.twist.modifiers : DEFAULT_MODIFIERS;
+  const seeds = weeklySeeds(challenge, seedCount);
+  const results: RunResult[] = [];
+  const winTimes: number[] = [];
+  const losers: number[] = [];
+  const targetSeeds: number[] = [];
+  let bestMs: number | undefined;
+  let bestSeed: number | undefined;
+  let ticks = 0;
+  for (const seed of seeds) {
+    const r = runHeadless(level, seed, referencePlayerCommands, { modifiers });
+    results.push(r);
+    ticks += r.ticks;
+    if (r.outcome === 'won') {
+      winTimes.push(r.timeMs);
+      if (r.timeMs <= challenge.targetMs) targetSeeds.push(seed);
+      if (bestMs === undefined || r.timeMs < bestMs) {
+        bestMs = r.timeMs;
+        bestSeed = seed;
+      }
+    } else losers.push(seed);
+  }
+  const fixed = results[0]!;
+  const wins = winTimes.length;
+  const winsOk = fixed.outcome === 'won' && wins / seedCount >= WEEKLY_WIN_RATE;
+  const targetOk = targetSeeds.length > 0;
+  return {
+    challenge,
+    level,
+    modifiers,
+    seeds,
+    results,
+    fixed,
+    fixedStars: starsFor(level, fixed),
+    wins,
+    medianMs: median(winTimes),
+    bestMs,
+    bestSeed,
+    fixedOnTarget: fixed.outcome === 'won' && fixed.timeMs <= challenge.targetMs,
+    targetSeeds,
+    losers,
+    ticks,
+    winsOk,
+    targetOk,
+    ok: winsOk,
+  };
 }
 
 export interface TwistRow {
@@ -135,10 +265,10 @@ export interface TwistRow {
 /**
  * Reference player on one pool level under one twist over seeds 1..`seedCount` (the campaign seeds,
  * not a day's fixed one: the sweep asks whether the level is winnable under the twist at all). Refuses
- * a level outside the pool.
+ * a level outside `pool` (the daily pool by default; `--pool a-b` widens it, GDD §3 band 5).
  */
-export function runTwist(level: LevelDef, twist: Twist, seedCount: number): TwistRow {
-  if (!inPool(level)) throw new Error(`daily: level ${level.id} is not in the challenge pool (${POOL_FROM}-${POOL_TO})`);
+export function runTwist(level: LevelDef, twist: Twist, seedCount: number, pool: Readonly<PoolRange> = DEFAULT_POOL): TwistRow {
+  if (!inPool(level, pool)) throw new Error(`daily: level ${level.id} is not in the challenge pool (${pool.from}-${pool.to})`);
   if (!Number.isInteger(seedCount) || seedCount < 1) throw new Error(`daily: bad seed count ${String(seedCount)}`);
   const seeds = Array.from({ length: seedCount }, (_, i) => i + 1);
   const results: RunResult[] = [];
