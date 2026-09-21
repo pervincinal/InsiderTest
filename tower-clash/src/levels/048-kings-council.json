@@ -28,24 +28,8 @@
     {"id": "yellowking", "x": 360, "y": 440, "owner": "enemy3", "units": 30, "level": 2, "kind": "barracks"},
     {"id": "crown", "x": 360, "y": 200, "owner": "neutral", "units": 12}
   ],
-  "roads": [
-    {"a": "home", "b": "w"},
-    {"a": "home", "b": "e"},
-    {"a": "home", "b": "court"},
-    {"a": "w", "b": "court"},
-    {"a": "e", "b": "court"},
-    {"a": "w", "b": "nw"},
-    {"a": "e", "b": "ne"},
-    {"a": "court", "b": "n"},
-    {"a": "nw", "b": "n"},
-    {"a": "ne", "b": "n"},
-    {"a": "nw", "b": "redking"},
-    {"a": "ne", "b": "greenking"},
-    {"a": "n", "b": "yellowking"},
-    {"a": "redking", "b": "yellowking"},
-    {"a": "greenking", "b": "yellowking"},
-    {"a": "redking", "b": "crown"},
-    {"a": "greenking", "b": "crown"},
-    {"a": "yellowking", "b": "crown"}
+  "obstacles": [
+    {"kind": "wall", "points": [{"x": 210, "y": 620}, {"x": 300, "y": 620}]},
+    {"kind": "wall", "points": [{"x": 420, "y": 620}, {"x": 510, "y": 620}]}
   ]
 }

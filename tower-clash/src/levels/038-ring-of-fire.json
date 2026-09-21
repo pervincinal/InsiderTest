@@ -27,20 +27,11 @@
     {"id": "yellow", "x": 360, "y": 380, "owner": "enemy3", "units": 8, "level": 1, "kind": "barracks"},
     {"id": "crown", "x": 360, "y": 180, "owner": "neutral", "units": 8}
   ],
-  "roads": [
-    {"a": "home", "b": "w"},
-    {"a": "home", "b": "e"},
-    {"a": "w", "b": "gunsw"},
-    {"a": "e", "b": "gunse"},
-    {"a": "gunsw", "b": "mid"},
-    {"a": "gunse", "b": "mid"},
-    {"a": "gunsw", "b": "red", "mine": 3},
-    {"a": "gunse", "b": "green", "mine": 3},
-    {"a": "mid", "b": "yellow", "barrier": 6},
-    {"a": "red", "b": "yellow"},
-    {"a": "green", "b": "yellow"},
-    {"a": "red", "b": "crown", "mine": 4},
-    {"a": "green", "b": "crown", "mine": 4},
-    {"a": "yellow", "b": "crown"}
+  "mines": [
+    {"x": 165, "y": 670, "charges": 3},
+    {"x": 555, "y": 670, "charges": 3},
+    {"x": 360, "y": 510, "charges": 6},
+    {"x": 245, "y": 360, "charges": 4},
+    {"x": 475, "y": 360, "charges": 4}
   ]
 }

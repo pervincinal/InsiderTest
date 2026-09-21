@@ -4,10 +4,10 @@
   "name_az": "Əkiz Çaylar",
   "name_ru": "Две реки",
   "name_tr": "İkiz Nehirler",
-  "lesson": "Two rivers, two rivals: cut the bridge the rusher crosses, cross the other one yourself, and never fight on both banks at once",
-  "lesson_az": "İki çay, iki rəqib: hücumçunun keçdiyi körpünü kəs, o birindən özün keç və heç vaxt iki sahildə eyni anda vuruşma",
-  "lesson_ru": "Две реки, два соперника: обруши мост, по которому идёт рвач, сам перейди по другому и никогда не дерись на обоих берегах сразу",
-  "lesson_tr": "İki nehir, iki rakip: saldırganın geçtiği köprüyü kes, diğerinden kendin geç ve asla iki kıyıda aynı anda savaşma",
+  "lesson": "Two rivers, two rivals: hold the ford the rusher crosses, cross the other one yourself, and never fight on both banks at once",
+  "lesson_az": "İki çay, iki rəqib: hücumçunun keçdiyi keçidi tut, o birindən özün keç və heç vaxt iki sahildə eyni anda vuruşma",
+  "lesson_ru": "Две реки, два соперника: держи брод, по которому идёт рвач, сам перейди по другому и никогда не дерись на обоих берегах сразу",
+  "lesson_tr": "İki nehir, iki rakip: saldırganın geçtiği geçidi tut, diğerinden kendin geç ve asla iki kıyıda aynı anda savaşma",
   "star3": 25000,
   "star2": 50000,
   "enemies": [
@@ -27,23 +27,13 @@
     {"id": "redkeep", "x": 150, "y": 340, "owner": "enemy1", "units": 8, "level": 1, "kind": "artillery"},
     {"id": "greenkeep", "x": 570, "y": 340, "owner": "enemy2", "units": 8, "level": 1, "kind": "artillery"}
   ],
-  "roads": [
-    {"a": "home", "b": "w"},
-    {"a": "home", "b": "e"},
-    {"a": "home", "b": "mid"},
-    {"a": "w", "b": "mid"},
-    {"a": "e", "b": "mid"},
-    {"a": "w", "b": "nw"},
-    {"a": "e", "b": "ne"},
-    {"a": "mid", "b": "nw"},
-    {"a": "mid", "b": "ne"},
-    {"a": "nw", "b": "red", "kind": "bridge"},
-    {"a": "ne", "b": "green", "kind": "bridge"},
-    {"a": "mid", "b": "ford", "barrier": 8},
-    {"a": "ford", "b": "red"},
-    {"a": "ford", "b": "green"},
-    {"a": "red", "b": "redkeep"},
-    {"a": "green", "b": "greenkeep"},
-    {"a": "redkeep", "b": "greenkeep"}
+  "obstacles": [
+    {"kind": "water", "points": [{"x": -40, "y": 680}, {"x": 100, "y": 680}]},
+    {"kind": "water", "points": [{"x": 200, "y": 680}, {"x": 295, "y": 680}]},
+    {"kind": "water", "points": [{"x": 425, "y": 680}, {"x": 520, "y": 680}]},
+    {"kind": "water", "points": [{"x": 620, "y": 680}, {"x": 760, "y": 680}]}
+  ],
+  "mines": [
+    {"x": 360, "y": 740, "charges": 8}
   ]
 }

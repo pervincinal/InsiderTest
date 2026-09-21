@@ -26,22 +26,9 @@
     {"id": "greenB", "x": 570, "y": 380, "owner": "enemy2", "units": 8, "level": 1, "kind": "fortress"},
     {"id": "greenkeep", "x": 360, "y": 200, "owner": "enemy2", "units": 12, "level": 1, "kind": "barracks"}
   ],
-  "roads": [
-    {"a": "home", "b": "w"},
-    {"a": "home", "b": "e"},
-    {"a": "home", "b": "mid"},
-    {"a": "w", "b": "mid"},
-    {"a": "e", "b": "mid"},
-    {"a": "w", "b": "red1"},
-    {"a": "e", "b": "red2"},
-    {"a": "mid", "b": "redbase", "barrier": 6},
-    {"a": "red1", "b": "redbase"},
-    {"a": "red2", "b": "redbase"},
-    {"a": "red1", "b": "greenA", "barrier": 8},
-    {"a": "red2", "b": "greenB", "barrier": 8},
-    {"a": "redbase", "b": "greenA"},
-    {"a": "redbase", "b": "greenB"},
-    {"a": "greenA", "b": "greenkeep"},
-    {"a": "greenB", "b": "greenkeep"}
+  "mines": [
+    {"x": 360, "y": 700, "charges": 6},
+    {"x": 150, "y": 570, "charges": 8},
+    {"x": 570, "y": 570, "charges": 8}
   ]
 }

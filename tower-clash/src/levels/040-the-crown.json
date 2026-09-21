@@ -4,10 +4,10 @@
   "name_az": "Tac",
   "name_ru": "Корона",
   "name_tr": "Taç",
-  "lesson": "The Crown: everything you have learned. Expand, hold walls, cut bridges, pay mines wisely, and take the crown once the three kings have exhausted each other",
-  "lesson_az": "Tac: öyrəndiyin hər şey. Genişlən, divarları saxla, körpüləri kəs, minaları ağılla ödə və üç kral bir-birini tükədəndə tacı götür",
-  "lesson_ru": "Корона: всё, чему ты научился. Расширяйся, держи стены, руби мосты, разумно плати минам и забери корону, когда три короля вымотают друг друга",
-  "lesson_tr": "Taç: öğrendiğin her şey. Genişle, surları tut, köprüleri kes, mayınları akıllıca öde ve üç kral birbirini tüketince tacı al",
+  "lesson": "The Crown: everything you have learned. Expand, hold walls, guard the fords, pay mines wisely, and take the crown once the three kings have exhausted each other",
+  "lesson_az": "Tac: öyrəndiyin hər şey. Genişlən, divarları saxla, keçidləri qoru, minaları ağılla ödə və üç kral bir-birini tükədəndə tacı götür",
+  "lesson_ru": "Корона: всё, чему ты научился. Расширяйся, держи стены, стереги броды, разумно плати минам и забери корону, когда три короля вымотают друг друга",
+  "lesson_tr": "Taç: öğrendiğin her şey. Genişle, surları tut, geçitleri koru, mayınları akıllıca öde ve üç kral birbirini tüketince tacı al",
   "star3": 35000,
   "star2": 85000,
   "enemies": [
@@ -29,28 +29,17 @@
     {"id": "yellow", "x": 360, "y": 420, "owner": "enemy3", "units": 12, "level": 1, "kind": "fortress"},
     {"id": "crown", "x": 360, "y": 200, "owner": "neutral", "units": 12, "kind": "fortress"}
   ],
-  "roads": [
-    {"a": "home", "b": "w"},
-    {"a": "home", "b": "e"},
-    {"a": "home", "b": "factory"},
-    {"a": "home", "b": "fort", "mine": 5},
-    {"a": "w", "b": "fort"},
-    {"a": "e", "b": "fort"},
-    {"a": "w", "b": "nw"},
-    {"a": "e", "b": "ne"},
-    {"a": "nw", "b": "red", "kind": "bridge"},
-    {"a": "ne", "b": "green", "kind": "bridge"},
-    {"a": "fort", "b": "guns"},
-    {"a": "nw", "b": "guns", "barrier": 6},
-    {"a": "ne", "b": "guns", "barrier": 6},
-    {"a": "guns", "b": "yellow"},
-    {"a": "red", "b": "yellow"},
-    {"a": "green", "b": "yellow"},
-    {"a": "red", "b": "crown", "mine": 5},
-    {"a": "green", "b": "crown", "mine": 5},
-    {"a": "yellow", "b": "crown"},
-    {"a": "red", "b": "green"},
-    {"a": "guns", "b": "red"},
-    {"a": "guns", "b": "green"}
+  "obstacles": [
+    {"kind": "water", "points": [{"x": -40, "y": 660}, {"x": 100, "y": 660}]},
+    {"kind": "water", "points": [{"x": 200, "y": 660}, {"x": 280, "y": 660}]},
+    {"kind": "water", "points": [{"x": 440, "y": 660}, {"x": 520, "y": 660}]},
+    {"kind": "water", "points": [{"x": 620, "y": 660}, {"x": 760, "y": 660}]}
+  ],
+  "mines": [
+    {"x": 360, "y": 1050, "charges": 5},
+    {"x": 255, "y": 370, "charges": 5},
+    {"x": 465, "y": 370, "charges": 5},
+    {"x": 255, "y": 700, "charges": 6},
+    {"x": 465, "y": 700, "charges": 6}
   ]
 }

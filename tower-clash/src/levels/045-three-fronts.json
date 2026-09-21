@@ -28,24 +28,11 @@
     {"id": "yellow", "x": 360, "y": 460, "owner": "enemy3", "units": 14, "level": 1, "kind": "barracks"},
     {"id": "crown", "x": 360, "y": 220, "owner": "neutral", "units": 12}
   ],
-  "roads": [
-    {"a": "home", "b": "w"},
-    {"a": "home", "b": "e"},
-    {"a": "home", "b": "wall"},
-    {"a": "w", "b": "wall"},
-    {"a": "e", "b": "wall"},
-    {"a": "w", "b": "red"},
-    {"a": "red", "b": "nw"},
-    {"a": "e", "b": "green"},
-    {"a": "green", "b": "ne"},
-    {"a": "wall", "b": "guns"},
-    {"a": "nw", "b": "guns"},
-    {"a": "ne", "b": "guns"},
-    {"a": "guns", "b": "yellow", "barrier": 6},
-    {"a": "nw", "b": "yellow"},
-    {"a": "ne", "b": "yellow"},
-    {"a": "yellow", "b": "crown"},
-    {"a": "nw", "b": "crown"},
-    {"a": "ne", "b": "crown"}
+  "obstacles": [
+    {"kind": "wall", "points": [{"x": 240, "y": 830}, {"x": 276, "y": 876}]},
+    {"kind": "wall", "points": [{"x": 480, "y": 830}, {"x": 444, "y": 876}]}
+  ],
+  "mines": [
+    {"x": 360, "y": 580, "charges": 6}
   ]
 }

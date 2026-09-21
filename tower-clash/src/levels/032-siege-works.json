@@ -4,10 +4,10 @@
   "name_az": "Mühasirə",
   "name_ru": "Осадные работы",
   "name_tr": "Kuşatma",
-  "lesson": "Band finale: your factory, their walls and guns, and a river between. Cut what threatens you, pay the mines with a few scouts, and break the keeps one at a time",
-  "lesson_az": "Mərhələ finalı: sənin zavodun, onların divarları və topları, arada isə çay. Səni təhdid edəni kəs, minaları bir neçə kəşfiyyatçı ilə ödə və qəsrləri bir-bir qır",
-  "lesson_ru": "Финал этапа: твой завод, их стены и пушки, а между вами река. Руби то, что тебе грозит, оплати мины парой разведчиков и ломай цитадели по одной",
-  "lesson_tr": "Etap finali: senin fabrikan, onların surları ve topları, arada bir nehir. Seni tehdit edeni kes, mayınları birkaç keşif eriyle öde ve kaleleri teker teker kır",
+  "lesson": "Band finale: your factory, their walls and guns, and a river between. Hold the fords that threaten you, pay the mines with a few scouts, and break the keeps one at a time",
+  "lesson_az": "Mərhələ finalı: sənin zavodun, onların divarları və topları, arada isə çay. Səni təhdid edən keçidləri tut, minaları bir neçə kəşfiyyatçı ilə ödə və qəsrləri bir-bir qır",
+  "lesson_ru": "Финал этапа: твой завод, их стены и пушки, а между вами река. Держи броды, что тебе грозят, оплати мины парой разведчиков и ломай цитадели по одной",
+  "lesson_tr": "Etap finali: senin fabrikan, onların surları ve topları, arada bir nehir. Seni tehdit eden geçitleri tut, mayınları birkaç keşif eriyle öde ve kaleleri teker teker kır",
   "star3": 30000,
   "star2": 60000,
   "enemies": [
@@ -27,24 +27,17 @@
     {"id": "green", "x": 570, "y": 520, "owner": "enemy2", "units": 14, "level": 1, "kind": "barracks"},
     {"id": "crown", "x": 360, "y": 260, "owner": "neutral", "units": 10, "kind": "fortress"}
   ],
-  "roads": [
-    {"a": "home", "b": "w"},
-    {"a": "home", "b": "e"},
-    {"a": "home", "b": "factory"},
-    {"a": "home", "b": "fort", "mine": 5},
-    {"a": "w", "b": "nw"},
-    {"a": "e", "b": "ne"},
-    {"a": "w", "b": "fort"},
-    {"a": "e", "b": "fort"},
-    {"a": "nw", "b": "red", "kind": "bridge"},
-    {"a": "ne", "b": "green", "kind": "bridge"},
-    {"a": "fort", "b": "guns"},
-    {"a": "nw", "b": "guns", "barrier": 6},
-    {"a": "ne", "b": "guns", "barrier": 6},
-    {"a": "guns", "b": "red"},
-    {"a": "guns", "b": "green"},
-    {"a": "red", "b": "crown", "mine": 4},
-    {"a": "green", "b": "crown", "mine": 4},
-    {"a": "red", "b": "green"}
+  "obstacles": [
+    {"kind": "water", "points": [{"x": -40, "y": 650}, {"x": 100, "y": 650}]},
+    {"kind": "water", "points": [{"x": 200, "y": 650}, {"x": 280, "y": 650}]},
+    {"kind": "water", "points": [{"x": 440, "y": 650}, {"x": 520, "y": 650}]},
+    {"kind": "water", "points": [{"x": 620, "y": 650}, {"x": 760, "y": 650}]}
+  ],
+  "mines": [
+    {"x": 360, "y": 1050, "charges": 5},
+    {"x": 255, "y": 390, "charges": 4},
+    {"x": 465, "y": 390, "charges": 4},
+    {"x": 255, "y": 690, "charges": 6},
+    {"x": 465, "y": 690, "charges": 6}
   ]
 }

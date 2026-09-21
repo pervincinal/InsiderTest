@@ -10,17 +10,13 @@
   "lesson_tr": "Tarafsız kuleler bedava üretimdir: savaşmadan önce ikisini de kap",
   "star3": 30000,
   "star2": 60000,
-  "enemies": [{ "owner": "enemy1", "personality": "rusher", "aggression": 0.3 }],
-  "towers": [
-    { "id": "home", "x": 360, "y": 1120, "owner": "player", "units": 12, "level": 1, "kind": "barracks" },
-    { "id": "west", "x": 140, "y": 820, "owner": "neutral", "units": 5 },
-    { "id": "east", "x": 580, "y": 820, "owner": "neutral", "units": 5 },
-    { "id": "foe", "x": 360, "y": 220, "owner": "enemy1", "units": 6, "level": 1, "kind": "barracks" }
+  "enemies": [
+    {"owner": "enemy1", "personality": "rusher", "aggression": 0.3}
   ],
-  "roads": [
-    { "a": "home", "b": "west" },
-    { "a": "home", "b": "east" },
-    { "a": "west", "b": "foe" },
-    { "a": "east", "b": "foe" }
+  "towers": [
+    {"id": "home", "x": 360, "y": 1120, "owner": "player", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "west", "x": 140, "y": 820, "owner": "neutral", "units": 5},
+    {"id": "east", "x": 580, "y": 820, "owner": "neutral", "units": 5},
+    {"id": "foe", "x": 360, "y": 220, "owner": "enemy1", "units": 6, "level": 1, "kind": "barracks"}
   ]
 }

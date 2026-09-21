@@ -26,22 +26,12 @@
     {"id": "green", "x": 570, "y": 440, "owner": "enemy2", "units": 12, "level": 1, "kind": "barracks"},
     {"id": "top", "x": 360, "y": 260, "owner": "neutral", "units": 8}
   ],
-  "roads": [
-    {"a": "home", "b": "w"},
-    {"a": "home", "b": "e"},
-    {"a": "w", "b": "keep"},
-    {"a": "e", "b": "keep"},
-    {"a": "w", "b": "nw"},
-    {"a": "e", "b": "ne"},
-    {"a": "nw", "b": "red", "mine": 4},
-    {"a": "ne", "b": "green", "barrier": 6},
-    {"a": "keep", "b": "red"},
-    {"a": "keep", "b": "green"},
-    {"a": "keep", "b": "guns"},
-    {"a": "guns", "b": "red"},
-    {"a": "guns", "b": "green"},
-    {"a": "red", "b": "top"},
-    {"a": "green", "b": "top"},
-    {"a": "red", "b": "green"}
+  "obstacles": [
+    {"kind": "rock", "points": [{"x": 196, "y": 600}], "width": 40},
+    {"kind": "rock", "points": [{"x": 524, "y": 600}], "width": 40}
+  ],
+  "mines": [
+    {"x": 150, "y": 570, "charges": 4},
+    {"x": 570, "y": 570, "charges": 6}
   ]
 }

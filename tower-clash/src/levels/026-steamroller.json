@@ -4,10 +4,10 @@
   "name_az": "Buldozer",
   "name_ru": "Каток",
   "name_tr": "Silindir",
-  "lesson": "A tank shrugs off a small mine or wall: one 5-weight tank spends a 4-charge mine and rolls on where four infantry would have died",
-  "lesson_az": "Tank kiçik mina və ya divara məhəl qoymur: bir 5 çəkili tank 4 yüklü minanı xərcləyib irəli gedir, dörd piyada isə orada ölərdi",
-  "lesson_ru": "Танку нипочём малая мина или стена: один танк весом 5 тратит мину на 4 заряда и катится дальше там, где четыре пехотинца погибли бы",
-  "lesson_tr": "Tank küçük mayın ya da duvarı umursamaz: 5 ağırlığında bir tank 4 şarjlı mayını harcayıp yoluna devam eder, dört piyade orada ölürdü",
+  "lesson": "A tank shrugs off a small mine: one 5-weight tank spends a 4-charge mine and rolls on where four infantry would have died",
+  "lesson_az": "Tank kiçik minaya məhəl qoymur: bir 5 çəkili tank 4 yüklü minanı xərcləyib irəli gedir, dörd piyada isə orada ölərdi",
+  "lesson_ru": "Танку нипочём малая мина: один танк весом 5 тратит мину на 4 заряда и катится дальше там, где четыре пехотинца погибли бы",
+  "lesson_tr": "Tank küçük mayını umursamaz: 5 ağırlığında bir tank 4 şarjlı mayını harcayıp yoluna devam eder, dört piyade orada ölürdü",
   "star3": 15000,
   "star2": 35000,
   "enemies": [
@@ -26,20 +26,10 @@
     {"id": "green", "x": 520, "y": 440, "owner": "enemy1", "units": 12, "level": 1, "kind": "barracks"},
     {"id": "top", "x": 360, "y": 240, "owner": "neutral", "units": 8}
   ],
-  "roads": [
-    {"a": "home", "b": "factory"},
-    {"a": "factory", "b": "depot", "mine": 4},
-    {"a": "home", "b": "e"},
-    {"a": "home", "b": "mid", "barrier": 4},
-    {"a": "e", "b": "mid"},
-    {"a": "mid", "b": "nw", "mine": 4},
-    {"a": "mid", "b": "ne"},
-    {"a": "e", "b": "ne"},
-    {"a": "nw", "b": "red"},
-    {"a": "ne", "b": "green"},
-    {"a": "mid", "b": "green", "mine": 4},
-    {"a": "red", "b": "top"},
-    {"a": "green", "b": "top"},
-    {"a": "red", "b": "green"}
+  "mines": [
+    {"x": 140, "y": 1025, "charges": 4},
+    {"x": 360, "y": 1025, "charges": 4},
+    {"x": 192, "y": 736, "charges": 4},
+    {"x": 440, "y": 660, "charges": 4}
   ]
 }

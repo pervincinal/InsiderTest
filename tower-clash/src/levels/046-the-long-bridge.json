@@ -1,13 +1,13 @@
 {
   "id": 46,
-  "name": "The Long Bridge",
-  "name_az": "Uzun Körpü",
-  "name_ru": "Длинный мост",
-  "name_tr": "Uzun Köprü",
-  "lesson": "A long bridge is a door you own: cross it first and hold the far end, and cut it the moment the column coming over is bigger than the garrison behind it — the fords still lead north",
-  "lesson_az": "Uzun körpü sənin qapındır: əvvəl ondan keç və o biri ucunu saxla, gələn dəstə arxadakı qarnizondan böyük olan anda isə onu kəs — keçidlər yenə şimala aparır",
-  "lesson_ru": "Длинный мост — твоя дверь: перейди его первым и держи дальний конец, а обруши в тот миг, когда идущая колонна больше гарнизона за ней — броды всё ещё ведут на север",
-  "lesson_tr": "Uzun köprü senin kapındır: önce sen geç ve uzak ucunu tut; gelen kol arkadaki garnizondan büyük olduğu anda kes — geçitler hâlâ kuzeye çıkar",
+  "name": "Narrow Ford",
+  "name_az": "Dar Keçid",
+  "name_ru": "Узкий брод",
+  "name_tr": "Dar Geçit",
+  "lesson": "A narrow ford is a door: whoever holds the tower at each end owns it. Take the far end first and keep it fed — a tower in the way blocks every line behind it",
+  "lesson_az": "Dar keçid bir qapıdır: hər ucundakı qülləni tutan ona sahibdir. Əvvəl o biri ucu al və bəslə — yolda duran qüllə arxasındakı hər xətti bağlayır",
+  "lesson_ru": "Узкий брод — это дверь: кто держит башни на его концах, тот ею владеет. Возьми дальний конец первым и подпитывай его — башня на пути закрывает все линии за собой",
+  "lesson_tr": "Dar geçit bir kapıdır: iki ucundaki kuleyi tutan ona sahiptir. Önce uzak ucu al ve besle — yoldaki kule arkasındaki her çizgiyi kapatır",
   "star3": 35000,
   "star2": 75000,
   "enemies": [
@@ -28,24 +28,8 @@
     {"id": "green", "x": 590, "y": 440, "owner": "enemy2", "units": 12, "level": 1, "kind": "barracks"},
     {"id": "crown", "x": 360, "y": 200, "owner": "neutral", "units": 10}
   ],
-  "roads": [
-    {"a": "home", "b": "w", "barrier": 4},
-    {"a": "home", "b": "e", "barrier": 4},
-    {"a": "home", "b": "mid", "kind": "bridge", "waypoints": [{"x": 300, "y": 1060}, {"x": 420, "y": 960}]},
-    {"a": "w", "b": "nw"},
-    {"a": "e", "b": "ne"},
-    {"a": "mid", "b": "nw"},
-    {"a": "mid", "b": "ne"},
-    {"a": "mid", "b": "n"},
-    {"a": "nw", "b": "n"},
-    {"a": "ne", "b": "n"},
-    {"a": "nw", "b": "red"},
-    {"a": "n", "b": "yellow"},
-    {"a": "ne", "b": "green"},
-    {"a": "red", "b": "yellow"},
-    {"a": "yellow", "b": "green"},
-    {"a": "red", "b": "crown"},
-    {"a": "green", "b": "crown"},
-    {"a": "yellow", "b": "crown"}
+  "obstacles": [
+    {"kind": "water", "points": [{"x": -40, "y": 1090}, {"x": 310, "y": 1090}]},
+    {"kind": "water", "points": [{"x": 410, "y": 1090}, {"x": 760, "y": 1090}]}
   ]
 }

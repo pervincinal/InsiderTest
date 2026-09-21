@@ -4,20 +4,18 @@
   "name_az": "Təchizat Xətti",
   "name_ru": "Снабжение",
   "name_tr": "İkmal Hattı",
-  "lesson": "Take the middle and keep supplying it from home: a tower under fire cannot recruit, so answer every red stream",
-  "lesson_az": "Ortanı al, onu evdən bəsləməyə davam et: atəş altındakı qüllə əsgər yığmır, hər qırmızı axına cavab ver",
-  "lesson_ru": "Возьми центр и подпитывай его из дома: башня под обстрелом не вербует, так что отвечай на каждый красный поток",
-  "lesson_tr": "Ortayı al ve onu üsten beslemeye devam et: ateş altındaki kule asker toplamaz, her kırmızı akışa cevap ver",
+  "lesson": "Take the middle: a tower in the way hides the enemy behind it. Sending never empties your tower, it only stops it growing, so keep the middle fed and answer every red stream",
+  "lesson_az": "Ortanı al: yolda duran qüllə arxasındakı düşməni gizlədir. Göndərmək qülləni boşaltmır, yalnız böyüməsini dayandırır, ona görə ortanı bəslə və hər qırmızı axına cavab ver",
+  "lesson_ru": "Возьми центр: башня на пути прячет врага за собой. Отправка не опустошает башню, а лишь останавливает её рост, так что подпитывай центр и отвечай на каждый красный поток",
+  "lesson_tr": "Ortayı al: yoldaki kule arkasındaki düşmanı gizler. Göndermek kuleyi boşaltmaz, sadece büyümesini durdurur; ortayı besle ve her kırmızı akışa cevap ver",
   "star3": 30000,
   "star2": 60000,
-  "enemies": [{ "owner": "enemy1", "personality": "opportunist", "aggression": 0.3 }],
-  "towers": [
-    { "id": "home", "x": 360, "y": 1120, "owner": "player", "units": 12, "level": 1, "kind": "barracks" },
-    { "id": "mid", "x": 360, "y": 700, "owner": "neutral", "units": 6 },
-    { "id": "foe", "x": 360, "y": 280, "owner": "enemy1", "units": 8, "level": 1, "kind": "barracks" }
+  "enemies": [
+    {"owner": "enemy1", "personality": "opportunist", "aggression": 0.3}
   ],
-  "roads": [
-    { "a": "home", "b": "mid" },
-    { "a": "mid", "b": "foe" }
+  "towers": [
+    {"id": "home", "x": 360, "y": 1120, "owner": "player", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "mid", "x": 360, "y": 700, "owner": "neutral", "units": 6},
+    {"id": "foe", "x": 360, "y": 280, "owner": "enemy1", "units": 8, "level": 1, "kind": "barracks"}
   ]
 }

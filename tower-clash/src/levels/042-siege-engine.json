@@ -29,25 +29,13 @@
     {"id": "green", "x": 570, "y": 400, "owner": "enemy2", "units": 12, "level": 1, "kind": "barracks"},
     {"id": "crown", "x": 360, "y": 240, "owner": "neutral", "units": 14, "kind": "fortress"}
   ],
-  "roads": [
-    {"a": "home", "b": "w"},
-    {"a": "home", "b": "e"},
-    {"a": "home", "b": "fort"},
-    {"a": "w", "b": "fort"},
-    {"a": "e", "b": "fort"},
-    {"a": "w", "b": "nw"},
-    {"a": "e", "b": "ne"},
-    {"a": "fort", "b": "nw"},
-    {"a": "fort", "b": "ne"},
-    {"a": "nw", "b": "gunw", "mine": 4},
-    {"a": "ne", "b": "gune", "mine": 4},
-    {"a": "fort", "b": "engine", "mine": 5},
-    {"a": "gunw", "b": "engine"},
-    {"a": "gune", "b": "engine"},
-    {"a": "gunw", "b": "red"},
-    {"a": "gune", "b": "green"},
-    {"a": "engine", "b": "crown"},
-    {"a": "red", "b": "crown"},
-    {"a": "green", "b": "crown"}
+  "obstacles": [
+    {"kind": "rock", "points": [{"x": 150, "y": 560}], "width": 50},
+    {"kind": "rock", "points": [{"x": 570, "y": 560}], "width": 50}
+  ],
+  "mines": [
+    {"x": 175, "y": 735, "charges": 4},
+    {"x": 545, "y": 735, "charges": 4},
+    {"x": 360, "y": 780, "charges": 5}
   ]
 }

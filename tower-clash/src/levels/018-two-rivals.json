@@ -25,19 +25,7 @@
     {"id": "green", "x": 570, "y": 420, "owner": "enemy2", "units": 12, "level": 1, "kind": "barracks"},
     {"id": "pass", "x": 360, "y": 300, "owner": "neutral", "units": 8}
   ],
-  "roads": [
-    {"a": "home", "b": "w1"},
-    {"a": "home", "b": "e1"},
-    {"a": "w1", "b": "w2"},
-    {"a": "e1", "b": "e2"},
-    {"a": "w2", "b": "mid"},
-    {"a": "e2", "b": "mid"},
-    {"a": "w2", "b": "red"},
-    {"a": "e2", "b": "green"},
-    {"a": "mid", "b": "red", "mine": 4},
-    {"a": "mid", "b": "green"},
-    {"a": "red", "b": "green"},
-    {"a": "red", "b": "pass"},
-    {"a": "green", "b": "pass"}
+  "mines": [
+    {"x": 225, "y": 497, "charges": 4}
   ]
 }

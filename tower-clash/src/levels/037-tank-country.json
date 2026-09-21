@@ -29,21 +29,8 @@
     {"id": "green", "x": 590, "y": 220, "owner": "enemy2", "units": 10, "level": 1, "kind": "barracks"},
     {"id": "yellow", "x": 360, "y": 500, "owner": "enemy3", "units": 12, "level": 1, "kind": "barracks"}
   ],
-  "roads": [
-    {"a": "home", "b": "factory"},
-    {"a": "home", "b": "w"},
-    {"a": "home", "b": "e"},
-    {"a": "home", "b": "fort"},
-    {"a": "w", "b": "fort"},
-    {"a": "e", "b": "fort"},
-    {"a": "w", "b": "nw"},
-    {"a": "e", "b": "ne"},
-    {"a": "nw", "b": "redfactory"},
-    {"a": "ne", "b": "greenfactory"},
-    {"a": "fort", "b": "yellow"},
-    {"a": "redfactory", "b": "yellow"},
-    {"a": "greenfactory", "b": "yellow"},
-    {"a": "redfactory", "b": "red"},
-    {"a": "greenfactory", "b": "green"}
+  "obstacles": [
+    {"kind": "wall", "points": [{"x": 200, "y": 560}, {"x": 300, "y": 560}]},
+    {"kind": "wall", "points": [{"x": 420, "y": 560}, {"x": 520, "y": 560}]}
   ]
 }

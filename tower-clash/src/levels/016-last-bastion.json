@@ -24,20 +24,7 @@
     {"id": "camp", "x": 470, "y": 520, "owner": "enemy1", "units": 5, "level": 1, "kind": "barracks"},
     {"id": "keep", "x": 360, "y": 260, "owner": "enemy1", "units": 10, "level": 1, "kind": "fortress"}
   ],
-  "roads": [
-    {"a": "home", "b": "west"},
-    {"a": "home", "b": "east"},
-    {"a": "home", "b": "fort"},
-    {"a": "west", "b": "fort"},
-    {"a": "east", "b": "fort"},
-    {"a": "west", "b": "nw"},
-    {"a": "east", "b": "ne"},
-    {"a": "nw", "b": "guns"},
-    {"a": "ne", "b": "camp"},
-    {"a": "fort", "b": "guns"},
-    {"a": "fort", "b": "camp"},
-    {"a": "guns", "b": "camp"},
-    {"a": "guns", "b": "keep"},
-    {"a": "camp", "b": "keep"}
+  "obstacles": [
+    {"kind": "wall", "points": [{"x": 330, "y": 420}, {"x": 390, "y": 420}]}
   ]
 }

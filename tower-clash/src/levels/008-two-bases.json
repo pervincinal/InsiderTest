@@ -10,27 +10,22 @@
   "lesson_tr": "İki üsle başlıyorsun: parça parça saldırma, ikisini de aynı hedefe akıt",
   "star3": 25000,
   "star2": 75000,
-  "enemies": [{ "owner": "enemy1", "personality": "rusher", "aggression": 0.5 }],
-  "towers": [
-    { "id": "homeW", "x": 170, "y": 1140, "owner": "player", "units": 10, "level": 1, "kind": "barracks" },
-    { "id": "homeE", "x": 550, "y": 1140, "owner": "player", "units": 10, "level": 1, "kind": "barracks" },
-    { "id": "nW", "x": 150, "y": 860, "owner": "neutral", "units": 6 },
-    { "id": "nE", "x": 570, "y": 860, "owner": "neutral", "units": 6 },
-    { "id": "mid", "x": 360, "y": 660, "owner": "neutral", "units": 10 },
-    { "id": "foeW", "x": 170, "y": 420, "owner": "enemy1", "units": 6, "level": 1, "kind": "barracks" },
-    { "id": "foeE", "x": 550, "y": 420, "owner": "enemy1", "units": 6, "level": 1, "kind": "barracks" },
-    { "id": "base", "x": 360, "y": 180, "owner": "enemy1", "units": 10, "level": 1, "kind": "barracks" }
+  "enemies": [
+    {"owner": "enemy1", "personality": "rusher", "aggression": 0.5}
   ],
-  "roads": [
-    { "a": "homeW", "b": "homeE" },
-    { "a": "homeW", "b": "nW" },
-    { "a": "homeE", "b": "nE" },
-    { "a": "nW", "b": "nE" },
-    { "a": "nW", "b": "mid" },
-    { "a": "nE", "b": "mid" },
-    { "a": "mid", "b": "foeW" },
-    { "a": "mid", "b": "foeE" },
-    { "a": "foeW", "b": "base" },
-    { "a": "foeE", "b": "base" }
+  "towers": [
+    {"id": "homeW", "x": 170, "y": 1140, "owner": "player", "units": 10, "level": 1, "kind": "barracks"},
+    {"id": "homeE", "x": 550, "y": 1140, "owner": "player", "units": 10, "level": 1, "kind": "barracks"},
+    {"id": "nW", "x": 150, "y": 860, "owner": "neutral", "units": 6},
+    {"id": "nE", "x": 570, "y": 860, "owner": "neutral", "units": 6},
+    {"id": "mid", "x": 360, "y": 660, "owner": "neutral", "units": 10},
+    {"id": "foeW", "x": 170, "y": 420, "owner": "enemy1", "units": 6, "level": 1, "kind": "barracks"},
+    {"id": "foeE", "x": 550, "y": 420, "owner": "enemy1", "units": 6, "level": 1, "kind": "barracks"},
+    {"id": "base", "x": 360, "y": 180, "owner": "enemy1", "units": 10, "level": 1, "kind": "barracks"}
+  ],
+  "obstacles": [
+    {"kind": "wall", "points": [{"x": 20, "y": 330}, {"x": 190, "y": 330}]},
+    {"kind": "wall", "points": [{"x": 290, "y": 330}, {"x": 430, "y": 330}]},
+    {"kind": "wall", "points": [{"x": 530, "y": 330}, {"x": 700, "y": 330}]}
   ]
 }

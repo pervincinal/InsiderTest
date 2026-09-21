@@ -1,13 +1,13 @@
 {
   "id": 24,
   "name": "The Gauntlet",
-  "name_az": "Sınaq Yolu",
+  "name_az": "Sınaq Keçidi",
   "name_ru": "Сквозь строй",
   "name_tr": "Zorlu Geçit",
-  "lesson": "Band finale: read the map before you tap. Mines, walls, guns and two rivals mean the cheapest road to the finish is rarely the shortest",
-  "lesson_az": "Mərhələ finalı: vurmazdan əvvəl xəritəni oxu. Minalar, divarlar, toplar və iki rəqib: finişə ən ucuz yol nadir hallarda ən qısasıdır",
-  "lesson_ru": "Финал этапа: изучи карту, прежде чем нажимать. Мины, стены, пушки и два соперника: самая дешёвая дорога к финишу редко бывает самой короткой",
-  "lesson_tr": "Etap finali: dokunmadan önce haritayı oku. Mayınlar, duvarlar, toplar ve iki rakip: bitişe en ucuz yol nadiren en kısasıdır",
+  "lesson": "Band finale: read the map before you tap. Mines, rocks, guns and two rivals mean the cheapest line to the finish is rarely the shortest",
+  "lesson_az": "Mərhələ finalı: vurmazdan əvvəl xəritəni oxu. Minalar, qayalar, toplar və iki rəqib: finişə ən ucuz xətt nadir hallarda ən qısasıdır",
+  "lesson_ru": "Финал этапа: изучи карту, прежде чем нажимать. Мины, валуны, пушки и два соперника: самая дешёвая линия к финишу редко бывает самой короткой",
+  "lesson_tr": "Etap finali: dokunmadan önce haritayı oku. Mayınlar, kayalar, toplar ve iki rakip: bitişe en ucuz çizgi nadiren en kısasıdır",
   "star3": 25000,
   "star2": 50000,
   "enemies": [
@@ -26,23 +26,15 @@
     {"id": "green", "x": 570, "y": 420, "owner": "enemy1", "units": 14, "level": 1, "kind": "barracks"},
     {"id": "crown", "x": 360, "y": 240, "owner": "neutral", "units": 12}
   ],
-  "roads": [
-    {"a": "home", "b": "w"},
-    {"a": "home", "b": "e"},
-    {"a": "home", "b": "fort", "mine": 5},
-    {"a": "w", "b": "fort"},
-    {"a": "e", "b": "fort"},
-    {"a": "w", "b": "nw"},
-    {"a": "e", "b": "ne"},
-    {"a": "fort", "b": "guns"},
-    {"a": "nw", "b": "guns"},
-    {"a": "ne", "b": "guns"},
-    {"a": "nw", "b": "red", "barrier": 8},
-    {"a": "ne", "b": "green", "barrier": 8},
-    {"a": "guns", "b": "red"},
-    {"a": "guns", "b": "green"},
-    {"a": "red", "b": "crown", "mine": 4},
-    {"a": "green", "b": "crown", "mine": 4},
-    {"a": "red", "b": "green"}
+  "obstacles": [
+    {"kind": "rock", "points": [{"x": 221, "y": 600}], "width": 50},
+    {"kind": "rock", "points": [{"x": 499, "y": 600}], "width": 50}
+  ],
+  "mines": [
+    {"x": 360, "y": 1050, "charges": 5},
+    {"x": 150, "y": 560, "charges": 8},
+    {"x": 570, "y": 560, "charges": 8},
+    {"x": 255, "y": 330, "charges": 4},
+    {"x": 465, "y": 330, "charges": 4}
   ]
 }

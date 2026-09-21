@@ -10,25 +10,20 @@
   "lesson_tr": "Tarafsız kaleyi ele geçir ve tut: kendi surlarında her savunmacı iki sayılır",
   "star3": 50000,
   "star2": 100000,
-  "enemies": [{ "owner": "enemy1", "personality": "turtle", "aggression": 0.4 }],
-  "towers": [
-    { "id": "home", "x": 360, "y": 1150, "owner": "player", "units": 12, "level": 1, "kind": "barracks" },
-    { "id": "west", "x": 150, "y": 900, "owner": "neutral", "units": 4 },
-    { "id": "east", "x": 570, "y": 900, "owner": "neutral", "units": 4 },
-    { "id": "fort", "x": 360, "y": 700, "owner": "neutral", "units": 5, "kind": "fortress" },
-    { "id": "spare", "x": 150, "y": 560, "owner": "neutral", "units": 6 },
-    { "id": "outpost", "x": 560, "y": 430, "owner": "enemy1", "units": 6, "level": 1, "kind": "barracks" },
-    { "id": "base", "x": 220, "y": 280, "owner": "enemy1", "units": 10, "level": 1, "kind": "barracks" }
+  "enemies": [
+    {"owner": "enemy1", "personality": "turtle", "aggression": 0.4}
   ],
-  "roads": [
-    { "a": "home", "b": "west" },
-    { "a": "home", "b": "east" },
-    { "a": "west", "b": "fort" },
-    { "a": "east", "b": "fort" },
-    { "a": "west", "b": "spare" },
-    { "a": "spare", "b": "base" },
-    { "a": "fort", "b": "outpost" },
-    { "a": "fort", "b": "base" },
-    { "a": "outpost", "b": "base" }
+  "towers": [
+    {"id": "home", "x": 360, "y": 1150, "owner": "player", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "west", "x": 150, "y": 900, "owner": "neutral", "units": 4},
+    {"id": "east", "x": 570, "y": 900, "owner": "neutral", "units": 4},
+    {"id": "fort", "x": 360, "y": 700, "owner": "neutral", "units": 5, "kind": "fortress"},
+    {"id": "spare", "x": 150, "y": 560, "owner": "neutral", "units": 6},
+    {"id": "outpost", "x": 560, "y": 430, "owner": "enemy1", "units": 6, "level": 1, "kind": "barracks"},
+    {"id": "base", "x": 220, "y": 280, "owner": "enemy1", "units": 10, "level": 1, "kind": "barracks"}
+  ],
+  "obstacles": [
+    {"kind": "rock", "points": [{"x": 268, "y": 590}], "width": 40},
+    {"kind": "rock", "points": [{"x": 398, "y": 600}], "width": 40}
   ]
 }

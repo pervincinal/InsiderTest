@@ -1,13 +1,13 @@
 {
   "id": 19,
-  "name": "Toll Road",
-  "name_az": "Rüsum Yolu",
+  "name": "Toll Gate",
+  "name_az": "Keçid Haqqı",
   "name_ru": "Пошлина",
-  "name_tr": "Paralı Yol",
-  "lesson": "A mine works both ways: sit behind a mined road and let the enemy rush pay the toll before it reaches you",
-  "lesson_az": "Mina hər iki tərəfə işləyir: minalı yolun arxasında otur və qoy düşmən hücumu sənə çatmazdan əvvəl rüsumu ödəsin",
-  "lesson_ru": "Мина работает в обе стороны: сядь за минированной дорогой и пусть вражеский натиск платит пошлину, пока дойдёт до тебя",
-  "lesson_tr": "Mayın iki yönlü çalışır: mayınlı yolun arkasında otur ve düşman hücumu sana ulaşmadan bedeli ödesin",
+  "name_tr": "Paralı Kapı",
+  "lesson": "A mine works both ways: sit behind a mined line and let the enemy rush pay the toll before it reaches you",
+  "lesson_az": "Mina hər iki tərəfə işləyir: minalı xəttin arxasında otur və qoy düşmən hücumu sənə çatmazdan əvvəl rüsumu ödəsin",
+  "lesson_ru": "Мина работает в обе стороны: сядь за минированной линией и пусть вражеский натиск платит пошлину, пока дойдёт до тебя",
+  "lesson_tr": "Mayın iki yönlü çalışır: mayınlı çizginin arkasında otur ve düşman hücumu sana ulaşmadan bedeli ödesin",
   "star3": 20000,
   "star2": 40000,
   "enemies": [
@@ -25,19 +25,12 @@
     {"id": "green", "x": 520, "y": 420, "owner": "enemy1", "units": 10, "level": 1, "kind": "barracks"},
     {"id": "top", "x": 360, "y": 200, "owner": "neutral", "units": 8}
   ],
-  "roads": [
-    {"a": "home", "b": "west"},
-    {"a": "home", "b": "east"},
-    {"a": "west", "b": "gate"},
-    {"a": "east", "b": "gate"},
-    {"a": "gate", "b": "red", "mine": 8},
-    {"a": "west", "b": "nw"},
-    {"a": "nw", "b": "red", "mine": 5},
-    {"a": "east", "b": "ne"},
-    {"a": "ne", "b": "green"},
-    {"a": "gate", "b": "green"},
-    {"a": "red", "b": "green"},
-    {"a": "red", "b": "top"},
-    {"a": "green", "b": "top"}
+  "obstacles": [
+    {"kind": "rock", "points": [{"x": 222, "y": 560}], "width": 40},
+    {"kind": "rock", "points": [{"x": 338, "y": 560}], "width": 40}
+  ],
+  "mines": [
+    {"x": 294, "y": 568, "charges": 8},
+    {"x": 200, "y": 510, "charges": 5}
   ]
 }

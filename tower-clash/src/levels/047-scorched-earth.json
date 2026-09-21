@@ -4,10 +4,10 @@
   "name_az": "Yanmış Torpaq",
   "name_ru": "Выжженная земля",
   "name_tr": "Yakılmış Toprak",
-  "lesson": "Barriers eat men, guns eat streams: break a wall with a wave, never a trickle, and park your own guns at the breach so the counter-attack dies on the road",
-  "lesson_az": "Səddlər əsgər yeyir, toplar axın: divarı damcı ilə yox, dalğa ilə yar və öz toplarını yarığa qoy ki, əks-hücum yolda ölsün",
-  "lesson_ru": "Барьеры едят людей, пушки едят потоки: ломай стену волной, а не струйкой, и ставь свои пушки у пролома, чтобы контратака умерла на дороге",
-  "lesson_tr": "Bariyerler asker yer, toplar akış: duvarı damlayla değil dalgayla kır ve kendi toplarını gediğe kur ki karşı saldırı yolda ölsün",
+  "lesson": "Mines eat men, guns eat streams: cross a mine with a wave, never a trickle, and park your own guns at the crossing so the counter-attack dies on the way",
+  "lesson_az": "Minalar əsgər yeyir, toplar axın: minanı damcı ilə yox, dalğa ilə keç və öz toplarını keçidə qoy ki, əks-hücum yolda ölsün",
+  "lesson_ru": "Мины едят людей, пушки едят потоки: проходи мину волной, а не струйкой, и ставь свои пушки у прохода, чтобы контратака умерла в пути",
+  "lesson_tr": "Mayınlar asker yer, toplar akış: mayını damlayla değil dalgayla geç ve kendi toplarını geçide kur ki karşı saldırı yolda ölsün",
   "star3": 40000,
   "star2": 80000,
   "enemies": [
@@ -29,24 +29,9 @@
     {"id": "green", "x": 570, "y": 420, "owner": "enemy2", "units": 12, "level": 1, "kind": "barracks"},
     {"id": "yellow", "x": 360, "y": 460, "owner": "enemy3", "units": 14, "level": 1, "kind": "fortress"}
   ],
-  "roads": [
-    {"a": "home", "b": "guns"},
-    {"a": "home", "b": "mid"},
-    {"a": "guns", "b": "w"},
-    {"a": "w", "b": "mid"},
-    {"a": "mid", "b": "ne"},
-    {"a": "w", "b": "nw"},
-    {"a": "mid", "b": "n"},
-    {"a": "nw", "b": "n"},
-    {"a": "ne", "b": "n"},
-    {"a": "nw", "b": "redguns", "barrier": 8},
-    {"a": "ne", "b": "greenguns", "barrier": 8},
-    {"a": "n", "b": "yellow", "barrier": 10},
-    {"a": "redguns", "b": "red"},
-    {"a": "redguns", "b": "yellow"},
-    {"a": "greenguns", "b": "green"},
-    {"a": "greenguns", "b": "yellow"},
-    {"a": "red", "b": "yellow"},
-    {"a": "green", "b": "yellow"}
+  "mines": [
+    {"x": 150, "y": 590, "charges": 8},
+    {"x": 570, "y": 760, "charges": 8},
+    {"x": 360, "y": 590, "charges": 10}
   ]
 }

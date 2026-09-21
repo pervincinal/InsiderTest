@@ -1,31 +1,27 @@
 {
   "id": 5,
-  "name": "Two Roads",
-  "name_az": "İki Yol",
-  "name_ru": "Две дороги",
-  "name_tr": "İki Yol",
-  "lesson": "Two routes to the enemy: hold one while you push down the other",
-  "lesson_az": "Düşmənə iki yol var: birini tut, o birindən hücum et",
-  "lesson_ru": "К врагу две дороги: держи одну, пока давишь по другой",
-  "lesson_tr": "Düşmana iki yol var: birini tut, diğerinden bastır",
+  "name": "Around the Wall",
+  "name_az": "Divarı Dolan",
+  "name_ru": "Обойди стену",
+  "name_tr": "Duvarı Dolaş",
+  "lesson": "Walls block the line: you cannot stream through stone, so go around it — hold one side while you push up the other",
+  "lesson_az": "Divar xətti kəsir: daşın içindən axıda bilməzsən, onu dolan — bir tərəfi tut, o birindən irəlilə",
+  "lesson_ru": "Стена перекрывает линию: сквозь камень поток не идёт, так что обойди её — держи одну сторону, дави по другой",
+  "lesson_tr": "Duvar çizgiyi keser: taşın içinden akış geçmez, etrafından dolaş — bir yanı tut, diğerinden bastır",
   "star3": 30000,
   "star2": 60000,
-  "enemies": [{ "owner": "enemy1", "personality": "rusher", "aggression": 0.45 }],
-  "towers": [
-    { "id": "home", "x": 360, "y": 1140, "owner": "player", "units": 12, "level": 1, "kind": "barracks" },
-    { "id": "west1", "x": 150, "y": 860, "owner": "neutral", "units": 5 },
-    { "id": "east1", "x": 570, "y": 860, "owner": "neutral", "units": 5 },
-    { "id": "west2", "x": 150, "y": 520, "owner": "neutral", "units": 8 },
-    { "id": "east2", "x": 570, "y": 520, "owner": "neutral", "units": 8 },
-    { "id": "foe", "x": 360, "y": 230, "owner": "enemy1", "units": 8, "level": 1, "kind": "barracks" }
+  "enemies": [
+    {"owner": "enemy1", "personality": "rusher", "aggression": 0.45}
   ],
-  "roads": [
-    { "a": "home", "b": "west1" },
-    { "a": "home", "b": "east1" },
-    { "a": "west1", "b": "east1" },
-    { "a": "west1", "b": "west2" },
-    { "a": "east1", "b": "east2" },
-    { "a": "west2", "b": "foe" },
-    { "a": "east2", "b": "foe" }
+  "towers": [
+    {"id": "home", "x": 360, "y": 1140, "owner": "player", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "west1", "x": 150, "y": 860, "owner": "neutral", "units": 5},
+    {"id": "east1", "x": 570, "y": 860, "owner": "neutral", "units": 5},
+    {"id": "west2", "x": 150, "y": 520, "owner": "neutral", "units": 8},
+    {"id": "east2", "x": 570, "y": 520, "owner": "neutral", "units": 8},
+    {"id": "foe", "x": 360, "y": 230, "owner": "enemy1", "units": 8, "level": 1, "kind": "barracks"}
+  ],
+  "obstacles": [
+    {"kind": "wall", "points": [{"x": 360, "y": 420}, {"x": 360, "y": 980}]}
   ]
 }

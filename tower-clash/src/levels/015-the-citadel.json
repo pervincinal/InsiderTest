@@ -10,31 +10,22 @@
   "lesson_tr": "Hepsi bir arada: kendi surlarını tut, topları yandan al, sonra elindeki tüm akışlarla iç kaleyi kır",
   "star3": 35000,
   "star2": 70000,
-  "enemies": [{ "owner": "enemy1", "personality": "rusher", "aggression": 0.7 }],
-  "towers": [
-    { "id": "home", "x": 360, "y": 1170, "owner": "player", "units": 17, "level": 1, "kind": "barracks" },
-    { "id": "west", "x": 140, "y": 950, "owner": "neutral", "units": 5 },
-    { "id": "east", "x": 580, "y": 950, "owner": "neutral", "units": 5 },
-    { "id": "bastion", "x": 360, "y": 880, "owner": "neutral", "units": 5, "kind": "fortress" },
-    { "id": "nw", "x": 150, "y": 640, "owner": "neutral", "units": 8 },
-    { "id": "ne", "x": 570, "y": 640, "owner": "neutral", "units": 8 },
-    { "id": "guns", "x": 360, "y": 560, "owner": "enemy1", "units": 2, "level": 1, "kind": "artillery" },
-    { "id": "outpost", "x": 580, "y": 380, "owner": "enemy1", "units": 4, "level": 1, "kind": "barracks" },
-    { "id": "citadel", "x": 360, "y": 230, "owner": "enemy1", "units": 10, "level": 1, "kind": "fortress" }
+  "enemies": [
+    {"owner": "enemy1", "personality": "rusher", "aggression": 0.7}
   ],
-  "roads": [
-    { "a": "home", "b": "west" },
-    { "a": "home", "b": "east" },
-    { "a": "home", "b": "bastion" },
-    { "a": "west", "b": "bastion" },
-    { "a": "east", "b": "bastion" },
-    { "a": "west", "b": "nw" },
-    { "a": "east", "b": "ne" },
-    { "a": "bastion", "b": "guns" },
-    { "a": "nw", "b": "guns" },
-    { "a": "ne", "b": "guns" },
-    { "a": "guns", "b": "outpost" },
-    { "a": "guns", "b": "citadel" },
-    { "a": "outpost", "b": "citadel" }
+  "towers": [
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 17, "level": 1, "kind": "barracks"},
+    {"id": "west", "x": 140, "y": 950, "owner": "neutral", "units": 5},
+    {"id": "east", "x": 580, "y": 950, "owner": "neutral", "units": 5},
+    {"id": "bastion", "x": 360, "y": 880, "owner": "neutral", "units": 5, "kind": "fortress"},
+    {"id": "nw", "x": 150, "y": 640, "owner": "neutral", "units": 8},
+    {"id": "ne", "x": 570, "y": 640, "owner": "neutral", "units": 8},
+    {"id": "guns", "x": 360, "y": 560, "owner": "enemy1", "units": 2, "level": 1, "kind": "artillery"},
+    {"id": "outpost", "x": 580, "y": 380, "owner": "enemy1", "units": 4, "level": 1, "kind": "barracks"},
+    {"id": "citadel", "x": 360, "y": 230, "owner": "enemy1", "units": 10, "level": 1, "kind": "fortress"}
+  ],
+  "obstacles": [
+    {"kind": "wall", "points": [{"x": 40, "y": 400}, {"x": 310, "y": 400}]},
+    {"kind": "wall", "points": [{"x": 400, "y": 400}, {"x": 500, "y": 400}]}
   ]
 }

@@ -10,25 +10,19 @@
   "lesson_tr": "Topçu menzilinden geçen her askeri vurur: önünden geçmeden önce mevziyi al ya da etrafından dolaş",
   "star3": 15000,
   "star2": 30000,
-  "enemies": [{ "owner": "enemy1", "personality": "rusher", "aggression": 0.5 }],
-  "towers": [
-    { "id": "home", "x": 360, "y": 1150, "owner": "player", "units": 18, "level": 1, "kind": "barracks" },
-    { "id": "west", "x": 140, "y": 900, "owner": "neutral", "units": 5 },
-    { "id": "east", "x": 580, "y": 880, "owner": "neutral", "units": 5 },
-    { "id": "mid", "x": 360, "y": 820, "owner": "neutral", "units": 6 },
-    { "id": "nw", "x": 140, "y": 480, "owner": "neutral", "units": 8 },
-    { "id": "post", "x": 470, "y": 520, "owner": "neutral", "units": 6, "kind": "artillery" },
-    { "id": "base", "x": 360, "y": 230, "owner": "enemy1", "units": 10, "level": 1, "kind": "barracks" }
+  "enemies": [
+    {"owner": "enemy1", "personality": "rusher", "aggression": 0.5}
   ],
-  "roads": [
-    { "a": "home", "b": "west" },
-    { "a": "home", "b": "east" },
-    { "a": "home", "b": "mid" },
-    { "a": "west", "b": "nw" },
-    { "a": "nw", "b": "base" },
-    { "a": "mid", "b": "base" },
-    { "a": "mid", "b": "post" },
-    { "a": "east", "b": "post" },
-    { "a": "post", "b": "base" }
+  "towers": [
+    {"id": "home", "x": 360, "y": 1150, "owner": "player", "units": 18, "level": 1, "kind": "barracks"},
+    {"id": "west", "x": 140, "y": 900, "owner": "neutral", "units": 5},
+    {"id": "east", "x": 580, "y": 880, "owner": "neutral", "units": 5},
+    {"id": "mid", "x": 360, "y": 820, "owner": "neutral", "units": 6},
+    {"id": "nw", "x": 140, "y": 480, "owner": "neutral", "units": 8},
+    {"id": "post", "x": 470, "y": 520, "owner": "neutral", "units": 6, "kind": "artillery"},
+    {"id": "base", "x": 360, "y": 230, "owner": "enemy1", "units": 10, "level": 1, "kind": "barracks"}
+  ],
+  "obstacles": [
+    {"kind": "rock", "points": [{"x": 250, "y": 560}], "width": 60}
   ]
 }

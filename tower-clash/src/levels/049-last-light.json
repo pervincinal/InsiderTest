@@ -29,25 +29,7 @@
     {"id": "greenkeep", "x": 570, "y": 440, "owner": "enemy2", "units": 10, "level": 1, "kind": "barracks"},
     {"id": "crown", "x": 360, "y": 260, "owner": "neutral", "units": 12, "kind": "fortress"}
   ],
-  "roads": [
-    {"a": "keep", "b": "lamp"},
-    {"a": "keep", "b": "e"},
-    {"a": "keep", "b": "mid"},
-    {"a": "lamp", "b": "w"},
-    {"a": "w", "b": "mid"},
-    {"a": "e", "b": "mid"},
-    {"a": "w", "b": "red"},
-    {"a": "mid", "b": "n"},
-    {"a": "red", "b": "n"},
-    {"a": "green", "b": "n"},
-    {"a": "n", "b": "yellow"},
-    {"a": "red", "b": "yellow"},
-    {"a": "green", "b": "yellow"},
-    {"a": "red", "b": "redkeep"},
-    {"a": "green", "b": "greenkeep"},
-    {"a": "redkeep", "b": "crown"},
-    {"a": "greenkeep", "b": "crown"},
-    {"a": "yellow", "b": "crown", "mine": 5},
-    {"a": "e", "b": "green"}
+  "mines": [
+    {"x": 360, "y": 400, "charges": 5}
   ]
 }

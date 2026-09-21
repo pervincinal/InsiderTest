@@ -4,23 +4,19 @@
   "name_az": "Güc Topla",
   "name_ru": "Накопление",
   "name_tr": "Güç Topla",
-  "lesson": "Let your tower fill up: at 25 units it upgrades itself, recruits faster and can run two streams. The enemy turtles, so out-produce it instead of racing it",
-  "lesson_az": "Qoy qüllən dolsun: 25 əsgərdə özü yüksəlir, daha tez yığır və iki axın apara bilir. Düşmən tısbağadır: onunla yarışma, ondan çox istehsal et",
-  "lesson_ru": "Дай башне наполниться: при 25 бойцах она сама растёт, быстрее вербует и ведёт два потока. Враг сидит в обороне — не гонись, а перепроизведи его",
-  "lesson_tr": "Kulen dolsun: 25 askerde kendi kendine yükselir, daha hızlı asker toplar ve iki akış sürer. Düşman kaplumbağa: yarışma, ondan çok üret",
+  "lesson": "Let your tower fill up: at 25 units it upgrades itself, streams faster and can run two streams. The enemy turtles, so out-produce it instead of racing it",
+  "lesson_az": "Qoy qüllən dolsun: 25 əsgərdə özü yüksəlir, daha sürətli axıdır və iki axın apara bilir. Düşmən tısbağadır: onunla yarışma, ondan çox istehsal et",
+  "lesson_ru": "Дай башне наполниться: при 25 бойцах она сама растёт, льёт быстрее и ведёт два потока. Враг сидит в обороне — не гонись, а перепроизведи его",
+  "lesson_tr": "Kulen dolsun: 25 askerde kendi kendine yükselir, daha hızlı akıtır ve iki akış sürer. Düşman kaplumbağa: yarışma, ondan çok üret",
   "star3": 35000,
   "star2": 70000,
-  "enemies": [{ "owner": "enemy1", "personality": "turtle", "aggression": 0.3 }],
-  "towers": [
-    { "id": "home", "x": 360, "y": 1120, "owner": "player", "units": 15, "level": 1, "kind": "barracks" },
-    { "id": "outpost", "x": 150, "y": 900, "owner": "neutral", "units": 6 },
-    { "id": "mid", "x": 360, "y": 700, "owner": "neutral", "units": 10 },
-    { "id": "foe", "x": 360, "y": 260, "owner": "enemy1", "units": 15, "level": 1, "kind": "barracks" }
+  "enemies": [
+    {"owner": "enemy1", "personality": "turtle", "aggression": 0.3}
   ],
-  "roads": [
-    { "a": "home", "b": "outpost" },
-    { "a": "home", "b": "mid" },
-    { "a": "outpost", "b": "mid" },
-    { "a": "mid", "b": "foe" }
+  "towers": [
+    {"id": "home", "x": 360, "y": 1120, "owner": "player", "units": 15, "level": 1, "kind": "barracks"},
+    {"id": "outpost", "x": 150, "y": 900, "owner": "neutral", "units": 6},
+    {"id": "mid", "x": 360, "y": 700, "owner": "neutral", "units": 10},
+    {"id": "foe", "x": 360, "y": 260, "owner": "enemy1", "units": 15, "level": 1, "kind": "barracks"}
   ]
 }

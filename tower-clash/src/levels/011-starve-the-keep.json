@@ -10,29 +10,21 @@
   "lesson_tr": "Kaleyi aç bırak: önce onu besleyen kışlayı al, sonra surlar akışlarına dayanamaz",
   "star3": 20000,
   "star2": 40000,
-  "enemies": [{ "owner": "enemy1", "personality": "opportunist", "aggression": 0.4 }],
-  "towers": [
-    { "id": "home", "x": 360, "y": 1160, "owner": "player", "units": 16, "level": 1, "kind": "barracks" },
-    { "id": "w1", "x": 150, "y": 920, "owner": "neutral", "units": 5 },
-    { "id": "e1", "x": 570, "y": 920, "owner": "neutral", "units": 5 },
-    { "id": "mid", "x": 360, "y": 720, "owner": "neutral", "units": 8 },
-    { "id": "nw", "x": 150, "y": 660, "owner": "neutral", "units": 9 },
-    { "id": "chapel", "x": 360, "y": 520, "owner": "neutral", "units": 9 },
-    { "id": "feed", "x": 560, "y": 560, "owner": "enemy1", "units": 8, "level": 1, "kind": "barracks" },
-    { "id": "keep", "x": 360, "y": 330, "owner": "enemy1", "units": 8, "level": 1, "kind": "fortress" }
+  "enemies": [
+    {"owner": "enemy1", "personality": "opportunist", "aggression": 0.4}
   ],
-  "roads": [
-    { "a": "home", "b": "w1" },
-    { "a": "home", "b": "e1" },
-    { "a": "w1", "b": "mid" },
-    { "a": "e1", "b": "mid" },
-    { "a": "w1", "b": "nw" },
-    { "a": "nw", "b": "chapel" },
-    { "a": "nw", "b": "keep" },
-    { "a": "mid", "b": "chapel" },
-    { "a": "mid", "b": "feed" },
-    { "a": "chapel", "b": "feed" },
-    { "a": "chapel", "b": "keep" },
-    { "a": "feed", "b": "keep" }
+  "towers": [
+    {"id": "home", "x": 360, "y": 1160, "owner": "player", "units": 16, "level": 1, "kind": "barracks"},
+    {"id": "w1", "x": 150, "y": 920, "owner": "neutral", "units": 5},
+    {"id": "e1", "x": 570, "y": 920, "owner": "neutral", "units": 5},
+    {"id": "mid", "x": 360, "y": 720, "owner": "neutral", "units": 8},
+    {"id": "nw", "x": 150, "y": 660, "owner": "neutral", "units": 9},
+    {"id": "chapel", "x": 360, "y": 520, "owner": "neutral", "units": 9},
+    {"id": "feed", "x": 560, "y": 560, "owner": "enemy1", "units": 8, "level": 1, "kind": "barracks"},
+    {"id": "keep", "x": 360, "y": 330, "owner": "enemy1", "units": 8, "level": 1, "kind": "fortress"}
+  ],
+  "obstacles": [
+    {"kind": "rock", "points": [{"x": 215, "y": 730}], "width": 40},
+    {"kind": "rock", "points": [{"x": 520, "y": 790}], "width": 40}
   ]
 }

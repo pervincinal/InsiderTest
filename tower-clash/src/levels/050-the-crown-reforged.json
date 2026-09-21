@@ -4,10 +4,10 @@
   "name_az": "Yenidən Dövülmüş Tac",
   "name_ru": "Корона, отлитая вновь",
   "name_tr": "Yeniden Dövülen Taç",
-  "lesson": "The crown, reforged: three kings, two bridges, walls, mines, guns and tanks — everything at once. Read the map, choose the one fight you can win, and win it every time",
-  "lesson_az": "Yenidən dövülmüş tac: üç kral, iki körpü, divarlar, minalar, toplar və tanklar — hamısı bir anda. Xəritəni oxu, qazana biləcəyin tək döyüşü seç və onu hər dəfə qazan",
-  "lesson_ru": "Корона, отлитая вновь: три короля, два моста, стены, мины, пушки и танки — всё сразу. Читай карту, выбирай тот единственный бой, что можешь выиграть, и выигрывай его каждый раз",
-  "lesson_tr": "Yeniden dövülen taç: üç kral, iki köprü, surlar, mayınlar, toplar ve tanklar — hepsi bir arada. Haritayı oku, kazanabileceğin tek savaşı seç ve onu her seferinde kazan",
+  "lesson": "The crown, reforged: three kings, two fords, walls, mines, guns and tanks — everything at once. Read the map, choose the one fight you can win, and win it every time",
+  "lesson_az": "Yenidən dövülmüş tac: üç kral, iki keçid, divarlar, minalar, toplar və tanklar — hamısı bir anda. Xəritəni oxu, qazana biləcəyin tək döyüşü seç və onu hər dəfə qazan",
+  "lesson_ru": "Корона, отлитая вновь: три короля, два брода, стены, мины, пушки и танки — всё сразу. Читай карту, выбирай тот единственный бой, что можешь выиграть, и выигрывай его каждый раз",
+  "lesson_tr": "Yeniden dövülen taç: üç kral, iki geçit, surlar, mayınlar, toplar ve tanklar — hepsi bir arada. Haritayı oku, kazanabileceğin tek savaşı seç ve onu her seferinde kazan",
   "star3": 40000,
   "star2": 80000,
   "enemies": [
@@ -29,26 +29,17 @@
     {"id": "yellow", "x": 360, "y": 460, "owner": "enemy3", "units": 16, "level": 1, "kind": "fortress"},
     {"id": "crown", "x": 360, "y": 200, "owner": "neutral", "units": 14, "kind": "fortress"}
   ],
-  "roads": [
-    {"a": "home", "b": "factory"},
-    {"a": "home", "b": "fort", "mine": 5},
-    {"a": "factory", "b": "w"},
-    {"a": "w", "b": "fort"},
-    {"a": "w", "b": "nw"},
-    {"a": "fort", "b": "ne"},
-    {"a": "fort", "b": "guns"},
-    {"a": "nw", "b": "guns", "barrier": 6},
-    {"a": "ne", "b": "guns", "barrier": 6},
-    {"a": "nw", "b": "red", "kind": "bridge"},
-    {"a": "ne", "b": "greenfactory", "kind": "bridge"},
-    {"a": "guns", "b": "yellow"},
-    {"a": "guns", "b": "red"},
-    {"a": "guns", "b": "greenfactory"},
-    {"a": "red", "b": "yellow"},
-    {"a": "greenfactory", "b": "yellow"},
-    {"a": "greenfactory", "b": "green"},
-    {"a": "red", "b": "crown", "mine": 6},
-    {"a": "green", "b": "crown", "mine": 6},
-    {"a": "yellow", "b": "crown"}
+  "obstacles": [
+    {"kind": "water", "points": [{"x": -40, "y": 630}, {"x": 80, "y": 630}]},
+    {"kind": "water", "points": [{"x": 190, "y": 630}, {"x": 270, "y": 630}]},
+    {"kind": "water", "points": [{"x": 470, "y": 720}, {"x": 540, "y": 720}]},
+    {"kind": "water", "points": [{"x": 600, "y": 720}, {"x": 760, "y": 720}]}
+  ],
+  "mines": [
+    {"x": 360, "y": 1055, "charges": 5},
+    {"x": 255, "y": 340, "charges": 6},
+    {"x": 475, "y": 290, "charges": 6},
+    {"x": 210, "y": 700, "charges": 6},
+    {"x": 465, "y": 770, "charges": 6}
   ]
 }

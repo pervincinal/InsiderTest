@@ -27,23 +27,13 @@
     {"id": "green", "x": 570, "y": 460, "owner": "enemy2", "units": 12, "level": 1, "kind": "fortress"},
     {"id": "crown", "x": 360, "y": 280, "owner": "neutral", "units": 12}
   ],
-  "roads": [
-    {"a": "home", "b": "w"},
-    {"a": "home", "b": "e"},
-    {"a": "home", "b": "fort"},
-    {"a": "w", "b": "fort"},
-    {"a": "e", "b": "fort"},
-    {"a": "w", "b": "nw"},
-    {"a": "e", "b": "ne"},
-    {"a": "fort", "b": "yellow"},
-    {"a": "nw", "b": "yellow"},
-    {"a": "ne", "b": "yellow"},
-    {"a": "nw", "b": "red", "barrier": 8},
-    {"a": "ne", "b": "green", "barrier": 8},
-    {"a": "yellow", "b": "red"},
-    {"a": "yellow", "b": "green"},
-    {"a": "red", "b": "crown"},
-    {"a": "green", "b": "crown"},
-    {"a": "yellow", "b": "crown", "mine": 6}
+  "obstacles": [
+    {"kind": "wall", "points": [{"x": 235, "y": 760}, {"x": 300, "y": 760}]},
+    {"kind": "wall", "points": [{"x": 420, "y": 760}, {"x": 485, "y": 760}]}
+  ],
+  "mines": [
+    {"x": 150, "y": 590, "charges": 8},
+    {"x": 570, "y": 590, "charges": 8},
+    {"x": 360, "y": 460, "charges": 6}
   ]
 }

@@ -1,13 +1,13 @@
 {
   "id": 29,
-  "name": "Island Hopping",
-  "name_az": "Adadan Adaya",
-  "name_ru": "По островам",
-  "name_tr": "Adadan Adaya",
-  "lesson": "Cut only what you must: a cut bridge is gone for you as well, so cut the enemy approach and keep your own road forward",
-  "lesson_az": "Yalnız lazım olanı kəs: kəsilən körpü sənin üçün də yoxdur, ona görə düşmənin yolunu kəs, öz irəli yolunu isə saxla",
-  "lesson_ru": "Режь только нужное: обрушенный мост пропадает и для тебя, так что руби подход врага, а свою дорогу вперёд сохрани",
-  "lesson_tr": "Sadece gerekeni kes: kesilen köprü senin için de yok olur, o yüzden düşmanın yolunu kes, kendi ileri yolunu koru",
+  "name": "Two Fords",
+  "name_az": "İki Keçid",
+  "name_ru": "Два брода",
+  "name_tr": "İki Geçit",
+  "lesson": "Each enemy crosses at its own ford and the pond hides the centre from both: push up the middle first, then cross the quieter ford",
+  "lesson_az": "Hər düşmən öz keçidindən keçir, gölməçə isə ortanı hər ikisindən gizlədir: əvvəl ortadan irəlilə, sonra sakit keçiddən keç",
+  "lesson_ru": "Каждый враг переходит у своего брода, а пруд прячет центр от обоих: сначала дави по центру, потом переходи у более тихого брода",
+  "lesson_tr": "Her düşman kendi geçidinden geçer, gölet ise ortayı ikisinden de gizler: önce ortadan ilerle, sonra sakin geçitten geç",
   "star3": 15000,
   "star2": 30000,
   "enemies": [
@@ -25,20 +25,7 @@
     {"id": "green", "x": 570, "y": 400, "owner": "enemy1", "units": 10, "level": 1, "kind": "barracks"},
     {"id": "crown", "x": 360, "y": 260, "owner": "neutral", "units": 10}
   ],
-  "roads": [
-    {"a": "home", "b": "islandw", "kind": "bridge"},
-    {"a": "home", "b": "islande", "kind": "bridge"},
-    {"a": "home", "b": "mid"},
-    {"a": "islandw", "b": "mid"},
-    {"a": "islande", "b": "mid"},
-    {"a": "islandw", "b": "nw"},
-    {"a": "islande", "b": "ne"},
-    {"a": "nw", "b": "red", "kind": "bridge"},
-    {"a": "ne", "b": "green", "kind": "bridge"},
-    {"a": "mid", "b": "red"},
-    {"a": "mid", "b": "green"},
-    {"a": "red", "b": "crown"},
-    {"a": "green", "b": "crown"},
-    {"a": "red", "b": "green"}
+  "obstacles": [
+    {"kind": "water", "points": [{"x": 270, "y": 520}, {"x": 450, "y": 520}], "width": 50}
   ]
 }

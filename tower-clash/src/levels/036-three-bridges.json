@@ -1,13 +1,13 @@
 {
   "id": 36,
-  "name": "Three Bridges",
-  "name_az": "Üç Körpü",
-  "name_ru": "Три моста",
-  "name_tr": "Üç Köprü",
-  "lesson": "Your keep starts at level 2. Three bridges, three rivals: cut two of them and you have a one-front war",
-  "lesson_az": "Qəsrin 2-ci səviyyədə başlayır. Üç körpü, üç rəqib: ikisini kəs və müharibən tək cəbhəli olsun",
-  "lesson_ru": "Твоя цитадель начинает на уровне 2. Три моста, три соперника: обруши два — и у тебя война на один фронт",
-  "lesson_tr": "Kalen 2. seviyede başlar. Üç köprü, üç rakip: ikisini kes, savaşın tek cepheli olsun",
+  "name": "Three Fords",
+  "name_az": "Üç Keçid",
+  "name_ru": "Три брода",
+  "name_tr": "Üç Geçit",
+  "lesson": "Your keep starts at level 2. Three fords, three rivals: each enemy can only reach you through its own ford, so hold two of them and attack through the third",
+  "lesson_az": "Qəsrin 2-ci səviyyədə başlayır. Üç keçid, üç rəqib: hər düşmən sənə yalnız öz keçidindən çata bilər, ona görə ikisini tut, üçüncüdən hücum et",
+  "lesson_ru": "Твоя цитадель начинает на уровне 2. Три брода, три соперника: каждый враг дойдёт до тебя только через свой брод, так что держи два из них и бей через третий",
+  "lesson_tr": "Kalen 2. seviyede başlar. Üç geçit, üç rakip: her düşman sana yalnız kendi geçidinden ulaşır, o yüzden ikisini tut, üçüncüden saldır",
   "star3": 35000,
   "star2": 80000,
   "enemies": [
@@ -28,24 +28,10 @@
     {"id": "yellow", "x": 360, "y": 400, "owner": "enemy3", "units": 12, "level": 1, "kind": "barracks"},
     {"id": "crown", "x": 360, "y": 180, "owner": "neutral", "units": 10}
   ],
-  "roads": [
-    {"a": "home", "b": "w"},
-    {"a": "home", "b": "e"},
-    {"a": "home", "b": "mid"},
-    {"a": "w", "b": "mid"},
-    {"a": "e", "b": "mid"},
-    {"a": "w", "b": "nw"},
-    {"a": "e", "b": "ne"},
-    {"a": "mid", "b": "n"},
-    {"a": "nw", "b": "red", "kind": "bridge"},
-    {"a": "ne", "b": "green", "kind": "bridge"},
-    {"a": "n", "b": "yellow", "kind": "bridge"},
-    {"a": "nw", "b": "n"},
-    {"a": "ne", "b": "n"},
-    {"a": "red", "b": "yellow"},
-    {"a": "green", "b": "yellow"},
-    {"a": "red", "b": "crown"},
-    {"a": "green", "b": "crown"},
-    {"a": "yellow", "b": "crown"}
+  "obstacles": [
+    {"kind": "water", "points": [{"x": -40, "y": 560}, {"x": 100, "y": 560}]},
+    {"kind": "water", "points": [{"x": 172, "y": 560}, {"x": 310, "y": 560}]},
+    {"kind": "water", "points": [{"x": 410, "y": 560}, {"x": 548, "y": 560}]},
+    {"kind": "water", "points": [{"x": 620, "y": 560}, {"x": 760, "y": 560}]}
   ]
 }

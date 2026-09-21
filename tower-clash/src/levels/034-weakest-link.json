@@ -27,21 +27,8 @@
     {"id": "yellow", "x": 360, "y": 400, "owner": "enemy3", "units": 10, "level": 1, "kind": "fortress"},
     {"id": "crown", "x": 360, "y": 200, "owner": "neutral", "units": 8}
   ],
-  "roads": [
-    {"a": "home", "b": "w"},
-    {"a": "home", "b": "e"},
-    {"a": "home", "b": "fort"},
-    {"a": "w", "b": "fort"},
-    {"a": "e", "b": "fort"},
-    {"a": "w", "b": "nw"},
-    {"a": "e", "b": "ne"},
-    {"a": "nw", "b": "red"},
-    {"a": "ne", "b": "green"},
-    {"a": "fort", "b": "yellow"},
-    {"a": "red", "b": "yellow"},
-    {"a": "green", "b": "yellow"},
-    {"a": "red", "b": "crown"},
-    {"a": "green", "b": "crown"},
-    {"a": "yellow", "b": "crown"}
+  "obstacles": [
+    {"kind": "wall", "points": [{"x": 190, "y": 600}, {"x": 310, "y": 600}]},
+    {"kind": "wall", "points": [{"x": 410, "y": 600}, {"x": 530, "y": 600}]}
   ]
 }

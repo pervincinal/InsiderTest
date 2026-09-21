@@ -4,21 +4,18 @@
   "name_az": "İlk Toxunuş",
   "name_ru": "Первые тапы",
   "name_tr": "İlk Dokunuş",
-  "lesson": "Tap your tower, then tap a target: the stream keeps flowing until you stop it",
-  "lesson_az": "Qüllənə vur, sonra hədəfə vur: sən dayandırana qədər axın davam edir",
-  "lesson_ru": "Нажми на свою башню, потом на цель: поток идёт, пока ты его не остановишь",
-  "lesson_tr": "Kulene dokun, sonra hedefe dokun: sen durdurana kadar akış sürer",
+  "lesson": "Tap your tower, then tap any tower you can see in a straight line: the stream keeps flowing until you stop it",
+  "lesson_az": "Qüllənə vur, sonra düz xətt üzrə gördüyün istənilən qülləyə vur: sən dayandırana qədər axın davam edir",
+  "lesson_ru": "Нажми на свою башню, потом на любую башню, которую видишь по прямой: поток идёт, пока ты его не остановишь",
+  "lesson_tr": "Kulene dokun, sonra düz çizgide gördüğün herhangi bir kuleye dokun: sen durdurana kadar akış sürer",
   "star3": 30000,
   "star2": 60000,
-  "enemies": [{ "owner": "enemy1", "personality": "rusher", "aggression": 0.2 }],
-  "towers": [
-    { "id": "home", "x": 200, "y": 1100, "owner": "player", "units": 12, "level": 1, "kind": "barracks" },
-    { "id": "camp", "x": 520, "y": 760, "owner": "neutral", "units": 5 },
-    { "id": "foe", "x": 200, "y": 340, "owner": "enemy1", "units": 8, "level": 1, "kind": "barracks" }
+  "enemies": [
+    {"owner": "enemy1", "personality": "rusher", "aggression": 0.2}
   ],
-  "roads": [
-    { "a": "home", "b": "camp" },
-    { "a": "camp", "b": "foe" },
-    { "a": "home", "b": "foe" }
+  "towers": [
+    {"id": "home", "x": 200, "y": 1100, "owner": "player", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "camp", "x": 520, "y": 760, "owner": "neutral", "units": 5},
+    {"id": "foe", "x": 200, "y": 340, "owner": "enemy1", "units": 8, "level": 1, "kind": "barracks"}
   ]
 }

@@ -3,11 +3,11 @@
   "name": "Minefield",
   "name_az": "Mina Sahəsi",
   "name_ru": "Минное поле",
-  "name_tr": "Mayınlı Yol",
-  "lesson": "Mines: the marked road kills the first 6 units that cross it, so take the long way round or pay the toll with a few before the main column",
-  "lesson_az": "Minalar: işarəli yol ondan keçən ilk 6 əsgəri öldürür, ona görə uzun yolla dolan və ya əsas dəstədən əvvəl bir neçə əsgərlə rüsumu ödə",
-  "lesson_ru": "Мины: отмеченная дорога убивает первых 6 бойцов, что по ней пройдут, так что иди в обход или заплати пошлину парой бойцов перед основной колонной",
-  "lesson_tr": "Mayınlar: işaretli yol geçen ilk 6 askeri öldürür, o yüzden uzun yoldan dolaş ya da ana koldan önce birkaç askerle bedeli öde",
+  "name_tr": "Mayın Alanı",
+  "lesson": "Mines: the marked spot kills the first 6 units that cross it, so go around by the flanks or pay the toll with a few before the main column",
+  "lesson_az": "Minalar: işarəli nöqtə ondan keçən ilk 6 əsgəri öldürür, ona görə cinahlardan dolan və ya əsas dəstədən əvvəl bir neçə əsgərlə rüsumu ödə",
+  "lesson_ru": "Мины: отмеченная точка убивает первых 6 бойцов, что через неё пройдут, так что обойди по флангам или заплати пошлину парой бойцов перед основной колонной",
+  "lesson_tr": "Mayınlar: işaretli nokta geçen ilk 6 askeri öldürür, o yüzden kanatlardan dolaş ya da ana koldan önce birkaç askerle bedeli öde",
   "star3": 20000,
   "star2": 40000,
   "enemies": [
@@ -24,18 +24,7 @@
     {"id": "red", "x": 200, "y": 320, "owner": "enemy1", "units": 8, "level": 1, "kind": "barracks"},
     {"id": "green", "x": 520, "y": 320, "owner": "enemy2", "units": 8, "level": 1, "kind": "barracks"}
   ],
-  "roads": [
-    {"a": "home", "b": "west"},
-    {"a": "home", "b": "east"},
-    {"a": "home", "b": "mid", "mine": 6},
-    {"a": "west", "b": "mid"},
-    {"a": "east", "b": "mid"},
-    {"a": "west", "b": "nw"},
-    {"a": "east", "b": "ne"},
-    {"a": "mid", "b": "red"},
-    {"a": "mid", "b": "green"},
-    {"a": "nw", "b": "red"},
-    {"a": "ne", "b": "green"},
-    {"a": "red", "b": "green"}
+  "mines": [
+    {"x": 360, "y": 945, "charges": 6}
   ]
 }

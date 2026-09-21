@@ -4,27 +4,24 @@
   "name_az": "Əvvəl Forpost",
   "name_ru": "Сначала форпост",
   "name_tr": "Önce Karakol",
-  "lesson": "The enemy holds two towers: take the weak outpost first, then the base behind it loses its shield",
-  "lesson_az": "Düşmənin iki qülləsi var: əvvəl zəif forpostu al, onda arxadakı baza qalxansız qalır",
-  "lesson_ru": "У врага две башни: сначала возьми слабый форпост — база за ним останется без щита",
-  "lesson_tr": "Düşmanın iki kulesi var: önce zayıf karakolu al, arkasındaki üs kalkansız kalır",
+  "lesson": "The enemy holds two towers: take the weak outpost first — the base behind the wall can only be reached through it",
+  "lesson_az": "Düşmənin iki qülləsi var: əvvəl zəif forpostu al — divar arxasındakı bazaya yalnız oradan çatmaq olar",
+  "lesson_ru": "У врага две башни: сначала возьми слабый форпост — база за стеной достижима только через него",
+  "lesson_tr": "Düşmanın iki kulesi var: önce zayıf karakolu al — duvarın ardındaki üsse yalnız oradan ulaşılır",
   "star3": 30000,
   "star2": 60000,
-  "enemies": [{ "owner": "enemy1", "personality": "opportunist", "aggression": 0.4 }],
-  "towers": [
-    { "id": "home", "x": 360, "y": 1140, "owner": "player", "units": 12, "level": 1, "kind": "barracks" },
-    { "id": "west", "x": 150, "y": 880, "owner": "neutral", "units": 5 },
-    { "id": "east", "x": 570, "y": 880, "owner": "neutral", "units": 5 },
-    { "id": "mid", "x": 250, "y": 600, "owner": "neutral", "units": 5 },
-    { "id": "outpost", "x": 570, "y": 560, "owner": "enemy1", "units": 6, "level": 1, "kind": "barracks" },
-    { "id": "base", "x": 360, "y": 250, "owner": "enemy1", "units": 10, "level": 1, "kind": "barracks" }
+  "enemies": [
+    {"owner": "enemy1", "personality": "opportunist", "aggression": 0.4}
   ],
-  "roads": [
-    { "a": "home", "b": "west" },
-    { "a": "home", "b": "east" },
-    { "a": "west", "b": "mid" },
-    { "a": "east", "b": "outpost" },
-    { "a": "mid", "b": "outpost" },
-    { "a": "outpost", "b": "base" }
+  "towers": [
+    {"id": "home", "x": 360, "y": 1140, "owner": "player", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "west", "x": 150, "y": 880, "owner": "neutral", "units": 5},
+    {"id": "east", "x": 570, "y": 880, "owner": "neutral", "units": 5},
+    {"id": "mid", "x": 250, "y": 600, "owner": "neutral", "units": 5},
+    {"id": "outpost", "x": 570, "y": 560, "owner": "enemy1", "units": 6, "level": 1, "kind": "barracks"},
+    {"id": "base", "x": 360, "y": 250, "owner": "enemy1", "units": 10, "level": 1, "kind": "barracks"}
+  ],
+  "obstacles": [
+    {"kind": "wall", "points": [{"x": 40, "y": 390}, {"x": 410, "y": 390}, {"x": 410, "y": 520}]}
   ]
 }

@@ -4,9 +4,9 @@
   "name_az": "Ağır Metal",
   "name_ru": "Тяжёлый металл",
   "name_tr": "Ağır Metal",
-  "lesson": "Tank factory: it builds one 5-weight tank every 4 s instead of infantry. A tank kills five infantry on the road or counts as five defenders, but it is slow, so ship armour early",
+  "lesson": "Tank factory: it builds one 5-weight tank every 4 s instead of infantry. A tank kills five infantry on the way or counts as five defenders, but it is slow, so ship armour early",
   "lesson_az": "Tank zavodu: piyada əvəzinə hər 4 saniyədə bir 5 çəkili tank düzəldir. Tank yolda beş piyadanı öldürür və ya beş müdafiəçi sayılır, amma yavaşdır, ona görə zirehi tez göndər",
-  "lesson_ru": "Танковый завод: вместо пехоты он строит один танк весом 5 каждые 4 с. Танк убивает пять пехотинцев на дороге или считается за пять защитников, но он медленный — отправляй броню пораньше",
+  "lesson_ru": "Танковый завод: вместо пехоты он строит один танк весом 5 каждые 4 с. Танк убивает пять пехотинцев в пути или считается за пять защитников, но он медленный — отправляй броню пораньше",
   "lesson_tr": "Tank fabrikası: piyade yerine her 4 saniyede bir 5 ağırlığında tank üretir. Tank yolda beş piyadeyi öldürür ya da beş savunmacı sayılır, ama yavaştır, o yüzden zırhı erken yolla",
   "star3": 40000,
   "star2": 80000,
@@ -25,20 +25,5 @@
     {"id": "red", "x": 150, "y": 460, "owner": "enemy1", "units": 12, "level": 1, "kind": "barracks"},
     {"id": "green", "x": 570, "y": 460, "owner": "enemy2", "units": 12, "level": 1, "kind": "barracks"},
     {"id": "top", "x": 360, "y": 300, "owner": "neutral", "units": 8}
-  ],
-  "roads": [
-    {"a": "home", "b": "factory"},
-    {"a": "factory", "b": "depot"},
-    {"a": "home", "b": "e"},
-    {"a": "home", "b": "mid"},
-    {"a": "e", "b": "mid"},
-    {"a": "mid", "b": "nw"},
-    {"a": "mid", "b": "ne"},
-    {"a": "e", "b": "ne"},
-    {"a": "nw", "b": "red"},
-    {"a": "ne", "b": "green"},
-    {"a": "red", "b": "top"},
-    {"a": "green", "b": "top"},
-    {"a": "red", "b": "green"}
   ]
 }

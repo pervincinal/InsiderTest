@@ -4,10 +4,10 @@
   "name_az": "Barıt Anbarı",
   "name_ru": "Бочка пороха",
   "name_tr": "Barut Fıçısı",
-  "lesson": "Your keep starts at level 2. Mines between rivals are free kills: leave the mined roads between two enemies alone and let their own columns trigger them",
-  "lesson_az": "Qəsrin 2-ci səviyyədə başlayır. Rəqiblər arasındakı minalar pulsuz qırğındır: iki düşmən arasındakı minalı yollara toxunma, qoy öz dəstələri onları partlatsın",
-  "lesson_ru": "Твоя цитадель начинает на уровне 2. Мины между соперниками — бесплатные жертвы: не трогай минированные дороги между двумя врагами, пусть их подрывают их же колонны",
-  "lesson_tr": "Kalen 2. seviyede başlar. Rakipler arasındaki mayınlar bedava kayıptır: iki düşman arasındaki mayınlı yollara dokunma, onları kendi kolları patlatsın",
+  "lesson": "Your keep starts at level 2. Mines between rivals are free kills: leave the mined lines between two enemies alone and let their own columns trigger them",
+  "lesson_az": "Qəsrin 2-ci səviyyədə başlayır. Rəqiblər arasındakı minalar pulsuz qırğındır: iki düşmən arasındakı minalı xətlərə toxunma, qoy öz dəstələri onları partlatsın",
+  "lesson_ru": "Твоя цитадель начинает на уровне 2. Мины между соперниками — бесплатные жертвы: не трогай минированные линии между двумя врагами, пусть их подрывают их же колонны",
+  "lesson_tr": "Kalen 2. seviyede başlar. Rakipler arasındaki mayınlar bedava kayıptır: iki düşman arasındaki mayınlı çizgilere dokunma, onları kendi kolları patlatsın",
   "star3": 20000,
   "star2": 40000,
   "enemies": [
@@ -27,23 +27,13 @@
     {"id": "yellow", "x": 360, "y": 600, "owner": "enemy1", "units": 10, "level": 1, "kind": "barracks"},
     {"id": "crown", "x": 360, "y": 300, "owner": "neutral", "units": 10}
   ],
-  "roads": [
-    {"a": "home", "b": "w"},
-    {"a": "home", "b": "e"},
-    {"a": "home", "b": "mid"},
-    {"a": "w", "b": "mid"},
-    {"a": "e", "b": "mid"},
-    {"a": "w", "b": "nw"},
-    {"a": "e", "b": "ne"},
-    {"a": "mid", "b": "yellow", "barrier": 8},
-    {"a": "nw", "b": "red"},
-    {"a": "ne", "b": "green"},
-    {"a": "nw", "b": "yellow", "mine": 5},
-    {"a": "ne", "b": "yellow", "mine": 5},
-    {"a": "red", "b": "yellow", "mine": 6},
-    {"a": "green", "b": "yellow", "mine": 6},
-    {"a": "red", "b": "crown", "mine": 4},
-    {"a": "green", "b": "crown", "mine": 4},
-    {"a": "yellow", "b": "crown"}
+  "mines": [
+    {"x": 360, "y": 740, "charges": 8},
+    {"x": 255, "y": 680, "charges": 5},
+    {"x": 465, "y": 680, "charges": 5},
+    {"x": 255, "y": 560, "charges": 6},
+    {"x": 465, "y": 560, "charges": 6},
+    {"x": 255, "y": 410, "charges": 4},
+    {"x": 465, "y": 410, "charges": 4}
   ]
 }

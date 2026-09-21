@@ -1,15 +1,31 @@
 /**
- * Level validation shared by `npm run levels:check` and `tests/levels/levels.test.ts`.
+ * Level validation shared by `npm run levels:check` and `tests/levels/levels.test.ts` (rules v3, GDD §2.0b).
  * Pure functions: a level in, a list of human-readable error strings out (empty = valid).
+ *
+ * A v3 level has towers, obstacles and mines and no roads: the lane graph is derived from the geometry
+ * (`src/sim/geometry.ts`, the same code `createState` runs), so the checks here are geometric — every
+ * tower must be reachable from the player's first tower through clear lanes, obstacles must not sit on
+ * towers, mines must lie on at least one lane.
  */
-import type { LevelDef, Owner, RoadDef, TowerDef } from '../../src/sim/types';
+import type { LevelDef, ObstacleDef, Owner, TowerDef } from '../../src/sim/types';
 import type { LevelTextTranslations } from '../../src/ui/i18n';
+import { C } from '../../src/sim/constants';
+import { distPointSegment, laneClear, mineHitsOn, obstacleFromDef } from '../../src/sim/geometry';
+import type { Obstacle } from '../../src/sim/types';
 
 export const MAP_W = 720;
 export const MAP_H = 1280;
 export const EDGE_MARGIN = 90;
 export const MIN_TOWER_DISTANCE = 150;
+/** No obstacle may come closer than this to a tower centre (a tower must not stand inside a wall). */
+export const OBSTACLE_TOWER_CLEARANCE = MIN_TOWER_DISTANCE / 2;
+/** A mine must lie this far from every tower centre (it is a hazard on the lane, not on the tower). */
+export const MINE_TOWER_CLEARANCE = 40;
 export const MAX_LEVEL_ID = 50;
+/** Obstacles appear from this level on (GDD §3: level 5 teaches "walls block the line"). */
+export const FIRST_OBSTACLE_LEVEL = 5;
+/** Mines appear from this level on (GDD §3: band "Two rivals"). */
+export const FIRST_MINE_LEVEL = 17;
 
 /** Languages a level's `name` / `lesson` are translated into (I18N-2): `name_az`, `lesson_ru`, … */
 export const LEVEL_TEXT_LANGS = ['az', 'ru', 'tr'] as const;
@@ -24,63 +40,50 @@ const OWNERS: readonly string[] = ['neutral', 'player', 'enemy1', 'enemy2', 'ene
 const ENEMY_OWNERS: readonly string[] = ['enemy1', 'enemy2', 'enemy3'];
 const TOWER_KINDS: readonly string[] = ['barracks', 'artillery', 'tankFactory', 'fortress'];
 const PERSONALITIES: readonly string[] = ['rusher', 'turtle', 'opportunist'];
-const ROAD_KINDS: readonly string[] = ['road', 'bridge'];
+const OBSTACLE_KINDS: readonly string[] = ['wall', 'water', 'rock'];
 
 export interface BandRules {
   name: string;
   maxEnemies: number;
   kinds: readonly string[];
+  obstacles: boolean;
   mines: boolean;
-  barriers: boolean;
-  bridges: boolean;
 }
 
 /** Progression bands from GDD §3, keyed by level id (1–8, 9–16, 17–24, 25–32, 33–40, 41–50). */
 export function bandFor(id: number): BandRules | undefined {
   if (id >= 1 && id <= 8) {
-    return { name: '1-8', maxEnemies: 1, kinds: ['barracks'], mines: false, barriers: false, bridges: false };
+    return { name: '1-8', maxEnemies: 1, kinds: ['barracks'], obstacles: id >= FIRST_OBSTACLE_LEVEL, mines: false };
   }
   if (id >= 9 && id <= 16) {
-    return {
-      name: '9-16',
-      maxEnemies: 1,
-      kinds: ['barracks', 'fortress', 'artillery'],
-      mines: false,
-      barriers: false,
-      bridges: false,
-    };
+    return { name: '9-16', maxEnemies: 1, kinds: ['barracks', 'fortress', 'artillery'], obstacles: true, mines: false };
   }
   if (id >= 17 && id <= 24) {
-    return {
-      name: '17-24',
-      maxEnemies: 2,
-      kinds: ['barracks', 'fortress', 'artillery'],
-      mines: true,
-      barriers: true,
-      bridges: false,
-    };
+    return { name: '17-24', maxEnemies: 2, kinds: ['barracks', 'fortress', 'artillery'], obstacles: true, mines: true };
   }
   if (id >= 25 && id <= 32) {
-    return { name: '25-32', maxEnemies: 2, kinds: TOWER_KINDS, mines: true, barriers: true, bridges: true };
+    return { name: '25-32', maxEnemies: 2, kinds: TOWER_KINDS, obstacles: true, mines: true };
   }
   if (id >= 33 && id <= 40) {
-    return { name: '33-40', maxEnemies: 3, kinds: TOWER_KINDS, mines: true, barriers: true, bridges: true };
+    return { name: '33-40', maxEnemies: 3, kinds: TOWER_KINDS, obstacles: true, mines: true };
   }
   if (id >= 41 && id <= MAX_LEVEL_ID) {
     // Grand Campaign (LV-9): no new vocabulary, everything from the earlier bands mixed.
-    return { name: '41-50', maxEnemies: 3, kinds: TOWER_KINDS, mines: true, barriers: true, bridges: true };
+    return { name: '41-50', maxEnemies: 3, kinds: TOWER_KINDS, obstacles: true, mines: true };
   }
   return undefined;
 }
 
 const isFiniteNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const isInteger = (v: unknown): v is number => Number.isInteger(v);
+const isPoint = (p: unknown): p is { x: number; y: number } =>
+  typeof p === 'object' && p !== null && isFiniteNumber((p as { x?: unknown }).x) && isFiniteNumber((p as { y?: unknown }).y);
 
-export function roadKey(a: string, b: string): string {
+export function laneKey(a: string, b: string): string {
   return a < b ? `${a}-${b}` : `${b}-${a}`;
 }
 
-/** Numeric and enum sanity of the scalar fields. */
+/** Numeric and enum sanity of the scalar fields; a leftover v2 `roads` list is an error. */
 export function validateFields(level: LevelDef): string[] {
   const errors: string[] = [];
   if (!isInteger(level.id) || level.id < 1) errors.push(`id must be a positive integer (got ${String(level.id)})`);
@@ -90,7 +93,9 @@ export function validateFields(level: LevelDef): string[] {
   if (!isInteger(level.star2) || level.star2 <= 0) errors.push(`star2 must be a positive integer of ms (got ${String(level.star2)})`);
   if (!Array.isArray(level.enemies)) errors.push('enemies must be an array');
   if (!Array.isArray(level.towers)) errors.push('towers must be an array');
-  if (!Array.isArray(level.roads)) errors.push('roads must be an array');
+  if (level.obstacles !== undefined && !Array.isArray(level.obstacles)) errors.push('obstacles must be an array when present');
+  if (level.mines !== undefined && !Array.isArray(level.mines)) errors.push('mines must be an array when present');
+  if ('roads' in level) errors.push('roads are gone (rules v3): remove the list — lanes are derived from towers and obstacles');
   return errors;
 }
 
@@ -205,83 +210,168 @@ export function validateSpacing(towers: TowerDef[]): string[] {
   return errors;
 }
 
-export function validateRoads(level: LevelDef): string[] {
+/** Towers whose coordinates are usable for geometry (the shape errors are reported by `validateTowers`). */
+function placedTowers(level: LevelDef): TowerDef[] {
+  return level.towers.filter((t) => typeof t.id === 'string' && isFiniteNumber(t.x) && isFiniteNumber(t.y));
+}
+
+/** Obstacles that pass `validateObstacles`' shape checks, with defaults applied (what `createState` sees). */
+function wellFormedObstacles(level: LevelDef): Obstacle[] {
+  return (level.obstacles ?? []).filter((o) => obstacleShapeErrors(o).length === 0).map(obstacleFromDef);
+}
+
+/** Distance from a tower centre to the nearest part of an obstacle's centre line (or its rock centre). */
+function obstacleDistance(o: Obstacle, p: { x: number; y: number }): number {
+  const first = o.points[0];
+  if (!first) return Infinity;
+  if (o.points.length === 1) return Math.hypot(first.x - p.x, first.y - p.y);
+  let best = Infinity;
+  for (let i = 1; i < o.points.length; i++) best = Math.min(best, distPointSegment(p, o.points[i - 1]!, o.points[i]!));
+  return best;
+}
+
+function obstacleShapeErrors(o: ObstacleDef): string[] {
   const errors: string[] = [];
-  const towerIds = new Set(level.towers.map((t) => t.id));
-  const seen = new Set<string>();
-  for (const [i, road] of level.roads.entries()) {
-    const label = `roads[${i}] (${String(road.a)}-${String(road.b)})`;
-    if (typeof road.a !== 'string' || typeof road.b !== 'string') {
-      errors.push(`${label}: a and b must be tower id strings`);
+  if (typeof o !== 'object' || o === null) return ['must be an object'];
+  if (!OBSTACLE_KINDS.includes(o.kind)) errors.push(`kind "${String(o.kind)}" is not an obstacle kind (${OBSTACLE_KINDS.join(' | ')})`);
+  if (!Array.isArray(o.points)) errors.push('points must be an array');
+  else {
+    const bad = o.points.findIndex((p) => !isPoint(p));
+    if (bad >= 0) errors.push(`points[${bad}] must be {x, y} with finite numbers`);
+    else if (o.points.length < 2 && !(o.kind === 'rock' && o.points.length === 1)) {
+      errors.push(`needs ≥ 2 points (a rock may be a single point), got ${o.points.length}`);
+    }
+  }
+  if (o.width !== undefined && (!isFiniteNumber(o.width) || o.width <= 0)) errors.push(`width must be a positive number (got ${String(o.width)})`);
+  return errors;
+}
+
+/**
+ * Obstacles (rules v3): known kind, a polyline of ≥ 2 points or a single-point rock, positive width,
+ * every point inside the map (water may run off-map by up to EDGE_MARGIN so a river can reach the
+ * edge), and no obstacle closer than OBSTACLE_TOWER_CLEARANCE to a tower centre.
+ */
+export function validateObstacles(level: LevelDef): string[] {
+  const errors: string[] = [];
+  const towers = placedTowers(level);
+  for (const [i, o] of (level.obstacles ?? []).entries()) {
+    const label = `obstacles[${i}]`;
+    const shape = obstacleShapeErrors(o);
+    if (shape.length > 0) {
+      errors.push(...shape.map((e) => `${label}: ${e}`));
       continue;
     }
-    if (road.a === road.b) errors.push(`${label}: a road cannot loop back to the same tower`);
-    if (!towerIds.has(road.a)) errors.push(`${label}: tower "${road.a}" does not exist`);
-    if (!towerIds.has(road.b)) errors.push(`${label}: tower "${road.b}" does not exist`);
-    const key = roadKey(road.a, road.b);
-    if (seen.has(key)) errors.push(`${label}: duplicate road`);
-    seen.add(key);
-
-    if (road.kind !== undefined && !ROAD_KINDS.includes(road.kind)) errors.push(`${label}.kind "${String(road.kind)}" is not a road kind`);
-    if (road.mine !== undefined && (!isFiniteNumber(road.mine) || road.mine <= 0)) errors.push(`${label}.mine must be a positive number`);
-    if (road.barrier !== undefined && (!isFiniteNumber(road.barrier) || road.barrier <= 0)) {
-      errors.push(`${label}.barrier must be a positive number`);
+    const slack = o.kind === 'water' ? EDGE_MARGIN : 0;
+    for (const [k, p] of o.points.entries()) {
+      if (p.x < -slack || p.x > MAP_W + slack || p.y < -slack || p.y > MAP_H + slack) {
+        errors.push(`${label}.points[${k}] (${p.x}, ${p.y}) is outside the ${MAP_W}×${MAP_H} map${slack > 0 ? ` (+${slack} px tolerance)` : ''}`);
+      }
     }
-    if (road.waypoints !== undefined) {
-      if (!Array.isArray(road.waypoints)) errors.push(`${label}.waypoints must be an array`);
-      else {
-        for (const [w, p] of road.waypoints.entries()) {
-          if (!isFiniteNumber(p.x) || !isFiniteNumber(p.y) || p.x < 0 || p.x > MAP_W || p.y < 0 || p.y > MAP_H) {
-            errors.push(`${label}.waypoints[${w}] must be inside the ${MAP_W}×${MAP_H} map`);
-          }
-        }
+    const obstacle = obstacleFromDef(o);
+    for (const t of towers) {
+      const d = obstacleDistance(obstacle, t);
+      if (d < OBSTACLE_TOWER_CLEARANCE) {
+        errors.push(`${label} (${o.kind}) is ${d.toFixed(0)} px from tower ${t.id} (min ${OBSTACLE_TOWER_CLEARANCE})`);
       }
     }
   }
   return errors;
 }
 
-/** Connected components of `towers` using only `roads` whose endpoints both pass `accept`. */
-function components(towers: TowerDef[], roads: RoadDef[], accept: (t: TowerDef) => boolean): string[][] {
-  const byId = new Map(towers.map((t) => [t.id, t]));
-  const nodes = towers.filter(accept).map((t) => t.id);
-  const adj = new Map<string, string[]>(nodes.map((id) => [id, []]));
-  for (const road of roads) {
-    const a = byId.get(road.a);
-    const b = byId.get(road.b);
-    if (!a || !b || !accept(a) || !accept(b)) continue;
-    adj.get(a.id)?.push(b.id);
-    adj.get(b.id)?.push(a.id);
-  }
-  const visited = new Set<string>();
-  const out: string[][] = [];
-  for (const start of nodes) {
-    if (visited.has(start)) continue;
-    const comp: string[] = [];
-    const stack = [start];
-    visited.add(start);
-    while (stack.length > 0) {
-      const id = stack.pop() as string;
-      comp.push(id);
-      for (const next of adj.get(id) ?? []) {
-        if (!visited.has(next)) {
-          visited.add(next);
-          stack.push(next);
-        }
-      }
+/**
+ * Mines (rules v3): a point inside the map with a positive integer `charges`, at least
+ * MINE_TOWER_CLEARANCE from every tower centre, and on at least one lane (a mine no lane crosses is dead
+ * weight — an authoring mistake).
+ */
+export function validateMines(level: LevelDef): string[] {
+  const errors: string[] = [];
+  const towers = placedTowers(level);
+  const obstacles = wellFormedObstacles(level);
+  const mines = level.mines ?? [];
+  for (const [i, m] of mines.entries()) {
+    const label = `mines[${i}]`;
+    if (!isPoint(m)) {
+      errors.push(`${label}: x/y must be finite numbers`);
+      continue;
     }
-    out.push(comp);
+    if (m.x < 0 || m.x > MAP_W || m.y < 0 || m.y > MAP_H) errors.push(`${label} (${m.x}, ${m.y}) is outside the ${MAP_W}×${MAP_H} map`);
+    if (!isInteger(m.charges) || m.charges <= 0) errors.push(`${label}.charges must be a positive integer (got ${String(m.charges)})`);
+    for (const t of towers) {
+      const d = Math.hypot(t.x - m.x, t.y - m.y);
+      if (d < MINE_TOWER_CLEARANCE) errors.push(`${label} is ${d.toFixed(0)} px from tower ${t.id} (min ${MINE_TOWER_CLEARANCE})`);
+    }
   }
-  return out;
+  const hit = new Set<number>();
+  for (let i = 0; i < towers.length; i++) {
+    for (let j = i + 1; j < towers.length; j++) {
+      const a = towers[i]!;
+      const b = towers[j]!;
+      if (!laneClear(towers, obstacles, a, b)) continue;
+      for (const h of mineHitsOn(mines.filter(isPoint), a, b)) hit.add(h.mine);
+    }
+  }
+  mines.forEach((m, i) => {
+    if (isPoint(m) && !hit.has(i)) errors.push(`mines[${i}] (${m.x}, ${m.y}) lies on no lane (within ${C.MINE_RADIUS} px of none)`);
+  });
+  return errors;
 }
 
+/** Lane adjacency of the towers accepted by `accept` (lanes are still blocked by every tower and obstacle). */
+function laneAdjacency(level: LevelDef, accept: (t: TowerDef) => boolean): Map<string, string[]> {
+  const all = placedTowers(level);
+  const obstacles = wellFormedObstacles(level);
+  const nodes = all.filter(accept);
+  const adj = new Map<string, string[]>(nodes.map((t) => [t.id, []]));
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i + 1; j < nodes.length; j++) {
+      const a = nodes[i]!;
+      const b = nodes[j]!;
+      if (!laneClear(all, obstacles, a, b)) continue;
+      adj.get(a.id)?.push(b.id);
+      adj.get(b.id)?.push(a.id);
+    }
+  }
+  return adj;
+}
+
+function reachableFrom(start: string, adj: Map<string, string[]>): Set<string> {
+  const seen = new Set<string>([start]);
+  const stack = [start];
+  while (stack.length > 0) {
+    const id = stack.pop() as string;
+    for (const next of adj.get(id) ?? []) {
+      if (!seen.has(next)) {
+        seen.add(next);
+        stack.push(next);
+      }
+    }
+  }
+  return seen;
+}
+
+/** Every lane of the level as `a-b` keys (a < b), i.e. what `createState` will build. */
+export function laneKeys(level: LevelDef): string[] {
+  const adj = laneAdjacency(level, () => true);
+  const keys = new Set<string>();
+  for (const [a, list] of adj) for (const b of list) keys.add(laneKey(a, b));
+  return [...keys].sort();
+}
+
+/**
+ * Connectivity (rules v3): every tower must be reachable from the player's first tower through clear
+ * lanes, and no tower may be isolated (a tower with no lane can neither attack nor be attacked).
+ */
 export function validateConnectivity(level: LevelDef): string[] {
   if (level.towers.length === 0) return ['level has no towers'];
-  const comps = components(level.towers, level.roads, () => true);
-  if (comps.length > 1) {
-    return [`tower graph is not connected: ${comps.map((c) => `{${c.join(',')}}`).join(' ')}`];
-  }
-  return [];
+  const errors: string[] = [];
+  const adj = laneAdjacency(level, () => true);
+  for (const [id, lanes] of adj) if (lanes.length === 0) errors.push(`tower ${id} is isolated: no clear lane to any other tower`);
+  const start = level.towers.find((t) => t.owner === 'player');
+  if (!start) return errors; // reported by validateOwnership
+  const seen = reachableFrom(start.id, adj);
+  const missing = level.towers.filter((t) => !seen.has(t.id)).map((t) => t.id);
+  if (missing.length > 0) errors.push(`not every tower is reachable from ${start.id} through clear lanes: {${missing.join(',')}}`);
+  return errors;
 }
 
 export function validateOwnership(level: LevelDef): string[] {
@@ -289,10 +379,10 @@ export function validateOwnership(level: LevelDef): string[] {
   const playerTowers = level.towers.filter((t) => t.owner === 'player');
   if (playerTowers.length === 0) errors.push('player must own at least one tower at start');
   else {
-    const groups = components(level.towers, level.roads, (t) => t.owner === 'player');
-    if (groups.length > 1) {
-      errors.push(`player towers must form one connected group at start (found ${groups.length})`);
-    }
+    const adj = laneAdjacency(level, (t) => t.owner === 'player');
+    const seen = reachableFrom(playerTowers[0]!.id, adj);
+    const groups = 1 + playerTowers.filter((t) => !seen.has(t.id)).length;
+    if (groups > 1) errors.push(`player towers must form one connected group at start (found ${groups})`);
   }
 
   const listed = new Set<Owner>(level.enemies.map((e) => e.owner));
@@ -319,12 +409,12 @@ export function validateBand(level: LevelDef): string[] {
       errors.push(`band ${band.name} does not allow tower kind "${kind}" (tower ${tower.id})`);
     }
   }
-  for (const road of level.roads) {
-    const label = `road ${road.a}-${road.b}`;
-    if (road.mine !== undefined && !band.mines) errors.push(`band ${band.name} does not allow mines (${label})`);
-    if (road.barrier !== undefined && !band.barriers) errors.push(`band ${band.name} does not allow barriers (${label})`);
-    if (road.kind === 'bridge' && !band.bridges) errors.push(`band ${band.name} does not allow bridges (${label})`);
+  const obstacles = level.obstacles?.length ?? 0;
+  const mines = level.mines?.length ?? 0;
+  if (obstacles > 0 && !band.obstacles) {
+    errors.push(`level ${level.id} may not have obstacles (they start at level ${FIRST_OBSTACLE_LEVEL}; got ${obstacles})`);
   }
+  if (mines > 0 && !band.mines) errors.push(`band ${band.name} does not allow mines (they start at level ${FIRST_MINE_LEVEL}; got ${mines})`);
   return errors;
 }
 
@@ -337,7 +427,8 @@ export function validateLevel(level: LevelDef): string[] {
     ...validateStars(level),
     ...validateEnemies(level),
     ...validateTowers(level),
-    ...validateRoads(level),
+    ...validateObstacles(level),
+    ...validateMines(level),
     ...validateConnectivity(level),
     ...validateOwnership(level),
     ...validateBand(level),
@@ -349,7 +440,10 @@ export interface LevelReport {
   name: string;
   band: string;
   towers: number;
-  roads: number;
+  /** Clear tower pairs (what `createState` turns into `state.roads`). */
+  lanes: number;
+  obstacles: number;
+  mines: number;
   enemies: number;
   errors: string[];
   /** Advisory only (missing translations); never fails the check. */
@@ -358,16 +452,21 @@ export interface LevelReport {
 
 /** Validate a whole list: per-level checks plus cross-level uniqueness and play order. */
 export function validateLevels(levels: LevelDef[]): LevelReport[] {
-  const reports = levels.map<LevelReport>((level) => ({
-    id: level.id,
-    name: level.name,
-    band: bandFor(level.id)?.name ?? '?',
-    towers: Array.isArray(level.towers) ? level.towers.length : 0,
-    roads: Array.isArray(level.roads) ? level.roads.length : 0,
-    enemies: Array.isArray(level.enemies) ? level.enemies.length : 0,
-    errors: validateLevel(level),
-    warnings: validateFields(level).length === 0 ? translationWarnings(level) : [],
-  }));
+  const reports = levels.map<LevelReport>((level) => {
+    const wellFormed = validateFields(level).length === 0;
+    return {
+      id: level.id,
+      name: level.name,
+      band: bandFor(level.id)?.name ?? '?',
+      towers: Array.isArray(level.towers) ? level.towers.length : 0,
+      lanes: wellFormed ? laneKeys(level).length : 0,
+      obstacles: Array.isArray(level.obstacles) ? level.obstacles.length : 0,
+      mines: Array.isArray(level.mines) ? level.mines.length : 0,
+      enemies: Array.isArray(level.enemies) ? level.enemies.length : 0,
+      errors: validateLevel(level),
+      warnings: wellFormed ? translationWarnings(level) : [],
+    };
+  });
   const idCount = new Map<number, number>();
   for (const level of levels) idCount.set(level.id, (idCount.get(level.id) ?? 0) + 1);
   const nameCount = new Map<string, number>();
@@ -399,13 +498,15 @@ export function validateLevels(levels: LevelDef[]): LevelReport[] {
 
 /** Plain-text table of the reports; error lines follow each failing row. */
 export function formatReport(reports: LevelReport[]): string {
-  const header = ['id', 'name', 'band', 'towers', 'roads', 'enemies', 'status'];
+  const header = ['id', 'name', 'band', 'towers', 'lanes', 'obstacles', 'mines', 'enemies', 'status'];
   const rows = reports.map((r) => [
     String(r.id),
     r.name,
     r.band,
     String(r.towers),
-    String(r.roads),
+    String(r.lanes),
+    String(r.obstacles),
+    String(r.mines),
     String(r.enemies),
     r.errors.length > 0 ? `FAIL (${r.errors.length})` : r.warnings.length > 0 ? `ok (${r.warnings.length} warning(s))` : 'ok',
   ]);

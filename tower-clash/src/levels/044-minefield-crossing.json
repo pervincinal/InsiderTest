@@ -4,10 +4,10 @@
   "name_az": "Mina Sahəsi Keçidi",
   "name_ru": "Через минное поле",
   "name_tr": "Mayın Tarlası Geçidi",
-  "lesson": "Every mined road charges its toll once: pay it with a cheap tower's men, then pour the real army down the road you have cleared",
-  "lesson_az": "Hər minalı yol haqqını bir dəfə alır: onu ucuz qüllənin əsgərləri ilə ödə, sonra əsl ordunu təmizlədiyin yoldan axıt",
-  "lesson_ru": "Каждая минная дорога берёт плату один раз: заплати её людьми дешёвой башни, а потом пусти настоящую армию по расчищенной дороге",
-  "lesson_tr": "Her mayınlı yol bedelini bir kez alır: onu ucuz bir kulenin askerleriyle öde, sonra gerçek orduyu temizlediğin yoldan akıt",
+  "lesson": "Every mine charges its toll once: pay it with a cheap tower's men, then pour the real army over the ground you have cleared",
+  "lesson_az": "Hər mina haqqını bir dəfə alır: onu ucuz qüllənin əsgərləri ilə ödə, sonra əsl ordunu təmizlədiyin xətdən axıt",
+  "lesson_ru": "Каждая мина берёт плату один раз: заплати её людьми дешёвой башни, а потом пусти настоящую армию по расчищенной линии",
+  "lesson_tr": "Her mayın bedelini bir kez alır: onu ucuz bir kulenin askerleriyle öde, sonra gerçek orduyu temizlediğin çizgiden akıt",
   "star3": 30000,
   "star2": 60000,
   "enemies": [
@@ -29,26 +29,13 @@
     {"id": "green", "x": 570, "y": 620, "owner": "enemy2", "units": 14, "level": 1, "kind": "barracks"},
     {"id": "crown", "x": 360, "y": 260, "owner": "neutral", "units": 12, "kind": "fortress"}
   ],
-  "roads": [
-    {"a": "home", "b": "out"},
-    {"a": "home", "b": "e"},
-    {"a": "home", "b": "mid"},
-    {"a": "out", "b": "w"},
-    {"a": "w", "b": "mid"},
-    {"a": "e", "b": "mid"},
-    {"a": "e", "b": "ne"},
-    {"a": "w", "b": "nw", "mine": 4},
-    {"a": "mid", "b": "n", "mine": 6},
-    {"a": "ne", "b": "n"},
-    {"a": "ne", "b": "green", "mine": 5},
-    {"a": "nw", "b": "n"},
-    {"a": "nw", "b": "red", "mine": 4},
-    {"a": "n", "b": "yellow", "mine": 6},
-    {"a": "n", "b": "green"},
-    {"a": "red", "b": "yellow"},
-    {"a": "yellow", "b": "green", "mine": 5},
-    {"a": "red", "b": "crown"},
-    {"a": "yellow", "b": "crown"},
-    {"a": "green", "b": "crown", "mine": 5}
+  "mines": [
+    {"x": 150, "y": 800, "charges": 4},
+    {"x": 360, "y": 830, "charges": 6},
+    {"x": 570, "y": 740, "charges": 5},
+    {"x": 150, "y": 580, "charges": 4},
+    {"x": 360, "y": 610, "charges": 6},
+    {"x": 465, "y": 560, "charges": 5},
+    {"x": 465, "y": 440, "charges": 5}
   ]
 }

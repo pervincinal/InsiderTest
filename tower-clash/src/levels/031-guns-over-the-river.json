@@ -4,10 +4,10 @@
   "name_az": "Çay Üstü Toplar",
   "name_ru": "Пушки над рекой",
   "name_tr": "Nehir Üstü Toplar",
-  "lesson": "Artillery kills one unit per shot whatever it weighs: a tank on a long bridge under the guns is five units lost, so silence the guns before the armour crosses. The enemy factory takes the far bank with its own tanks, so cross in one heavy column, never tank by tank",
-  "lesson_az": "Artilleriya çəkisindən asılı olmayaraq hər atəşlə bir vahid öldürür: toplar altındakı uzun körpüdə tank beş əsgər itkisidir, ona görə zireh keçməzdən əvvəl topları susdur. Düşmən zavodu o biri sahili öz tankları ilə tutur, ona görə bir ağır dəstə ilə keç, heç vaxt tank-tank yox",
-  "lesson_ru": "Артиллерия убивает одну единицу за выстрел, сколько бы та ни весила: танк на длинном мосту под пушками — минус пять бойцов, так что заглуши пушки до переправы брони. Вражеский завод держит дальний берег своими танками — иди одной тяжёлой колонной, а не по танку",
-  "lesson_tr": "Topçu ağırlığı ne olursa olsun her atışta bir birim öldürür: topların altındaki uzun köprüde bir tank beş asker kaybıdır, o yüzden zırh geçmeden topları sustur. Düşman fabrikası karşı kıyıyı kendi tanklarıyla tutar, tek bir ağır kolla geç, asla tank tank değil",
+  "lesson": "Artillery kills one unit per shot whatever it weighs: a tank on a long line under the guns is five units lost, so silence the guns before the armour crosses. The enemy factory takes the far bank with its own tanks, so cross in one heavy column, never tank by tank",
+  "lesson_az": "Artilleriya çəkisindən asılı olmayaraq hər atəşlə bir vahid öldürür: toplar altındakı uzun xətdə tank beş əsgər itkisidir, ona görə zireh keçməzdən əvvəl topları susdur. Düşmən zavodu o biri sahili öz tankları ilə tutur, ona görə bir ağır dəstə ilə keç, heç vaxt tank-tank yox",
+  "lesson_ru": "Артиллерия убивает одну единицу за выстрел, сколько бы та ни весила: танк на длинной линии под пушками — минус пять бойцов, так что заглуши пушки до переправы брони. Вражеский завод держит дальний берег своими танками — иди одной тяжёлой колонной, а не по танку",
+  "lesson_tr": "Topçu ağırlığı ne olursa olsun her atışta bir birim öldürür: topların altındaki uzun çizgide bir tank beş asker kaybıdır, o yüzden zırh geçmeden topları sustur. Düşman fabrikası karşı kıyıyı kendi tanklarıyla tutar, tek bir ağır kolla geç, asla tank tank değil",
   "star3": 30000,
   "star2": 60000,
   "enemies": [
@@ -27,21 +27,10 @@
     {"id": "green", "x": 570, "y": 520, "owner": "enemy1", "units": 12, "level": 1, "kind": "barracks"},
     {"id": "greenkeep", "x": 520, "y": 280, "owner": "enemy1", "units": 8, "level": 1, "kind": "fortress"}
   ],
-  "roads": [
-    {"a": "home", "b": "factory"},
-    {"a": "home", "b": "e"},
-    {"a": "home", "b": "bank"},
-    {"a": "e", "b": "bank"},
-    {"a": "bank", "b": "guns"},
-    {"a": "guns", "b": "red"},
-    {"a": "factory", "b": "north", "kind": "bridge", "waypoints": [{"x": 110, "y": 750}]},
-    {"a": "red", "b": "redfactory"},
-    {"a": "redfactory", "b": "north"},
-    {"a": "e", "b": "ne"},
-    {"a": "ne", "b": "green"},
-    {"a": "bank", "b": "green"},
-    {"a": "red", "b": "green", "barrier": 6},
-    {"a": "green", "b": "greenkeep"},
-    {"a": "red", "b": "greenkeep"}
+  "obstacles": [
+    {"kind": "water", "points": [{"x": 172, "y": 580}, {"x": 172, "y": 900}], "width": 24}
+  ],
+  "mines": [
+    {"x": 450, "y": 490, "charges": 6}
   ]
 }

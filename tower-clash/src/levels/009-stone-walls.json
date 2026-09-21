@@ -10,22 +10,19 @@
   "lesson_tr": "Kale: her savunmacıya iki saldırgan gerekir. Akıtmadan önce kulelerini doldur, ince bir sızıntı sadece surları besler",
   "star3": 20000,
   "star2": 40000,
-  "enemies": [{ "owner": "enemy1", "personality": "rusher", "aggression": 0.3 }],
-  "towers": [
-    { "id": "home", "x": 360, "y": 1140, "owner": "player", "units": 12, "level": 1, "kind": "barracks" },
-    { "id": "west", "x": 160, "y": 900, "owner": "neutral", "units": 5 },
-    { "id": "east", "x": 560, "y": 900, "owner": "neutral", "units": 5 },
-    { "id": "mid", "x": 360, "y": 640, "owner": "neutral", "units": 10 },
-    { "id": "flank", "x": 560, "y": 420, "owner": "neutral", "units": 6 },
-    { "id": "keep", "x": 360, "y": 300, "owner": "enemy1", "units": 10, "level": 1, "kind": "fortress" }
+  "enemies": [
+    {"owner": "enemy1", "personality": "rusher", "aggression": 0.3}
   ],
-  "roads": [
-    { "a": "home", "b": "west" },
-    { "a": "home", "b": "east" },
-    { "a": "west", "b": "mid" },
-    { "a": "east", "b": "mid" },
-    { "a": "mid", "b": "keep" },
-    { "a": "flank", "b": "keep" },
-    { "a": "flank", "b": "mid" }
+  "towers": [
+    {"id": "home", "x": 360, "y": 1140, "owner": "player", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "west", "x": 160, "y": 900, "owner": "neutral", "units": 5},
+    {"id": "east", "x": 560, "y": 900, "owner": "neutral", "units": 5},
+    {"id": "mid", "x": 360, "y": 640, "owner": "neutral", "units": 10},
+    {"id": "flank", "x": 560, "y": 420, "owner": "neutral", "units": 6},
+    {"id": "keep", "x": 360, "y": 300, "owner": "enemy1", "units": 10, "level": 1, "kind": "fortress"}
+  ],
+  "obstacles": [
+    {"kind": "wall", "points": [{"x": 60, "y": 470}, {"x": 320, "y": 470}]},
+    {"kind": "wall", "points": [{"x": 400, "y": 470}, {"x": 490, "y": 470}]}
   ]
 }

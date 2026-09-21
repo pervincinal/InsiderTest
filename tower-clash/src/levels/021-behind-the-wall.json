@@ -1,13 +1,13 @@
 {
   "id": 21,
-  "name": "Behind the Wall",
-  "name_az": "Divar Arxasında",
-  "name_ru": "За стеной",
-  "name_tr": "Duvarın Ardında",
-  "lesson": "A barrier shields you too: the rusher behind the wall must spend units breaking it, so expand on the open side first and meet it when it is bled",
-  "lesson_az": "Sədd səni də qoruyur: divar arxasındakı hücumçu onu qırmaq üçün əsgər xərcləməlidir, ona görə əvvəl açıq tərəfdə genişlən və onu zəifləyəndə qarşıla",
-  "lesson_ru": "Заслон защищает и тебя: рвачу за стеной придётся тратить бойцов на её пролом, так что сначала расширяйся с открытой стороны и встречай его обескровленным",
-  "lesson_tr": "Bariyer seni de korur: duvarın ardındaki saldırgan onu kırmak için asker harcamalı, o yüzden önce açık tarafta genişle ve onu kan kaybedince karşıla",
+  "name": "Mined Flank",
+  "name_az": "Minalı Cinah",
+  "name_ru": "Минный фланг",
+  "name_tr": "Mayınlı Kanat",
+  "lesson": "Mines shield you too: the rusher behind them must spend units to cross, so expand on the open side first and meet it when it is bled",
+  "lesson_az": "Minalar səni də qoruyur: arxasındakı hücumçu keçmək üçün əsgər xərcləməlidir, ona görə əvvəl açıq tərəfdə genişlən və onu zəifləyəndə qarşıla",
+  "lesson_ru": "Мины защищают и тебя: рвачу за ними придётся тратить бойцов на проход, так что сначала расширяйся с открытой стороны и встречай его обескровленным",
+  "lesson_tr": "Mayınlar seni de korur: arkalarındaki saldırgan geçmek için asker harcamalı, o yüzden önce açık tarafta genişle ve onu kan kaybedince karşıla",
   "star3": 20000,
   "star2": 40000,
   "enemies": [
@@ -25,20 +25,13 @@
     {"id": "green", "x": 570, "y": 520, "owner": "enemy1", "units": 8, "level": 1, "kind": "barracks"},
     {"id": "crown", "x": 360, "y": 340, "owner": "neutral", "units": 10}
   ],
-  "roads": [
-    {"a": "home", "b": "w"},
-    {"a": "home", "b": "e"},
-    {"a": "w", "b": "fort"},
-    {"a": "e", "b": "fort"},
-    {"a": "w", "b": "wall"},
-    {"a": "wall", "b": "red", "barrier": 12},
-    {"a": "fort", "b": "red", "barrier": 8},
-    {"a": "fort", "b": "ne"},
-    {"a": "e", "b": "ne"},
-    {"a": "ne", "b": "green"},
-    {"a": "fort", "b": "green"},
-    {"a": "red", "b": "green"},
-    {"a": "red", "b": "crown", "mine": 4},
-    {"a": "green", "b": "crown"}
+  "obstacles": [
+    {"kind": "rock", "points": [{"x": 208, "y": 700}], "width": 40},
+    {"kind": "rock", "points": [{"x": 307, "y": 700}], "width": 40}
+  ],
+  "mines": [
+    {"x": 150, "y": 640, "charges": 12},
+    {"x": 182, "y": 568, "charges": 8},
+    {"x": 255, "y": 430, "charges": 4}
   ]
 }
