@@ -4,7 +4,9 @@ Owner: Publisher. This is the listing for the **first store submission**, which 
 
 **Status of the claims (2026-09-17, v0.4.0 "Streams update").** Everything described below is committed: the economy and shop (v0.3.0, `docs/BACKLOG.md` "Done" Sprint 3 + Day 2/2b), the in-game languages EN/AZ/RU/TR (`9e45fc9`) and **rules v2** (`docs/GDD.md` §2.0; commits `4bb3944`, `8e53c03`, `2d8cb24`): attacks are persistent **streams** (tap your tower, tap a target, the stream keeps flowing until you stop it; a L1/L2/L3 tower runs 1/2/3 streams), towers **upgrade automatically** when the garrison fills (25 → L2, 50 → L3, 100 max), the SEND 100 % / 50 % toggle and the paid tap-to-upgrade are gone, all 40 levels retuned, levels load on demand. Also in the build since the same day: **rules v2.1 "Under fire"** (`3e4a388`, GDD §2.0): a hostile soldier landing on a tower pauses that tower's recruiting for 1.5 s, so an unanswered enemy stream eventually takes any tower; the count badge turns peach with a crossed-swords pip while it lasts — described in the long description with one line (§1.1 / §1.2 "A tower under attack…") and one clause in the "What's new" texts, nothing more (no numbers in public texts; the level 2 lesson and the star clocks have not been re-measured for it yet). **Level names and lessons are in EN/AZ/RU/TR** (`235def1`, I18N-2). The screenshot files in `tower-clash/store/screenshots/` are the v0.4.0 retake (`577b894`, §1.3). If a build is submitted *without* the economy, use the ad-free wording kept in §1.4.
 
-What must NOT be claimed: leaderboards, multiplayer, cloud save, more than 50 levels, subscriptions, loot boxes, tablet support (phone-only listing), "no ads" / "no purchases" for the store builds, and — since rules v2 — "send half / send all", a send-ratio switch or upgrading a tower by tapping / paying soldiers.
+What must NOT be claimed: leaderboards, multiplayer, cloud save, more than 50 levels, subscriptions, loot boxes, tablet support (phone-only listing), "no ads" / "no purchases" for the store builds, and — since rules v2 — "send half / send all", a send-ratio switch or upgrading a tower by tapping / paying soldiers; and — since Rules v3 — roads, bridges, a bridge cut, barriers, or a tower being drained by sending.
+
+**Status 2026-09-21b (Rules v3, GDD §2.0b).** The road model is gone from the 1.0.0 RC (no version bump): a tower attacks any tower it can see in a straight line, walls / water / rocks / other towers block the line, sending keeps the garrison and only pauses growth, each stream runs at the tower's level speed, bridges and barriers are removed, mines are points on the map. §1.1 / §1.2, the promotional text, keywords and §4 below were reworded the same day; every screenshot set still shows roads and must be re-rendered (§1.3, `LAUNCH_CHECKLIST.md` G10 / A11 / R3).
 
 **Addendum 2026-09-20 (v1.0.0 release candidate, `RELEASE_NOTES.md`).** Also in the tree and claimable: the **Daily Challenge** with streak milestones (GDD §7; one bullet added below in §1.1 / §1.2), four **silhouette skins** (Round keep, Watchtower, Shield bearers, Clockwork robots — 21 skins in total; the "tower, helmet and island skins" wording stays true), level 2's under-fire lesson, ten pool levels retuned, three-canvas rendering. Not claimable on 2026-09-20: a weekly challenge, levels beyond 40 — both lifted on 2026-09-21 (next paragraph).
 
@@ -31,21 +33,20 @@ What must NOT be claimed: leaderboards, multiplayer, cloud save, more than 50 le
 Tower Clash is a one-thumb real-time strategy game: tap one of your towers, tap a target, and a stream of soldiers starts marching — and keeps marching until you stop it. Reinforce friendly towers, overwhelm hostile ones, and when a garrison hits zero the tower is yours. Capture every enemy tower to win.
 
 HOW IT PLAYS
-• Tap a blue tower, then tap any connected tower: a stream of soldiers starts flowing there — and keeps flowing until you tap the target again. Drag from tower to tower works too.
+• Tap a blue tower, then tap any tower it can see in a straight line: a stream of soldiers starts flowing there — and keeps flowing until you tap the target again. Walls, water and rocks block the line. Drag from tower to tower works too.
 • Towers upgrade themselves: let one fill to 25 soldiers and it becomes level 2, at 50 level 3 (100 max). Bigger towers recruit faster and run more streams — one at level 1, two at level 2, three at level 3.
-• A streaming tower sends every new recruit onward and stops growing — close the stream when you want it to level up.
+• Sending never empties a tower — it only stops growing while it streams, and bigger towers stream faster. Close the stream to let it level up.
 • A tower under attack stops recruiting — answer every enemy stream, or the tower falls.
-• Enemy streams are drawn on the road in their colour, so you always see where the next attack comes from — and where to answer it.
+• Enemy streams are drawn as straight ribbons in their colour, so you always see where the next attack comes from — and where to answer it.
 
 50 HAND-MADE LEVELS
 • Levels 1–3 teach the basics with a short built-in tutorial; every later level opens with a one-line lesson.
 • Fortresses (from level 9) shrug off half of every attack — bring more than you think.
-• Artillery (from level 12) shoots down soldiers that walk into its range — approach from the right road.
+• Artillery (from level 12) shoots down soldiers that walk into its range — approach from the right side.
 • Two enemies at once from level 17, three from level 33 — and they fight each other too.
-• Mines that take out the first soldiers to cross a road, and barriers that must be worn down or walked around.
+• Walls, rivers and rocks that block the line of attack, and mines that take out the first soldiers to pass over them.
 • Tank factories (from level 25): a tank weighs five soldiers but crawls — send it first and let the infantry catch up.
-• Bridges you can cut with a long press: the column on it drowns and the enemy behind it is stranded.
-• Levels 41–50, the Grand Campaign: three enemies, a bridge and a mine on every map, the toughest islands — no new rules, all of them at once.
+• Levels 41–50, the Grand Campaign: three enemies, walls and mines on every map, the toughest islands — no new rules, all of them at once.
 • Beat every level for three stars: the faster you win, the more stars you earn. Stars unlock the next level and pay gold.
 • Daily Challenge: one fixed level, seed and twist per day, the same for everyone — free retries, gold and crystals for the first win, bonus crystals for a 3-, 7- and 30-day win streak.
 • Weekly Challenge: every Monday one twisted level from the late campaign, the same for everyone — 100 gold for the first win, 20 crystals for beating its three-star clock.
@@ -78,21 +79,20 @@ Menus, hints, the tutorial, level names and lessons are in English, Azerbaijani,
 Tower Clash bir barmaqla oynanan real vaxt strategiya oyunudur: öz qüllənə toxun, hədəfə toxun — əsgər axını yola düşür və sən dayandırana qədər davam edir. Dost qüllələri gücləndir, düşmən qüllələrini sıxışdır; qarnizon sıfıra düşəndə qüllə sənindir. Qalib gəlmək üçün bütün düşmən qüllələrini tut.
 
 NECƏ OYNANIR
-• Mavi qülləyə toxun, sonra yolla bağlı istənilən qülləyə toxun: ora əsgər axını başlayır — və sən hədəfə yenidən toxunana qədər davam edir. Qüllədən qülləyə sürükləmək də işləyir.
+• Mavi qülləyə toxun, sonra düz xətlə gördüyü istənilən qülləyə toxun: ora əsgər axını başlayır — və sən hədəfə yenidən toxunana qədər davam edir. Divar, su və qaya xətti kəsir. Qüllədən qülləyə sürükləmək də işləyir.
 • Qüllələr özləri təkmilləşir: biri 25 əsgərə dolsun — 2-ci səviyyə olur, 50-də 3-cü səviyyə (maksimum 100). Böyük qüllə daha sürətli əsgər yığır və daha çox axın aparır — 1-ci səviyyədə bir, 2-cidə iki, 3-cüdə üç.
-• Axın verən qüllə hər yeni əsgəri irəli göndərir və böyümür — səviyyəsi qalxsın istəyirsənsə axını bağla.
+• Göndərmək qülləni boşaltmır — axın verərkən yalnız böyümür, böyük qüllə daha sürətli axın verir. Səviyyəsi qalxsın istəyirsənsə axını bağla.
 • Hücum altındakı qüllə əsgər yığmır — hər düşmən axınına cavab ver, yoxsa qüllə düşər.
-• Düşmən axınları yolun üstündə öz rəngində çəkilir — növbəti hücumun haradan gəldiyini və hara cavab verəcəyini həmişə görürsən.
+• Düşmən axınları düz lentlərlə öz rəngində çəkilir — növbəti hücumun haradan gəldiyini və hara cavab verəcəyini həmişə görürsən.
 
 50 ƏL İLƏ HAZIRLANMIŞ SƏVİYYƏ
 • 1–3-cü səviyyələr qısa daxili təlimatla əsasları öyrədir; sonrakı hər səviyyə bir cümləlik dərslə başlayır.
 • Qalalar (9-cu səviyyədən) hər hücumun yarısını dəf edir — düşündüyündən çox əsgər apar.
-• Top qüllələri (12-ci səviyyədən) mənzilinə girən əsgərləri vurur — düzgün yoldan yaxınlaş.
+• Top qüllələri (12-ci səviyyədən) mənzilinə girən əsgərləri vurur — düzgün tərəfdən yaxınlaş.
 • 17-ci səviyyədən eyni anda iki, 33-cü səviyyədən üç rəqib — onlar bir-biri ilə də vuruşur.
-• Yoldan ilk keçən əsgərləri məhv edən minalar və aşındırılmalı ya da yan keçilməli sədlər.
+• Hücum xəttini kəsən divarlar, çaylar və qayalar, və üstündən keçən ilk əsgərləri məhv edən minalar.
 • Tank zavodları (25-ci səviyyədən): tank beş əsgər ağırlığındadır, amma yavaş gedir — əvvəl onu göndər, piyada arxadan çatsın.
-• Uzun basışla kəsilə bilən körpülər: körpüdəki kolon batır, arxadakı düşmən ilişib qalır.
-• 41–50-ci səviyyələr, Böyük Kampaniya: hər xəritədə üç rəqib, körpü və mina, ən çətin adalar — yeni qayda yoxdur, hamısı bir yerdə.
+• 41–50-ci səviyyələr, Böyük Kampaniya: hər xəritədə üç rəqib, divar və mina, ən çətin adalar — yeni qayda yoxdur, hamısı bir yerdə.
 • Hər səviyyədə üç ulduz qazan: nə qədər tez qalib gəlsən, o qədər çox ulduz. Ulduzlar növbəti səviyyəni açır və qızıl qazandırır.
 • Günlük Çağırış: hər gün hamı üçün eyni səviyyə, seed və fənd — pulsuz təkrar cəhdlər, ilk qələbəyə qızıl və kristal, 3, 7 və 30 günlük qələbə seriyasına bonus kristal.
 • Həftəlik Çağırış: hər bazar ertəsi kampaniyanın son hissəsindən fəndli bir səviyyə, hamı üçün eyni — ilk qələbəyə 100 qızıl, üç ulduz vaxtını keçəndə 20 kristal.
@@ -128,7 +128,7 @@ Qeyd: menyular, işarələr, təlimat, səviyyə adları və dərslər azərbayc
 | Phone screenshots | 2–8, 9:16, 320–3840 px | `tower-clash/store/screenshots/en/01..08.png`, `az/`, `ru/`, `tr/` (one set per store language; caption *and* the game's own UI in that language, PUB-7), 1080×1920, each < 600 KB (v0.4.0 retake, `577b894`; AZ/RU/TR in-game sets rendered 2026-09-17) |
 | IAP review screenshot (Apple only, not shown on any store page) | ≥ 640×920 | `tower-clash/store/iap-review/shop-crystals.png`, 1290×2796, uncaptioned shop Crystals tab (see §6.1) |
 
-Screenshot order and captions (same frames in every set; the `SHOTS` table in `renderStoreShots.mjs` is the source of truth). **Status (2026-09-17, v0.4.0 retake by the Tech Artist, commit `577b894`; Publisher check of `store/screenshots/raw/*.png` and `en/`, `az/`):** all eight frames are rules-v2 renders — STREAMS pill in the HUD, no SEND toggle, the new tutorial hint on 02 — and the set is ready to upload. Google Play allows up to 8 phone screenshots, App Store up to 10 (frame 09 is App Store only).
+Screenshot order and captions (same frames in every set; the `SHOTS` table in `renderStoreShots.mjs` is the source of truth). **Status (2026-09-17, v0.4.0 retake by the Tech Artist, commit `577b894`; Publisher check of `store/screenshots/raw/*.png` and `en/`, `az/`):** all eight frames are rules-v2 renders — STREAMS pill in the HUD, no SEND toggle, the new tutorial hint on 02 — and the set is ready to upload. **2026-09-21, Rules v3:** every frame shows roads; "done" below now means "captured under v2, re-capture after Rules v3" — the whole set (Google, Apple, AZ/RU/TR) is re-rendered by the Tech Artist once v3 is in the build, with frame 03 showing straight lanes and a wall instead of roads (level 5 may carry a new name). Google Play allows up to 8 phone screenshots, App Store up to 10 (frame 09 is App Store only).
 
 | # | Frame (raw file name) | EN caption | AZ caption | RU caption | TR caption | Status |
 |---|---|---|---|---|---|---|
@@ -144,7 +144,7 @@ Screenshot order and captions (same frames in every set; the `SHOTS` table in `r
 
 The README embeds `store/screenshots/en/02,04,06,07.png` (tutorial, upgrade, fortress, result) with matching alt texts; `LAUNCH_CHECKLIST.md` G10 / A11 list the same files. Localised AZ/RU/TR in-game sets are rendered by the same script (PUB-7 done 2026-09-17: `store/screenshots/{az,ru,tr}/01..08.png`, in-game UI in that language).
 
-Frame 08 deliberately shows the Upgrades tab and not the Crystals tab: the crystal packs display the catalogue's fallback USD prices (the store SDK localises them only on a device) and, in the web build, a "Test store" line. Screenshots never show a price in a fixed currency (a hard-coded "$0.99" in a screenshot is a consumer-law problem in the EU), so the Crystals tab is used only for the private App Store Connect review screenshot (§6.1). Follow-up: (PUB-6) add frames from levels 17+ (two enemies, mines, a cut bridge, three enemies).
+Frame 08 deliberately shows the Upgrades tab and not the Crystals tab: the crystal packs display the catalogue's fallback USD prices (the store SDK localises them only on a device) and, in the web build, a "Test store" line. Screenshots never show a price in a fixed currency (a hard-coded "$0.99" in a screenshot is a consumer-law problem in the EU), so the Crystals tab is used only for the private App Store Connect review screenshot (§6.1). Follow-up: (PUB-6) add frames from levels 17+ (two enemies, mines, a wall gap, three enemies).
 
 ### 1.4 Alternative wording for an ad-free / purchase-free build
 
@@ -166,7 +166,7 @@ HONEST BY DESIGN
 |---|---|---|---|
 | Name | 30 | `Tower Clash` (11) | `Tower Clash` (11) |
 | Subtitle | 30 | `Capture every tower` (19) | `Bütün qüllələri tut` (19) |
-| Promotional text | 170 | `Tap, send, conquer. 50 levels of one-thumb real-time strategy: fortresses, artillery, tanks, mines, bridges. Plays offline, no account. Ads removable.` (150) | `Toxun, göndər, fəth et. Qalalar, toplar, tanklar, minalar, körpülərlə 50 səviyyəlik bir barmaq real vaxt strategiya. Oflayn, hesabsız. Reklamlar silinə bilər.` (158) |
+| Promotional text | 170 | `Tap, send, conquer. 50 levels of one-thumb real-time strategy: fortresses, artillery, tanks, walls, mines. Plays offline, no account. Ads removable.` (148) | `Toxun, göndər, fəth et. Qalalar, toplar, tanklar, divarlar, minalarla 50 səviyyəlik bir barmaq real vaxt strategiya. Oflayn, hesabsız. Reklamlar silinə bilər.` (158) |
 | Keywords | 100 | `tower,war,strategy,rts,capture,conquer,castle,army,offline,tap,casual,defense,attack,soldiers` (93) | `qüllə,strategiya,qala,ordu,oflayn,müharibə,fəth,döyüş,əsgər,tower,war,rts,casual` (80) |
 | Primary category | — | Games | — |
 | Subcategories | — | Strategy, Casual | — |
@@ -187,7 +187,7 @@ App Store screenshots (exact device sizes, rendered by `node store/tools/renderS
 | iPhone 6.7" | 1290×2796 | `tower-clash/store/screenshots/apple-6.7/en/01..09.png` (v0.4.0 retake, `577b894`) |
 | iPhone 6.5" | 1284×2778 | `tower-clash/store/screenshots/apple-6.5/en/01..09.png` (v0.4.0 retake, `577b894`) |
 
-Same frames and captions as the Google set (English only — Azerbaijani is not an App Store locale), plus the App-Store-only frame 09 (level 15 artillery citadel, "Silence the guns"), rendered at the exact device sizes by `--apple`; the set is current with rules v2 and ready to upload (9 of the 10 allowed). iPad screenshots are not needed if the app is marked iPhone-only in App Store Connect (recommended; the game is portrait phone-first).
+Same frames and captions as the Google set (English only — Azerbaijani is not an App Store locale), plus the App-Store-only frame 09 (level 15 artillery citadel, "Silence the guns"), rendered at the exact device sizes by `--apple`; the set is current with rules v2 (re-render after Rules v3 — it shows roads) and ready to upload once retaken (9 of the 10 allowed). iPad screenshots are not needed if the app is marked iPhone-only in App Store Connect (recommended; the game is portrait phone-first).
 
 Review notes for App Review (paste into "Notes"): *Single-player offline game, no account needed. In-app purchases are one-time products handled by StoreKit through RevenueCat; "Restore Purchases" is in the shop screen. Ads are Google AdMob; the app never requests App Tracking Transparency (no `NSUserTrackingUsageDescription` in Info.plist) and always requests non-personalised ads on iOS, so the IDFA is not used — App Privacy "Tracking" is answered No (see §6.4). Sandbox tester: none required — all content is available without purchase.*
 
@@ -197,9 +197,9 @@ Review notes for App Review (paste into "Notes"): *Single-player offline game, n
 
 Primary (in title / subtitle / first lines): tower clash, capture every tower, real-time strategy.
 
-Secondary (descriptions, keyword field): tower war, tower conquest, castle capture, army strategy, rts, one-thumb strategy, offline strategy game, casual strategy, tap to attack, fortress, artillery, tanks, mines, bridges, three stars, short levels, 50 levels, daily challenge, weekly challenge, commander upgrades, skins.
+Secondary (descriptions, keyword field): tower war, tower conquest, castle capture, army strategy, rts, one-thumb strategy, offline strategy game, casual strategy, tap to attack, fortress, artillery, tanks, walls, mines, three stars, short levels, 50 levels, daily challenge, weekly challenge, commander upgrades, skins.
 
-Azerbaijani: qüllə oyunu, strategiya oyunu, qala tutmaq, ordu, real vaxt strategiya, oflayn oyun, bir barmaqla oyun, tank, körpü.
+Azerbaijani: qüllə oyunu, strategiya oyunu, qala tutmaq, ordu, real vaxt strategiya, oflayn oyun, bir barmaqla oyun, tank, divar.
 
 Removed from the list since v0.2.0: "no ads strategy", "reklamsız oyun" — no longer true for the store builds.
 
@@ -213,7 +213,7 @@ Facts to answer with:
 
 | Question | Answer | Why |
 |---|---|---|
-| Violence | Mild / cartoon, infrequent | Tiny stylised clay soldiers and tanks move along roads and disappear with a puff of particles when they meet an opposing unit, a mine or a barrier; units on a cut bridge fall into the water and vanish. No blood, no injury depiction, no realistic weapons, no human suffering. |
+| Violence | Mild / cartoon, infrequent | Tiny stylised clay soldiers and tanks move in straight lines between towers and disappear with a puff of particles when they meet an opposing unit or a mine. No blood, no injury depiction, no realistic weapons, no human suffering. |
 | Fear / horror | None | — |
 | Sexual content, nudity | None | — |
 | Language | None | UI text only (PLAY, STREAMS, MENU, VICTORY), in English, Azerbaijani, Russian or Turkish. |
@@ -236,8 +236,8 @@ node -e '
 const c = (s) => [...s].length;
 console.log("gp short EN", c("Capture every tower. One-thumb real-time strategy, 50 levels, plays offline."));
 console.log("gp short AZ", c("Bütün qüllələri tut. Bir barmaqla real vaxt strategiya, 50 səviyyə, oflayn."));
-console.log("promo EN", c("Tap, send, conquer. 50 levels of one-thumb real-time strategy: fortresses, artillery, tanks, mines, bridges. Plays offline, no account. Ads removable."));
-console.log("promo AZ", c("Toxun, göndər, fəth et. Qalalar, toplar, tanklar, minalar, körpülərlə 50 səviyyəlik bir barmaq real vaxt strategiya. Oflayn, hesabsız. Reklamlar silinə bilər."));
+console.log("promo EN", c("Tap, send, conquer. 50 levels of one-thumb real-time strategy: fortresses, artillery, tanks, walls, mines. Plays offline, no account. Ads removable."));
+console.log("promo AZ", c("Toxun, göndər, fəth et. Qalalar, toplar, tanklar, divarlar, minalarla 50 səviyyəlik bir barmaq real vaxt strategiya. Oflayn, hesabsız. Reklamlar silinə bilər."));
 console.log("subtitle AZ", c("Bütün qüllələri tut"));
 console.log("keywords EN", c("tower,war,strategy,rts,capture,conquer,castle,army,offline,tap,casual,defense,attack,soldiers"));
 '

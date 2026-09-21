@@ -12,32 +12,38 @@ Proposed tag: `tower-clash-v1.0.0` (on branch `claude/tower-war-game-plan-weqwpb
 
 **Status on 2026-09-21 (Publisher check of the tree at `a3923b9` against `docs/BACKLOG.md` "Done" 2026-09-18 … 09-20, `docs/GDD.md` §3 / §7 / §8 and `reports/2026-09-20.md`).** The build has **50 levels**: band 5 "Grand Campaign" (`041-twin-rivers` … `050-the-crown-reforged`, `bb5c147`) is in the generated `manifest.ts` with names and lessons in EN/AZ/RU/TR and final star clocks (3★ 20–50 s), `npm run levels:check` reports "50 level(s) valid", the reference bot wins 500/500 plain runs at 50 seeds and ≥ 47/50 under every twist, `--upgrades max` median ≤ 2.5★; level 46 was hardened after the 60-day sweep (`a34522c`). The **Weekly Challenge** (GDD §8, WEEKLY-1) is implemented: picker `6399883`, playtest mode and CI gate `b6b77ad`, UI / save / e2e `3f46f16`. Daily pool 9–50 with the per-cycle shuffle (`6399883`, DAILY-4). Verification: `npm run test` **677** unit tests (re-run by the Publisher on 2026-09-21), **84** e2e, `npm run playtest` 50/50 levels, daily sweep 60 days 60/60 over 9–50, weekly sweep 26/26 weeks at 5 seeds, eager bundle 78.5 kB gzip with the weekly (limit 80, PERF-4 `8e8b55e`). Everything under "In this build" is committed; the public texts (`STORE_LISTING.md`, `README.md`) say 50 levels and name the weekly since 2026-09-21 (PUB-10).
 
-**Store "What's new" (≤ 500 characters each, counted with `node -e` on 2026-09-21 — EN 499, AZ 480, RU 488, TR 490; use the language of the listing locale). On the very first store submission the field is optional on Google Play and free-form on the App Store; the same text serves as the update note for the web/PWA channel.**
+**Store "What's new" (≤ 500 characters each, counted with `node -e` on 2026-09-21, Rules v3 wording — EN 494, AZ 486, RU 495, TR 473; use the language of the listing locale). On the very first store submission the field is optional on Google Play and free-form on the App Store; the same text serves as the update note for the web/PWA channel.**
 
-EN (499):
+EN (494):
 ```
-Tower Clash 1.0. The Grand Campaign: 50 hand-made levels, the last ten with three enemies, bridges and mines. Daily Challenge: one fixed level, seed and twist per day, the same for everyone; the first win pays gold and crystals, 3-, 7- and 30-day streaks pay bonus crystals. Weekly Challenge: every Monday a twisted level from 33–50 — 100 gold for the win, 20 crystals for beating its 3-star clock. Four new skins, level 2 teaches "under fire", smoother drawing on phones. No account, plays offline.
+Tower Clash 1.0 with Rules v3: no more roads — a tower attacks any tower it can see in a straight line; walls, water and rocks block the shot. Sending never empties a tower, it only pauses its growth, and bigger towers stream faster. The Grand Campaign: 50 hand-made levels, the last ten with three enemies, walls and mines. Daily Challenge: one fixed level and twist per day, streaks pay crystals. Weekly Challenge: every Monday a twisted late level. Four new skins. No account, plays offline.
 ```
-AZ (480):
+AZ (486):
 ```
-Tower Clash 1.0. Böyük Kampaniya: 50 əl ilə hazırlanmış səviyyə, son onunda üç rəqib, hər xəritədə körpü və mina. Günlük Çağırış: hər gün hamı üçün eyni səviyyə, seed və fənd; ilk qələbə qızıl və kristal, 3, 7 və 30 günlük seriya bonus kristal verir. Həftəlik Çağırış: hər bazar ertəsi 33–50 arasından fəndli səviyyə — qələbəyə 100 qızıl, 3 ulduz vaxtını keçəndə 20 kristal. Dörd yeni görünüş, 2-ci səviyyə "atəş altında"nı öyrədir, telefonda daha rəvan çəkilir. Hesabsız, oflayn.
+Tower Clash 1.0, Qaydalar v3 ilə: yollar yoxdur — qüllə düz xətlə gördüyü hər qülləyə hücum edə bilər; divar, su və qaya xətti kəsir. Göndərmək qülləni boşaltmır, yalnız böyüməsini dayandırır; böyük qüllə daha sürətli axın verir. Böyük Kampaniya: 50 əl ilə hazırlanmış səviyyə, son onunda üç rəqib, divar və mina. Günlük Çağırış: hər gün hamı üçün eyni səviyyə və fənd, seriyalar kristal verir. Həftəlik Çağırış: hər bazar ertəsi fəndli bir səviyyə. Dörd yeni görünüş. Hesabsız, oflayn.
 ```
-RU (488):
+RU (495):
 ```
-Tower Clash 1.0. Большая кампания: 50 уровней ручной работы, в последних десяти три противника, мосты и мины на каждой карте. Ежедневный вызов: каждый день один уровень, seed и условие для всех; первая победа даёт золото и кристаллы, серии в 3, 7 и 30 дней — бонусные кристаллы. Недельный вызов: по понедельникам уровень 33–50 с условием, 100 золота за победу, 20 кристаллов за время на три звезды. Четыре новых облика, уровень 2 учит «под огнём», плавнее отрисовка. Без аккаунта, офлайн.
+Tower Clash 1.0 с правилами v3: дорог больше нет — башня атакует любую башню на прямой линии; стены, вода и скалы перекрывают линию. Отправка не опустошает башню, а лишь останавливает её рост; башни выше уровнем шлют быстрее. Большая кампания: 50 уровней ручной работы, в последних десяти три противника, стены и мины. Ежедневный вызов: один уровень и условие в день для всех, серии дают кристаллы. Недельный вызов: по понедельникам уровень с условием. Четыре новых облика. Без аккаунта, офлайн.
 ```
-TR (490):
+TR (473):
 ```
-Tower Clash 1.0. Büyük Sefer: 50 el yapımı bölüm — son onunda üç rakip, her haritada köprü ve mayın. Günlük Meydan Okuma: her gün herkes için aynı bölüm, seed ve kural; ilk zafer altın ve kristal, 3, 7 ve 30 günlük zafer serisi bonus kristal verir. Haftalık Meydan Okuma: her pazartesi 33–50 arasından kurallı bir bölüm, zafere 100 altın, 3 yıldız süresini geçince 20 kristal. Dört yeni görünüm, 2. bölüm "ateş altında"yı öğretir, telefonda daha akıcı çizim. Yine hesapsız, yine çevrimdışı.
+Tower Clash 1.0, Kurallar v3 ile: yol yok — bir kule düz çizgide gördüğü her kuleye saldırabilir; duvar, su ve kaya çizgiyi keser. Göndermek kuleyi boşaltmaz, yalnızca büyümesini durdurur; büyük kuleler daha hızlı akış verir. Büyük Sefer: 50 el yapımı bölüm, son onunda üç rakip, duvar ve mayın. Günlük Meydan Okuma: her gün herkese aynı bölüm ve kural, seriler kristal verir. Haftalık Meydan Okuma: her pazartesi kurallı bir bölüm. Dört yeni görünüm. Hesapsız, çevrimdışı.
 ```
 (Twist names, "Weekly" and the TR word for level — "bölüm" — are the in-game labels from `src/ui/locales/{en,az,ru,tr}.ts`; "Grand Campaign" is GDD §3's name for band 5, not an in-game string.)
 
 ### English
 
-Tower Clash 1.0 is the "Streams update" (v0.4.0) plus one week of content and hardening: the Grand Campaign (levels 41–50, so 50 levels in all), a Daily Challenge with streak milestones over a 9–50 pool, a Weekly Challenge, four silhouette skins, a level-2 lesson for "under fire", ten levels retuned so the daily pool holds under every twist, and a renderer that draws on three canvases. Nothing in the rules changed since v0.4.0.
+Tower Clash 1.0 is the "Streams update" (v0.4.0) plus one week of content and hardening: the Grand Campaign (levels 41–50, so 50 levels in all), a Daily Challenge with streak milestones over a 9–50 pool, a Weekly Challenge, four silhouette skins, a level-2 lesson for "under fire", ten levels retuned so the daily pool holds under every twist, and a renderer that draws on three canvases — plus **Rules v3** (2026-09-21), which replaces roads with straight-line attacks (next block).
+
+**In this build — Rules v3 "free lanes" (2026-09-21, GDD §2.0b, stakeholder request; ships inside 1.0.0, no version bump)**
+- No more roads: a tower can attack any tower it can see in a straight line. Walls, water, rocks — and other towers — block the line. Tap your tower and thin guide lines show every tower it can reach; a blocked tower shakes and says "Blocked".
+- Sending never empties your tower: the soldiers stay home, the tower only stops growing while it streams. Each stream flows at the tower's level speed — 1 / 1.4 / 2 soldiers per second at level 1 / 2 / 3 (a tank factory sends a tank every 4 / 2.8 / 2 s) — and needs at least one soldier at home; a tower shot down to 0 drops its streams and grows again.
+- Bridges, the long-press bridge cut and barriers are gone: rivers are water with gaps where the bridges stood, old barriers became walls or mines. Mines are points on the map that take the first soldiers to pass over them.
+- All 50 levels re-authored on the new rules (walls from level 5, mines from 17, tower kinds unchanged); star clocks re-measured with the reference player; enemy AI and the reference bot play the lane model; lesson lines rewritten in EN/AZ/RU/TR. Store screenshots are re-captured after this change (`LAUNCH_CHECKLIST.md` G10 / A11 / R3).
 
 **In this build — Grand Campaign, levels 41–50 (GDD §3 band 5)**
-- Ten new levels after 40 "The Crown" (`bb5c147`, LV-9): Twin Rivers, Siege Engine, Iron Convoy, Minefield Crossing, Three Fronts, The Long Bridge, Scorched Earth, Kings' Council, Last Light, The Crown Reforged. No new mechanic — three enemies, at least one bridge and one mine on every map, 10–12 towers, enemy aggression rising 0.6 → 0.9; names and lessons in EN/AZ/RU/TR; 3★ clocks 20–50 s by the v2 policy. Unlocks like every other level, with a star on the one before.
+- Ten new levels after 40 "The Crown" (`bb5c147`, LV-9): Twin Rivers, Siege Engine, Iron Convoy, Minefield Crossing, Three Fronts, The Long Bridge, Scorched Earth, Kings' Council, Last Light, The Crown Reforged. No new mechanic — three enemies, walls and mines on every map (Rules v3: the former bridges are gaps in the water), 10–12 towers, enemy aggression rising 0.6 → 0.9; names and lessons in EN/AZ/RU/TR; 3★ clocks 20–50 s by the v2 policy. Unlocks like every other level, with a star on the one before.
 - Economy hooks (`d2086ae`): band-5 full-3★ bonus 20 crystals, 50-level milestone 60 crystals, new achievement "Clear level 50" (`grand_campaign`, 10 crystals) — eleven achievements now; level count, map, NEXT button and unlock logic are data-driven from the manifest.
 - Verified: 500/500 plain runs at 50 seeds, ≥ 47/50 under every twist, `--upgrades max` median ≤ 2.5★; level 46 "The Long Bridge" hardened after the 60-day daily sweep (`a34522c`: 1000/1000 plain, every twist ≥ 199/200). Levels stay lazy chunks, so the first download did not grow.
 
@@ -68,7 +74,7 @@ Tower Clash 1.0 is the "Streams update" (v0.4.0) plus one week of content and ha
 - **More lazy chunks** (`8e8b55e`, PERF-4): roof materials, helmets, cosmetic terrain themes, SFX recipes and the coin / crystal bursts load on demand — eager bundle 80.15 → 77.1 kB gzip, 78.5 kB with the weekly (limit 80); look and sound unchanged (pixel diff 0 on the default look).
 
 **In this build — AI**
-- Reference bot (`3b66c42` AI-3, `288618f` AI-4): answers a hose from a drained source (hose reserve); a capped tower keeps its attack on a burst alone while supplying sideways. The bot that verifies every level and every daily; the campaign enemy AI is unchanged.
+- Reference bot (`3b66c42` AI-3, `288618f` AI-4): answers a hose from its source (hose reserve); a capped tower keeps its attack on a burst alone while supplying sideways — both re-based on the Rules v3 lane model (no drain) on 2026-09-21. The bot that verifies every level and every daily; the campaign enemy AI is unchanged.
 
 **In this build — verification and docs**
 - Tutorial e2e for levels 1–3 on a fresh save (`239cb9c`, checklist R1 done); continue e2e pinned to level 15 seed 2 (`2c2c511`); hostile-save, i18n-key and rollover unit tests, layers + lazy e2e (`f0d7903`); `maxedModifiers()` helper pinned to the catalog (`1304498`); daily / weekly picker pins (2026-09-21 → daily 44 / lean, weekly 33 / 743047 / fastFeet), `e2e/weekly.spec.ts`, lazy-chunk e2e counting only the user-driven re-fetch (`9b263b0`). **677 unit tests, 84 e2e.**
@@ -87,10 +93,16 @@ Still true on every build: no accounts, no analytics. The web/PWA build makes no
 
 ### Azərbaycanca
 
-Tower Clash 1.0 = "Axınlar yeniləməsi" (v0.4.0) + bir həftəlik məzmun və möhkəmləndirmə: Böyük Kampaniya (41–50-ci səviyyələr, cəmi 50 səviyyə), 9–50 hovuzu üzərində seriya mükafatlı Günlük Çağırış, Həftəlik Çağırış, dörd siluet görünüşü, 2-ci səviyyədə "atəş altında" dərsi, günlük hovuz hər fənd altında dayanıqlı olsun deyə on səviyyənin yenidən tənzimlənməsi və üç kanvasda çəkən renderer. v0.4.0-dan bəri qaydalarda heç nə dəyişməyib.
+Tower Clash 1.0 = "Axınlar yeniləməsi" (v0.4.0) + bir həftəlik məzmun və möhkəmləndirmə: Böyük Kampaniya (41–50-ci səviyyələr, cəmi 50 səviyyə), 9–50 hovuzu üzərində seriya mükafatlı Günlük Çağırış, Həftəlik Çağırış, dörd siluet görünüşü, 2-ci səviyyədə "atəş altında" dərsi, günlük hovuz hər fənd altında dayanıqlı olsun deyə on səviyyənin yenidən tənzimlənməsi və üç kanvasda çəkən renderer. Üstəlik **Qaydalar v3** (2026-09-21): yolların yerinə düz xətt hücumları (növbəti blok).
+
+**Bu build-də — Qaydalar v3 "sərbəst xətlər" (2026-09-21, GDD §2.0b, sifarişçinin istəyi; 1.0.0-ın içində gəlir, versiya dəyişmir)**
+- Yollar yoxdur: qüllə düz xətlə gördüyü istənilən qülləyə hücum edə bilər. Divar, su, qaya — və digər qüllələr — xətti kəsir. Öz qüllənə toxun: nazik bələdçi xətlər çata biləcəyi hər qülləni göstərir; bağlı qüllə titrəyir və "Yol bağlıdır" deyir.
+- Göndərmək qülləni heç vaxt boşaltmır: əsgərlər yerində qalır, qüllə axın verərkən yalnız böyümür. Hər axın qüllənin səviyyə sürəti ilə gedir — 1 / 2 / 3-cü səviyyədə saniyədə 1 / 1.4 / 2 əsgər (tank zavodu hər 4 / 2.8 / 2 s-də bir tank) — və evdə ən azı bir əsgər tələb edir; 0-a endirilmiş qüllə axınlarını itirir və yenidən böyüyür.
+- Körpülər, uzun basışla körpü kəsmə və sədlər yoxdur: çaylar körpülərin yerində boşluqları olan su zolağıdır, köhnə sədlər divara ya minaya çevrilib. Minalar xəritədə nöqtədir — üstündən keçən ilk əsgərləri aparır.
+- Bütün 50 səviyyə yeni qaydalarla yenidən qurulub (divarlar 5-ci, minalar 17-ci səviyyədən, qüllə növləri dəyişməyib); ulduz vaxtları istinad oyunçusu ilə yenidən ölçülüb; düşmən AI-ı və istinad botu xətt modelini oynayır; dərs sətirləri EN/AZ/RU/TR yenidən yazılıb. Mağaza ekran görüntüləri bu dəyişiklikdən sonra yenidən çəkilir (`LAUNCH_CHECKLIST.md` G10 / A11 / R3).
 
 **Bu build-də — Böyük Kampaniya, 41–50-ci səviyyələr (GDD §3, 5-ci band)**
-- 40 "The Crown"dan sonra on yeni səviyyə (`bb5c147`, LV-9): Əkiz Çaylar, Mühasirə Maşını, Dəmir Karvan, Mina Sahəsi Keçidi, Üç Cəbhə, Uzun Körpü, Yanmış Torpaq, Krallar Şurası, Son İşıq, Yenidən Dövülmüş Tac. Yeni mexanika yoxdur — üç rəqib, hər xəritədə ən azı bir körpü və bir mina, 10–12 qüllə, düşmən aqressiyası 0.6 → 0.9; adlar və dərslər EN/AZ/RU/TR; 3★ vaxtları v2 siyasəti ilə 20–50 s. Hər səviyyə kimi, əvvəlkində ulduz olanda açılır.
+- 40 "The Crown"dan sonra on yeni səviyyə (`bb5c147`, LV-9): Əkiz Çaylar, Mühasirə Maşını, Dəmir Karvan, Mina Sahəsi Keçidi, Üç Cəbhə, Uzun Körpü, Yanmış Torpaq, Krallar Şurası, Son İşıq, Yenidən Dövülmüş Tac. Yeni mexanika yoxdur — üç rəqib, hər xəritədə divar və mina (Qaydalar v3: köhnə körpülər suda boşluqdur), 10–12 qüllə, düşmən aqressiyası 0.6 → 0.9; adlar və dərslər EN/AZ/RU/TR; 3★ vaxtları v2 siyasəti ilə 20–50 s. Hər səviyyə kimi, əvvəlkində ulduz olanda açılır.
 - İqtisadiyyat (`d2086ae`): 5-ci bandın tam 3★ bonusu 20 kristal, 50 səviyyə mərhələsi 60 kristal, yeni nailiyyət "50-ci səviyyəni keç" (`grand_campaign`, 10 kristal) — indi on bir nailiyyət; səviyyə sayı, xəritə, NEXT düyməsi və açılma məntiqi manifestdən oxunur.
 - Yoxlanılıb: 50 seed-də 500/500 adi oyun, hər fənddə ≥ 47/50, `--upgrades max` median ≤ 2.5★; 46-cı səviyyə "Uzun Körpü" 60 günlük gündəlik yoxlamadan sonra möhkəmləndirilib (`a34522c`: 1000/1000 adi, hər fənddə ≥ 199/200). Səviyyələr gecikmə ilə yüklənən hissələrdə qalır, ilk yükləmə böyüməyib.
 
