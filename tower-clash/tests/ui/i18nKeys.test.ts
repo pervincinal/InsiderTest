@@ -35,6 +35,11 @@ function usedKeys(): { literal: Set<string>; templates: Set<string> } {
     const src = readFileSync(file, 'utf8');
     for (const m of src.matchAll(/\bt\(\s*'([^']+)'/g)) literal.add(m[1]!);
     for (const m of src.matchAll(/\bt\(\s*`([^`$]*)\$\{[^}]+\}`/g)) templates.add(m[1]!);
+    // `t(cond ? 'a.x' : 'b.y', …)`: both branches are keys (play.ts noBoosters, hud.ts chip — WEEKLY-1)
+    for (const m of src.matchAll(/\bt\(\s*[^'`()]*?\?\s*'([^']+)'\s*:\s*'([^']+)'/g)) {
+      literal.add(m[1]!);
+      literal.add(m[2]!);
+    }
     // `step('tutorial.x', …)` in tutorial.ts and `key: 'shop.tab.x'` tables pass keys around as strings
     for (const m of src.matchAll(/\bstep\(\s*'([^']+)'/g)) literal.add(m[1]!);
     for (const m of src.matchAll(/'((?:shop\.tab|daily\.twist|booster|hint|tutorial)\.[a-zA-Z0-9_.]+)'/g)) literal.add(m[1]!);
@@ -54,6 +59,10 @@ describe('translation keys used by src/', () => {
   it('finds the keys (the scan is not silently empty)', () => {
     expect(literal.size).toBeGreaterThan(100);
     expect(templates.size).toBeGreaterThanOrEqual(2);
+  });
+
+  it('keys chosen by a ternary inside t(...) are scanned (weekly / daily chip and noBoosters)', () => {
+    for (const k of ['weekly.noBoosters', 'daily.noBoosters', 'weekly.chip', 'daily.chip']) expect(literal.has(k), k).toBe(true);
   });
 
   it('every runtime-built key family has an expansion in this test', () => {

@@ -145,7 +145,7 @@ export function beginMapFrame(view: View, pal: Palette): void {
   const ctx = view.ctx;
   applyDeviceTransform(view);
   ctx.fillStyle = pal.letterbox;
-  ctx.fillRect(0, 0, view.cssW, view.cssH);
+  ctx.fillRect(0, 0, view.cssW + 1, view.cssH + 1); // +1: cover the rounded-up last pixel column / row (layers.ts)
   ctx.save();
   applyTransform(view);
   clipToMap(view);

@@ -50,25 +50,26 @@ jobs:
         run: npm run playtest
 
       # Daily Challenge gate (GDD §7.5): the reference player on today's and the next 29 days' challenges
-      # (`challengeFor`: level 9–40, fixed seed, twist, no upgrades) over 3 seeds each. Every day's fixed
-      # seed must be won and wins/K >= 90 %. Exit 1 on any failed day. Measured 2.4 s locally.
+      # (`challengeFor`: level 9–50, fixed seed, twist, no upgrades) over 3 seeds each. Every day's fixed
+      # seed must be won and wins/K >= 90 %. Exit 1 on any failed day. Measured 2.5 s locally (2026-09-21).
       - name: Daily challenge gate (30 days x 3 seeds)
         run: npm run playtest -- --daily $(date -u +%F) --days 30 --seeds 3
 
       # Weekly Challenge gate (GDD §8): the reference player on this week's and the next 25 weeks'
-      # challenges (`weeklyFor`: level 33–50, fixed seed, non-plain twist, no upgrades) over 3 seeds
+      # challenges (`weeklyFor`: level 33–50, fixed seed, non-plain twist, no upgrades) over 5 seeds
       # each. Every week's fixed seed must be won and wins/K >= 80 % (the 3★ target column is
       # informational: star3 sits at 0.9 × the bot's median by design). The key
       # is the ISO week's Monday (`%u` = 1..7, Monday = 1; `-0 days` is valid GNU date): GNU
       # `'monday this week'` would resolve to the *next* Monday on Tue–Sun and skip the current week.
-      # Measured ~3.5 s locally.
+      # Measured 4.0 s locally (2026-09-21).
       - name: Weekly challenge gate (26 weeks x 5 seeds)
         run: npm run playtest -- --weekly "$(date -u -d "-$(( $(date -u +%u) - 1 )) days" +%F)" --weeks 26 --seeds 5
 
-      # Twist pool gate (GDD §7.5 item 3): every pool level (9–40) under each twist over seeds 1..5,
-      # gate per level wins/K >= 80 % (4/5). K = 5 is the GDD gate; K = 3 would demand 3/3, which is
-      # stricter than the spec. Exit 1 on any failed level. Measured ~2.6 s per twist locally.
-      - name: Twist pool gate (5 twists x 32 levels x 5 seeds)
+      # Twist pool gate (GDD §7.5 item 3): every pool level (9–50, 42 levels) under each twist over
+      # seeds 1..5, gate per level wins/K >= 80 % (4/5). K = 5 is the GDD gate; K = 3 would demand 3/3,
+      # which is stricter than the spec. Exit 1 on any failed level. Measured 4.1–5.4 s per twist
+      # locally (24 s for all five; daily + weekly + twists together 30.5 s, 2026-09-21).
+      - name: Twist pool gate (5 twists x 42 levels x 5 seeds)
         run: |
           for twist in plain lean fastFeet thinWalls reinforced; do
             npm run playtest -- --twist "$twist" --seeds 5 || exit 1

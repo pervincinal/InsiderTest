@@ -132,7 +132,10 @@ export function weekKeyOf(date: Date): string {
 }
 
 export function isMondayKey(dayKey: string): boolean {
-  return DAY_KEY.test(dayKey) && new Date(`${dayKey}T00:00:00Z`).getUTCDay() === 1;
+  if (!DAY_KEY.test(dayKey)) return false;
+  const d = new Date(`${dayKey}T00:00:00Z`);
+  // a real calendar date (V8 rolls `2026-02-30` over to Monday March 2) that is a Monday
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === dayKey && d.getUTCDay() === 1;
 }
 
 /** The weekly challenge for a Monday key; throws on a non-Monday or malformed key. */

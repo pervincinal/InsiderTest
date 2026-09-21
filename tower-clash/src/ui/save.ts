@@ -199,7 +199,10 @@ function dayString(v: unknown): string {
 /** A well-formed day key that is a Monday (UTC) — the only keys `weekly` may carry. */
 function mondayString(v: unknown): string {
   const day = dayString(v);
-  return day && new Date(`${day}T00:00:00Z`).getUTCDay() === 1 ? day : '';
+  if (!day) return '';
+  const d = new Date(`${day}T00:00:00Z`);
+  // a real calendar date (V8 rolls `2026-02-30` over to Monday March 2) that is a Monday, as `isMondayKey`
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === day && d.getUTCDay() === 1 ? day : '';
 }
 
 /** Well-formed `challenge.best` entries only (valid day key, stars 0..3, finite time), pruned to the newest keys. */

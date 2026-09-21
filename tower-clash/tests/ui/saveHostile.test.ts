@@ -4,9 +4,11 @@ import { SAVE_KEY, SAVE_KEY_V1, SAVE_KEY_V2, defaultSave, loadSaveFrom, normaliz
 import { equippedSkin } from '../../src/economy/entitlements';
 import { themeFor } from '../../src/render/palette';
 import { earnGold, spendCrystals, spendGold } from '../../src/economy/wallet';
-import { recordChallengeResult, shownStreak } from '../../src/ui/daily';
-import { TWISTS } from '../../src/daily/challenge';
-import { challengeFor } from '../../src/daily/challenge';
+import { challengeDone, recordChallengeResult, shownStreak } from '../../src/ui/daily';
+import { recordWeeklyResult, shownWeekStreak, weeklyDone, weeklyTargetDone } from '../../src/ui/weekly';
+import type { WeeklyChallenge } from '../../src/daily/challenge';
+import { TWISTS, WEEKLY_REWARD, dayNumberOf, isMondayKey } from '../../src/daily/challenge';
+import { challengeFor, weeklyFor } from '../../src/daily/challenge';
 import { setSaveStorageForTests } from '../../src/ui/save';
 
 /*
@@ -49,6 +51,7 @@ const HOSTILE_INPUTS: [string, unknown][] = [
       charges: { overdrive: -1, freeze: 'two', airstrike: 2.9 },
       daily: { lastClaimDay: '2026-9-1', streak: 400 },
       challenge: { lastWinDay: 20260918, streak: -3, best: 'none', milestones: 'all' },
+      weekly: { lastWinWeek: '2026-09-22', streak: -3, best: { '2026-09-21': { stars: 9, timeMs: -1, target: 'true' }, '2026-09-22': { stars: 3, timeMs: 1, target: true }, '2026-02-30': { stars: 3, timeMs: 1, target: true } } },
       adCounters: { day: null, rewardedByPlacement: [5], levelsCompleted: -9 },
       purchases: 'remove_ads',
       milestones: [1, 2],
@@ -60,7 +63,8 @@ const HOSTILE_INPUTS: [string, unknown][] = [
     },
   ],
   ['prototype pollution keys', JSON.parse('{"stars":{"__proto__":{"polluted":1},"constructor":3},"upgrades":{"__proto__":{"x":1}},"defeats":{"__proto__":9},"__proto__":{"gold":9}}')],
-  ['unknown future version with huge numbers', { version: 99, gold: Number.MAX_SAFE_INTEGER * 4, crystals: 2 ** 53, stars: { '40': 3 }, challenge: { streak: 1e300, milestones: [1e300] } }],
+  ['unknown future version with huge numbers', { version: 99, gold: Number.MAX_SAFE_INTEGER * 4, crystals: 2 ** 53, stars: { '40': 3 }, challenge: { streak: 1e300, milestones: [1e300] }, weekly: { streak: 1e300, lastWinWeek: '9999-12-27' } }],
+  ['weekly / challenge blocks as arrays and swapped shapes', { weekly: [{ lastWinWeek: '2026-09-21' }], challenge: { lastWinWeek: '2026-09-21', best: [{ stars: 3 }] } }],
 ];
 
 describe('normalizeSave under hostile input', () => {
@@ -79,6 +83,14 @@ describe('normalizeSave under hostile input', () => {
       for (const n of Object.values(s.stars)) expect(n).toBeLessThanOrEqual(3);
       for (const n of Object.values(s.upgrades)) expect(n).toBeLessThanOrEqual(5);
       expect(s.daily.streak).toBeLessThanOrEqual(7);
+      // weekly (WEEKLY-1): Monday keys only, `target` a strict boolean, at most 12 weeks kept
+      if (s.weekly.lastWinWeek !== null) expect(isMondayKey(s.weekly.lastWinWeek)).toBe(true);
+      expect(Object.keys(s.weekly.best).length).toBeLessThanOrEqual(12);
+      for (const [k, b] of Object.entries(s.weekly.best)) {
+        expect(isMondayKey(k), k).toBe(true);
+        expect(typeof b.target).toBe('boolean');
+        expect(b.stars).toBeLessThanOrEqual(3);
+      }
     });
   }
 
@@ -146,5 +158,91 @@ describe('normalizeSave under hostile input', () => {
 
   it('challengeFor is total over well-formed keys the save could carry (no throw for any YYYY-MM-DD string)', () => {
     for (const key of ['0000-00-00', '9999-99-99', '2026-02-30', '2026-13-01']) expect(() => challengeFor(key)).not.toThrow();
+  });
+});
+
+/* ---------- WEEKLY-1: save.weekly against hostile / stale input and its interplay with `challenge` (QA 2026-09-21) ---------- */
+
+function addDays(dayKey: string, n: number): string {
+  return new Date(Date.UTC(Number(dayKey.slice(0, 4)), Number(dayKey.slice(5, 7)) - 1, Number(dayKey.slice(8, 10))) + n * 86_400_000).toISOString().slice(0, 10);
+}
+
+describe('save.weekly normalisation (hostile input, interplay with the daily challenge block)', () => {
+  const MON = '2026-09-21';
+  const PREV = '2026-09-14';
+  const level = { star3: 30_000, star2: 60_000 };
+  const weeklyOf = (over: Partial<WeeklyChallenge> = {}): WeeklyChallenge => ({ ...weeklyFor(MON), targetMs: 30_000, ...over });
+
+  it('Monday-key check: only real calendar Mondays survive (a rolled-over date like 2026-02-30 is not a key)', () => {
+    expect(isMondayKey('2026-02-30')).toBe(false); // V8 parses it as Monday 2026-03-02
+    expect(isMondayKey('2026-03-02')).toBe(true);
+    expect(isMondayKey('2026-02-29')).toBe(false); // → Sunday 2026-03-01
+    expect(isMondayKey('9999-99-99')).toBe(false);
+    expect(isMondayKey('2026-13-01')).toBe(false);
+    expect(isMondayKey('0001-01-01')).toBe(true); // proleptic Gregorian, a Monday
+    expect(() => weeklyFor('2026-02-30')).toThrow();
+    const s = normalizeSave({ weekly: { lastWinWeek: '2026-02-30', streak: 2, best: { '2026-02-30': { stars: 3, timeMs: 1, target: true }, '2026-03-02': { stars: 1, timeMs: 2, target: true }, '2026-09-22': { stars: 3, timeMs: 1, target: true } } } });
+    expect(s.weekly).toEqual({ lastWinWeek: null, streak: 2, best: { '2026-03-02': { stars: 1, timeMs: 2, target: true } } });
+    // the daily keeps shape-valid keys (its picker is total over them, see above): the two ledgers validate independently
+    const d = normalizeSave({ challenge: { lastWinDay: '2026-02-30', best: { '2026-02-30': { stars: 3, timeMs: 1 } } } });
+    expect(d.challenge.lastWinDay).toBe('2026-02-30');
+    expect(Object.keys(d.challenge.best)).toEqual(['2026-02-30']);
+    expect(d.weekly).toEqual(defaultSave().weekly);
+  });
+
+  it('`target` is a strict boolean, best is pruned to the newest 12 Mondays, the streak is a non-negative integer (not clamped)', () => {
+    const best: Record<string, unknown> = {};
+    for (let w = 0; w < 30; w++) best[addDays('2026-01-05', 7 * w)] = { stars: 1, timeMs: w, target: [true, 1, 'true', {}, null][w % 5] };
+    const s = normalizeSave({ weekly: { lastWinWeek: MON, streak: '7', best } });
+    const keys = Object.keys(s.weekly.best).sort();
+    expect(keys.length).toBe(12);
+    expect(keys[0]).toBe(addDays('2026-01-05', 7 * 18));
+    expect(keys[11]).toBe(addDays('2026-01-05', 7 * 29));
+    for (const k of keys) {
+      const w = (dayNumberOf(k) - dayNumberOf('2026-01-05')) / 7;
+      expect(s.weekly.best[k]).toEqual({ stars: 1, timeMs: w, target: w % 5 === 0 });
+    }
+    expect(s.weekly.streak).toBe(0); // '7' is not a number
+    for (const [raw, want] of [[2.9, 2], [-3, 0], [NaN, 0], [Infinity, 0], [1e300, 1e300], [null, 0]] as const) expect(normalizeSave({ weekly: { streak: raw } }).weekly.streak).toBe(want);
+    assertSaneNumbers(s);
+    expect(roundTrip(s)).toEqual(s);
+  });
+
+  it('an absurd streak cannot break the arithmetic: shown capped at 99, a first win still pays once, the round trip is a fixed point', () => {
+    setSaveStorageForTests(null);
+    const s = normalizeSave({ weekly: { lastWinWeek: PREV, streak: 1e300, best: {} }, challenge: { lastWinDay: '2026-09-20', streak: 2 ** 53, best: {}, milestones: [] } });
+    expect(shownWeekStreak(s, MON)).toBe(99);
+    expect(shownStreak(s, MON)).toBe(99);
+    const out = recordWeeklyResult(s, weeklyOf(), level, 'won', 45_000);
+    expect(out).toMatchObject({ firstWin: true, gold: WEEKLY_REWARD.gold, targetHit: false, crystals: 0, streak: 99 });
+    expect(s.weekly.streak).toBe(1e300); // + 1 is absorbed at this magnitude; still finite and non-negative
+    expect(s.challenge.streak).toBe(2 ** 53); // untouched by the weekly
+    expect(recordWeeklyResult(s, weeklyOf(), level, 'won', 45_000).gold).toBe(0);
+    assertSaneNumbers(s);
+    expect(roundTrip(s)).toEqual(s);
+  });
+
+  it('interplay with the daily block: a pre-WEEKLY-1 save, a weekly block in the daily shape, or the daily best map copied into weekly', () => {
+    // an old save (before WEEKLY-1) has no `weekly`: defaults, while the daily progress is kept as is
+    const old = normalizeSave({ version: 3, challenge: { lastWinDay: MON, streak: 4, best: { [MON]: { stars: 2, timeMs: 40_000 } }, milestones: [3] } });
+    expect(old.weekly).toEqual({ lastWinWeek: null, streak: 0, best: {} });
+    expect(old.challenge).toEqual({ lastWinDay: MON, streak: 4, best: { [MON]: { stars: 2, timeMs: 40_000 } }, milestones: [3] });
+    expect(weeklyDone(old, MON)).toBe(false);
+    expect(challengeDone(old, MON)).toBe(true);
+    // the daily's field names inside the weekly block are ignored (no cross-reading of `lastWinDay` / `milestones`)
+    const swapped = normalizeSave({ weekly: { lastWinDay: MON, streak: 4, best: { [MON]: { stars: 2, timeMs: 40_000 } }, milestones: [3] } });
+    expect(swapped.weekly).toEqual({ lastWinWeek: null, streak: 4, best: { [MON]: { stars: 2, timeMs: 40_000, target: false } } });
+    expect(swapped.milestones).toEqual([]);
+    expect(weeklyDone(swapped, MON)).toBe(true); // a shape-valid best for this Monday counts as done: the gold is never paid twice
+    expect(weeklyTargetDone(swapped, MON)).toBe(false);
+    expect(challengeDone(swapped, MON)).toBe(false);
+    // a daily best map (14 day keys) copied into weekly keeps only its two Mondays
+    const days: Record<string, unknown> = {};
+    for (let d = 0; d < 14; d++) days[addDays(PREV, d)] = { stars: 3, timeMs: 1_000 };
+    const copied = normalizeSave({ challenge: { best: days }, weekly: { best: days } });
+    expect(Object.keys(copied.challenge.best).length).toBe(14);
+    expect(Object.keys(copied.weekly.best).sort()).toEqual([PREV, MON]);
+    assertSaneNumbers(copied);
+    expect(roundTrip(copied)).toEqual(copied);
   });
 });
