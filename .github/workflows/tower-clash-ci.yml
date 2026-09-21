@@ -80,7 +80,8 @@ jobs:
 
       # Web bundle guard: the entry chunk (and its modulepreloads) must not contain the native
       # store/ads plugins (they are dynamic imports used only inside the Capacitor shells) and must
-      # stay under the gzip budget. `--no-build` reuses the dist/ from the step above.
+      # stay under the 80 kB gzip budget (GDD §2.0b acceptance 3; scripts/checkBundle.mjs holds the
+      # number). `--no-build` reuses the dist/ from the step above.
       - name: Bundle check (no native plugins in the entry chunk, gzip budget)
         run: node scripts/checkBundle.mjs --no-build
 
@@ -90,8 +91,10 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       # Default Playwright project (`chromium`, Pixel 5 metrics): smoke (title → level select →
-      # level 1 → win → result), content (every authored level loads), economy and perf
-      # (frame-time budget on the top level).
+      # level 1: select home → rules v3 guide lines → stream that keeps the garrison → win → result;
+      # blocked-tap hint through the level 5 wall), content (every authored level loads; wall / water /
+      # rock screenshots), tutorial, daily / weekly, economy, lazy chunks, layers and perf (frame-time
+      # budget on the top level).
       - name: Browser e2e (smoke + content + economy + perf)
         timeout-minutes: 15
         run: npm run e2e

@@ -198,10 +198,18 @@ test.describe('Tower Clash in an Android WebView', () => {
     await expect.poll(() => hint(page), { message: 'touching the home tower selects it' }).toBe('Now tap the grey tower — the stream keeps flowing');
     await touchAt(page, camp.x, camp.y);
     await expect.poll(() => hint(page), { message: 'touching the target starts the stream' }).toBeNull();
-    await expect.poll(() => towerUnits(page, 'home'), { message: 'home garrison drains into the stream' }).toBeLessThan(garrisonBefore);
     await expect
       .poll(() => page.evaluate(() => window.__towerclash.getState()?.units.length ?? 0), { message: 'units marching' })
       .toBeGreaterThan(0);
+    // rules v3 (GDD §2.0b item 4): the stream carries production; the linked garrison (>= the value
+    // read before the taps: the tower grew until the link landed) holds for 2 s of sim time
+    const held = await page.evaluate(() => {
+      const s = window.__towerclash.getState()!;
+      return { units: s.towers['home']!.units, time: s.time };
+    });
+    expect(held.units).toBeGreaterThanOrEqual(garrisonBefore);
+    await expect.poll(() => simTime(page)).toBeGreaterThanOrEqual(held.time + 2000);
+    expect(await towerUnits(page, 'home'), 'a streaming tower keeps its garrison: no drain, no growth').toBe(held.units);
     await shot(page, 'play-touch');
 
     expect(errors.page).toEqual([]);

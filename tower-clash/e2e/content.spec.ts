@@ -7,9 +7,11 @@ import type { Page } from '@playwright/test';
  * Content check: every authored level in src/levels/*.json must load in the real browser build
  * through the debug surface (`window.__towerclash.loadLevel(id)`), land on the play screen with the
  * right levelId, tick the sim forward, and produce no console errors / uncaught exceptions.
- * Screenshots are taken for a fixed set of milestone ids (1 and the last level of every band: 8, 16,
- * 24, 32, 40, 50) when they exist, so
- * new content from the Level Designer is picked up automatically and missing ids are skipped.
+ * Screenshots are taken for a fixed set of milestone ids (1, the first obstacle lesson 5, and the last
+ * level of every band: 8, 16, 24, 32, 40, 50) when they exist, so new content from the Level Designer
+ * is picked up automatically and missing ids are skipped. Rules v3 (GDD §2.0b): the set must show
+ * every obstacle kind — a wall, a water band and a rock — so the terrain drawing is eyeballed on
+ * every kind.
  *
  * Levels are discovered from the filesystem (not imported from src/) for the same reason as
  * smoke.spec.ts: Node's native TS loader cannot import the JSON-backed level index.
@@ -19,6 +21,7 @@ interface LevelJson {
   id: number;
   name: string;
   towers: { id: string; owner: string }[];
+  obstacles?: { kind: string }[];
 }
 
 const LEVELS_DIR = new URL('../src/levels/', import.meta.url);
@@ -26,7 +29,8 @@ const LEVEL_FILES = readdirSync(LEVELS_DIR)
   .filter((f) => /^\d{3}-.*\.json$/.test(f))
   .sort();
 const LEVELS: LevelJson[] = LEVEL_FILES.map((f) => JSON.parse(readFileSync(new URL(f, LEVELS_DIR), 'utf8')) as LevelJson);
-const SCREENSHOT_IDS = [1, 8, 16, 24, 32, 40, 50];
+const SCREENSHOT_IDS = [1, 5, 8, 16, 24, 32, 40, 50];
+const OBSTACLE_KINDS = ['wall', 'water', 'rock'] as const;
 
 const SHOTS = fileURLToPath(new URL('./__screenshots__/', import.meta.url));
 const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}content-${name}.png`, scale: 'css' });
@@ -86,6 +90,13 @@ test.describe('Tower Clash content: every authored level loads', () => {
       expect(consoleErrors).toEqual([]);
     });
   }
+
+  test('screenshot milestones show every obstacle kind (wall, water, rock)', () => {
+    const shot = LEVELS.filter((l) => SCREENSHOT_IDS.includes(l.id));
+    const kinds = new Set(shot.flatMap((l) => (l.obstacles ?? []).map((o) => o.kind)));
+    test.info().annotations.push({ type: 'obstacle-kinds', description: shot.map((l) => `${l.id}: ${[...new Set((l.obstacles ?? []).map((o) => o.kind))].join('+') || '-'}`).join(', ') });
+    for (const kind of OBSTACLE_KINDS) expect([...kinds], `a screenshot level with a ${kind}`).toContain(kind);
+  });
 
   test('screenshot milestones that do not exist yet are reported, not failed', () => {
     const ids = new Set(LEVELS.map((l) => l.id));

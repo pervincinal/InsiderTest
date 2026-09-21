@@ -24,13 +24,15 @@ const RESULT_NEXT = { x: 84, y: 780, w: 170, h: 72 };
 const WEEKLY_REWARD = { gold: 100, crystals: 20 };
 const UNLOCK_AFTER_LEVEL = 32;
 /**
- * Two consecutive weeks the reference player wins at the fixed seed (scratch sweep over
- * `weeklyFor` + `runHeadless`, 2026-09-20): 2026-10-05 → level 37 Tank Country, seed 80299, Fast
- * feet, target 25 s, bot 22.15 s (3★, pays the crystals); 2026-10-12 → level 39 The Long Night, seed
- * 157939, Fast feet, target 35 s, bot 38.55 s (2★, gold only).
+ * Two consecutive weeks the reference player wins at the fixed seed (`npm run playtest -- --weekly
+ * 2026-09-21 --weeks 30 --seeds 1`, rules v3 clocks, 2026-09-21): 2026-09-21 → level 33 Three Kings,
+ * seed 743047, Fast feet, target 35 s, bot 32.9 s (3★, pays the crystals); 2026-09-28 → level 46
+ * River Gate, seed 760996, Thin walls, target 70 s, bot 89.3 s (2★, gold only). Re-pick from the same
+ * sweep when a level is re-clocked: the row needs "3* by: fixed" for week A and "won" for week B.
+ * (Pre-v3 pair: 2026-10-05 / 2026-10-12 — level 37 now clocks 82.4 s against a 65 s target.)
  */
-const WEEK_A = '2026-10-05';
-const WEEK_B = '2026-10-12';
+const WEEK_A = '2026-09-21';
+const WEEK_B = '2026-09-28';
 
 const SHOTS = fileURLToPath(new URL('./__screenshots__/', import.meta.url));
 const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}${name}.png`, scale: 'css' });
@@ -106,8 +108,8 @@ test.describe('weekly challenge', () => {
     expect(info.challenge.weekKey).toBe(WEEK_A);
     expect(info.challenge.levelId).toBeGreaterThanOrEqual(33);
     expect(info.challenge.twist.id).not.toBe('plain');
-    // any day maps to its Monday
-    await page.evaluate(() => window.__towerclash.setWeekKey('2026-10-07'));
+    // any day maps to its Monday (the Wednesday of WEEK_A)
+    await page.evaluate(() => window.__towerclash.setWeekKey('2026-09-23'));
     expect((await weekly(page)).challenge.weekKey).toBe(WEEK_A);
     await tapRect(page, TAB_WEEKLY);
     await expect.poll(() => tab(page)).toBe('weekly');
@@ -168,7 +170,7 @@ test.describe('weekly challenge', () => {
     const result = (await page.evaluate(() => window.__towerclash.getResult()))!;
     const clockA = (await save(page)).weekly.best[WEEK_A]?.timeMs;
     test.info().annotations.push({ type: 'weekly', description: `${WEEK_A}: ${result.stars}★, clock ${clockA} ms, target ${info.challenge.targetMs} ms` });
-    expect(result.stars).toBe(3); // the reference player reaches the 25 s target at seed 80299 (22.15 s headless)
+    expect(result.stars).toBe(3); // the reference player reaches the 35 s target at seed 743047 (32.9 s headless)
     expect(result.coinsEarned).toBe(WEEKLY_REWARD.gold);
     expect(result.crystalsEarned).toBe(WEEKLY_REWARD.crystals);
     expect(result.achievements).toEqual([]);

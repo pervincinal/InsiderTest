@@ -59,8 +59,6 @@ const TIER1_COST = 60;
 const CAPACITY_PER_TIER = 0.05;
 const SLATE_COST = 80;
 const DUSK_COST = 150;
-// a level the "auto lose" helper loses within seconds on every seed (verified levels 12 and 16)
-const LOSING_LEVEL = 12;
 // src/sim/constants.ts — CONTINUE_REWIND_MS / CONTINUE_FREEZE_MS; a level + seed the "auto lose" helper loses
 // after the full rewind window (~27 s of sim time) so the continue really goes back 20 s (tests/ui/continue.test.ts)
 const CONTINUE_REWIND_MS = 20_000;

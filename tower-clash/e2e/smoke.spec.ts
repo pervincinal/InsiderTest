@@ -4,11 +4,12 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
 /*
- * Smoke: PWA files → title → level select (locks) → play level 1 (tutorial + manual stream) →
- * reference player wins → result (stars, coins) → next level → level select (level 2 unlocked,
- * level 3 locked) → pause menu (speed toggle) → save persisted. Everything is canvas-drawn, so the
- * test taps logical (720×1280) coordinates converted with `window.__towerclash.toClient` and reads
- * state via the debug surface.
+ * Smoke: PWA files → title → level select (locks) → play level 1 (tutorial + manual stream: select
+ * home → guide lines (rules v3) → link → the garrison holds) → reference player wins → result (stars,
+ * coins) → next level → level select (level 2 unlocked, level 3 locked) → pause menu (speed toggle) →
+ * save persisted; plus the rules v3 blocked tap on level 5. Everything is canvas-drawn, so the test
+ * taps logical (720×1280) coordinates converted with `window.__towerclash.toClient` and reads state
+ * via the debug surface (and a few canvas pixels for the guide lines, which the sim knows nothing of).
  *
  * The spec deliberately imports nothing from src/: Node 22 strips types natively for ESM `.ts`
  * imports (parameter properties and JSON imports then fail to load), so the few hit regions it
@@ -55,6 +56,8 @@ interface LevelJson {
   star3: number;
   star2: number;
   towers: { id: string; x: number; y: number; owner: string }[];
+  /** Rules v3 (GDD §2.0b): wall / water polylines and rocks that block the straight lane between towers. */
+  obstacles?: { kind: string; points: { x: number; y: number }[] }[];
 }
 const LEVELS_DIR = new URL('../src/levels/', import.meta.url);
 const LEVEL_FILES = readdirSync(LEVELS_DIR).filter((f) => /^\d{3}-.*\.json$/.test(f)).sort();
@@ -87,7 +90,7 @@ const simTime = (page: Page) => page.evaluate(() => window.__towerclash.getState
 const levelId = (page: Page) => page.evaluate(() => window.__towerclash.getState()?.levelId ?? -1);
 const hint = (page: Page) => page.evaluate(() => window.__towerclash.getTutorialHint());
 const limitHint = (page: Page) => page.evaluate(() => window.__towerclash.getLimitHint());
-/** Active attack streams (rules v2 `state.links`), reduced to what the test asserts on. */
+/** Active attack streams (`state.links`, rules v2/v3), reduced to what the test asserts on. */
 const links = (page: Page) => page.evaluate(() => (window.__towerclash.getState()?.links ?? []).map((l) => ({ owner: l.owner, from: l.from, to: l.to })));
 /** The player's streams only (the bot runs its own at the same time). */
 const playerLinks = (page: Page) => links(page).then((ls) => ls.filter((l) => l.owner === 'player'));
@@ -112,6 +115,32 @@ const coins = (page: Page) => page.evaluate(() => window.__towerclash.getCoins()
 const language = (page: Page) => page.evaluate(() => window.__towerclash.getLanguage());
 const text = (page: Page, key: string) => page.evaluate((k) => window.__towerclash.getText(k), key);
 const boosters = (page: Page) => page.evaluate(() => window.__towerclash.getState()?.boosters ?? []);
+/** Ids of the lanes the sim built for the level (`state.roads`, rules v3: every clear straight pair, id `a-b` with a < b). */
+const laneIds = (page: Page) => page.evaluate(() => Object.keys(window.__towerclash.getState()?.roads ?? {}).sort());
+/** The logical point `t` of the way from tower `a` to tower `b`. */
+const along = (a: { x: number; y: number }, b: { x: number; y: number }, t: number) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+/**
+ * Mean RGBA of the 3×3 device pixels of the #game canvas around a logical point. The guide lines
+ * of rules v3 (§2.0b item 8) are pure rendering — the sim has no notion of them — so the test reads
+ * the canvas: a 2 px owner-coloured line at 30 % alpha shifts the colour under it by far more than
+ * the anti-aliasing noise of a still frame.
+ */
+const pixelAt = (page: Page, p: { x: number; y: number }) =>
+  page.evaluate(([x, y]) => {
+    const c = document.getElementById('game');
+    if (!(c instanceof HTMLCanvasElement)) throw new Error('#game is not a canvas');
+    const client = window.__towerclash.toClient(x, y);
+    const rect = c.getBoundingClientRect();
+    const px = Math.round((client.x - rect.left) * (c.width / rect.width));
+    const py = Math.round((client.y - rect.top) * (c.height / rect.height));
+    const d = c.getContext('2d')!.getImageData(px - 1, py - 1, 3, 3).data;
+    const sum = [0, 0, 0, 0];
+    for (let i = 0; i < d.length; i++) sum[i % 4]! += d[i]!;
+    return sum.map((v) => v / (d.length / 4));
+  }, [p.x, p.y] as const);
+const colourDistance = (a: number[], b: number[]) => a.reduce((acc, v, i) => acc + Math.abs(v - (b[i] ?? 0)), 0);
+/** Smallest colour change over the probe points since `before` (0 while nothing new is drawn there). */
+const GUIDE_LINE_MIN_SHIFT = 12;
 
 /** Stars by clear time, mirrors src/ui/save.ts starsFor (GDD §2.4). */
 function expectedStars(level: { star3: number; star2: number }, timeMs: number): number {
@@ -235,9 +264,9 @@ test.describe('Tower Clash smoke', () => {
     await page.waitForTimeout(300); // let the ring / arrow pulse once
     await lookShot(page, 'look3-tutorial');
 
-    // Rules v2 stream: tap the player tower ("home") then the neutral tower ("camp") — level 1's
+    // Rules v3 stream: tap the player tower ("home") then the neutral tower ("camp") — level 1's
     // lesson. Each tutorial hint must disappear on its matching action; the tap creates one link
-    // and units start marching.
+    // and units start marching while the garrison holds.
     const level1 = readLevel(LEVEL_FILES[0]!);
     expect(level1.id).toBe(1);
     const home = level1.towers.find((t) => t.id === 'home')!;
@@ -248,19 +277,41 @@ test.describe('Tower Clash smoke', () => {
     const garrisonBefore = await towerUnits(page, 'home');
     expect(garrisonBefore).toBeGreaterThan(0);
     expect(await playerLinks(page)).toEqual([]);
+    // Rules v3 (GDD §2.0b item 1): level 1 has no obstacles, so every pair is a straight lane.
+    expect(level1.obstacles ?? []).toEqual([]);
+    expect(await laneIds(page)).toEqual(['camp-foe', 'camp-home', 'foe-home']);
+    // (c0) guide lines (§2.0b item 8): selecting home draws a thin line to every tower it has a lane
+    //      to. Probe three points of the home → foe segment (only the guide line is ever drawn there:
+    //      the tutorial ring / arrow sit on home and camp, the stream below runs on home → camp).
+    const guideProbes = [0.35, 0.5, 0.65].map((t) => along(home, foe, t));
+    const guideBefore = await Promise.all(guideProbes.map((p) => pixelAt(page, p)));
+    const guideShift = async () => Math.min(...(await Promise.all(guideProbes.map(async (p, i) => colourDistance(await pixelAt(page, p), guideBefore[i]!)))));
     await tapAt(page, home.x, home.y);
     await expect.poll(() => hint(page), { message: 'first hint should clear once home is selected' }).toBe('Now tap the grey tower — the stream keeps flowing');
+    await expect.poll(guideShift, { message: 'selecting home must draw a guide line along the home → foe lane' }).toBeGreaterThanOrEqual(GUIDE_LINE_MIN_SHIFT);
     await tapAt(page, camp.x, camp.y);
     await expect.poll(() => hint(page), { message: 'second hint should clear after the link' }).toBeNull();
     await expect.poll(() => playerLinks(page), { message: 'the tap should create exactly one player stream' }).toEqual([{ owner: 'player', from: 'home', to: 'camp' }]);
-    await expect.poll(() => towerUnits(page, 'home'), { message: 'home garrison should drain through the stream' }).toBeLessThan(garrisonBefore);
     await expect
       .poll(() => page.evaluate(() => window.__towerclash.getState()?.units.length ?? 0), {
-        message: 'units should be marching on the road',
+        message: 'units should be marching on the lane',
       })
       .toBeGreaterThan(0);
+    // (c0b) the stream carries production, not garrison (§2.0b items 4–5, "say dəyişmir"): over the
+    //       next 2 s of sim time the linked home neither drains nor grows. (The foe's first units
+    //       cannot land on home before ≈ 8 s of sim time: 1 s emit + 760 px / 120 px/s.)
+    //       (`garrisonBefore` was read before the taps: at ×1 the tower grows +1/s until the link
+    //       lands, so the hold is measured from the linked garrison, not from that earlier value.)
+    const held = await page.evaluate(() => {
+      const s = window.__towerclash.getState()!;
+      return { units: s.towers['home']!.units, time: s.time };
+    });
+    expect(held.units).toBeGreaterThanOrEqual(garrisonBefore);
+    await expect.poll(() => simTime(page)).toBeGreaterThanOrEqual(held.time + 2000);
+    expect(await towerUnits(page, 'home'), 'a streaming tower keeps its garrison: no drain, no growth').toBe(held.units);
+    expect(await playerLinks(page)).toEqual([{ owner: 'player', from: 'home', to: 'camp' }]);
 
-    // (c1) link limit: home is L1 (one stream), so a second target ("foe", road-connected) is refused
+    // (c1) link limit: home is L1 (one stream), so a second target ("foe", lane-connected) is refused
     //      with the hint bubble and no second link.
     expect(await limitHint(page)).toBeNull();
     await tapAt(page, foe.x, foe.y);
@@ -386,6 +437,48 @@ test.describe('Tower Clash smoke', () => {
     // whole flow must be free of console errors and uncaught exceptions
     expect(pageErrors).toEqual([]);
     expect(consoleErrors).toEqual([]);
+  });
+
+  test('rules v3: a tap on a tower behind a wall is refused with the blocked hint; a clear lane links (level 5)', async ({ page }) => {
+    const pageErrors: string[] = [];
+    page.on('pageerror', (err) => pageErrors.push(String(err)));
+    // level 5 "Around the Wall": a wall at x = 360 between home (bottom centre) and foe (top centre);
+    // west1 / east1 are clear of it. The level is past the tutorial band, so no hint interferes.
+    const level5 = readLevel(LEVEL_FILES[4]!);
+    expect(level5.id).toBe(5);
+    const home = level5.towers.find((t) => t.id === 'home')!;
+    const foe = level5.towers.find((t) => t.id === 'foe')!;
+    const west1 = level5.towers.find((t) => t.id === 'west1')!;
+    expect(home.owner).toBe('player');
+    expect(home.x).toBe(foe.x); // straight up, through the wall
+    const wall = (level5.obstacles ?? []).find((o) => o.kind === 'wall' && o.points.every((p) => p.x === home.x))!;
+    expect(wall, 'level 5 authors a wall on the home → foe line (src/levels/005-*.json)').toBeTruthy();
+    expect(Math.min(...wall.points.map((p) => p.y))).toBeGreaterThan(foe.y);
+    expect(Math.max(...wall.points.map((p) => p.y))).toBeLessThan(home.y);
+
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.__towerclash?.loadLevel === 'function');
+    expect(await page.evaluate(() => window.__towerclash.loadLevel(5, 1))).toBe(true);
+    await expect.poll(() => screen(page)).toBe('play');
+    expect(await levelId(page)).toBe(5);
+    // the sim built no lane through the wall (§2.0b items 1–2) but one to the clear neighbour
+    const lanes = await laneIds(page);
+    expect(lanes, 'no lane home → foe: the wall blocks the straight line').not.toContain('foe-home');
+    expect(lanes, 'home → west1 is clear').toContain('home-west1');
+
+    // tap home, then foe: shake + `hint.blocked`, no link; the hint fades and home stays selected
+    await tapAt(page, home.x, home.y);
+    await page.waitForTimeout(150);
+    expect(await limitHint(page)).toBeNull();
+    await tapAt(page, foe.x, foe.y);
+    await expect.poll(() => limitHint(page), { message: 'a tap on a tower behind the wall must raise the blocked hint' }).toBe(await text(page, 'hint.blocked'));
+    expect(await text(page, 'hint.blocked')).not.toBe('hint.blocked');
+    expect(await playerLinks(page)).toEqual([]);
+    await expect.poll(() => limitHint(page), { message: 'the hint fades on its own' }).toBeNull();
+    await tapAt(page, west1.x, west1.y);
+    await expect.poll(() => playerLinks(page), { message: 'home is still selected: the clear target links at once' }).toEqual([{ owner: 'player', from: 'home', to: 'west1' }]);
+    expect(await limitHint(page)).toBeNull();
+    expect(pageErrors).toEqual([]);
   });
 
   test('language: detected from the browser on first run, AZ picked in settings changes the title chip, hints and persists', async ({ page }) => {

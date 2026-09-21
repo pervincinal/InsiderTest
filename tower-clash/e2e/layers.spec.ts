@@ -25,20 +25,11 @@ const PAUSE_RESUME = { x: 210, y: 566, w: 300, h: 76 };
 // src/sim/constants.ts — MAP_W / MAP_H
 const MAP = { w: 720, h: 1280 };
 
-interface CanvasStats {
-  id: string;
-  w: number;
-  h: number;
-  cssW: string;
-  cssH: string;
-  /** Sampled pixels with alpha > 0 (always all of them on the opaque ground layer). */
-  opaque: number;
-  /** Sampled pixels that are not pure black (the opaque ground layer's "blank" colour). */
-  nonBlack: number;
-  sampled: number;
-}
-
-/** Pixel statistics of one canvas (every 7th pixel — enough to tell blank from painted, fast enough per frame). */
+/**
+ * Pixel statistics of one canvas (every 7th pixel — enough to tell blank from painted, fast enough per
+ * frame): `opaque` = sampled pixels with alpha > 0 (always all of them on the opaque ground layer),
+ * `nonBlack` = sampled pixels that are not pure black (the opaque ground layer's "blank" colour).
+ */
 const stats = (page: Page, id: string) =>
   page.evaluate((cid) => {
     const c = document.getElementById(cid);
