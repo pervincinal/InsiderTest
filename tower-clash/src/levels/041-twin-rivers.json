@@ -19,13 +19,13 @@
     {"id": "w", "x": 150, "y": 1020, "owner": "neutral", "units": 4},
     {"id": "e", "x": 570, "y": 1020, "owner": "neutral", "units": 4},
     {"id": "mid", "x": 360, "y": 900, "owner": "neutral", "units": 8},
-    {"id": "nw", "x": 150, "y": 800, "owner": "neutral", "units": 12},
-    {"id": "ne", "x": 570, "y": 800, "owner": "neutral", "units": 12},
-    {"id": "ford", "x": 360, "y": 640, "owner": "neutral", "units": 8},
-    {"id": "red", "x": 150, "y": 560, "owner": "enemy1", "units": 10, "level": 1, "kind": "barracks"},
-    {"id": "green", "x": 570, "y": 560, "owner": "enemy2", "units": 10, "level": 1, "kind": "barracks"},
-    {"id": "redkeep", "x": 150, "y": 340, "owner": "enemy1", "units": 8, "level": 1, "kind": "barracks"},
-    {"id": "greenkeep", "x": 570, "y": 340, "owner": "enemy2", "units": 8, "level": 1, "kind": "barracks"}
+    {"id": "nw", "x": 150, "y": 800, "owner": "neutral", "units": 10},
+    {"id": "ne", "x": 570, "y": 800, "owner": "neutral", "units": 10},
+    {"id": "ford", "x": 360, "y": 640, "owner": "neutral", "units": 6},
+    {"id": "red", "x": 150, "y": 560, "owner": "enemy1", "units": 8, "level": 1, "kind": "barracks"},
+    {"id": "green", "x": 570, "y": 560, "owner": "enemy2", "units": 8, "level": 1, "kind": "barracks"},
+    {"id": "redkeep", "x": 150, "y": 340, "owner": "enemy1", "units": 8, "level": 1, "kind": "artillery"},
+    {"id": "greenkeep", "x": 570, "y": 340, "owner": "enemy2", "units": 8, "level": 1, "kind": "artillery"}
   ],
   "roads": [
     {"a": "home", "b": "w"},
