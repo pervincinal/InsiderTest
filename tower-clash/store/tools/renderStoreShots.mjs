@@ -77,9 +77,12 @@ const DO_GOOGLE = flag('google') || flag('all') || !flag('apple');
 const IAP_REVIEW_SET = DO_APPLE ? 'apple-6.7' : 'google';
 
 /**
- * Order matters: index N becomes <lang>/0N.png (STORE_LISTING.md §1.3 retake list, v0.4.0 set).
- * `capture` names the frame routine in `captureRaw`; `appleOnly` frames are skipped in the Google
- * set (8 phone screenshots max there, 10 on the App Store).
+ * Order matters: index N becomes <lang>/0N.png (STORE_LISTING.md §1.3 retake list, v0.4.0 set,
+ * re-captured under Rules v3 — GDD §2.0b: no roads, straight lanes, walls / rivers / boulders and
+ * point mines on the terrain). `capture` names the frame routine in `captureRaw`; `appleOnly`
+ * frames are skipped in the Google set (8 phone screenshots max there, 10 on the App Store).
+ * Level names as of the v3 re-authoring: 1 "First Taps", 4 "Build Up", 5 "Around the Wall"
+ * (was "Two Roads"), 9 "Stone Walls", 15 "The Citadel".
  */
 const SHOTS = [
   { name: 'title', capture: 'title',
@@ -104,8 +107,14 @@ const SHOTS = [
 /** Frames of one set, in order (the Google set drops the App-Store-only extras). */
 const shotsFor = (set) => SHOTS.filter((s) => !s.appleOnly || set.exact);
 
-/** Level layouts the frame routines tap (logical 720×1280 tower positions, from src/levels/*.json). */
+/**
+ * Level layouts the frame routines tap (logical 720×1280 tower positions, from src/levels/*.json).
+ * Level 5 "Around the Wall" (v3): a vertical stone wall x = 360, y 420…980 splits the map; the home
+ * tower at the bottom sees both first-row towers past the wall's end, so both taps open a lane.
+ */
 const LEVEL_5 = { home: { x: 360, y: 1140 }, west1: { x: 150, y: 860 }, east1: { x: 570, y: 860 } };
+/** Result frame: level and seeds on which the reference player wins with three stars (see `FRAMES.result`). */
+const RESULT_LEVEL = { id: 8, seeds: [14, 5, 11, 18, 3, 2], fastUntilMs: 20_000 };
 
 /** Uncaptioned IAP review frame (Apple): the shop's Crystals tab, written by the first set rendered. */
 const IAP_REVIEW = { file: join(STORE, 'iap-review', 'shop-crystals.png'), tab: 'crystals' };
@@ -238,7 +247,7 @@ async function startPreview() {
 const FRAME_CONDITIONS = () => {
   window.__storeShotCondition = (st, key) => {
     switch (key) {
-      case 'bothStreams': // a player ribbon and an enemy ribbon on the roads at the same moment
+      case 'bothStreams': // a player ribbon and an enemy ribbon on their straight lanes at the same moment
         return st.links.some((l) => l.owner === 'player') && st.links.some((l) => l.owner !== 'player');
       case 'homeL2': // the player's home tower has just auto-upgraded
         return (st.towers.home?.level ?? 1) >= 2;
@@ -339,18 +348,20 @@ async function playUntil(page, id, untilMs) {
 }
 
 /**
- * Win `id` with the reference player. The result screen freezes the HUD as it was at the moment of
- * victory, so the last seconds run at ×1 (no "×10" tag) after a fast-forward to `fastUntilMs`.
+ * Win `id` with the reference player at three stars, trying `seeds` in order (the game loop is a
+ * fixed-step accumulator, so a seed reproduces the headless `playtest` result). The result screen
+ * freezes the HUD as it was at the moment of victory, so the last seconds run at ×1 (no "×10" tag)
+ * after a fast-forward to `fastUntilMs`.
  */
-async function playToResult(page, id, fastUntilMs) {
+async function playToResult(page, id, seeds, fastUntilMs) {
   let result = null;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    await page.evaluate((lv) => {
+  for (const seed of seeds) {
+    await page.evaluate(({ lv, sd }) => {
       window.__towerclash.setSpeed(1);
-      window.__towerclash.loadLevel(lv);
+      window.__towerclash.loadLevel(lv, sd);
       window.__towerclash.setSpeed(10);
       window.__towerclash.autoplay();
-    }, id);
+    }, { lv: id, sd: seed });
     let deadline = Date.now() + 60_000;
     while (Date.now() < deadline && (await screen(page)) === 'play' && (await simTime(page)) < fastUntilMs) await sleep(100);
     await page.evaluate(() => window.__towerclash.setSpeed(1));
@@ -359,10 +370,10 @@ async function playToResult(page, id, fastUntilMs) {
     deadline = Date.now() + 240_000;
     while (Date.now() < deadline && (await screen(page)) !== 'result') await sleep(150);
     result = await page.evaluate(() => window.__towerclash.getResult());
-    if (result?.outcome === 'won') break;
-    console.log(`level ${id}: bot got ${JSON.stringify(result)}, retrying (timing at ×10 varies between runs)`);
+    if (result?.outcome === 'won' && result.stars === 3) break;
+    console.log(`level ${id} seed ${seed}: bot got ${JSON.stringify(result)}, trying the next seed`);
   }
-  if (result?.outcome !== 'won') throw new Error(`level ${id}: expected a win, got ${JSON.stringify(result)}`);
+  if (result?.outcome !== 'won' || result.stars !== 3) throw new Error(`level ${id}: expected a 3-star win, got ${JSON.stringify(result)}`);
   await page.waitForTimeout(1800); // stars pop in one by one; capture particles fade
   return result;
 }
@@ -435,7 +446,8 @@ const FRAMES = {
     if (!hint) throw new Error('level 1: tutorial hint not visible on a fresh save');
   },
 
-  // level 5 "Two Roads": a player ribbon and an enemy ribbon on the roads at the same moment
+  // level 5 "Around the Wall": a blue player ribbon and a coral enemy ribbon on straight lanes at the
+  // same moment, either side of the stone wall that splits the map (no roads under them — rules v3)
   streams: (page) =>
     withSeeds('level 5 streams', 4, (seed) =>
       playWhile(page, 5, 'bothStreams', { seed, speed: 4, maxMs: 60_000 }),
@@ -447,7 +459,8 @@ const FRAMES = {
     if (!ok) throw new Error('level 4: home did not reach L2');
   },
 
-  // level 5, manual: one stream from the L1 home, then a second target → "L2 needed for 2 streams" (tower shakes)
+  // level 5, manual: one stream from the L1 home (guide lines show the reachable towers, the wall blocks
+  // the rest), then a second target → "L2 needed for 2 streams" (tower shakes)
   limitHint: async (page) => {
     await page.evaluate(() => {
       window.__towerclash.setSpeed(1);
@@ -459,14 +472,15 @@ const FRAMES = {
     await page.waitForTimeout(120);
     await tapAt(page, LEVEL_5.west1);
     await page.waitForFunction(() => (window.__towerclash.getState()?.links ?? []).some((l) => l.owner === 'player'));
-    await page.waitForTimeout(350); // first units on the road
+    await page.waitForTimeout(350); // first units on the lane
     await tapAt(page, LEVEL_5.east1);
     await page.waitForFunction(() => window.__towerclash.getLimitHint() !== null, null, { polling: 'raf', timeout: 5000 });
     await page.waitForTimeout(120); // bubble fully faded in, tower mid-shake
     if ((await page.evaluate(() => window.__towerclash.getLimitHint())) === null) throw new Error('level 5: limit hint gone before the capture');
   },
 
-  // level 9 "Stone Walls": mid-battle with the player streaming into the fortress ("keep"). Preferred
+  // level 9 "Stone Walls": mid-battle with the player streaming into the fortress ("keep") past the
+  // stone wall on the west (v3 obstacle, the lane runs through the gap at its east end). Preferred
   // take: at the same moment the keep's counter-stream has a player tower (mid) under fire, so the
   // frame also shows the under-fire badge (enemy-coloured pill with the crossed-swords pip; the sim
   // holds it for UNDER_FIRE_MS = 1.5 s after every landing). Polled at ×4 so the 50 ms poll sees the
@@ -477,14 +491,20 @@ const FRAMES = {
     if (!hit) await withSeeds('level 9 fortress', 4, (seed) => playWhile(page, 9, 'playerToKeep', opts(seed)));
   },
 
-  // level 15 "The Citadel" (App Store extra): artillery mid-battle
+  // level 15 "The Citadel" (App Store extra): artillery mid-battle; the two wall segments at y = 400
+  // leave a gap in the middle — the "wall gap" frame the listing asks for (STORE_LISTING.md §1.3)
   citadel: async (page) => {
     await playUntil(page, 15, 30_000);
   },
 
-  // the reference player wins level 1: result card with 3 stars
+  // the reference player wins level 8 "Two Bases" with 3 stars: result card, three gold stars.
+  // Rules v3 moved level 1's clock under the bot (it wins "First Taps" at ≈ 32–35 s against a 30 s
+  // 3★ clock — star3 is 0.9 × its median by design), so the frame uses the earliest level where the
+  // bot 3-stars on a known seed with margin: level 8, seeds 14 / 5 / 11 / 18 win at 30.1–30.6 s
+  // against 35 s (`npx tsx` over `runHeadless`, 2026-09-21). The fresh save still shows the
+  // "First victory" achievement toast and the first coins, as the level 1 frame did.
   result: async (page, ctx) => {
-    ctx.result = await playToResult(page, 1, 12_000);
+    ctx.result = await playToResult(page, RESULT_LEVEL.id, RESULT_LEVEL.seeds, RESULT_LEVEL.fastUntilMs);
   },
 
   // shop on the seeded mid-game save (the shop is a full screen, so nothing from the result overlays it)
@@ -534,7 +554,7 @@ async function captureRaw(browser, set, lang) {
     if (w !== set.out.w || h !== set.out.h) throw new Error(`${out(i)} is ${w}×${h}, expected ${set.out.w}×${set.out.h}`);
     writeFileSync(out(i), buf);
   }
-  console.log(`[${tag}] raw frames written (level 1 result: ${result.stars} stars, ${result.coinsEarned} coins)`);
+  console.log(`[${tag}] raw frames written (level ${RESULT_LEVEL.id} result: ${result.stars} stars, ${result.coinsEarned} coins)`);
   await page.context().close();
 }
 
@@ -753,8 +773,11 @@ const drawFeatureInPage = () => {
   const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
   const P = {
     water: '#5ec1e6', waterLight: '#8fd9f0', grass: '#8fd16a', grassLight: '#a3dd7d', bush: '#5ea94a',
-    cliff: '#e0c99a', cliffDark: '#b89b67', road: '#e8d9a8', text: '#1e2a44', selection: '#ffd23f',
-    player: '#3b82f6', playerDark: '#1d4ed8', enemy: '#ef4444', enemyDark: '#b91c1c', neutral: '#8a94a6', neutralDark: '#5b6b85',
+    cliff: '#e0c99a', cliffDark: '#b89b67', text: '#1e2a44', selection: '#ffd23f',
+    // rules v3 obstacles, from src/render/palette.ts (grass biome wall tones, rock, water, sparkle)
+    grassShade: '#5aa836', wallLit: '#e3d9c6', wallMid: '#b9ad99', wallShade: '#7f7566',
+    rock: '#d9d4c8', rockDark: '#a39c8c', river: '#5fc9e8', waterSparkle: 'rgba(232,251,255,0.8)', shadow: 'rgba(26,58,90,0.22)',
+    player: '#3b82f6', playerLit: '#6d9bff', playerDark: '#1d4ed8', enemy: '#ef4444', enemyDark: '#b91c1c', neutral: '#8a94a6', neutralDark: '#5b6b85',
     crown: '#facc15', crownEdge: '#ca8a04', crownDot: '#fde68a',
   };
 
@@ -800,33 +823,121 @@ const drawFeatureInPage = () => {
     ctx.fill();
   }
 
-  // roads between the three towers
+  // three towers on the island; v3: no roads — a stone wall with a gap, a river and a boulder are
+  // the obstacles, and streams are straight owner-coloured ribbons between towers that see each other
   const T = [
     { x: 150, y: 160, n: 24, fill: P.player, edge: P.playerDark, crown: true },
     { x: 890, y: 130, n: 18, fill: P.enemy, edge: P.enemyDark, flag: true },
     { x: 800, y: 320, n: 7, fill: P.neutral, edge: P.neutralDark },
   ];
-  ctx.strokeStyle = P.road;
-  ctx.lineWidth = 22;
+  const poly = (pts) => {
+    ctx.beginPath();
+    pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+  };
   ctx.lineCap = 'round';
-  for (const [a, b] of [[0, 1], [0, 2], [1, 2]]) {
-    ctx.beginPath();
-    ctx.moveTo(T[a].x, T[a].y);
-    ctx.lineTo(T[b].x, T[b].y);
-    ctx.stroke();
+  ctx.lineJoin = 'round';
+
+  // river (terrain.ts drawRiver): dark bank lip, pale wet rim, water body, lighter centre, ripple line
+  const river = [[40, 285], [150, 318], [232, 400], [285, 452]];
+  const rw = 26;
+  poly(river); ctx.strokeStyle = P.grassShade; ctx.lineWidth = rw + 8; ctx.stroke();
+  poly(river); ctx.strokeStyle = P.waterLight; ctx.lineWidth = rw + 2; ctx.stroke();
+  poly(river); ctx.strokeStyle = P.river; ctx.lineWidth = rw - 2; ctx.stroke();
+  poly(river); ctx.strokeStyle = P.waterLight; ctx.globalAlpha = 0.45; ctx.lineWidth = rw * 0.45; ctx.stroke();
+  ctx.globalAlpha = 0.8; ctx.strokeStyle = P.waterSparkle; ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let i = 1; i < river.length; i++) {
+    const [ax, ay] = river[i - 1]; const [bx, by] = river[i];
+    const len = Math.hypot(bx - ax, by - ay); const tx = (bx - ax) / len; const ty = (by - ay) / len;
+    for (let d = 6; d <= len - 6; d += 4) {
+      const sn = Math.sin((d / 22) * Math.PI * 2) * 2.5 - rw * 0.14;
+      const x = ax + tx * d - ty * sn; const y = ay + ty * d + tx * sn;
+      if (i === 1 && d === 6) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
   }
-  // marching dots (player blue heading to the neutral tower)
-  for (let i = 1; i <= 6; i++) {
-    const t = 0.25 + i * 0.07;
-    const x = T[0].x + (T[2].x - T[0].x) * t;
-    const y = T[0].y + (T[2].y - T[0].y) * t;
-    ctx.fillStyle = P.player;
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // stone wall with a gap (terrain.ts drawWall): shadow, ink contour, shaded side face, lit top face,
+  // cap line, lit edge and battlement merlons — the enemy's stream to the neutral tower runs through the gap
+  const ww = 24;
+  const wallSegs = [[[640, 205], [790, 222]], [[850, 230], [975, 246]]];
+  for (const seg of wallSegs) {
+    poly(seg); ctx.save(); ctx.translate(4, 8); ctx.globalAlpha = 0.55; ctx.strokeStyle = P.shadow; ctx.lineWidth = ww + 4; ctx.stroke(); ctx.restore();
+    poly(seg); ctx.save(); ctx.translate(0, 4); ctx.strokeStyle = 'rgba(30,42,68,0.4)'; ctx.lineWidth = ww + 3; ctx.stroke();
+    ctx.strokeStyle = P.wallShade; ctx.lineWidth = ww; ctx.stroke(); ctx.restore();
+    poly(seg); ctx.strokeStyle = P.wallMid; ctx.lineWidth = ww; ctx.stroke();
+    poly(seg); ctx.strokeStyle = 'rgba(70,62,54,0.7)'; ctx.lineWidth = 2; ctx.stroke();
+    const [[ax, ay], [bx, by]] = seg;
+    const len = Math.hypot(bx - ax, by - ay); const tx = (bx - ax) / len; const ty = (by - ay) / len;
+    const nx = ty; const ny = -tx; // lit (upper-left facing) side
+    const half = ww / 2;
+    ctx.strokeStyle = 'rgba(227,217,198,0.85)'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(ax + nx * (half - 2), ay + ny * (half - 2)); ctx.lineTo(bx + nx * (half - 2), by + ny * (half - 2)); ctx.stroke();
+    const pitch = 16; const count = Math.max(1, Math.floor(len / pitch)); const start = (len - (count - 1) * pitch) / 2;
+    for (let k = 0; k < count; k++) {
+      const d = start + k * pitch;
+      ctx.save(); ctx.translate(ax + tx * d + nx * (half - 1), ay + ty * d + ny * (half - 1)); ctx.rotate(Math.atan2(ty, tx));
+      ctx.fillStyle = P.wallLit; ctx.fillRect(-3.5, -5, 7, 6);
+      ctx.strokeStyle = 'rgba(30,42,68,0.35)'; ctx.lineWidth = 1; ctx.strokeRect(-3.5, -5, 7, 6);
+      ctx.restore();
+    }
+  }
+
+  // boulder (terrain.ts drawRock look): ground shadow, shaded base, lit top facet
+  const rock = (x, y, r) => {
+    ctx.fillStyle = P.shadow;
+    ctx.beginPath(); ctx.ellipse(x + 6, y + r * 0.55, r * 1.15, r * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = P.rockDark;
+    ctx.beginPath(); ctx.moveTo(x - r, y + r * 0.35); ctx.quadraticCurveTo(x - r * 0.9, y - r * 0.8, x - r * 0.2, y - r);
+    ctx.quadraticCurveTo(x + r * 0.7, y - r * 1.05, x + r, y - r * 0.1); ctx.quadraticCurveTo(x + r * 0.9, y + r * 0.6, x, y + r * 0.62);
+    ctx.quadraticCurveTo(x - r * 0.6, y + r * 0.62, x - r, y + r * 0.35); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(30,42,68,0.35)'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = P.rock;
+    ctx.beginPath(); ctx.moveTo(x - r * 0.75, y + r * 0.05); ctx.quadraticCurveTo(x - r * 0.7, y - r * 0.7, x - r * 0.15, y - r * 0.82);
+    ctx.quadraticCurveTo(x + r * 0.45, y - r * 0.85, x + r * 0.6, y - r * 0.3); ctx.quadraticCurveTo(x + r * 0.1, y - r * 0.1, x - r * 0.75, y + r * 0.05); ctx.closePath(); ctx.fill();
+  };
+  rock(735, 425, 30);
+  rock(560, 90, 18);
+
+  // guide line (rules v3 §2.0b.8): the player's tower can see the enemy keep — thin, 30 % owner colour
+  ctx.save(); ctx.globalAlpha = 0.3; ctx.strokeStyle = P.player; ctx.lineWidth = 3; ctx.setLineDash([10, 8]);
+  ctx.beginPath(); ctx.moveTo(T[0].x + 60, T[0].y - 2); ctx.lineTo(T[1].x - 60, T[1].y + 2); ctx.stroke(); ctx.restore();
+
+  // straight stream ribbons (draw.ts drawLinks): translucent owner body, paper chevrons marching to the
+  // target, arrowhead at the target end; the player's has an ink outline so it reads first
+  const R = 54;
+  const ribbon = (a, b, body, mine) => {
+    const len = Math.hypot(b.x - a.x, b.y - a.y); const dx = (b.x - a.x) / len; const dy = (b.y - a.y) / len;
+    const nx = -dy; const ny = dx;
+    const s0 = R + 12; const s1 = len - R - 16;
+    const at = (s) => ({ x: a.x + dx * s, y: a.y + dy * s });
+    const p0 = at(s0); const p1 = at(s1);
+    if (mine) { ctx.globalAlpha = 0.6; ctx.strokeStyle = P.text; ctx.lineWidth = 14; ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke(); }
+    ctx.globalAlpha = mine ? 0.72 : 0.55; ctx.strokeStyle = body; ctx.lineWidth = 12;
+    ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
+    ctx.globalAlpha = mine ? 0.9 : 0.75; ctx.strokeStyle = '#fffaf0'; ctx.lineWidth = 2.6;
     ctx.beginPath();
-    ctx.arc(x, y, 7, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = P.playerDark;
-    ctx.lineWidth = 2;
+    for (let sp = s0 + 10; sp < s1 - 8; sp += 26) {
+      const p = at(sp);
+      ctx.moveTo(p.x - dx * 3.5 + nx * 4, p.y - dy * 3.5 + ny * 4); ctx.lineTo(p.x + dx * 3, p.y + dy * 3); ctx.lineTo(p.x - dx * 3.5 - nx * 4, p.y - dy * 3.5 - ny * 4);
+    }
     ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.beginPath(); ctx.moveTo(p1.x + dx * 14, p1.y + dy * 14); ctx.lineTo(p1.x - dx * 6 + nx * 12, p1.y - dy * 6 + ny * 12);
+    ctx.lineTo(p1.x - dx, p1.y - dy); ctx.lineTo(p1.x - dx * 6 - nx * 12, p1.y - dy * 6 - ny * 12); ctx.closePath();
+    if (mine) { ctx.strokeStyle = P.text; ctx.lineWidth = 3; ctx.stroke(); }
+    ctx.fillStyle = body; ctx.fill();
+    return { dx, dy, at, s0, s1 };
+  };
+  ribbon(T[1], T[2], P.enemy, false); // enemy stream through the wall gap into the neutral tower
+  const blue = ribbon(T[0], T[2], P.playerLit, true); // player stream, straight across the island
+  // marching soldiers (as dots, the app-icon look) on the player's stream
+  for (let i = 1; i <= 6; i++) {
+    const p = blue.at(blue.s0 + 80 + i * 62);
+    ctx.fillStyle = P.player;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = P.playerDark; ctx.lineWidth = 2; ctx.stroke();
   }
 
   // towers in the app-icon look: filled disc, darker ring, bold count, crown for the player

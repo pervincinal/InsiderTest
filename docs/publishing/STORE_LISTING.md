@@ -134,11 +134,11 @@ Screenshot order and captions (same frames in every set; the `SHOTS` table in `r
 |---|---|---|---|---|---|---|
 | 01 | Title screen with the language chip (`01-title`) | Capture every tower | Bütün qüllələri tut | Захвати все башни | Tüm kuleleri ele geçir | done |
 | 02 | Level 1 "First Taps" on a fresh save, tutorial hint "Tap your tower" and the lesson banner (`02-level-01-tutorial`) | Tap, and the stream flows | Vur — axın davam edir | Нажми — поток пошёл | Dokun, akış başlasın | done |
-| 03 | Level 5 "Two Roads": a blue player stream and a red enemy stream on the roads at the same moment (`03-level-05-streams`) | Streams keep flowing | Axınlar dayanmır | Потоки не иссякают | Akışlar durmaz | done |
+| 03 | Level 5 "Around the Wall": a blue player stream and a red enemy stream on straight lanes either side of the wall (`03-level-05-streams`) | Streams keep flowing | Axınlar dayanmır | Потоки не иссякают | Akışlar durmaz | done |
 | 04 | Level 4 "Build-up": a player tower reaching 25 and turning into the L2 sprite (`04-level-04-upgrade`) | Fill up to level up | Doldur, səviyyə qalxsın | Наполни и прокачай | Doldur, seviye atla | done |
 | 05 | Level 5: the limit hint "L2 needed for 2 streams" on an L1 tower that already runs one stream (`05-level-05-limit-hint`) | Bigger towers, more streams | Böyük qüllə, çox axın | Выше башня — больше потоков | Büyük kule, çok akış | done |
 | 06 | Level 9 "Stone Walls" (first fortress), player stream into the fortress (`06-level-09-fortress`) | Storm the fortress | Qalanı ələ keçir | Штурмуй крепость | Kaleyi fethet | done |
-| 07 | Result screen, 3 stars (`07-result-win`) | Three-star every level | Hər səviyyədə üç ulduz | Везде по три звезды | Her bölümde üç yıldız | done |
+| 07 | Result screen, 3 stars — a level 8 "Two Bases" win (level 1 cannot be 3-starred by the reference line under v3) (`07-result-win`) | Three-star every level | Hər səviyyədə üç ulduz | Везде по три звезды | Her bölümde üç yıldız | done |
 | 08 | Shop, **Upgrades** tab (five Commander tracks, gold prices, seeded mid-game save) (`08-shop-upgrades`) | Boost your commander | Komandirini gücləndir | Прокачай командира | Komutanını güçlendir | done |
 | 09 | Level 15 (artillery citadel) — **App Store sets only** (`09-level-15-citadel`) | Silence the guns | Topları susdur | Заглуши пушки (Apple sets are EN only) | Topları sustur (Apple sets are EN only) | done (Apple 6.7" / 6.5" only; not in the Google set, which stays at 8) |
 
@@ -187,7 +187,7 @@ App Store screenshots (exact device sizes, rendered by `node store/tools/renderS
 | iPhone 6.7" | 1290×2796 | `tower-clash/store/screenshots/apple-6.7/en/01..09.png` (v0.4.0 retake, `577b894`) |
 | iPhone 6.5" | 1284×2778 | `tower-clash/store/screenshots/apple-6.5/en/01..09.png` (v0.4.0 retake, `577b894`) |
 
-Same frames and captions as the Google set (English only — Azerbaijani is not an App Store locale), plus the App-Store-only frame 09 (level 15 artillery citadel, "Silence the guns"), rendered at the exact device sizes by `--apple`; the set is current with rules v2 (re-render after Rules v3 — it shows roads) and ready to upload once retaken (9 of the 10 allowed). iPad screenshots are not needed if the app is marked iPhone-only in App Store Connect (recommended; the game is portrait phone-first).
+Same frames and captions as the Google set (English only — Azerbaijani is not an App Store locale), plus the App-Store-only frame 09 (level 15 artillery citadel, "Silence the guns"), rendered at the exact device sizes by `--apple`; the set was re-rendered for Rules v3 on 2026-09-21 (walls, fords, straight ribbons) and is ready to upload (9 of the 10 allowed). iPad screenshots are not needed if the app is marked iPhone-only in App Store Connect (recommended; the game is portrait phone-first).
 
 Review notes for App Review (paste into "Notes"): *Single-player offline game, no account needed. In-app purchases are one-time products handled by StoreKit through RevenueCat; "Restore Purchases" is in the shop screen. Ads are Google AdMob; the app never requests App Tracking Transparency (no `NSUserTrackingUsageDescription` in Info.plist) and always requests non-personalised ads on iOS, so the IDFA is not used — App Privacy "Tracking" is answered No (see §6.4). Sandbox tester: none required — all content is available without purchase.*
 
