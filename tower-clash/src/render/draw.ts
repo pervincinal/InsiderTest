@@ -809,7 +809,7 @@ export function drawGame(ctx: CanvasRenderingContext2D, state: GameState, view: 
     ctx.clearRect(0, 0, view.cssW, view.cssH);
   } else {
     ctx.fillStyle = letterbox;
-    ctx.fillRect(0, 0, view.cssW, view.cssH);
+    ctx.fillRect(0, 0, view.cssW + 1, view.cssH + 1); // +1: cover the rounded-up last pixel column / row (layers.ts)
   }
 
   ctx.save();

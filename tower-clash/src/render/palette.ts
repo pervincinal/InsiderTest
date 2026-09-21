@@ -374,6 +374,16 @@ export function loadThemes(): Promise<LazyThemes> {
   return lazyThemesPromise;
 }
 
+/** True for a cosmetic theme id that lives in the lazy chunk (unknown ids and the default are eager). */
+export function isLazyTheme(id: string | undefined): boolean {
+  return id !== undefined && id !== 'theme.default' && (THEME_IDS as readonly string[]).includes(id);
+}
+
+/** True once the cosmetic themes chunk is in (synchronous check for the level-start preload). */
+export function themesLoaded(): boolean {
+  return lazyThemes !== null;
+}
+
 /**
  * Theme for a sprite id; unknown / undefined ids give the untinted default, and so does a cosmetic
  * id until its chunk has loaded (the call starts the download; draw time backs off after a failure).

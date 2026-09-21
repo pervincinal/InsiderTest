@@ -106,7 +106,7 @@ export function beginFrame(view: View, pal: Palette, letterbox: string = pal.let
   const ctx = view.ctx;
   applyDeviceTransform(view);
   ctx.fillStyle = letterbox;
-  ctx.fillRect(0, 0, view.cssW, view.cssH);
+  ctx.fillRect(0, 0, view.cssW + 1, view.cssH + 1); // +1: cover the rounded-up last pixel column / row (layers.ts)
   ctx.save();
   applyTransform(view);
   clipToMap(view);

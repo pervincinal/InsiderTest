@@ -485,61 +485,6 @@ export function drawCoin(ctx: CanvasRenderingContext2D, pal: Palette, cx: number
   ctx.restore();
 }
 
-/** Clay padlock centred at (cx, cy); `size` is the body width. */
-export function drawLock(ctx: CanvasRenderingContext2D, color: string, cx: number, cy: number, size: number): void {
-  const bodyH = size * 0.78;
-  const bodyY = cy - bodyH / 2 + size * 0.22;
-  ctx.save();
-  ctx.strokeStyle = shade(color, -0.25);
-  ctx.lineWidth = Math.max(3, size * 0.15);
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.arc(cx, bodyY, size * 0.3, Math.PI, 0);
-  ctx.stroke();
-  roundRect(ctx, { x: cx - size / 2, y: bodyY + size * 0.06, w: size, h: bodyH }, size * 0.18);
-  ctx.fillStyle = shade(color, -0.3);
-  ctx.fill();
-  roundRect(ctx, { x: cx - size / 2, y: bodyY, w: size, h: bodyH }, size * 0.18);
-  ctx.fillStyle = color;
-  ctx.fill();
-  innerHighlight(ctx, { x: cx - size / 2, y: bodyY, w: size, h: bodyH }, size * 0.18, 0.5);
-  ctx.fillStyle = shade(color, -0.45);
-  ctx.beginPath();
-  ctx.arc(cx, bodyY + bodyH * 0.42, size * 0.12, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillRect(cx - size * 0.05, bodyY + bodyH * 0.45, size * 0.1, bodyH * 0.25);
-  ctx.restore();
-}
-
-/** Small triangular pennant on a pole (level-select "you are here", HUD flourishes). */
-export function drawFlag(ctx: CanvasRenderingContext2D, color: string, x: number, y: number, h: number, wave = 0): void {
-  ctx.save();
-  ctx.strokeStyle = '#6b5a45';
-  ctx.lineWidth = Math.max(2, h * 0.09);
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(x, y);
-  ctx.lineTo(x, y - h);
-  ctx.stroke();
-  const w = h * 0.7;
-  const fh = h * 0.42;
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.moveTo(x, y - h);
-  ctx.quadraticCurveTo(x + w * 0.5, y - h + wave, x + w, y - h + fh * 0.5 + wave);
-  ctx.quadraticCurveTo(x + w * 0.5, y - h + fh + wave, x, y - h + fh);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.3)';
-  ctx.beginPath();
-  ctx.moveTo(x, y - h);
-  ctx.quadraticCurveTo(x + w * 0.5, y - h + wave, x + w, y - h + fh * 0.5 + wave);
-  ctx.lineTo(x + w * 0.5, y - h + fh * 0.35 + wave * 0.5);
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
-}
-
 /** Ease-out with overshoot, for pop-in animations. t in 0..1. */
 export function easeOutBack(t: number): number {
   const c1 = 1.70158;

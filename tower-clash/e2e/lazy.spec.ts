@@ -20,6 +20,10 @@ const TITLE_PLAY = { x: 180, y: 640, w: 360, h: 96 };
 const LEVEL3_CHUNK = /\/assets\/003-[^/?]*\.js(\?.*)?$/;
 const MENU_CHUNK = /\/assets\/lazyScreens-[^/?]*\.js(\?.*)?$/;
 const SKIN_CHUNK = /\/assets\/skinShapes-[^/?]*\.js(\?.*)?$/;
+const THEMES_CHUNK = /\/assets\/themes-[^/?]*\.js(\?.*)?$/;
+const LEVEL15_CHUNK = /\/assets\/015-[^/?]*\.js(\?.*)?$/;
+// src/render/palette.ts — DEFAULT_THEME.letterbox (#1f8fc2): what the ground layer shows without the neon theme
+const DEFAULT_LETTERBOX = [31, 143, 194];
 
 const screen = (page: Page) => page.evaluate(() => window.__towerclash.getScreen());
 const simTime = (page: Page) => page.evaluate(() => window.__towerclash.getState()?.time ?? -1);
@@ -138,6 +142,37 @@ test.describe('lazy chunks under a failing network', () => {
     expect(await page.evaluate(() => window.__towerclash.loadLevel(2, 1))).toBe(true);
     expect((await fetched).ok()).toBe(true);
     await expect.poll(() => screen(page)).toBe('play');
+    expect(errors).toEqual([]);
+  });
+
+  test('PERF-5 preload: an equipped lazy roof + neon theme fetch their chunks at level start, before the first play frame, no throw', async ({ page }) => {
+    const requests: { url: string; at: number }[] = [];
+    page.on('request', (r) => {
+      const url = r.url();
+      if (SKIN_CHUNK.test(url) || THEMES_CHUNK.test(url) || LEVEL15_CHUNK.test(url)) requests.push({ url, at: Date.now() });
+    });
+    const errors = await boot(page, { version: 3, skins: { owned: ['roof_slate', 'theme_neon'], equipped: { roof: 'roof_slate', helmet: null, theme: 'theme_neon' } } });
+    // the idle preload may have warmed the chunks on the title already (the themed title asks for `themes`);
+    // whatever is left is requested by startLevel before the play screen exists
+    const started = Date.now();
+    const start = page.evaluate(() => window.__towerclash.loadLevel(15, 1));
+    await page.waitForFunction(() => window.__towerclash.getScreen() === 'play');
+    const playAt = Date.now();
+    expect(await start).toBe(true);
+    const ground = await page.evaluate(() => {
+      const g = document.getElementById('ground') as HTMLCanvasElement;
+      return Array.from(g.getContext('2d')!.getImageData(2, 2, 1, 1).data.slice(0, 3));
+    });
+    const skin = requests.find((r) => SKIN_CHUNK.test(r.url));
+    const themes = requests.find((r) => THEMES_CHUNK.test(r.url));
+    expect(skin, 'the roof material chunk was requested').toBeDefined();
+    expect(themes, 'the themes chunk was requested').toBeDefined();
+    expect(skin!.at, 'skin chunk requested before the first play frame').toBeLessThanOrEqual(playAt);
+    expect(themes!.at, 'themes chunk requested before the first play frame').toBeLessThanOrEqual(playAt);
+    expect(ground, 'the ground layer is already lit by the neon theme').not.toEqual(DEFAULT_LETTERBOX);
+    expect(playAt - started, 'the wait for the chunks is short').toBeLessThan(5_000);
+    expect(await page.evaluate(() => window.__towerclash.getState()?.levelId)).toBe(15);
+    await expect.poll(() => simTime(page)).toBeGreaterThan(200);
     expect(errors).toEqual([]);
   });
 });

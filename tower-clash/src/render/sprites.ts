@@ -101,6 +101,17 @@ export function isShapeSkin(id: string | undefined): id is string {
   return id !== undefined && (id.startsWith('tower.') || id.startsWith('unit.'));
 }
 
+/** True when drawing `skin` needs the lazy chunk: a cosmetic roof / helmet material or a silhouette (PERF-5 preload). */
+export function needsShapeSkins(skin: TowerSkin | undefined): boolean {
+  const lazy = (id: string | undefined): boolean => id !== undefined && (LAZY_ROOFS.has(id) || LAZY_HELMETS.has(id) || isShapeSkin(id));
+  return skin !== undefined && (lazy(skin.roof) || lazy(skin.helmet));
+}
+
+/** True once the silhouette / material chunk is in (synchronous check for the level-start preload). */
+export function shapeSkinsLoaded(): boolean {
+  return shapeSkins !== null;
+}
+
 /**
  * Load the silhouette skin drawers (idempotent; resolves immediately once loaded; a failed fetch
  * is retried on the next call — src/lazyChunk.ts re-fetches under a fresh URL).

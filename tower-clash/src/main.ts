@@ -6,6 +6,8 @@ import { getPalette } from './render/palette';
 import type { View } from './render/view';
 import { createView, resize, toClient } from './render/view';
 import { blankLayer, createLayers } from './render/layers';
+import { preloadCosmetics, warmCosmetics } from './render/cosmetics';
+import { equippedSkin } from './economy/entitlements';
 import { attachPointer } from './input/pointer';
 import type { PointerPoint } from './input/pointer';
 import type { SaveData } from './ui/save';
@@ -40,6 +42,17 @@ import { shownWeekStreak, weeklyDone, weeklyTargetDone, weeklyUnlocked } from '.
  */
 type LazyScreens = typeof import('./ui/lazyScreens');
 const LAZY_SCREENS_KEY = 'lazyScreens';
+/**
+ * Longest a level start waits for the equipped cosmetic chunks (PERF-5). They are small and usually
+ * warm (idle preload / shop), so the wait is normally nil; on a stalled connection the level starts
+ * with the default look and the skins land later, as before.
+ */
+const COSMETIC_WAIT_MS = 2000;
+
+/** `p`, or undefined once `ms` have passed — whichever comes first. */
+function within<T>(p: Promise<T>, ms: number): Promise<T | undefined> {
+  return Promise.race([p, new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), ms))]);
+}
 
 /** Test/debug surface for Playwright. */
 export interface TowerClashDebug {
@@ -346,7 +359,13 @@ class TowerClashApp implements App {
     whenIdle(() => {
       void this.loadLazy().catch(() => undefined);
       this.preloadLevel(LEVEL_META[currentLevelIndex(this.save, LEVEL_META)]?.id);
+      void this.preloadCosmetics(); // equipped skins / theme, so the title and the first PLAY are already skinned
     });
+  }
+
+  /** Start the lazy chunks the equipped skins draw with (PERF-5); null when they are all in. Never rejects. */
+  private preloadCosmetics(): Promise<void> | null {
+    return preloadCosmetics(equippedSkin(this.save));
   }
 
   /** Fetch a level chunk in the background (no-op for unknown ids; errors are swallowed, `startLevel` retries). */
@@ -401,6 +420,7 @@ class TowerClashApp implements App {
   }
 
   private openShop(tab: ShopTab, back: () => void): Promise<void> {
+    warmCosmetics(); // the shop previews every roof / helmet / theme: fetch both chunks alongside the screen
     return this.goLazy((L) => new L.ShopScreen(this, tab, back));
   }
 
@@ -438,22 +458,26 @@ class TowerClashApp implements App {
   /**
    * Start a level: at once when its chunk is in (the usual case — the current level is preloaded
    * after the first frame and the next one when a level starts), otherwise through the spinner.
+   * The cosmetic chunks the equipped skins need (PERF-5) are requested first and awaited alongside
+   * the level (bounded by `COSMETIC_WAIT_MS`), so the first frame is already skinned / themed.
    * A navigation or another start that happened meanwhile wins; a failed download returns to the
    * screen the player was on. Resolves true once the play screen is current.
    */
   startLevel(levelId: number, seed?: number, opts?: StartOptions): Promise<boolean> {
     const seq = ++this.startSeq;
+    if (levelIndex(levelId) < 0) return Promise.resolve(false);
+    const cosmetics = this.preloadCosmetics(); // kicked off before the level chunk
     const cached = getLoadedLevel(levelId);
-    if (cached) {
+    if (cached && !cosmetics) {
       this.enterLevel(cached, seed, opts);
       return Promise.resolve(true);
     }
-    if (levelIndex(levelId) < 0) return Promise.resolve(false);
     const from = this.current;
     const loading = new LoadingScreen(this);
     this.go(loading);
-    const start = loadLevel(levelId).then(
-      (level) => {
+    const levelChunk = cached ? Promise.resolve(cached) : loadLevel(levelId);
+    const start = Promise.all([levelChunk, cosmetics ? within(cosmetics, COSMETIC_WAIT_MS) : undefined]).then(
+      ([level]) => {
         if (seq !== this.startSeq || this.current !== loading) return null; // superseded
         if (!level) {
           this.current = from; // no enter(): the screen never left
@@ -517,7 +541,12 @@ class TowerClashApp implements App {
     const dt = this.lastFrame ? now - this.lastFrame : 0;
     this.lastFrame = now;
     this.current.update?.(dt, now);
-    if (this.current.name !== 'play') blankLayer(this.view.layers?.hud); // menus paint over the ground layer; nothing may paint over them
+    if (this.current.name !== 'play') {
+      // menus paint their own background; nothing may paint over them, and a stale ground (old level /
+      // theme) must not survive into the next match
+      blankLayer(this.view.layers?.hud);
+      blankLayer(this.view.layers?.ground);
+    }
     this.current.draw(this.view, now);
     this.preloadLazy(); // after the first paint; a no-op from then on
     requestAnimationFrame((f) => this.frame(f));

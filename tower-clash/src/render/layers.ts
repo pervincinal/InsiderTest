@@ -1,6 +1,7 @@
 import { C } from '../sim/constants';
 import type { GameState } from '../sim/types';
 import type { Palette } from './palette';
+import { themeFor } from './palette';
 import type { View } from './view';
 import type { TerrainSpec } from './terrain';
 import { drawTerrain } from './terrain';
@@ -15,8 +16,15 @@ import { drawHud, hudKey } from './hud';
  *   hud (above):    `drawHud`, repainted when a HUD input changes (clock once a second, counts,
  *                   toast…); `pointer-events: none` so input still lands on the game canvas.
  * The game canvas in between is cleared (not filled) every frame, so the ground shows through.
- * Menus paint their own opaque background over the ground layer; the HUD layer is blanked
- * whenever the play screen does not use it (pause / result overlays, tutorial, other screens).
+ * Menus paint their own opaque background over the ground layer, and `main.ts` blanks both layers
+ * whenever the play screen is not current (pause / result overlays, tutorial, other screens), so
+ * a stale ground never survives a theme change in the shop. The ground key carries the *resolved*
+ * theme id (`themeFor`), so a lazily loaded theme that lands mid-level repaints the ground
+ * (PERF-5): the raw sprite id would not change when the chunk arrives.
+ *
+ * Letterbox fills go one CSS px past the viewport: the canvas is `round(css × dpr)` pixels wide, so
+ * an exact `cssW` fill leaves the last column partly uncovered and whatever sits below shows
+ * through it as a faint strip on the right / bottom edge.
  */
 
 export interface Layer {
@@ -86,13 +94,18 @@ function logical(ctx: CanvasRenderingContext2D, view: View): void {
   ctx.clip();
 }
 
+/** Cache key of the ground layer: level / biome / resolved theme / palette / letterbox / viewport. */
+export function groundKey(view: View, pal: Palette, spec: TerrainSpec, letterbox: string): string {
+  return `${spec.key}|${spec.biome ?? ''}|${themeFor(spec.theme).id}|${pal.owners.enemy1}|${letterbox}|${view.dpr}|${view.scale}|${view.offsetX}|${view.offsetY}`;
+}
+
 export function paintGround(layer: Layer, view: View, pal: Palette, spec: TerrainSpec, letterbox: string): void {
-  const key = `${spec.key}|${spec.biome ?? ''}|${spec.theme ?? ''}|${pal.owners.enemy1}|${letterbox}|${view.dpr}|${view.scale}|${view.offsetX}|${view.offsetY}`;
+  const key = groundKey(view, pal, spec, letterbox);
   if (layer.key === key) return;
   const ctx = layer.ctx;
   ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
   ctx.fillStyle = letterbox;
-  ctx.fillRect(0, 0, view.cssW, view.cssH);
+  ctx.fillRect(0, 0, view.cssW + 1, view.cssH + 1);
   ctx.save();
   logical(ctx, view);
   drawTerrain(ctx, view, pal, spec);
