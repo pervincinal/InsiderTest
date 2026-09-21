@@ -4,19 +4,19 @@
   "name_az": "Yanmış Torpaq",
   "name_ru": "Выжженная земля",
   "name_tr": "Yakılmış Toprak",
-  "lesson": "Mines eat men, guns eat streams: cross a mine with a wave, never a trickle, and park your own guns at the crossing so the counter-attack dies on the way",
-  "lesson_az": "Minalar əsgər yeyir, toplar axın: minanı damcı ilə yox, dalğa ilə keç və öz toplarını keçidə qoy ki, əks-hücum yolda ölsün",
-  "lesson_ru": "Мины едят людей, пушки едят потоки: проходи мину волной, а не струйкой, и ставь свои пушки у прохода, чтобы контратака умерла в пути",
-  "lesson_tr": "Mayınlar asker yer, toplar akış: mayını damlayla değil dalgayla geç ve kendi toplarını geçide kur ki karşı saldırı yolda ölsün",
-  "star3": 40000,
-  "star2": 80000,
+  "lesson": "Your keep starts at level 2. Mines eat men, guns eat streams: a mine costs its charges once, so send a level-3 stream over it, and park your own guns at the crossing so the counter-attack dies on the way",
+  "lesson_az": "Qəsrin 2-ci səviyyədə başlayır. Minalar əsgər yeyir, toplar axın: mina yükünü bir dəfə alır, ona görə üstündən 3-cü səviyyə axın göndər və öz toplarını keçidə qoy ki, əks-hücum yolda ölsün",
+  "lesson_ru": "Твоя цитадель начинает на уровне 2. Мины едят людей, пушки едят потоки: мина берёт заряды один раз, так что пусти через неё поток уровня 3 и поставь свои пушки у прохода, чтобы контратака умерла в пути",
+  "lesson_tr": "Kalen 2. seviyede başlar. Mayınlar asker yer, toplar akış: mayın bedelini bir kez alır, o yüzden üzerinden 3. seviye akış gönder ve kendi toplarını geçide kur ki karşı saldırı yolda ölsün",
+  "star3": 80000,
+  "star2": 160000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.8},
     {"owner": "enemy2", "personality": "opportunist", "aggression": 0.8},
     {"owner": "enemy3", "personality": "turtle", "aggression": 0.8}
   ],
   "towers": [
-    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 18, "level": 1, "kind": "barracks"},
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 30, "level": 2, "kind": "barracks"},
     {"id": "guns", "x": 150, "y": 1100, "owner": "player", "units": 6, "level": 1, "kind": "artillery"},
     {"id": "w", "x": 150, "y": 900, "owner": "neutral", "units": 6},
     {"id": "mid", "x": 360, "y": 940, "owner": "neutral", "units": 8},
@@ -24,10 +24,10 @@
     {"id": "nw", "x": 150, "y": 700, "owner": "neutral", "units": 8},
     {"id": "n", "x": 360, "y": 720, "owner": "neutral", "units": 10, "kind": "artillery"},
     {"id": "redguns", "x": 150, "y": 480, "owner": "enemy1", "units": 8, "level": 1, "kind": "artillery"},
-    {"id": "red", "x": 150, "y": 260, "owner": "enemy1", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "red", "x": 150, "y": 260, "owner": "enemy1", "units": 6, "level": 1, "kind": "fortress"},
     {"id": "greenguns", "x": 570, "y": 640, "owner": "enemy2", "units": 8, "level": 1, "kind": "artillery"},
-    {"id": "green", "x": 570, "y": 420, "owner": "enemy2", "units": 12, "level": 1, "kind": "barracks"},
-    {"id": "yellow", "x": 360, "y": 460, "owner": "enemy3", "units": 14, "level": 1, "kind": "fortress"}
+    {"id": "green", "x": 570, "y": 420, "owner": "enemy2", "units": 6, "level": 1, "kind": "fortress"},
+    {"id": "yellow", "x": 360, "y": 460, "owner": "enemy3", "units": 8, "level": 1, "kind": "fortress"}
   ],
   "mines": [
     {"x": 150, "y": 590, "charges": 8},

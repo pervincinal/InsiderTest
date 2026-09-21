@@ -4,19 +4,19 @@
   "name_az": "Mühasirə Maşını",
   "name_ru": "Осадная машина",
   "name_tr": "Kuşatma Aracı",
-  "lesson": "Enemy guns eat a thin stream one man at a time: take a gun post with one full wave from next door, then turn its fire on the keeps behind it",
-  "lesson_az": "Düşmən topları nazik axını bir-bir yeyir: top postunu qonşu qüllədən bir dolu dalğa ilə al, sonra onun atəşini arxadakı qəsrlərə çevir",
-  "lesson_ru": "Вражеские пушки съедают тонкий поток по одному: бери орудийный пост одной полной волной от соседа, а потом направь его огонь на замки позади",
-  "lesson_tr": "Düşman topları ince akışı tek tek yer: top mevzisini yandaki kuleden tek bir dolu dalgayla al, sonra ateşini arkadaki kalelere çevir",
-  "star3": 30000,
-  "star2": 60000,
+  "lesson": "Your keep starts at level 2. Enemy guns kill one man per shot, so a thin stream never lands: grow to level 3, stack every lane you have on one gun post, then turn its fire on the keeps behind it",
+  "lesson_az": "Qəsrin 2-ci səviyyədə başlayır. Düşmən topları hər atəşlə bir əsgər öldürür, nazik axın heç vaxt çatmır: 3-cü səviyyəyə böyü, bütün xətlərini bir top postuna yığ, sonra onun atəşini arxadakı qəsrlərə çevir",
+  "lesson_ru": "Твоя цитадель начинает на уровне 2. Вражеские пушки убивают по бойцу за выстрел, и тонкий поток не доходит: дорасти до уровня 3, собери все линии на одном орудийном посту, а потом направь его огонь на замки позади",
+  "lesson_tr": "Kalen 2. seviyede başlar. Düşman topları her atışta bir asker öldürür, ince akış asla varmaz: 3. seviyeye büyü, tüm çizgilerini tek bir top mevzisine yığ, sonra ateşini arkadaki kalelere çevir",
+  "star3": 85000,
+  "star2": 170000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.65},
     {"owner": "enemy2", "personality": "rusher", "aggression": 0.65},
     {"owner": "enemy3", "personality": "turtle", "aggression": 0.65}
   ],
   "towers": [
-    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 20, "level": 1, "kind": "barracks"},
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 30, "level": 2, "kind": "barracks"},
     {"id": "w", "x": 150, "y": 1030, "owner": "neutral", "units": 5},
     {"id": "e", "x": 570, "y": 1030, "owner": "neutral", "units": 5},
     {"id": "fort", "x": 360, "y": 930, "owner": "neutral", "units": 8, "kind": "fortress"},
@@ -29,10 +29,7 @@
     {"id": "green", "x": 570, "y": 400, "owner": "enemy2", "units": 12, "level": 1, "kind": "barracks"},
     {"id": "crown", "x": 360, "y": 240, "owner": "neutral", "units": 14, "kind": "fortress"}
   ],
-  "obstacles": [
-    {"kind": "rock", "points": [{"x": 150, "y": 560}], "width": 50},
-    {"kind": "rock", "points": [{"x": 570, "y": 560}], "width": 50}
-  ],
+  "obstacles": [],
   "mines": [
     {"x": 175, "y": 735, "charges": 4},
     {"x": 545, "y": 735, "charges": 4},

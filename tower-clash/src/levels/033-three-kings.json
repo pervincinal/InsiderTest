@@ -4,31 +4,31 @@
   "name_az": "Üç Kral",
   "name_ru": "Три короля",
   "name_tr": "Üç Kral",
-  "lesson": "Three enemies fight each other where they touch: stay out of the middle and take neutrals while they bleed",
-  "lesson_az": "Üç düşmən toxunduqları yerdə bir-biri ilə vuruşur: ortadan uzaq dur və onlar qan itirərkən neytralları al",
-  "lesson_ru": "Три врага дерутся между собой на стыках: держись вне центра и бери нейтралов, пока они истекают кровью",
-  "lesson_tr": "Üç düşman temas ettikleri yerde birbiriyle savaşır: ortadan uzak dur ve onlar kan kaybederken tarafsızları al",
-  "star3": 40000,
-  "star2": 80000,
+  "lesson": "Your keep starts at level 2. Three enemies fight each other where they touch: stay out of the middle and take neutrals while they bleed",
+  "lesson_az": "Qəsrin 2-ci səviyyədə başlayır. Üç düşmən toxunduqları yerdə bir-biri ilə vuruşur: ortadan uzaq dur və onlar qan itirərkən neytralları al",
+  "lesson_ru": "Твоя цитадель начинает на уровне 2. Три врага дерутся между собой на стыках: держись вне центра и бери нейтралов, пока они истекают кровью",
+  "lesson_tr": "Kalen 2. seviyede başlar. Üç düşman temas ettikleri yerde birbiriyle savaşır: ortadan uzak dur ve onlar kan kaybederken tarafsızları al",
+  "star3": 35000,
+  "star2": 75000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.4},
     {"owner": "enemy2", "personality": "turtle", "aggression": 0.4},
     {"owner": "enemy3", "personality": "opportunist", "aggression": 0.4}
   ],
   "towers": [
-    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 14, "level": 1, "kind": "barracks"},
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 30, "level": 2, "kind": "barracks"},
     {"id": "w", "x": 150, "y": 1000, "owner": "neutral", "units": 5},
     {"id": "e", "x": 570, "y": 1000, "owner": "neutral", "units": 5},
     {"id": "mid", "x": 360, "y": 860, "owner": "neutral", "units": 8},
     {"id": "nw", "x": 150, "y": 700, "owner": "neutral", "units": 12},
     {"id": "ne", "x": 570, "y": 700, "owner": "neutral", "units": 12},
     {"id": "n", "x": 360, "y": 620, "owner": "neutral", "units": 8},
-    {"id": "red", "x": 130, "y": 420, "owner": "enemy1", "units": 10, "level": 1, "kind": "barracks"},
-    {"id": "yellow", "x": 360, "y": 380, "owner": "enemy3", "units": 10, "level": 1, "kind": "barracks"},
-    {"id": "green", "x": 590, "y": 420, "owner": "enemy2", "units": 8, "level": 1, "kind": "barracks"}
+    {"id": "red", "x": 130, "y": 420, "owner": "enemy1", "units": 6, "level": 1, "kind": "barracks"},
+    {"id": "yellow", "x": 360, "y": 380, "owner": "enemy3", "units": 6, "level": 1, "kind": "barracks"},
+    {"id": "green", "x": 590, "y": 420, "owner": "enemy2", "units": 2, "level": 1, "kind": "barracks"}
   ],
   "obstacles": [
-    {"kind": "wall", "points": [{"x": 210, "y": 520}, {"x": 300, "y": 520}]},
-    {"kind": "wall", "points": [{"x": 420, "y": 520}, {"x": 510, "y": 520}]}
+    {"kind": "wall", "points": [{"x": 240, "y": 520}, {"x": 280, "y": 520}]},
+    {"kind": "wall", "points": [{"x": 440, "y": 520}, {"x": 480, "y": 520}]}
   ]
 }

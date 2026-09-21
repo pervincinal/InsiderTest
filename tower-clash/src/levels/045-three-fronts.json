@@ -8,11 +8,11 @@
   "lesson_az": "Qəsrin 2-ci səviyyədə başlayır. Üç cəbhə, bir ordu: ikisini qala və toplarla bağla, üçüncüdə isə ən zəif kralın durduğu yerdə hücum et",
   "lesson_ru": "Твоя цитадель начинает на уровне 2. Три фронта, одна армия: два из них закрой крепостью и пушками, а бей на третьем, где стоит слабейший король",
   "lesson_tr": "Kalen 2. seviyede başlar. Üç cephe, tek ordu: ikisini kale ve toplarla kapat, üçüncüde ise en zayıf kralın durduğu yerde saldır",
-  "star3": 35000,
-  "star2": 70000,
+  "star3": 55000,
+  "star2": 110000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.75},
-    {"owner": "enemy2", "personality": "turtle", "aggression": 0.75},
+    {"owner": "enemy2", "personality": "opportunist", "aggression": 0.75},
     {"owner": "enemy3", "personality": "opportunist", "aggression": 0.75}
   ],
   "towers": [
@@ -20,12 +20,12 @@
     {"id": "w", "x": 180, "y": 1000, "owner": "neutral", "units": 5},
     {"id": "e", "x": 540, "y": 1000, "owner": "neutral", "units": 5},
     {"id": "wall", "x": 360, "y": 900, "owner": "neutral", "units": 8, "kind": "fortress"},
-    {"id": "red", "x": 110, "y": 820, "owner": "enemy1", "units": 12, "level": 1, "kind": "barracks"},
-    {"id": "green", "x": 610, "y": 820, "owner": "enemy2", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "red", "x": 110, "y": 820, "owner": "enemy1", "units": 6, "level": 1, "kind": "barracks"},
+    {"id": "green", "x": 610, "y": 820, "owner": "enemy3", "units": 6, "level": 1, "kind": "barracks"},
     {"id": "nw", "x": 200, "y": 660, "owner": "neutral", "units": 8},
     {"id": "ne", "x": 520, "y": 660, "owner": "neutral", "units": 8},
     {"id": "guns", "x": 360, "y": 700, "owner": "neutral", "units": 6, "kind": "artillery"},
-    {"id": "yellow", "x": 360, "y": 460, "owner": "enemy3", "units": 14, "level": 1, "kind": "barracks"},
+    {"id": "yellow", "x": 360, "y": 460, "owner": "enemy2", "units": 8, "level": 1, "kind": "barracks"},
     {"id": "crown", "x": 360, "y": 220, "owner": "neutral", "units": 12}
   ],
   "obstacles": [

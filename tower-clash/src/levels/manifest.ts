@@ -69,7 +69,7 @@ export const LEVEL_MANIFEST: readonly LevelManifestEntry[] = [
   { id: 45, name: 'Three Fronts', name_az: 'Üç Cəbhə', name_ru: 'Три фронта', name_tr: 'Üç Cephe', star3: 55000, star2: 110000, load: () => import('./045-three-fronts.json').then(def) },
   { id: 46, name: 'River Gate', name_az: 'Çay Qapısı', name_ru: 'Врата реки', name_tr: 'Nehir Kapısı', star3: 70000, star2: 140000, load: () => import('./046-the-long-bridge.json').then(def) },
   { id: 47, name: 'Scorched Earth', name_az: 'Yanmış Torpaq', name_ru: 'Выжженная земля', name_tr: 'Yakılmış Toprak', star3: 80000, star2: 160000, load: () => import('./047-scorched-earth.json').then(def) },
-  { id: 48, name: 'Kings\' Council', name_az: 'Krallar Şurası', name_ru: 'Совет королей', name_tr: 'Krallar Meclisi', star3: 70000, star2: 140000, load: () => import('./048-kings-council.json').then(def) },
+  { id: 48, name: 'Kings\' Council', name_az: 'Krallar Şurası', name_ru: 'Совет королей', name_tr: 'Krallar Meclisi', star3: 50000, star2: 100000, load: () => import('./048-kings-council.json').then(def) },
   { id: 49, name: 'Last Light', name_az: 'Son İşıq', name_ru: 'Свет в ночи', name_tr: 'Son Işık', star3: 30000, star2: 80000, load: () => import('./049-last-light.json').then(def) },
   { id: 50, name: 'The Crown Reforged', name_az: 'Yenidən Dövülmüş Tac', name_ru: 'Корона, отлитая вновь', name_tr: 'Yeniden Dövülen Taç', star3: 90000, star2: 180000, load: () => import('./050-the-crown-reforged.json').then(def) },
 ];

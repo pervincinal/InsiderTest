@@ -4,19 +4,19 @@
   "name_az": "Dəmir Karvan",
   "name_ru": "Стальной обоз",
   "name_tr": "Demir Konvoy",
-  "lesson": "Tanks are five men in one body: a mine or a shell costs a tank far less than a column, so bank a full convoy at your factory and roll it over the mined lines",
-  "lesson_az": "Tank bir bədəndə beş əsgərdir: mina və ya mərmi tanka dəstədən qat-qat az başa gəlir, ona görə zavodda dolu karvan yığ və minalı xətlərdən keçir",
-  "lesson_ru": "Танк — пять бойцов в одном теле: мина или снаряд стоят танку куда меньше, чем колонне, так что копи полный обоз на заводе и кати его по минированным линиям",
-  "lesson_tr": "Tank tek bedende beş askerdir: mayın ya da mermi tanka koldan çok daha az kayıp verdirir, o yüzden fabrikada dolu bir konvoy biriktir ve mayınlı çizgilerden sür",
-  "star3": 50000,
-  "star2": 100000,
+  "lesson": "Your keep starts at level 2. Tanks are five men in one body: a mine or a shell costs a tank far less than a column, so roll your factory's stream over the mined lines and let the infantry follow",
+  "lesson_az": "Qəsrin 2-ci səviyyədə başlayır. Tank bir bədəndə beş əsgərdir: mina və ya mərmi tanka dəstədən qat-qat az başa gəlir, ona görə zavodun axınını minalı xətlərdən keçir, piyada arxadan gəlsin",
+  "lesson_ru": "Твоя цитадель начинает на уровне 2. Танк — пять бойцов в одном теле: мина или снаряд стоят танку куда меньше, чем колонне, так что кати поток завода по минированным линиям, а пехота пусть идёт следом",
+  "lesson_tr": "Kalen 2. seviyede başlar. Tank tek bedende beş askerdir: mayın ya da mermi tanka koldan çok daha az kayıp verdirir, o yüzden fabrikanın akışını mayınlı çizgilerden sür, piyade arkadan gelsin",
+  "star3": 40000,
+  "star2": 80000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.7},
-    {"owner": "enemy2", "personality": "turtle", "aggression": 0.7},
+    {"owner": "enemy2", "personality": "opportunist", "aggression": 0.7},
     {"owner": "enemy3", "personality": "opportunist", "aggression": 0.7}
   ],
   "towers": [
-    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 18, "level": 1, "kind": "barracks"},
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 30, "level": 2, "kind": "barracks"},
     {"id": "factory", "x": 150, "y": 1120, "owner": "player", "units": 10, "level": 1, "kind": "tankFactory"},
     {"id": "w", "x": 150, "y": 930, "owner": "neutral", "units": 6},
     {"id": "mid", "x": 360, "y": 940, "owner": "neutral", "units": 8},
@@ -25,9 +25,9 @@
     {"id": "n", "x": 360, "y": 720, "owner": "neutral", "units": 10, "kind": "fortress"},
     {"id": "yellow", "x": 570, "y": 660, "owner": "enemy3", "units": 12, "level": 1, "kind": "barracks"},
     {"id": "redfactory", "x": 150, "y": 500, "owner": "enemy1", "units": 10, "level": 1, "kind": "tankFactory"},
-    {"id": "greenfactory", "x": 570, "y": 440, "owner": "enemy2", "units": 10, "level": 1, "kind": "tankFactory"},
+    {"id": "greenfactory", "x": 570, "y": 440, "owner": "enemy2", "units": 5, "level": 1, "kind": "tankFactory"},
     {"id": "red", "x": 150, "y": 280, "owner": "enemy1", "units": 12, "level": 1, "kind": "barracks"},
-    {"id": "green", "x": 570, "y": 260, "owner": "enemy2", "units": 12, "level": 1, "kind": "barracks"}
+    {"id": "green", "x": 570, "y": 260, "owner": "enemy2", "units": 6, "level": 1, "kind": "barracks"}
   ],
   "mines": [
     {"x": 150, "y": 610, "charges": 5},

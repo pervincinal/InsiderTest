@@ -4,19 +4,19 @@
   "name_az": "Tac",
   "name_ru": "Корона",
   "name_tr": "Taç",
-  "lesson": "The Crown: everything you have learned. Expand, hold walls, guard the fords, pay mines wisely, and take the crown once the three kings have exhausted each other",
-  "lesson_az": "Tac: öyrəndiyin hər şey. Genişlən, divarları saxla, keçidləri qoru, minaları ağılla ödə və üç kral bir-birini tükədəndə tacı götür",
-  "lesson_ru": "Корона: всё, чему ты научился. Расширяйся, держи стены, стереги броды, разумно плати минам и забери корону, когда три короля вымотают друг друга",
-  "lesson_tr": "Taç: öğrendiğin her şey. Genişle, surları tut, geçitleri koru, mayınları akıllıca öde ve üç kral birbirini tüketince tacı al",
-  "star3": 35000,
-  "star2": 85000,
+  "lesson": "Your keep starts at level 2. The Crown: everything you have learned. Expand, guard the ford, pay mines wisely, break the two fortresses one at a time and take the crown once the three kings have exhausted each other",
+  "lesson_az": "Qəsrin 2-ci səviyyədə başlayır. Tac: öyrəndiyin hər şey. Genişlən, keçidi qoru, minaları ağılla ödə, iki qalanı bir-bir qır və üç kral bir-birini tükədəndə tacı götür",
+  "lesson_ru": "Твоя цитадель начинает на уровне 2. Корона: всё, чему ты научился. Расширяйся, стереги брод, разумно плати минам, ломай две крепости по одной и забери корону, когда три короля вымотают друг друга",
+  "lesson_tr": "Kalen 2. seviyede başlar. Taç: öğrendiğin her şey. Genişle, geçidi koru, mayınları akıllıca öde, iki kaleyi teker teker kır ve üç kral birbirini tüketince tacı al",
+  "star3": 95000,
+  "star2": 180000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.8},
     {"owner": "enemy2", "personality": "opportunist", "aggression": 0.8},
     {"owner": "enemy3", "personality": "turtle", "aggression": 0.8}
   ],
   "towers": [
-    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 18, "level": 1, "kind": "barracks"},
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 30, "level": 2, "kind": "barracks"},
     {"id": "factory", "x": 570, "y": 1130, "owner": "player", "units": 10, "level": 1, "kind": "tankFactory"},
     {"id": "w", "x": 150, "y": 1010, "owner": "neutral", "units": 5},
     {"id": "e", "x": 570, "y": 960, "owner": "neutral", "units": 5},
@@ -24,16 +24,14 @@
     {"id": "nw", "x": 150, "y": 780, "owner": "neutral", "units": 6},
     {"id": "ne", "x": 570, "y": 780, "owner": "neutral", "units": 6},
     {"id": "guns", "x": 360, "y": 620, "owner": "neutral", "units": 5, "kind": "artillery"},
-    {"id": "red", "x": 150, "y": 540, "owner": "enemy1", "units": 14, "level": 1, "kind": "barracks"},
-    {"id": "green", "x": 570, "y": 540, "owner": "enemy2", "units": 14, "level": 1, "kind": "barracks"},
+    {"id": "red", "x": 150, "y": 540, "owner": "enemy1", "units": 14, "level": 1, "kind": "fortress"},
+    {"id": "green", "x": 570, "y": 540, "owner": "enemy2", "units": 14, "level": 1, "kind": "fortress"},
     {"id": "yellow", "x": 360, "y": 420, "owner": "enemy3", "units": 12, "level": 1, "kind": "fortress"},
     {"id": "crown", "x": 360, "y": 200, "owner": "neutral", "units": 12, "kind": "fortress"}
   ],
   "obstacles": [
-    {"kind": "water", "points": [{"x": -40, "y": 660}, {"x": 100, "y": 660}]},
-    {"kind": "water", "points": [{"x": 200, "y": 660}, {"x": 280, "y": 660}]},
-    {"kind": "water", "points": [{"x": 440, "y": 660}, {"x": 520, "y": 660}]},
-    {"kind": "water", "points": [{"x": 620, "y": 660}, {"x": 760, "y": 660}]}
+    {"kind": "water", "points": [{"x": -40, "y": 660}, {"x": 170, "y": 660}]},
+    {"kind": "water", "points": [{"x": 550, "y": 660}, {"x": 760, "y": 660}]}
   ],
   "mines": [
     {"x": 360, "y": 1050, "charges": 5},

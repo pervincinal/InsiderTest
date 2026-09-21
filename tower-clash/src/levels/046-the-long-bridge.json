@@ -1,35 +1,35 @@
 {
   "id": 46,
-  "name": "Narrow Ford",
-  "name_az": "Dar Keçid",
-  "name_ru": "Узкий брод",
-  "name_tr": "Dar Geçit",
-  "lesson": "A narrow ford is a door: whoever holds the tower at each end owns it. Take the far end first and keep it fed — a tower in the way blocks every line behind it",
-  "lesson_az": "Dar keçid bir qapıdır: hər ucundakı qülləni tutan ona sahibdir. Əvvəl o biri ucu al və bəslə — yolda duran qüllə arxasındakı hər xətti bağlayır",
-  "lesson_ru": "Узкий брод — это дверь: кто держит башни на его концах, тот ею владеет. Возьми дальний конец первым и подпитывай его — башня на пути закрывает все линии за собой",
-  "lesson_tr": "Dar geçit bir kapıdır: iki ucundaki kuleyi tutan ona sahiptir. Önce uzak ucu al ve besle — yoldaki kule arkasındaki her çizgiyi kapatır",
-  "star3": 35000,
-  "star2": 75000,
+  "name": "River Gate",
+  "name_az": "Çay Qapısı",
+  "name_ru": "Врата реки",
+  "name_tr": "Nehir Kapısı",
+  "lesson": "Your keep starts at level 2. The river in front of your keep has one ford: take the bank beyond it first and keep it fed, because a tower in the way blocks every line behind it",
+  "lesson_az": "Qəsrin 2-ci səviyyədə başlayır. Qəsrinin qabağındakı çayın bir keçidi var: əvvəl o biri sahili al və bəslə, çünki yolda duran qüllə arxasındakı hər xətti bağlayır",
+  "lesson_ru": "Твоя цитадель начинает на уровне 2. У реки перед цитаделью один брод: возьми берег за ним первым и подпитывай его, ведь башня на пути закрывает все линии за собой",
+  "lesson_tr": "Kalen 2. seviyede başlar. Kalenin önündeki nehrin tek geçidi var: önce karşı kıyıyı al ve besle, çünkü yoldaki kule arkasındaki her çizgiyi kapatır",
+  "star3": 70000,
+  "star2": 140000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.75},
     {"owner": "enemy2", "personality": "opportunist", "aggression": 0.75},
     {"owner": "enemy3", "personality": "turtle", "aggression": 0.75}
   ],
   "towers": [
-    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 20, "level": 1, "kind": "barracks"},
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 30, "level": 2, "kind": "barracks"},
     {"id": "w", "x": 150, "y": 1010, "owner": "neutral", "units": 5},
     {"id": "e", "x": 570, "y": 1010, "owner": "neutral", "units": 5},
     {"id": "mid", "x": 360, "y": 880, "owner": "neutral", "units": 8},
     {"id": "nw", "x": 150, "y": 760, "owner": "neutral", "units": 12},
     {"id": "ne", "x": 570, "y": 760, "owner": "neutral", "units": 12},
     {"id": "n", "x": 360, "y": 640, "owner": "neutral", "units": 14},
-    {"id": "red", "x": 130, "y": 440, "owner": "enemy1", "units": 12, "level": 1, "kind": "barracks"},
-    {"id": "yellow", "x": 360, "y": 400, "owner": "enemy3", "units": 14, "level": 1, "kind": "fortress"},
-    {"id": "green", "x": 590, "y": 440, "owner": "enemy2", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "red", "x": 130, "y": 440, "owner": "enemy1", "units": 6, "level": 1, "kind": "barracks"},
+    {"id": "yellow", "x": 360, "y": 400, "owner": "enemy3", "units": 8, "level": 1, "kind": "fortress"},
+    {"id": "green", "x": 590, "y": 440, "owner": "enemy2", "units": 6, "level": 1, "kind": "barracks"},
     {"id": "crown", "x": 360, "y": 200, "owner": "neutral", "units": 10}
   ],
   "obstacles": [
-    {"kind": "water", "points": [{"x": -40, "y": 1090}, {"x": 310, "y": 1090}]},
-    {"kind": "water", "points": [{"x": 410, "y": 1090}, {"x": 760, "y": 1090}]}
+    {"kind": "water", "points": [{"x": -40, "y": 1090}, {"x": 200, "y": 1090}]},
+    {"kind": "water", "points": [{"x": 520, "y": 1090}, {"x": 760, "y": 1090}]}
   ]
 }

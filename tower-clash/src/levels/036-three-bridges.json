@@ -1,15 +1,15 @@
 {
   "id": 36,
-  "name": "Three Fords",
-  "name_az": "Üç Keçid",
-  "name_ru": "Три брода",
-  "name_tr": "Üç Geçit",
-  "lesson": "Your keep starts at level 2. Three fords, three rivals: each enemy can only reach you through its own ford, so hold two of them and attack through the third",
-  "lesson_az": "Qəsrin 2-ci səviyyədə başlayır. Üç keçid, üç rəqib: hər düşmən sənə yalnız öz keçidindən çata bilər, ona görə ikisini tut, üçüncüdən hücum et",
-  "lesson_ru": "Твоя цитадель начинает на уровне 2. Три брода, три соперника: каждый враг дойдёт до тебя только через свой брод, так что держи два из них и бей через третий",
-  "lesson_tr": "Kalen 2. seviyede başlar. Üç geçit, üç rakip: her düşman sana yalnız kendi geçidinden ulaşır, o yüzden ikisini tut, üçüncüden saldır",
-  "star3": 35000,
-  "star2": 80000,
+  "name": "One Wide Ford",
+  "name_az": "Geniş Keçid",
+  "name_ru": "Широкий брод",
+  "name_tr": "Geniş Geçit",
+  "lesson": "Your keep starts at level 2. One wide ford, three rivals: everything crosses in the middle, so hold the bank with two towers and let the three kings meet each other there before you cross",
+  "lesson_az": "Qəsrin 2-ci səviyyədə başlayır. Bir geniş keçid, üç rəqib: hər şey ortadan keçir, ona görə sahili iki qülləylə tut və keçməzdən əvvəl qoy üç kral orada bir-birilə üzləşsin",
+  "lesson_ru": "Твоя цитадель начинает на уровне 2. Один широкий брод, три соперника: всё идёт через середину, так что держи берег двумя башнями и дай трём королям сойтись там, прежде чем переходить",
+  "lesson_tr": "Kalen 2. seviyede başlar. Tek geniş geçit, üç rakip: her şey ortadan geçer, o yüzden kıyıyı iki kuleyle tut ve sen geçmeden önce üç kral orada birbiriyle karşılaşsın",
+  "star3": 60000,
+  "star2": 120000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.6},
     {"owner": "enemy2", "personality": "opportunist", "aggression": 0.6},
@@ -23,15 +23,13 @@
     {"id": "nw", "x": 150, "y": 740, "owner": "neutral", "units": 8},
     {"id": "ne", "x": 570, "y": 740, "owner": "neutral", "units": 8},
     {"id": "n", "x": 360, "y": 660, "owner": "neutral", "units": 8},
-    {"id": "red", "x": 150, "y": 460, "owner": "enemy1", "units": 8, "level": 1, "kind": "barracks"},
-    {"id": "green", "x": 570, "y": 460, "owner": "enemy2", "units": 8, "level": 1, "kind": "barracks"},
-    {"id": "yellow", "x": 360, "y": 400, "owner": "enemy3", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "red", "x": 150, "y": 460, "owner": "enemy1", "units": 6, "level": 1, "kind": "barracks"},
+    {"id": "green", "x": 570, "y": 460, "owner": "enemy2", "units": 6, "level": 1, "kind": "barracks"},
+    {"id": "yellow", "x": 360, "y": 400, "owner": "enemy3", "units": 8, "level": 1, "kind": "fortress"},
     {"id": "crown", "x": 360, "y": 180, "owner": "neutral", "units": 10}
   ],
   "obstacles": [
-    {"kind": "water", "points": [{"x": -40, "y": 560}, {"x": 100, "y": 560}]},
-    {"kind": "water", "points": [{"x": 172, "y": 560}, {"x": 310, "y": 560}]},
-    {"kind": "water", "points": [{"x": 410, "y": 560}, {"x": 548, "y": 560}]},
-    {"kind": "water", "points": [{"x": 620, "y": 560}, {"x": 760, "y": 560}]}
+    {"kind": "water", "points": [{"x": -40, "y": 560}, {"x": 170, "y": 560}]},
+    {"kind": "water", "points": [{"x": 550, "y": 560}, {"x": 760, "y": 560}]}
   ]
 }

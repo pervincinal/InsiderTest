@@ -8,8 +8,8 @@
   "lesson_az": "Səhər mühasirədəsən: fənərin topdur, qəsrin isə hər zərbəni yarıya bölən qaladır, ona görə dayan, qoy hücumçular divarlarında tükənsin, sonra boşalanın içindən yarıb çıx",
   "lesson_ru": "Окружён на рассвете: твой фонарь — пушка, а цитадель — крепость, что делит каждый удар пополам, так что держись, дай рвачам истратиться о твои стены, а потом прорвись через того, кто опустел",
   "lesson_tr": "Şafakta kuşatıldın: fenerin toptur, kalen ise her inişi yarıya bölen bir kaledir; o yüzden dayan, saldırganlar surlarında tükensin, sonra boşalanın içinden yarıp çık",
-  "star3": 20000,
-  "star2": 45000,
+  "star3": 30000,
+  "star2": 80000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.85},
     {"owner": "enemy2", "personality": "rusher", "aggression": 0.85},
@@ -21,12 +21,12 @@
     {"id": "e", "x": 570, "y": 1060, "owner": "neutral", "units": 5},
     {"id": "w", "x": 150, "y": 900, "owner": "neutral", "units": 6},
     {"id": "mid", "x": 360, "y": 940, "owner": "neutral", "units": 8},
-    {"id": "red", "x": 150, "y": 700, "owner": "enemy1", "units": 16, "level": 1, "kind": "barracks"},
+    {"id": "red", "x": 150, "y": 700, "owner": "enemy1", "units": 10, "level": 1, "kind": "barracks"},
     {"id": "n", "x": 360, "y": 720, "owner": "neutral", "units": 10},
-    {"id": "green", "x": 570, "y": 660, "owner": "enemy2", "units": 16, "level": 1, "kind": "barracks"},
-    {"id": "yellow", "x": 360, "y": 500, "owner": "enemy3", "units": 18, "level": 1, "kind": "barracks"},
-    {"id": "redkeep", "x": 150, "y": 460, "owner": "enemy1", "units": 10, "level": 1, "kind": "barracks"},
-    {"id": "greenkeep", "x": 570, "y": 440, "owner": "enemy2", "units": 10, "level": 1, "kind": "barracks"},
+    {"id": "green", "x": 570, "y": 660, "owner": "enemy2", "units": 10, "level": 1, "kind": "barracks"},
+    {"id": "yellow", "x": 360, "y": 500, "owner": "enemy3", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "redkeep", "x": 150, "y": 460, "owner": "enemy1", "units": 6, "level": 1, "kind": "barracks"},
+    {"id": "greenkeep", "x": 570, "y": 440, "owner": "enemy2", "units": 6, "level": 1, "kind": "barracks"},
     {"id": "crown", "x": 360, "y": 260, "owner": "neutral", "units": 12, "kind": "fortress"}
   ],
   "mines": [

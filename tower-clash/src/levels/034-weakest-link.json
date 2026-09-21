@@ -8,27 +8,24 @@
   "lesson_az": "Qəsrin 2-ci səviyyədə başlayır, amma iki hücumçu ən zəif qonşunu vurur, ona görə sərhəd qülləsini heç vaxt boş qoyma: hər sərhəd qarnizonunu yanındakı düşməndən yuxarı saxla",
   "lesson_ru": "Твоя цитадель начинает на уровне 2, но два рвача бьют по слабейшему соседу, так что не оставляй пограничную башню пустой: держи каждый гарнизон на границе выше соседнего врага",
   "lesson_tr": "Kalen 2. seviyede başlar ama iki saldırgan en zayıf komşuya vurur, o yüzden sınır kulesini asla zayıf bırakma: her sınır garnizonunu yanındaki düşmanın üstünde tut",
-  "star3": 25000,
-  "star2": 50000,
+  "star3": 50000,
+  "star2": 100000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.45},
     {"owner": "enemy2", "personality": "rusher", "aggression": 0.45},
     {"owner": "enemy3", "personality": "turtle", "aggression": 0.45}
   ],
   "towers": [
-    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 40, "level": 2, "kind": "barracks"},
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 30, "level": 2, "kind": "barracks"},
     {"id": "w", "x": 150, "y": 1000, "owner": "neutral", "units": 5},
     {"id": "e", "x": 570, "y": 1000, "owner": "neutral", "units": 5},
     {"id": "fort", "x": 360, "y": 860, "owner": "neutral", "units": 6, "kind": "fortress"},
     {"id": "nw", "x": 150, "y": 720, "owner": "neutral", "units": 12},
     {"id": "ne", "x": 570, "y": 720, "owner": "neutral", "units": 12},
-    {"id": "red", "x": 150, "y": 480, "owner": "enemy1", "units": 10, "level": 1, "kind": "barracks"},
-    {"id": "green", "x": 570, "y": 480, "owner": "enemy2", "units": 10, "level": 1, "kind": "barracks"},
-    {"id": "yellow", "x": 360, "y": 400, "owner": "enemy3", "units": 10, "level": 1, "kind": "fortress"},
+    {"id": "red", "x": 150, "y": 480, "owner": "enemy1", "units": 6, "level": 1, "kind": "barracks"},
+    {"id": "green", "x": 570, "y": 480, "owner": "enemy2", "units": 6, "level": 1, "kind": "barracks"},
+    {"id": "yellow", "x": 360, "y": 400, "owner": "enemy3", "units": 6, "level": 1, "kind": "fortress"},
     {"id": "crown", "x": 360, "y": 200, "owner": "neutral", "units": 8}
   ],
-  "obstacles": [
-    {"kind": "wall", "points": [{"x": 190, "y": 600}, {"x": 310, "y": 600}]},
-    {"kind": "wall", "points": [{"x": 410, "y": 600}, {"x": 530, "y": 600}]}
-  ]
+  "obstacles": []
 }

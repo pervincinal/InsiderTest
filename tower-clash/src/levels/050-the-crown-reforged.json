@@ -4,19 +4,19 @@
   "name_az": "Yenidən Dövülmüş Tac",
   "name_ru": "Корона, отлитая вновь",
   "name_tr": "Yeniden Dövülen Taç",
-  "lesson": "The crown, reforged: three kings, two fords, walls, mines, guns and tanks — everything at once. Read the map, choose the one fight you can win, and win it every time",
-  "lesson_az": "Yenidən dövülmüş tac: üç kral, iki keçid, divarlar, minalar, toplar və tanklar — hamısı bir anda. Xəritəni oxu, qazana biləcəyin tək döyüşü seç və onu hər dəfə qazan",
-  "lesson_ru": "Корона, отлитая вновь: три короля, два брода, стены, мины, пушки и танки — всё сразу. Читай карту, выбирай тот единственный бой, что можешь выиграть, и выигрывай его каждый раз",
-  "lesson_tr": "Yeniden dövülen taç: üç kral, iki geçit, surlar, mayınlar, toplar ve tanklar — hepsi bir arada. Haritayı oku, kazanabileceğin tek savaşı seç ve onu her seferinde kazan",
-  "star3": 40000,
-  "star2": 80000,
+  "lesson": "Your keep starts at level 2. The crown, reforged: three kings, rivers, mines, guns and tanks — everything at once. Read the map, choose the one fight you can win, and win it every time",
+  "lesson_az": "Qəsrin 2-ci səviyyədə başlayır. Yenidən dövülmüş tac: üç kral, çaylar, minalar, toplar və tanklar — hamısı bir anda. Xəritəni oxu, qazana biləcəyin tək döyüşü seç və onu hər dəfə qazan",
+  "lesson_ru": "Твоя цитадель начинает на уровне 2. Корона, отлитая вновь: три короля, реки, мины, пушки и танки — всё сразу. Читай карту, выбирай тот единственный бой, что можешь выиграть, и выигрывай его каждый раз",
+  "lesson_tr": "Kalen 2. seviyede başlar. Yeniden dövülen taç: üç kral, nehirler, mayınlar, toplar ve tanklar — hepsi bir arada. Haritayı oku, kazanabileceğin tek savaşı seç ve onu her seferinde kazan",
+  "star3": 90000,
+  "star2": 180000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.9},
     {"owner": "enemy2", "personality": "opportunist", "aggression": 0.9},
     {"owner": "enemy3", "personality": "turtle", "aggression": 0.9}
   ],
   "towers": [
-    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 18, "level": 1, "kind": "barracks"},
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 30, "level": 2, "kind": "barracks"},
     {"id": "factory", "x": 150, "y": 1110, "owner": "player", "units": 10, "level": 1, "kind": "tankFactory"},
     {"id": "w", "x": 150, "y": 900, "owner": "neutral", "units": 6},
     {"id": "fort", "x": 360, "y": 940, "owner": "neutral", "units": 8, "kind": "fortress"},
@@ -31,8 +31,6 @@
   ],
   "obstacles": [
     {"kind": "water", "points": [{"x": -40, "y": 630}, {"x": 80, "y": 630}]},
-    {"kind": "water", "points": [{"x": 190, "y": 630}, {"x": 270, "y": 630}]},
-    {"kind": "water", "points": [{"x": 470, "y": 720}, {"x": 540, "y": 720}]},
     {"kind": "water", "points": [{"x": 600, "y": 720}, {"x": 760, "y": 720}]}
   ],
   "mines": [
