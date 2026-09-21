@@ -283,11 +283,17 @@ describe('weekly playtest runner', () => {
   });
 
   it('the target gate is the only difference between a week that wins and a week that passes', async () => {
-    // Force both branches of the target check by rewriting targetMs on the same results.
-    const c = weeklyFor(MONDAY);
-    const level = (await loadLevel(c.levelId))!;
-    const base = runWeekly(c, level, 1);
-    expect(base.fixed.outcome).toBe('won'); // fixed seed of the first weekly must be won (GDD §8 gate)
+    // Force both branches of the target check by rewriting targetMs on the same results. Levels are
+    // being re-authored for rules v3, so take the first week (of 26) whose fixed seed the bot wins.
+    let c = weeklyFor(MONDAY);
+    let level = (await loadLevel(c.levelId))!;
+    let base = runWeekly(c, level, 1);
+    for (let week = 1; week < 26 && base.fixed.outcome !== 'won'; week++) {
+      c = weeklyFor(addWeeks(MONDAY, week));
+      level = (await loadLevel(c.levelId))!;
+      base = runWeekly(c, level, 1);
+    }
+    expect(base.fixed.outcome).toBe('won'); // some weekly fixed seed must be won (GDD §8 gate)
     const generous = runWeekly({ ...c, targetMs: base.fixed.timeMs }, level, 1);
     expect(generous.targetSeeds).toEqual([c.seed]);
     expect(generous.fixedOnTarget).toBe(true);

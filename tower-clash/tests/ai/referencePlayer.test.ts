@@ -1,601 +1,330 @@
 import { describe, expect, it } from 'vitest';
-import { makeLevel } from '../helpers';
-import { Rng, applyCommand, createState, getOutcome, step } from '../../src/sim/index';
-import type { Command, GameState, LevelDef, Outcome } from '../../src/sim/index';
-import { isAiTick, referencePlayerCommands, rngsFor, runAiTick } from '../../src/ai/index';
-import { CUT_REACTION_MS, OPENING_GROW_LEVEL, SUPPLY_MIN, bridgeLoss, capped, wantAt } from '../../src/ai/referencePlayer';
-import { loadAllLevels } from '../../src/levels/index';
-
-const LEVELS = await loadAllLevels();
+import { makeLevel, wall } from '../helpers';
+import { Rng, applyCommand, createState, step } from '../../src/sim/index';
+import type { Command, GameState, TowerDef } from '../../src/sim/index';
+import { ATTACK_PLAN_MS, CAPTURE_PLAN_MS, GROWER_MIN_TOWERS, grower, hopsToOpponent, referencePlayerCommands } from '../../src/ai/index';
+import { CONTEST_PENALTY_MS, HOPELESS_MS } from '../../src/ai/referencePlayer';
+import { RACE_MARGIN_MS } from '../../src/ai/tactics';
 
 /*
- * Rules v2: the reference player only ever issues `link`, `unlink` and `cutBridge`. Every test pins the
- * exact command list of a tick, and the level runs assert that no `sendUnits` / `upgrade` is emitted.
- * Rules v2.1 (2026-09-17, "under fire"): a hit tower recruits nothing, so the attack plan counts 10 s of
- * trickle once the burst matches the defenders; pins marked "v2.1 re-pin" were re-measured deliberately.
+ * Reference player (GDD §2.5, rules v3). Every test asserts the exact commands of one tick on a small
+ * fixture; the campaign-level behaviour (level 1 win, determinism, idle player) lives in headless.test.ts.
  */
 
-const links = (cmds: Command[]) => cmds.filter((c) => c.type === 'link');
-const unlinks = (cmds: Command[]) => cmds.filter((c) => c.type === 'unlink');
-const legacy = (cmds: Command[]) => cmds.filter((c) => c.type === 'sendUnits' || c.type === 'upgrade');
+function game(towers: TowerDef[], over: Parameters<typeof makeLevel>[0] = {}): GameState {
+  return createState(makeLevel({ towers, ...over }), 1);
+}
 const link = (from: string, to: string): Command => ({ type: 'link', owner: 'player', from, to });
 const unlink = (from: string, to: string): Command => ({ type: 'unlink', owner: 'player', from, to });
-
-/** Headless game with the reference player vs the level's enemies; asserts no legacy command on the way. */
-function play(level: LevelDef, seed: number, maxMs: number): { outcome: Outcome; state: GameState } {
-  const state = createState(level, seed);
-  const enemyRng = new Rng(seed);
-  const playerRng = new Rng(seed + 1);
-  while (getOutcome(state) === 'playing' && state.time < maxMs) {
-    if (isAiTick(state)) {
-      const p = referencePlayerCommands(state, playerRng);
-      expect(legacy(p)).toEqual([]);
-      const e = runAiTick(state, enemyRng);
-      for (const cmd of p) applyCommand(state, cmd);
-      for (const cmd of e) applyCommand(state, cmd);
-    }
-    step(state);
-  }
-  return { outcome: getOutcome(state), state };
+const bot = (state: GameState, trace?: (rule: string, cmd: Command) => void) => referencePlayerCommands(state, new Rng(1), trace);
+function enemyLink(state: GameState, from: string, to: string): void {
+  applyCommand(state, { type: 'link', owner: 'enemy1', from, to });
 }
 
-/** Run the player's commands at each AI tick for `ms` of sim time; returns the commands per tick. */
-function drive(state: GameState, ms: number, rng = new Rng(1)): Map<number, Command[]> {
-  const out = new Map<number, Command[]>();
-  const end = state.time + ms;
-  while (state.time < end) {
-    if (isAiTick(state)) {
-      const cmds = referencePlayerCommands(state, rng);
-      out.set(state.time, cmds);
-      for (const cmd of cmds) applyCommand(state, cmd);
-    }
-    step(state);
-  }
-  return out;
-}
-
-describe('reference player: captures', () => {
-  it('takes a free neutral with a metered stream: links, then unlinks once enough is walking', () => {
-    const level = makeLevel({
-      towers: [
-        { id: 'p', x: 360, y: 1100, owner: 'player', units: 10 },
-        { id: 'n', x: 360, y: 800, owner: 'neutral', units: 5 },
-        { id: 'm', x: 360, y: 500, owner: 'neutral', units: 20 },
-        { id: 'e', x: 360, y: 200, owner: 'enemy1', units: 10 },
-      ],
-      roads: [
-        { a: 'p', b: 'n' },
-        { a: 'n', b: 'm' },
-        { a: 'm', b: 'e' },
-      ],
-    });
-    const state = createState(level, 1);
-    const first = referencePlayerCommands(state, new Rng(1));
-    expect(first).toEqual([link('p', 'n')]);
-    for (const cmd of first) applyCommand(state, cmd);
-    const ticks = drive(state, 4000);
-    // "garrison > units + 1": 7 must land. 4 are walking at 0.5 s (too few), 8 at 1.0 s → the stream ends there.
-    expect(ticks.get(0)).toEqual([]);
-    expect(ticks.get(500)).toEqual([]);
-    expect(ticks.get(1000)).toEqual([unlink('p', 'n')]);
-    expect(state.links).toHaveLength(0);
-    expect(state.towers['n']!).toMatchObject({ owner: 'player', units: 3 });
-    expect(state.towers['p']!.units).toBe(6); // 10 − 8 poured + 4 produced
-    // A captured tower with no enemy next to it is left to grow: no supply stream.
-    expect(wantAt(state, state.towers['n']!)).toBe(0);
-    expect(ticks.get(3500)).toEqual([]);
-  });
-
-  it('a contested neutral is taken from L1 too (OPENING_GROW_LEVEL = 1) when the garrison can hold it', () => {
-    expect(OPENING_GROW_LEVEL).toBe(1);
-    const level = makeLevel({
-      towers: [
-        { id: 'p', x: 360, y: 1100, owner: 'player', units: 20 },
-        { id: 'n', x: 360, y: 700, owner: 'neutral', units: 5 },
-        { id: 'e', x: 360, y: 300, owner: 'enemy1', units: 8 },
-      ],
-      roads: [
-        { a: 'p', b: 'n' },
-        { a: 'n', b: 'e' },
-      ],
-    });
-    expect(referencePlayerCommands(createState(level, 1), new Rng(1))).toEqual([link('p', 'n')]);
-  });
-
-  it('does not race a rusher for a neutral it could not hold: 12 vs camp 5 with foe 8 next to it waits', () => {
-    const tutorial = makeLevel({
-      enemies: [{ owner: 'enemy1', personality: 'rusher', aggression: 0.2 }],
-      towers: [
-        { id: 'home', x: 200, y: 1100, owner: 'player', units: 12 },
-        { id: 'camp', x: 520, y: 760, owner: 'neutral', units: 5 },
-        { id: 'foe', x: 200, y: 340, owner: 'enemy1', units: 8 },
-      ],
-      roads: [
-        { a: 'home', b: 'camp' },
-        { a: 'camp', b: 'foe' },
-        { a: 'home', b: 'foe' },
-      ],
-    });
-    expect(referencePlayerCommands(createState(tutorial, 1), new Rng(1))).toEqual([]);
-  });
-});
-
-describe('reference player: attacks', () => {
-  it('does not suicide into a stronger enemy tower', () => {
-    const level = (p: number, e: number) =>
-      makeLevel({
-        towers: [
-          { id: 'p', x: 360, y: 1000, owner: 'player', units: p },
-          { id: 'e', x: 360, y: 400, owner: 'enemy1', units: e },
-        ],
-      });
-    expect(referencePlayerCommands(createState(level(10, 20), 1), new Rng(1))).toEqual([]);
-    // The enemy grows to 25 during the 5 s walk: a 24-burst is short of that, so its trickle does not count → waits.
-    expect(referencePlayerCommands(createState(level(24, 20), 1), new Rng(1))).toEqual([]);
-    // v2.1 re-pin: 25 matches the 25 it meets and the keep recruits nothing from the first landing, so
-    // 25 + 1/s × 10 s ≥ 25 × 1.2 + 2 = 32 → the stream starts (v2: 26 and even 30 waited, regen 5 counted against them).
-    expect(referencePlayerCommands(createState(level(25, 20), 1), new Rng(1))).toEqual([link('p', 'e')]);
-    expect(referencePlayerCommands(createState(level(30, 20), 1), new Rng(1))).toEqual([link('p', 'e')]);
-  });
-
-  it('attacks a weak adjacent enemy tower with a stream and keeps it flowing (nothing else to hold against)', () => {
-    const level = makeLevel({
-      towers: [
-        { id: 'p', x: 360, y: 1000, owner: 'player', units: 20 },
-        { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 3 },
-      ],
-    });
-    const state = createState(level, 1);
-    const first = referencePlayerCommands(state, new Rng(1));
-    expect(first).toEqual([link('p', 'e')]);
-    for (const cmd of first) applyCommand(state, cmd);
-    const ticks = drive(state, 3000);
-    for (const cmds of ticks.values()) expect(cmds).toEqual([]);
-    expect(state.links).toHaveLength(1);
-  });
-
-  it('ends the stream at the reserve it must keep against a second enemy neighbour', () => {
-    const level = (f: number): LevelDef =>
-      makeLevel({
-        towers: [
-          { id: 'p', x: 360, y: 1000, owner: 'player', units: 30 },
-          { id: 'e', x: 360, y: 700, owner: 'enemy1', units: 2 },
-          ...(f ? [{ id: 'f', x: 60, y: 1000, owner: 'enemy1' as const, units: f }] : []),
-        ],
-        roads: [{ a: 'p', b: 'e' }, ...(f ? [{ a: 'p', b: 'f' }] : [])],
-      });
-    // Alone against a 2-unit tower: the stream runs on (p drains 4 per tick).
-    const alone = createState(level(0), 1);
-    const aloneFirst = referencePlayerCommands(alone, new Rng(1));
-    expect(aloneFirst).toEqual([link('p', 'e')]);
-    for (const cmd of aloneFirst) applyCommand(alone, cmd);
-    const aloneTicks = drive(alone, 3000);
-    for (const cmds of aloneTicks.values()) expect(cmds).toEqual([]);
-    expect(alone.towers['p']!.units).toBe(7);
-    // With f (12) 300 px away: f grows to 14 while its column would walk, lands at 4.2 s, p regrows 4 → keep 11.
-    const flanked = createState(level(12), 1);
-    const flankedFirst = referencePlayerCommands(flanked, new Rng(1));
-    expect(flankedFirst).toEqual([link('p', 'e')]);
-    for (const cmd of flankedFirst) applyCommand(flanked, cmd);
-    const ticks = drive(flanked, 3000);
-    expect(ticks.get(2000)).toEqual([]);
-    expect(ticks.get(2500)).toEqual([unlink('p', 'e')]);
-    expect(flanked.towers['p']!.units).toBeGreaterThanOrEqual(11);
-    expect(flanked.links).toHaveLength(0);
-  });
-
-  it('attacks the rusher head-on from the first tick (level 1 opening) and wins in 13.15 s on seed 1', () => {
-    const level = LEVELS.find((l) => l.id === 1)!;
-    const state = createState(level, 1);
-    const playerRng = new Rng(1);
-    const enemyRng = new Rng(5);
-    const log: [number, Command[]][] = [];
-    while (getOutcome(state) === 'playing' && state.time < 30_000) {
-      if (isAiTick(state)) {
-        const p = referencePlayerCommands(state, playerRng);
-        expect(legacy(p)).toEqual([]);
-        if (p.length) log.push([state.time, p]);
-        const e = runAiTick(state, enemyRng);
-        for (const cmd of p) applyCommand(state, cmd);
-        for (const cmd of e) applyCommand(state, cmd);
-      }
-      step(state);
-    }
-    // v2.1 re-pin: t = 0: camp is contested (foe 8 next to it) → wait; t = 0.5 s: 12 lands on foe's 8 + 3
-    // grown, and foe recruits nothing once hit, so 12 + 10 s of trickle ≥ 11 × 1.2 + 2 → attack it at once
-    // (v2: waited until foe had emptied itself at t = 1 s, won at 19.8 s).
-    expect(log[0]).toEqual([500, [link('home', 'foe')]]);
-    expect(getOutcome(state)).toBe('won');
-    expect(state.time).toBe(13_150);
-  });
-
-  it('ends a hopeless attack: a stream that can no longer flip its target is unlinked', () => {
-    const level = makeLevel({
-      towers: [
-        { id: 'p', x: 360, y: 1000, owner: 'player', units: 3, level: 3 },
-        { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 60, level: 3 },
-      ],
-    });
-    const state = createState(level, 1);
-    applyCommand(state, link('p', 'e')); // a human tapped it: 3 units against 60
-    expect(referencePlayerCommands(state, new Rng(1))).toEqual([unlink('p', 'e')]);
-  });
-});
-
-describe('reference player: capped surplus (AI-4)', () => {
-  /**
-   * A finished keep at 100 next to a 60-unit L3 keep 240 px away, flanked by an 80-unit L3 keep on
-   * another road: the strict reserve against the flank's possible column (80 + 4 grown + 1 − 4 regrown
-   * = 81) leaves a 19-unit burst against a target that needs 64 × 1.2 + 2 ≈ 79 at landing, so the
-   * strict rule waits forever while the tower makes nothing. Capped, the garrison is surplus: 100 ≥ 79.
-   */
-  const cappedLevel = (target = 60): LevelDef =>
-    makeLevel({
-      enemies: [{ owner: 'enemy1', personality: 'turtle', aggression: 0 }],
-      towers: [
-        { id: 'p', x: 360, y: 1000, owner: 'player', units: 100, level: 3 },
-        { id: 'e', x: 360, y: 760, owner: 'enemy1', units: target, level: 3 },
-        { id: 'f', x: 120, y: 1000, owner: 'enemy1', units: 80, level: 3 },
-      ],
-      roads: [
-        { a: 'p', b: 'e' },
-        { a: 'p', b: 'f' },
-      ],
-    });
-
-  it('capped(): a keep at its capacity and top level only', () => {
-    const state = createState(cappedLevel(), 1);
-    expect(capped(state, state.towers['p']!)).toBe(true);
-    expect(capped(state, state.towers['e']!)).toBe(false); // 60 of 100
-    expect(capped(state, { ...state.towers['p']!, level: 2, units: 50 })).toBe(false); // an L2 at 50 upgrades, it is never "full"
-  });
-
-  it('a capped L3 at 100 attacks the 60-unit keep 240 px away within 2 s on its whole garrison', () => {
-    const state = createState(cappedLevel(), 1);
-    const ticks = drive(state, 2000);
-    const linkTicks = [...ticks.entries()].filter(([, cmds]) => links(cmds).length > 0).map(([t]) => t);
-    expect(linkTicks.length).toBeGreaterThan(0);
-    expect(linkTicks[0]).toBeLessThanOrEqual(1500);
-    expect(ticks.get(linkTicks[0]!)).toEqual([link('p', 'e')]);
-    expect(state.links.map((l) => `${l.from}>${l.to}`)).toEqual(['p>e']);
-  });
-
-  it('keeps the wave going below the strict reserve while what it still holds is what flips the target, and takes it', () => {
-    const state = createState(cappedLevel(), 1);
-    const ticks = drive(state, 12_000);
-    // Once below capacity the strict reserve (81) is back; rule 0d would end the stream at 81 units
-    // and waste the 19 on the road. `waveStillNeeded` keeps it up: at 4 s p holds ~74 and streams on.
-    expect(ticks.get(4000)).toEqual([]);
-    expect(state.towers['e']!.owner).toBe('player');
-    expect(state.time).toBe(12_000);
-    // Never a suicide: the strict reserve returns after the capture (p regrows unlinked).
-    expect(state.links.filter((l) => l.from === 'p' && l.to === 'e')).toHaveLength(0);
-    expect(state.towers['p']!.owner).toBe('player');
-  });
-
-  it('does not launch an uncovered plan just because it is capped: 100 vs 90 waits', () => {
-    // 90 grows to 94 by landing: 94 × 1.2 + 2 = 114.8 > 100 → waits, exactly as an uncapped tower would.
-    const state = createState(cappedLevel(90), 1);
-    const ticks = drive(state, 3000);
-    for (const cmds of ticks.values()) expect(cmds).toEqual([]);
-    expect(state.links).toHaveLength(0);
-  });
-
-  it('lateral supply: a capped front keep with nothing to attack streams its surplus into the emptier front neighbour', () => {
-    // e at 100 behind barriers of 80: no plan clears (≥ 122 + 80 needed). a can throw 100 − 21 (the
-    // column e could push through its barrier: 100 − 80 = 20, + 1) sideways into b (60 → capacity).
-    const level = makeLevel({
-      enemies: [{ owner: 'enemy1', personality: 'turtle', aggression: 0 }],
-      towers: [
-        { id: 'a', x: 240, y: 1000, owner: 'player', units: 100, level: 3 },
-        { id: 'b', x: 480, y: 1000, owner: 'player', units: 60, level: 3 },
-        { id: 'e', x: 360, y: 700, owner: 'enemy1', units: 100, level: 3 },
-      ],
-      roads: [
-        { a: 'a', b: 'b' },
-        { a: 'a', b: 'e', barrier: 80 },
-        { a: 'b', b: 'e', barrier: 80 },
-      ],
-    });
-    const state = createState(level, 1);
-    const first = referencePlayerCommands(state, new Rng(1));
-    expect(first).toEqual([link('a', 'b')]);
-    for (const cmd of first) applyCommand(state, cmd);
-    const ticks = drive(state, 2000);
-    // Rule 0b keeps a lateral line up while the source is a finished keep still ≥ 60 % full.
-    expect(ticks.get(500)).toEqual([]);
-    expect(ticks.get(1000)).toEqual([]);
-    expect(state.links.some((l) => l.from === 'a' && l.to === 'b')).toBe(true);
-    expect(state.towers['a']!.units).toBeLessThan(100);
-    expect(state.towers['b']!.units).toBeGreaterThan(60);
-    // The source produces again: after the first tick it is below capacity, so it recruits (2/s at L3).
-    const before = state.towers['a']!.units;
-    applyCommand(state, unlink('a', 'b'));
-    step(state, 1000);
-    expect(state.towers['a']!.units).toBeGreaterThan(before);
-  });
-
-  it('a capped keep with nothing to attack and no neighbour to fill issues nothing (a full front is a stalemate, not a leak)', () => {
-    const level = makeLevel({
-      enemies: [{ owner: 'enemy1', personality: 'turtle', aggression: 0 }],
-      towers: [
-        { id: 'a', x: 240, y: 1000, owner: 'player', units: 100, level: 3 },
-        { id: 'b', x: 480, y: 1000, owner: 'player', units: 100, level: 3 },
-        { id: 'e', x: 360, y: 700, owner: 'enemy1', units: 100, level: 3 },
-      ],
-      roads: [
-        { a: 'a', b: 'b' },
-        { a: 'a', b: 'e', barrier: 80 },
-        { a: 'b', b: 'e', barrier: 80 },
-      ],
-    });
-    const state = createState(level, 1);
-    const ticks = drive(state, 2000);
-    for (const cmds of ticks.values()) expect(cmds).toEqual([]);
-  });
-});
-
-describe('reference player: reinforce', () => {
-  it('links a helper only when its stream lands before the tower falls', () => {
-    const level = (qy: number): LevelDef =>
-      makeLevel({
-        towers: [
-          { id: 'p', x: 360, y: 1000, owner: 'player', units: 2 },
-          { id: 'q', x: 60, y: qy, owner: 'player', units: 9 },
-          { id: 'e', x: 360, y: 640, owner: 'enemy1', units: 8 },
-        ],
-        roads: [
-          { a: 'p', b: 'e' },
-          { a: 'p', b: 'q' },
-        ],
-      });
-    // e's 8 start landing at 3.0 s; p has 5 by then and falls to the fifth unit at ~3.5 s.
-    const near = createState(level(1000), 1); // q → p is 300 px = 2.5 s: in time
-    applyCommand(near, { type: 'link', owner: 'enemy1', from: 'e', to: 'p' });
-    expect(referencePlayerCommands(near, new Rng(1))).toEqual([link('q', 'p')]);
-    const far = createState(level(1360), 1); // q → p is 469 px = 3.9 s: lands after p has fallen
-    applyCommand(far, { type: 'link', owner: 'enemy1', from: 'e', to: 'p' });
-    expect(referencePlayerCommands(far, new Rng(1))).toEqual([]);
-  });
-
-  it('answers an all-in on a neighbour instead of racing for a neutral', () => {
-    const level = makeLevel({
-      towers: [
-        { id: 'p', x: 360, y: 1000, owner: 'player', units: 6 },
-        { id: 'q', x: 60, y: 1000, owner: 'player', units: 2 },
-        { id: 'n', x: 660, y: 1000, owner: 'neutral', units: 2 },
-        { id: 'e', x: 60, y: 640, owner: 'enemy1', units: 6 },
-      ],
-      roads: [
-        { a: 'p', b: 'q' },
-        { a: 'p', b: 'n' },
-        { a: 'q', b: 'e' },
-      ],
-    });
-    const calm = createState(level, 1);
-    expect(referencePlayerCommands(calm, new Rng(1))).toEqual([link('p', 'n')]);
-    const attacked = createState(level, 1);
-    applyCommand(attacked, { type: 'link', owner: 'enemy1', from: 'e', to: 'q' });
-    expect(referencePlayerCommands(attacked, new Rng(1))).toEqual([link('p', 'q')]);
-  });
-
-  it('ends a supply line once the captured front tower holds what it needs (at least SUPPLY_MIN)', () => {
-    expect(SUPPLY_MIN).toBe(10);
-    const level = makeLevel({
-      towers: [
-        { id: 'p', x: 360, y: 1000, owner: 'player', units: 30, level: 2 },
-        { id: 'f', x: 360, y: 700, owner: 'player', units: 12 },
-        { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 3 },
-      ],
-      roads: [
-        { a: 'p', b: 'f' },
-        { a: 'f', b: 'e' },
-      ],
-    });
-    const state = createState(level, 1);
-    applyCommand(state, link('p', 'f')); // a human left a supply line running
-    // f faces e (3 units): it wants max(10, what holds e's column) = 10 and already has 12 → the line ends.
-    expect(wantAt(state, state.towers['f']!)).toBe(10);
-    expect(unlinks(referencePlayerCommands(state, new Rng(1)))).toEqual([unlink('p', 'f')]);
-  });
-});
-
-describe('reference player: whole games', () => {
-  it('is deterministic given the rng', () => {
-    const level = LEVELS.find((l) => l.id === 3)!;
-    const a = play(level, 3, 60_000);
-    const b = play(level, 3, 60_000);
-    expect(a.outcome).toBe(b.outcome);
-    expect(JSON.stringify(a.state)).toBe(JSON.stringify(b.state));
-  });
-
-  it('an equal 1 v 1 against a rusher is decided under rules v2.1: the rusher opens, the reference player answers and wins at 19.95 s', () => {
-    // v2.1 re-pin: p 10 vs e 10 (rusher 0.5) on a 600 px road. Under v2 nobody attacked an equal tower
-    // and both grew to L3 100 (a stalemate at 120 s). Now the rusher streams at once (10 + 10 s of trickle
-    // ≥ 10 + 1.5); its source drains to 0 and the reference player's counter/parry rules take it.
-    const { outcome, state } = play(makeLevel(), 1, 120_000);
-    expect(outcome).toBe('won');
-    expect(state.time).toBe(19_950);
-    expect(state.towers['e']!.owner).toBe('player');
-  });
-
-  it('wins level 1 on every seed 1..100 with the game client rng streams, never issuing a legacy command', () => {
-    const level = LEVELS.find((l) => l.id === 1)!;
-    const lost: number[] = [];
-    for (let seed = 1; seed <= 100; seed++) {
-      const state = createState(level, seed);
-      const rngs = rngsFor(seed, level.enemies);
-      while (getOutcome(state) === 'playing' && state.time < 60_000) {
-        if (isAiTick(state)) {
-          const p = referencePlayerCommands(state, rngs.player);
-          expect(legacy(p)).toEqual([]);
-          const e = runAiTick(state, rngs.enemies);
-          for (const cmd of p) applyCommand(state, cmd);
-          for (const cmd of e) applyCommand(state, cmd);
-        }
-        step(state);
-      }
-      if (getOutcome(state) !== 'won') lost.push(seed);
-    }
-    expect(lost).toEqual([]);
-  });
-});
-
-describe('reference player: tank factory sources', () => {
-  it('a factory holding less than one tank (3 weight) next to a 4-unit enemy issues nothing', () => {
-    const level = makeLevel({
-      towers: [
-        { id: 'p', x: 360, y: 1000, owner: 'player', units: 3, kind: 'tankFactory' },
-        { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 4 },
-      ],
-    });
-    expect(referencePlayerCommands(createState(level, 1), new Rng(1))).toEqual([]);
-  });
-
-  it('sizes a tank source in whole tanks when judging an attack', () => {
-    /** Tank factory `p` (`units` weight) 600 px below a 1-unit enemy `e` (grows to 6 during the 5 s walk). */
-    const vs1 = (units: number): GameState =>
-      createState(
-        makeLevel({
-          towers: [
-            { id: 'p', x: 360, y: 1000, owner: 'player', units, kind: 'tankFactory' },
-            { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 1 },
-          ],
-        }),
-        1,
-      );
-    // 9 weight is one tank (5): short of the 6 it meets → no trickle credit, 5 < 6 × 1.2 + 2 → wait.
-    expect(referencePlayerCommands(vs1(9), new Rng(1))).toEqual([]);
-    // v2.1 re-pin: 10 weight is two tanks: 10 ≥ 6 and the target recruits nothing during the burst
-    // (v2 counted 2 regen and needed three tanks) → the stream starts and the first unit out is a tank.
-    const state = vs1(10);
-    expect(referencePlayerCommands(state, new Rng(1))).toEqual([link('p', 'e')]);
-    applyCommand(state, link('p', 'e'));
-    for (let i = 0; i < 3; i++) step(state);
-    expect(state.units[0]).toMatchObject({ kind: 'tank', weight: 5 });
-  });
-
-  it('plays 20 s of sim time with a sub-tank factory in play and finishes', () => {
-    const level = makeLevel({
-      towers: [
-        { id: 'p', x: 200, y: 1000, owner: 'player', units: 3, kind: 'tankFactory' },
-        { id: 'q', x: 520, y: 1000, owner: 'player', units: 30 },
-        { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 4 },
-      ],
-      roads: [
-        { a: 'p', b: 'e' },
-        { a: 'q', b: 'e' },
-      ],
-    });
-    const { outcome, state } = play(level, 1, 20_000);
-    expect(outcome === 'won' || state.time >= 20_000).toBe(true);
-  });
-});
-
-describe('reference player: bridge-aware attack planner', () => {
-  /**
-   * Two own towers next to enemy `e` (600 px north): `a` over a bridge, `b` over a plain road, and an
-   * `a`–`b` road (320 px) so that cutting the bridge would leave `a` two hops from `e` — a cut the far
-   * side can afford (`keepsRoutes`, +1 hop). `e` is a turtle keep at `level` with `units`.
-   */
-  function forkLevel(opts: { a: number; b: number; units: number; level: 1 | 2 | 3; link?: boolean; bridge?: boolean }): LevelDef {
-    return makeLevel({
-      enemies: [{ owner: 'enemy1', personality: 'turtle', aggression: 0.5 }],
-      towers: [
-        { id: 'a', x: 200, y: 1000, owner: 'player', units: opts.a, level: 3 },
-        { id: 'b', x: 520, y: 1000, owner: 'player', units: opts.b, level: 3 },
-        { id: 'e', x: 360, y: 400, owner: 'enemy1', units: opts.units, level: opts.level },
-      ],
-      roads: [
-        { a: 'a', b: 'e', kind: opts.bridge === false ? 'road' : 'bridge' },
-        { a: 'b', b: 'e' },
-        ...(opts.link === false ? [] : [{ a: 'a', b: 'b' }]),
-      ],
-    });
-  }
-  const from = (cmds: Command[]) =>
-    links(cmds)
-      .map((c) => (c.type === 'link' ? c.from : ''))
-      .sort();
-
-  it('bridgeLoss: everything landing later than one AI tick after the first step is lost', () => {
-    expect(CUT_REACTION_MS).toBe(500);
-    expect(bridgeLoss(22, 5000)).toBe(22);
-    expect(bridgeLoss(10, 500)).toBe(9);
-    expect(bridgeLoss(10, 380)).toBe(8);
-    expect(bridgeLoss(1, 380)).toBe(0);
-  });
-
-  it('(1) attacks a max-level keep with the plain-road source only, keeping the bridge source home', () => {
-    const state = createState(forkLevel({ a: 30, b: 30, units: 4, level: 3 }), 1);
-    expect(referencePlayerCommands(state, new Rng(1))).toEqual([link('b', 'e')]);
-  });
-
-  it('(1) the same fork into an L1 barracks uses both sources: only a finished keep is planned as a cutter', () => {
-    const state = createState(forkLevel({ a: 30, b: 30, units: 4, level: 1 }), 1);
-    expect(from(referencePlayerCommands(state, new Rng(1)))).toEqual(['a', 'b']);
-  });
-
-  it('(1) a keep that would strand itself by cutting is not a cutter: both sources go', () => {
-    const state = createState(forkLevel({ a: 30, b: 30, units: 4, level: 3, link: false }), 1);
-    expect(from(referencePlayerCommands(state, new Rng(1)))).toEqual(['a', 'b']);
-  });
-
-  it('(2) requires the force surviving the cut to reach needed: a stream that is all bridge waits', () => {
-    const road = createState(forkLevel({ a: 40, b: 1, units: 4, level: 3, bridge: false }), 1);
-    expect(from(referencePlayerCommands(road, new Rng(1)))).toContain('a');
-    const bridge = createState(forkLevel({ a: 40, b: 1, units: 4, level: 3 }), 1);
-    expect(referencePlayerCommands(bridge, new Rng(1))).toEqual([]);
-  });
-
-  it('(2) relays chained into an exposed source are lost with it', () => {
-    const level = forkLevel({ a: 40, b: 1, units: 4, level: 3 });
-    level.towers.push({ id: 'r', x: 200, y: 1250, owner: 'player', units: 30, level: 3 });
-    level.roads.push({ a: 'a', b: 'r' });
-    expect(referencePlayerCommands(createState(level, 1), new Rng(1))).toEqual([]);
-  });
-
-  it('a short stream is joined by the stronger source over a plain road, never over a bridge the keep can cut', () => {
-    // b (30) streams at e (L3 keep, 20 → 30 when the stream lands). v2.1 re-pin: the keep recruits nothing
-    // once hit, so b's stream is not hopeless (v2: 2/s regen made it so and rule 0 ended it) — it is
-    // short of 1.2 × 30 + 2, and a joins it over the plain road.
-    const road = createState(forkLevel({ a: 40, b: 30, units: 20, level: 3, bridge: false }), 1);
-    applyCommand(road, link('b', 'e'));
-    for (let i = 0; i < 10; i++) step(road);
+describe('capture (rule 2)', () => {
+  it('opens with the neutral that falls soonest and traces the rule', () => {
+    const state = game([
+      { id: 'home', x: 360, y: 1100, owner: 'player', units: 12 },
+      { id: 'cheap', x: 60, y: 1100, owner: 'neutral', units: 4 }, // 1 + 2.5 + 4 = 7.5 s
+      { id: 'dear', x: 660, y: 1100, owner: 'neutral', units: 9 }, // 12.5 s
+      { id: 'foe', x: 360, y: 300, owner: 'enemy1', units: 8 },
+    ]);
     const rules: string[] = [];
-    expect(referencePlayerCommands(road, new Rng(1), (rule) => rules.push(rule))).toEqual([link('a', 'e')]);
-    expect(rules).toEqual(['attack']);
-    // Over a bridge the keep could cut, a stays home and b's stream runs on alone.
-    const bridge = createState(forkLevel({ a: 40, b: 30, units: 20, level: 3 }), 1);
-    applyCommand(bridge, link('b', 'e'));
-    for (let i = 0; i < 10; i++) step(bridge);
-    expect(referencePlayerCommands(bridge, new Rng(1))).toEqual([]);
-    expect(bridge.links).toHaveLength(1);
+    expect(bot(state, (rule) => rules.push(rule))).toEqual([link('home', 'cheap')]);
+    expect(rules).toEqual(['capture']);
+    expect(CAPTURE_PLAN_MS).toBe(30_000);
   });
 
-  it('level 40 seed 6: no player unit is drowned by an enemy bridge cut, and the crown falls before 90 s', () => {
-    const level = LEVELS.find((l) => l.id === 40)!;
-    const state = createState(level, 6);
-    const rngs = rngsFor(6, level.enemies);
-    let drowned = 0;
-    let enemyCuts = 0;
-    while (getOutcome(state) === 'playing' && state.time < 180_000) {
-      if (isAiTick(state)) {
-        const p = referencePlayerCommands(state, rngs.player);
-        expect(legacy(p)).toEqual([]);
-        const e = runAiTick(state, rngs.enemies);
-        for (const cmd of p) applyCommand(state, cmd);
-        for (const cmd of e) {
-          if (cmd.type === 'cutBridge') enemyCuts++;
-          applyCommand(state, cmd);
-        }
-        for (const ev of state.events) if (ev.type === 'unitDied' && ev.cause === 'bridge' && ev.owner === 'player') drowned += 1;
-      }
-      step(state);
-    }
-    expect(getOutcome(state)).toBe('won');
-    expect(enemyCuts).toBe(0);
-    expect(drowned).toBe(0);
-    expect(state.time).toBeLessThanOrEqual(90_000);
+  it('never wastes a link: a neutral that cannot fall within the horizon is left alone and the tower grows', () => {
+    const state = game([
+      { id: 'home', x: 360, y: 1100, owner: 'player', units: 12 },
+      { id: 'big', x: 360, y: 500, owner: 'neutral', units: 40, level: 3 }, // 1 + 5 + 40 = 46 s
+      { id: 'foe', x: 60, y: 300, owner: 'enemy1', units: 100, level: 3 },
+    ]);
+    expect(bot(state)).toEqual([]);
+  });
+
+  it('stacks links from several towers when one stream cannot break the target in time', () => {
+    const state = game([
+      { id: 'rear', x: 360, y: 1250, owner: 'player', units: 30, level: 2 }, // the grower: kept out of captures
+      { id: 'a', x: 60, y: 1100, owner: 'player', units: 12 },
+      { id: 'b', x: 660, y: 1100, owner: 'player', units: 12 },
+      { id: 'big', x: 360, y: 700, owner: 'neutral', units: 40, level: 3 }, // 500 px: one stream 45 s, two 25 s
+      { id: 'foe', x: 360, y: 100, owner: 'enemy1', units: 100, level: 3 },
+    ]);
+    expect(grower(state, hopsToOpponent(state, 'player'))?.id).toBe('rear');
+    expect(bot(state)).toEqual([link('a', 'big'), link('b', 'big')]);
+  });
+
+  it('keeps the growing keep out of captures while it holds ≥ GROWER_MIN_TOWERS towers', () => {
+    expect(GROWER_MIN_TOWERS).toBe(2);
+    const state = game([
+      { id: 'rear', x: 360, y: 1200, owner: 'player', units: 20, level: 1 },
+      { id: 'front', x: 360, y: 900, owner: 'player', units: 5, level: 1 },
+      { id: 'n', x: 60, y: 900, owner: 'neutral', units: 3 },
+      { id: 'foe', x: 360, y: 300, owner: 'enemy1', units: 8 },
+    ]);
+    const hops = hopsToOpponent(state, 'player');
+    expect(grower(state, hops)?.id).toBe('rear');
+    // rear also has a lane to n (no tower between), but front takes it and rear grows.
+    expect(state.roads['n-rear']).toBeDefined();
+    expect(bot(state)).toEqual([link('front', 'n')]);
+    state.towers['rear']!.level = 3; // a finished keep is no grower: the next one is
+    expect(grower(state, hops)?.id).toBe('front');
+  });
+
+  it('does not race a contested neutral it would lose on parity, and prefers uncontested ones', () => {
+    // Level-1 geometry: equal L1 rates, ours 1.5 s ahead, a 5-unit camp: the rival's landing at 7.9 s is the 6th.
+    const state = game([
+      { id: 'home', x: 200, y: 1100, owner: 'player', units: 12 },
+      { id: 'camp', x: 520, y: 760, owner: 'neutral', units: 5 },
+      { id: 'foe', x: 200, y: 340, owner: 'enemy1', units: 8 },
+    ]);
+    applyCommand(state, link('home', 'camp'));
+    for (let i = 0; i < 30; i++) step(state);
+    enemyLink(state, 'foe', 'camp');
+    const cmds = bot(state);
+    expect(cmds[0]).toEqual(unlink('home', 'camp')); // feeding the rival's capture is waste
+    expect(cmds[1]).toEqual(link('home', 'foe')); // foe's only link is busy: the stream lands unopposed
+    expect(CONTEST_PENALTY_MS).toBe(10_000);
+  });
+
+  it('hold check: a neutral next to a stronger enemy tower is not taken (it would be lost at once)', () => {
+    const state = game([
+      { id: 'home', x: 360, y: 1100, owner: 'player', units: 12, level: 1 },
+      { id: 'n', x: 360, y: 800, owner: 'neutral', units: 2 },
+      { id: 'keep', x: 360, y: 500, owner: 'enemy1', units: 60, level: 3 }, // 2/s with free links
+    ]);
+    expect(bot(state)).toEqual([]);
+    state.towers['keep']!.level = 1; // 1/s: our 1/s supply can hold it
+    expect(bot(state)).toEqual([link('home', 'n')]);
+  });
+});
+
+describe('attack (rule 3)', () => {
+  it('focuses on the enemy tower that falls soonest, planning against its shield and reinforcement', () => {
+    expect(ATTACK_PLAN_MS).toBe(45_000);
+    const state = game([
+      { id: 'a', x: 60, y: 1100, owner: 'player', units: 20, level: 2 },
+      { id: 'b', x: 660, y: 1100, owner: 'player', units: 20, level: 2 },
+      { id: 'weak', x: 360, y: 700, owner: 'enemy1', units: 3, level: 1 }, // one link: shields one of two L2 streams
+      { id: 'far', x: 60, y: 300, owner: 'enemy1', units: 3, level: 1 },
+    ]);
+    // a is the growing keep (tie → first), so b opens on weak (L1: it cannot match an L2 stream, one breaks it);
+    // far is reachable from a only, and a joins as the last resort.
+    expect(grower(state, hopsToOpponent(state, 'player'))?.id).toBe('a');
+    expect(bot(state)).toEqual([link('b', 'weak'), link('a', 'far')]);
+    state.towers['weak']!.level = 2; // two links: it would shield both L2 streams — nothing is opened
+    state.towers['far']!.level = 3;
+    expect(bot(state)).toEqual([]);
+    // far (L1) already supplies weak with its only link (1/s) and weak's one free link shields one stream:
+    // b is shielded, a's 1.43/s nets 0.43/s over the supply — both are needed, the keep last.
+    state.towers['far']!.level = 1;
+    applyCommand(state, { type: 'link', owner: 'enemy1', from: 'weak', to: 'far' });
+    applyCommand(state, { type: 'link', owner: 'enemy1', from: 'far', to: 'weak' });
+    expect(bot(state)).toEqual([link('b', 'weak'), link('a', 'weak')]);
+  });
+
+  it('an equal-level tower with a free link on a single lane is not attacked (it would shield) — the tower grows instead', () => {
+    const state = game([
+      { id: 'home', x: 360, y: 1100, owner: 'player', units: 12, level: 1 },
+      { id: 'foe', x: 360, y: 500, owner: 'enemy1', units: 3, level: 1 },
+    ]);
+    expect(bot(state)).toEqual([]);
+    enemyLink(state, 'foe', 'home'); // its only link is now busy: the counter lands
+    expect(bot(state)).toContainEqual(link('home', 'foe'));
+  });
+
+  it('the growing keep joins an attack only as a last resort', () => {
+    // foe (L1, one free link) shields front's 1/s; the grower's 1.43/s is then unmatched and breaks it.
+    const towers: TowerDef[] = [
+      { id: 'rear', x: 360, y: 1200, owner: 'player', units: 20, level: 2 },
+      { id: 'front', x: 60, y: 900, owner: 'player', units: 5, level: 1 },
+      { id: 'foe', x: 60, y: 500, owner: 'enemy1', units: 30, level: 1 },
+    ];
+    const alone = game(towers);
+    expect(grower(alone, hopsToOpponent(alone, 'player'))?.id).toBe('rear');
+    expect(bot(alone)).toEqual([link('front', 'foe'), link('rear', 'foe')]);
+    // With a third tower the grower stays out: front is shielded, side lands.
+    const withSide = game([...towers, { id: 'side', x: 660, y: 900, owner: 'player', units: 10, level: 1 }]);
+    expect(bot(withSide)).toEqual([link('front', 'foe'), link('side', 'foe')]);
+  });
+});
+
+describe('defend (rule 1)', () => {
+  it('reinforces a sieged tower from a neighbour when that makes it hold (and no counter is possible)', () => {
+    const state = game(
+      [
+        { id: 'p', x: 360, y: 1000, owner: 'player', units: 3, level: 1 },
+        { id: 'q', x: 60, y: 1000, owner: 'player', units: 10, level: 1 },
+        { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 10, level: 1 },
+      ],
+      { obstacles: [{ kind: 'rock', points: [{ x: 210, y: 700 }] }] }, // blocks q–e: no counter
+    );
+    expect(state.roads['e-q']).toBeUndefined();
+    enemyLink(state, 'e', 'p');
+    const rules: string[] = [];
+    const cmds = bot(state, (r) => rules.push(r));
+    expect(cmds[0]).toEqual(link('q', 'p'));
+    expect(rules[0]).toBe('reinforce');
+  });
+
+  it('counter comes first: with a lane to the attacker’s source the helper besieges it and the tower shields meanwhile', () => {
+    const state = game([
+      { id: 'p', x: 360, y: 1000, owner: 'player', units: 3, level: 1 },
+      { id: 'q', x: 60, y: 1000, owner: 'player', units: 10, level: 1 },
+      { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 10, level: 1 },
+    ]);
+    enemyLink(state, 'e', 'p');
+    const rules: string[] = [];
+    // e is linked (not growing): q's stream lands from 6.6 s and flips it at 17.6 s; p would fall at 10 s, so it shields.
+    expect(bot(state, (r) => rules.push(r))).toEqual([link('q', 'e'), link('p', 'e')]);
+    expect(rules).toEqual(['counter', 'shield']);
+  });
+
+  it('counters: besieges the attacker’s source from a second tower when a reinforcement cannot save the target', () => {
+    const state = game([
+      { id: 'p', x: 360, y: 1000, owner: 'player', units: 3, level: 1 },
+      { id: 'q', x: 660, y: 700, owner: 'player', units: 10, level: 1 },
+      { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 4, level: 2 }, // 1.43/s: q's 1/s supply cannot hold p
+    ]);
+    enemyLink(state, 'e', 'p');
+    const rules: string[] = [];
+    const cmds = bot(state, (r) => rules.push(r));
+    expect(cmds).toContainEqual(link('q', 'e')); // e is linked (not growing): 1 + 3.5 + 5 = 9.5 s
+    expect(rules).toContain('counter');
+  });
+
+  it('shields: streams back on the attacker’s lane when its rate matches, reclaiming a slower attack', () => {
+    const state = game([
+      { id: 'p', x: 360, y: 1000, owner: 'player', units: 10, level: 1 },
+      { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 10, level: 1 },
+      { id: 'n', x: 660, y: 1000, owner: 'neutral', units: 20 },
+    ]);
+    applyCommand(state, link('p', 'n')); // a 24 s capture
+    enemyLink(state, 'e', 'p'); // p falls at 1 + 5 + 11 = 17 s: before n would fall
+    const cmds = bot(state);
+    expect(cmds).toEqual([unlink('p', 'n'), link('p', 'e')]);
+  });
+
+  it('does not shield an attacker it cannot match', () => {
+    const state = game([
+      { id: 'p', x: 360, y: 1000, owner: 'player', units: 10, level: 1 },
+      { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 10, level: 2 },
+    ]);
+    enemyLink(state, 'e', 'p');
+    expect(bot(state)).toEqual([]);
+  });
+
+  it('shield race (RACE_MARGIN_MS): drops a shield for an attack whose target falls first', () => {
+    expect(RACE_MARGIN_MS).toBe(1000);
+    // Level-3 standoff: p shields w; foe's only link shields q; foe (3) falls to p in 1 + 5 + 4 = 10 s,
+    // p (20) would fall to w's stream in ≈ 1.5 + 21 s: the race is worth it.
+    const state = game([
+      { id: 'p', x: 360, y: 1000, owner: 'player', units: 20, level: 1 },
+      { id: 'q', x: 660, y: 700, owner: 'player', units: 1, level: 1 },
+      { id: 'w', x: 60, y: 1000, owner: 'enemy1', units: 5, level: 1 },
+      { id: 'foe', x: 360, y: 400, owner: 'enemy1', units: 3, level: 1 },
+    ]);
+    enemyLink(state, 'w', 'p');
+    applyCommand(state, link('p', 'w'));
+    applyCommand(state, link('q', 'foe'));
+    enemyLink(state, 'foe', 'q');
+    for (let i = 0; i < 40; i++) step(state); // the standoff is running
+    expect(bot(state)).toEqual([unlink('p', 'w'), link('p', 'foe')]);
+  });
+});
+
+describe('maintain (rule 0) and supply (rule 4)', () => {
+  it('ends a hopeless attack after its commitment, but keeps a shield', () => {
+    const state = game([
+      { id: 'p', x: 360, y: 1000, owner: 'player', units: 10, level: 1 },
+      { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 10, level: 1 },
+      { id: 'k', x: 60, y: 400, owner: 'enemy1', units: 100, level: 3 },
+    ]);
+    applyCommand(state, link('p', 'e'));
+    enemyLink(state, 'k', 'e'); // 2/s of supply: e never falls
+    while (state.time < 5000) step(state);
+    expect(bot(state)).toEqual([unlink('p', 'e')]);
+    expect(HOPELESS_MS).toBe(60_000);
+    enemyLink(state, 'e', 'p');
+    expect(bot(state)).toEqual([]); // now a shield: kept
+  });
+
+  it('a supply line that is no reinforcement ends unless its source is a capped keep', () => {
+    const state = game([
+      { id: 'r', x: 360, y: 1200, owner: 'player', units: 20, level: 2 },
+      { id: 'f', x: 360, y: 900, owner: 'player', units: 5, level: 1 },
+      { id: 'e', x: 360, y: 300, owner: 'enemy1', units: 100, level: 3 },
+    ]);
+    applyCommand(state, link('r', 'f'));
+    expect(bot(state)).toEqual([unlink('r', 'f')]);
+    state.towers['r']!.level = 3;
+    state.towers['r']!.units = 100;
+    expect(bot(state)).toEqual([]);
+  });
+
+  it('a capped keep with nothing to attack pours into the emptiest friendly neighbour nearest the front', () => {
+    const state = game([
+      { id: 'keep', x: 360, y: 1200, owner: 'player', units: 100, level: 3 },
+      { id: 'a', x: 60, y: 900, owner: 'player', units: 30, level: 2 },
+      { id: 'b', x: 660, y: 900, owner: 'player', units: 10, level: 1 },
+      { id: 'e', x: 360, y: 300, owner: 'enemy1', units: 100, level: 3 },
+    ]);
+    const rules: string[] = [];
+    expect(bot(state, (r) => rules.push(r))).toEqual([link('keep', 'b')]);
+    expect(rules).toEqual(['supply']);
+  });
+
+  it('upgrade break: a linked L1 at 25 drops its link, upgrades next tick and re-links at the L2 rate', () => {
+    const state = game([
+      { id: 'p', x: 360, y: 1000, owner: 'player', units: 25, level: 1 },
+      { id: 'n', x: 360, y: 400, owner: 'neutral', units: 10 },
+    ]);
+    applyCommand(state, link('p', 'n'));
+    const rules: string[] = [];
+    expect(bot(state, (r) => rules.push(r))).toEqual([unlink('p', 'n')]);
+    expect(rules).toEqual(['upgrade']);
+    applyCommand(state, unlink('p', 'n'));
+    step(state);
+    expect(state.towers['p']!.level).toBe(2);
+    expect(bot(state)).toEqual([link('p', 'n')]);
+  });
+
+  it('retreat: a tower under fire below 3 units drops a stream that is not winning its lane', () => {
+    const state = game([
+      { id: 'p', x: 360, y: 1000, owner: 'player', units: 2, level: 1 },
+      { id: 'n', x: 660, y: 1000, owner: 'neutral', units: 80, level: 3 },
+      { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 10, level: 2 },
+    ]);
+    applyCommand(state, link('p', 'n'));
+    state.towers['p']!.underFireUntilMs = 1500;
+    expect(bot(state)).toEqual([unlink('p', 'n')]);
+  });
+});
+
+describe('purity', () => {
+  it('reads only the state: two calls on the same state give the same commands and mutate nothing', () => {
+    const state = game([
+      { id: 'home', x: 360, y: 1100, owner: 'player', units: 12 },
+      { id: 'n', x: 60, y: 1100, owner: 'neutral', units: 4 },
+      { id: 'foe', x: 360, y: 300, owner: 'enemy1', units: 8 },
+    ]);
+    const before = JSON.stringify(state);
+    const a = bot(state);
+    const b = bot(state);
+    expect(a).toEqual(b);
+    expect(JSON.stringify(state)).toBe(before);
+  });
+
+  it('a wall with no lane through it leaves the bot with nothing to do', () => {
+    const state = game(
+      [
+        { id: 'home', x: 360, y: 1100, owner: 'player', units: 12 },
+        { id: 'foe', x: 360, y: 300, owner: 'enemy1', units: 2 },
+      ],
+      { obstacles: [wall(100, 700, 620, 700)] },
+    );
+    expect(bot(state)).toEqual([]);
   });
 });

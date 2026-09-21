@@ -38,10 +38,6 @@ describe('rngsFor', () => {
         { id: 'e1', x: 150, y: 400, owner: 'enemy1', units: 20 },
         { id: 'e2', x: 570, y: 400, owner: 'enemy2', units: 20 },
       ],
-      roads: [
-        { a: 'p', b: 'e1' },
-        { a: 'p', b: 'e2' },
-      ],
     });
     const a = runAiTick(createState(level, 7), rngsFor(7, enemies).enemies);
     const b = runAiTick(createState(level, 7), rngsFor(7, enemies).enemies);

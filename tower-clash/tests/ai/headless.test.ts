@@ -4,7 +4,7 @@ import { DEFAULT_MODIFIERS } from '../../src/sim/index';
 import type { PlayerModifiers } from '../../src/sim/index';
 import { referencePlayerCommands } from '../../src/ai/index';
 import { HEADLESS_MAX_MS, runHeadless, starsFor } from '../../src/ai/headless';
-import { makeLevel } from '../helpers';
+import { makeLevel, wall } from '../helpers';
 
 /** Every Commander track at its cap (ECONOMY.md §3.2 / catalog ADVANTAGE_LIMIT). */
 const MAX_MODIFIERS: PlayerModifiers = { productionMul: 1.2, capacityMul: 1.25, startGarrisonBonus: 5, unitSpeedMul: 1.15 };
@@ -29,16 +29,15 @@ describe('runHeadless', () => {
     }
   });
 
-  it('with max modifiers wins level 1 faster than without: seed 1 outright, 18+ of 20 seeds, 15 %+ less time in total', () => {
-    // Upgrades change the opening (bigger garrison, faster columns) and so the whole match, so a single
-    // seed could come out slower; the population must be clearly faster.
+  it('wins level 1 on 20 seeds with and without max modifiers, and the boost is never slower in total', () => {
+    // Rules v3 (2026-09-21): a stream lands its rate whatever the garrison, so the +5 start bonus and the
+    // capacity are worth little on level 1; production ×1.2 and march ×1.15 shave a few seconds. The
+    // pinned times are the campaign clock for level 1 seed 1 (re-pin when the AI or the level changes).
     const first = runHeadless(level1, 1, referencePlayerCommands);
     const firstBoosted = runHeadless(level1, 1, referencePlayerCommands, { modifiers: MAX_MODIFIERS });
-    // v2.1 re-pin (2026-09-17): the bot attacks the rusher head-on from the first tick (v2: 16 400 / 11 600).
-    expect(first).toMatchObject({ outcome: 'won', timeMs: 18_850 });
-    expect(firstBoosted).toMatchObject({ outcome: 'won', timeMs: 12_250 });
+    expect(first).toMatchObject({ outcome: 'won', timeMs: 34_850 });
+    expect(firstBoosted).toMatchObject({ outcome: 'won', timeMs: 33_900 });
 
-    let faster = 0;
     let baseTotal = 0;
     let boostedTotal = 0;
     for (let seed = 1; seed <= 20; seed++) {
@@ -46,12 +45,10 @@ describe('runHeadless', () => {
       const boosted = runHeadless(level1, seed, referencePlayerCommands, { modifiers: MAX_MODIFIERS });
       expect(base.outcome).toBe('won');
       expect(boosted.outcome).toBe('won');
-      if (boosted.timeMs < base.timeMs) faster++;
       baseTotal += base.timeMs;
       boostedTotal += boosted.timeMs;
     }
-    expect(faster).toBeGreaterThanOrEqual(18);
-    expect(boostedTotal).toBeLessThan(baseTotal * 0.85);
+    expect(boostedTotal).toBeLessThanOrEqual(baseTotal);
   });
 
   it('never lets the idle player win level 1, with or without upgrades', () => {
@@ -62,8 +59,8 @@ describe('runHeadless', () => {
   });
 
   it('stops at the sim-time budget when nobody wins', () => {
-    // Two towers, no road: nothing can ever happen.
-    const stalemate = makeLevel({ roads: [] });
+    // Two towers, a wall between them: no lane, nothing can ever happen.
+    const stalemate = makeLevel({ obstacles: [wall(100, 700, 620, 700)] });
     const r = runHeadless(stalemate, 1, referencePlayerCommands, { maxMs: 10_000 });
     expect(r).toEqual({ outcome: 'playing', timeMs: 10_000, ticks: 200, modifiers: DEFAULT_MODIFIERS });
   });

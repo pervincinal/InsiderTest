@@ -1,20 +1,27 @@
 /**
- * Public AI API. Controllers are pure functions of (state, rng) and return commands only; the caller
- * applies them with `applyCommand` on every AI tick (`C.AI_TICK_MS`, see `isAiTick`).
+ * Public AI API (rules v3). Controllers are pure functions of (state, rng) and return commands only; the
+ * caller applies them with `applyCommand` on every AI tick (`C.AI_TICK_MS`, see `isAiTick`).
  */
 import type { Command, EnemyDef, GameState, Owner } from '../sim/index';
 import { Rng } from '../sim/index';
 import { opportunistCommands, rusherCommands, turtleCommands } from './personalities';
 
-export { referencePlayerCommands } from './referencePlayer';
-export type { RuleTrace } from './referencePlayer';
+export { referencePlayerCommands, grower, CAPTURE_PLAN_MS, ATTACK_PLAN_MS, GROWER_MIN_TOWERS } from './referencePlayer';
+export type { RuleTrace } from './tactics';
+export { RETREAT_UNITS } from './tactics';
 export {
   rusherCommands,
   turtleCommands,
   opportunistCommands,
-  OPPORTUNIST_RESERVE,
+  planMsFor,
+  SIEGE_PLAN_S,
+  HOPELESS_MS,
+  COUNTER_PLAN_MS,
+  RUSHER_MAX_LINKS,
   OPPORTUNIST_MAX_LINKS,
-  ENEMY_MAX_LINKS,
+  TURTLE_MAX_LINKS,
+  TURTLE_MIN_LEVEL,
+  DEFENCE_MIN_AGGRESSION,
   SUPPLY_FULL_UNITS,
 } from './personalities';
 export {
@@ -24,20 +31,21 @@ export {
   hostileNeighbours,
   enemyNeighbours,
   friendlyNeighbours,
-  incomingThreat,
-  incomingSupport,
-  effectiveDefenders,
   hopsToOpponent,
-  linkPending,
   linksTo,
   freeLinkSlots,
   hasLink,
-  inflowRate,
+  emitRate,
   linkRate,
-  holdReserve,
+  laneFlow,
+  siegeOf,
   fallsAtMs,
+  siegePlan,
+  reinforcePlan,
+  artilleryKillRate,
+  FALLS_HORIZON_MS,
 } from './common';
-export type { Neighbour } from './common';
+export type { Neighbour, Siege, Flow, Plan, PlannedLink } from './common';
 
 /** Commands for one enemy this AI tick, according to its personality and aggression. */
 export function enemyCommands(state: GameState, enemy: EnemyDef, rng: Rng): Command[] {

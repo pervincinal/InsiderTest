@@ -1,0 +1,513 @@
+/**
+ * Shared decision rules (rules v3, GDD §2.5). One `Ctx` per owner per AI tick collects the commands and
+ * remembers what this tick already decided (links issued, links ended, towers that started a stream) so
+ * that later rules plan on top of earlier ones. Every rule is a pure function of the visible state.
+ *
+ * Under v3 a stream costs nothing but the source's growth and lands its rate whatever the source holds,
+ * so the decisions are:
+ *   maintain — end streams that no longer earn their keep (hopeless attacks, supply the target does not
+ *              need, everything from a tower shot below `RETREAT_UNITS` that is not winning its lane);
+ *   defend   — a tower that falls to what is coming is reinforced by neighbours whose streams make it
+ *              hold, else the attacker's *source* is besieged from other towers (its garrison is what
+ *              falls, and its capture ends the stream), else the tower streams back on the same lane when
+ *              its rate is at least the attacker's (the streams cancel 1:1 and nothing lands);
+ *   attack   — towers with a free link stream at the hostile tower that falls soonest within the plan
+ *              horizon, stacking links from several towers when one cannot break it; a tower with no
+ *              takeable target stays unlinked and grows.
+ */
+import type { Command, GameState, Link, Owner, Tower } from '../sim/index';
+import { capacityOf, isUnderFire, linksFrom, maxLinksOf } from '../sim/index';
+import {
+  allLinks,
+  atMaxLevel,
+  bySpeed,
+  flipOwner,
+  hasLink,
+  isCapped,
+  laneFlow,
+  linkRate,
+  neighbours,
+  ownedTowers,
+  reinforcePlan,
+  roadBetween,
+  siegeOf,
+  siegePlan,
+  type Plan,
+  type PlannedLink,
+  type Siege,
+  type SiegeOptions,
+  underSiege,
+} from './common';
+
+/**
+ * A tower under fire holding fewer units than this ends every stream that is not winning its lane: it
+ * cannot grow while linked, and when the fire stops it should (GDD §2.5 unlink rules).
+ */
+export const RETREAT_UNITS = 3;
+/** An attack that is landing is kept at least this long before it is judged hopeless (no tick-by-tick ping-pong). */
+export const MIN_ATTACK_MS = 5_000;
+/**
+ * A linked tower at capacity below its top level cannot auto-upgrade; it drops its links for one tick to
+ * take the level (faster streams, one more link) when it survives at least this long without them.
+ */
+export const UPGRADE_BREAK_SAFE_MS = 3_000;
+
+/** Optional hook for tooling: called with the rule that produced each command. */
+export type RuleTrace = (rule: string, cmd: Command) => void;
+
+export interface Ctx {
+  state: GameState;
+  owner: Owner;
+  cmds: Command[];
+  /** Links issued this tick. */
+  planned: PlannedLink[];
+  /** Links ended this tick. */
+  ended: Link[];
+  /** Towers that started a stream this tick (one new stream per tower per tick, readable ribbons). */
+  used: Set<string>;
+  /** Towers whose decisions are skipped this tick (aggression gate); they neither link nor unlink. */
+  skipped: Set<string>;
+  rule: string;
+  trace?: RuleTrace;
+}
+
+export function newCtx(state: GameState, owner: Owner, trace?: RuleTrace): Ctx {
+  return { state, owner, cmds: [], planned: [], ended: [], used: new Set(), skipped: new Set(), rule: '', trace };
+}
+
+export function options(ctx: Ctx): SiegeOptions {
+  return { planned: ctx.planned, exclude: ctx.ended };
+}
+
+/** `siegeOf` on top of this tick's decisions. */
+export function siege(ctx: Ctx, target: Tower, extra: readonly PlannedLink[] = []): Siege {
+  return siegeOf(ctx.state, target, { planned: extra.length ? [...ctx.planned, ...extra] : ctx.planned, exclude: ctx.ended });
+}
+
+/** Active links of `from` after this tick's unlinks. */
+export function activeLinks(ctx: Ctx, from: string): Link[] {
+  return linksFrom(ctx.state, from).filter((l) => !ctx.ended.includes(l));
+}
+
+/** Link slots the tower can still fill this tick: level limit (or the bot's cap) minus active and planned links. */
+export function freeSlots(ctx: Ctx, tower: Tower, cap = Infinity): number {
+  const limit = Math.min(cap, maxLinksOf(tower));
+  return Math.max(0, limit - activeLinks(ctx, tower.id).length - ctx.planned.filter((p) => p.from === tower.id).length);
+}
+
+export function issueLink(ctx: Ctx, from: Tower, to: string): void {
+  const cmd: Command = { type: 'link', owner: ctx.owner, from: from.id, to };
+  ctx.cmds.push(cmd);
+  ctx.planned.push({ owner: ctx.owner, from: from.id, to });
+  ctx.used.add(from.id);
+  ctx.trace?.(ctx.rule, cmd);
+}
+
+export function issueUnlink(ctx: Ctx, link: Link): void {
+  if (ctx.ended.includes(link)) return;
+  const cmd: Command = { type: 'unlink', owner: ctx.owner, from: link.from, to: link.to };
+  ctx.cmds.push(cmd);
+  ctx.ended.push(link);
+  ctx.trace?.(ctx.rule, cmd);
+}
+
+/** Issue every link of a plan (sources are marked used). */
+export function issuePlan(ctx: Ctx, plan: Plan): void {
+  for (const l of plan.links) {
+    const from = ctx.state.towers[l.from];
+    if (from) issueLink(ctx, from, l.to);
+  }
+}
+
+/** Own towers that may still act this tick (not skipped) and hold at least one unit (a stream needs soldiers). */
+export function actors(ctx: Ctx): Tower[] {
+  return ownedTowers(ctx.state, ctx.owner).filter((t) => !ctx.skipped.has(t.id) && t.units >= 1);
+}
+
+/**
+ * True when `link` shields its source: a hostile stream runs the other way on the same lane and ours is
+ * at least as fast, so the two cancel and nothing lands on us (GDD §2.5: counter-stream only when my
+ * rate ≥ theirs).
+ */
+export function isShield(ctx: Ctx, link: PlannedLink): boolean {
+  const from = ctx.state.towers[link.from];
+  const to = ctx.state.towers[link.to];
+  if (!from || !to || to.owner === ctx.owner) return false;
+  const reverse = ctx.state.links.find((l) => l.from === link.to && l.to === link.from && l.owner !== ctx.owner && !ctx.ended.includes(l));
+  if (!reverse) return false;
+  return linkRate(ctx.state, from, ctx.owner) >= linkRate(ctx.state, to, reverse.owner);
+}
+
+/**
+ * True when the supply line `link` (into an own tower) is what keeps its target standing, or the target
+ * is still under siege (a hostile stream or column heads for it) — the line stays until the attack is over.
+ */
+export function isReinforcement(ctx: Ctx, link: Link): boolean {
+  const to = ctx.state.towers[link.to];
+  if (!to || to.owner !== ctx.owner) return false;
+  if (siegeOf(ctx.state, to, { planned: ctx.planned, exclude: [...ctx.ended, link] }).fallsAtMs !== Infinity) return true;
+  return underSiege(ctx.state, to);
+}
+
+export interface MaintainConfig {
+  /** An attack whose target does not fall within this is hopeless and ends (unless it shields). */
+  hopelessMs: number;
+  /** Whether a supply line into an own tower that is not a reinforcement should go on. */
+  keepSupply: (ctx: Ctx, source: Tower, target: Tower, link: Link) => boolean;
+}
+
+/** Rule "maintain" for one tower (see file header). */
+export function maintain(ctx: Ctx, tower: Tower, cfg: MaintainConfig): void {
+  ctx.rule = 'maintain';
+  const state = ctx.state;
+  const links = activeLinks(ctx, tower.id);
+  if (links.length === 0) return;
+  // Upgrade break: at capacity below the top level, drop every link for a tick to take the level.
+  if (!atMaxLevel(tower) && tower.units >= capacityOf(tower, state)) {
+    const without = siegeOf(state, tower, { planned: ctx.planned, exclude: [...ctx.ended, ...links] }).fallsAtMs;
+    if (without > UPGRADE_BREAK_SAFE_MS) {
+      ctx.rule = 'upgrade';
+      for (const link of links) issueUnlink(ctx, link);
+      return;
+    }
+  }
+  const retreat = isUnderFire(state, tower) && tower.units < RETREAT_UNITS;
+  for (const link of links) {
+    const target = state.towers[link.to];
+    if (!target) continue;
+    if (target.owner === ctx.owner) {
+      if (isReinforcement(ctx, link)) continue;
+      if (retreat || !cfg.keepSupply(ctx, tower, target, link)) issueUnlink(ctx, link);
+      continue;
+    }
+    const shield = isShield(ctx, link);
+    const flow = laneFlow(state, link, [...state.links.filter((l) => !ctx.ended.includes(l)), ...ctx.planned]);
+    const landing = flow !== undefined && flow.rate > 0;
+    const falls = landing ? siege(ctx, target).fallsAtMs : Infinity;
+    if (target.owner === 'neutral' && landing) {
+      // A contested neutral goes to whoever lands the flipping unit; feeding a rival's capture is waste.
+      const winner = flipOwner(state, target, options(ctx));
+      if (winner !== undefined && winner !== ctx.owner) {
+        issueUnlink(ctx, link);
+        continue;
+      }
+    }
+    if (retreat) {
+      // Keep only a stream that is winning its lane: shielding, or landing on a target that falls in time.
+      if (!(shield || (landing && falls <= cfg.hopelessMs))) issueUnlink(ctx, link);
+      continue;
+    }
+    if (shield) continue;
+    if (!landing) {
+      issueUnlink(ctx, link);
+      continue;
+    }
+    if (falls > cfg.hopelessMs && state.time - link.createdMs >= MIN_ATTACK_MS) issueUnlink(ctx, link);
+  }
+}
+
+export interface DefendConfig {
+  /** Plan horizon for a counter-siege of the attacker's source. */
+  counterMs: number;
+  /** Link cap per tower (personality readability caps). */
+  cap?: number;
+  /** Extra sources a rule may not use (e.g. the reference player's growing keep) — defence ignores it by default. */
+  mayHelp?: (tower: Tower) => boolean;
+}
+
+/** Links of `tower` a shield may replace: supply that is not a reinforcement, or an attack whose target outlives the tower. */
+function reclaimableFor(ctx: Ctx, tower: Tower, fallsAt: number): Link | undefined {
+  for (const link of activeLinks(ctx, tower.id)) {
+    const target = ctx.state.towers[link.to];
+    if (!target) continue;
+    if (target.owner === ctx.owner) {
+      if (!isReinforcement(ctx, link)) return link;
+      continue;
+    }
+    if (isShield(ctx, link)) continue;
+    if (siege(ctx, target).fallsAtMs > fallsAt) return link;
+  }
+  return undefined;
+}
+
+/**
+ * Rule "defend" for one own tower: counter the attackers' sources (their capture ends the siege for
+ * good) → reinforce when the tower would still fall before the counter lands → shield. Returns true
+ * when the tower was falling and something was done about it.
+ */
+export function defend(ctx: Ctx, tower: Tower, cfg: DefendConfig): boolean {
+  const state = ctx.state;
+  const cap = cfg.cap ?? Infinity;
+  const s0 = siege(ctx, tower);
+  if (s0.fallsAtMs === Infinity) return false;
+  const mayHelp = cfg.mayHelp ?? (() => true);
+  const helpers = () => actors(ctx).filter((t) => t.id !== tower.id && !ctx.used.has(t.id) && mayHelp(t) && freeSlots(ctx, t, cap) > 0);
+
+  // 1) counter: besiege the attackers' sources from other towers (a linked source does not grow: its garrison is what falls).
+  ctx.rule = 'counter';
+  let answered = false;
+  let counterDoneMs = Infinity;
+  const attackers = state.links
+    .filter((l) => l.to === tower.id && l.owner !== ctx.owner && !ctx.ended.includes(l))
+    .map((l) => ({ link: l, flow: laneFlow(state, l, allLinks(state, options(ctx))) }))
+    .filter((a) => a.flow && a.flow.rate > 0)
+    .sort((a, b) => b.flow!.rate - a.flow!.rate);
+  for (const a of attackers) {
+    const source = state.towers[a.link.from];
+    if (!source) continue;
+    const sources = helpers()
+      .filter((t) => roadBetween(state, t.id, source.id) && !hasLink(state, t.id, source.id))
+      .sort(bySpeed(state, source, ctx.owner));
+    const plan = siegePlan(state, ctx.owner, source, sources, cfg.counterMs, options(ctx));
+    if (!plan) continue;
+    issuePlan(ctx, plan);
+    answered = true;
+    counterDoneMs = Math.min(counterDoneMs, plan.siege.fallsAtMs);
+  }
+
+  // 2) reinforce: friendly streams that make the tower hold, when it would fall before the counter frees it.
+  ctx.rule = 'reinforce';
+  let s = siege(ctx, tower);
+  if (s.fallsAtMs !== Infinity && s.fallsAtMs <= counterDoneMs + RACE_MARGIN_MS) {
+    const adjacent = helpers()
+      .filter((t) => roadBetween(state, t.id, tower.id) && !hasLink(state, t.id, tower.id))
+      .sort(bySpeed(state, tower, ctx.owner));
+    const saved = reinforcePlan(state, ctx.owner, tower, adjacent, options(ctx));
+    if (saved) {
+      issuePlan(ctx, saved);
+      return true;
+    }
+  }
+
+  // 3) shield: stream back on the lane of the strongest attacker we can match, so nothing lands.
+  ctx.rule = 'shield';
+  if (!ctx.used.has(tower.id)) {
+    s = siege(ctx, tower);
+    for (const a of attackers) {
+      if (s.fallsAtMs === Infinity || s.fallsAtMs > counterDoneMs + RACE_MARGIN_MS) break;
+      const source = state.towers[a.link.from];
+      if (!source || hasLink(state, tower.id, source.id)) continue;
+      if (linkRate(state, tower, ctx.owner) < linkRate(state, source, a.link.owner)) continue;
+      if (freeSlots(ctx, tower, cap) <= 0) {
+        const reclaim = reclaimableFor(ctx, tower, s.fallsAtMs);
+        if (!reclaim) continue;
+        issueUnlink(ctx, reclaim);
+      }
+      issueLink(ctx, tower, source.id);
+      answered = true;
+      break;
+    }
+  }
+  return answered;
+}
+
+export interface AttackConfig {
+  /** Rule name for the trace (default 'attack'). */
+  rule?: string;
+  /** Plan horizon: a target must fall within this to be worth a link. */
+  planMs: number;
+  /** Link cap per tower. */
+  cap?: number;
+  /** Which hostile towers are targets (default: every non-own tower). */
+  targets?: (tower: Tower) => boolean;
+  /** Which own towers may open an attack (default: all). */
+  sources?: (tower: Tower) => boolean;
+  /** Sources tried last (used only when the others cannot break the target). */
+  lastResort?: (tower: Tower) => boolean;
+  /** Score of a feasible plan (lower is better; default: when the target falls). */
+  score?: (target: Tower, plan: Plan) => number;
+  /**
+   * A source without a free slot may end the returned link to attack (default: none). Called once
+   * without a plan to ask whether the source could open at all, then with the chosen plan to pick the
+   * link (undefined then rejects the plan for that target).
+   */
+  reclaim?: (ctx: Ctx, source: Tower, plan?: Plan) => Link | undefined;
+  /**
+   * Plan against the defender's best answer: every friendly neighbour of the target with a free link is
+   * assumed to reinforce it, and the target is assumed to stream back on the lane of every source it can
+   * match (its free links, strongest source first). Off: plan against what is on the map now.
+   */
+  anticipate?: boolean;
+  /**
+   * A neutral is taken only when it can be held: the strongest rival neighbour with a free link streams
+   * no faster than what our adjacent towers could pour into it after the capture.
+   */
+  holdCheck?: boolean;
+  /** Score penalty (ms) for a neutral a rival already streams at (the flip is a race we may lose). */
+  contestPenaltyMs?: number;
+}
+
+/** Hypothetical reinforcement links into `target` from its owner's neighbours that have a free link. */
+export function anticipatedReinforcements(state: GameState, target: Tower): PlannedLink[] {
+  if (target.owner === 'neutral') return [];
+  const out: PlannedLink[] = [];
+  for (const n of neighbours(state, target.id)) {
+    const f = n.tower;
+    if (f.owner !== target.owner || f.units < 1 || hasLink(state, f.id, target.id)) continue;
+    if (linksFrom(state, f.id).length >= maxLinksOf(f)) continue;
+    out.push({ owner: f.owner, from: f.id, to: target.id });
+  }
+  return out;
+}
+
+/**
+ * Hypothetical shields: the target streams back at `link`'s source when it still has a link to spare (in
+ * `planned` count the shields already assumed) and its rate matches the source's.
+ */
+export function anticipatedShield(state: GameState, target: Tower, link: PlannedLink, planned: readonly PlannedLink[]): PlannedLink[] {
+  if (target.owner === 'neutral' || target.units < 1) return [];
+  const source = state.towers[link.from];
+  if (!source) return [];
+  const used = linksFrom(state, target.id).length + planned.filter((p) => p.from === target.id).length;
+  if (used >= maxLinksOf(target)) return [];
+  if (hasLink(state, target.id, source.id) || planned.some((p) => p.from === target.id && p.to === source.id)) return [];
+  if (linkRate(state, target) < linkRate(state, source, link.owner)) return [];
+  return [{ owner: target.owner, from: target.id, to: source.id }];
+}
+
+/** Strongest stream a rival neighbour with a free link could put on `tower` right now (weight/s). */
+export function strongestRivalRate(state: GameState, tower: Tower, owner: Owner): number {
+  let best = 0;
+  for (const n of neighbours(state, tower.id)) {
+    const r = n.tower;
+    if (r.owner === owner || r.owner === 'neutral' || r.units < 1) continue;
+    if (linksFrom(state, r.id).length >= maxLinksOf(r)) continue;
+    best = Math.max(best, linkRate(state, r));
+  }
+  return best;
+}
+
+/**
+ * Rule "attack": repeatedly pick the hostile target with the best-scoring feasible plan (the minimal set
+ * of adjacent sources whose stacked streams break it within `planMs`) and issue it, until nothing is
+ * takeable. A target already falling within the horizon to our own streams is left alone (no piling).
+ */
+export function attack(ctx: Ctx, cfg: AttackConfig): void {
+  ctx.rule = cfg.rule ?? 'attack';
+  const state = ctx.state;
+  const cap = cfg.cap ?? Infinity;
+  const isTarget = cfg.targets ?? ((t: Tower) => t.owner !== ctx.owner);
+  const maySource = cfg.sources ?? (() => true);
+  const lastResort = cfg.lastResort ?? (() => false);
+  const score = cfg.score ?? ((_t: Tower, p: Plan) => p.siege.fallsAtMs);
+  const canOpen = (t: Tower): boolean => freeSlots(ctx, t, cap) > 0 || (cfg.reclaim !== undefined && cfg.reclaim(ctx, t) !== undefined);
+  const rejected = new Set<string>();
+
+  for (;;) {
+    const sources = actors(ctx).filter((t) => !ctx.used.has(t.id) && maySource(t) && canOpen(t));
+    if (sources.length === 0) return;
+    const targetIds = new Set<string>();
+    for (const s of sources) for (const n of neighbours(state, s.id)) if (n.tower.owner !== ctx.owner && isTarget(n.tower)) targetIds.add(n.tower.id);
+    let best: { target: Tower; plan: Plan; score: number } | undefined;
+    for (const id of [...targetIds].sort()) {
+      if (rejected.has(id)) continue;
+      const target = state.towers[id]!;
+      const already = siege(ctx, target);
+      const mine = state.links.some((l) => l.to === id && l.owner === ctx.owner && !ctx.ended.includes(l)) || ctx.planned.some((p) => p.to === id);
+      if (mine && already.fallsAtMs <= cfg.planMs) continue;
+      const adjacent = sources.filter((s) => roadBetween(state, s.id, id) && !hasLink(state, s.id, id)).sort(bySpeed(state, target, ctx.owner));
+      const ordered = [...adjacent.filter((s) => !lastResort(s)), ...adjacent.filter((s) => lastResort(s))];
+      const reinforcements = cfg.anticipate ? anticipatedReinforcements(state, target) : [];
+      const opts: SiegeOptions = { planned: [...ctx.planned, ...reinforcements], exclude: ctx.ended };
+      const onAdd = cfg.anticipate ? (link: PlannedLink, planned: readonly PlannedLink[]) => anticipatedShield(state, target, link, planned) : undefined;
+      const plan = siegePlan(state, ctx.owner, target, ordered, cfg.planMs, opts, onAdd);
+      if (!plan) continue;
+      let penalty = 0;
+      if (target.owner === 'neutral') {
+        // A contested neutral goes to whoever lands the flipping unit: only plans that land it count.
+        let others = 0;
+        for (const [o, r] of plan.siege.byOwner) if (o !== ctx.owner) others += r;
+        if (others > 0) {
+          if (flipOwner(state, target, { planned: [...ctx.planned, ...plan.links], exclude: ctx.ended }) !== ctx.owner) continue;
+          penalty = cfg.contestPenaltyMs ?? 0;
+        }
+        if (cfg.holdCheck) {
+          let ours = 0;
+          for (const n of neighbours(state, id)) {
+            const t = n.tower;
+            if (t.owner !== ctx.owner || t.units < 1) continue;
+            const inPlan = plan.links.some((l) => l.from === t.id);
+            if (inPlan || freeSlots(ctx, t) > 0) ours += linkRate(state, t, ctx.owner);
+          }
+          if (strongestRivalRate(state, target, ctx.owner) > ours) continue;
+        }
+      }
+      const sc = score(target, plan) + penalty;
+      if (!best || sc < best.score) best = { target, plan, score: sc };
+    }
+    if (!best) return;
+    // Sources without a free slot must give up a link for the plan; if one cannot, the target is dropped.
+    const reclaims: Link[] = [];
+    let feasible = true;
+    for (const l of best.plan.links) {
+      const from = state.towers[l.from]!;
+      if (freeSlots(ctx, from, cap) > 0) continue;
+      const link = cfg.reclaim?.(ctx, from, best.plan);
+      if (!link) {
+        feasible = false;
+        break;
+      }
+      reclaims.push(link);
+    }
+    if (!feasible) {
+      rejected.add(best.target.id);
+      continue;
+    }
+    for (const link of reclaims) issueUnlink(ctx, link);
+    issuePlan(ctx, best.plan);
+  }
+}
+
+/**
+ * A shield dropped for an attack must win the race: the attack's target falls at least `RACE_MARGIN_MS`
+ * before the shielding tower would once the hostile stream lands on it again.
+ */
+export const RACE_MARGIN_MS = 1_000;
+
+/**
+ * Link a source may give up for an attack plan: a supply line that is no reinforcement (always), or —
+ * with `races` and once the plan is known — a shield whose tower outlives the plan's target by
+ * `RACE_MARGIN_MS` (the enemy cannot shield a lane while its links are busy, so the race is worth it).
+ */
+export function reclaimForAttack(ctx: Ctx, source: Tower, plan: Plan | undefined, races: boolean): Link | undefined {
+  let shield: Link | undefined;
+  for (const link of activeLinks(ctx, source.id)) {
+    const target = ctx.state.towers[link.to];
+    if (!target) continue;
+    if (target.owner === ctx.owner) {
+      if (!isReinforcement(ctx, link)) return link;
+      continue;
+    }
+    if (races && !shield && isShield(ctx, link)) shield = link;
+  }
+  if (!shield) return undefined;
+  if (!plan) return shield; // "could open" probe: judged with the plan below
+  const without = siegeOf(ctx.state, source, { planned: ctx.planned, exclude: [...ctx.ended, shield] }).fallsAtMs;
+  return without > plan.siege.fallsAtMs + RACE_MARGIN_MS ? shield : undefined;
+}
+
+/**
+ * Rule "supply": a capped keep (top level, at capacity — it makes nothing and streaming costs it
+ * nothing) with a free link pours into the friendly neighbour that needs it most: fewest hops to the
+ * opponent first (`hops`), then the emptiest. The sim ends the line when the target is full.
+ */
+export function supply(ctx: Ctx, hops: ReadonlyMap<string, number>, cap = Infinity): void {
+  ctx.rule = 'supply';
+  const state = ctx.state;
+  for (const keep of actors(ctx)) {
+    if (ctx.used.has(keep.id) || !isCapped(state, keep) || freeSlots(ctx, keep, cap) <= 0) continue;
+    let best: Tower | undefined;
+    let bestKey = [Infinity, Infinity] as const;
+    for (const n of neighbours(state, keep.id)) {
+      const t = n.tower;
+      if (t.owner !== ctx.owner || hasLink(state, keep.id, t.id) || ctx.planned.some((p) => p.from === keep.id && p.to === t.id)) continue;
+      if (t.units >= capacityOf(t, state)) continue;
+      const key = [hops.get(t.id) ?? Infinity, t.units] as const;
+      if (key[0] < bestKey[0] || (key[0] === bestKey[0] && key[1] < bestKey[1])) {
+        best = t;
+        bestKey = key;
+      }
+    }
+    if (best) issueLink(ctx, keep, best.id);
+  }
+}

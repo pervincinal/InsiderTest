@@ -1,457 +1,363 @@
 import { describe, expect, it } from 'vitest';
 import { makeLevel } from '../helpers';
 import { Rng, applyCommand, createState, step } from '../../src/sim/index';
-import type { Command, EnemyDef, GameState, TowerKind } from '../../src/sim/index';
-import { enemyCommands, runAiTick } from '../../src/ai/index';
-import { ENEMY_MAX_LINKS, OPPORTUNIST_MAX_LINKS, OPPORTUNIST_RESERVE, SUPPLY_FULL_UNITS, supplyFull } from '../../src/ai/personalities';
-import { incomingThreat, threatReserve } from '../../src/ai/common';
-import { loadAllLevels } from '../../src/levels/index';
-import { runHeadless } from '../../src/ai/headless';
-
-const LEVELS = await loadAllLevels();
+import type { Command, EnemyDef, GameState, TowerDef } from '../../src/sim/index';
+import {
+  COUNTER_PLAN_MS,
+  DEFENCE_MIN_AGGRESSION,
+  HOPELESS_MS,
+  OPPORTUNIST_MAX_LINKS,
+  RUSHER_MAX_LINKS,
+  SIEGE_PLAN_S,
+  SUPPLY_FULL_UNITS,
+  TURTLE_MAX_LINKS,
+  TURTLE_MIN_LEVEL,
+  enemyCommands,
+  opportunistCommands,
+  planMsFor,
+  rusherCommands,
+  turtleCommands,
+} from '../../src/ai/index';
+import { MIN_ATTACK_MS, RETREAT_UNITS, UPGRADE_BREAK_SAFE_MS } from '../../src/ai/tactics';
 
 /*
- * Rules v2 (GDD §2.0 / §2.5): an enemy attack is a `link`; the stream ends with `unlink` when the
- * source is threatened below its reserve or the captured target is full. Upgrades are automatic, so no
- * personality ever issues `upgrade`, and `sendUnits` is legacy: every test below asserts the exact
- * command list, and the last block runs whole levels asserting neither legacy command is ever emitted.
- * Rules v2.1 (2026-09-17, "under fire"): the attack test is `siegeForce ≥ costToTake + margin`, where
- * `siegeForce` adds 10 s of the source's trickle once the burst alone matches the target's garrison.
- * Thresholds below were re-pinned deliberately to that rule (v2 values in the comments).
+ * Rules v3 personalities (GDD §2.5). Aggression 1 everywhere unless a test is about the gate, so no
+ * tick is skipped and the decision rule alone decides. Fixtures keep every lane length a round number.
  */
 
-function enemy(personality: EnemyDef['personality'], aggression: number): EnemyDef {
-  return { owner: 'enemy1', personality, aggression };
+const rusher = (aggression = 1): EnemyDef => ({ owner: 'enemy1', personality: 'rusher', aggression });
+const turtle = (aggression = 1): EnemyDef => ({ owner: 'enemy1', personality: 'turtle', aggression });
+const opportunist = (aggression = 1): EnemyDef => ({ owner: 'enemy1', personality: 'opportunist', aggression });
+const rival: EnemyDef = { owner: 'enemy2', personality: 'rusher', aggression: 1 };
+
+function game(towers: TowerDef[], enemies: EnemyDef[] = [rusher()]): GameState {
+  return createState(makeLevel({ towers, enemies }), 1);
 }
 
-/** p (player) — e (enemy1) on one 600 px road, with chosen garrisons (and e's level / kind). */
-function duel(enemyDef: EnemyDef, enemyUnits: number, playerUnits: number, level: 1 | 2 | 3 = 1, kind: TowerKind = 'barracks'): GameState {
-  return createState(
-    makeLevel({
-      enemies: [enemyDef],
-      towers: [
-        { id: 'p', x: 360, y: 1000, owner: 'player', units: playerUnits, level: 1 },
-        { id: 'e', x: 360, y: 400, owner: 'enemy1', units: enemyUnits, level, kind },
-      ],
-    }),
-    1,
-  );
-}
-
+const link = (from: string, to: string, owner: EnemyDef['owner'] = 'enemy1'): Command => ({ type: 'link', owner, from, to });
+const unlink = (from: string, to: string, owner: EnemyDef['owner'] = 'enemy1'): Command => ({ type: 'unlink', owner, from, to });
 const links = (cmds: Command[]) => cmds.filter((c) => c.type === 'link');
-const unlinks = (cmds: Command[]) => cmds.filter((c) => c.type === 'unlink');
-const cuts = (cmds: Command[]) => cmds.filter((c) => c.type === 'cutBridge');
-const legacy = (cmds: Command[]) => cmds.filter((c) => c.type === 'upgrade' || c.type === 'sendUnits');
-const linkCmd = (from: string, to: string): Command => ({ type: 'link', owner: 'enemy1', from, to });
 
-/**
- * e (enemy1, `enemyUnits`) at the north end of a 600 px bridge from p (player, `playerUnits`); with `alt`,
- * a plain detour p — n — e (neutral n) keeps e reachable once the bridge is gone.
- */
-function bridgeDuel(enemyDef: EnemyDef, enemyUnits: number, playerUnits: number, alt = true, level: 1 | 2 | 3 = 3): GameState {
-  return createState(
-    makeLevel({
-      enemies: [enemyDef],
-      towers: [
-        { id: 'p', x: 360, y: 1000, owner: 'player', units: playerUnits },
-        { id: 'e', x: 360, y: 400, owner: 'enemy1', units: enemyUnits, level },
-        ...(alt ? [{ id: 'n', x: 60, y: 700, owner: 'neutral' as const, units: 2 }] : []),
-      ],
-      roads: [{ a: 'p', b: 'e', kind: 'bridge' }, ...(alt ? [{ a: 'p', b: 'n' }, { a: 'n', b: 'e' }] : [])],
-    }),
-    1,
-  );
+/** Enemy tower `e` 600 px above a target tower. */
+function duel(targetUnits: number, targetOwner: 'player' | 'neutral' = 'player', enemyLevel: 1 | 2 | 3 = 1): TowerDef[] {
+  return [
+    { id: 'p', x: 360, y: 1000, owner: targetOwner, units: targetUnits, level: 1 },
+    { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 8, level: enemyLevel },
+  ];
 }
+
+describe('plan horizon and aggression', () => {
+  it('planMsFor scales the personality horizon by 0.5 + 0.5 × aggression', () => {
+    expect(SIEGE_PLAN_S).toEqual({ rusher: 30, turtle: 45, opportunist: 45 });
+    expect(planMsFor('rusher', 1)).toBe(30_000);
+    expect(planMsFor('rusher', 0)).toBe(15_000);
+    expect(planMsFor('turtle', 0.5)).toBe(45_000 * 0.75);
+    expect(planMsFor('opportunist', 2)).toBe(45_000); // clamped
+  });
+
+  it('the aggression gate skips a tower with probability (1 − a) × 0.5, drawn once per tower in level order', () => {
+    const state = game(duel(3, 'neutral'));
+    // a = 0: the draw must be ≥ 0.5 for the tower to act. Rng(1).next() is deterministic; test both outcomes.
+    const r = new Rng(1).next();
+    const cmds = rusherCommands(state, rusher(0), new Rng(1));
+    if (r < 0.5) expect(cmds).toEqual([]);
+    else expect(cmds).toEqual([link('e', 'p')]);
+    // a = 1 never skips, whatever the draw.
+    expect(rusherCommands(state, rusher(1), new Rng(1))).toEqual([link('e', 'p')]);
+    expect(rusherCommands(state, rusher(1), new Rng(2))).toEqual([link('e', 'p')]);
+  });
+
+  it('is deterministic: same state, same rng seed, same commands', () => {
+    const state = game(duel(3, 'neutral'));
+    expect(enemyCommands(state, rusher(0.5), new Rng(7))).toEqual(enemyCommands(state, rusher(0.5), new Rng(7)));
+  });
+});
 
 describe('rusher', () => {
-  it('at aggression 0 (+3 margin): 9 v 10 waits (no wave, so no trickle credit), 10 v 10 links (10 + 10 s of trickle ≥ 13)', () => {
-    // v2.1 re-pin: under v2 12 v 10 waited and 13 v 10 linked (13 ≥ 10 + 3).
-    const def = enemy('rusher', 0);
-    // aggression 0 skips half the ticks: try several ticks per case so the gate never hides the rule.
-    for (const [units, expected] of [
-      [9, 0],
-      [10, 1],
-    ] as const) {
-      const rng = new Rng(7);
-      let attacks = 0;
-      for (let i = 0; i < 12; i++) attacks += links(enemyCommands(duel(def, units, 10), def, rng)).length;
-      if (expected === 0) expect(attacks).toBe(0);
-      else expect(attacks).toBeGreaterThan(0);
-    }
+  it('links when the target falls within 30 s: a player L1 at 10 over 600 px (22 s) yes, at 30 (44 s) no', () => {
+    expect(rusherCommands(game(duel(10)), rusher(), new Rng(1))).toEqual([link('e', 'p')]);
+    expect(rusherCommands(game(duel(30)), rusher(), new Rng(1))).toEqual([]);
   });
 
-  it('at aggression 1 never skips: 9 v 10 waits (a burst short of the garrison counts alone), 10 v 10 links (the trickle finishes it)', () => {
-    // v2.1 re-pin: under v2 10 v 10 waited and 11 v 10 linked (needs target + 1 in the burst alone).
-    const def = enemy('rusher', 1);
-    expect(enemyCommands(duel(def, 9, 10), def, new Rng(1))).toEqual([]);
-    expect(enemyCommands(duel(def, 10, 10), def, new Rng(1))).toEqual([linkCmd('e', 'p')]);
+  it('the horizon shrinks with low aggression: the same 10-unit target (22 s) is beyond a = 0.2 (18 s)', () => {
+    const state = game(duel(10));
+    // Force the gate open by picking a seed whose first draw is ≥ (1 − 0.2) × 0.5 = 0.4.
+    let seed = 1;
+    while (new Rng(seed).next() < 0.4) seed++;
+    expect(rusherCommands(state, rusher(0.2), new Rng(seed))).toEqual([]);
+    expect(rusherCommands(state, rusher(0.4), new Rng(seed))).toEqual([]); // 21 s horizon
+    expect(rusherCommands(state, rusher(0.5), new Rng(seed))).toEqual([link('e', 'p')]); // 22.5 s
   });
 
-  it('needs double the garrison against a fortress before its trickle counts: 19 v 10 waits, 20 links', () => {
-    // v2.1 re-pin: under v2 21 v 10 waited and 22 linked (20 effective defenders + 1 + the +1 margin).
-    const def = enemy('rusher', 1);
-    const level = makeLevel({
-      enemies: [def],
-      towers: [
-        { id: 'p', x: 360, y: 1000, owner: 'player', units: 10, kind: 'fortress' },
-        { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 19 },
-      ],
-    });
-    expect(enemyCommands(createState(level, 1), def, new Rng(1))).toEqual([]);
-    level.towers[1]!.units = 20;
-    expect(enemyCommands(createState(level, 1), def, new Rng(1))).toEqual([linkCmd('e', 'p')]);
+  it('never waits for a level and takes the target that falls soonest', () => {
+    const state = game([
+      { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 1, level: 1 },
+      { id: 'near', x: 360, y: 700, owner: 'neutral', units: 8 }, // 300 px: 1 + 2.5 + 8 = 11.5 s
+      { id: 'far', x: 60, y: 400, owner: 'neutral', units: 2 }, // 300 px: 1 + 2.5 + 2 = 5.5 s
+    ]);
+    expect(rusherCommands(state, rusher(), new Rng(1))).toEqual([link('e', 'far')]);
   });
 
-  it('v2.1 acceptance 4: an L3 at 100 across from a player L3 at 100 (240 px, no other towers) links within 2 s', () => {
-    // 100 + 2/s × 10 s = 120 ≥ 100 + margin; under v2 (100 < 101) it never linked.
-    const level = (aggression: number) =>
-      makeLevel({
-        enemies: [enemy('rusher', aggression)],
-        towers: [
-          { id: 'p', x: 360, y: 1000, owner: 'player', units: 100, level: 3 },
-          { id: 'e', x: 360, y: 760, owner: 'enemy1', units: 100, level: 3 },
-        ],
-      });
-    expect(enemyCommands(createState(level(1), 1), enemy('rusher', 1), new Rng(1))).toEqual([linkCmd('e', 'p')]);
-    // At aggression 0 half the ticks are skipped: the link still comes within 2 s (4 ticks) on seed 1.
-    const state = createState(level(0), 1);
-    const def = enemy('rusher', 0);
-    const rng = new Rng(1);
-    let linkedAt = -1;
-    while (state.time <= 2000 && linkedAt < 0) {
-      if (state.time % 500 === 0) {
-        const cmds = enemyCommands(state, def, rng);
-        if (links(cmds).length) linkedAt = state.time;
-        for (const cmd of cmds) applyCommand(state, cmd);
-      }
-      step(state);
-    }
-    expect(linkedAt).toBeGreaterThanOrEqual(0);
-    expect(linkedAt).toBeLessThanOrEqual(2000);
+  it('runs one ribbon per tower whatever the level (RUSHER_MAX_LINKS)', () => {
+    expect(RUSHER_MAX_LINKS).toBe(1);
+    const state = game([
+      { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 50, level: 3 },
+      { id: 'a', x: 60, y: 400, owner: 'neutral', units: 2 },
+      { id: 'b', x: 660, y: 400, owner: 'neutral', units: 2 },
+    ]);
+    expect(links(rusherCommands(state, rusher(), new Rng(1)))).toHaveLength(1);
+    applyCommand(state, link('e', 'a'));
+    expect(links(rusherCommands(state, rusher(), new Rng(1)))).toHaveLength(0);
   });
 
-  it('keeps the stream while it drains, and ends it once the captured target holds SUPPLY_FULL_UNITS', () => {
-    const def = enemy('rusher', 1);
-    const state = duel(def, 12, 3);
-    for (const cmd of enemyCommands(state, def, new Rng(1))) applyCommand(state, cmd);
-    expect(state.links).toHaveLength(1);
-    expect(SUPPLY_FULL_UNITS).toBe(5);
-    expect(supplyFull(state, state.towers['p']!)).toBe(5);
-    // e pours its 12 in 1.5 s and then trickles at 1/s; p grows 1/s and absorbs the burst: no re-link, no unlink.
-    let captureMs = 0;
-    let unlinkMs = 0;
-    for (let tick = 0; tick < 200 && unlinkMs === 0; tick++) {
-      step(state);
-      if (state.events.some((e) => e.type === 'capture')) captureMs = state.time;
-      if (state.time % 500 !== 0) continue;
-      const cmds = enemyCommands(state, def, new Rng(1));
-      if (captureMs === 0) expect(cmds).toEqual([]);
-      if (unlinks(cmds).length) {
-        unlinkMs = state.time;
-        expect(cmds).toEqual([{ type: 'unlink', owner: 'enemy1', from: 'e', to: 'p' }]);
-      }
-    }
-    // v2.1 re-pin (sim): p recruits nothing from the first landing, so the 12th unit lands on an empty
-    // tower two ticks earlier than under v2 (6150).
-    expect(captureMs).toBe(6050);
-    expect(state.towers['p']!.owner).toBe('enemy1');
-    // Unlinked on the first tick the captured tower held ≥ 5 (the trickle plus its own production: 6 by then).
-    expect(state.towers['p']!.units).toBe(6);
-    expect(unlinkMs).toBe(7000);
-  });
-
-  it('stops every stream when a hostile column approaches while its garrison is under the reserve, and links nothing new', () => {
-    const def = enemy('rusher', 1);
-    const state = duel(def, 12, 3);
-    applyCommand(state, linkCmd('e', 'p'));
-    for (let i = 0; i < 30; i++) step(state); // 1.5 s: e has poured 12 and holds 1 fresh unit
-    expect(state.towers['e']!.units).toBe(1);
-    expect(enemyCommands(state, def, new Rng(1))).toEqual([]);
-    // The player streams back: 4 units still to drain out of p count as an approaching column.
-    applyCommand(state, { type: 'link', owner: 'player', from: 'p', to: 'e' });
-    expect(incomingThreat(state, 'e')).toBe(4);
-    expect(threatReserve(state, state.towers['e']!)).toBe(6);
-    expect(enemyCommands(state, def, new Rng(1))).toEqual([{ type: 'unlink', owner: 'enemy1', from: 'e' }]);
-  });
-
-  it('never links a target it already streams to, and runs one stream per tower whatever its level', () => {
-    const def = enemy('rusher', 1);
-    const level = makeLevel({
-      enemies: [def],
-      towers: [
-        { id: 'p', x: 360, y: 1000, owner: 'player', units: 2 },
-        { id: 'q', x: 60, y: 400, owner: 'player', units: 2 },
-        { id: 'e', x: 660, y: 400, owner: 'enemy1', units: 40, level: 3 },
-      ],
-      roads: [
-        { a: 'p', b: 'e' },
-        { a: 'q', b: 'e' },
-      ],
-    });
-    const state = createState(level, 1);
-    const first = enemyCommands(state, def, new Rng(1));
-    expect(first).toHaveLength(ENEMY_MAX_LINKS);
-    expect(first[0]).toMatchObject({ type: 'link', from: 'e' });
-    applyCommand(state, first[0]!);
-    expect(enemyCommands(state, def, new Rng(1))).toEqual([]);
+  it('does not plan against the defence (a single L1 stream at a player L1 with a free link is still opened)', () => {
+    const state = game(duel(3));
+    expect(rusherCommands(state, rusher(), new Rng(1))).toEqual([link('e', 'p')]);
   });
 });
 
 describe('turtle', () => {
-  it('issues nothing below max level — it grows to 100 unlinked instead of upgrading', () => {
-    const def = enemy('turtle', 1);
-    expect(enemyCommands(duel(def, 25, 5, 1), def, new Rng(1))).toEqual([]);
-    expect(enemyCommands(duel(def, 50, 5, 2), def, new Rng(1))).toEqual([]);
-    // Left alone the sim upgrades it by itself: 5 → L2 at 25, L3 at 50 (and the turtle still waits).
-    const state = duel(def, 24, 5, 1);
-    for (let i = 0; i < 20; i++) step(state); // 1 s: one unit produced → 25 → L2
-    expect(state.towers['e']!).toMatchObject({ level: 2, units: 25 });
-    expect(enemyCommands(state, def, new Rng(1))).toEqual([]);
+  it('opens no attack from an L1 tower, even at a 1-unit neutral next door; an L2 tower attacks', () => {
+    expect(TURTLE_MIN_LEVEL).toBe(2);
+    const l1 = game([
+      { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 20, level: 1 },
+      { id: 'n', x: 360, y: 700, owner: 'neutral', units: 1 },
+    ]);
+    expect(turtleCommands(l1, turtle(), new Rng(1))).toEqual([]);
+    const l2 = game([
+      { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 20, level: 2 },
+      { id: 'n', x: 360, y: 700, owner: 'neutral', units: 1 },
+    ]);
+    expect(turtleCommands(l2, turtle(), new Rng(1))).toEqual([link('e', 'n')]);
   });
 
-  it('at max level links with siegeForce ≥ (2 − aggression) × target + 1: an L3 at 9 v 10 waits at aggression 0.5, 10 v 10 links', () => {
-    // v2.1 re-pin: factor 1.5 needs 16; a 10-burst matches the garrison and adds 2/s × 10 s = 30 (v2: 15 waited, 16 linked).
-    const def = enemy('turtle', 0.5);
-    expect(enemyCommands(duel(def, 9, 10, 3), def, new Rng(1))).toEqual([]);
-    expect(enemyCommands(duel(def, 10, 10, 3), def, new Rng(1))).toEqual([linkCmd('e', 'p')]);
+  it('an L3 turtle uses every link its level allows, one new stream per tick', () => {
+    expect(TURTLE_MAX_LINKS).toBe(3);
+    const state = game([
+      { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 100, level: 3 },
+      { id: 'a', x: 60, y: 400, owner: 'neutral', units: 2 },
+      { id: 'b', x: 660, y: 400, owner: 'neutral', units: 2 },
+      { id: 'c', x: 360, y: 700, owner: 'neutral', units: 2 },
+    ]);
+    const seen: string[] = [];
+    for (let tick = 0; tick < 3; tick++) {
+      const cmds = links(turtleCommands(state, turtle(), new Rng(1)));
+      expect(cmds).toHaveLength(1);
+      seen.push((cmds[0] as { to: string }).to);
+      for (const c of cmds) applyCommand(state, c);
+    }
+    expect(new Set(seen).size).toBe(3);
+    expect(turtleCommands(state, turtle(), new Rng(1))).toEqual([]);
   });
 
-  it('a fortress is finished at L2', () => {
-    const def = enemy('turtle', 1);
-    const level = makeLevel({
-      enemies: [def],
-      towers: [
-        { id: 'p', x: 360, y: 1000, owner: 'player', units: 5 },
-        { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 20, level: 2, kind: 'fortress' },
-      ],
-    });
-    expect(enemyCommands(createState(level, 1), def, new Rng(1))).toEqual([linkCmd('e', 'p')]);
-  });
-});
-
-describe('turtle: cutBridge', () => {
-  it('cuts the bridge under a player stream that would take its max-level tower', () => {
-    const def = enemy('turtle', 1);
-    // p (40) streams at e (L3, 20): the 40 still to drain out of p are the column on the bridge.
-    const state = bridgeDuel(def, 20, 40);
-    applyCommand(state, { type: 'link', owner: 'player', from: 'p', to: 'e' });
-    const cmds = enemyCommands(state, def, new Rng(1));
-    expect(cmds).toEqual([{ type: 'cutBridge', owner: 'enemy1', roadId: 'e-p' }]);
-    applyCommand(state, cmds[0]!);
-    expect(state.roads['e-p']!.cut).toBe(true);
-    expect(state.links).toHaveLength(0); // the stream dies with the road
-    expect(state.towers['e']!.units).toBe(20);
+  it('plans against the defence: an L2 target with two links shields two L2 streams, so it takes three towers to open', () => {
+    const one = game([
+      { id: 'p', x: 360, y: 1000, owner: 'player', units: 3, level: 2 },
+      { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 30, level: 2 },
+    ]);
+    expect(turtleCommands(one, turtle(), new Rng(1))).toEqual([]);
+    const two = game([
+      { id: 'p', x: 360, y: 1000, owner: 'player', units: 3, level: 2 },
+      { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 30, level: 2 },
+      { id: 'f', x: 60, y: 1000, owner: 'enemy1', units: 30, level: 2 },
+    ]);
+    expect(turtleCommands(two, turtle(), new Rng(1))).toEqual([]);
+    const three = game([
+      { id: 'p', x: 360, y: 1000, owner: 'player', units: 3, level: 2 },
+      { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 30, level: 2 },
+      { id: 'f', x: 60, y: 1000, owner: 'enemy1', units: 30, level: 2 },
+      { id: 'g', x: 660, y: 1000, owner: 'enemy1', units: 30, level: 2 },
+    ]);
+    expect(links(turtleCommands(three, turtle(), new Rng(1)))).toHaveLength(3);
   });
 
-  it('keeps the bridge under a stream its garrison absorbs', () => {
-    const def = enemy('turtle', 1);
-    const state = bridgeDuel(def, 20, 5);
-    applyCommand(state, { type: 'link', owner: 'player', from: 'p', to: 'e' });
-    expect(cuts(enemyCommands(state, def, new Rng(1)))).toHaveLength(0);
+  it('a capped keep supplies the growing neighbour nearest the front', () => {
+    const state = game([
+      { id: 'keep', x: 360, y: 200, owner: 'enemy1', units: 100, level: 3 },
+      { id: 'front', x: 360, y: 500, owner: 'enemy1', units: 10, level: 1 },
+      { id: 'rear', x: 360, y: 100, owner: 'enemy1', units: 5, level: 1 }, // behind the keep: its only lane is to the keep
+      { id: 'p', x: 360, y: 1100, owner: 'player', units: 100, level: 3 },
+    ]);
+    // Nothing to attack (p is an L3 at 100 with three links to shield with), so the keep pours forward.
+    expect(turtleCommands(state, turtle(), new Rng(1))).toEqual([link('keep', 'front')]);
   });
-
-  it('never cuts its last route to an opponent, even to save the tower', () => {
-    const def = enemy('turtle', 1);
-    const state = bridgeDuel(def, 20, 40, false);
-    applyCommand(state, { type: 'link', owner: 'player', from: 'p', to: 'e' });
-    expect(cuts(enemyCommands(state, def, new Rng(1)))).toHaveLength(0);
-  });
-
-  it('does not cut pre-emptively: a big garrison across the bridge is not a column', () => {
-    const def = enemy('turtle', 1);
-    const state = bridgeDuel(def, 20, 40);
-    expect(cuts(enemyCommands(state, def, new Rng(1)))).toHaveLength(0);
-  });
-
-  it('does not burn a bridge for a tower below max level (a fresh capture is not worth it)', () => {
-    const def = enemy('turtle', 1);
-    const state = bridgeDuel(def, 5, 30, true, 1);
-    applyCommand(state, { type: 'link', owner: 'player', from: 'p', to: 'e' });
-    expect(enemyCommands(state, def, new Rng(1))).toEqual([]);
-    state.towers['e']!.level = 2;
-    expect(cuts(enemyCommands(state, def, new Rng(1)))).toHaveLength(0);
-    state.towers['e']!.level = 3;
-    expect(cuts(enemyCommands(state, def, new Rng(1)))).toEqual([{ type: 'cutBridge', owner: 'enemy1', roadId: 'e-p' }]);
-  });
-
-  it('never cuts a bridge its own stream uses', () => {
-    const def = enemy('turtle', 1);
-    const state = bridgeDuel(def, 100, 40);
-    applyCommand(state, linkCmd('e', 'p')); // the turtle's own attack over the bridge
-    applyCommand(state, { type: 'link', owner: 'player', from: 'p', to: 'e' });
-    expect(cuts(enemyCommands(state, def, new Rng(1)))).toHaveLength(0);
-  });
-
-  it('is gated by aggression like every other action, and cuts on a later tick if skipped', () => {
-    const def = enemy('turtle', 0);
-    const state = bridgeDuel(def, 20, 40);
-    applyCommand(state, { type: 'link', owner: 'player', from: 'p', to: 'e' });
-    const rng = new Rng(3);
-    let total = 0;
-    for (let i = 0; i < 12; i++) total += cuts(enemyCommands(state, def, rng)).length;
-    expect(total).toBeGreaterThan(0);
-    expect(total).toBeLessThan(12);
-  });
-});
-
-describe('rusher and opportunist never cut bridges', () => {
-  for (const personality of ['rusher', 'opportunist'] as const) {
-    it(personality, () => {
-      const def = enemy(personality, 1);
-      const state = bridgeDuel(def, 20, 40);
-      applyCommand(state, { type: 'link', owner: 'player', from: 'p', to: 'e' });
-      expect(cuts(enemyCommands(state, def, new Rng(1)))).toHaveLength(0);
-    });
-  }
 });
 
 describe('opportunist', () => {
-  it('links when the units above its reserve of 5 match the target and the trickle covers the margin: 7 v 3 waits, 8 v 3 links', () => {
-    // v2.1 re-pin: 8 v 3 has 3 spare = the garrison, + 10 s of trickle ≥ 4 (v2: 8 waited, 9 linked).
-    const def = enemy('opportunist', 1);
-    expect(OPPORTUNIST_RESERVE).toBe(5);
-    expect(enemyCommands(duel(def, 7, 3), def, new Rng(1))).toEqual([]); // 2 spare < 3: no wave, no credit
-    expect(enemyCommands(duel(def, 8, 3), def, new Rng(1))).toEqual([linkCmd('e', 'p')]);
+  it('prefers a target already under fire from someone else over one that falls sooner', () => {
+    const state = game(
+      [
+        { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 10, level: 1 },
+        { id: 'quick', x: 60, y: 400, owner: 'neutral', units: 2 },
+        { id: 'hit', x: 660, y: 400, owner: 'neutral', units: 6 },
+        { id: 'r', x: 660, y: 100, owner: 'enemy2', units: 10, level: 1 },
+      ],
+      [opportunist(), rival],
+    );
+    expect(opportunistCommands(state, opportunist(), new Rng(1))).toEqual([link('e', 'quick')]);
+    applyCommand(state, link('r', 'hit', 'enemy2'));
+    // Contested: the rival's stream (300 px) lands first; our 300 px stream at 1/s wins the flip only if the parity says so.
+    expect(links(opportunistCommands(state, opportunist(), new Rng(1)))).toHaveLength(1);
   });
 
-  it('targets the tower with the fewest units regardless of owner', () => {
-    const def = enemy('opportunist', 1);
-    const level = makeLevel({
-      enemies: [def],
-      towers: [
-        { id: 'p', x: 360, y: 1000, owner: 'player', units: 4 },
-        { id: 'n', x: 100, y: 400, owner: 'neutral', units: 2 },
-        { id: 'e', x: 600, y: 400, owner: 'enemy1', units: 12 },
-      ],
-      roads: [
-        { a: 'p', b: 'e' },
-        { a: 'n', b: 'e' },
-      ],
-    });
-    expect(enemyCommands(createState(level, 1), def, new Rng(1))).toEqual([linkCmd('e', 'n')]);
-  });
-
-  it('runs two streams at L2 when half the spare garrison takes each target, one at L1', () => {
-    const def = enemy('opportunist', 1);
-    const level = (units: number, lvl: 1 | 2) =>
-      makeLevel({
-        enemies: [def],
-        towers: [
-          { id: 'p', x: 360, y: 1000, owner: 'player', units: 3 },
-          { id: 'n', x: 100, y: 400, owner: 'neutral', units: 3 },
-          { id: 'e', x: 600, y: 400, owner: 'enemy1', units, level: lvl },
-        ],
-        roads: [
-          { a: 'p', b: 'e' },
-          { a: 'n', b: 'e' },
-        ],
-      });
+  it('runs at most two ribbons per tower (OPPORTUNIST_MAX_LINKS), the second from L2 up', () => {
     expect(OPPORTUNIST_MAX_LINKS).toBe(2);
-    // 13 − 5 = 8 spare, half 4 ≥ 3 + 1 for both targets: two streams (p first: equal units, lower cost).
-    expect(enemyCommands(createState(level(13, 2), 1), def, new Rng(1))).toEqual([linkCmd('e', 'p'), linkCmd('e', 'n')]);
-    // v2.1 re-pin: 12 − 5 = 7 spare, half 3 matches each 3-garrison and half the trickle (5) covers the +1: two streams (v2: one).
-    expect(enemyCommands(createState(level(12, 2), 1), def, new Rng(1))).toEqual([linkCmd('e', 'p'), linkCmd('e', 'n')]);
-    // 10 − 5 = 5 spare: half 2 is short of a 3-garrison, so no trickle credit for the second — one stream.
-    expect(enemyCommands(createState(level(10, 2), 1), def, new Rng(1))).toEqual([linkCmd('e', 'p')]);
-    // L1 allows one link however rich the tower is.
-    expect(enemyCommands(createState(level(30, 1), 1), def, new Rng(1))).toEqual([linkCmd('e', 'p')]);
-  });
-
-  it('never issues upgrade commands, however rich and idle', () => {
-    const def = enemy('opportunist', 1);
-    expect(enemyCommands(duel(def, 30, 30), def, new Rng(1))).toEqual([]);
-    expect(enemyCommands(duel(def, 49, 60, 2), def, new Rng(1))).toEqual([]);
+    const state = game([
+      { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 100, level: 3 },
+      { id: 'a', x: 60, y: 400, owner: 'neutral', units: 2 },
+      { id: 'b', x: 660, y: 400, owner: 'neutral', units: 2 },
+      { id: 'c', x: 360, y: 700, owner: 'neutral', units: 2 },
+    ]);
+    for (let tick = 0; tick < 3; tick++) for (const c of opportunistCommands(state, opportunist(), new Rng(1))) applyCommand(state, c);
+    expect(state.links).toHaveLength(2);
   });
 });
 
-describe('tank factories (whole tanks only)', () => {
-  it('rusher counts only whole tanks: 4 weight is nothing, 8 weight is one tank, 10 weight goes', () => {
-    const def = enemy('rusher', 1);
-    expect(enemyCommands(duel(def, 4, 2, 1, 'tankFactory'), def, new Rng(1))).toEqual([]);
-    // 8 weight vs 6: raw weight passes 6 + 1 = 7, but only one tank (5) could go — it waits.
-    expect(enemyCommands(duel(def, 8, 6, 1, 'tankFactory'), def, new Rng(1))).toEqual([]);
-    const state = duel(def, 10, 6, 1, 'tankFactory');
-    expect(enemyCommands(state, def, new Rng(1))).toEqual([linkCmd('e', 'p')]);
-    applyCommand(state, linkCmd('e', 'p'));
-    for (let i = 0; i < 3; i++) step(state);
-    expect(state.units[0]).toMatchObject({ kind: 'tank', weight: 5, owner: 'enemy1' });
+describe('shared defence (every personality)', () => {
+  const sieged = (attackerLevel: 1 | 2, helper = false): GameState =>
+    game([
+      { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 10, level: 1 },
+      { id: 'p', x: 360, y: 1000, owner: 'player', units: 10, level: attackerLevel },
+      ...(helper ? [{ id: 'h', x: 60, y: 400, owner: 'enemy1' as const, units: 10, level: 1 as const }] : []),
+    ]);
+
+  it('shield: streams back on the attacker’s lane when its rate matches (L1 v L1), not when it is outrated (L1 v L2)', () => {
+    const equal = sieged(1);
+    applyCommand(equal, { type: 'link', owner: 'player', from: 'p', to: 'e' });
+    for (const p of [rusher(), turtle(), opportunist()]) expect(enemyCommands(equal, p, new Rng(1))).toEqual([link('e', 'p')]);
+    const outrated = sieged(2);
+    applyCommand(outrated, { type: 'link', owner: 'player', from: 'p', to: 'e' });
+    for (const p of [rusher(), turtle(), opportunist()]) expect(enemyCommands(outrated, p, new Rng(1))).toEqual([]);
   });
 
-  it('turtle at max level needs a whole tank matching the garrison; its trickle is discounted by what the target recruits between tanks', () => {
-    // v2.1 re-pin: factor 1 needs 5 + 1 = 6. One tank (5) matches the 5-garrison; the factory lands 2 more
-    // tanks in 10 s (10) while an L1 target recruits 2.5 s of every 4 (⌈6.25⌉ = 7): credit 3 → 8 ≥ 6.
-    // 4 weight is no tank at all. (v2: 9 waited, 10 linked.)
-    const def = enemy('turtle', 1);
-    expect(enemyCommands(duel(def, 4, 5, 3, 'tankFactory'), def, new Rng(1))).toEqual([]);
-    expect(enemyCommands(duel(def, 5, 5, 3, 'tankFactory'), def, new Rng(1))).toEqual([linkCmd('e', 'p')]);
+  it('counter before reinforce: the neighbour besieges the attacker’s source when it can reach it, else it reinforces', () => {
+    const open = sieged(1, true);
+    applyCommand(open, { type: 'link', owner: 'player', from: 'p', to: 'e' });
+    // p is linked (not growing): h's stream flips it at 1 + 5.6 + 10 = 16.6 s; e (10 + 6 grown) falls only at 22 s,
+    // so the counter alone answers — no shield, no reinforcement.
+    expect(enemyCommands(open, turtle(), new Rng(1))).toEqual([link('h', 'p')]);
+    open.towers['e']!.units = 3; // e would fall at 6 + 9 = 15 s, before the counter frees it: it shields meanwhile
+    expect(enemyCommands(open, turtle(), new Rng(1))).toEqual([link('h', 'p'), link('e', 'p')]);
+    const walled = game(
+      [
+        { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 10, level: 1 },
+        { id: 'p', x: 360, y: 1000, owner: 'player', units: 10, level: 1 },
+        { id: 'h', x: 60, y: 400, owner: 'enemy1', units: 10, level: 1 },
+      ],
+      [turtle()],
+    );
+    expect(walled.roads['h-p']).toBeDefined();
+    // Without a lane to p, h can only reinforce: h → e (1/s) offsets p → e (1/s) and e holds.
+    const noLane = createState(makeLevel({ enemies: [turtle()], towers: [
+      { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 10, level: 1 },
+      { id: 'p', x: 360, y: 1000, owner: 'player', units: 10, level: 1 },
+      { id: 'h', x: 60, y: 400, owner: 'enemy1', units: 10, level: 1 },
+    ], obstacles: [{ kind: 'rock', points: [{ x: 210, y: 700 }] }] }), 1);
+    expect(noLane.roads['h-p']).toBeUndefined();
+    applyCommand(noLane, { type: 'link', owner: 'player', from: 'p', to: 'e' });
+    expect(enemyCommands(noLane, turtle(), new Rng(1))[0]).toEqual(link('h', 'e'));
   });
 
-  it('opportunist keeps the reserve and counts only whole tanks above it', () => {
-    const def = enemy('opportunist', 1);
-    expect(enemyCommands(duel(def, 9, 3, 1, 'tankFactory'), def, new Rng(1))).toEqual([]); // 4 spare < one tank
-    expect(enemyCommands(duel(def, 12, 3, 1, 'tankFactory'), def, new Rng(1))).toEqual([linkCmd('e', 'p')]); // 7 spare → one tank
+  it('counter: a second tower besieges the attacker’s source when that falls within COUNTER_PLAN_MS', () => {
+    expect(COUNTER_PLAN_MS).toBe(30_000);
+    const state = game([
+      { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 10, level: 1 },
+      { id: 'h', x: 360, y: 700, owner: 'enemy1', units: 10, level: 1 },
+      { id: 'p', x: 660, y: 700, owner: 'player', units: 4, level: 2 },
+    ]);
+    applyCommand(state, { type: 'link', owner: 'player', from: 'p', to: 'e' }); // p (L2) outrates e's shield
+    const cmds = enemyCommands(state, rusher(), new Rng(1));
+    // h cannot reinforce enough (1/s v 1.43/s) but p, linked and not growing, falls to h in 1 + 2.5 + 5 = 8.5 s.
+    expect(cmds).toContainEqual(link('h', 'p'));
   });
 });
 
-describe('runAiTick', () => {
-  it('is deterministic for the same state and rng seed, and returns one command per enemy owner', () => {
-    const level = makeLevel({
-      enemies: [
-        { owner: 'enemy1', personality: 'rusher', aggression: 0.4 },
-        { owner: 'enemy2', personality: 'opportunist', aggression: 0.6 },
-      ],
-      towers: [
-        { id: 'p', x: 360, y: 1100, owner: 'player', units: 3 },
-        { id: 'e1', x: 150, y: 400, owner: 'enemy1', units: 20 },
-        { id: 'e2', x: 570, y: 400, owner: 'enemy2', units: 20 },
-      ],
-      roads: [
-        { a: 'p', b: 'e1' },
-        { a: 'p', b: 'e2' },
-        { a: 'e1', b: 'e2' },
-      ],
-    });
-    const collect = (seed: number): Command[][] => {
-      const state = createState(level, 5);
-      const rng = new Rng(seed);
-      const out: Command[][] = [];
-      for (let i = 0; i < 10; i++) out.push(runAiTick(state, rng));
-      return out;
+describe('defence needs aggression (DEFENCE_MIN_AGGRESSION)', () => {
+  it('an enemy below 0.35 neither shields nor reinforces; at 0.35 it does', () => {
+    expect(DEFENCE_MIN_AGGRESSION).toBe(0.35);
+    const state = game([
+      { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 3, level: 1 }, // falls at 15 s, before h's counter lands p (16.6 s)
+      { id: 'h', x: 60, y: 400, owner: 'enemy1', units: 10, level: 1 },
+      { id: 'p', x: 360, y: 1000, owner: 'player', units: 10, level: 1 },
+    ]);
+    applyCommand(state, { type: 'link', owner: 'player', from: 'p', to: 'e' });
+    let seed = 1;
+    const bothAct = (n: number): boolean => {
+      const r = new Rng(n);
+      return r.next() >= 0.4 && r.next() >= 0.4;
     };
-    const a = collect(11);
-    const b = collect(11);
-    expect(a).toEqual(b);
-    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
-    const all = a.flat();
-    expect(all.length).toBeGreaterThan(0);
-    expect(new Set(all.map((c) => c.owner))).toEqual(new Set(['enemy1', 'enemy2']));
-    // A different seed changes which ticks are skipped (aggression gate) but not the command shapes.
-    const c = collect(12).flat();
-    for (const cmd of c) expect(cmd.type).toBe('link');
+    while (!bothAct(seed)) seed++; // both towers pass the gate this tick at a = 0.2 (skip < 0.4) and above
+    const timid = rusherCommands(state, rusher(0.2), new Rng(seed));
+    expect(timid).toEqual([link('h', 'p')]); // an attack (p falls within its 18 s horizon) — no shield e → p
+    const brave = rusherCommands(state, rusher(0.35), new Rng(seed));
+    expect(brave).toEqual([link('h', 'p'), link('e', 'p')]); // the counter, and the shield while it runs
   });
 });
 
-describe('no legacy commands', () => {
-  for (const id of [1, 4, 6, 9, 33]) {
-    it(`level ${id}: enemies never issue upgrade or sendUnits over 60 s`, () => {
-      const level = LEVELS.find((l) => l.id === id)!;
-      const state = createState(level, 1);
-      const rng = new Rng(3);
-      const seen = new Set<string>();
-      for (let tick = 0; tick < 1200; tick++) {
-        if (state.time % 500 === 0) {
-          const cmds = runAiTick(state, rng);
-          expect(legacy(cmds)).toEqual([]);
-          for (const cmd of cmds) {
-            seen.add(cmd.type);
-            applyCommand(state, cmd);
-          }
-        }
-        step(state);
-      }
-      expect([...seen].every((t) => t === 'link' || t === 'unlink' || t === 'cutBridge')).toBe(true);
-      // and the idle player still never wins the level
-      expect(runHeadless(level, 1, undefined, { maxMs: 60_000 }).outcome).not.toBe('won');
-    });
-  }
+describe('maintain (every personality)', () => {
+  it('ends an attack that has become hopeless once it has run MIN_ATTACK_MS', () => {
+    expect(MIN_ATTACK_MS).toBe(5000);
+    expect(HOPELESS_MS).toBe(60_000);
+    const state = game([
+      { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 8, level: 1 },
+      { id: 'p', x: 360, y: 1000, owner: 'player', units: 10, level: 1 },
+      { id: 'q', x: 60, y: 1000, owner: 'player', units: 10, level: 3 },
+    ]);
+    applyCommand(state, link('e', 'p'));
+    applyCommand(state, { type: 'link', owner: 'player', from: 'q', to: 'p' }); // 2/s of supply: p never falls
+    expect(rusherCommands(state, rusher(), new Rng(1))).toEqual([]); // committed for 5 s
+    while (state.time < MIN_ATTACK_MS) step(state);
+    const cmds = rusherCommands(state, rusher(), new Rng(1));
+    expect(cmds[0]).toEqual(unlink('e', 'p'));
+    expect(cmds.slice(1)).toEqual([link('e', 'q')]); // the freed link goes to q at once (a rusher plans against no defence)
+  });
+
+  it('keeps a stream that shields its source even when it lands nothing', () => {
+    const state = game(duel(10));
+    applyCommand(state, link('e', 'p'));
+    applyCommand(state, { type: 'link', owner: 'player', from: 'p', to: 'e' });
+    while (state.time < 10_000) step(state);
+    expect(rusherCommands(state, rusher(), new Rng(1))).toEqual([]);
+  });
+
+  it('ends a supply line into a captured tower once it holds SUPPLY_FULL_UNITS, unless the source is a capped keep', () => {
+    expect(SUPPLY_FULL_UNITS).toBe(5);
+    const state = game([
+      { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 8, level: 1 },
+      { id: 'c', x: 360, y: 700, owner: 'enemy1', units: 4, level: 1 },
+    ]);
+    applyCommand(state, link('e', 'c'));
+    expect(rusherCommands(state, rusher(), new Rng(1))).toEqual([]);
+    state.towers['c']!.units = 5;
+    expect(rusherCommands(state, rusher(), new Rng(1))).toEqual([unlink('e', 'c')]);
+    state.towers['e']!.level = 3;
+    state.towers['e']!.units = 100;
+    expect(rusherCommands(state, rusher(), new Rng(1))).toEqual([]);
+  });
+
+  it('retreat: a tower under fire below RETREAT_UNITS drops a stream that is not winning its lane', () => {
+    expect(RETREAT_UNITS).toBe(3);
+    const state = game([
+      { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 2, level: 1 },
+      { id: 'n', x: 660, y: 400, owner: 'neutral', units: 80, level: 3 }, // 1 + 2.5 + 80 s: beyond HOPELESS_MS
+      { id: 'p', x: 360, y: 1000, owner: 'player', units: 20, level: 2 },
+    ]);
+    applyCommand(state, link('e', 'n'));
+    state.towers['e']!.underFireUntilMs = state.time + 1500;
+    expect(rusherCommands(state, rusher(), new Rng(1))).toEqual([unlink('e', 'n')]);
+  });
+
+  it('upgrade break: a linked tower at capacity below its top level drops its links for a tick when that is safe', () => {
+    expect(UPGRADE_BREAK_SAFE_MS).toBe(3000);
+    const state = game([
+      { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 25, level: 1 },
+      { id: 'n', x: 360, y: 700, owner: 'neutral', units: 10 },
+    ]);
+    applyCommand(state, link('e', 'n'));
+    expect(rusherCommands(state, rusher(), new Rng(1))).toEqual([unlink('e', 'n')]);
+    applyCommand(state, unlink('e', 'n'));
+    step(state);
+    expect(state.towers['e']!.level).toBe(2);
+    expect(rusherCommands(state, rusher(), new Rng(1))).toEqual([link('e', 'n')]); // and back, at 1.43/s
+  });
 });
