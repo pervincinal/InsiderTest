@@ -4,25 +4,24 @@
   "name_az": "Daş Divarlar",
   "name_ru": "Каменные стены",
   "name_tr": "Taş Duvarlar",
-  "lesson": "Fortress: two attackers per defender. Fill your towers before you stream in, because a thin trickle only feeds the walls",
-  "lesson_az": "Qala: hər müdafiəçiyə iki hücumçu lazımdır. Axıtmazdan əvvəl qüllələrini doldur, çünki nazik axın yalnız divarları bəsləyir",
-  "lesson_ru": "Крепость: два атакующих на одного защитника. Наполни башни, прежде чем лить, — тонкая струйка лишь кормит стены",
-  "lesson_tr": "Kale: her savunmacıya iki saldırgan gerekir. Akıtmadan önce kulelerini doldur, ince bir sızıntı sadece surları besler",
-  "star3": 20000,
-  "star2": 40000,
+  "lesson": "Your keep now starts at level 2: two streams, and faster ones. Fortress: two attackers per defender, so surround it and stream in from every side",
+  "lesson_az": "Qəsrin artıq 2-ci səviyyədə başlayır: iki axın, həm də daha sürətli. Qala: hər müdafiəçiyə iki hücumçu, ona görə onu mühasirəyə al və hər tərəfdən axıt",
+  "lesson_ru": "Твоя цитадель теперь начинает на уровне 2: два потока, и быстрее. Крепость: два атакующих на защитника, так что окружи её и лей со всех сторон",
+  "lesson_tr": "Kalen artık 2. seviyede başlar: iki akış, üstelik daha hızlı. Hisar: her savunmacıya iki saldırgan, o yüzden onu kuşat ve her yandan akıt",
+  "star3": 30000,
+  "star2": 60000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.3}
   ],
   "towers": [
-    {"id": "home", "x": 360, "y": 1140, "owner": "player", "units": 12, "level": 1, "kind": "barracks"},
-    {"id": "west", "x": 160, "y": 900, "owner": "neutral", "units": 5},
+    {"id": "home", "x": 360, "y": 1140, "owner": "player", "units": 30, "level": 2, "kind": "barracks"},
+    {"id": "west", "x": 150, "y": 760, "owner": "neutral", "units": 5},
     {"id": "east", "x": 560, "y": 900, "owner": "neutral", "units": 5},
-    {"id": "mid", "x": 360, "y": 640, "owner": "neutral", "units": 10},
+    {"id": "mid", "x": 420, "y": 640, "owner": "neutral", "units": 10},
     {"id": "flank", "x": 560, "y": 420, "owner": "neutral", "units": 6},
     {"id": "keep", "x": 360, "y": 300, "owner": "enemy1", "units": 10, "level": 1, "kind": "fortress"}
   ],
   "obstacles": [
-    {"kind": "wall", "points": [{"x": 60, "y": 470}, {"x": 320, "y": 470}]},
-    {"kind": "wall", "points": [{"x": 400, "y": 470}, {"x": 490, "y": 470}]}
+    {"kind": "wall", "points": [{"x": 60, "y": 470}, {"x": 320, "y": 470}]}
   ]
 }

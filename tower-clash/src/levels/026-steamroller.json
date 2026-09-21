@@ -8,8 +8,8 @@
   "lesson_az": "Tank kiçik minaya məhəl qoymur: bir 5 çəkili tank 4 yüklü minanı xərcləyib irəli gedir, dörd piyada isə orada ölərdi",
   "lesson_ru": "Танку нипочём малая мина: один танк весом 5 тратит мину на 4 заряда и катится дальше там, где четыре пехотинца погибли бы",
   "lesson_tr": "Tank küçük mayını umursamaz: 5 ağırlığında bir tank 4 şarjlı mayını harcayıp yoluna devam eder, dört piyade orada ölürdü",
-  "star3": 15000,
-  "star2": 35000,
+  "star3": 45000,
+  "star2": 90000,
   "enemies": [
     {"owner": "enemy1", "personality": "opportunist", "aggression": 0.45},
     {"owner": "enemy2", "personality": "rusher", "aggression": 0.45}

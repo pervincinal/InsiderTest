@@ -4,12 +4,15 @@ import { checkManifest } from '../../scripts/lib/levelManifest';
 import {
   FIRST_MINE_LEVEL,
   FIRST_OBSTACLE_LEVEL,
+  LANE_WARNING_FROM_LEVEL,
   LEVEL_TEXT_FIELDS,
+  MIN_ATTACK_LANES,
   LEVEL_TEXT_LANGS,
   MINE_TOWER_CLEARANCE,
   OBSTACLE_TOWER_CLEARANCE,
   bandFor,
   laneKeys,
+  laneWarnings,
   translationMaxLength,
   translationWarnings,
   validateBand,
@@ -25,7 +28,7 @@ import {
   validateTranslations,
 } from '../../scripts/lib/validateLevel';
 import type { AuthoredLevel } from '../../scripts/lib/validateLevel';
-import type { LevelDef, MineDef, ObstacleDef } from '../../src/sim/types';
+import type { LevelDef, MineDef, ObstacleDef, TowerDef } from '../../src/sim/types';
 import { levelLesson, levelName } from '../../src/ui/i18n';
 import { makeLevel, wall } from '../helpers';
 
@@ -75,7 +78,8 @@ describe('shipped levels', () => {
 
   it('derives the tutorial lane graphs from geometry (a tower in the way blocks the line)', () => {
     const supplyLine = LEVELS.find((l) => l.id === 2)!;
-    expect(laneKeys(supplyLine)).toEqual(['foe-mid', 'home-mid']); // mid stands on the home–foe line
+    expect(laneKeys(supplyLine)).not.toContain('foe-home'); // mid stands on the home–foe line
+    expect(laneKeys(supplyLine)).toEqual(expect.arrayContaining(['foe-mid', 'home-mid', 'foe-side', 'home-side'])); // the side tower is the way around
     const aroundTheWall = LEVELS.find((l) => l.id === 5)!;
     expect(laneKeys(aroundTheWall)).not.toContain('foe-home'); // the wall blocks the straight line
     expect(laneKeys(aroundTheWall)).toContain('home-west1');
@@ -166,6 +170,39 @@ describe('validator rules', () => {
     expect(validateTranslations(empty)).toEqual(['lesson_tr must be a non-empty string when present']);
     const wrongType = { ...base, name_ru: 7 } as unknown as AuthoredLevel;
     expect(validateTranslations(wrongType)).toEqual(['name_ru must be a non-empty string when present']);
+  });
+
+  it('warns (never fails) about non-player towers with fewer than MIN_ATTACK_LANES lanes from band 2 on', () => {
+    // p sees e and n; n stands between e and nothing else: e has 2 lanes, n has 2 lanes
+    const towers: TowerDef[] = [
+      { id: 'p', x: 360, y: 1100, owner: 'player', units: 10, level: 1 },
+      { id: 'n', x: 150, y: 700, owner: 'neutral', units: 5 },
+      { id: 'e', x: 360, y: 300, owner: 'enemy1', units: 10, level: 1 },
+    ];
+    const band2 = makeLevel({ id: LANE_WARNING_FROM_LEVEL, towers });
+    expect(laneWarnings(band2)).toEqual([
+      `tower n (neutral) has 2 clear lane(s), fewer than ${MIN_ATTACK_LANES}: a defender can shield every lane to it`,
+      `tower e (enemy1) has 2 clear lane(s), fewer than ${MIN_ATTACK_LANES}: a defender can shield every lane to it`,
+    ]);
+    expect(validateLevel(band2), 'a warning is not an error').toEqual([]);
+    const report = validateLevels([band2])[0]!;
+    expect(report.errors).toEqual([]);
+    expect(report.warnings).toEqual(expect.arrayContaining(laneWarnings(band2)));
+    expect(laneWarnings(makeLevel({ id: LANE_WARNING_FROM_LEVEL - 1, towers })), 'band 1 is exempt').toEqual([]);
+    // a wall that cuts p off from e leaves e with one lane and is still only a warning
+    const walled = makeLevel({ id: LANE_WARNING_FROM_LEVEL, towers, obstacles: [wall(250, 600, 470, 600)] });
+    expect(laneWarnings(walled)).toContain(`tower e (enemy1) has 1 clear lane(s), fewer than ${MIN_ATTACK_LANES}: a defender can shield every lane to it`);
+    // four lanes: no warning
+    const open = makeLevel({
+      id: LANE_WARNING_FROM_LEVEL,
+      towers: [
+        ...towers,
+        { id: 'w', x: 570, y: 700, owner: 'neutral', units: 5 },
+        { id: 's', x: 570, y: 1000, owner: 'neutral', units: 5 },
+        { id: 'x', x: 150, y: 1000, owner: 'neutral', units: 5 },
+      ],
+    });
+    expect(laneWarnings(open).filter((w) => w.startsWith('tower e '))).toEqual([]);
   });
 
   it('rejects duplicate translated names across levels', () => {

@@ -4,32 +4,29 @@
   "name_az": "Keçidi Tut",
   "name_ru": "Держи брод",
   "name_tr": "Geçidi Tut",
-  "lesson": "Rivers block the line like walls and only the fords cross them: hold the tower at your ford, because it is the only one the far bank can see",
-  "lesson_az": "Çaylar divar kimi xətti kəsir və yalnız keçidlər onları keçir: öz keçidindəki qülləni tut, çünki o biri sahil yalnız onu görür",
-  "lesson_ru": "Реки перекрывают линию как стены, и пересечь их можно только по бродам: держи башню у своего брода — только её видит дальний берег",
-  "lesson_tr": "Nehirler duvar gibi çizgiyi keser, yalnız geçitlerden aşılır: kendi geçidindeki kuleyi tut, çünkü karşı kıyı yalnız onu görür",
-  "star3": 30000,
-  "star2": 60000,
+  "lesson": "Your keep starts at level 2. Rivers block the line like walls and only the ford crosses them: hold the bank tower at the ford and pour two streams through it before the far bank grows",
+  "lesson_az": "Qəsrin 2-ci səviyyədə başlayır. Çaylar divar kimi xətti kəsir, onları yalnız keçid keçir: keçiddəki sahil qülləsini tut və o biri sahil böyüməmiş oradan iki axın burax",
+  "lesson_ru": "Твоя цитадель начинает на уровне 2. Реки перекрывают линию как стены, и пересечь их можно только по броду: держи башню у брода и пусти через него два потока, пока дальний берег не вырос",
+  "lesson_tr": "Kalen 2. seviyede başlar. Nehirler duvar gibi çizgiyi keser, yalnız geçitten aşılır: geçitteki kıyı kulesini tut ve karşı kıyı büyümeden oradan iki akış gönder",
+  "star3": 55000,
+  "star2": 125000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.55},
     {"owner": "enemy2", "personality": "turtle", "aggression": 0.55}
   ],
   "towers": [
-    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 20, "level": 1, "kind": "barracks"},
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 30, "level": 2, "kind": "barracks"},
     {"id": "w", "x": 150, "y": 1000, "owner": "neutral", "units": 4},
     {"id": "e", "x": 570, "y": 1000, "owner": "neutral", "units": 4},
     {"id": "bank", "x": 360, "y": 860, "owner": "neutral", "units": 8},
     {"id": "nw", "x": 150, "y": 700, "owner": "neutral", "units": 10},
     {"id": "ne", "x": 570, "y": 700, "owner": "neutral", "units": 6},
     {"id": "red", "x": 250, "y": 460, "owner": "enemy1", "units": 12, "level": 1, "kind": "barracks"},
-    {"id": "green", "x": 520, "y": 460, "owner": "enemy2", "units": 10, "level": 1, "kind": "barracks"},
+    {"id": "green", "x": 520, "y": 460, "owner": "enemy2", "units": 10, "level": 1, "kind": "fortress"},
     {"id": "top", "x": 360, "y": 240, "owner": "neutral", "units": 8}
   ],
   "obstacles": [
-    {"kind": "water", "points": [{"x": -40, "y": 580}, {"x": 170, "y": 580}]},
-    {"kind": "water", "points": [{"x": 300, "y": 580}, {"x": 440, "y": 580}]},
-    {"kind": "water", "points": [{"x": 600, "y": 580}, {"x": 760, "y": 580}]},
-    {"kind": "rock", "points": [{"x": 294, "y": 744}], "width": 40},
-    {"kind": "rock", "points": [{"x": 472, "y": 673}], "width": 40}
+    {"kind": "water", "points": [{"x": -40, "y": 580}, {"x": 200, "y": 580}]},
+    {"kind": "water", "points": [{"x": 520, "y": 580}, {"x": 760, "y": 580}]}
   ]
 }

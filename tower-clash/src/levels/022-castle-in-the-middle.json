@@ -8,22 +8,22 @@
   "lesson_az": "İki rəqib arasındakı neytral qalanı al: sənin divarlarında onların iki hücumçusu sənin birinə dəyər, ona görə sən böyüyərkən qoy ikisi də ona çırpılsın",
   "lesson_ru": "Возьми нейтральную крепость между двумя соперниками: на твоих стенах два их атакующих стоят одного твоего, так что пусть оба бьются о неё, пока ты растёшь",
   "lesson_tr": "İki rakip arasındaki tarafsız kaleyi al: senin surlarında onların iki saldırganı senin birine bedel, sen büyürken ikisi de ona çarpsın",
-  "star3": 30000,
-  "star2": 60000,
+  "star3": 45000,
+  "star2": 90000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.7},
     {"owner": "enemy2", "personality": "opportunist", "aggression": 0.7}
   ],
   "towers": [
-    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 15, "level": 1, "kind": "barracks"},
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 30, "level": 2, "kind": "barracks"},
     {"id": "w", "x": 150, "y": 1000, "owner": "neutral", "units": 5},
     {"id": "e", "x": 570, "y": 1000, "owner": "neutral", "units": 5},
     {"id": "keep", "x": 360, "y": 800, "owner": "neutral", "units": 8, "kind": "fortress"},
     {"id": "nw", "x": 150, "y": 700, "owner": "neutral", "units": 6},
     {"id": "ne", "x": 570, "y": 700, "owner": "neutral", "units": 6},
     {"id": "guns", "x": 360, "y": 520, "owner": "neutral", "units": 4, "kind": "artillery"},
-    {"id": "red", "x": 150, "y": 440, "owner": "enemy1", "units": 12, "level": 1, "kind": "barracks"},
-    {"id": "green", "x": 570, "y": 440, "owner": "enemy2", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "red", "x": 150, "y": 440, "owner": "enemy1", "units": 8, "level": 1, "kind": "barracks"},
+    {"id": "green", "x": 570, "y": 440, "owner": "enemy2", "units": 8, "level": 1, "kind": "barracks"},
     {"id": "top", "x": 360, "y": 260, "owner": "neutral", "units": 8}
   ],
   "obstacles": [

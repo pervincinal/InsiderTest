@@ -8,21 +8,21 @@
   "lesson_az": "İki düşmən bir-biri ilə də vuruşur: hücumçu tısbağaya cumarkən sakit cinahda genişlən, sonra zəif qalanı bitir",
   "lesson_ru": "Два врага дерутся и между собой: расширяйся на тихом фланге, пока рвач бьётся о черепаху, потом добей того, кто остался слабым",
   "lesson_tr": "İki düşman birbiriyle de savaşır: saldırgan kaplumbağaya yüklenirken sessiz kanatta genişle, sonra zayıf kalanı bitir",
-  "star3": 45000,
-  "star2": 90000,
+  "star3": 40000,
+  "star2": 80000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.45},
     {"owner": "enemy2", "personality": "turtle", "aggression": 0.45}
   ],
   "towers": [
-    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 30, "level": 2, "kind": "barracks"},
     {"id": "w1", "x": 150, "y": 1000, "owner": "neutral", "units": 4},
     {"id": "e1", "x": 570, "y": 1000, "owner": "neutral", "units": 4},
     {"id": "w2", "x": 150, "y": 800, "owner": "neutral", "units": 6},
     {"id": "e2", "x": 570, "y": 800, "owner": "neutral", "units": 6},
     {"id": "mid", "x": 360, "y": 640, "owner": "neutral", "units": 10},
-    {"id": "red", "x": 150, "y": 420, "owner": "enemy1", "units": 12, "level": 1, "kind": "barracks"},
-    {"id": "green", "x": 570, "y": 420, "owner": "enemy2", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "red", "x": 150, "y": 420, "owner": "enemy1", "units": 6, "level": 1, "kind": "barracks"},
+    {"id": "green", "x": 570, "y": 420, "owner": "enemy2", "units": 4, "level": 1, "kind": "barracks"},
     {"id": "pass", "x": 360, "y": 300, "owner": "neutral", "units": 8}
   ],
   "mines": [

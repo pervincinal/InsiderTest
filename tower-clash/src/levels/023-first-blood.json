@@ -4,12 +4,12 @@
   "name_az": "İlk Qan",
   "name_ru": "Первая кровь",
   "name_tr": "İlk Kan",
-  "lesson": "Your keep starts at level 2 with two streams. Kill the rusher first: a turtle sits still while it fills up to level 3, so the restless enemy is the only one that hurts you and the softer one to take",
-  "lesson_az": "Qəsrin 2-ci səviyyədə iki axınla başlayır. Əvvəl hücumçunu öldür: tısbağa 3-cü səviyyəyə dolana qədər yerində oturur, yəni səni yalnız narahat düşmən incidir və onu almaq da asandır",
-  "lesson_ru": "Твоя цитадель начинает на уровне 2 с двумя потоками. Сначала убей рвача: черепаха сидит на месте, пока не наполнится до уровня 3, так что беспокойный враг — единственный, кто тебе вредит, и его же легче взять",
-  "lesson_tr": "Kalen 2. seviyede iki akışla başlar. Önce saldırganı öldür: kaplumbağa 3. seviyeye dolana kadar yerinde oturur, yani sana yalnız huzursuz düşman zarar verir ve o daha kolay alınır",
-  "star3": 30000,
-  "star2": 60000,
+  "lesson": "Kill the rusher first: a turtle sits still while it fills up to level 3, so the restless enemy is the only one that hurts you and the softer one to take",
+  "lesson_az": "Əvvəl hücumçunu öldür: tısbağa 3-cü səviyyəyə dolana qədər yerində oturur, yəni səni yalnız narahat düşmən incidir və onu almaq da asandır",
+  "lesson_ru": "Сначала убей рвача: черепаха сидит на месте, пока не наполнится до уровня 3, так что беспокойный враг — единственный, кто тебе вредит, и его же легче взять",
+  "lesson_tr": "Önce saldırganı öldür: kaplumbağa 3. seviyeye dolana kadar yerinde oturur, yani sana yalnız huzursuz düşman zarar verir ve o daha kolay alınır",
+  "star3": 40000,
+  "star2": 80000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.75},
     {"owner": "enemy2", "personality": "turtle", "aggression": 0.75}
@@ -19,12 +19,12 @@
     {"id": "w", "x": 150, "y": 1000, "owner": "neutral", "units": 4},
     {"id": "e", "x": 570, "y": 1000, "owner": "neutral", "units": 4},
     {"id": "mid", "x": 360, "y": 900, "owner": "neutral", "units": 6},
-    {"id": "red1", "x": 150, "y": 760, "owner": "enemy1", "units": 5, "level": 1, "kind": "barracks"},
-    {"id": "red2", "x": 570, "y": 760, "owner": "enemy1", "units": 5, "level": 1, "kind": "barracks"},
-    {"id": "redbase", "x": 360, "y": 620, "owner": "enemy1", "units": 10, "level": 1, "kind": "barracks"},
-    {"id": "greenA", "x": 150, "y": 380, "owner": "enemy2", "units": 8, "level": 1, "kind": "barracks"},
-    {"id": "greenB", "x": 570, "y": 380, "owner": "enemy2", "units": 8, "level": 1, "kind": "fortress"},
-    {"id": "greenkeep", "x": 360, "y": 200, "owner": "enemy2", "units": 12, "level": 1, "kind": "barracks"}
+    {"id": "red1", "x": 150, "y": 760, "owner": "enemy1", "units": 3, "level": 1, "kind": "barracks"},
+    {"id": "red2", "x": 570, "y": 760, "owner": "enemy1", "units": 3, "level": 1, "kind": "barracks"},
+    {"id": "redbase", "x": 360, "y": 620, "owner": "enemy1", "units": 6, "level": 1, "kind": "barracks"},
+    {"id": "greenA", "x": 150, "y": 380, "owner": "enemy2", "units": 5, "level": 1, "kind": "barracks"},
+    {"id": "greenB", "x": 570, "y": 380, "owner": "enemy2", "units": 5, "level": 1, "kind": "fortress"},
+    {"id": "greenkeep", "x": 360, "y": 200, "owner": "enemy2", "units": 8, "level": 1, "kind": "barracks"}
   ],
   "mines": [
     {"x": 360, "y": 700, "charges": 6},

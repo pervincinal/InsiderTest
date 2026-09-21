@@ -8,14 +8,14 @@
   "lesson_az": "Minalar: işarəli nöqtə ondan keçən ilk 6 əsgəri öldürür, ona görə cinahlardan dolan və ya əsas dəstədən əvvəl bir neçə əsgərlə rüsumu ödə",
   "lesson_ru": "Мины: отмеченная точка убивает первых 6 бойцов, что через неё пройдут, так что обойди по флангам или заплати пошлину парой бойцов перед основной колонной",
   "lesson_tr": "Mayınlar: işaretli nokta geçen ilk 6 askeri öldürür, o yüzden kanatlardan dolaş ya da ana koldan önce birkaç askerle bedeli öde",
-  "star3": 20000,
-  "star2": 40000,
+  "star3": 25000,
+  "star2": 50000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.4},
     {"owner": "enemy2", "personality": "opportunist", "aggression": 0.4}
   ],
   "towers": [
-    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 16, "level": 1, "kind": "barracks"},
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 30, "level": 2, "kind": "barracks"},
     {"id": "west", "x": 150, "y": 980, "owner": "neutral", "units": 4},
     {"id": "east", "x": 570, "y": 980, "owner": "neutral", "units": 4},
     {"id": "mid", "x": 360, "y": 800, "owner": "neutral", "units": 6},

@@ -8,18 +8,18 @@
   "lesson_az": "Divar xətti kəsir: daşın içindən axıda bilməzsən, onu dolan — bir tərəfi tut, o birindən irəlilə",
   "lesson_ru": "Стена перекрывает линию: сквозь камень поток не идёт, так что обойди её — держи одну сторону, дави по другой",
   "lesson_tr": "Duvar çizgiyi keser: taşın içinden akış geçmez, etrafından dolaş — bir yanı tut, diğerinden bastır",
-  "star3": 30000,
-  "star2": 60000,
+  "star3": 35000,
+  "star2": 70000,
   "enemies": [
-    {"owner": "enemy1", "personality": "rusher", "aggression": 0.45}
+    {"owner": "enemy1", "personality": "rusher", "aggression": 0.2}
   ],
   "towers": [
     {"id": "home", "x": 360, "y": 1140, "owner": "player", "units": 12, "level": 1, "kind": "barracks"},
-    {"id": "west1", "x": 150, "y": 860, "owner": "neutral", "units": 5},
-    {"id": "east1", "x": 570, "y": 860, "owner": "neutral", "units": 5},
-    {"id": "west2", "x": 150, "y": 520, "owner": "neutral", "units": 8},
-    {"id": "east2", "x": 570, "y": 520, "owner": "neutral", "units": 8},
-    {"id": "foe", "x": 360, "y": 230, "owner": "enemy1", "units": 8, "level": 1, "kind": "barracks"}
+    {"id": "west1", "x": 150, "y": 860, "owner": "neutral", "units": 4},
+    {"id": "east1", "x": 570, "y": 860, "owner": "neutral", "units": 4},
+    {"id": "west2", "x": 150, "y": 520, "owner": "neutral", "units": 6},
+    {"id": "east2", "x": 570, "y": 520, "owner": "neutral", "units": 6},
+    {"id": "foe", "x": 360, "y": 230, "owner": "enemy1", "units": 4, "level": 1, "kind": "barracks"}
   ],
   "obstacles": [
     {"kind": "wall", "points": [{"x": 360, "y": 420}, {"x": 360, "y": 980}]}

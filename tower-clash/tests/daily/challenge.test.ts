@@ -107,7 +107,7 @@ describe('picker pins (GDD §7.2), cycle boundaries and dayNumberOf', () => {
     expect(daily('2026-09-19').slice(1)).toEqual([455607, 'fastFeet']);
     expect(daily('2026-09-20').slice(1)).toEqual([266987, 'fastFeet']);
     const w = weeklyFor('2026-09-21');
-    expect([w.levelId, w.seed, w.twist.id, w.targetMs]).toEqual([33, 743047, 'fastFeet', 40_000]);
+    expect([w.levelId, w.seed, w.twist.id, w.targetMs]).toEqual([33, 743047, 'fastFeet', 35_000]);
     expect(w.weekKey).toBe('2026-09-21');
   });
 

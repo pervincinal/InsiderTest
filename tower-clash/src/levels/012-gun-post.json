@@ -8,21 +8,19 @@
   "lesson_az": "Artilleriya mənzilindən keçən hər əsgəri vurur: yanından keçməzdən əvvəl postu al və ya yolu dolan",
   "lesson_ru": "Артиллерия бьёт по всем, кто проходит в её радиусе: возьми пост, прежде чем идти мимо, или обойди",
   "lesson_tr": "Topçu menzilinden geçen her askeri vurur: önünden geçmeden önce mevziyi al ya da etrafından dolaş",
-  "star3": 15000,
-  "star2": 30000,
+  "star3": 45000,
+  "star2": 90000,
   "enemies": [
-    {"owner": "enemy1", "personality": "rusher", "aggression": 0.5}
+    {"owner": "enemy1", "personality": "rusher", "aggression": 0.4}
   ],
   "towers": [
-    {"id": "home", "x": 360, "y": 1150, "owner": "player", "units": 18, "level": 1, "kind": "barracks"},
+    {"id": "home", "x": 360, "y": 1150, "owner": "player", "units": 30, "level": 2, "kind": "barracks"},
     {"id": "west", "x": 140, "y": 900, "owner": "neutral", "units": 5},
     {"id": "east", "x": 580, "y": 880, "owner": "neutral", "units": 5},
     {"id": "mid", "x": 360, "y": 820, "owner": "neutral", "units": 6},
     {"id": "nw", "x": 140, "y": 480, "owner": "neutral", "units": 8},
     {"id": "post", "x": 470, "y": 520, "owner": "neutral", "units": 6, "kind": "artillery"},
-    {"id": "base", "x": 360, "y": 230, "owner": "enemy1", "units": 10, "level": 1, "kind": "barracks"}
+    {"id": "base", "x": 360, "y": 230, "owner": "enemy1", "units": 6, "level": 1, "kind": "barracks"}
   ],
-  "obstacles": [
-    {"kind": "rock", "points": [{"x": 250, "y": 560}], "width": 60}
-  ]
+  "obstacles": []
 }

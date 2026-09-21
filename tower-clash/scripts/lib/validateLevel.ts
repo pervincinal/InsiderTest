@@ -26,6 +26,15 @@ export const MAX_LEVEL_ID = 50;
 export const FIRST_OBSTACLE_LEVEL = 5;
 /** Mines appear from this level on (GDD §3: band "Two rivals"). */
 export const FIRST_MINE_LEVEL = 17;
+/**
+ * Rules v3 structural consequence (GDD §2.0b): equal streams on a lane cancel and a shielding tower never
+ * comes under fire, so a tower is takeable only with more attack lanes than its defender has links
+ * (L1 1, L2 2, L3 3, fortress 2). Every enemy or neutral tower the player must take needs at least this
+ * many clear lanes; below it the check *warns* (not an error) from `LANE_WARNING_FROM_LEVEL` on — the
+ * tutorial band's enemies (aggression < 0.35) never shield, so band 1 is exempt.
+ */
+export const MIN_ATTACK_LANES = 4;
+export const LANE_WARNING_FROM_LEVEL = 9;
 
 /** Languages a level's `name` / `lesson` are translated into (I18N-2): `name_az`, `lesson_ru`, … */
 export const LEVEL_TEXT_LANGS = ['az', 'ru', 'tr'] as const;
@@ -358,6 +367,26 @@ export function laneKeys(level: LevelDef): string[] {
 }
 
 /**
+ * Non-fatal (rules v3, GDD §2.0b "structural consequence"): from `LANE_WARNING_FROM_LEVEL` on, every
+ * non-player tower with fewer than `MIN_ATTACK_LANES` clear lanes — a defender that shields every lane
+ * to it stands off equal-level streams, so such a keep is takeable only by out-levelling it. Lanes are
+ * counted with the same geometry `createState` uses (`laneClear`: obstacles and third towers block).
+ */
+export function laneWarnings(level: LevelDef): string[] {
+  if (!isInteger(level.id) || level.id < LANE_WARNING_FROM_LEVEL) return [];
+  const adj = laneAdjacency(level, () => true);
+  const warnings: string[] = [];
+  for (const t of placedTowers(level)) {
+    if (t.owner === 'player') continue;
+    const lanes = adj.get(t.id)?.length ?? 0;
+    if (lanes < MIN_ATTACK_LANES) {
+      warnings.push(`tower ${t.id} (${t.owner}) has ${lanes} clear lane(s), fewer than ${MIN_ATTACK_LANES}: a defender can shield every lane to it`);
+    }
+  }
+  return warnings;
+}
+
+/**
  * Connectivity (rules v3): every tower must be reachable from the player's first tower through clear
  * lanes, and no tower may be isolated (a tower with no lane can neither attack nor be attacked).
  */
@@ -446,7 +475,7 @@ export interface LevelReport {
   mines: number;
   enemies: number;
   errors: string[];
-  /** Advisory only (missing translations); never fails the check. */
+  /** Advisory only (missing translations, towers with fewer than `MIN_ATTACK_LANES` lanes); never fails the check. */
   warnings: string[];
 }
 
@@ -464,7 +493,7 @@ export function validateLevels(levels: LevelDef[]): LevelReport[] {
       mines: Array.isArray(level.mines) ? level.mines.length : 0,
       enemies: Array.isArray(level.enemies) ? level.enemies.length : 0,
       errors: validateLevel(level),
-      warnings: wellFormed ? translationWarnings(level) : [],
+      warnings: wellFormed ? [...translationWarnings(level), ...laneWarnings(level)] : [],
     };
   });
   const idCount = new Map<number, number>();

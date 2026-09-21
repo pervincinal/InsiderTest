@@ -8,14 +8,14 @@
   "lesson_az": "Tank zavodu: piyada əvəzinə hər 4 saniyədə bir 5 çəkili tank düzəldir. Tank yolda beş piyadanı öldürür və ya beş müdafiəçi sayılır, amma yavaşdır, ona görə zirehi tez göndər",
   "lesson_ru": "Танковый завод: вместо пехоты он строит один танк весом 5 каждые 4 с. Танк убивает пять пехотинцев в пути или считается за пять защитников, но он медленный — отправляй броню пораньше",
   "lesson_tr": "Tank fabrikası: piyade yerine her 4 saniyede bir 5 ağırlığında tank üretir. Tank yolda beş piyadeyi öldürür ya da beş savunmacı sayılır, ama yavaştır, o yüzden zırhı erken yolla",
-  "star3": 40000,
-  "star2": 80000,
+  "star3": 25000,
+  "star2": 50000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.4},
     {"owner": "enemy2", "personality": "turtle", "aggression": 0.4}
   ],
   "towers": [
-    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 30, "level": 2, "kind": "barracks"},
     {"id": "factory", "x": 150, "y": 1120, "owner": "player", "units": 10, "level": 1, "kind": "tankFactory"},
     {"id": "depot", "x": 130, "y": 930, "owner": "neutral", "units": 8},
     {"id": "e", "x": 570, "y": 1000, "owner": "neutral", "units": 5},

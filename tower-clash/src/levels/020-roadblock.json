@@ -8,14 +8,14 @@
   "lesson_az": "Qaya ortaya gedən düz xətti birdəfəlik kəsir, ondan o yandakı xətlər isə minalıdır: dolanmaq vaxt, mina əsgər aparır — hər hücum üçün ucuz olanı seç",
   "lesson_ru": "Валун навсегда закрывает прямую линию к центру, а линии за ним минированы: обход стоит времени, мина — бойцов; выбирай для каждого рывка цену подешевле",
   "lesson_tr": "Kaya ortaya giden düz çizgiyi temelli keser, ötesindeki çizgiler ise mayınlı: dolaşmak zaman, mayın asker götürür — her hamle için ucuz olanı seç",
-  "star3": 20000,
-  "star2": 40000,
+  "star3": 35000,
+  "star2": 70000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.45},
     {"owner": "enemy2", "personality": "opportunist", "aggression": 0.45}
   ],
   "towers": [
-    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 20, "level": 1, "kind": "barracks"},
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 30, "level": 2, "kind": "barracks"},
     {"id": "left", "x": 150, "y": 980, "owner": "neutral", "units": 5},
     {"id": "right", "x": 570, "y": 980, "owner": "neutral", "units": 5},
     {"id": "mid", "x": 360, "y": 820, "owner": "neutral", "units": 8},

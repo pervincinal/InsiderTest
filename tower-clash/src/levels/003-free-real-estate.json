@@ -8,8 +8,8 @@
   "lesson_az": "Neytral qüllələr pulsuz istehsaldır: döyüşdən əvvəl hər ikisini götür",
   "lesson_ru": "Нейтральные башни — бесплатное производство: забери обе до боя",
   "lesson_tr": "Tarafsız kuleler bedava üretimdir: savaşmadan önce ikisini de kap",
-  "star3": 30000,
-  "star2": 60000,
+  "star3": 35000,
+  "star2": 70000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.3}
   ],

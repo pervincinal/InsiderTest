@@ -4,12 +4,12 @@
   "name_az": "Zireh Yarışı",
   "name_ru": "Гонка брони",
   "name_tr": "Zırh Yarışı",
-  "lesson": "Enemy tank factory: it streams its bank of tanks at the weakest tower next to it, and one 5-weight tank flips a garrison of four. Keep the tower facing it above the bank, and take the factory before its bank fills",
-  "lesson_az": "Düşmən tank zavodu: yığdığı tankları yanındakı ən zəif qülləyə axıdır və bir 5 çəkili tank dörd əsgərlik qarnizonu çevirir. Onunla üzbəüz qülləni yığımdan yuxarı saxla və zavodu yığımı dolmamış al",
-  "lesson_ru": "Вражеский танковый завод: он льёт свой запас танков в слабейшую соседнюю башню, а один танк весом 5 переворачивает гарнизон из четырёх. Держи башню напротив него выше его запаса и возьми завод, пока запас не наполнился",
-  "lesson_tr": "Düşman tank fabrikası: biriktirdiği tankları yanındaki en zayıf kuleye akıtır ve 5 ağırlığında bir tank dört kişilik garnizonu çevirir. Karşısındaki kuleyi birikimin üstünde tut ve fabrikayı birikimi dolmadan al",
-  "star3": 20000,
-  "star2": 40000,
+  "lesson": "Enemy tank factory: every four seconds it rolls a 5-weight tank down its lane, and one tank flips a garrison of four. Never meet it with a thin stream — take the factory through the gaps at both ends of the wall, from several lanes at once",
+  "lesson_az": "Düşmən tank zavodu: hər dörd saniyədə xəttinə 5 çəkili tank buraxır və bir tank dörd əsgərlik qarnizonu çevirir. Onu nazik axınla qarşılama — zavodu divarın iki ucundakı boşluqlardan, bir neçə xətdən eyni anda al",
+  "lesson_ru": "Вражеский танковый завод: каждые четыре секунды он пускает по линии танк весом 5, а один танк переворачивает гарнизон из четырёх. Не встречай его тонким потоком — бери завод через проходы на обоих концах стены, с нескольких линий сразу",
+  "lesson_tr": "Düşman tank fabrikası: her dört saniyede çizgisine 5 ağırlığında bir tank salar ve bir tank dört kişilik garnizonu çevirir. Onu ince akışla karşılama — fabrikayı surun iki ucundaki boşluklardan, birkaç çizgiden aynı anda al",
+  "star3": 45000,
+  "star2": 90000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.5},
     {"owner": "enemy2", "personality": "opportunist", "aggression": 0.5}
@@ -20,14 +20,14 @@
     {"id": "depot", "x": 130, "y": 930, "owner": "neutral", "units": 6},
     {"id": "e", "x": 570, "y": 1000, "owner": "neutral", "units": 5},
     {"id": "mid", "x": 360, "y": 900, "owner": "neutral", "units": 8},
-    {"id": "nw", "x": 150, "y": 700, "owner": "neutral", "units": 12},
-    {"id": "ne", "x": 570, "y": 700, "owner": "neutral", "units": 6},
+    {"id": "nw", "x": 200, "y": 700, "owner": "neutral", "units": 12},
+    {"id": "ne", "x": 520, "y": 700, "owner": "neutral", "units": 6},
     {"id": "redfactory", "x": 150, "y": 460, "owner": "enemy1", "units": 10, "level": 1, "kind": "tankFactory"},
     {"id": "red", "x": 200, "y": 270, "owner": "enemy1", "units": 12, "level": 1, "kind": "barracks"},
     {"id": "green", "x": 570, "y": 460, "owner": "enemy2", "units": 12, "level": 1, "kind": "barracks"},
-    {"id": "top", "x": 430, "y": 290, "owner": "neutral", "units": 8}
+    {"id": "top", "x": 430, "y": 330, "owner": "neutral", "units": 8}
   ],
   "obstacles": [
-    {"kind": "wall", "points": [{"x": 190, "y": 580}, {"x": 545, "y": 580}]}
+    {"kind": "wall", "points": [{"x": 230, "y": 580}, {"x": 460, "y": 580}]}
   ]
 }
