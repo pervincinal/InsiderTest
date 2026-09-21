@@ -4,11 +4,11 @@ Owner: Publisher. This is the listing for the **first store submission**, which 
 
 **Status of the claims (2026-09-17, v0.4.0 "Streams update").** Everything described below is committed: the economy and shop (v0.3.0, `docs/BACKLOG.md` "Done" Sprint 3 + Day 2/2b), the in-game languages EN/AZ/RU/TR (`9e45fc9`) and **rules v2** (`docs/GDD.md` §2.0; commits `4bb3944`, `8e53c03`, `2d8cb24`): attacks are persistent **streams** (tap your tower, tap a target, the stream keeps flowing until you stop it; a L1/L2/L3 tower runs 1/2/3 streams), towers **upgrade automatically** when the garrison fills (25 → L2, 50 → L3, 100 max), the SEND 100 % / 50 % toggle and the paid tap-to-upgrade are gone, all 40 levels retuned, levels load on demand. Also in the build since the same day: **rules v2.1 "Under fire"** (`3e4a388`, GDD §2.0): a hostile soldier landing on a tower pauses that tower's recruiting for 1.5 s, so an unanswered enemy stream eventually takes any tower; the count badge turns peach with a crossed-swords pip while it lasts — described in the long description with one line (§1.1 / §1.2 "A tower under attack…") and one clause in the "What's new" texts, nothing more (no numbers in public texts; the level 2 lesson and the star clocks have not been re-measured for it yet). **Level names and lessons are in EN/AZ/RU/TR** (`235def1`, I18N-2). The screenshot files in `tower-clash/store/screenshots/` are the v0.4.0 retake (`577b894`, §1.3). If a build is submitted *without* the economy, use the ad-free wording kept in §1.4.
 
-What must NOT be claimed: leaderboards, multiplayer, cloud save, more than 40 levels, subscriptions, loot boxes, tablet support (phone-only listing), "no ads" / "no purchases" for the store builds, and — since rules v2 — "send half / send all", a send-ratio switch or upgrading a tower by tapping / paying soldiers.
+What must NOT be claimed: leaderboards, multiplayer, cloud save, more than 50 levels, subscriptions, loot boxes, tablet support (phone-only listing), "no ads" / "no purchases" for the store builds, and — since rules v2 — "send half / send all", a send-ratio switch or upgrading a tower by tapping / paying soldiers.
 
-**Addendum 2026-09-20 (v1.0.0 release candidate, `RELEASE_NOTES.md`).** Also in the tree and claimable: the **Daily Challenge** with streak milestones (GDD §7; one bullet added below in §1.1 / §1.2), four **silhouette skins** (Round keep, Watchtower, Shield bearers, Clockwork robots — 21 skins in total; the "tower, helmet and island skins" wording stays true), level 2's under-fire lesson, ten pool levels retuned, three-canvas rendering. Not claimable: a weekly challenge (GDD §8 is a proposal), levels beyond 40.
+**Addendum 2026-09-20 (v1.0.0 release candidate, `RELEASE_NOTES.md`).** Also in the tree and claimable: the **Daily Challenge** with streak milestones (GDD §7; one bullet added below in §1.1 / §1.2), four **silhouette skins** (Round keep, Watchtower, Shield bearers, Clockwork robots — 21 skins in total; the "tower, helmet and island skins" wording stays true), level 2's under-fire lesson, ten pool levels retuned, three-canvas rendering. Not claimable on 2026-09-20: a weekly challenge, levels beyond 40 — both lifted on 2026-09-21 (next paragraph).
 
-**TODO (Publisher, 1.0.1) — bump "40 levels" to "50 levels" only when `tower-clash/src/levels/041-*.json` … `050-*.json` exist (on 2026-09-20 the manifest holds 001–040; the ten band-5 drafts `041-twin-rivers.json` … `050-the-crown-reforged.json` sit in the folder as untracked work in progress — not in `manifest.ts`, `npm run levels:check` says "40 level(s) valid", no AZ/RU/TR names, placeholder star clocks — and GDD §3 "Band 5" defines the pack as a post-1.0 free update, LV-9; so every public text stays at 40 for 1.0.0).** Places to change together, then re-run §5: this status line and the "more than 40 levels" clause above; §1 Google Play short description EN/AZ ("40 levels" → "50 levels", "40 səviyyə" → "50 səviyyə" — same length, 76 / 75 stay); §1.1 heading "40 HAND-MADE LEVELS" and §1.2 "40 ƏL İLƏ HAZIRLANMIŞ SƏVİYYƏ" (+ one bullet for the band-5 vocabulary, e.g. "Levels 41–50: the Grand Campaign — every mechanic, three enemies, the toughest maps"); §2 App Store promotional text EN/AZ ("40 levels" / "40 səviyyəlik" — 150 / 158 chars stay); §3 ASO secondary keyword "40 levels"; §5 count script strings; `tower-clash/README.md` ("40 hand-made levels", "every one of the 40 levels"); `RELEASE_NOTES.md` v1.0.1 what's-new "10 new Grand Campaign levels". Do not touch the biome list ("FIVE ISLANDS") unless the Tech Artist ships a sixth biome — GDD §3 says 41–50 inherit the volcanic palette until then. Do not add "weekly challenge" until GDD §8 is implemented (WEEKLY-1).
+**Status 2026-09-21 (PUB-10, done — v1.0.0 release candidate carries 50 levels and the Weekly Challenge).** Band 5 "Grand Campaign", levels 41–50 (`bb5c147`, LV-9), is in `src/levels/manifest.ts` with names and lessons in EN/AZ/RU/TR and final star clocks; `npm run levels:check` reports "50 level(s) valid", the reference bot wins 500/500 plain runs and ≥ 47/50 under every twist (`docs/BACKLOG.md` "Done" 2026-09-20). The **Weekly Challenge** shipped in `3f46f16` (WEEKLY-1, GDD §8): one fixed match per week from Monday 00:00 UTC, a level from 33–50, always one of the four non-plain twists, 100 gold for the first win and 20 crystals once for a run at or under the level's 3★ clock, a week streak, a WEEKLY tab on the daily card, unlocked after level 32. Every "40 levels" claim below therefore says **50** (this status, the "more than 50 levels" clause above, §1 short descriptions, §1.1 / §1.2 headings, §2 promotional texts, §3 keywords, §5 script) and §1.1 / §1.2 gained one bullet for levels 41–50 and one for the weekly; counts re-run in §5 (3981 / 3947 of 4000). Still not claimable: a sixth biome ("FIVE ISLANDS" stays — GDD §3 says 41–50 use the volcanic palette), leaderboards, cloud save, tablets. Version in the tree: 1.0.0 / build 5 (`RELEASE_NOTES.md`).
 
 ---
 
@@ -17,7 +17,7 @@ What must NOT be claimed: leaderboards, multiplayer, cloud save, more than 40 le
 | Field | Limit | EN | AZ |
 |---|---|---|---|
 | App name | 30 | `Tower Clash` (11) | `Tower Clash` (11) |
-| Short description | 80 | `Capture every tower. One-thumb real-time strategy, 40 levels, plays offline.` (76) | `Bütün qüllələri tut. Bir barmaqla real vaxt strategiya, 40 səviyyə, oflayn.` (75) |
+| Short description | 80 | `Capture every tower. One-thumb real-time strategy, 50 levels, plays offline.` (76) | `Bütün qüllələri tut. Bir barmaqla real vaxt strategiya, 50 səviyyə, oflayn.` (75) |
 | Category | — | Games › Strategy | Oyunlar › Strategiya |
 | Tags | — | Strategy, Casual, Single player, Offline, Stylised | — |
 | Contact e-mail | — | `[developer e-mail]` | — |
@@ -37,7 +37,7 @@ HOW IT PLAYS
 • A tower under attack stops recruiting — answer every enemy stream, or the tower falls.
 • Enemy streams are drawn on the road in their colour, so you always see where the next attack comes from — and where to answer it.
 
-40 HAND-MADE LEVELS
+50 HAND-MADE LEVELS
 • Levels 1–3 teach the basics with a short built-in tutorial; every later level opens with a one-line lesson.
 • Fortresses (from level 9) shrug off half of every attack — bring more than you think.
 • Artillery (from level 12) shoots down soldiers that walk into its range — approach from the right road.
@@ -45,8 +45,10 @@ HOW IT PLAYS
 • Mines that take out the first soldiers to cross a road, and barriers that must be worn down or walked around.
 • Tank factories (from level 25): a tank weighs five soldiers but crawls — send it first and let the infantry catch up.
 • Bridges you can cut with a long press: the column on it drowns and the enemy behind it is stranded.
+• Levels 41–50, the Grand Campaign: three enemies, a bridge and a mine on every map, the toughest islands — no new rules, all of them at once.
 • Beat every level for three stars: the faster you win, the more stars you earn. Stars unlock the next level and pay gold.
 • Daily Challenge: one fixed level, seed and twist per day, the same for everyone — free retries, gold and crystals for the first win, bonus crystals for a 3-, 7- and 30-day win streak.
+• Weekly Challenge: every Monday one twisted level from the late campaign, the same for everyone — 100 gold for the first win, 20 crystals for beating its three-star clock.
 
 GOLD, CRYSTALS AND UPGRADES
 • Gold is earned by playing — stars, replays and daily rewards — and buys Overdrive (×3 production for 10 s), Freeze (enemies stop producing for 5 s), Airstrike (−10 soldiers on one enemy tower) and permanent Commander upgrades (production, capacity, starting garrison, march speed, cheaper boosters).
@@ -82,7 +84,7 @@ NECƏ OYNANIR
 • Hücum altındakı qüllə əsgər yığmır — hər düşmən axınına cavab ver, yoxsa qüllə düşər.
 • Düşmən axınları yolun üstündə öz rəngində çəkilir — növbəti hücumun haradan gəldiyini və hara cavab verəcəyini həmişə görürsən.
 
-40 ƏL İLƏ HAZIRLANMIŞ SƏVİYYƏ
+50 ƏL İLƏ HAZIRLANMIŞ SƏVİYYƏ
 • 1–3-cü səviyyələr qısa daxili təlimatla əsasları öyrədir; sonrakı hər səviyyə bir cümləlik dərslə başlayır.
 • Qalalar (9-cu səviyyədən) hər hücumun yarısını dəf edir — düşündüyündən çox əsgər apar.
 • Top qüllələri (12-ci səviyyədən) mənzilinə girən əsgərləri vurur — düzgün yoldan yaxınlaş.
@@ -90,8 +92,10 @@ NECƏ OYNANIR
 • Yoldan ilk keçən əsgərləri məhv edən minalar və aşındırılmalı ya da yan keçilməli sədlər.
 • Tank zavodları (25-ci səviyyədən): tank beş əsgər ağırlığındadır, amma yavaş gedir — əvvəl onu göndər, piyada arxadan çatsın.
 • Uzun basışla kəsilə bilən körpülər: körpüdəki kolon batır, arxadakı düşmən ilişib qalır.
+• 41–50-ci səviyyələr, Böyük Kampaniya: hər xəritədə üç rəqib, körpü və mina, ən çətin adalar — yeni qayda yoxdur, hamısı bir yerdə.
 • Hər səviyyədə üç ulduz qazan: nə qədər tez qalib gəlsən, o qədər çox ulduz. Ulduzlar növbəti səviyyəni açır və qızıl qazandırır.
 • Günlük Çağırış: hər gün hamı üçün eyni səviyyə, seed və fənd — pulsuz təkrar cəhdlər, ilk qələbəyə qızıl və kristal, 3, 7 və 30 günlük qələbə seriyasına bonus kristal.
+• Həftəlik Çağırış: hər bazar ertəsi kampaniyanın son hissəsindən fəndli bir səviyyə, hamı üçün eyni — ilk qələbəyə 100 qızıl, üç ulduz vaxtını keçəndə 20 kristal.
 
 QIZIL, KRİSTAL VƏ TƏKMİLLƏŞDİRMƏLƏR
 • Qızıl oyunla qazanılır — ulduzlar, təkrar oyunlar və gündəlik mükafatlar — və Overdrive (10 saniyə ×3 istehsal), Freeze (rəqiblər 5 saniyə istehsal etmir), Airstrike (bir düşmən qülləsindən −10 əsgər) və daimi Komandir təkmilləşdirmələri (istehsal, tutum, başlanğıc qarnizon, yürüş sürəti, ucuz gücləndiricilər) üçün xərclənir.
@@ -162,7 +166,7 @@ HONEST BY DESIGN
 |---|---|---|---|
 | Name | 30 | `Tower Clash` (11) | `Tower Clash` (11) |
 | Subtitle | 30 | `Capture every tower` (19) | `Bütün qüllələri tut` (19) |
-| Promotional text | 170 | `Tap, send, conquer. 40 levels of one-thumb real-time strategy: fortresses, artillery, tanks, mines, bridges. Plays offline, no account. Ads removable.` (150) | `Toxun, göndər, fəth et. Qalalar, toplar, tanklar, minalar, körpülərlə 40 səviyyəlik bir barmaq real vaxt strategiya. Oflayn, hesabsız. Reklamlar silinə bilər.` (158) |
+| Promotional text | 170 | `Tap, send, conquer. 50 levels of one-thumb real-time strategy: fortresses, artillery, tanks, mines, bridges. Plays offline, no account. Ads removable.` (150) | `Toxun, göndər, fəth et. Qalalar, toplar, tanklar, minalar, körpülərlə 50 səviyyəlik bir barmaq real vaxt strategiya. Oflayn, hesabsız. Reklamlar silinə bilər.` (158) |
 | Keywords | 100 | `tower,war,strategy,rts,capture,conquer,castle,army,offline,tap,casual,defense,attack,soldiers` (93) | `qüllə,strategiya,qala,ordu,oflayn,müharibə,fəth,döyüş,əsgər,tower,war,rts,casual` (80) |
 | Primary category | — | Games | — |
 | Subcategories | — | Strategy, Casual | — |
@@ -193,7 +197,7 @@ Review notes for App Review (paste into "Notes"): *Single-player offline game, n
 
 Primary (in title / subtitle / first lines): tower clash, capture every tower, real-time strategy.
 
-Secondary (descriptions, keyword field): tower war, tower conquest, castle capture, army strategy, rts, one-thumb strategy, offline strategy game, casual strategy, tap to attack, fortress, artillery, tanks, mines, bridges, three stars, short levels, 40 levels, commander upgrades, skins.
+Secondary (descriptions, keyword field): tower war, tower conquest, castle capture, army strategy, rts, one-thumb strategy, offline strategy game, casual strategy, tap to attack, fortress, artillery, tanks, mines, bridges, three stars, short levels, 50 levels, daily challenge, weekly challenge, commander upgrades, skins.
 
 Azerbaijani: qüllə oyunu, strategiya oyunu, qala tutmaq, ordu, real vaxt strategiya, oflayn oyun, bir barmaqla oyun, tank, körpü.
 
@@ -230,15 +234,15 @@ Expected results: Google Play / IARC **Everyone (ESRB E), PEGI 3, USK 0** with t
 ```bash
 node -e '
 const c = (s) => [...s].length;
-console.log("gp short EN", c("Capture every tower. One-thumb real-time strategy, 40 levels, plays offline."));
-console.log("gp short AZ", c("Bütün qüllələri tut. Bir barmaqla real vaxt strategiya, 40 səviyyə, oflayn."));
-console.log("promo EN", c("Tap, send, conquer. 40 levels of one-thumb real-time strategy: fortresses, artillery, tanks, mines, bridges. Plays offline, no account. Ads removable."));
-console.log("promo AZ", c("Toxun, göndər, fəth et. Qalalar, toplar, tanklar, minalar, körpülərlə 40 səviyyəlik bir barmaq real vaxt strategiya. Oflayn, hesabsız. Reklamlar silinə bilər."));
+console.log("gp short EN", c("Capture every tower. One-thumb real-time strategy, 50 levels, plays offline."));
+console.log("gp short AZ", c("Bütün qüllələri tut. Bir barmaqla real vaxt strategiya, 50 səviyyə, oflayn."));
+console.log("promo EN", c("Tap, send, conquer. 50 levels of one-thumb real-time strategy: fortresses, artillery, tanks, mines, bridges. Plays offline, no account. Ads removable."));
+console.log("promo AZ", c("Toxun, göndər, fəth et. Qalalar, toplar, tanklar, minalar, körpülərlə 50 səviyyəlik bir barmaq real vaxt strategiya. Oflayn, hesabsız. Reklamlar silinə bilər."));
 console.log("subtitle AZ", c("Bütün qüllələri tut"));
 console.log("keywords EN", c("tower,war,strategy,rts,capture,conquer,castle,army,offline,tap,casual,defense,attack,soldiers"));
 '
 ```
-Results on 2026-09-13: 76 / 75 / 150 / 158 / 19 / 93. IAP names and descriptions in §6.1 were counted the same way (≤ 30 / ≤ 45). Full descriptions §1.1 / §1.2 on 2026-09-20, after the Daily Challenge bullet: **3665 / 3650** (limit 4000).
+Results on 2026-09-21 (after 40 → 50; the digit swap keeps every length): 76 / 75 / 150 / 158 / 19 / 93. IAP names and descriptions in §6.1 were counted the same way (≤ 30 / ≤ 45). Full descriptions §1.1 / §1.2 on 2026-09-21, after the Grand Campaign and Weekly Challenge bullets: **3981 / 3947** (limit 4000; 2026-09-20 they were 3665 / 3650).
 
 ---
 

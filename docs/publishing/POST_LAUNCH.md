@@ -6,7 +6,7 @@ Owner: Publisher (this file); each row names the role that does the work. Writte
 
 ## Qısa xülasə (Azərbaycanca)
 
-1.0 tag-ından sonrakı dörd həftənin planı. **Yumşaq buraxılış:** əvvəlcə veb (GitHub Pages, dünya üzrə, hesab tələb etmir), sonra Google Play qapalı test → istehsal və App Store, ilk iki həftə yalnız Azərbaycan, Türkiyə, Qazaxıstan və Gürcüstanda (oyunun dilləri AZ/RU/TR/EN-dir; bu bazarlar ucuzdur və rəy toplamaq üçün kifayətdir), 2-ci həftənin sonunda göstəricilər yerindədirsə bütün ölkələr. **Tərəf-müqabildən lazım olan** hər şey `LAUNCH_CHECKLIST.md`-dədir: hesablar (G1, A1), imza açarları (G3–G4, A3–A5), Pages (W3), ödəniş profilləri (MZ1–MZ2), AdMob/RevenueCat (MZ7, MZ13), 12 test istifadəçisi (G19), tag (V3). **İzlənən göstəricilər** (§3): D1 ≥ 25 %, D7 ≥ 8 %, D30 ≥ 2 %; ARPDAU $0.05–0.10; ödəyici 1–2 % (D7 qalanlardan); Reklamları sil 0.5–1 %; qiymət ≥ 4.3; çöküş < 1.09 %, ANR < 0.47 % (Google-un hədləri). Oyunda analitika yoxdur (məxfilik siyasəti) — rəqəmlər yalnız mağaza konsollarından, RevenueCat və AdMob-dan gəlir; günlük çağırışda iştirak 1.0-da ölçülmür. **LiveOps təqvimi** (§4): günlük çağırış avtomatik işləyir (28 günlük cədvəl aşağıda), seriya mükafatları 3/7/30-cu gün, 1.0.1-də 41–50-ci səviyyələr, 1.1-də həftəlik çağırış və yeni görünüşlər. **Növbətçilik** (§5): QA hər səhər çöküş/ANR-ə baxır, Publisher mağaza rəylərinə 48 saat içində cavab yazır, Producer gündəlik sprintdə prioritet verir. **Yol xəritəsi** (§6): 1.0.1 (L+2 həftə) — 5-ci band paketi, düzəlişlər; 1.1 (L+5–6 həftə) — həftəlik çağırış, görünüşlər, Phase C təkliflər; sonra — liderlər cədvəli (hesab lazımdır).
+1.0 tag-ından sonrakı dörd həftənin planı. **Yumşaq buraxılış:** əvvəlcə veb (GitHub Pages, dünya üzrə, hesab tələb etmir), sonra Google Play qapalı test → istehsal və App Store, ilk iki həftə yalnız Azərbaycan, Türkiyə, Qazaxıstan və Gürcüstanda (oyunun dilləri AZ/RU/TR/EN-dir; bu bazarlar ucuzdur və rəy toplamaq üçün kifayətdir), 2-ci həftənin sonunda göstəricilər yerindədirsə bütün ölkələr. **Tərəf-müqabildən lazım olan** hər şey `LAUNCH_CHECKLIST.md`-dədir: hesablar (G1, A1), imza açarları (G3–G4, A3–A5), Pages (W3), ödəniş profilləri (MZ1–MZ2), AdMob/RevenueCat (MZ7, MZ13), 12 test istifadəçisi (G19), tag (V3). **İzlənən göstəricilər** (§3): D1 ≥ 25 %, D7 ≥ 8 %, D30 ≥ 2 %; ARPDAU $0.05–0.10; ödəyici 1–2 % (D7 qalanlardan); Reklamları sil 0.5–1 %; qiymət ≥ 4.3; çöküş < 1.09 %, ANR < 0.47 % (Google-un hədləri). Oyunda analitika yoxdur (məxfilik siyasəti) — rəqəmlər yalnız mağaza konsollarından, RevenueCat və AdMob-dan gəlir; günlük çağırışda iştirak 1.0-da ölçülmür. **LiveOps təqvimi** (§4): günlük çağırış avtomatik işləyir (28 günlük cədvəl aşağıda, hovuz 9–50), həftəlik çağırış hər bazar ertəsi 00:00 UTC (1.0-dadır, 33–50-ci səviyyələr), seriya mükafatları 3/7/30-cu gün; 41–50-ci səviyyələr də 1.0-dadır (Prodüser qərarı 2026-09-21). **Növbətçilik** (§5): QA hər səhər çöküş/ANR-ə baxır, Publisher mağaza rəylərinə 48 saat içində cavab yazır, Producer gündəlik sprintdə prioritet verir. **Yol xəritəsi** (§6): 1.0.1 (L+2 həftə) — cilalama və telemetriyasız tənzimləmə (düzəlişlər, rəylərə və bota əsaslanan balans, 17+ və 41+ səviyyələrdən skrinşotlar, save yeniləmə testi); 1.1 (L+5–6 həftə) — GDD §7.6 və §8-dən növbəti məzmun: yeni görünüşlər, çağırış nailiyyətləri, fənd zəmanətləri, həftə seriyası mərhələləri, dünənki xəritə, paylaşma kartı, Phase C təkliflər; sonra — liderlər cədvəli (hesab lazımdır).
 
 ---
 
@@ -94,10 +94,10 @@ Everything here runs **without a server**: the daily challenge is a pure functio
 
 | Beat | Cadence | What happens | Owner | Notes |
 |---|---|---|---|---|
-| **Daily Challenge** | every UTC day, 00:00 | New level / seed / twist for everyone (GDD §7); card, countdown, streak | Automatic. AI Engineer re-runs `npm run playtest -- --daily <L> --days 28 --seeds 5` on L−1 and on every level or AI change; the day table is §4.3 | Reset is 04:00 Baku, 03:00 Istanbul, 05:00/06:00 Almaty — the soft-launch countries see it in the morning. Any pool edit (adding 41–50) re-maps every future day (GDD §7.4): only with a build and a report note, never mid-day |
+| **Daily Challenge** | every UTC day, 00:00 | New level / seed / twist for everyone (GDD §7); card, countdown, streak | Automatic. AI Engineer re-runs `npm run playtest -- --daily <L> --days 28 --seeds 5` on L−1 and on every level or AI change; the day table is §4.3 | Reset is 04:00 Baku, 03:00 Istanbul, 05:00/06:00 Almaty — the soft-launch countries see it in the morning. Pool 9–50 with a per-cycle shuffle since DAILY-4 (`6399883`, in 1.0: no level repeats inside a 42-day cycle); any pool edit re-maps every future day (GDD §7.4): only with a build and a report note, never mid-day |
 | **Streak milestones** | per player: day 3 / 7 / 30 of a win streak | +5 / +20 / +100 crystals once per streak run (GDD §7.2, ECONOMY.md §6.2); **day 30 does not repeat at 60 / 90** — decided 2026-09-20 (GDD §7.2 "Day 30", DAILY-3): distinct day-60 / day-100 tiers are the only variant, and only with streak data | Automatic. Monetization Designer watches the crystal economy through the shop's skin sales in RevenueCat (no other signal) | First players can reach day 7 on L+6 and day 30 on **L+29** — the 1.0.1 build must keep `save.challenge.milestones` across the update (schema v3 unchanged; QA adds an upgrade test, §6) |
 | **Login reward** | per player, local calendar day, 7-day cycle | Gold days 1–7, crystals on days 4 and 7 (ECONOMY.md §2.1) | Automatic | Documented asymmetry: login = local day, challenge = UTC day (GDD §7.4) — reviews that complain about "streak lost" are the signal to unify (§6, 1.1) |
-| **Weekly challenge** | Monday 00:00 UTC — **when it ships (1.1, GDD §8 "proposed 2026-09-20, not implemented", WEEKLY-1)** | One fixed match per ISO week keyed by the UTC Monday: a level from 33 … `POOL_TO`, always one of the four non-plain twists, fixed seed; 100 gold on the first win, 20 crystals once for beating the level's own 3★ clock, a week streak; shown as a **WEEKLY tab on the daily card** (not a second card), unlock after level 32 | Game Designer (§8 rules — written), Frontend (tab, `save.weekly`, 12 keys × 4 languages), AI Engineer (`--weekly <monday> --weeks 26 --seeds 5` gate with a 3★ column), Monetization (confirms 20 crystals against §6.1's 14–15/day band), QA (e2e), Publisher (what's new, listing line) | Not in 1.0. Monday shows a new daily and a new weekly at the same reset — accepted in §8.1. With `POOL_TO` = 40 the weekly draws from band 4 only; GDD §3 says the weekly is the first place 41–50 appear once the pool grows |
+| **Weekly Challenge** | Monday 00:00 UTC (**in 1.0** — `3f46f16`, WEEKLY-1, GDD §8) | One fixed match per ISO week keyed by the UTC Monday: a level from 33–50, always one of the four non-plain twists, fixed seed; 100 gold on the first win, 20 crystals once for a run at or under the level's own 3★ clock, a week streak (no week milestones in 1.0); shown as a **WEEKLY tab on the daily card**, unlock after level 32 | Automatic. AI Engineer re-runs `npm run playtest -- --weekly <monday> --weeks 26 --seeds 5` on every level or AI change (CI gate 26 weeks × 5 seeds, `b6b77ad`); Monetization watches the 20-crystal target against §6.1's band | Monday shows a new daily and a new weekly at the same reset (GDD §8.1). The 3★ target is for players faster than the bot (the bot reaches it on ~10 of 26 weeks, GDD §8.4). First four weeks in §4.3 |
 | **Skin drop** | one per release from 1.0.1 (§6) | New skin(s) visible in the Skins tab with a "New" badge (badge exists? — Frontend to confirm; otherwise the shop order puts new items first) | Tech Artist (sprites), Monetization (price), Frontend (shop), Publisher (store screenshot 08 if the shop frame changes) | Cosmetic only; never a limited-time price in 1.x (no server clock to enforce it honestly) |
 | **Store reviews** | daily | Reply within 48 h (§5) | Publisher | — |
 | **Ratings prompt** | none in 1.0 | The game never asks for a rating (no `SKStoreReviewController` / In-App Review call) — decision for 1.1 after the first 30 organic ratings | Producer | Do not add before the rating is known to be ≥ 4.3 |
@@ -107,32 +107,41 @@ Everything here runs **without a server**: the daily challenge is a pure functio
 | Week | Dates | Beats | Release | Owner |
 |---|---|---|---|---|
 | 1 | L … L+6 | Tag, Pages live, closed testing starts; daily runs; **first hotfix window** (1.0.1-rc if S1); day-3 streak first reachable on L+2, day 7 on L+6 | none planned (1.0.x only if S1/S2) | Producer, QA |
-| 2 | L+7 … L+13 | KPI sheet starts; sandbox purchases; band 5 pack final verification (`playtest --level 41..50`, 100 seeds, star clocks); daily-pool decision for 41–50 | **1.0.1 tagged on L+12**, to Play production + App Store review on L+13 so it is the build in the stores at L+14 | Level Designer, AI Engineer, Game Designer, Mobile Engineer, Publisher |
+| 2 | L+7 … L+13 | KPI sheet starts; sandbox purchases; first store reviews on the Grand Campaign (41–50) and the weekly read for tuning (§6.1); save upgrade test; second weekly on L+7 if L is a Monday | **1.0.1 tagged on L+12** (polish / tuning, §6.1 — only if there is something to ship), to Play production + App Store review on L+13 so it is the build in the stores at L+14 | QA, AI Engineer, Game Designer, Mobile Engineer, Publisher |
 | 3 | L+14 … L+20 | Stores open in AZ/TR/KZ/GE with 1.0.1 (or 1.0.0 if 1.0.1 slipped — the country roll-out does not wait for content); first store reviews; 1.1 scope fixed from the week-2 read | 1.0.2 only if needed | Publisher (reviews), Monetization (ARPDAU read) |
-| 4 | L+21 … L+27 | Weekly-challenge build in review; skin drop #1 sprites final; D7 first readable for the store cohort on L+21; retro on L+28 | **1.1 tagged on L+27** if the weekly challenge passes its gate; otherwise 1.1 = skins + fixes and the weekly moves to 1.2 | Game Designer, Frontend, AI Engineer, Tech Artist |
+| 4 | L+21 … L+27 | 1.1 content in review (§6.2: skin drop #1, challenge achievements, twist guarantees); D7 first readable for the store cohort on L+21; retro on L+28 | **1.1 tagged on L+27** with whatever passed its gate; anything red slips to 1.2 | Game Designer, Frontend, AI Engineer, Tech Artist |
 
-### 4.3 The daily challenge for the next four calendar weeks (from the shipped picker, `src/daily/challenge.ts`, run 2026-09-20)
+### 4.3 The daily and weekly challenges for the next four calendar weeks (from the shipped pickers, `src/daily/challenge.ts`, run 2026-09-21 after DAILY-4 / WEEKLY-1)
 
-The picker is keyed by the calendar date, not by L, so this table is valid whatever day L falls on; re-run the script for a different window. Every row below is inside the 60-day sweep that passed 60/60 days (300/300 runs) on 2026-09-19.
+The pickers are keyed by the calendar date, not by L, so this table is valid whatever day L falls on; re-run for a different window. Every row below is inside the 60-day sweep that passed 60/60 days over the 9–50 pool on 2026-09-20 (`docs/BACKLOG.md` WEEKLY-1 / DAILY-4; level 46 hardened in `a34522c`). The first row is the pin in GDD §7.2 (2026-09-21 → 44 / lean).
 
 | Date (UTC) | Level | Twist | | Date (UTC) | Level | Twist |
 |---|---|---|---|---|---|---|
-| 09-21 Mon | 38 Ring of Fire | Lean rations | | 10-05 Mon | 26 Steamroller | Thin walls |
-| 09-22 Tue | 13 Crossfire | Reinforced | | 10-06 Tue | 33 Three Kings | Reinforced |
-| 09-23 Wed | 32 Siege Works | Thin walls | | 10-07 Wed | 20 Roadblock | Fast feet |
-| 09-24 Thu | 39 The Long Night | Fast feet | | 10-08 Thu | 27 Armour Race | Lean rations |
-| 09-25 Fri | 26 Steamroller | Lean rations | | 10-09 Fri | 14 Guns and Walls | Reinforced |
-| 09-26 Sat | 33 Three Kings | Reinforced | | 10-10 Sat | 28 Burn the Bridge | Lean rations |
-| 09-27 Sun | 20 Roadblock | Reinforced | | 10-11 Sun | 9 Stone Walls | Fast feet |
-| 09-28 Mon | 27 Armour Race | Thin walls | | 10-12 Mon | 34 Weakest Link | Classic |
-| 09-29 Tue | 14 Guns and Walls | Classic | | 10-13 Tue | 15 The Citadel | Reinforced |
-| 09-30 Wed | 28 Burn the Bridge | Fast feet | | 10-14 Wed | 40 The Crown | Reinforced |
-| 10-01 Thu | 38 Ring of Fire | Lean rations | | 10-15 Thu | 21 Behind the Wall | Fast feet |
-| 10-02 Fri | 13 Crossfire | Thin walls | | 10-16 Fri | 14 Guns and Walls | Thin walls |
-| 10-03 Sat | 32 Siege Works | Lean rations | | 10-17 Sat | 27 Armour Race | Fast feet |
-| 10-04 Sun | 39 The Long Night | Classic | | 10-18 Sun | 20 Roadblock | Thin walls |
+| 09-21 Mon | 44 Minefield Crossing | Lean rations | | 10-05 Mon | 25 Heavy Metal | Thin walls |
+| 09-22 Tue | 31 Guns over the River | Reinforced | | 10-06 Tue | 23 First Blood | Reinforced |
+| 09-23 Wed | 21 Behind the Wall | Thin walls | | 10-07 Wed | 17 Minefield | Fast feet |
+| 09-24 Thu | 36 Three Bridges | Fast feet | | 10-08 Thu | 39 The Long Night | Lean rations |
+| 09-25 Fri | 22 Castle in the Middle | Lean rations | | 10-09 Fri | 47 Scorched Earth | Reinforced |
+| 09-26 Sat | 50 The Crown Reforged | Reinforced | | 10-10 Sat | 38 Ring of Fire | Lean rations |
+| 09-27 Sun | 49 Last Light | Reinforced | | 10-11 Sun | 14 Guns and Walls | Fast feet |
+| 09-28 Mon | 16 Last Bastion | Thin walls | | 10-12 Mon | 33 Three Kings | Classic |
+| 09-29 Tue | 9 Stone Walls | Classic | | 10-13 Tue | 15 The Citadel | Reinforced |
+| 09-30 Wed | 20 Roadblock | Fast feet | | 10-14 Wed | 30 Drawbridge | Reinforced |
+| 10-01 Thu | 32 Siege Works | Lean rations | | 10-15 Thu | 11 Starve the Keep | Fast feet |
+| 10-02 Fri | 13 Crossfire | Thin walls | | 10-16 Fri | 41 Twin Rivers | Thin walls |
+| 10-03 Sat | 10 Hold the Line | Lean rations | | 10-17 Sat | 42 Siege Engine | Fast feet |
+| 10-04 Sun | 24 The Gauntlet | Classic | | 10-18 Sun | 45 Three Fronts | Thin walls |
 
-**Observation for the Game Designer (not a bug, a 1.0.1 candidate).** In this window the day-level repeats with a 10-day period — 38, 13, 32, 39, 26, 33, 20, 27, 14, 28, then the same ten again from 10-01 — because the FNV hash of `YYYY-MM-DD` strings that differ only in the last digit lands on the same residues mod 32 more often than a uniform draw would; 15 distinct levels in 28 days, and level 14 three times. The GDD §7.6 "twist guarantees" idea (never the same level within 14 days, a small rejection loop over the hash) is the fix; it re-maps future days, so it belongs in a numbered release with a report note, ideally 1.0.1 together with the pool decision for 41–50.
+28 distinct levels in 28 days (the per-cycle shuffle of DAILY-4 — the 10-day repeat pattern noted here on 2026-09-20 is gone). Levels 41–50 appear as dailies from day one (09-21 is level 44): a player who has not reached them yet can still play them as the daily without touching campaign progress (GDD §7.2 "Locked levels").
+
+Weekly Challenge, same window (`weeklyFor`, always a non-plain twist; the first row is the GDD §8.4 pin):
+
+| Week from (UTC Monday) | Level | Twist | 3★ target |
+|---|---|---|---|
+| 2026-09-21 | 33 Three Kings | Fast feet | 40 s |
+| 2026-09-28 | 46 The Long Bridge | Thin walls | 35 s |
+| 2026-10-05 | 37 Tank Country | Fast feet | 25 s |
+| 2026-10-12 | 39 The Long Night | Fast feet | 35 s |
 
 ## 5. Triage rota — crashes, ANRs, store reviews, support mail
 
@@ -175,36 +184,42 @@ The `[developer e-mail]` placeholder is the same one as in the privacy and suppo
 
 Everything on this list is verifiable by the reference bot or by a test; everything that needs an account or a server stays in "Later" (`docs/PLAN.md` "After M3").
 
-### 6.1 1.0.1 — "Grand Campaign" (target tag L+12, in the stores by L+14)
+### 6.1 1.0.1 — polish and telemetry-free tuning (target tag L+12, in the stores by L+14; skipped if nothing below is ready or needed)
+
+The Grand Campaign (levels 41–50) and the Weekly Challenge that were planned here shipped in 1.0.0 itself (Producer decision 2026-09-21; `RELEASE_NOTES.md` "In this build"), as did the daily pool 9–50, the 42-day no-repeat picker (DAILY-4) and the "(00:00 UTC)" countdown label. 1.0.1 is therefore a polish release: no new content, no schema change, nothing that needs a store product.
 
 | Item | What | Owner | Gate |
 |---|---|---|---|
-| **Band 5 pack: levels 41–50** | Ten new levels after 40 "The Crown" per GDD §3 "Band 5" (LV-9, in progress 2026-09-20: draft JSON `041-twin-rivers` … `050-the-crown-reforged` in the working tree, untracked, not yet in the manifest): **no new mechanic**, exactly three enemies, all tower kinds, ≥ 1 bridge and ≥ 1 mine per level, 10–12 towers, aggression 0.6 → 0.9 non-decreasing, no mirror match, names ≤ 15 chars with AZ/RU/TR twins, volcanic palette until a sixth biome exists; unlocks when level 40 has a star; band-5 full-3★ bonus 20 crystals, `crystalsPerMilestone[50]` = 60, `stars_40` target = campaign length (id kept), new `grand_campaign` "Clear level 50" 10 crystals, one skip in the band | Level Designer (JSON, `npm run levels:manifest`), Game Designer (brief — done; §3 band table row), AI Engineer (`playtest --seeds 20` ≥ 95 %, `--upgrades max --seeds 10` median ≤ 2.5★ over 50, every twist ≥ 4/5 at K = 5 and ≥ 45/50 at K = 50 with `--pool 9-50` or a local `POOL_TO`), Monetization (confirms the crystal sizes), Frontend (`MAX_LEVEL_ID` / band hooks — partly in the tree), Tech Artist (biome, optional), QA (content e2e screenshots level 50) | 10/10 won, idle never wins, every win < 180 s; star clocks by the v2 policy (3★ 25–50 s, no placeholder 40 / 80 s left); `npm run levels:check` "50 level(s) valid"; eager bundle ≤ 80 kB (levels are lazy); `npm run check` green |
-| Daily pool stays 9–40 | **Decided in GDD §3 (2026-09-20):** `POOL_TO` stays 40 when the pack ships; the pool grows to 9–50 only later, in one commit on a release day, after (1) the pack is on every store, (2) the twist-safe gates are green on the shipped JSON, (3) a daily-report note (every future day re-maps, the pinned §7.2 examples change), (4) a fresh 60-day sweep and all five twist gates over 9–50 in CI, (5) §7.5 re-read as 9–50 | Game Designer rules, AI Engineer sweeps, Frontend flips the constant | Not before 1.1; never mid-day |
-| Twist / level repeat guard | GDD §7.6 "never the same level within 14 days" rejection loop (see §4.3) — same re-mapping caveat, so bundle it with the pool decision | Game Designer + Frontend (`src/daily/challenge.ts` is Frontend's) + AI Engineer | Unit test: no repeat inside 14 days over 2026-10 … 2027-09 |
-| Store texts 40 → 50 | Every "40 levels" claim in `STORE_LISTING.md` (TODO line at its top lists the places), `README.md`, what's-new "10 new Grand Campaign levels" | Publisher | Only after the ten JSON files are in `src/levels/` |
-| Screenshots from levels 17+ and 41+ | PUB-6: two enemies, mines, a cut bridge, three enemies, one band-5 frame; Google set stays at 8 (replace 05 and 08?) — Publisher decides the order | Tech Artist renders (`store/tools/renderStoreShots.mjs`), Publisher captions in 4 languages | Frames from the real game; no mock-ups |
-| "(00:00 UTC)" on the daily card | `daily.newIn` / `daily.newInTime` now name the reset (GDD §7.4 deviation closed) — in the Frontend Engineer's working tree on 2026-09-20, uncommitted; expected in 1.0.0 itself, listed here only in case it slips | Frontend Engineer | e2e at 360 px (the countdown pill widened to 250 px; the title keeps ≥ 290 px) |
-| Save upgrade test | A 1.0.0 save with an active streak and paid milestones opens in 1.0.1 unchanged | QA Engineer | unit test with a fixture |
-| Hotfixes from §5 | whatever the closed test found | as assigned | — |
+| Hotfixes from §5 | Whatever the closed test and the first reviews find (S1/S2 go out as 1.0.x hotfixes on their own schedule, §5.4) | as assigned | `npm run check`, e2e, the failing case pinned by a test |
+| Tuning without telemetry | The game reports nothing (privacy policy), so the only signals are store reviews (§5.3), the bot and the team's own play. Any level named in ≥ 3 reviews as "impossible" / "too easy" is re-run with `npm run playtest -- --level N --seeds 100` and `--twist <id>` over the pool; a change stays inside GDD §3's star-clock policy (3★ = 0.9 × bot median) and the twist gates (≥ 47/50). Daily / weekly picks are never edited mid-cycle — a pool or clock change ships with a report note (GDD §7.4, §8.1) | Game Designer (call), Level Designer (JSON), AI Engineer (gates) | 100-seed run before and after; 60-day daily sweep and 26-week weekly sweep green in CI |
+| Save upgrade test | A 1.0.0 save with an active daily streak, paid milestones, a weekly best and 41–50 stars opens in 1.0.1 unchanged (schema v3 unchanged) | QA Engineer | unit test with a fixture |
+| Screenshots from levels 17+ and 41+ | PUB-6: two enemies, mines, a cut bridge, three enemies, one band-5 frame, the WEEKLY tab; Google set stays at 8 (replace 05 and 08?) — Publisher decides the order | Tech Artist renders (`store/tools/renderStoreShots.mjs`), Publisher captions in 4 languages | Frames from the real game; no mock-ups |
+| Store texts | What's-new for 1.0.1 (bug-fix wording, ≤ 500 chars × 4), listing unchanged unless a claim changed; localised AZ/RU/TR App Store screenshot sets only if a listing in one of those locales exists | Publisher | Counts in `STORE_LISTING.md` §5 |
+| Version | `package.json` 1.0.1 / `config.buildNumber` 6, `npm run version:sync`, tag `tower-clash-v1.0.1` | Publisher (bump), Producer (tag) | `npm run version:check` |
 
-### 6.2 1.1 — "Weekly" (target tag L+27; slips to 1.2 if the weekly gate is red)
+### 6.2 1.1 — next content (target tag L+27; anything whose gate is red slips to 1.2)
+
+Candidates from GDD §7.6 (daily "v2 ideas") and §8.1 (weekly "revisit" notes); all playable offline, none needs an account or a server. The Producer picks the set from the week-2 read (§4.2).
 
 | Item | What | Owner | Gate |
 |---|---|---|---|
-| **Weekly challenge** (GDD §8, proposed 2026-09-20, WEEKLY-1 — rules, UI contract, code sizing and acceptance are written) | `weekKeyOf` = the UTC Monday; `weeklyFor(weekKey)` pure picker over 33 … `POOL_TO` with the four non-plain twists and a fixed seed; equal-for-everyone as §7.2; unlock after level 32; **100 gold** once on the first win, **20 crystals** once for a run at or under the level's `star3` (any attempt in the week); week streak, `save.weekly` keeps 12 weeks, no schema bump; WEEKLY tab on the daily card, HUD chip "Weekly · <name>", result lines, 12 new strings × 4 languages; RETRY after the Monday rollover returns to the map | Game Designer (done), Frontend (`src/daily/challenge.ts` +≈ 35 lines, `src/ui/weekly.ts`, card tab), AI Engineer (`--weekly <monday> --weeks N --seeds K` + CI 26 weeks × 3 seeds), Monetization (20 crystals vs §6.1 band; drops to 15 if it overshoots, never the gold), QA (unit + e2e at 360×640 / 390×844), Publisher (what's new, one listing bullet, privacy unchanged — no new data) | GDD §8.4: picker unit tests incl. Monday pin for 2026-09-21; 26/26 weeks pass at 5 seeds with ≥ 1 3★ run per week; save rules; card e2e; eager bundle ≤ 80 kB |
-| **More skins** (skin drop #1) | Two tower roofs or one terrain theme + one helmet, priced in the 100–200 band (ECONOMY.md §3.3); sprites in the lazy skin chunk | Tech Artist, Monetization (price), Frontend (shop) | Readability rules; shop preview |
-| Challenge achievements | "7-day challenge streak", "30 daily wins" (GDD §7.6) — cheap once `save.challenge` exists | Monetization (sizing), Frontend | unit tests |
+| **More skins** (skin drop #1) | Two tower roofs or one terrain theme + one helmet, priced in the 100–200 band (ECONOMY.md §3.3); sprites in the lazy skin chunk | Tech Artist, Monetization (price), Frontend (shop) | Readability rules; shop preview; eager bundle ≤ 80 kB |
+| Challenge achievements | "7-day challenge streak", "30 daily wins", "4-week weekly streak" (GDD §7.6) — cheap now that `save.challenge` and `save.weekly` exist | Monetization (sizing), Frontend | unit tests; crystal totals inside ECONOMY.md §6.1's band |
+| Twist guarantees | Never the same twist on consecutive days (GDD §7.6, still open after DAILY-4): a rejection loop over the twist hash; re-maps future days, so it ships on a release day with a report note and new GDD §7.2 pins | Game Designer, Frontend, AI Engineer (fresh 60-day sweep) | Unit test over 2026-10 … 2027-09; sweep green |
+| Week-streak milestones | GDD §8.1 defers them "with the day-30 data"; decide from reviews and the weekly participation the team can see (none — so only if reviews ask) | Game Designer, Monetization | ECONOMY.md §6.1 band |
+| Yesterday's map | A second entry on the daily card, no reward, for players who missed the day (GDD §7.6) | Game Designer, Frontend | card fits 360 px; e2e |
+| Share card | A screenshot with day / week key, twist and stars, verifiable by anyone with the game (GDD §7.6); Web Share API on the web, Capacitor Share natively — no upload, no network call of our own | Frontend, Tech Artist (layout), Publisher (privacy: nothing leaves the device unless the player shares) | e2e renders the card |
 | Unify the streak day | Login streak to UTC as well, or both to local (GDD §7.6) — decided by review evidence from weeks 3–4 | Game Designer | migration keeps existing streaks |
 | Phase C offers | `weekend_pack`, first-purchase double (ECONOMY.md §8 Phase C) — only if payer conversion is inside the band and the stores' product lists can grow (new IAP ids → `STORE_LISTING.md` §6.1, Apple review with the version) | Monetization, Frontend, Publisher | RevenueCat products exist |
 | Telemetry decision | Whether to add an opt-in, anonymous, aggregate counter for the daily / weekly participation and tutorial completion; if yes: privacy policy **v3**, Data safety / App Privacy re-answered, a Settings toggle, no third-party SDK | Publisher (policy), Game Designer (what is counted), Frontend, stakeholder decision recorded in the report | Default if no answer: **no telemetry** |
 | Rating prompt | In-App Review / `SKStoreReviewController` after a 3★ win on level ≥ 10, once, only if the organic rating is ≥ 4.3 | Mobile Engineer, Producer decides | — |
+| Sixth biome | Own palette for levels 41–50 (they inherit the volcanic one, GDD §3) — then "FIVE ISLANDS" in the listing becomes six | Tech Artist, Publisher | pixel-readability checks as for the themes |
 
 ### 6.3 Later (needs accounts, a server, or evidence)
 
 - Weekly leaderboard for the daily / weekly (GDD §7.6) — accounts + server clock; out of 1.x.
 - Enemy-side mutators (sim per-owner modifiers) — the weekly challenge is the first customer.
-- Share card (day key + twist + stars), yesterday's map, reset notification (Capacitor local notifications, opt-in) — GDD §7.6.
+- Reset notification at 00:00 UTC / Monday 00:00 UTC (Capacitor local notifications, opt-in in Settings) — GDD §7.6; native only, and a permission the privacy policy would have to mention.
 - Streak shield (20 crystals, once per 30 days) — only with the Publisher's read on loss-aversion wording in the stores (ECONOMY.md §6.2).
 - Remote-configurable ad caps (ECONOMY.md §8 Phase C) — needs a config endpoint, so a network call the privacy policy would have to list.
 - Replays, local 2-player — backlog "Icebox".
