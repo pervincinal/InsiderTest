@@ -16,7 +16,7 @@ import { run, spawn } from './util';
 
 function solo(over: Partial<TowerDef>) {
   return createState(
-    makeLevel({ towers: [{ id: 'p', x: 100, y: 100, owner: 'player', units: 10, ...over }], roads: [] }),
+    makeLevel({ towers: [{ id: 'p', x: 100, y: 100, owner: 'player', units: 10, ...over }]}),
     1,
   );
 }
@@ -124,7 +124,6 @@ describe('auto-upgrade', () => {
           { id: 'p', x: 360, y: 1000, owner: 'player', units: 24, level: 1 },
           { id: 'q', x: 360, y: 400, owner: 'player', units: 0, level: 1 },
         ],
-        roads: [{ a: 'p', b: 'q' }],
       }),
       1,
     );
@@ -137,7 +136,7 @@ describe('auto-upgrade', () => {
 
   it('the player capacity modifier multiplies the ladder: ×1.25 → upgrade at 31, not 25', () => {
     const state = createState(
-      makeLevel({ towers: [{ id: 'p', x: 0, y: 0, owner: 'player', units: 25, level: 1 }], roads: [] }),
+      makeLevel({ towers: [{ id: 'p', x: 0, y: 0, owner: 'player', units: 25, level: 1 }]}),
       1,
       { ...DEFAULT_MODIFIERS, capacityMul: 1.25 },
     );
@@ -152,7 +151,7 @@ describe('auto-upgrade', () => {
 
   it('a start-garrison bonus that fills the tower upgrades it on the first tick, not in createState', () => {
     const state = createState(
-      makeLevel({ towers: [{ id: 'p', x: 0, y: 0, owner: 'player', units: 22, level: 1 }], roads: [] }),
+      makeLevel({ towers: [{ id: 'p', x: 0, y: 0, owner: 'player', units: 22, level: 1 }]}),
       1,
       { ...DEFAULT_MODIFIERS, startGarrisonBonus: 5 },
     );
@@ -170,25 +169,28 @@ describe('auto-upgrade', () => {
     expect(state.towers['p']!.units).toBe(30);
   });
 
-  it('a linked tower does not upgrade: it drains instead', () => {
+  it('a linked tower does not upgrade (rules v3: it streams its production and keeps its garrison)', () => {
     const state = createState(
       makeLevel({
         towers: [
           { id: 'p', x: 360, y: 1000, owner: 'player', units: 25, level: 1 },
           { id: 'n', x: 360, y: 400, owner: 'neutral', units: 0, level: 1 },
         ],
-        roads: [{ a: 'p', b: 'n' }],
       }),
       1,
     );
     applyCommand(state, { type: 'link', owner: 'player', from: 'p', to: 'n' });
-    step(state);
+    run(state, 40); // 2 s: two units emitted, none taken from the garrison
     expect(state.towers['p']!.level).toBe(1);
     expect(state.towers['p']!.units).toBe(25);
+    expect(state.towers['p']!.genAccMs).toBe(0);
     expect(upgrades(state)).toEqual([]);
-    run(state, 2); // 150 ms: first unit leaves
-    expect(state.towers['p']!.units).toBe(24);
-    expect(state.towers['p']!.level).toBe(1);
+    expect(state.units.length).toBe(2);
+    // Unlinked, the full L1 upgrades on the next tick.
+    applyCommand(state, { type: 'unlink', owner: 'player', from: 'p' });
+    step(state);
+    expect(state.towers['p']!.level).toBe(2);
+    expect(upgrades(state)).toEqual([{ type: 'upgrade', towerId: 'p', level: 2 }]);
   });
 
   it('the upgrade command does nothing under rules v2', () => {

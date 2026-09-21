@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { makeLevel } from '../helpers';
+import { makeLevel, wall } from '../helpers';
 import type { LevelDef, PlayerModifiers } from '../../src/sim/types';
 import { DEFAULT_MODIFIERS } from '../../src/sim/types';
 import { createState } from '../../src/sim/create';
@@ -22,7 +22,6 @@ function duo(units = 10, level: 1 | 2 | 3 = 1): LevelDef {
       { id: 'p', x: 100, y: 100, owner: 'player', units, level },
       { id: 'e', x: 500, y: 100, owner: 'enemy1', units, level },
     ],
-    roads: [],
   });
 }
 
@@ -93,7 +92,6 @@ describe('productionMul', () => {
         { id: 'a', x: 100, y: 100, owner: 'player', units: 0, kind: 'artillery' },
         { id: 't', x: 100, y: 300, owner: 'player', units: 0, kind: 'tankFactory' },
       ],
-      roads: [],
     });
     const state = createState(level, 1, mods({ productionMul: 2 }));
     run(state, 19); // artillery: 2000 / 2 = 1000 ms → tick 20; tank: 4000 / 2 = 2000 ms → tick 40
@@ -128,7 +126,7 @@ describe('capacityMul', () => {
     ['tankFactory', 1, 25, 31],
   ] as const)('%s L%i: base %i → 62.5 %% more is %i', (kind, level, base, modified) => {
     const state = createState(
-      makeLevel({ towers: [{ id: 'p', x: 0, y: 0, owner: 'player', kind, level }], roads: [] }),
+      makeLevel({ towers: [{ id: 'p', x: 0, y: 0, owner: 'player', kind, level }]}),
       1,
       mods({ capacityMul: 1.25 }),
     );
@@ -145,7 +143,7 @@ describe('capacityMul', () => {
     const state = createState(makeLevel({ towers: [
       { id: 'p', x: 360, y: 1000, owner: 'player', units: 121, level: 3 },
       { id: 'q', x: 360, y: 400, owner: 'player', units: 5, level: 1 },
-    ] , roads: [{ a: 'p', b: 'q' }] }), 1, mods({ capacityMul: 1.25 }));
+    ] }), 1, mods({ capacityMul: 1.25 }));
     spawn(state, { owner: 'player', from: 'q', to: 'p', progress: 1, weight: 5 });
     step(state);
     expect(state.towers['p']!.units).toBe(125); // 121 + 5 → 126 capped at 125 (not 100)
@@ -161,7 +159,6 @@ describe('startGarrisonBonus', () => {
         { id: 'e', x: 0, y: 200, owner: 'enemy1', units: 10 },
         { id: 'n', x: 0, y: 300, owner: 'neutral', units: 10 },
       ],
-      roads: [],
     });
     const state = createState(level, 1, mods({ startGarrisonBonus: 3 }));
     expect(state.towers['p1']!.units).toBe(13);
@@ -181,7 +178,7 @@ describe('startGarrisonBonus', () => {
 });
 
 describe('unitSpeedMul', () => {
-  /** Player (p) and enemy (e) each 600 px from neutral target n; one unit sent from each. */
+  /** Player (p) and enemy (e) each 600 px from a neutral target; a wall keeps the two halves apart. */
   function marchLevel(): LevelDef {
     return makeLevel({
       towers: [
@@ -190,31 +187,29 @@ describe('unitSpeedMul', () => {
         { id: 'n', x: 60, y: 400, owner: 'neutral', units: 10 },
         { id: 'm', x: 660, y: 400, owner: 'neutral', units: 10 },
       ],
-      roads: [
-        { a: 'p', b: 'n' },
-        { a: 'e', b: 'm' },
-      ],
+      obstacles: [wall(360, 0, 360, 1280)],
     });
   }
 
   it('×1.15 → 138 px/s, 600 px in 87 ticks instead of 100; enemy unchanged', () => {
     const state = createState(marchLevel(), 1, mods({ unitSpeedMul: 1.15 }));
-    applyCommand(state, { type: 'sendUnits', owner: 'player', from: 'p', to: 'n', ratio: 0.1 });
-    applyCommand(state, { type: 'sendUnits', owner: 'enemy1', from: 'e', to: 'm', ratio: 0.1 });
-    step(state);
+    expect(Object.keys(state.roads).sort()).toEqual(['e-m', 'n-p']);
+    applyCommand(state, { type: 'link', owner: 'player', from: 'p', to: 'n' });
+    applyCommand(state, { type: 'link', owner: 'enemy1', from: 'e', to: 'm' });
+    run(state, 20); // 1000 ms: the first unit of each L1 stream leaves
     const pu = state.units.find((u) => u.owner === 'player')!;
     const eu = state.units.find((u) => u.owner === 'enemy1')!;
     expect(pu.speed).toBeCloseTo(138, 10);
     expect(eu.speed).toBe(C.UNIT_SPEED);
-    run(state, 85); // tick 86: 4300 ms × 138 = 593 px, not there yet
+    run(state, 85); // tick 106: 4300 ms × 138 = 593 px, not there yet
     expect(state.towers['n']!.units).toBe(10);
     expect(state.towers['m']!.units).toBe(10);
-    run(state, 1); // tick 87: 600.3 px
+    run(state, 1); // tick 107: 600.3 px
     expect(state.towers['n']!.units).toBe(9);
     expect(state.towers['m']!.units).toBe(10);
-    run(state, 12); // tick 99
+    run(state, 12); // tick 119
     expect(state.towers['m']!.units).toBe(10);
-    run(state, 1); // tick 100: 5000 ms × 120 = 600 px
+    run(state, 1); // tick 120: 5000 ms × 120 = 600 px
     expect(state.towers['m']!.units).toBe(9);
   });
 
@@ -223,12 +218,13 @@ describe('unitSpeedMul', () => {
       makeLevel({ towers: [
         { id: 'p', x: 60, y: 1000, owner: 'player', units: 10, kind: 'tankFactory' },
         { id: 'n', x: 60, y: 400, owner: 'neutral', units: 10 },
-      ], roads: [{ a: 'p', b: 'n' }] }),
+      ] }),
       1,
       mods({ unitSpeedMul: 1.15 }),
     );
-    applyCommand(state, { type: 'sendUnits', owner: 'player', from: 'p', to: 'n', ratio: 0.5 });
-    step(state);
+    applyCommand(state, { type: 'link', owner: 'player', from: 'p', to: 'n' });
+    run(state, 80); // TANK_GEN_MS[1] = 4000
+    expect(state.units[0]).toMatchObject({ kind: 'tank', weight: 5 });
     expect(state.units[0]!.speed).toBeCloseTo(C.UNIT_SPEED * C.TANK_SPEED_MUL * 1.15, 10);
   });
 });
@@ -274,7 +270,7 @@ describe('determinism with modifiers', () => {
   it('same level + seed + modifiers → identical states; different modifiers → different states', () => {
     const play = (m: PlayerModifiers) => {
       const state = createState(makeLevel(), 3, m);
-      applyCommand(state, { type: 'sendUnits', owner: 'player', from: 'p', to: 'e', ratio: 0.5 });
+      applyCommand(state, { type: 'link', owner: 'player', from: 'p', to: 'e' });
       run(state, 200);
       return state;
     };

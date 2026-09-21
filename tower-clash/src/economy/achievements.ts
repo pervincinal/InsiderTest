@@ -29,16 +29,19 @@ export interface MatchSummary {
   upgradedToL3: boolean;
   capturedFortress: boolean;
   capturedTankFactory: boolean;
-  /** The player cut a bridge (their own command; enemy cuts do not count). */
-  cutBridge: boolean;
+  /** Rules v3: one player tower ran three streams at once (an L3 with three links). */
+  tripleStream: boolean;
 }
 
 export function emptyMatch(): MatchSummary {
-  return { outcome: 'lost', levelId: 0, timeMs: 0, lostTower: false, upgradedToL3: false, capturedFortress: false, capturedTankFactory: false, cutBridge: false };
+  return { outcome: 'lost', levelId: 0, timeMs: 0, lostTower: false, upgradedToL3: false, capturedFortress: false, capturedTankFactory: false, tripleStream: false };
 }
 
 /** "Win in under 30 s" (`speedrunner` label in the catalog). */
 export const SPEEDRUN_MS = 30_000;
+
+/** Simultaneous streams from one tower that satisfy `first_triple_stream` (an L3's link limit). */
+export const TRIPLE_STREAM_LINKS = 3;
 
 /** Tower level that satisfies `first_l3`. */
 export const L3_LEVEL = 3;
@@ -84,8 +87,8 @@ function matchSatisfies(id: string, m: MatchSummary): boolean {
       return m.upgradedToL3;
     case 'first_fortress':
       return m.capturedFortress;
-    case 'first_bridge_cut':
-      return m.cutBridge;
+    case 'first_triple_stream':
+      return m.tripleStream;
     case 'first_tank':
       return m.capturedTankFactory;
     case 'flawless':

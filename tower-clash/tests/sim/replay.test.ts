@@ -60,10 +60,11 @@ function invariantViolations(s: GameState): string[] {
     if (u.speed <= 0) bad.push(`unit ${u.id} speed ${u.speed}`);
     if (!s.roads[u.roadId]) bad.push(`unit ${u.id} on unknown road ${u.roadId}`);
   }
-  for (const q of s.queues) {
-    if (q.remaining < 0) bad.push(`queue ${q.from}->${q.to} remaining ${q.remaining}`);
-    if (!s.towers[q.from] || !s.towers[q.to]) bad.push(`queue ${q.from}->${q.to} references unknown tower`);
+  for (const l of s.links) {
+    if (l.emitAccMs < 0) bad.push(`link ${l.from}->${l.to} emitAccMs ${l.emitAccMs}`);
+    if (!s.roads[l.roadId]) bad.push(`link ${l.from}->${l.to} on unknown lane ${l.roadId}`);
   }
+  for (const m of s.mines) if (m.charges < 0) bad.push(`mine at ${m.x},${m.y} charges ${m.charges}`);
   if (s.nextUnitId < 0) bad.push(`nextUnitId ${s.nextUnitId}`);
   return bad;
 }

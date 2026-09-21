@@ -3,11 +3,11 @@ import { makeLevel } from '../helpers';
 import { createState } from '../../src/sim/create';
 import { applyCommand } from '../../src/sim/commands';
 import { step } from '../../src/sim/step';
-import { run, spawn } from './util';
+import { run } from './util';
 
 describe('upgrade (rules v2: validated and ignored)', () => {
   it('does not change level or garrison and emits no event, even when the old cost is affordable', () => {
-    const state = createState(makeLevel({ towers: [{ id: 'p', x: 0, y: 0, owner: 'player', units: 20 }], roads: [] }), 1);
+    const state = createState(makeLevel({ towers: [{ id: 'p', x: 0, y: 0, owner: 'player', units: 20 }]}), 1);
     applyCommand(state, { type: 'upgrade', owner: 'player', towerId: 'p' });
     expect(state.towers['p']!.level).toBe(1);
     expect(state.towers['p']!.units).toBe(20);
@@ -19,9 +19,8 @@ describe('upgrade (rules v2: validated and ignored)', () => {
       makeLevel({
         towers: [
           { id: 'p', x: 0, y: 0, owner: 'player', units: 50, level: 3 },
-          { id: 'f', x: 0, y: 0, owner: 'player', units: 50, level: 2, kind: 'fortress' },
+          { id: 'f', x: 300, y: 0, owner: 'player', units: 50, level: 2, kind: 'fortress' },
         ],
-        roads: [],
       }),
       1,
     );
@@ -43,103 +42,38 @@ describe('upgrade (rules v2: validated and ignored)', () => {
   });
 });
 
-describe('sendUnits (legacy one-shot queue)', () => {
-  it('sends all units by default: garrison drops immediately and a queue is created', () => {
+describe('legacy commands (rules v3)', () => {
+  it('sendUnits is accepted and ignored: nothing leaves, no unit, no event', () => {
     const state = createState(makeLevel(), 1);
     applyCommand(state, { type: 'sendUnits', owner: 'player', from: 'p', to: 'e' });
-    expect(state.towers['p']!.units).toBe(0);
-    expect(state.queues).toEqual([
-      { owner: 'player', from: 'p', to: 'e', roadId: 'e-p', remaining: 10, unitKind: 'infantry', nextLeaveMs: 0 },
-    ]);
-  });
-
-  it('sends floor(units × 0.5) with ratio 0.5', () => {
-    const state = createState(makeLevel({ towers: [
-      { id: 'p', x: 360, y: 1000, owner: 'player', units: 7 },
-      { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 10 },
-    ] }), 1);
     applyCommand(state, { type: 'sendUnits', owner: 'player', from: 'p', to: 'e', ratio: 0.5 });
-    expect(state.towers['p']!.units).toBe(4);
-    expect(state.queues[0]!.remaining).toBe(3);
-  });
-
-  it('releases one unit every 120 ms at 120 px/s', () => {
-    const state = createState(makeLevel(), 1);
-    applyCommand(state, { type: 'sendUnits', owner: 'player', from: 'p', to: 'e' });
-    step(state); // t=50: first unit leaves
-    expect(state.units.length).toBe(1);
-    expect(state.units[0]).toMatchObject({ owner: 'player', kind: 'infantry', weight: 1, from: 'p', to: 'e', speed: 120 });
-    step(state); // t=100
-    expect(state.units.length).toBe(1);
-    step(state); // t=150 ≥ 120
-    expect(state.units.length).toBe(2);
-    run(state, 30);
-    expect(state.units.length).toBe(10);
-    expect(state.queues).toEqual([]);
-  });
-
-  it('tank factories send tanks in weight-5 chunks at 0.7× speed', () => {
-    const state = createState(makeLevel({ towers: [
-      { id: 'p', x: 360, y: 1000, owner: 'player', units: 12, kind: 'tankFactory' },
-      { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 10 },
-    ] }), 1);
-    applyCommand(state, { type: 'sendUnits', owner: 'player', from: 'p', to: 'e' });
-    expect(state.towers['p']!.units).toBe(2);
-    expect(state.queues[0]).toMatchObject({ remaining: 2, unitKind: 'tank' });
-    step(state);
-    expect(state.units[0]).toMatchObject({ kind: 'tank', weight: 5, speed: 84 });
-  });
-
-  it('ignores sends from towers the owner does not hold, without a road, or with nothing to send', () => {
-    const state = createState(makeLevel({ towers: [
-      { id: 'p', x: 360, y: 1000, owner: 'player', units: 10 },
-      { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 10 },
-      { id: 'q', x: 0, y: 0, owner: 'player', units: 0 },
-    ] }), 1);
-    applyCommand(state, { type: 'sendUnits', owner: 'enemy1', from: 'p', to: 'e' });
-    applyCommand(state, { type: 'sendUnits', owner: 'player', from: 'p', to: 'q' });
-    applyCommand(state, { type: 'sendUnits', owner: 'player', from: 'q', to: 'p' });
-    applyCommand(state, { type: 'sendUnits', owner: 'player', from: 'p', to: 'e', ratio: 0.05 });
-    expect(state.queues).toEqual([]);
     expect(state.towers['p']!.units).toBe(10);
-  });
-
-  it('is ignored on a cut bridge', () => {
-    const state = createState(makeLevel({ roads: [{ a: 'p', b: 'e', kind: 'bridge' }] }), 1);
-    applyCommand(state, { type: 'cutBridge', owner: 'player', roadId: 'e-p' });
-    applyCommand(state, { type: 'sendUnits', owner: 'player', from: 'p', to: 'e' });
-    expect(state.queues).toEqual([]);
-    expect(state.towers['p']!.units).toBe(10);
-  });
-});
-
-describe('cutBridge', () => {
-  it('kills units in transit, marks the road cut and emits events', () => {
-    const state = createState(makeLevel({ roads: [{ a: 'p', b: 'e', kind: 'bridge' }] }), 1);
-    spawn(state, { owner: 'player', from: 'p', to: 'e', progress: 0.5 });
-    spawn(state, { owner: 'enemy1', from: 'e', to: 'p', progress: 0.25 });
-    applyCommand(state, { type: 'cutBridge', owner: 'player', roadId: 'e-p' });
-    expect(state.roads['e-p']!.cut).toBe(true);
     expect(state.units).toEqual([]);
-    expect(state.events).toEqual([
-      { type: 'unitDied', x: 360, y: 700, owner: 'player', cause: 'bridge' },
-      { type: 'unitDied', x: 360, y: 550, owner: 'enemy1', cause: 'bridge' },
-      { type: 'bridgeCut', roadId: 'e-p' },
-    ]);
+    expect(state.links).toEqual([]);
+    expect(state.events).toEqual([]);
+    step(state);
+    expect(state.units).toEqual([]);
   });
 
-  it('is ignored for plain roads, non-endpoint owners and already-cut bridges', () => {
-    const plain = createState(makeLevel(), 1);
-    applyCommand(plain, { type: 'cutBridge', owner: 'player', roadId: 'e-p' });
-    expect(plain.roads['e-p']!.cut).toBe(false);
+  it('an empty tower cannot open a stream (rules v3 rule 6: a stream needs soldiers)', () => {
+    const state = createState(makeLevel({ towers: [
+      { id: 'p', x: 360, y: 1000, owner: 'player', units: 0 },
+      { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 10 },
+    ]}), 1);
+    applyCommand(state, { type: 'link', owner: 'player', from: 'p', to: 'e' });
+    expect(state.links).toEqual([]);
+    expect(state.events).toEqual([]);
+    state.towers['p']!.units = 1;
+    applyCommand(state, { type: 'link', owner: 'player', from: 'p', to: 'e' });
+    expect(state.links).toHaveLength(1);
+  });
 
-    const bridge = createState(makeLevel({ roads: [{ a: 'p', b: 'e', kind: 'bridge' }] }), 1);
-    applyCommand(bridge, { type: 'cutBridge', owner: 'enemy2', roadId: 'e-p' });
-    expect(bridge.roads['e-p']!.cut).toBe(false);
-    applyCommand(bridge, { type: 'cutBridge', owner: 'enemy1', roadId: 'e-p' });
-    expect(bridge.roads['e-p']!.cut).toBe(true);
-    applyCommand(bridge, { type: 'cutBridge', owner: 'player', roadId: 'e-p' });
-    expect(bridge.events.filter((e) => e.type === 'bridgeCut').length).toBe(1);
+  it('a neutral-owner command is ignored', () => {
+    const state = createState(makeLevel(), 1);
+    applyCommand(state, { type: 'link', owner: 'neutral', from: 'p', to: 'e' });
+    applyCommand(state, { type: 'booster', owner: 'neutral', booster: 'airstrike', towerId: 'e' });
+    expect(state.links).toEqual([]);
+    expect(state.towers['e']!.units).toBe(10);
   });
 });
 
@@ -149,7 +83,7 @@ describe('boosters', () => {
       { id: 'p', x: 0, y: 0, owner: 'player', units: 10 },
       { id: 'e', x: 100, y: 0, owner: 'enemy1', units: 14 },
       { id: 'n', x: 200, y: 0, owner: 'neutral', units: 14 },
-    ], roads: [] }), 1);
+    ]}), 1);
     applyCommand(state, { type: 'booster', owner: 'player', booster: 'airstrike', towerId: 'e' });
     expect(state.towers['e']!.units).toBe(4);
     applyCommand(state, { type: 'booster', owner: 'player', booster: 'airstrike', towerId: 'e' });

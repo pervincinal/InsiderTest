@@ -26,9 +26,25 @@ export function deepCopy<T>(value: T): T {
   return value;
 }
 
-/** Deep, cheap copy of a sim state (or any plain-data record with a `time`). Never shares references with the source. */
+/**
+ * Snapshot layout version: bump when `GameState` changes shape. 2 = rules v3 (links carry `emitAccMs`,
+ * state carries `obstacles` and `mines`; towers lost `linkCursor` / `drainAccMs`).
+ */
+export const SNAPSHOT_VERSION = 2;
+
+function hasStaticObstacles(value: unknown): value is { obstacles: unknown[] } {
+  return value !== null && typeof value === 'object' && Array.isArray((value as { obstacles?: unknown }).obstacles);
+}
+
+/**
+ * Deep, cheap copy of a sim state (or any plain-data record with a `time`). Mutable data never shares
+ * references with the source; the static `obstacles` of a `GameState` are shared by reference (they
+ * never change during a match, so copying them every second would be waste).
+ */
 export function cloneState<T = GameState>(state: T): T {
-  return typeof structuredClone === 'function' ? structuredClone(state) : deepCopy(state);
+  const copy = typeof structuredClone === 'function' ? structuredClone(state) : deepCopy(state);
+  if (hasStaticObstacles(state) && hasStaticObstacles(copy)) copy.obstacles = state.obstacles;
+  return copy;
 }
 
 /**

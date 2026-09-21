@@ -23,12 +23,22 @@ export const C = Object.freeze({
   LINKS_PER_LEVEL: [0, 1, 2, 3] as const,
 
   UNIT_SPEED: 120, // px/s
-  LEAVE_INTERVAL_MS: 120,
   INFANTRY_WEIGHT: 1,
 
   TANK_WEIGHT: 5,
   TANK_SPEED_MUL: 0.7,
-  TANK_GEN_MS: 4000,
+  /** ms per produced tank by tank-factory level (index = level); the same interval paces its streams (rules v3). */
+  TANK_GEN_MS: [0, 4000, 2800, 2000] as const,
+
+  /**
+   * Rules v3 "free lanes" (GDD §2.0b). A lane joins two towers when the straight segment between their
+   * centres passes no third tower closer than TOWER_BLOCK_RADIUS (strictly) and comes no closer than
+   * width / 2 to any obstacle. Mines within MINE_RADIUS of a lane are crossed by units on it.
+   */
+  TOWER_BLOCK_RADIUS: 48,
+  OBSTACLE_WIDTH: 28, // default thickness of a wall / water polyline
+  ROCK_RADIUS: 40, // default radius of a single-point rock (width = 2 × radius)
+  MINE_RADIUS: 30,
 
   ARTILLERY_GEN_MUL: 2, // generation interval multiplier (half rate)
   ARTILLERY_COOLDOWN_MS: 800,

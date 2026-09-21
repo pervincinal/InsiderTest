@@ -49,8 +49,8 @@ describe('unlock rules', () => {
   });
 
   it('a defeat never pays the win-based goals but still counts the match facts', () => {
-    const r = evaluateAchievements(save, { ...emptyMatch(), outcome: 'lost', timeMs: 10_000, upgradedToL3: true, capturedFortress: true, capturedTankFactory: true, cutBridge: true });
-    expect(ids(r)).toEqual(['first_l3', 'first_fortress', 'first_bridge_cut', 'first_tank']);
+    const r = evaluateAchievements(save, { ...emptyMatch(), outcome: 'lost', timeMs: 10_000, upgradedToL3: true, capturedFortress: true, capturedTankFactory: true, tripleStream: true });
+    expect(ids(r)).toEqual(['first_l3', 'first_fortress', 'first_triple_stream', 'first_tank']);
     expect(r.crystals).toBe(20);
     expect(save.crystals).toBe(20);
   });
@@ -120,7 +120,7 @@ describe('once-only grants', () => {
 
   it('every catalog achievement can be granted exactly once in total (95 crystals)', () => {
     for (const level of LEVEL_META) save.stars[String(level.id)] = 3;
-    const everything = win({ levelId: GRAND_CAMPAIGN_LEVEL, timeMs: 1000, upgradedToL3: true, capturedFortress: true, capturedTankFactory: true, cutBridge: true });
+    const everything = win({ levelId: GRAND_CAMPAIGN_LEVEL, timeMs: 1000, upgradedToL3: true, capturedFortress: true, capturedTankFactory: true, tripleStream: true });
     const all = evaluateAchievements(save, everything);
     expect(ids(all)).toEqual(ACHIEVEMENTS.map((a) => a.id));
     expect(all.crystals).toBe(95);

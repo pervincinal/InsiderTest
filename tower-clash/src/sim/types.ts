@@ -1,11 +1,11 @@
-/** Shared simulation contract. Every layer imports from here; only `sim/` mutates these. */
+/** Shared simulation contract (rules v3, GDD §2.0b). Every layer imports from here; only `sim/` mutates these. */
 
 export type Owner = 'neutral' | 'player' | 'enemy1' | 'enemy2' | 'enemy3';
 export type EnemyOwner = 'enemy1' | 'enemy2' | 'enemy3';
 export type TowerKind = 'barracks' | 'artillery' | 'tankFactory' | 'fortress';
 export type UnitKind = 'infantry' | 'tank';
 export type Personality = 'rusher' | 'turtle' | 'opportunist';
-export type RoadKind = 'road' | 'bridge';
+export type ObstacleKind = 'wall' | 'water' | 'rock';
 
 /* ---------- Level definition (JSON) ---------- */
 
@@ -19,13 +19,22 @@ export interface TowerDef {
   kind?: TowerKind; // default 'barracks'
 }
 
-export interface RoadDef {
-  a: string;
-  b: string;
-  kind?: RoadKind; // default 'road'
-  waypoints?: { x: number; y: number }[];
-  mine?: number; // weight killed before the mine is spent
-  barrier?: number; // hp that must be worn down before passage
+/**
+ * Rules v3: a static obstacle. A polyline of ≥ 2 points with a thickness (`width`, default
+ * `OBSTACLE_WIDTH`); a `rock` may be a single point (a disc of diameter `width`, default `ROCK_RADIUS × 2`).
+ * A lane is blocked when the tower-to-tower segment comes within `width / 2` of the polyline (or the point).
+ */
+export interface ObstacleDef {
+  kind: ObstacleKind;
+  points: { x: number; y: number }[];
+  width?: number;
+}
+
+/** Rules v3: a mine at a point; every lane passing within `MINE_RADIUS` of it records a hit. */
+export interface MineDef {
+  x: number;
+  y: number;
+  charges: number; // weight killed before the mine is spent (positive integer)
 }
 
 export interface EnemyDef {
@@ -42,7 +51,8 @@ export interface LevelDef {
   star2: number; // ms
   enemies: EnemyDef[];
   towers: TowerDef[];
-  roads: RoadDef[];
+  obstacles?: ObstacleDef[];
+  mines?: MineDef[];
 }
 
 /* ---------- Runtime state ---------- */
@@ -58,26 +68,41 @@ export interface Tower {
   genAccMs: number; // accumulated ms toward next produced unit
   artilleryCooldownMs: number;
   defenceAcc: number; // fortress only: fractional hostile damage carried between arrivals
-  linkCursor: number; // round-robin index into this tower's outgoing links (rules v2 draining)
-  drainAccMs: number; // accumulated ms toward the next unit leaving through a link
   /**
    * Rules v2.1 "Under fire": sim time until which the tower generates nothing, re-armed to
    * `time + UNDER_FIRE_MS` by every hostile landing, cleared (0) by a capture. The tower is under fire
    * while `time < underFireUntilMs` (`isUnderFire`); renderer and AI read it, only `sim/` writes it.
+   * Under fire pauses growth only: a linked tower keeps streaming.
    */
   underFireUntilMs: number;
 }
 
+/** Runtime copy of an `ObstacleDef` with defaults applied. Static for the whole match. */
+export interface Obstacle {
+  kind: ObstacleKind;
+  points: { x: number; y: number }[];
+  width: number;
+}
+
+/** Runtime mine: `charges` decrease as units cross it; 0 = spent (gone for every lane). */
+export interface Mine {
+  x: number;
+  y: number;
+  charges: number;
+}
+
+/**
+ * Rules v3 lane: the straight segment between two towers whose line is clear (no obstacle, no third
+ * tower within `TOWER_BLOCK_RADIUS`). Computed once in `createState`; never changes during a match.
+ */
 export interface Road {
   id: string; // `${a}-${b}` with a < b lexicographically
   a: string;
   b: string;
-  kind: RoadKind;
-  points: { x: number; y: number }[]; // a → waypoints → b
+  points: { x: number; y: number }[]; // always [centre of a, centre of b]
   length: number; // px
-  mine: number; // remaining mine weight, 0 = none
-  barrier: number; // remaining barrier hp, 0 = none
-  cut: boolean; // bridge destroyed
+  /** Mines within `MINE_RADIUS` of the lane: index into `state.mines` and the fraction along the lane from `a`, sorted by `t`. */
+  mineHits: { mine: number; t: number }[];
 }
 
 export interface Unit {
@@ -93,8 +118,9 @@ export interface Unit {
 }
 
 /**
- * Rules v2 (GDD §2.0): a persistent attack stream from `from` to the road-connected `to`. While a
- * tower has ≥ 1 link it drains one unit every `LEAVE_INTERVAL_MS` into its links round-robin.
+ * Rules v3 (GDD §2.0b): a persistent attack stream from `from` to the lane-connected `to`. Each link
+ * emits its own stream: one unit every `streamIntervalMs(from)` (the tower's production interval) while
+ * the garrison holds ≥ 1; the garrison itself does not change by sending.
  */
 export interface Link {
   owner: Owner; // owner of `from` when the link was created; the link dies when `from` changes hands
@@ -102,20 +128,10 @@ export interface Link {
   to: string; // tower id
   roadId: string;
   createdMs: number; // sim time of the `link` command
+  emitAccMs: number; // accumulated ms toward the next emitted unit
 }
 
-export type UnlinkReason = 'manual' | 'sourceLost' | 'roadCut' | 'targetFull';
-
-/** @deprecated Legacy one-shot send (`sendUnits`), kept during the transition to links. */
-export interface SendQueue {
-  owner: Owner;
-  from: string;
-  to: string;
-  roadId: string;
-  remaining: number; // units still to leave
-  unitKind: UnitKind;
-  nextLeaveMs: number; // sim time when next unit leaves
-}
+export type UnlinkReason = 'manual' | 'sourceLost' | 'targetFull' | 'sourceEmpty';
 
 export interface Booster {
   type: 'overdrive' | 'freeze';
@@ -131,7 +147,7 @@ export interface Booster {
  * and a lost player tower reverts to base rates for its new owner.
  */
 export interface PlayerModifiers {
-  productionMul: number; // generation interval ÷ productionMul (multiplicative with overdrive)
+  productionMul: number; // generation (and stream) interval ÷ productionMul (multiplicative with overdrive)
   capacityMul: number; // capacity × capacityMul, floored, min 1
   startGarrisonBonus: number; // extra units on every player tower at createState (capped at capacity)
   unitSpeedMul: number; // unit speed × unitSpeedMul, applied at spawn
@@ -150,10 +166,11 @@ export interface GameState {
   modifiers: PlayerModifiers; // player-only bonuses, fixed for the whole match
   time: number; // ms, advances by TICK_MS
   towers: Record<string, Tower>;
-  roads: Record<string, Road>;
+  roads: Record<string, Road>; // lanes (static)
+  obstacles: Obstacle[]; // static
+  mines: Mine[]; // charges decrease
   units: Unit[];
-  links: Link[]; // active attack streams (rules v2)
-  queues: SendQueue[]; // legacy `sendUnits` queues
+  links: Link[]; // active attack streams
   boosters: Booster[];
   enemies: EnemyDef[];
   nextUnitId: number;
@@ -166,21 +183,19 @@ export type SimEvent =
   | { type: 'upgrade'; towerId: string; level: number } // auto-upgrade (rules v2)
   | { type: 'linked'; owner: Owner; from: string; to: string }
   | { type: 'unlinked'; owner: Owner; from: string; to: string; reason: UnlinkReason }
-  | { type: 'unitDied'; x: number; y: number; owner: Owner; cause: 'clash' | 'artillery' | 'mine' | 'barrier' | 'bridge' }
-  | { type: 'bridgeCut'; roadId: string }
+  | { type: 'unitDied'; x: number; y: number; owner: Owner; cause: 'clash' | 'artillery' | 'mine' }
   | { type: 'won'; timeMs: number }
   | { type: 'lost'; timeMs: number };
 
 /* ---------- Commands (only way to act on the sim) ---------- */
 
 export type Command =
-  | { type: 'link'; owner: Owner; from: string; to: string } // rules v2: start an attack stream
+  | { type: 'link'; owner: Owner; from: string; to: string } // start an attack stream
   | { type: 'unlink'; owner: Owner; from: string; to?: string } // remove one (or all) links of `from`
-  /** @deprecated legacy one-shot send; prefer `link`. */
-  | { type: 'sendUnits'; owner: Owner; from: string; to: string; ratio?: number } // ratio default 1
+  /** @deprecated rules v3: the one-shot send is gone; validated and ignored (kept only so old callers compile). */
+  | { type: 'sendUnits'; owner: Owner; from: string; to: string; ratio?: number }
   /** @deprecated rules v2: upgrades are automatic; validated and ignored (kept for save/replay compatibility). */
   | { type: 'upgrade'; owner: Owner; towerId: string }
-  | { type: 'cutBridge'; owner: Owner; roadId: string }
   | { type: 'booster'; owner: Owner; booster: 'overdrive' | 'freeze' | 'airstrike'; towerId?: string };
 
 export type Outcome = 'playing' | 'won' | 'lost';

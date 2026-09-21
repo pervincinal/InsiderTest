@@ -9,7 +9,7 @@ describe('boosters in step', () => {
     const state = createState(makeLevel({ towers: [
       { id: 'p', x: 0, y: 0, owner: 'player', units: 10, level: 3 },
       { id: 'e', x: 100, y: 0, owner: 'enemy1', units: 10, level: 3 },
-    ], roads: [] }), 1);
+    ]}), 1);
     applyCommand(state, { type: 'booster', owner: 'player', booster: 'overdrive' });
     run(state, 200);
     expect(state.towers['p']!.units).toBe(70); // 60 produced instead of 20
@@ -29,7 +29,7 @@ describe('boosters in step', () => {
       { id: 'p', x: 0, y: 0, owner: 'player', units: 10 },
       { id: 'e', x: 100, y: 0, owner: 'enemy1', units: 10 },
       { id: 'f', x: 200, y: 0, owner: 'enemy2', units: 10 },
-    ], roads: [] }), 1);
+    ]}), 1);
     applyCommand(state, { type: 'booster', owner: 'player', booster: 'freeze' });
     run(state, 100);
     expect(state.towers['p']!.units).toBe(15);

@@ -1,15 +1,14 @@
-import type { GameState, LevelDef, Owner, PlayerModifiers, Road, Tower, TowerKind } from './types';
+import type { GameState, LevelDef, Mine, Obstacle, ObstacleKind, Owner, PlayerModifiers, Tower, TowerKind } from './types';
 import { DEFAULT_MODIFIERS } from './types';
 import { C } from './constants';
 import { capacityOf } from './step';
+import { buildLanes, obstacleFromDef, roadIdFor } from './geometry';
+
+export { roadIdFor };
 
 const OWNERS: ReadonlySet<string> = new Set<Owner>(['neutral', 'player', 'enemy1', 'enemy2', 'enemy3']);
 const KINDS: ReadonlySet<string> = new Set<TowerKind>(['barracks', 'artillery', 'tankFactory', 'fortress']);
-
-/** Canonical road id for the pair of tower ids (order independent). */
-export function roadIdFor(a: string, b: string): string {
-  return a < b ? `${a}-${b}` : `${b}-${a}`;
-}
+const OBSTACLE_KINDS: ReadonlySet<string> = new Set<ObstacleKind>(['wall', 'water', 'rock']);
 
 function isFiniteNumber(n: unknown): n is number {
   return typeof n === 'number' && Number.isFinite(n);
@@ -17,16 +16,6 @@ function isFiniteNumber(n: unknown): n is number {
 
 function fail(level: LevelDef, msg: string): never {
   throw new Error(`Invalid level ${level.id} (${level.name}): ${msg}`);
-}
-
-function polylineLength(points: { x: number; y: number }[]): number {
-  let len = 0;
-  for (let i = 1; i < points.length; i++) {
-    const p = points[i - 1]!;
-    const q = points[i]!;
-    len += Math.hypot(q.x - p.x, q.y - p.y);
-  }
-  return len;
 }
 
 /** Copy and validate player modifiers; throws on NaN / non-positive multipliers / negative bonus. */
@@ -47,7 +36,9 @@ function normaliseModifiers(m: Readonly<PlayerModifiers>): PlayerModifiers {
 }
 
 /**
- * Build the initial runtime state for a level. Throws on a malformed level.
+ * Build the initial runtime state for a level (rules v3). Throws on a malformed level.
+ * Lanes (`state.roads`) are computed here from the towers and obstacles and never change afterwards;
+ * mines are copied into `state.mines` and referenced from the lanes they lie on.
  * `modifiers` are the player's permanent bonuses (Commander upgrades); they are copied into the
  * state so a replay reproduces the match, and every `player` tower starts with `startGarrisonBonus`
  * extra units (capped at its — already modified — capacity).
@@ -55,10 +46,13 @@ function normaliseModifiers(m: Readonly<PlayerModifiers>): PlayerModifiers {
 export function createState(level: LevelDef, seed: number, modifiers: Readonly<PlayerModifiers> = DEFAULT_MODIFIERS): GameState {
   const mods = normaliseModifiers(modifiers);
   if (!Array.isArray(level.towers) || level.towers.length === 0) fail(level, 'no towers');
-  if (!Array.isArray(level.roads)) fail(level, 'roads must be an array');
+  if ((level as { roads?: unknown }).roads !== undefined) fail(level, 'roads are not part of rules v3');
+  if (level.obstacles !== undefined && !Array.isArray(level.obstacles)) fail(level, 'obstacles must be an array');
+  if (level.mines !== undefined && !Array.isArray(level.mines)) fail(level, 'mines must be an array');
   if (!Array.isArray(level.enemies)) fail(level, 'enemies must be an array');
 
   const towers: Record<string, Tower> = {};
+  const list: Tower[] = [];
   for (const def of level.towers) {
     if (typeof def.id !== 'string' || def.id.length === 0) fail(level, 'tower without id');
     if (def.id.includes('-')) fail(level, `tower id "${def.id}" must not contain "-"`);
@@ -72,7 +66,10 @@ export function createState(level: LevelDef, seed: number, modifiers: Readonly<P
     if (kind === 'fortress' && lvl > C.FORTRESS_MAX_LEVEL) fail(level, `fortress "${def.id}" exceeds max level`);
     const units = def.units ?? 0;
     if (!Number.isInteger(units) || units < 0) fail(level, `tower "${def.id}" has bad units ${String(units)}`);
-    towers[def.id] = {
+    for (const other of list) {
+      if (Math.hypot(other.x - def.x, other.y - def.y) < 1) fail(level, `towers "${other.id}" and "${def.id}" overlap`);
+    }
+    const tower: Tower = {
       id: def.id,
       x: def.x,
       y: def.y,
@@ -83,45 +80,36 @@ export function createState(level: LevelDef, seed: number, modifiers: Readonly<P
       genAccMs: 0,
       artilleryCooldownMs: 0,
       defenceAcc: 0,
-      linkCursor: 0,
-      drainAccMs: 0,
       underFireUntilMs: 0,
     };
-    const tower = towers[def.id]!;
     if (tower.owner === 'player' && mods.startGarrisonBonus > 0) {
       tower.units = Math.min(capacityOf(tower, { modifiers: mods }), tower.units + mods.startGarrisonBonus);
     }
+    towers[def.id] = tower;
+    list.push(tower);
   }
 
-  const roads: Record<string, Road> = {};
-  for (const def of level.roads) {
-    if (!towers[def.a]) fail(level, `road references unknown tower "${String(def.a)}"`);
-    if (!towers[def.b]) fail(level, `road references unknown tower "${String(def.b)}"`);
-    if (def.a === def.b) fail(level, `road "${def.a}" loops onto itself`);
-    const id = roadIdFor(def.a, def.b);
-    if (roads[id]) fail(level, `duplicate road "${id}"`);
-    const kind = def.kind ?? 'road';
-    if (kind !== 'road' && kind !== 'bridge') fail(level, `road "${id}" has bad kind "${String(kind)}"`);
-    const mine = def.mine ?? 0;
-    const barrier = def.barrier ?? 0;
-    if (!Number.isInteger(mine) || mine < 0) fail(level, `road "${id}" has bad mine ${String(mine)}`);
-    if (!Number.isInteger(barrier) || barrier < 0) fail(level, `road "${id}" has bad barrier ${String(barrier)}`);
-    const waypoints = def.waypoints ?? [];
-    for (const w of waypoints) {
-      if (!isFiniteNumber(w.x) || !isFiniteNumber(w.y)) fail(level, `road "${id}" has a bad waypoint`);
+  const obstacles: Obstacle[] = [];
+  (level.obstacles ?? []).forEach((def, i) => {
+    if (!def || typeof def !== 'object') fail(level, `obstacle #${i} is not an object`);
+    if (!OBSTACLE_KINDS.has(def.kind)) fail(level, `obstacle #${i} has bad kind "${String(def.kind)}"`);
+    if (!Array.isArray(def.points)) fail(level, `obstacle #${i} has no points`);
+    const minPoints = def.kind === 'rock' ? 1 : 2;
+    if (def.points.length < minPoints) fail(level, `obstacle #${i} (${def.kind}) needs at least ${minPoints} point(s)`);
+    for (const p of def.points) {
+      if (!p || !isFiniteNumber(p.x) || !isFiniteNumber(p.y)) fail(level, `obstacle #${i} has a bad point`);
     }
-    // Normalise so that road.a < road.b and points run a → b.
-    const forward = def.a < def.b;
-    const a = forward ? def.a : def.b;
-    const b = forward ? def.b : def.a;
-    const ta = towers[a]!;
-    const tb = towers[b]!;
-    const mids = (forward ? waypoints : [...waypoints].reverse()).map((w) => ({ x: w.x, y: w.y }));
-    const points = [{ x: ta.x, y: ta.y }, ...mids, { x: tb.x, y: tb.y }];
-    const length = polylineLength(points);
-    if (!(length > 0)) fail(level, `road "${id}" has zero length`);
-    roads[id] = { id, a, b, kind, points, length, mine, barrier, cut: false };
-  }
+    if (def.width !== undefined && (!isFiniteNumber(def.width) || def.width <= 0)) fail(level, `obstacle #${i} has bad width ${String(def.width)}`);
+    obstacles.push(obstacleFromDef(def));
+  });
+
+  const mines: Mine[] = [];
+  (level.mines ?? []).forEach((def, i) => {
+    if (!def || typeof def !== 'object') fail(level, `mine #${i} is not an object`);
+    if (!isFiniteNumber(def.x) || !isFiniteNumber(def.y)) fail(level, `mine #${i} has bad coordinates`);
+    if (!Number.isInteger(def.charges) || def.charges <= 0) fail(level, `mine #${i} has bad charges ${String(def.charges)}`);
+    mines.push({ x: def.x, y: def.y, charges: def.charges });
+  });
 
   for (const e of level.enemies) {
     if (e.owner !== 'enemy1' && e.owner !== 'enemy2' && e.owner !== 'enemy3') {
@@ -135,10 +123,11 @@ export function createState(level: LevelDef, seed: number, modifiers: Readonly<P
     modifiers: mods,
     time: 0,
     towers,
-    roads,
+    roads: buildLanes(list, obstacles, mines),
+    obstacles,
+    mines,
     units: [],
     links: [],
-    queues: [],
     boosters: [],
     enemies: level.enemies.map((e) => ({ ...e })),
     nextUnitId: 1,

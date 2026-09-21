@@ -106,7 +106,7 @@ export const ACHIEVEMENTS = [
   { id: 'first_win', label: 'First victory', crystals: 5 },
   { id: 'first_l3', label: 'Upgrade a tower to level 3', crystals: 5 },
   { id: 'first_fortress', label: 'Capture a fortress', crystals: 5 },
-  { id: 'first_bridge_cut', label: 'Cut a bridge', crystals: 5 },
+  { id: 'first_triple_stream', label: 'Run three streams from one tower', crystals: 5 },
   { id: 'first_tank', label: 'Capture a tank factory', crystals: 5 },
   { id: 'stars_10', label: 'Ten 3★ levels', crystals: 10 },
   { id: 'stars_20', label: 'Twenty 3★ levels', crystals: 10 },

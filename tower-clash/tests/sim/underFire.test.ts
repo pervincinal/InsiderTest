@@ -1,20 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { makeLevel } from '../helpers';
-import type { GameState, Owner, RoadDef, TowerDef } from '../../src/sim/types';
+import type { GameState, MineDef, Owner, TowerDef } from '../../src/sim/types';
 import { createState } from '../../src/sim/create';
 import { applyCommand } from '../../src/sim/commands';
 import { isUnderFire, step } from '../../src/sim/step';
 import { cloneState, deepCopy } from '../../src/sim/snapshot';
 import { C } from '../../src/sim/constants';
-import { run, spawn } from './util';
+import { run, runUntil, spawn } from './util';
 
 /*
  * Rules v2.1 "Under fire" (GDD §2.0): a hostile landing pauses the target's production for
- * UNDER_FIRE_MS = 1500 ms. Maps below use 240 px roads (2 s of infantry travel, 2.86 s for a tank):
- * `p` (360,1000) — `e` (360,760); `n` (120,1000) is p's neighbour on a second 240 px road.
+ * UNDER_FIRE_MS = 1500 ms. Maps below use 240 px lanes (2 s of infantry travel, 2.86 s for a tank):
+ * `p` (360,1000) — `e` (360,760); `n` (120,1000) is p's neighbour on a second 240 px lane.
+ * Rules v3: an L1 stream spawns its first unit at 1000 ms and lands it 1950 ms later (2950 ms).
  */
 
-function duel(p: Partial<TowerDef>, e: Partial<TowerDef>, extra: TowerDef[] = [], roads: RoadDef[] = []): GameState {
+function duel(p: Partial<TowerDef>, e: Partial<TowerDef>, extra: TowerDef[] = [], mines: MineDef[] = []): GameState {
   return createState(
     makeLevel({
       towers: [
@@ -22,22 +23,13 @@ function duel(p: Partial<TowerDef>, e: Partial<TowerDef>, extra: TowerDef[] = []
         { id: 'e', x: 360, y: 760, owner: 'enemy1', units: 10, level: 1, ...e },
         ...extra,
       ],
-      roads: [{ a: 'p', b: 'e' }, ...roads],
+      mines,
     }),
     1,
   );
 }
 
 const link = (state: GameState, owner: Owner, from: string, to: string) => applyCommand(state, { type: 'link', owner, from, to });
-
-/** Step until `pred` holds (inclusive) or `maxMs` of sim time passed; returns the sim time when it held, or -1. */
-function runUntil(state: GameState, pred: (s: GameState) => boolean, maxMs: number): number {
-  while (state.time < maxMs) {
-    step(state);
-    if (pred(state)) return state.time;
-  }
-  return -1;
-}
 
 describe('under fire: rule mechanics', () => {
   it('C.UNDER_FIRE_MS is 1500 (GDD §2.0 v2.1)', () => {
@@ -89,7 +81,7 @@ describe('under fire: rule mechanics', () => {
   });
 
   it('friendly reinforcements still land (+1 each), do not arm the window and still auto-upgrade the tower', () => {
-    const state = duel({ units: 23 }, { units: 10 }, [{ id: 'n', x: 120, y: 1000, owner: 'player', units: 10 }], [{ a: 'n', b: 'p' }]);
+    const state = duel({ units: 23 }, { units: 10 }, [{ id: 'n', x: 120, y: 1000, owner: 'player', units: 10 }]);
     spawn(state, { owner: 'enemy1', from: 'e', to: 'p', progress: 0.995 });
     step(state); // 23 → 22, under fire until 1550
     expect(state.towers['p']!.underFireUntilMs).toBe(1550);
@@ -103,7 +95,7 @@ describe('under fire: rule mechanics', () => {
     expect(state.towers['p']!.underFireUntilMs).toBe(1550); // friendly landings never touch it
   });
 
-  it('units that die on the road are not landings (clash, mine, barrier, artillery)', () => {
+  it('units that die on the lane are not landings (clash, mine, artillery)', () => {
     // clash: enemy and player units meet on p-e and both die
     const clash = duel({ units: 10 }, { units: 10 });
     spawn(clash, { owner: 'enemy1', from: 'e', to: 'p', progress: 0.45 });
@@ -113,25 +105,16 @@ describe('under fire: rule mechanics', () => {
     expect(clash.towers['p']!.underFireUntilMs).toBe(0);
     expect(clash.towers['e']!.underFireUntilMs).toBe(0);
 
-    // mine and barrier at the midpoint of a road into p
-    const hazard = createState(
-      makeLevel({
-        towers: [
-          { id: 'p', x: 360, y: 1000, owner: 'player', units: 10 },
-          { id: 'e', x: 360, y: 760, owner: 'enemy1', units: 10 },
-          { id: 'f', x: 120, y: 1000, owner: 'enemy1', units: 10 },
-        ],
-        roads: [
-          { a: 'p', b: 'e', mine: 1 },
-          { a: 'f', b: 'p', barrier: 1 },
-        ],
-      }),
-      1,
-    );
+    // mines at the midpoints of two lanes into p
+    const hazard = duel({ units: 10 }, { units: 10 }, [{ id: 'f', x: 120, y: 1000, owner: 'enemy1', units: 10 }], [
+      { x: 360, y: 880, charges: 1 },
+      { x: 240, y: 1000, charges: 1 },
+    ]);
     spawn(hazard, { owner: 'enemy1', from: 'e', to: 'p', progress: 0.48 });
     spawn(hazard, { owner: 'enemy1', from: 'f', to: 'p', progress: 0.48 });
     run(hazard, 12);
     expect(hazard.units).toEqual([]);
+    expect(hazard.mines.map((m) => m.charges)).toEqual([0, 0]);
     expect(hazard.towers['p']!.units).toBe(10);
     expect(hazard.towers['p']!.underFireUntilMs).toBe(0);
 
@@ -180,8 +163,8 @@ describe('under fire: rule mechanics', () => {
   });
 });
 
-describe('under fire: GDD §2.0 v2.1 acceptance', () => {
-  it('1. L3 100 streams into an enemy L3 100 over 240 px: the target flips between 13 s and 16 s', () => {
+describe('under fire: GDD §2.0 v2.1 acceptance, re-measured under rules v3 streams', () => {
+  it('1. L3 100 streams into an enemy L3 100 over 240 px: the target flips between 50 s and 54 s (2/s from 2.45 s, never recruiting)', () => {
     const state = duel({ level: 3, units: 100 }, { level: 3, units: 100 });
     link(state, 'player', 'p', 'e');
     let minGarrison = Infinity;
@@ -191,35 +174,31 @@ describe('under fire: GDD §2.0 v2.1 acceptance', () => {
         if (s.towers['e']!.owner === 'enemy1') minGarrison = Math.min(minGarrison, s.towers['e']!.units);
         return s.towers['e']!.owner === 'player';
       },
-      30_000,
+      60_000,
     );
-    expect(flipMs).toBeGreaterThanOrEqual(13_000);
-    expect(flipMs).toBeLessThanOrEqual(16_000);
+    expect(flipMs).toBeGreaterThanOrEqual(50_000);
+    expect(flipMs).toBeLessThanOrEqual(54_000);
     expect(minGarrison).toBe(0);
-    // From the first landing at ≈ 2.15 s the keep never recruited: 100 landings took it to 0, the 101st flipped it.
+    expect(state.towers['p']!.units).toBe(100); // the source never drains
     expect(state.events).toContainEqual({ type: 'capture', towerId: 'e', by: 'player', from: 'enemy1' });
   });
 
-  it('2a. enemy L1 25 streams into a player L3 100 over 240 px, unanswered: the keep falls between 70 s and 90 s', () => {
+  it('2a. enemy L1 25 streams into a player L3 100 over 240 px, unanswered: the keep falls between 100 s and 106 s', () => {
     const state = duel({ level: 3, units: 100 }, { level: 1, units: 25 });
     link(state, 'enemy1', 'e', 'p'); // linked before the first tick so the full L1 does not auto-upgrade
     const fallMs = runUntil(state, (s) => s.towers['p']!.owner === 'enemy1', 120_000);
-    expect(fallMs).toBeGreaterThanOrEqual(70_000);
-    expect(fallMs).toBeLessThanOrEqual(90_000);
-    expect(state.towers['e']!.level).toBe(1);
+    // 1/s from 2.95 s, the keep under fire from the first landing: 101 landings → 102.95 s.
+    expect(fallMs).toBeGreaterThanOrEqual(100_000);
+    expect(fallMs).toBeLessThanOrEqual(106_000);
+    expect(state.towers['e']!).toMatchObject({ level: 1, units: 25 });
   });
 
   it('2b. … answered by a player L3 100 neighbour linking in at t = 5 s: back at 100 by 25 s, supply line ends with targetFull', () => {
-    const state = duel(
-      { level: 3, units: 100 },
-      { level: 1, units: 25 },
-      [{ id: 'n', x: 120, y: 1000, owner: 'player', units: 100, level: 3 }],
-      [{ a: 'n', b: 'p' }],
-    );
+    const state = duel({ level: 3, units: 100 }, { level: 1, units: 25 }, [{ id: 'n', x: 120, y: 1000, owner: 'player', units: 100, level: 3 }]);
     link(state, 'enemy1', 'e', 'p');
-    run(state, 100); // t = 5 s: the burst has landed, the trickle is on
+    run(state, 100); // t = 5 s: landings at 2.95, 3.95, 4.95
     const dented = state.towers['p']!.units;
-    expect(dented).toBeLessThanOrEqual(76);
+    expect(dented).toBe(97);
     expect(isUnderFire(state, state.towers['p']!)).toBe(true);
     link(state, 'player', 'n', 'p');
     let fullAtMs = -1;
@@ -231,11 +210,13 @@ describe('under fire: GDD §2.0 v2.1 acceptance', () => {
         fullAtMs = state.time;
       }
     }
-    expect(fullAtMs).toBeGreaterThan(5_000);
-    expect(fullAtMs).toBeLessThanOrEqual(25_000);
+    // Supply 2/s from 7.45 s against 1/s of hits: +1/s net from ≈ 95 → 100 at ≈ 12.5 s.
+    expect(fullAtMs).toBeGreaterThan(10_000);
+    expect(fullAtMs).toBeLessThanOrEqual(15_000);
     expect(state.towers['p']!.units).toBe(100);
     expect(state.towers['p']!.owner).toBe('player');
     expect(state.links.some((l) => l.from === 'n')).toBe(false);
+    expect(state.towers['n']!.units).toBe(100); // the helper's garrison is untouched by its stream
     // The keep still recruits nothing by itself: the neighbour's stream did the refilling.
     expect(isUnderFire(state, state.towers['p']!)).toBe(true);
   });
@@ -247,7 +228,7 @@ describe('under fire: GDD §2.0 v2.1 acceptance', () => {
     const landings: { atMs: number; unitsAfter: number; unitsBefore: number }[] = [];
     let armed = 0;
     let before = p.units;
-    while (state.time < 12_000) {
+    while (state.time < 16_000) {
       step(state);
       if (p.underFireUntilMs !== armed) {
         armed = p.underFireUntilMs;
@@ -255,18 +236,17 @@ describe('under fire: GDD §2.0 v2.1 acceptance', () => {
       }
       before = p.units;
     }
-    expect(landings.map((l) => l.atMs)).toEqual([3_000, 6_850, 10_850]);
-    // The stock tank leaves at 0.15 s (drain timer) and walks 240 / 84 px/s ≈ 2.86 s (58 ticks, the spawn
-    // tick included); the next tanks are produced every TANK_GEN_MS and leave on the tick they appear
-    // (armed drain timer): landings 4 s apart.
-    for (const l of landings) expect(l.unitsAfter).toBeLessThan(l.unitsBefore);
-    // Between two landings the window (1.5 s) expires and ≈ 2.5 s of L1 production lands: +2 each cycle.
-    expect(landings[1]!.unitsBefore - landings[0]!.unitsAfter).toBe(2);
+    // Tanks leave at 4000, 8000, 12000 ms (TANK_GEN_MS[1]) and walk 240 / 84 px/s ≈ 2.86 s (58 ticks, the spawn tick included).
+    expect(landings.map((l) => l.atMs)).toEqual([6_850, 10_850, 14_850]);
+    for (const l of landings) expect(l.unitsAfter).toBe(l.unitsBefore - 5);
+    // Between two landings the window (1.5 s) expires and 2.5 s of L1 production lands (the accumulator carries over).
+    expect(landings[1]!.unitsBefore - landings[0]!.unitsAfter).toBe(3);
     expect(landings[2]!.unitsBefore - landings[1]!.unitsAfter).toBe(2);
+    expect(state.towers['e']!.units).toBe(5); // the factory keeps its tank
     // Explicitly: under fire right after a landing, expired UNDER_FIRE_MS later.
     const s2 = duel({ level: 1, units: 10 }, { kind: 'tankFactory', level: 1, units: 5 });
     link(s2, 'enemy1', 'e', 'p');
-    runUntil(s2, (s) => s.towers['p']!.underFireUntilMs > 0, 5_000);
+    runUntil(s2, (s) => s.towers['p']!.underFireUntilMs > 0, 8_000);
     expect(isUnderFire(s2, s2.towers['p']!)).toBe(true);
     run(s2, C.UNDER_FIRE_MS / C.TICK_MS);
     expect(isUnderFire(s2, s2.towers['p']!)).toBe(false);
@@ -286,6 +266,7 @@ describe('under fire: GDD §2.0 v2.1 acceptance', () => {
     // A restored snapshot replays exactly: the target flips on the same tick in both timelines.
     const origFall = runUntil(state, (s) => s.towers['p']!.owner === 'enemy1', 120_000);
     const copyFall = runUntil(copy, (s) => s.towers['p']!.owner === 'enemy1', 120_000);
+    expect(origFall).toBeGreaterThan(0);
     expect(copyFall).toBe(origFall);
     expect(copy).toEqual(state);
     // Restoring a snapshot taken under fire keeps production paused: no unit appears until the window ends.

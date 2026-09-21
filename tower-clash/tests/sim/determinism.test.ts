@@ -1,43 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { makeLevel } from '../helpers';
 import { createState } from '../../src/sim/create';
-import { applyCommand } from '../../src/sim/commands';
-import { step } from '../../src/sim/step';
-import type { Command, GameState } from '../../src/sim/types';
+import type { GameState } from '../../src/sim/types';
+import { scenarioLevel, scriptedTick } from './util';
 
 function scenario(seed: number): GameState {
-  const level = makeLevel({
-    towers: [
-      { id: 'p', x: 100, y: 1100, owner: 'player', units: 20, level: 1 },
-      { id: 'a', x: 360, y: 700, owner: 'neutral', units: 5, kind: 'artillery' },
-      { id: 'e', x: 600, y: 300, owner: 'enemy1', units: 12, kind: 'fortress' },
-      { id: 't', x: 100, y: 300, owner: 'enemy1', units: 10, kind: 'tankFactory' },
-    ],
-    roads: [
-      { a: 'p', b: 'a', mine: 2 },
-      { a: 'a', b: 'e', barrier: 3, waypoints: [{ x: 500, y: 600 }] },
-      { a: 'p', b: 't', kind: 'bridge' },
-      { a: 't', b: 'a' },
-    ],
-  });
-  const state = createState(level, seed);
-  const script: [number, Command][] = [
-    [0, { type: 'sendUnits', owner: 'player', from: 'p', to: 'a', ratio: 0.5 }],
-    [0, { type: 'sendUnits', owner: 'enemy1', from: 't', to: 'a' }],
-    [40, { type: 'sendUnits', owner: 'enemy1', from: 'e', to: 'a', ratio: 0.5 }],
-    [60, { type: 'upgrade', owner: 'player', towerId: 'p' }], // rules v2: ignored
-    [80, { type: 'link', owner: 'player', from: 'p', to: 'a' }],
-    [100, { type: 'link', owner: 'enemy1', from: 'e', to: 'a' }],
-    [120, { type: 'booster', owner: 'player', booster: 'overdrive' }],
-    [200, { type: 'sendUnits', owner: 'player', from: 'a', to: 'e' }],
-    [220, { type: 'cutBridge', owner: 'player', roadId: 'p-t' }],
-    [300, { type: 'booster', owner: 'player', booster: 'freeze' }],
-    [340, { type: 'unlink', owner: 'player', from: 'p' }],
-  ];
-  for (let tick = 0; tick < 600; tick++) {
-    for (const [at, cmd] of script) if (at === tick) applyCommand(state, cmd);
-    step(state);
-  }
+  const state = createState(scenarioLevel(), seed);
+  for (let tick = 0; tick < 600; tick++) scriptedTick(state, tick);
   return state;
 }
 
@@ -50,18 +18,29 @@ describe('determinism', () => {
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
   });
 
-  it('the scenario actually exercised the rules', () => {
+  it('the scenario actually exercised the rules (lanes, obstacles, mines, streams, boosters)', () => {
     const s = scenario(42);
-    expect(s.roads['p-t']!.cut).toBe(true);
-    expect(s.roads['a-p']!.mine).toBe(0);
-    expect(s.towers['p']!.level).toBe(1); // the `upgrade` command is ignored and p drained through its link
-    expect(s.towers['a']!.owner).toBe('player'); // captured through the p → a stream
-    // Auto-upgraded on reinforcements + generation. Rules v2.1 "under fire": enemy1's stream into `a`
-    // (tick 100 until `e` fell at 15.65 s) paused its recruiting, so it reaches L2 at 15.95 s (v2: L3 by 30 s).
-    expect(s.towers['a']!.level).toBe(2);
-    expect(s.towers['a']!.underFireUntilMs).toBeGreaterThan(0); // the scenario exercised the v2.1 rule
-    expect(s.towers['e']!.owner).toBe('player');
-    expect(s.links).toEqual([]); // player unlinked at tick 340; enemy1's link died with its source
+    expect(Object.keys(s.roads).sort()).toEqual(['a-e', 'a-p', 'a-t', 'e-t']); // p–e blocked by a, p–t by the wall
+    expect(s.obstacles.length).toBe(1);
+    expect(s.mines.map((m) => m.charges)).toEqual([0, 0]); // both mines spent by the streams
+    expect(s.towers['p']!.level).toBe(1); // the `upgrade` and `sendUnits` commands are ignored; p streamed most of the match
+    expect(s.towers['p']!.units).toBe(23); // 20 kept by the stream + 3 grown while unlinked (17.0 s → 20.0 s)
+    expect(s.towers['a']!).toMatchObject({ owner: 'enemy1', level: 1 }); // enemy1's tank and fortress streams took the hub at 9.65 s
+    expect(s.towers['t']!).toMatchObject({ owner: 'enemy1', units: 10 }); // airstruck to 0 at 18 s, two tanks regrown since
+    expect(s.links).toEqual([
+      { owner: 'enemy1', from: 'e', to: 'a', roadId: 'a-e', createdMs: 2000, emitAccMs: 0 }, // supply line into the captured hub
+      { owner: 'player', from: 'p', to: 'a', roadId: 'a-p', createdMs: 20_000, emitAccMs: 0 }, // the [440] a → e link was refused: not the player's
+    ]);
     expect(s.boosters).toEqual([]);
+  });
+
+  it('the airstrike on the linked tank factory ends its stream with sourceEmpty (event trace)', () => {
+    const state = createState(scenarioLevel(), 42);
+    const trace: string[] = [];
+    for (let tick = 0; tick < 600; tick++) {
+      scriptedTick(state, tick);
+      for (const e of state.events) if (e.type === 'capture' || e.type === 'unlinked') trace.push(`${state.time}:${e.type}:${'towerId' in e ? e.towerId : `${e.from}>${e.to}:${e.reason}`}`);
+    }
+    expect(trace).toEqual(['9650:capture:a', '18050:unlinked:t>a:sourceEmpty']);
   });
 });

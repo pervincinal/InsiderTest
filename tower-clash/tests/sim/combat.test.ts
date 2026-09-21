@@ -74,56 +74,72 @@ describe('artillery', () => {
   });
 });
 
-describe('hazards', () => {
-  it('mine kills infantry until its charges are spent, then a heavier unit survives it', () => {
-    const state = createState(makeLevel({ roads: [{ a: 'p', b: 'e', mine: 3 }] }), 1);
+describe('mines (rules v3)', () => {
+  /** Default map: lane `e-p` runs from e (360,400) to p (360,1000); a mine at (360,700) sits at t = 0.5. */
+  const mined = (mines: { x: number; y: number; charges: number }[]) => createState(makeLevel({ mines }), 1);
+
+  it('kills infantry until its charges are spent, then a heavier unit survives it and empties it', () => {
+    const state = mined([{ x: 360, y: 700, charges: 3 }]);
+    expect(state.roads['e-p']!.mineHits).toEqual([{ mine: 0, t: 0.5 }]);
     spawn(state, { owner: 'player', from: 'p', to: 'e', progress: 0.495 });
     step(state);
     expect(state.units).toEqual([]);
-    expect(state.roads['e-p']!.mine).toBe(2);
+    expect(state.mines[0]!.charges).toBe(2);
     expect(state.events).toContainEqual({ type: 'unitDied', x: 360, y: 700 - 0.005 * 600, owner: 'player', cause: 'mine' });
     const tank = spawn(state, { owner: 'enemy1', from: 'e', to: 'p', progress: 0.495, weight: 5, kind: 'tank' });
     step(state);
     expect(state.units).toEqual([tank]);
     expect(tank.weight).toBe(5);
-    expect(state.roads['e-p']!.mine).toBe(0);
+    expect(state.mines[0]!.charges).toBe(0);
     state.units = [];
     spawn(state, { owner: 'player', from: 'p', to: 'e', progress: 0.495 });
     step(state);
-    expect(state.units.length).toBe(1);
+    expect(state.units.length).toBe(1); // spent: gone for good
   });
 
-  it('barrier absorbs unit weight until hp 0, then lets units pass', () => {
-    const state = createState(makeLevel({ roads: [{ a: 'p', b: 'e', barrier: 2 }] }), 1);
-    spawn(state, { owner: 'player', from: 'p', to: 'e', progress: 0.495 });
-    step(state);
+  it('is crossed direction-aware at its lane fraction (t = 0.25 from `a`, 0.75 for a unit walking the other way)', () => {
+    const state = mined([{ x: 360, y: 550, charges: 2 }]);
+    expect(state.roads['e-p']!.mineHits).toEqual([{ mine: 0, t: 0.25 }]);
+    const back = spawn(state, { owner: 'player', from: 'p', to: 'e', progress: 0.7 });
+    run(state, 4); // 0.74: not yet
+    expect(state.units).toEqual([back]);
+    step(state); // 0.75 ≥ 0.75
     expect(state.units).toEqual([]);
-    expect(state.roads['e-p']!.barrier).toBe(1);
-    expect(state.events).toContainEqual({ type: 'unitDied', x: 360, y: 697, owner: 'player', cause: 'barrier' });
-    spawn(state, { owner: 'enemy1', from: 'e', to: 'p', progress: 0.495 });
-    step(state);
+    expect(state.mines[0]!.charges).toBe(1);
+    const fwd = spawn(state, { owner: 'enemy1', from: 'e', to: 'p', progress: 0.2 });
+    run(state, 4); // 0.24
+    expect(state.units).toEqual([fwd]);
+    step(state); // 0.25
     expect(state.units).toEqual([]);
-    expect(state.roads['e-p']!.barrier).toBe(0);
-    spawn(state, { owner: 'player', from: 'p', to: 'e', progress: 0.495 });
-    step(state);
-    expect(state.units.length).toBe(1);
+    expect(state.mines[0]!.charges).toBe(0);
   });
 
-  it('a heavier unit breaks a weaker barrier and continues with reduced weight', () => {
-    const state = createState(makeLevel({ roads: [{ a: 'p', b: 'e', barrier: 2 }] }), 1);
-    const tank = spawn(state, { owner: 'player', from: 'p', to: 'e', progress: 0.495, weight: 5, kind: 'tank' });
-    step(state);
-    expect(state.units).toEqual([tank]);
-    expect(tank.weight).toBe(3);
-    expect(state.roads['e-p']!.barrier).toBe(0);
-  });
-
-  it('a unit that has not reached the midpoint is unaffected', () => {
-    const state = createState(makeLevel({ roads: [{ a: 'p', b: 'e', mine: 1, barrier: 1 }] }), 1);
+  it('a unit that has not reached the mine is unaffected', () => {
+    const state = mined([{ x: 360, y: 700, charges: 1 }]);
     spawn(state, { owner: 'player', from: 'p', to: 'e', progress: 0.2 });
     run(state, 20);
     expect(state.units.length).toBe(1);
-    expect(state.roads['e-p']!.mine).toBe(1);
-    expect(state.roads['e-p']!.barrier).toBe(1);
+    expect(state.mines[0]!.charges).toBe(1);
+  });
+
+  it('two mines on one lane are met in travel order; a spent one is skipped', () => {
+    const state = mined([
+      { x: 360, y: 850, charges: 1 }, // t = 0.75
+      { x: 360, y: 550, charges: 1 }, // t = 0.25
+    ]);
+    expect(state.roads['e-p']!.mineHits).toEqual([
+      { mine: 1, t: 0.25 },
+      { mine: 0, t: 0.75 },
+    ]);
+    // A fast enough crossing: put a tank right before the first mine and let it walk past both.
+    const tank = spawn(state, { owner: 'player', from: 'p', to: 'e', progress: 0.2, weight: 5, kind: 'tank' });
+    run(state, 100); // 84 px/s: 0.007 per tick → 0.9, past both mines
+    expect(state.units).toEqual([tank]); // heavier than both: survives, empties both
+    expect(tank.weight).toBe(5);
+    expect(state.mines.map((m) => m.charges)).toEqual([0, 0]);
+    state.units = [];
+    spawn(state, { owner: 'player', from: 'p', to: 'e', progress: 0.2 });
+    run(state, 60);
+    expect(state.units.length).toBe(1); // both spent: nothing happens
   });
 });
