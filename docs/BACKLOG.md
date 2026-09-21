@@ -3,7 +3,12 @@
 Priority = order within a section. Producer moves items; anyone may add to Bugs / Icebox.
 
 ## In progress (today)
-(empty — next sprint picks from "Next")
+- [ ] RULES-3 (2026-09-21, stakeholder) **Rules v3 "free lanes"** — GDD §2.0b: no roads (any two towers with a clear straight line are connected; obstacles `wall`/`water`/`rock` and third towers block), paths straight only, a stream never drains its source (each link emits at the tower's production rate: L1/L2/L3 = 1 / 1.43 / 2 units per s), growth paused while streaming, `sourceEmpty` auto-unlink, point mines, no bridges/barriers/waypoints.
+  - [ ] RULES-3a sim + geometry + tests — gameplay-engineer
+  - [ ] RULES-3b 50 levels on the obstacle schema, validator, converter, lessons in 4 languages, GDD §3 — level-designer
+  - [ ] RULES-3c render (obstacles, mines, straight ribbons, guide lines), input (no bridge cut, `hint.blocked`), locales, tutorial — frontend-engineer
+  - [ ] RULES-3d AI threat model for free streams, personalities, reference player, GDD §2.5 — ai-engineer (after 3a)
+  - [ ] RULES-3e star clocks re-measured (after 3d) — level-designer; e2e + screenshots + CI gates — qa-engineer; release notes / store texts — publisher
 
 ## Next (ECON — Phase B/C after accounts exist)
 - [ ] ECON-1 Phase B: real RevenueCat + AdMob keys (secrets `RC_*`, `ADMOB_*`), sandbox purchase test on a device, App Store Connect / Play products created with catalog ids — mobile-engineer + publisher (needs stakeholder accounts)
