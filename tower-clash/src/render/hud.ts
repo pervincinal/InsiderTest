@@ -191,7 +191,7 @@ function drawStreamArrow(ctx: CanvasRenderingContext2D, color: string, cx: numbe
 
 /**
  * Per-tower stream count (rules v2): a small "⇢n" chip left of the garrison badge of every tower
- * that currently drains through ≥ 1 link, in the owner's tone so enemy streams read too.
+ * that currently streams through ≥ 1 link (growth paused, rules v3), in the owner's tone so enemy streams read too.
  */
 function drawStreamChips(ctx: CanvasRenderingContext2D, state: GameState, ui: PlayUi): void {
   const pal = ui.palette;

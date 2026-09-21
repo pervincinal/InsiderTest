@@ -244,7 +244,6 @@ describe('PlayScreen in challenge mode', () => {
     const state = play.state;
     for (const t of Object.values(state.towers)) t.owner = 'player';
     state.units = state.units.filter((u) => u.owner === 'player');
-    state.queues = state.queues.filter((q) => q.owner === 'player');
     state.links = state.links.filter((l) => l.owner === 'player');
     clock.now += 250;
     play.update(250, clock.now);
@@ -330,17 +329,12 @@ describe('PlayScreen in challenge mode', () => {
 
   it('a lost challenge pays nothing and offers no continue', () => {
     const shell = fakeApp(save);
-    // two player towers against a strong enemy: the debug "suicide" mode loses it (continue.test.ts)
+    // two L1 player towers against an L3 keep (rules v3: three 2/s streams; the garrison no longer decides): the debug "suicide" mode loses it (continue.test.ts)
     const level = makeLevel({
       towers: [
         { id: 'p', x: 360, y: 1000, owner: 'player', units: 40, level: 1 },
         { id: 'q', x: 160, y: 900, owner: 'player', units: 24, level: 1 },
-        { id: 'e', x: 360, y: 160, owner: 'enemy1', units: 100, level: 1 },
-      ],
-      roads: [
-        { a: 'p', b: 'e' },
-        { a: 'q', b: 'p' },
-        { a: 'q', b: 'e' },
+        { id: 'e', x: 360, y: 160, owner: 'enemy1', units: 100, level: 3 },
       ],
     });
     const play = new PlayScreen(shell.app, level, 7, 20, { challenge: challenge() });
@@ -420,7 +414,6 @@ describe('UTC day rollover during a match (GDD §7.5 item 4)', () => {
     app.go(play);
     for (const tower of Object.values(play.state.towers)) tower.owner = 'player';
     play.state.units = [];
-    play.state.queues = [];
     play.state.links = [];
     play.update(250, 250);
     const result = current() as ResultScreen;

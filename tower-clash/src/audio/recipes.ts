@@ -38,12 +38,6 @@ export function playRecipe(s: Synth, name: SfxName, opts: SfxOptions): void {
       sweep(s, 170, 40, 260, 'sine', { gain: 0.5 });
       noiseBurst(s, 120, 350, { gain: 0.25 });
       return;
-    case 'bridgeCut':
-      // Wood crack: bright noise snap then a short low body knock.
-      noiseBurst(s, 90, 2600, { gain: 0.35, filter: 'bandpass' });
-      noiseBurst(s, 220, 500, { gain: 0.2, delayS: 0.03 });
-      blip(s, 95, 150, 'square', { gain: 0.12, delayS: 0.02 });
-      return;
     case 'won':
       // 4-note fanfare: C5 E5 G5 C6, the last held.
       [523.3, 659.3, 784, 1046.5].forEach((hz, i) => {

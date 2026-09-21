@@ -94,9 +94,9 @@ function logical(ctx: CanvasRenderingContext2D, view: View): void {
   ctx.clip();
 }
 
-/** Cache key of the ground layer: level / biome / resolved theme / palette / letterbox / viewport. */
+/** Cache key of the ground layer: level / variant (spent mines) / biome / resolved theme / palette / letterbox / viewport. */
 export function groundKey(view: View, pal: Palette, spec: TerrainSpec, letterbox: string): string {
-  return `${spec.key}|${spec.biome ?? ''}|${themeFor(spec.theme).id}|${pal.owners.enemy1}|${letterbox}|${view.dpr}|${view.scale}|${view.offsetX}|${view.offsetY}`;
+  return `${spec.key}|${spec.variant ?? ''}|${spec.biome ?? ''}|${themeFor(spec.theme).id}|${pal.owners.enemy1}|${letterbox}|${view.dpr}|${view.scale}|${view.offsetX}|${view.offsetY}`;
 }
 
 export function paintGround(layer: Layer, view: View, pal: Palette, spec: TerrainSpec, letterbox: string): void {

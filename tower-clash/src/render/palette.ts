@@ -24,6 +24,8 @@ export interface BiomeColors {
   path: { lit: string; shade: string };
   /** Foliage clumps (bushes / cacti / pines / rocks). */
   bush: Tones;
+  /** Stone of `wall` obstacles (rules v3): lit cap, mid face, shaded side — darker than the plinth stone so it reads on every ground. */
+  wall: Tones;
   /** Small scattered dots (flowers / pebbles / embers). */
   dots: readonly string[];
 }
@@ -33,15 +35,8 @@ export interface Palette {
   background: string;
   /** Deeper water outside the logical map (letterbox bars). */
   letterbox: string;
-  /** Sandy path fill / edge. */
-  road: string;
-  roadDim: string;
-  /** Wooden bridge planks. */
-  bridge: string;
   /** Mine light / danger. */
   mine: string;
-  /** Stone wall barrier. */
-  barrier: string;
   /** Dark navy UI text. */
   text: string;
   textDim: string;
@@ -110,10 +105,8 @@ export interface Palette {
   stoneTones: Tones;
   /** Foam line where water meets the cliff. */
   foam: string;
-  /** Wood tones (bridges). */
+  /** Wood tones (skins, tank factory). */
   woodTones: Tones;
-  /** Warm grey clay of road barriers (darker than plinth stone so the wall reads on sand and snow). */
-  barrierTones: Tones;
   /** Dust puffs behind marching columns on sand (pale, reads on the darker sand path). */
   dust: string;
   rope: string;
@@ -138,6 +131,7 @@ const BIOMES: Record<Biome, BiomeColors> = Object.freeze({
     cliff: { lit: '#e9c98a', shade: '#b9925a' },
     path: { lit: '#f7e7bd', shade: '#d9c28c' },
     bush: { lit: '#8ad95a', mid: '#5fb742', shade: '#3f8f2e' },
+    wall: { lit: '#e3d9c6', mid: '#b9ad99', shade: '#7f7566' },
     dots: ['#fffaf0', '#ffd35c', '#ff8f92'],
   },
   autumn: {
@@ -145,6 +139,7 @@ const BIOMES: Record<Biome, BiomeColors> = Object.freeze({
     cliff: { lit: '#e9c98a', shade: '#b9925a' },
     path: { lit: '#f7e7bd', shade: '#d9c28c' },
     bush: { lit: '#ffb75c', mid: '#f08a3c', shade: '#c25a2a' },
+    wall: { lit: '#e6d6bd', mid: '#bda98c', shade: '#82705a' },
     dots: ['#fffaf0', '#ffb703', '#ff5a5f'],
   },
   sand: {
@@ -152,6 +147,7 @@ const BIOMES: Record<Biome, BiomeColors> = Object.freeze({
     cliff: { lit: '#e6c08a', shade: '#b5865a' },
     path: { lit: '#d9b985', shade: '#b8955e' },
     bush: { lit: '#8fd07a', mid: '#5fa85a', shade: '#3f7f43' },
+    wall: { lit: '#f1dcb4', mid: '#c9a273', shade: '#8a6a47' },
     dots: ['#fffaf0', '#e8b27c', '#c99a68'],
   },
   snow: {
@@ -159,6 +155,7 @@ const BIOMES: Record<Biome, BiomeColors> = Object.freeze({
     cliff: { lit: '#c9d9e6', shade: '#8ea9c2' },
     path: { lit: '#d6e3ee', shade: '#a9c0d4' },
     bush: { lit: '#4f8d7a', mid: '#2f6b5c', shade: '#1f4d43' },
+    wall: { lit: '#dfe6ee', mid: '#9fb0c2', shade: '#5f7185' },
     dots: ['#fffaf0', '#dbeafe', '#bfd8f0'],
   },
   volcanic: {
@@ -166,6 +163,7 @@ const BIOMES: Record<Biome, BiomeColors> = Object.freeze({
     cliff: { lit: '#5a4a4c', shade: '#3a2c30' },
     path: { lit: '#ff9a3c', shade: '#d9601e' },
     bush: { lit: '#7a6f7c', mid: '#57505c', shade: '#3a343f' },
+    wall: { lit: '#8f8391', mid: '#5f5565', shade: '#2e2833' },
     dots: ['#ffb703', '#ff5a1f', '#ffd35c'],
   },
 });
@@ -198,11 +196,7 @@ const mids = (t: Record<Owner, Tones>): Record<Owner, string> => ({
 export const DEFAULT_PALETTE: Palette = Object.freeze({
   background: '#3fb6de',
   letterbox: '#1f8fc2',
-  road: '#f7e7bd',
-  roadDim: '#d9c28c',
-  bridge: '#b07a45',
   mine: '#ff5a5f',
-  barrier: '#d8cdb8',
   text: '#1e2a44',
   textDim: '#5b6b85',
   panel: '#fffaf0',
@@ -255,7 +249,6 @@ export const DEFAULT_PALETTE: Palette = Object.freeze({
   stoneTones: { lit: '#fff8e8', mid: '#efe6d2', shade: '#bfae90' },
   foam: 'rgba(255, 250, 240, 0.55)',
   woodTones: { lit: '#d29a5e', mid: '#b07a45', shade: '#7a4d27' },
-  barrierTones: { lit: '#e3d9c6', mid: '#b9ad99', shade: '#7f7566' },
   dust: '#fff6e0',
   rope: '#e8d3a2',
   metal: { lit: '#8b94a3', mid: '#4b5361', shade: '#2d3340' },

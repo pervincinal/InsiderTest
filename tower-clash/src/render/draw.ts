@@ -1,6 +1,7 @@
 import type { GameState, LevelDef, Outcome, Owner, Road, Tower, Unit } from '../sim/types';
 import { C } from '../sim/constants';
-import { capacityOf, isUnderFire, roadPointAt } from '../sim/step';
+import { roadIdFor } from '../sim/create';
+import { capacityOf, isUnderFire, linksFrom } from '../sim/step';
 import type { Biome, Palette } from './palette';
 import { biomeFor, themeFor, withAlpha } from './palette';
 import type { View } from './view';
@@ -24,9 +25,6 @@ export interface PlayUi {
   alpha: number;
   selectedTowerId: string | null;
   hoverTowerId: string | null;
-  /** Bridge currently being long-pressed and how far along (0..1) the press is. */
-  pressRoadId: string | null;
-  pressProgress: number;
   paused: boolean;
   outcome: Outcome;
   stars: number; // only meaningful when outcome === 'won'
@@ -40,9 +38,10 @@ export interface PlayUi {
   /** Equipped cosmetic skins; roof / helmet apply to the player's towers and soldiers only, the theme re-lights the ground. */
   skin?: TowerSkin;
   /**
-   * Rules v2 link-limit refusal: the selected tower shakes briefly and a paper hint bubble shows
-   * `limitHintText` until `until` (same clock as `nowMs`). The play screen sets a fresh object per
-   * refusal; the text is already localised by the UI.
+   * Refused gesture (link limit, or a tap on a tower with no clear lane — rules v3 §2.0b): the
+   * selected tower shakes briefly and a paper hint bubble shows `limitHintText` until `until`
+   * (same clock as `nowMs`). The play screen sets a fresh object per refusal; the text is already
+   * localised by the UI.
    */
   limitHint?: { until: number };
   limitHintText?: string;
@@ -73,7 +72,7 @@ function motionAllowed(): boolean {
   return !reducedMotion;
 }
 
-/* ---------- roads ---------- */
+/* ---------- lanes (rules v3: always a straight segment a → b) ---------- */
 
 export interface Pose {
   x: number;
@@ -82,259 +81,38 @@ export interface Pose {
   dy: number;
 }
 
-/** Point and unit tangent at fraction `t` along a road's polyline (measured from road.a). */
+/** Point and unit tangent at fraction `t` along a lane (measured from road.a; lanes are straight). */
 export function roadPoseAt(road: Road, t: number): Pose {
   const pts = road.points;
-  const n = pts.length;
-  if (n < 2) {
-    const p = pts[0] ?? { x: 0, y: 0 };
-    return { x: p.x, y: p.y, dx: 1, dy: 0 };
-  }
-  let remaining = Math.max(0, Math.min(1, t)) * road.length;
-  for (let i = 1; i < n; i++) {
-    const p = pts[i - 1]!;
-    const q = pts[i]!;
-    const sx = q.x - p.x;
-    const sy = q.y - p.y;
-    const seg = Math.hypot(sx, sy);
-    if (remaining <= seg || i === n - 1) {
-      const k = seg === 0 ? 0 : Math.min(1, remaining / seg);
-      const inv = seg === 0 ? 0 : 1 / seg;
-      return { x: p.x + sx * k, y: p.y + sy * k, dx: sx * inv, dy: sy * inv };
-    }
-    remaining -= seg;
-  }
-  const last = pts[n - 1]!;
-  return { x: last.x, y: last.y, dx: 1, dy: 0 };
+  const p = pts[0] ?? { x: 0, y: 0 };
+  const q = pts[pts.length - 1] ?? p;
+  const sx = q.x - p.x;
+  const sy = q.y - p.y;
+  const seg = Math.hypot(sx, sy);
+  if (seg === 0) return { x: p.x, y: p.y, dx: 1, dy: 0 };
+  const k = Math.max(0, Math.min(1, t));
+  return { x: p.x + sx * k, y: p.y + sy * k, dx: sx / seg, dy: sy / seg };
 }
 
-function tracePolyline(ctx: CanvasRenderingContext2D, road: Road, t0: number, t1: number): void {
-  const steps = Math.max(2, Math.ceil((road.length * (t1 - t0)) / 24));
-  for (let i = 0; i <= steps; i++) {
-    const p = roadPointAt(road, t0 + ((t1 - t0) * i) / steps);
-    if (i === 0) ctx.moveTo(p.x, p.y);
-    else ctx.lineTo(p.x, p.y);
-  }
-}
-
-/** Small paper chip with ink numerals for hazard counts / queued sends. */
+/** Small paper chip with ink numerals for mine charges / queued sends. */
 function chip(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, text: string, stroke: string): void {
   drawBadge(ctx, pal, x, y, text, false, { stroke, scale: 0.72 });
 }
 
-/** Plank bridge with rope rails (dynamic: it can be cut). Static roads live in the terrain cache. */
-function drawBridge(ctx: CanvasRenderingContext2D, pal: Palette, road: Road, pressing: number): void {
-  ctx.lineCap = 'butt';
-  ctx.lineJoin = 'round';
-  const spans: [number, number][] = road.cut
-    ? [
-        [0, 0.36],
-        [0.64, 1],
-      ]
-    : [[0, 1]];
-  const wood = pal.woodTones;
-  for (const [t0, t1] of spans) {
-    // shadow on the water / ground, then the deck
-    ctx.strokeStyle = pal.groundShadow;
-    ctx.lineWidth = 30;
-    ctx.beginPath();
-    tracePolyline(ctx, road, t0, t1);
-    ctx.save();
-    ctx.translate(4, 7);
-    ctx.stroke();
-    ctx.restore();
-    ctx.strokeStyle = wood.shade;
-    ctx.lineWidth = 28;
-    ctx.stroke();
-    ctx.strokeStyle = wood.mid;
-    ctx.lineWidth = 22;
-    ctx.stroke();
-    // planks: lit top edge + shade gap
-    const count = Math.max(1, Math.floor((road.length * (t1 - t0)) / 12));
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = wood.shade;
-    ctx.beginPath();
-    for (let i = 0; i <= count; i++) {
-      const p = roadPoseAt(road, t0 + ((t1 - t0) * i) / count);
-      ctx.moveTo(p.x - p.dy * 11, p.y + p.dx * 11);
-      ctx.lineTo(p.x + p.dy * 11, p.y - p.dx * 11);
-    }
-    ctx.stroke();
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = wood.lit;
-    ctx.beginPath();
-    for (let i = 0; i <= count; i++) {
-      const p = roadPoseAt(road, t0 + ((t1 - t0) * i) / count);
-      ctx.moveTo(p.x - p.dy * 11 - 2, p.y + p.dx * 11 - 2);
-      ctx.lineTo(p.x + p.dy * 11 - 2, p.y - p.dx * 11 - 2);
-    }
-    ctx.stroke();
-    // rope rails on both sides, with posts
-    ctx.strokeStyle = pal.rope;
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    const posts = Math.max(2, Math.floor((road.length * (t1 - t0)) / 48));
-    for (const side of [-1, 1]) {
-      for (let i = 0; i <= posts; i++) {
-        const p = roadPoseAt(road, t0 + ((t1 - t0) * i) / posts);
-        const px = p.x - p.dy * 14 * side;
-        const py = p.y + p.dx * 14 * side;
-        if (i === 0) ctx.moveTo(px, py - 8);
-        else ctx.lineTo(px, py - 8);
-      }
-    }
-    ctx.stroke();
-    ctx.strokeStyle = wood.shade;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    for (const side of [-1, 1]) {
-      for (let i = 0; i <= posts; i++) {
-        const p = roadPoseAt(road, t0 + ((t1 - t0) * i) / posts);
-        const px = p.x - p.dy * 14 * side;
-        const py = p.y + p.dx * 14 * side;
-        ctx.moveTo(px, py + 1);
-        ctx.lineTo(px, py - 9);
-      }
-    }
-    ctx.stroke();
-  }
-  if (road.cut) {
-    // splintered ends over the gap
-    ctx.fillStyle = wood.shade;
-    for (const t of [0.36, 0.64]) {
-      const p = roadPoseAt(road, t);
-      ctx.beginPath();
-      ctx.moveTo(p.x - p.dy * 11, p.y + p.dx * 11);
-      ctx.lineTo(p.x + p.dx * (t < 0.5 ? 10 : -10), p.y + p.dy * (t < 0.5 ? 10 : -10));
-      ctx.lineTo(p.x + p.dy * 11, p.y - p.dx * 11);
-      ctx.closePath();
-      ctx.fill();
-    }
-    // fallen planks scattered in the gap (deterministic per road)
-    for (let i = 0; i < 4; i++) {
-      const p = roadPoseAt(road, 0.41 + i * 0.06);
-      const side = (i % 2 ? 1 : -1) * (5 + i * 3);
-      const x = p.x - p.dy * side;
-      const y = p.y + p.dx * side + 3;
-      const ang = Math.atan2(p.dy, p.dx) + (i - 1.5) * 0.75;
-      const len = 6 + (i % 3) * 2;
-      const c = Math.cos(ang) * len;
-      const sn = Math.sin(ang) * len;
-      ctx.lineCap = 'butt';
-      ctx.lineWidth = 3.5;
-      ctx.strokeStyle = pal.groundShadow;
-      ctx.beginPath();
-      ctx.moveTo(x - c + 2, y - sn + 3);
-      ctx.lineTo(x + c + 2, y + sn + 3);
-      ctx.stroke();
-      ctx.strokeStyle = i % 2 ? wood.mid : wood.shade;
-      ctx.beginPath();
-      ctx.moveTo(x - c, y - sn);
-      ctx.lineTo(x + c, y + sn);
-      ctx.stroke();
-    }
-    return;
-  }
-  if (pressing > 0) {
-    const m = roadPointAt(road, 0.5);
-    ctx.lineCap = 'round';
-    ctx.strokeStyle = withAlpha(pal.ink, 0.25);
-    ctx.lineWidth = 8;
-    ctx.beginPath();
-    ctx.arc(m.x, m.y, 28, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.strokeStyle = pal.mine;
-    ctx.lineWidth = 6;
-    ctx.beginPath();
-    ctx.arc(m.x, m.y, 28, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pressing);
-    ctx.stroke();
-  }
-}
-
-/** Initial hazard strength from the level definition (the sim only keeps the remainder). */
-function initialHazard(level: LevelDef, road: Road, key: 'barrier' | 'mine'): number {
-  for (const r of level.roads) {
-    if ((r.a === road.a && r.b === road.b) || (r.a === road.b && r.b === road.a)) return r[key] ?? 0;
-  }
-  return 0;
-}
-
-function drawHazards(ctx: CanvasRenderingContext2D, pal: Palette, level: LevelDef, road: Road, nowMs: number): void {
-  if (road.cut) return;
-  const m = roadPoseAt(road, 0.5);
-  if (road.barrier > 0) {
-    // clay wall blocks across the path; cracks grow as hp drains
-    const nx = -m.dy;
-    const ny = m.dx;
-    const initial = Math.max(road.barrier, initialHazard(level, road, 'barrier'));
-    const damage = 1 - road.barrier / initial;
-    ctx.fillStyle = pal.groundShadow;
-    ctx.beginPath();
-    ctx.ellipse(m.x + 8, m.y + 9, 34, 10, 0, 0, Math.PI * 2);
-    ctx.fill();
-    const st = pal.barrierTones;
-    ctx.lineJoin = 'round';
-    for (let i = -2; i <= 2; i++) {
-      const cx = m.x + nx * i * 12;
-      const cy = m.y + ny * i * 12;
-      const h = 18 + (i % 2 ? 0 : 4);
-      ctx.fillStyle = st.shade;
-      roundRect(ctx, { x: cx - 6, y: cy - h + 3, w: 13, h }, 3);
-      ctx.fill();
-      ctx.fillStyle = st.mid;
-      roundRect(ctx, { x: cx - 7, y: cy - h, w: 13, h }, 3);
-      ctx.fill();
-      ctx.fillStyle = st.lit;
-      roundRect(ctx, { x: cx - 6, y: cy - h + 1, w: 11, h: 4 }, 2);
-      ctx.fill();
-      // ink contour so the wall reads on every ground colour
-      ctx.strokeStyle = withAlpha(pal.ink, 0.35);
-      ctx.lineWidth = 1.5;
-      roundRect(ctx, { x: cx - 7, y: cy - h, w: 13, h }, 3);
-      ctx.stroke();
-      // cracks proportional to damage
-      const cracks = Math.round(damage * 3);
-      if (cracks > 0 && (i + 2) % Math.max(1, 4 - cracks) === 0) {
-        ctx.strokeStyle = withAlpha(pal.ink, 0.6);
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(cx - 3, cy - h + 4);
-        ctx.lineTo(cx + 1, cy - h / 2);
-        ctx.lineTo(cx - 2, cy - 3);
-        ctx.stroke();
-      }
-    }
-    chip(ctx, pal, m.x, m.y - 36, String(road.barrier), pal.ink);
-  }
-  if (road.mine > 0) {
-    const blink = motionAllowed() ? 0.55 + 0.45 * Math.sin(nowMs / 160) : 1;
-    ctx.fillStyle = pal.groundShadow;
-    ctx.beginPath();
-    ctx.ellipse(m.x + 4, m.y + 6, 15, 6, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = pal.metal.shade;
-    ctx.beginPath();
-    ctx.ellipse(m.x, m.y, 15, 11, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = pal.metal.mid;
-    ctx.beginPath();
-    ctx.ellipse(m.x, m.y - 3, 12, 7, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // stripe ring
-    ctx.strokeStyle = pal.gold;
-    ctx.lineWidth = 2;
-    ctx.setLineDash([4, 4]);
-    ctx.beginPath();
-    ctx.ellipse(m.x, m.y - 3, 12, 7, 0, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
+/** Blinking lamp and charge chip over every live mine (the body sits in the cached terrain). */
+function drawMineLights(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, nowMs: number): void {
+  const mines = state.mines;
+  if (mines.length === 0) return;
+  const blink = motionAllowed() ? 0.55 + 0.45 * Math.sin(nowMs / 160) : 1;
+  for (const m of mines) {
+    if (m.charges <= 0) continue;
     ctx.fillStyle = pal.mine;
     ctx.globalAlpha = blink;
     ctx.beginPath();
     ctx.arc(m.x, m.y - 4, 4, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
-    chip(ctx, pal, m.x, m.y - 30, String(road.mine), pal.mine);
+    chip(ctx, pal, m.x, m.y - 30, String(m.charges), pal.mine);
   }
 }
 
@@ -367,13 +145,11 @@ function ribbonPose(road: Road, forward: boolean, s: number, off: number): Ribbo
 }
 
 function traceRibbon(ctx: CanvasRenderingContext2D, road: Road, forward: boolean, s0: number, s1: number, off: number): void {
-  const steps = Math.max(2, Math.ceil((s1 - s0) / 10));
+  const a = ribbonPose(road, forward, s0, off);
+  const b = ribbonPose(road, forward, s1, off);
   ctx.beginPath();
-  for (let i = 0; i <= steps; i++) {
-    const p = ribbonPose(road, forward, s0 + ((s1 - s0) * i) / steps, off);
-    if (i === 0) ctx.moveTo(p.x, p.y);
-    else ctx.lineTo(p.x, p.y);
-  }
+  ctx.moveTo(a.x, a.y);
+  ctx.lineTo(b.x, b.y);
 }
 
 function linkRoad(state: LinkedState, link: LinkLike): Road | undefined {
@@ -384,27 +160,27 @@ function linkRoad(state: LinkedState, link: LinkLike): Road | undefined {
 }
 
 /**
- * Every active link as a road-following ribbon in the owner's colour (mid tone, 55 %; the player's
- * in the lit tone with a 1 px ink outline so their own streams read first), chevrons marching
- * toward the target (frozen under reduced motion) and an arrowhead at the target end. Opposite
- * links on one road are offset to their right so both read. Sources with ≥ 1 link get a soft
- * pulsing "draining" ring on the ground. Drawn over roads, under hazards / units / towers.
+ * Every active link as a straight ribbon along its lane in the owner's colour (mid tone, 55 %; the
+ * player's in the lit tone with a 1 px ink outline so their own streams read first), chevrons
+ * marching toward the target (frozen under reduced motion) and an arrowhead at the target end.
+ * Opposite links on one lane are offset to their right so both read. Sources with ≥ 1 link get a
+ * soft pulsing "streaming" ring on the ground (growth paused, rules v3). Drawn under units / towers.
  */
 export function drawLinks(ctx: CanvasRenderingContext2D, pal: Palette, state: LinkedState, nowMs: number, motion: boolean): void {
   const links = state.links ?? [];
   if (links.length === 0) return;
-  // which roads carry traffic both ways, and which towers are draining
+  // which lanes carry traffic both ways, and which towers are streaming
   const dirs = new Map<string, number>();
-  const draining = new Map<string, Owner>();
+  const streaming = new Map<string, Owner>();
   for (const l of links) {
     const road = linkRoad(state, l);
     if (!road) continue;
     dirs.set(road.id, (dirs.get(road.id) ?? 0) | (l.from === road.a ? 1 : 2));
-    draining.set(l.from, l.owner);
+    streaming.set(l.from, l.owner);
   }
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  for (const [id, owner] of draining) {
+  for (const [id, owner] of streaming) {
     const t = state.towers[id];
     if (!t) continue;
     const tones = pal.ownerTones[owner];
@@ -424,7 +200,7 @@ export function drawLinks(ctx: CanvasRenderingContext2D, pal: Palette, state: Li
   const phase = motion ? ((nowMs / 1000) * CHEVRON_SPEED) % CHEVRON_PITCH : 0;
   for (const l of links) {
     const road = linkRoad(state, l);
-    if (!road || road.cut) continue;
+    if (!road) continue;
     const forward = l.from === road.a;
     const off = dirs.get(road.id) === 3 ? LINK_SIDE_PX : 0;
     const len = road.length;
@@ -524,6 +300,38 @@ function selectionRing(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y
   ctx.lineDashOffset = 0;
 }
 
+/**
+ * Rules v3 §2.0b(8): while a player tower is selected, a thin line (owner colour, 30 % alpha, 2 px)
+ * from it to every tower it has a clear lane to, skipping targets it already streams into. Blocked
+ * towers get nothing, so the player sees at a glance what is reachable.
+ */
+export function drawGuideLines(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, sel: Tower): void {
+  if (sel.owner !== 'player') return;
+  const linked = new Set<string>();
+  for (const l of linksFrom(state, sel.id)) linked.add(l.to);
+  const r0 = towerFootprintRadius(sel.kind, sel.level) + 6;
+  ctx.save();
+  ctx.globalAlpha = 0.3;
+  ctx.strokeStyle = pal.owners[sel.owner];
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  for (const id in state.towers) {
+    if (id === sel.id || linked.has(id) || !state.roads[roadIdFor(sel.id, id)]) continue;
+    const t = state.towers[id]!;
+    const dx = t.x - sel.x;
+    const dy = t.y - sel.y;
+    const len = Math.hypot(dx, dy);
+    const r1 = towerFootprintRadius(t.kind, t.level) + 6;
+    if (len <= r0 + r1) continue;
+    ctx.moveTo(sel.x + (dx / len) * r0, sel.y + (dy / len) * r0);
+    ctx.lineTo(t.x - (dx / len) * r1, t.y - (dy / len) * r1);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawGroundMarks(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, ui: PlayUi, nowMs: number): void {
   const motion = motionAllowed();
   // artillery ranges (the sim measures a circle in map units)
@@ -543,18 +351,19 @@ function drawGroundMarks(ctx: CanvasRenderingContext2D, pal: Palette, state: Gam
   const sel = ui.selectedTowerId ? state.towers[ui.selectedTowerId] : undefined;
   const hov = ui.hoverTowerId ? state.towers[ui.hoverTowerId] : undefined;
   if (sel) {
+    drawGuideLines(ctx, pal, state, sel);
     const pulse = motion ? (Math.sin(nowMs / 180) + 1) / 2 : 0.5;
     selectionRing(ctx, pal, sel.x, sel.y, 54 + pulse * 4);
   }
   if (hov && sel && hov.id !== sel.id) {
-    const [a, b] = sel.id < hov.id ? [sel.id, hov.id] : [hov.id, sel.id];
-    const road = state.roads[`${a}-${b}`];
+    const road = state.roads[roadIdFor(sel.id, hov.id)];
     if (road) {
       ctx.lineCap = 'round';
       ctx.setLineDash([16, 14]);
       ctx.lineDashOffset = motion ? -(nowMs / 25) % 30 : 0;
       ctx.beginPath();
-      tracePolyline(ctx, road, 0, 1);
+      ctx.moveTo(sel.x, sel.y);
+      ctx.lineTo(hov.x, hov.y);
       ctx.strokeStyle = pal.goldShade;
       ctx.lineWidth = 12;
       ctx.stroke();
@@ -671,8 +480,6 @@ function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState
   while (ui_ < units.length) drawUnit(units[ui_++]!);
 
   // badges on top of everything in the world
-  const queued = new Map<string, number>();
-  for (const q of state.queues) queued.set(q.from, (queued.get(q.from) ?? 0) + q.remaining);
   for (const t of towers) {
     const raise = ui.selectedTowerId === t.id ? 4 : 0;
     const by = Math.max(HUD.mapTop + 26, t.y + badgeY(t.kind, t.level) - raise);
@@ -684,8 +491,6 @@ function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState
       underFire: isUnderFire(state, t) ? (by_ ? pal.owners[by_] : pal.ink) : undefined,
       shake: motion ? (fx?.badgeHit(t.id, nowMs) ?? 0) : 0,
     });
-    const n = queued.get(t.id) ?? 0;
-    if (n > 0) chip(ctx, pal, t.x + 46, by + 2, `+${n}`, pal.ownerTones[t.owner].mid);
   }
   if (hint && ui.limitHintText && ui.selectedTowerId) {
     const t = state.towers[ui.selectedTowerId];
@@ -769,15 +574,25 @@ function drawHintBubble(ctx: CanvasRenderingContext2D, pal: Palette, t: Tower, b
 
 const specCache = new WeakMap<GameState, TerrainSpec>();
 
+/** Which mines are spent — the only ground state that changes mid-match (re-keys the terrain cache). */
+function mineVariant(state: GameState): string {
+  let out = '';
+  for (let i = 0; i < state.mines.length; i++) if (state.mines[i]!.charges <= 0) out += `${i},`;
+  return out;
+}
+
 function terrainSpec(state: GameState, theme: string | undefined): TerrainSpec {
+  const variant = mineVariant(state);
   let spec = specCache.get(state);
-  if (spec && spec.theme === theme) return spec;
+  if (spec && spec.theme === theme && spec.variant === variant) return spec;
   spec = {
     key: `level:${state.levelId}`,
+    variant,
     seed: state.levelId,
     biome: biomeFor(state.levelId),
     theme,
-    roads: Object.values(state.roads).map((r) => ({ points: r.points, kind: r.kind })),
+    obstacles: state.obstacles.map((o) => ({ kind: o.kind, points: o.points, width: o.width })),
+    mines: state.mines.map((m) => ({ x: m.x, y: m.y, charges: m.charges })),
     towers: Object.values(state.towers).map((t) => ({ x: t.x, y: t.y })),
   };
   specCache.set(state, spec);
@@ -821,11 +636,8 @@ export function drawGame(ctx: CanvasRenderingContext2D, state: GameState, view: 
   if (!layers || shake.dx || shake.dy) drawTerrain(ctx, view, pal, spec);
   drawTerrainOverlay(ctx, pal, spec, nowMs, motion);
 
-  for (const road of Object.values(state.roads)) {
-    if (road.kind === 'bridge') drawBridge(ctx, pal, road, ui.pressRoadId === road.id ? ui.pressProgress : 0);
-  }
   drawLinks(ctx, pal, state, nowMs, motion);
-  for (const road of Object.values(state.roads)) drawHazards(ctx, pal, ui.level, road, nowMs);
+  drawMineLights(ctx, pal, state, nowMs);
   drawGroundMarks(ctx, pal, state, ui, nowMs);
   drawWorld(ctx, pal, state, ui, nowMs, spec.biome ?? 'grass');
   ui.particles?.draw(ctx, nowMs);

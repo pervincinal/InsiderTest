@@ -11,7 +11,7 @@ export interface LoopHooks {
   beforeTick?(state: GameState): Command[] | undefined;
   /**
    * Receives every event of this frame after the last step: those emitted by the ticks and those
-   * emitted by the commands applied before each tick (`linked` / `unlinked` / `bridgeCut`).
+   * emitted by the commands applied before each tick (`linked` / `unlinked`).
    */
   onEvents?(events: SimEvent[]): void;
 }
@@ -70,7 +70,7 @@ export class GameLoop {
     }
 
     const events: SimEvent[] = [];
-    // Commands emit events too (`linked`, `unlinked`, `bridgeCut`) and `step()` starts by resetting
+    // Commands emit events too (`linked`, `unlinked`) and `step()` starts by resetting
     // `state.events`, so the list is drained right before every step as well as right after it.
     // Draining clears the state's list so the next pre-step drain never re-collects a tick's events.
     const drain = (): void => {

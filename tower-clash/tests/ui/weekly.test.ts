@@ -268,7 +268,6 @@ describe('PlayScreen in weekly mode', () => {
     const state = play.state;
     for (const t of Object.values(state.towers)) t.owner = 'player';
     state.units = state.units.filter((u) => u.owner === 'player');
-    state.queues = state.queues.filter((q) => q.owner === 'player');
     state.links = state.links.filter((l) => l.owner === 'player');
     clock.now += 250;
     play.update(250, clock.now);
@@ -355,12 +354,7 @@ describe('PlayScreen in weekly mode', () => {
       towers: [
         { id: 'p', x: 360, y: 1000, owner: 'player', units: 40, level: 1 },
         { id: 'q', x: 160, y: 900, owner: 'player', units: 24, level: 1 },
-        { id: 'e', x: 360, y: 160, owner: 'enemy1', units: 100, level: 1 },
-      ],
-      roads: [
-        { a: 'p', b: 'e' },
-        { a: 'q', b: 'p' },
-        { a: 'q', b: 'e' },
+        { id: 'e', x: 360, y: 160, owner: 'enemy1', units: 100, level: 3 },
       ],
     });
     const play = new PlayScreen(shell.app, hard, 7, 20, { weekly: weekly() });
@@ -403,7 +397,6 @@ describe('PlayScreen in weekly mode', () => {
     app.go(play2);
     for (const tower of Object.values(play2.state.towers)) tower.owner = 'player';
     play2.state.units = [];
-    play2.state.queues = [];
     play2.state.links = [];
     play2.update(250, 250);
     const result = current() as ResultScreen;

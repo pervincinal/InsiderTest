@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { Road } from '../../src/sim/types';
+import type { LevelDef, Road } from '../../src/sim/types';
 import { COLOR_BLIND_PALETTE, DEFAULT_PALETTE, shade } from '../../src/render/palette';
 import { formatTime, isLight, wrapText } from '../../src/render/widgets';
-import { roadPoseAt } from '../../src/render/draw';
+import { drawGuideLines, roadPoseAt } from '../../src/render/draw';
+import type { TerrainSpec } from '../../src/render/terrain';
+import { getTerrain } from '../../src/render/terrain';
+import type { View } from '../../src/render/view';
 import { ParticleSystem, hostileAttackers } from '../../src/render/particles';
 import { badgeY, drawBadge, towerTop } from '../../src/render/sprites';
 import { makeLevel } from '../helpers';
@@ -62,29 +65,91 @@ describe('widgets', () => {
   });
 });
 
-describe('roadPoseAt', () => {
+describe('roadPoseAt (rules v3: lanes are straight)', () => {
   const road: Road = {
     id: 'a-b',
     a: 'a',
     b: 'b',
-    kind: 'road',
     points: [
       { x: 0, y: 0 },
-      { x: 100, y: 0 },
-      { x: 100, y: 100 },
+      { x: 300, y: 400 },
     ],
-    length: 200,
-    mine: 0,
-    barrier: 0,
-    cut: false,
+    length: 500,
+    mineHits: [],
   };
-  it('returns the point and the unit tangent of the segment', () => {
-    expect(roadPoseAt(road, 0.25)).toEqual({ x: 50, y: 0, dx: 1, dy: 0 });
-    expect(roadPoseAt(road, 0.75)).toEqual({ x: 100, y: 50, dx: 0, dy: 1 });
+  it('returns the point and the unit tangent of the lane', () => {
+    expect(roadPoseAt(road, 0.5)).toEqual({ x: 150, y: 200, dx: 0.6, dy: 0.8 });
+    expect(roadPoseAt(road, 0)).toEqual({ x: 0, y: 0, dx: 0.6, dy: 0.8 });
   });
   it('clamps outside 0..1', () => {
     expect(roadPoseAt(road, -1)).toMatchObject({ x: 0, y: 0 });
-    expect(roadPoseAt(road, 2)).toMatchObject({ x: 100, y: 100 });
+    expect(roadPoseAt(road, 2)).toMatchObject({ x: 300, y: 400 });
+  });
+});
+
+/* Rules v3 §2.0b(8): guide lines from the selected tower to every tower it has a clear lane to. */
+describe('drawGuideLines', () => {
+  /** Recording context: every call is logged; properties are writable. */
+  function recCtx(): { ctx: CanvasRenderingContext2D; calls: [string, unknown[]][]; props: Record<string | symbol, unknown> } {
+    const calls: [string, unknown[]][] = [];
+    const props: Record<string | symbol, unknown> = {};
+    const ctx = new Proxy({} as CanvasRenderingContext2D, {
+      get(_t, key) {
+        if (key in props) return props[key];
+        return (...args: unknown[]) => {
+          calls.push([String(key), args]);
+          return undefined;
+        };
+      },
+      set(_t, key, value) {
+        props[key] = value;
+        return true;
+      },
+    });
+    return { ctx, calls, props };
+  }
+  /** p (player) sees e and n; a wall between p and x blocks that lane; p already streams into e. */
+  const level: LevelDef = {
+    id: 998,
+    name: 'guide',
+    lesson: 'guide',
+    star3: 30_000,
+    star2: 60_000,
+    enemies: [{ owner: 'enemy1', personality: 'rusher', aggression: 0.5 }],
+    towers: [
+      { id: 'p', x: 200, y: 1000, owner: 'player', units: 10, level: 2 },
+      { id: 'e', x: 200, y: 400, owner: 'enemy1', units: 10, level: 1 },
+      { id: 'n', x: 520, y: 700, owner: 'neutral', units: 5 },
+      { id: 'x', x: 520, y: 300, owner: 'neutral', units: 5 },
+    ],
+    obstacles: [{ kind: 'wall', points: [{ x: 410, y: 450 }, { x: 470, y: 500 }], width: 28 }],
+  };
+
+  it('draws one thin 30 % owner-coloured line per reachable, not-yet-linked tower and nothing for blocked ones', () => {
+    const state = createState(level, 1);
+    expect(state.roads['p-x']).toBeUndefined();
+    expect(state.roads['e-p']).toBeDefined();
+    applyCommand(state, { type: 'link', owner: 'player', from: 'p', to: 'e' });
+    const { ctx, calls, props } = recCtx();
+    drawGuideLines(ctx, DEFAULT_PALETTE, state, state.towers.p!);
+    const lines = calls.filter(([k]) => k === 'lineTo');
+    expect(lines).toHaveLength(1); // only n: e is already linked, x is blocked, p is itself
+    const [lx, ly] = lines[0]![1] as [number, number];
+    // ends short of n's footprint, on the p → n segment
+    const n = state.towers.n!;
+    expect(Math.hypot(lx - n.x, ly - n.y)).toBeGreaterThan(20);
+    expect(Math.hypot(lx - n.x, ly - n.y)).toBeLessThan(80);
+    expect(Math.abs((lx - 200) * (n.y - 1000) - (ly - 1000) * (n.x - 200))).toBeLessThan(1e-6);
+    expect(props.globalAlpha).toBe(0.3);
+    expect(props.lineWidth).toBe(2);
+    expect(props.strokeStyle).toBe(DEFAULT_PALETTE.owners.player);
+  });
+
+  it('draws nothing for a foreign selection', () => {
+    const state = createState(level, 1);
+    const { ctx, calls } = recCtx();
+    drawGuideLines(ctx, DEFAULT_PALETTE, state, state.towers.e!);
+    expect(calls.filter(([k]) => k === 'lineTo')).toHaveLength(0);
   });
 });
 
@@ -113,7 +178,6 @@ describe('particles', () => {
     ps.capture(100, 100, '#3b82f6');
     ps.death(10, 10);
     ps.upgrade('t', 0, 0, '#fff', 0);
-    ps.bridgeCut([{ x: 0, y: 0 }, { x: 10, y: 0 }], '#000', '#111');
     expect(ps.count).toBe(0);
     expect(ps.towerPulse('t', 100)).toBe(0);
   });
@@ -197,6 +261,76 @@ describe('under fire', () => {
     for (const pal of [DEFAULT_PALETTE, COLOR_BLIND_PALETTE]) {
       expect(pal.badgeAlert).toMatch(/^#[0-9a-f]{6}$/);
       expect(() => drawBadge(ctx, pal, 100, 100, '100', true, { underFire: pal.owners.enemy1, shake: 0 })).not.toThrow();
+    }
+  });
+});
+
+/* Rules v3 §2.0b(9): obstacles and mines live in the cached ground; a spent mine re-keys the cache. */
+describe('terrain obstacles and mines', () => {
+  /** Counting context: gradients and measureText are stubbed, every other method call is tallied. */
+  function countingCtx(): { ctx: CanvasRenderingContext2D; calls: Map<string, number> } {
+    const calls = new Map<string, number>();
+    const props: Record<string | symbol, unknown> = {};
+    const ctx = new Proxy({} as CanvasRenderingContext2D, {
+      get(_t, key) {
+        if (key in props) return props[key];
+        if (key === 'measureText') return (s: string) => ({ width: s.length * 10 });
+        if (key === 'createLinearGradient' || key === 'createRadialGradient') return () => ({ addColorStop: () => undefined });
+        return () => {
+          const k = String(key);
+          calls.set(k, (calls.get(k) ?? 0) + 1);
+          return undefined;
+        };
+      },
+      set(_t, key, value) {
+        props[key] = value;
+        return true;
+      },
+    });
+    return { ctx, calls };
+  }
+  const view = { dpr: 1, scale: 0.5, offsetX: 0, offsetY: 0, cssW: 360, cssH: 640 } as View;
+  const spec: TerrainSpec = {
+    key: 'level:terrain-test',
+    variant: '',
+    seed: 5,
+    biome: 'grass',
+    towers: [{ x: 200, y: 1000 }],
+    obstacles: [
+      { kind: 'wall', points: [{ x: 100, y: 300 }, { x: 400, y: 320 }, { x: 420, y: 500 }], width: 28 },
+      { kind: 'water', points: [{ x: 40, y: 700 }, { x: 360, y: 760 }, { x: 700, y: 700 }], width: 40 },
+      { kind: 'rock', points: [{ x: 560, y: 1000 }], width: 80 },
+      { kind: 'rock', points: [{ x: 100, y: 1150 }, { x: 300, y: 1160 }], width: 40 },
+    ],
+    mines: [{ x: 360, y: 640, charges: 3 }],
+  };
+
+  it('renders every obstacle kind plus a live mine, caches the canvas, and re-renders once a mine is spent', () => {
+    const made: Map<string, number>[] = [];
+    const doc = {
+      createElement: () => {
+        const r = countingCtx();
+        made.push(r.calls);
+        return { width: 0, height: 0, getContext: () => r.ctx };
+      },
+    };
+    (globalThis as { document?: unknown }).document = doc;
+    try {
+      const a = getTerrain(view, DEFAULT_PALETTE, spec);
+      expect(made).toHaveLength(1);
+      const first = made[0]!;
+      expect(first.get('stroke')).toBeGreaterThan(30); // wall bands + merlon edges + river bands + ripple
+      expect(first.get('strokeRect')).toBeGreaterThan(10); // battlement merlons along the wall
+      expect(first.get('setLineDash')).toBe(2); // the live mine's dashed stripe ring (on / off)
+      expect(getTerrain(view, DEFAULT_PALETTE, spec)).toBe(a); // same spec → cache hit
+      const spent: TerrainSpec = { ...spec, variant: '0,', mines: [{ x: 360, y: 640, charges: 0 }] };
+      const b = getTerrain(view, DEFAULT_PALETTE, spent);
+      expect(b).not.toBe(a);
+      expect(made).toHaveLength(2);
+      expect(made[1]!.get('setLineDash') ?? 0).toBe(0); // a crater has no stripe ring
+      expect(made[1]!.get('strokeRect')).toBe(first.get('strokeRect')); // the wall is unchanged
+    } finally {
+      delete (globalThis as { document?: unknown }).document;
     }
   });
 });

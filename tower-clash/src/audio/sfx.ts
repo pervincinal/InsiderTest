@@ -14,7 +14,6 @@ export type SfxName =
   | 'upgrade'
   | 'unitDied'
   | 'artillery'
-  | 'bridgeCut'
   | 'won'
   | 'lost'
   | 'button';
@@ -126,9 +125,6 @@ export function sfxForEvents(
         break;
       case 'unitDied':
         out.push({ name: ev.cause === 'artillery' ? 'artillery' : 'unitDied' });
-        break;
-      case 'bridgeCut':
-        out.push({ name: 'bridgeCut' });
         break;
       case 'won':
         out.push({ name: 'won' });

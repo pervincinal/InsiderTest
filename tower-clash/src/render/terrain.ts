@@ -1,6 +1,6 @@
 import { C } from '../sim/constants';
 import { HUD } from './layout';
-import type { Biome, BiomeColors, Palette, TerrainTheme, Tones } from './palette';
+import type { Biome, Palette, TerrainTheme, Tones } from './palette';
 import { shade, themeFor, themedBiome, withAlpha } from './palette';
 import type { View } from './view';
 
@@ -8,21 +8,38 @@ import type { View } from './view';
  * Ground layer (ART_DIRECTION §3 "island"), rendered once per (level, palette, canvas resolution)
  * into an offscreen canvas: water gradient, the island's soft blue drop shadow and foam line, a
  * three-band cliff bevel under a rounded plateau whose edge is lit from the upper-left, sun
- * patches, biome decorations and the roads. `drawTerrainOverlay` adds the only animated part —
- * two or three drifting cloud shadows and water sparkles — cheaply every frame.
+ * patches, biome decorations, the level's obstacles (rules v3 §2.0b: stone walls, rivers,
+ * boulders — there are no roads any more, every clear pair of towers is a lane) and its mines
+ * (a spent mine leaves a crater; `TerrainSpec.variant` re-keys the cache when one is spent).
+ * `drawTerrainOverlay` adds the only animated part — two or three drifting cloud shadows and
+ * water sparkles — cheaply every frame.
  */
 
-export interface TerrainRoad {
+export type TerrainObstacleKind = 'wall' | 'water' | 'rock';
+
+/** An obstacle as the sim stores it (`state.obstacles`): a polyline (or a single point for a rock) with a thickness. */
+export interface TerrainObstacle {
+  kind: TerrainObstacleKind;
   points: { x: number; y: number }[];
-  kind: 'road' | 'bridge';
+  width: number;
+}
+
+/** A mine point (`state.mines[i]`); `charges` 0 = spent → crater. */
+export interface TerrainMine {
+  x: number;
+  y: number;
+  charges: number;
 }
 
 export interface TerrainSpec {
-  /** Cache key, e.g. `level:9` or `title`. */
+  /** Level identity, e.g. `level:9` or `title` (also keys the ambient clouds / sparkles). */
   key: string;
+  /** Extra cache discriminator for state that changes the ground mid-match (spent mines). */
+  variant?: string;
   /** Seed for the deterministic decoration scatter. */
   seed: number;
-  roads: TerrainRoad[];
+  obstacles: TerrainObstacle[];
+  mines: TerrainMine[];
   towers: { x: number; y: number }[];
   /** Vertical band the plateau should cover (defaults to the play area). */
   top?: number;
@@ -75,15 +92,22 @@ function segDist(px: number, py: number, ax: number, ay: number, bx: number, by:
   return Math.hypot(px - (ax + dx * t), py - (ay + dy * t));
 }
 
-function distToRoads(spec: TerrainSpec, x: number, y: number): number {
+/** Distance from a point to the nearest obstacle *edge* (polyline distance minus half its width) or mine. */
+function distToObstacles(spec: TerrainSpec, x: number, y: number): number {
   let best = Infinity;
-  for (const road of spec.roads) {
-    for (let i = 1; i < road.points.length; i++) {
-      const a = road.points[i - 1]!;
-      const b = road.points[i]!;
-      best = Math.min(best, segDist(x, y, a.x, a.y, b.x, b.y));
+  for (const ob of spec.obstacles) {
+    const pts = ob.points;
+    if (pts.length === 0) continue;
+    let d = Infinity;
+    if (pts.length === 1) d = Math.hypot(pts[0]!.x - x, pts[0]!.y - y);
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1]!;
+      const b = pts[i]!;
+      d = Math.min(d, segDist(x, y, a.x, a.y, b.x, b.y));
     }
+    best = Math.min(best, d - ob.width / 2);
   }
+  for (const m of spec.mines) best = Math.min(best, Math.hypot(m.x - x, m.y - y) - 18);
   return best;
 }
 
@@ -300,7 +324,7 @@ function drawCactus(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x
   ctx.fill();
 }
 
-function drawRock(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, s: number, rng: () => number, dark: boolean): void {
+function drawRock(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, s: number, rng: () => number, dark: boolean, squash = 0.75): void {
   propShadow(ctx, pal, x, y + s * 0.3, s, s * 0.9);
   const tones: Tones = dark ? { lit: '#8a7f8c', mid: '#5c5361', shade: '#3a333f' } : { lit: '#f2ede2', mid: pal.rock, shade: pal.rockDark };
   const n = 6;
@@ -308,7 +332,7 @@ function drawRock(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: num
   for (let i = 0; i < n; i++) {
     const a = (i / n) * Math.PI * 2;
     const r = s * (0.8 + rng() * 0.3);
-    pts.push({ x: x + Math.cos(a) * r, y: y + Math.sin(a) * r * 0.75 });
+    pts.push({ x: x + Math.cos(a) * r, y: y + Math.sin(a) * r * squash });
   }
   const trace = (): void => {
     ctx.beginPath();
@@ -345,31 +369,247 @@ export function drawDots(ctx: CanvasRenderingContext2D, colors: readonly string[
   }
 }
 
-/** Cream path with a soft darker edge and a faint lit centre line. Also used by the title backdrop. */
-export function drawPath(ctx: CanvasRenderingContext2D, pal: Palette, points: Pt[], colors?: BiomeColors['path']): void {
-  if (points.length < 2) return;
-  const col = colors ?? { lit: pal.pathLit, shade: pal.pathShade };
+/* ---------- obstacles (rules v3 §2.0b) ---------- */
+
+function tracePolyline(ctx: CanvasRenderingContext2D, pts: Pt[]): void {
+  ctx.beginPath();
+  if (pts.length === 1) {
+    // a lone point: zero-length segment so round caps make a disc of the stroke width
+    ctx.moveTo(pts[0]!.x, pts[0]!.y);
+    ctx.lineTo(pts[0]!.x + 0.01, pts[0]!.y);
+    return;
+  }
+  pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+}
+
+/** Unit tangent and the unit normal that faces the key light for one polyline segment. */
+function segmentFrame(a: Pt, b: Pt): { tx: number; ty: number; nx: number; ny: number; len: number } {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const tx = dx / len;
+  const ty = dy / len;
+  let nx = ty;
+  let ny = -tx;
+  if (nx * LIGHT_X + ny * LIGHT_Y < 0) {
+    nx = -nx;
+    ny = -ny;
+  }
+  return { tx, ty, nx, ny, len };
+}
+
+/**
+ * Stone wall band of the obstacle's width: long ground shadow, ink contour, a shaded side face
+ * extruded 4 px downward, the lit top face, a darker cap line along the walkway and battlement
+ * merlons (7 × 6 px) on the light-facing edge every 16 px. Reads at 360 px width (merlons ≈ 3 px).
+ */
+function drawWall(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, ob: TerrainObstacle): void {
+  const pts = ob.points;
+  if (pts.length === 0) return;
+  const w = Math.max(10, ob.width);
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  ctx.beginPath();
-  points.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
-  // soft shadow on the lower-right edge
-  ctx.strokeStyle = pal.groundShadow;
-  ctx.lineWidth = 32;
+  // ground shadow to the lower-right
+  tracePolyline(ctx, pts);
   ctx.save();
-  ctx.translate(2, 3);
-  ctx.globalAlpha = 0.5;
+  ctx.translate(4, 8);
+  ctx.globalAlpha = 0.55;
+  ctx.strokeStyle = pal.groundShadow;
+  ctx.lineWidth = w + 4;
   ctx.stroke();
   ctx.restore();
-  ctx.strokeStyle = col.shade;
-  ctx.lineWidth = 30;
+  // ink contour (so the wall reads on snow and sand), then the side face, then the top face
+  ctx.save();
+  ctx.translate(0, 4);
+  ctx.strokeStyle = withAlpha(pal.ink, 0.4);
+  ctx.lineWidth = w + 3;
   ctx.stroke();
-  ctx.strokeStyle = col.lit;
-  ctx.lineWidth = 22;
+  ctx.strokeStyle = tones.shade;
+  ctx.lineWidth = w;
   ctx.stroke();
-  ctx.strokeStyle = 'rgba(255, 250, 240, 0.32)';
-  ctx.lineWidth = 3;
+  ctx.restore();
+  ctx.strokeStyle = tones.mid;
+  ctx.lineWidth = w;
   ctx.stroke();
+  // darker cap line along the walkway
+  ctx.strokeStyle = withAlpha(shade(tones.shade, -0.25), 0.7);
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  // lit edge + merlons on the light-facing side, per segment
+  const segs: [Pt, Pt][] = pts.length === 1 ? [[pts[0]!, { x: pts[0]!.x + 0.01, y: pts[0]!.y }]] : [];
+  for (let i = 1; i < pts.length; i++) segs.push([pts[i - 1]!, pts[i]!]);
+  const half = w / 2;
+  for (const [a, b] of segs) {
+    const f = segmentFrame(a, b);
+    ctx.strokeStyle = withAlpha(tones.lit, 0.85);
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(a.x + f.nx * (half - 2), a.y + f.ny * (half - 2));
+    ctx.lineTo(b.x + f.nx * (half - 2), b.y + f.ny * (half - 2));
+    ctx.stroke();
+    const pitch = 16;
+    const count = Math.max(1, Math.floor(f.len / pitch));
+    const start = (f.len - (count - 1) * pitch) / 2;
+    const ang = Math.atan2(f.ty, f.tx);
+    for (let k = 0; k < count; k++) {
+      const d = start + k * pitch;
+      const cx = a.x + f.tx * d + f.nx * (half - 1);
+      const cy = a.y + f.ty * d + f.ny * (half - 1);
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(ang);
+      // the merlon sticks 4 px out past the top face on the lit side (local y of the normal after the rotation)
+      const outward = f.ny * f.tx - f.nx * f.ty;
+      const y0 = outward > 0 ? -1 : -5;
+      ctx.fillStyle = tones.lit;
+      ctx.fillRect(-3.5, y0, 7, 6);
+      ctx.strokeStyle = withAlpha(pal.ink, 0.35);
+      ctx.lineWidth = 1;
+      ctx.strokeRect(-3.5, y0, 7, 6);
+      ctx.restore();
+    }
+  }
+}
+
+/**
+ * River band: dark grass bank lip, pale wet rim, water body (theme water, lightened), a deeper
+ * centre and a lighter wavy ripple line drawn slightly off-centre so the current reads.
+ */
+function drawRiver(ctx: CanvasRenderingContext2D, pal: Palette, theme: TerrainTheme, grass: Tones, ob: TerrainObstacle, rng: () => number): void {
+  const pts = ob.points;
+  if (pts.length === 0) return;
+  const w = Math.max(10, ob.width);
+  const body = shade(theme.waterBottom, 0.18);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  tracePolyline(ctx, pts);
+  ctx.strokeStyle = grass.shade;
+  ctx.lineWidth = w + 8;
+  ctx.stroke();
+  ctx.strokeStyle = shade(body, 0.5);
+  ctx.lineWidth = w + 2;
+  ctx.stroke();
+  ctx.strokeStyle = body;
+  ctx.lineWidth = w - 2;
+  ctx.stroke();
+  ctx.strokeStyle = theme.waterBottom;
+  ctx.globalAlpha = 0.45;
+  ctx.lineWidth = Math.max(3, w * 0.45);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  // ripple: a sine wobble along each segment, offset toward the shaded bank
+  const ripple = theme.tintAmount > 0 ? theme.waterSparkle : pal.waterLight;
+  ctx.strokeStyle = ripple;
+  ctx.lineWidth = 2;
+  ctx.globalAlpha = 0.8;
+  const segs: [Pt, Pt][] = [];
+  for (let i = 1; i < pts.length; i++) segs.push([pts[i - 1]!, pts[i]!]);
+  if (pts.length === 1) segs.push([pts[0]!, { x: pts[0]!.x + 0.01, y: pts[0]!.y }]);
+  ctx.beginPath();
+  for (const [a, b] of segs) {
+    const f = segmentFrame(a, b);
+    const off = -w * 0.14;
+    const wave = 18 + rng() * 8;
+    const amp = Math.min(3, w * 0.09);
+    for (let d = 6; d <= f.len - 6; d += 4) {
+      const s = Math.sin((d / wave) * Math.PI * 2) * amp + off;
+      const x = a.x + f.tx * d + f.nx * s;
+      const y = a.y + f.ty * d + f.ny * s;
+      if (d === 6) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+  }
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+/** Boulder(s): a single point is one big rock of the obstacle's radius, a polyline a chain of them. */
+function drawBoulders(ctx: CanvasRenderingContext2D, pal: Palette, ob: TerrainObstacle, rng: () => number, dark: boolean): void {
+  const pts = ob.points;
+  if (pts.length === 0) return;
+  const r = Math.max(8, ob.width / 2);
+  const rocks: { x: number; y: number; s: number }[] = [];
+  if (pts.length === 1) rocks.push({ x: pts[0]!.x, y: pts[0]!.y, s: r * 0.95 });
+  else {
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1]!;
+      const b = pts[i]!;
+      const f = segmentFrame(a, b);
+      const step = r * 1.15;
+      const n = Math.max(1, Math.round(f.len / step));
+      for (let k = i === 1 ? 0 : 1; k <= n; k++) {
+        const d = (f.len * k) / n;
+        const j = (rng() - 0.5) * r * 0.35;
+        rocks.push({ x: a.x + f.tx * d + f.nx * j, y: a.y + f.ty * d + f.ny * j, s: r * (0.7 + rng() * 0.25) });
+      }
+    }
+  }
+  rocks.sort((p, q) => p.y - q.y);
+  for (const k of rocks) drawRock(ctx, pal, k.x, k.y, k.s, rng, dark, 0.85);
+}
+
+/** Mine body (the blinking lamp and the charge chip are dynamic: `draw.ts`). */
+function drawMineBody(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number): void {
+  ctx.fillStyle = pal.groundShadow;
+  ctx.beginPath();
+  ctx.ellipse(x + 4, y + 6, 15, 6, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = pal.metal.shade;
+  ctx.beginPath();
+  ctx.ellipse(x, y, 15, 11, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = pal.metal.mid;
+  ctx.beginPath();
+  ctx.ellipse(x, y - 3, 12, 7, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = pal.gold;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.ellipse(x, y - 3, 12, 7, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+/** Scorched crater where a mine went off. */
+function drawCrater(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, rng: () => number): void {
+  ctx.fillStyle = pal.groundShadow;
+  ctx.globalAlpha = 0.7;
+  ctx.beginPath();
+  ctx.ellipse(x, y, 22, 11, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = pal.contactShadow;
+  ctx.beginPath();
+  ctx.ellipse(x, y + 1, 14, 7, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = withAlpha(pal.paper, 0.4);
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.ellipse(x, y - 1, 16, 8, 0, Math.PI * 1.05, Math.PI * 1.75);
+  ctx.stroke();
+  ctx.fillStyle = pal.ink;
+  ctx.globalAlpha = 0.45;
+  for (let i = 0; i < 5; i++) {
+    const a = rng() * Math.PI * 2;
+    const d = 18 + rng() * 10;
+    ctx.beginPath();
+    ctx.arc(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.5, 1.5 + rng(), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawObstacles(ctx: CanvasRenderingContext2D, pal: Palette, theme: TerrainTheme, grass: Tones, wall: Tones, spec: TerrainSpec, rng: () => number, dark: boolean): void {
+  // rivers are ground: under everything; walls and boulders sorted by their lowest point
+  for (const ob of spec.obstacles) if (ob.kind === 'water') drawRiver(ctx, pal, theme, grass, ob, rng);
+  const solid = spec.obstacles.filter((ob) => ob.kind !== 'water');
+  const low = (ob: TerrainObstacle): number => ob.points.reduce((m, p) => Math.max(m, p.y), -Infinity);
+  solid.sort((p, q) => low(p) - low(q));
+  for (const ob of solid) {
+    if (ob.kind === 'wall') drawWall(ctx, pal, wall, ob);
+    else drawBoulders(ctx, pal, ob, rng, dark);
+  }
 }
 
 function render(ctx: CanvasRenderingContext2D, pal: Palette, spec: TerrainSpec): void {
@@ -458,20 +698,20 @@ function render(ctx: CanvasRenderingContext2D, pal: Palette, spec: TerrainSpec):
   // directional edge bevel (lit upper-left, shaded lower-right), inner half visible
   strokeBevel(ctx, outline, grass, 9);
 
-  // paths
-  for (const road of spec.roads) if (road.kind === 'road') drawPath(ctx, pal, road.points, biome.path);
+  // obstacles (walls / rivers / boulders) under the props
+  const kind = spec.biome ?? 'grass';
+  drawObstacles(ctx, pal, theme, grass, biome.wall, spec, rng, kind === 'volcanic');
 
-  // decorations: keep off paths and towers
-  const place = (minRoad: number, minTower: number): Pt | null => {
+  // decorations: keep off obstacles, mines and towers
+  const place = (minObstacle: number, minTower: number): Pt | null => {
     for (let tries = 0; tries < 24; tries++) {
       const x = 60 + rng() * (C.MAP_W - 120);
       const y = top + 40 + rng() * (bottom - top - 80);
-      if (distToRoads(spec, x, y) < minRoad || distToTowers(spec, x, y) < minTower) continue;
+      if (distToObstacles(spec, x, y) < minObstacle || distToTowers(spec, x, y) < minTower) continue;
       return { x, y };
     }
     return null;
   };
-  const kind = spec.biome ?? 'grass';
   const clumps = kind === 'sand' ? 7 : kind === 'volcanic' ? 6 : 10;
   const items: { p: Pt; s: number; f: (p: Pt, s: number) => void }[] = [];
   for (let i = 0; i < clumps; i++) {
@@ -497,6 +737,12 @@ function render(ctx: CanvasRenderingContext2D, pal: Palette, spec: TerrainSpec):
     const p = place(30, 84);
     if (p) drawDots(ctx, biome.dots, p.x, p.y, rng);
   }
+  // mines on top of the props: live body or crater
+  const mineRng = makeRng(spec.seed * 7 + 3);
+  for (const m of spec.mines) {
+    if (m.charges > 0) drawMineBody(ctx, pal, m.x, m.y);
+    else drawCrater(ctx, pal, m.x, m.y, mineRng);
+  }
   ctx.restore();
 }
 
@@ -508,7 +754,7 @@ export function getTerrain(view: View, pal: Palette, spec: TerrainSpec): HTMLCan
   const s = view.dpr * view.scale;
   const pxW = Math.max(1, Math.ceil(C.MAP_W * s));
   const pxH = Math.max(1, Math.ceil(C.MAP_H * s));
-  const key = `${spec.key}|${spec.biome ?? 'grass'}|${themeFor(spec.theme).id}|${pal.owners.enemy1}|${pxW}x${pxH}`;
+  const key = `${spec.key}|${spec.variant ?? ''}|${spec.biome ?? 'grass'}|${themeFor(spec.theme).id}|${pal.owners.enemy1}|${pxW}x${pxH}`;
   const hit = cache.get(key);
   if (hit) return hit.canvas;
   const canvas = document.createElement('canvas');

@@ -1,33 +1,52 @@
 import { describe, expect, it } from 'vitest';
-import type { Command, GameState } from '../../src/sim/types';
+import type { Command, GameState, LevelDef } from '../../src/sim/types';
 import { createState } from '../../src/sim/create';
 import { applyCommand } from '../../src/sim/commands';
 import { C } from '../../src/sim/constants';
 import type { PointerPoint } from '../../src/input/pointer';
-import { LIMIT_HINT_MS, LONG_PRESS_MS, PlayGestures, decideLink } from '../../src/input/pointer';
-import { makeLevel } from '../helpers';
+import { LIMIT_HINT_MS, PlayGestures, decideLink } from '../../src/input/pointer';
 
 /*
- * Rules v2 gestures (GDD §2.0 "Interaction"): tap own tower = select; tap a connected tower = link,
- * or unlink when that stream exists; refused with a hint at the per-level link limit; drag = link;
- * tap the selected tower again = deselect (no upgrade command any more).
+ * Rules v2 / v3 gestures (GDD §2.0 "Interaction", §2.0b rule 8): tap own tower = select; tap a
+ * tower with a clear lane = link, or unlink when that stream exists; refused with a hint at the
+ * per-level link limit; a blocked tower (wall in the way) = shake + `hint.blocked`; drag = link;
+ * tap the selected tower again = deselect (no upgrade command any more). No bridge cut.
  */
 
-/** Player `p` (L1) with roads to an enemy `e` and a neutral `n`; `n`–`e` joined too; a far tower `x` with no road to `p`. */
+/**
+ * Player `p` (L1), an enemy `e`, a neutral `n` and a far neutral `x`. Every pair has a clear lane
+ * except `p`–`x`: a short wall crosses that segment at (440, 475) — `e`–`x` and `n`–`x` pass it by
+ * more than its half width, so `x` stays reachable from the others.
+ */
 function fixture(): GameState {
-  return createState(
-    makeLevel({
-      towers: [
-        { id: 'p', x: 200, y: 1000, owner: 'player', units: 10, level: 1 },
-        { id: 'e', x: 200, y: 400, owner: 'enemy1', units: 10, level: 1 },
-        { id: 'n', x: 520, y: 700, owner: 'neutral', units: 5 },
-        { id: 'x', x: 520, y: 300, owner: 'neutral', units: 5 },
-      ],
-      roads: [{ a: 'p', b: 'e' }, { a: 'p', b: 'n' }, { a: 'n', b: 'e' }, { a: 'x', b: 'e', kind: 'bridge' }],
-    }),
-    1,
-  );
+  const level: LevelDef = {
+    id: 999,
+    name: 'gestures',
+    lesson: 'gestures',
+    star3: 30_000,
+    star2: 60_000,
+    enemies: [{ owner: 'enemy1', personality: 'rusher', aggression: 0.5 }],
+    towers: [
+      { id: 'p', x: 200, y: 1000, owner: 'player', units: 10, level: 1 },
+      { id: 'e', x: 200, y: 400, owner: 'enemy1', units: 10, level: 1 },
+      { id: 'n', x: 520, y: 700, owner: 'neutral', units: 5 },
+      { id: 'x', x: 520, y: 300, owner: 'neutral', units: 5 },
+    ],
+    obstacles: [{ kind: 'wall', points: [{ x: 410, y: 450 }, { x: 470, y: 500 }], width: 28 }],
+  };
+  return createState(level, 1);
 }
+
+describe('fixture lanes', () => {
+  it('joins every pair except p–x (blocked by the wall)', () => {
+    const state = fixture();
+    expect(Object.keys(state.roads).sort()).toEqual(['e-n', 'e-p', 'e-x', 'n-p', 'n-x']);
+    expect(state.roads['n-p']!.points).toEqual([
+      { x: 520, y: 700 },
+      { x: 200, y: 1000 },
+    ]);
+  });
+});
 
 describe('decideLink', () => {
   it('links, then toggles to unlink, and refuses a second stream at L1', () => {
@@ -47,17 +66,17 @@ describe('decideLink', () => {
     expect(decideLink(state, 'p', 'n')).toEqual({ kind: 'link' });
     applyCommand(state, { type: 'link', owner: 'player', from: 'p', to: 'n' });
     expect(state.links).toHaveLength(2);
-    state.towers['p']!.level = 3; // L3 allows three, but p has only two neighbours
-    expect(decideLink(state, 'p', 'x')).toEqual({ kind: 'none' }); // no road
+    state.towers['p']!.level = 3; // L3 allows three, but p has only two clear lanes
+    expect(decideLink(state, 'p', 'x')).toEqual({ kind: 'blocked' });
   });
 
-  it('never decides anything for foreign sources, self-targets, missing or cut roads', () => {
+  it('never decides anything for foreign sources, self-targets or unknown towers; a wall in the way is `blocked`', () => {
     const state = fixture();
     expect(decideLink(state, 'e', 'p')).toEqual({ kind: 'none' });
     expect(decideLink(state, 'p', 'p')).toEqual({ kind: 'none' });
-    expect(decideLink(state, 'p', 'x')).toEqual({ kind: 'none' });
-    state.roads['e-p']!.cut = true;
-    expect(decideLink(state, 'p', 'e')).toEqual({ kind: 'none' });
+    expect(decideLink(state, 'p', 'ghost')).toEqual({ kind: 'none' });
+    expect(decideLink(state, 'p', 'x')).toEqual({ kind: 'blocked' });
+    expect(decideLink(state, 'p', 'x', false)).toEqual({ kind: 'blocked' });
   });
 });
 
@@ -71,6 +90,7 @@ describe('PlayGestures (taps and drags → link / unlink commands)', () => {
         applyCommand(state, cmd); // the play screen enqueues; here the sim applies at once so the next tap sees it
       },
       limitHintText: (n) => `L${n} needed for ${n} streams`,
+      blockedHintText: () => 'Blocked — no clear line',
     });
     let now = 1000;
     const at = (id: string, dx = 0, dy = 0): PointerPoint => ({ id: 1, x: state.towers[id]!.x + dx, y: state.towers[id]!.y + dy, timeMs: now });
@@ -159,21 +179,43 @@ describe('PlayGestures (taps and drags → link / unlink commands)', () => {
     expect(commands).toEqual([]);
   });
 
-  it('long-press on an own bridge midpoint still cuts it', () => {
+  it('tap on a blocked tower sends nothing, keeps the selection and raises hint.blocked for LIMIT_HINT_MS', () => {
     const state = fixture();
-    state.towers['x']!.owner = 'player';
-    const { g, commands } = harness(state);
-    const road = state.roads['e-x']!;
-    const m = road.points[0]!;
-    const n = road.points[road.points.length - 1]!;
-    const mid = { id: 1, x: (m.x + n.x) / 2, y: (m.y + n.y) / 2, timeMs: 5000 };
-    g.down(mid);
-    g.tick(5000 + LONG_PRESS_MS - 1);
+    const { g, commands, tap, clock } = harness(state);
+    tap('p');
+    tap('x');
     expect(commands).toEqual([]);
-    g.tick(5000 + LONG_PRESS_MS);
-    expect(commands).toEqual([{ type: 'cutBridge', owner: 'player', roadId: 'e-x' }]);
-    expect(road.cut).toBe(true);
-    g.up({ ...mid, timeMs: 5000 + LONG_PRESS_MS + 10 });
-    expect(commands).toHaveLength(1);
+    expect(g.selectedTowerId).toBe('p'); // still selected, so the renderer can shake it
+    expect(g.limitHint).toEqual({ until: clock() + LIMIT_HINT_MS });
+    expect(g.limitHintText).toBe('Blocked — no clear line');
+    g.tick(clock() + LIMIT_HINT_MS);
+    expect(g.limitHint).toBeNull();
+    // a reachable tower right after works as usual
+    tap('n');
+    expect(commands).toEqual([{ type: 'link', owner: 'player', from: 'p', to: 'n' }]);
+  });
+
+  it('drag onto a blocked tower is refused with the same hint; tapping another own tower moves the selection', () => {
+    const state = fixture();
+    const { g, commands, drag, tap } = harness(state);
+    drag('p', 'x');
+    expect(commands).toEqual([]);
+    expect(g.selectedTowerId).toBe('p');
+    expect(g.limitHintText).toBe('Blocked — no clear line');
+    state.towers['x']!.owner = 'player';
+    tap('x');
+    expect(g.selectedTowerId).toBe('x');
+    expect(commands).toEqual([]);
+  });
+
+  it('long-press does nothing any more (no bridges to cut)', () => {
+    const state = fixture();
+    const { g, commands, at } = harness(state);
+    const down = { ...at('p'), x: 360, y: 700, timeMs: 5000 };
+    g.down(down);
+    g.tick(5000 + 2000);
+    g.up({ ...down, timeMs: 7000 });
+    expect(commands).toEqual([]);
+    expect(g.selectedTowerId).toBeNull();
   });
 });

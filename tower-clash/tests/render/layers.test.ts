@@ -89,7 +89,7 @@ describe('layers (PERF-3)', () => {
 
   describe('ground layer and the equipped terrain theme (PERF-5)', () => {
     const view = { dpr: 2, scale: 0.5, offsetX: 0, offsetY: 0, cssW: 360, cssH: 640 } as View;
-    const spec: TerrainSpec = { key: 'level:15', seed: 15, biome: 'grass', theme: 'theme.neon', roads: [], towers: [] };
+    const spec: TerrainSpec = { key: 'level:15', seed: 15, biome: 'grass', theme: 'theme.neon', obstacles: [], mines: [], towers: [] };
 
     it('is keyed on the resolved theme: a lazily loaded theme that lands after the first paint repaints the ground', async () => {
       // A fresh worker has not loaded the themes chunk in this file: `themeFor` gives the default until it lands.

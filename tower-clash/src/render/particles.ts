@@ -1,6 +1,5 @@
 import type { GameState, Owner, SimEvent, Tower } from '../sim/types';
 import { C } from '../sim/constants';
-import { roadPointAt } from '../sim/step';
 import type { Palette } from './palette';
 import { DEFAULT_PALETTE, shade } from './palette';
 import { reducedMotionOverride } from '../ui/motion';
@@ -343,24 +342,6 @@ export class ParticleSystem implements BurstHost {
     }
   }
 
-  /** Bridge collapsing: plank pieces tumble into the gap. */
-  bridgeCut(points: { x: number; y: number }[], wood: string, woodDark: string): void {
-    if (this.reducedMotion || points.length < 2) return;
-    const a = points[0]!;
-    const b = points[points.length - 1]!;
-    const mx = (a.x + b.x) / 2;
-    const my = (a.y + b.y) / 2;
-    for (let i = 0; i < 9; i++) {
-      const p = this.make('plank', mx + (this.rnd() - 0.5) * 60, my + (this.rnd() - 0.5) * 20, i % 2 ? wood : woodDark, 900 + this.rnd() * 400, 6 + this.rnd() * 8);
-      p.vx = (this.rnd() - 0.5) * 120;
-      p.vy = -80 - this.rnd() * 120;
-      p.gravity = 520;
-      p.rot = this.rnd() * Math.PI;
-      p.vrot = (this.rnd() - 0.5) * 10;
-      this.push(p);
-    }
-  }
-
   /**
    * Purchase / reward: `n` gold coins fountain up from (x, y), spin and fall (screen or logical
    * space — whatever transform is active when `draw` runs). Gold is the same in both palettes.
@@ -420,11 +401,6 @@ export class ParticleSystem implements BurstHost {
         case 'upgrade': {
           const t = state.towers[ev.towerId];
           if (t) this.upgrade(t.id, t.x, t.y, pal.gold, nowMs);
-          break;
-        }
-        case 'bridgeCut': {
-          const road = state.roads[ev.roadId];
-          if (road) this.bridgeCut([roadPointAt(road, 0.4), roadPointAt(road, 0.6)], pal.wood, pal.woodDark);
           break;
         }
         case 'won':

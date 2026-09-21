@@ -70,6 +70,7 @@ export const ru: Dictionary = {
   'hud.selectHint': 'Нажми на соседнюю башню, чтобы начать поток · ещё раз — остановить',
   'hud.streams': 'ПОТОКИ',
   'hint.linkLimit': 'Для {n} потоков нужен L{n}',
+  'hint.blocked': 'Путь закрыт — нет прямой линии',
 
   'pause.title': 'ПАУЗА',
   'pause.subtitle': 'Уровень {n} · {time}',
@@ -238,7 +239,7 @@ export const ru: Dictionary = {
   'achievement.first_win': 'Первая победа',
   'achievement.first_l3': 'Подними башню до уровня 3',
   'achievement.first_fortress': 'Захвати крепость',
-  'achievement.first_bridge_cut': 'Обруши мост',
+  'achievement.first_triple_stream': 'Три потока из одной башни',
   'achievement.first_tank': 'Захвати танковый завод',
   'achievement.stars_10': 'Десять уровней на 3★',
   'achievement.stars_20': 'Двадцать уровней на 3★',

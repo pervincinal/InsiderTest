@@ -3,6 +3,8 @@ import { Rng } from '../sim/rng';
 import { C } from '../sim/constants';
 import { SnapshotRing, applyContinue } from '../sim/snapshot';
 import { createState } from '../sim/create';
+import { linksFrom, maxLinksOf } from '../sim/step';
+import { TRIPLE_STREAM_LINKS } from '../economy/achievements';
 import { getOutcome } from '../sim/outcome';
 import { LEVEL_META, levelIndex } from '../levels/index';
 import { enemyCommands, isAiTick, referencePlayerCommands, rngsFor } from '../ai/index';
@@ -35,7 +37,7 @@ import { CRYSTAL_SERVICES } from '../economy/catalog';
 import type { DailyChallenge, WeeklyChallenge } from '../daily/challenge';
 import { recordChallengeResult, restartLevel } from './daily';
 import { recordWeeklyResult } from './weekly';
-import { isMuted, onPlayerCommand, onSimEvents, onSimFrame, playSfx, resetAudioLevel, toggleMuted } from '../audio/index';
+import { isMuted, onSimEvents, onSimFrame, playSfx, resetAudioLevel, toggleMuted } from '../audio/index';
 import { hapticCapture } from '../native/index';
 import { t } from './i18n';
 
@@ -90,8 +92,6 @@ export class PlayScreen implements Screen {
   private suicide = false;
   /** Facts about this match for the achievement rules (ECON-4), collected from sim events. */
   readonly match: MatchSummary = emptyMatch();
-  /** Bridges the player asked to cut; a `bridgeCut` event on one of them counts as the player's. */
-  private readonly cutRequests = new Set<string>();
   /** Daily Challenge match (GDD §7): fixed twist modifiers, no upgrades, boosters and continues off. */
   readonly challenge: DailyChallenge | null;
   /** Weekly Challenge match (GDD §8): the same fixed-match rules as `challenge`, booked per week. */
@@ -129,10 +129,9 @@ export class PlayScreen implements Screen {
     this.gestures = new PlayGestures({
       getState: () => (this.loop.finished ? null : this.loop.state),
       limitHintText: (n) => t('hint.linkLimit', { n }),
+      blockedHintText: () => t('hint.blocked'),
       onCommand: (cmd) => {
         this.tutorial?.onCommand(cmd, this.state);
-        onPlayerCommand(cmd, this.state); // legacy `sendUnits` feedback; `link` / `unlink` are keyed off their sim events
-        this.notePlayerCommand(cmd);
         this.loop.enqueue(cmd);
       },
     });
@@ -206,52 +205,41 @@ export class PlayScreen implements Screen {
       if (rng) cmds.push(...enemyCommands(state, enemy, rng));
     }
     if (this.autoplay) {
-      const mine = referencePlayerCommands(state, this.playerRng);
-      for (const cmd of mine) this.notePlayerCommand(cmd);
-      cmds.push(...mine);
+      cmds.push(...referencePlayerCommands(state, this.playerRng));
     }
     if (this.suicide) cmds.push(...this.suicideCommands(state));
     return cmds;
   }
 
-  private notePlayerCommand(cmd: Command): void {
-    if (cmd.type === 'cutBridge' && cmd.owner === 'player') this.cutRequests.add(cmd.roadId);
-  }
-
   /**
-   * Debug helper (e2e "auto lose"): every player tower trickles two units per AI tick towards the
-   * enemy — into the strongest connected enemy tower when there is one, else through a player
-   * neighbour towards the front — so garrisons never grow and the enemy walks into empty towers.
-   * Uses the legacy one-shot `sendUnits` on purpose: a rules-v2 link would drain the whole
-   * garrison in seconds and the continue tests need a defeat that comes after a full rewind
-   * window.
+   * Debug helper (e2e "auto lose"): a stream never drains its source under rules v3 and nothing
+   * the player does can weaken an own tower, so the fastest defeat is to stop growing and let the
+   * enemy come: every player tower with a free link streams into the strongest hostile tower it
+   * has a clear lane to that is not already streaming back on that lane (a counter-stream would
+   * cancel the attack 1:1 and protect us), else into a player neighbour. Growth pauses either way.
    */
   private suicideCommands(state: GameState): Command[] {
     const cmds: Command[] = [];
     const neighbours = (id: string): Tower[] => {
       const out: Tower[] = [];
       for (const r of Object.values(state.roads)) {
-        if (r.cut) continue;
         const otherId = r.a === id ? r.b : r.b === id ? r.a : null;
         const other = otherId ? state.towers[otherId] : undefined;
         if (other) out.push(other);
       }
       return out;
     };
-    const hostileScore = (other: Tower): number => (other.owner === 'neutral' ? 0 : 1000) + other.units;
+    const streamsInto = (from: string, to: string): boolean => state.links.some((l) => l.from === from && l.to === to);
     for (const t of Object.values(state.towers)) {
-      if (t.owner !== 'player' || t.units <= 0) continue;
+      if (t.owner !== 'player' || t.units <= 0 || linksFrom(state, t.id).length >= maxLinksOf(t)) continue;
       let best: { to: string; score: number } | null = null;
       for (const other of neighbours(t.id)) {
-        // an enemy neighbour first; otherwise a player neighbour that borders the enemy (score < 0 keeps it below any enemy)
-        let score: number;
-        if (other.owner !== 'player') score = hostileScore(other);
-        else if (neighbours(other.id).some((n) => n.owner !== 'player')) score = -1;
-        else continue;
+        if (streamsInto(t.id, other.id) || streamsInto(other.id, t.id)) continue;
+        // a hostile target first (the strongest, so our trickle matters least); a player neighbour only pauses growth
+        const score = other.owner === 'player' ? -1 : (other.owner === 'neutral' ? 0 : 1000) + other.units;
         if (!best || score > best.score) best = { to: other.id, score };
       }
-      if (!best) continue;
-      cmds.push({ type: 'sendUnits', owner: 'player', from: t.id, to: best.to, ratio: Math.min(1, 2 / t.units) });
+      if (best) cmds.push({ type: 'link', owner: 'player', from: t.id, to: best.to });
     }
     return cmds;
   }
@@ -288,12 +276,13 @@ export class PlayScreen implements Screen {
         const t = this.state.towers[ev.towerId];
         if (t?.owner === 'player' && ev.level >= L3_LEVEL) m.upgradedToL3 = true;
         if (t) this.effects.push({ x: t.x, y: t.y, color: pal.star, bornMs: this.nowMs, lifeMs: 350, kind: 'ring' });
-      } else if (ev.type === 'bridgeCut') {
-        if (this.cutRequests.has(ev.roadId)) m.cutBridge = true;
       } else if (ev.type === 'linked') {
-        if (ev.owner === 'player') playSfx('send'); // one tick per stream started (manual or autoplay)
+        if (ev.owner === 'player') {
+          playSfx('send'); // one tick per stream started (manual or autoplay)
+          if (linksFrom(this.state, ev.from).length >= TRIPLE_STREAM_LINKS) m.tripleStream = true;
+        }
       } else if (ev.type === 'unlinked') {
-        if (ev.owner === 'player' && ev.reason === 'manual') playSfx('button'); // auto-ends (target full, road cut) stay silent
+        if (ev.owner === 'player' && ev.reason === 'manual') playSfx('button'); // auto-ends (target full, source empty / lost) stay silent
       }
     }
     onSimEvents(events, this.state);
@@ -349,8 +338,6 @@ export class PlayScreen implements Screen {
       alpha: this.loop.alpha,
       selectedTowerId: this.gestures.selectedTowerId,
       hoverTowerId: this.gestures.hoverTowerId,
-      pressRoadId: this.gestures.pressRoadId,
-      pressProgress: this.gestures.pressProgress,
       paused: this.loop.paused,
       limitHint: this.gestures.limitHint ?? undefined,
       limitHintText: this.gestures.limitHintText || undefined,

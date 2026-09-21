@@ -1,5 +1,4 @@
-import type { Command, GameState, SimEvent } from '../sim/types';
-import { C } from '../sim/constants';
+import type { GameState, SimEvent } from '../sim/types';
 import type { SaveData } from '../ui/save';
 import { writeSave } from '../ui/save';
 import type { AudioContextFactory, AudioContextLike } from './synth';
@@ -113,23 +112,6 @@ export function onSimEvents(events: readonly SimEvent[], state: Pick<GameState, 
 /** Call once per frame after the loop advanced: plays the soft arrival tap for own units. */
 export function onSimFrame(state: Pick<GameState, 'units'>): void {
   if (mod.arrivals.tick(state) > 0) mod.player.play('arrive');
-}
-
-/** Units the sim will actually dispatch for a `sendUnits` command (mirrors `sim/commands.ts`). */
-export function sendCount(cmd: Extract<Command, { type: 'sendUnits' }>, state: Pick<GameState, 'towers' | 'roads'>): number {
-  const from = state.towers[cmd.from];
-  const to = state.towers[cmd.to];
-  if (!from || !to || from === to || from.owner !== cmd.owner) return 0;
-  const ratio = cmd.ratio === undefined ? 1 : Math.min(1, Math.max(0, cmd.ratio));
-  const weight = from.kind === 'tankFactory' ? C.TANK_WEIGHT : C.INFANTRY_WEIGHT;
-  return Math.floor(Math.floor(from.units * ratio) / weight);
-}
-
-/** Feedback for a command the player just issued (only `sendUnits` has no sim event of its own). */
-export function onPlayerCommand(cmd: Command, state: Pick<GameState, 'towers' | 'roads'>): void {
-  if (cmd.type !== 'sendUnits') return;
-  const count = sendCount(cmd, state);
-  if (count > 0) mod.player.play('send', { count });
 }
 
 /** Forget per-level tracking (call when a level starts). */

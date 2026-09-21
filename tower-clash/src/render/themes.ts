@@ -42,6 +42,7 @@ function themedBiome(biome: BiomeColors, theme: TerrainTheme, biomeId: string): 
     cliff: { lit: mix(biome.cliff.lit, theme.tint, theme.tintAmount), shade: mix(biome.cliff.shade, theme.tint, theme.tintAmount) },
     path: theme.path ?? { lit: mix(biome.path.lit, theme.tint, theme.pathTintAmount), shade: mix(biome.path.shade, theme.tint, theme.pathTintAmount) },
     bush: mixTones(biome.bush, bushTint, bushK),
+    wall: mixTones(biome.wall, theme.tint, theme.tintAmount),
     dots: theme.dots ?? biome.dots,
   };
   themedBiomeCache.set(key, out);

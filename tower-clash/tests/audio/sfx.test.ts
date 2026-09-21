@@ -12,11 +12,9 @@ import {
   isAudioUnlocked,
   isMuted,
   loadSfxRecipes,
-  onPlayerCommand,
   onSimEvents,
   onSimFrame,
   playSfx,
-  sendCount,
   sendPitchHz,
   setMuted,
   sfxForEvents,
@@ -26,7 +24,7 @@ import {
 import type { SfxName } from '../../src/audio/index';
 import { FakeAudioContext } from './fakeAudio';
 
-const ALL: SfxName[] = ['send', 'arrive', 'capture', 'upgrade', 'unitDied', 'artillery', 'bridgeCut', 'won', 'lost', 'button'];
+const ALL: SfxName[] = ['send', 'arrive', 'capture', 'upgrade', 'unitDied', 'artillery', 'won', 'lost', 'button'];
 
 let ctx: FakeAudioContext;
 let save: SaveData;
@@ -214,14 +212,13 @@ describe('event → sfx mapping', () => {
     ]);
   });
 
-  it('maps upgrades (own towers only), deaths by cause, bridge cuts and outcomes', () => {
+  it('maps upgrades (own towers only), deaths by cause and outcomes', () => {
     const events: SimEvent[] = [
       { type: 'upgrade', towerId: 'a', level: 2 },
       { type: 'upgrade', towerId: 'b', level: 2 },
       { type: 'unitDied', x: 0, y: 0, owner: 'player', cause: 'artillery' },
       { type: 'unitDied', x: 0, y: 0, owner: 'enemy1', cause: 'clash' },
       { type: 'unitDied', x: 0, y: 0, owner: 'enemy1', cause: 'mine' },
-      { type: 'bridgeCut', roadId: 'a-b' },
       { type: 'won', timeMs: 1000 },
       { type: 'lost', timeMs: 1000 },
     ];
@@ -230,7 +227,6 @@ describe('event → sfx mapping', () => {
       'artillery',
       'unitDied',
       'unitDied',
-      'bridgeCut',
       'won',
       'lost',
     ]);
@@ -280,22 +276,5 @@ describe('arrivals', () => {
     expect(ctx.voices().length).toBe(1);
     onSimFrame(state);
     expect(ctx.voices().length).toBe(1);
-  });
-});
-
-describe('player commands', () => {
-  it('sendCount mirrors the sim and only valid sends tick', () => {
-    unlockAudio();
-    const state = createState(makeLevel(), 1); // p: 10 units, e: 10 units
-    expect(sendCount({ type: 'sendUnits', owner: 'player', from: 'p', to: 'e', ratio: 0.5 }, state)).toBe(5);
-    expect(sendCount({ type: 'sendUnits', owner: 'player', from: 'e', to: 'p' }, state)).toBe(0);
-
-    onPlayerCommand({ type: 'sendUnits', owner: 'player', from: 'e', to: 'p' }, state);
-    expect(ctx.voices().length).toBe(0);
-    onPlayerCommand({ type: 'upgrade', owner: 'player', towerId: 'p' }, state); // upgrade sound comes from the sim event
-    expect(ctx.voices().length).toBe(0);
-    onPlayerCommand({ type: 'sendUnits', owner: 'player', from: 'p', to: 'e' }, state);
-    expect(ctx.voices().length).toBe(1);
-    expect(ctx.oscillators[0]!.frequency.events[0]!.value).toBeCloseTo(sendPitchHz(10));
   });
 });

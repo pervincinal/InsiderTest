@@ -50,15 +50,12 @@ function demoRoad(a: number, b: number): Road {
     id: `d${a}-d${b}`,
     a: `d${a}`,
     b: `d${b}`,
-    kind: 'road',
     points: [
       { x: p.x, y: p.y },
       { x: q.x, y: q.y },
     ],
     length: Math.hypot(q.x - p.x, q.y - p.y),
-    mine: 0,
-    barrier: 0,
-    cut: false,
+    mineHits: [],
   };
 }
 
@@ -67,7 +64,8 @@ const DEMO_ROADS: Road[] = [demoRoad(0, 1), demoRoad(0, 2), demoRoad(1, 2)];
 const DEMO_TERRAIN: TerrainSpec = {
   key: 'title',
   seed: 42,
-  roads: DEMO_ROADS.map((r) => ({ points: r.points, kind: r.kind })),
+  obstacles: [],
+  mines: [],
   towers: DEMO_TOWERS,
   top: 120,
   bottom: 1150,

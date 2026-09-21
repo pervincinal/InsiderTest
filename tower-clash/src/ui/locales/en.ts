@@ -75,6 +75,7 @@ export const en = {
   'hud.selectHint': 'Tap a connected tower to start a stream · tap it again to stop',
   'hud.streams': 'STREAMS',
   'hint.linkLimit': 'L{n} needed for {n} streams',
+  'hint.blocked': 'Blocked — no clear line',
 
   'pause.title': 'PAUSED',
   'pause.subtitle': 'Level {n} · {time}',
@@ -245,7 +246,7 @@ export const en = {
   'achievement.first_win': 'First victory',
   'achievement.first_l3': 'Upgrade a tower to level 3',
   'achievement.first_fortress': 'Capture a fortress',
-  'achievement.first_bridge_cut': 'Cut a bridge',
+  'achievement.first_triple_stream': 'Run three streams from one tower',
   'achievement.first_tank': 'Capture a tank factory',
   'achievement.stars_10': 'Ten 3★ levels',
   'achievement.stars_20': 'Twenty 3★ levels',

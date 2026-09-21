@@ -70,6 +70,7 @@ export const az: Dictionary = {
   'hud.selectHint': 'Axın başlatmaq üçün bağlı qülləyə vur · dayandırmaq üçün yenidən vur',
   'hud.streams': 'AXINLAR',
   'hint.linkLimit': '{n} axın üçün L{n} lazımdır',
+  'hint.blocked': 'Yol bağlıdır — düz xətt yoxdur',
 
   'pause.title': 'FASİLƏ',
   'pause.subtitle': 'Səviyyə {n} · {time}',
@@ -238,7 +239,7 @@ export const az: Dictionary = {
   'achievement.first_win': 'İlk qələbə',
   'achievement.first_l3': 'Qülləni 3-cü səviyyəyə qaldır',
   'achievement.first_fortress': 'Qala ələ keçir',
-  'achievement.first_bridge_cut': 'Körpü kəs',
+  'achievement.first_triple_stream': 'Bir qaladan üç axın aç',
   'achievement.first_tank': 'Tank zavodu ələ keçir',
   'achievement.stars_10': 'On 3★ səviyyə',
   'achievement.stars_20': 'İyirmi 3★ səviyyə',

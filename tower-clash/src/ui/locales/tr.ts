@@ -70,6 +70,7 @@ export const tr: Dictionary = {
   'hud.selectHint': 'Akış başlatmak için bağlı kuleye dokun · durdurmak için tekrar dokun',
   'hud.streams': 'AKIŞLAR',
   'hint.linkLimit': '{n} akış için L{n} gerekir',
+  'hint.blocked': 'Yol kapalı — düz hat yok',
 
   'pause.title': 'DURAKLATILDI',
   'pause.subtitle': 'Bölüm {n} · {time}',
@@ -238,7 +239,7 @@ export const tr: Dictionary = {
   'achievement.first_win': 'İlk zafer',
   'achievement.first_l3': 'Bir kuleyi 3. seviyeye yükselt',
   'achievement.first_fortress': 'Bir kale ele geçir',
-  'achievement.first_bridge_cut': 'Bir köprü kes',
+  'achievement.first_triple_stream': 'Bir kaleden üç akış aç',
   'achievement.first_tank': 'Bir tank fabrikası ele geçir',
   'achievement.stars_10': 'On 3★ bölüm',
   'achievement.stars_20': 'Yirmi 3★ bölüm',

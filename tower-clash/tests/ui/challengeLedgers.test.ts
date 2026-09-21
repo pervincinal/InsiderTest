@@ -65,7 +65,6 @@ function winNow(play: PlayScreen, clock: { now: number }): void {
   const state = play.state;
   for (const tower of Object.values(state.towers)) tower.owner = 'player';
   state.units = state.units.filter((u) => u.owner === 'player');
-  state.queues = state.queues.filter((q) => q.owner === 'player');
   state.links = state.links.filter((l) => l.owner === 'player');
   clock.now += 250;
   play.update(250, clock.now);

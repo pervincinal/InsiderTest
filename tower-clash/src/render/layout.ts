@@ -165,7 +165,6 @@ export function levelMapMaxScroll(count: number, viewH = 1280): number {
 
 export const TOWER_RADIUS = 34;
 export const TOWER_HIT_RADIUS = 44;
-export const ROAD_HIT_RADIUS = 30;
 export const UNIT_RADIUS = 6;
 export const TANK_RADIUS = 11;
 
