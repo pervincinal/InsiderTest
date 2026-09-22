@@ -122,7 +122,7 @@ const along = (a: { x: number; y: number }, b: { x: number; y: number }, t: numb
 /**
  * Mean RGBA of the 3×3 device pixels of the #game canvas around a logical point. The guide lines
  * of rules v3 (§2.0b item 8) are pure rendering — the sim has no notion of them — so the test reads
- * the canvas: a 2 px owner-coloured line at 30 % alpha shifts the colour under it by far more than
+ * the canvas: a 2 px owner-coloured line at 45 % alpha shifts the colour under it by far more than
  * the anti-aliasing noise of a still frame.
  */
 const pixelAt = (page: Page, p: { x: number; y: number }) =>
@@ -283,9 +283,15 @@ test.describe('Tower Clash smoke', () => {
     // (c0) guide lines (§2.0b item 8): selecting home draws a thin line to every tower it has a lane
     //      to. Probe three points of the home → foe segment (only the guide line is ever drawn there:
     //      the tutorial ring / arrow sit on home and camp, the stream below runs on home → camp).
-    const guideProbes = [0.35, 0.5, 0.65].map((t) => along(home, foe, t));
-    const guideBefore = await Promise.all(guideProbes.map((p) => pixelAt(page, p)));
-    const guideShift = async () => Math.min(...(await Promise.all(guideProbes.map(async (p, i) => colourDistance(await pixelAt(page, p), guideBefore[i]!)))));
+    //      The line is dashed (ART-7: 10 px on / 8 px off in map units), so each probe is a run of
+    //      three points 6 px apart along the lane — one of them always lies on a dash — and the
+    //      probe's shift is the largest of the three.
+    const laneLen = Math.hypot(foe.x - home.x, foe.y - home.y);
+    const guideProbes = [0.35, 0.5, 0.65].map((t) => [0, 6, 12].map((px) => along(home, foe, t + px / laneLen)));
+    const guideBefore = await Promise.all(guideProbes.map((run) => Promise.all(run.map((p) => pixelAt(page, p)))));
+    const probeShift = async (run: { x: number; y: number }[], i: number) =>
+      Math.max(...(await Promise.all(run.map(async (p, j) => colourDistance(await pixelAt(page, p), guideBefore[i]![j]!)))));
+    const guideShift = async () => Math.min(...(await Promise.all(guideProbes.map(probeShift))));
     await tapAt(page, home.x, home.y);
     await expect.poll(() => hint(page), { message: 'first hint should clear once home is selected' }).toBe('Now tap the grey tower — the stream keeps flowing');
     await expect.poll(guideShift, { message: 'selecting home must draw a guide line along the home → foe lane' }).toBeGreaterThanOrEqual(GUIDE_LINE_MIN_SHIFT);

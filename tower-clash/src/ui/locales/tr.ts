@@ -71,6 +71,7 @@ export const tr: Dictionary = {
   'hud.streams': 'AKIŞLAR',
   'hint.linkLimit': '{n} akış için L{n} gerekir',
   'hint.blocked': 'Yol kapalı — düz hat yok',
+  'hint.empty': 'Asker yok — kale büyüsün',
 
   'pause.title': 'DURAKLATILDI',
   'pause.subtitle': 'Bölüm {n} · {time}',

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { LevelDef, Road } from '../../src/sim/types';
 import { COLOR_BLIND_PALETTE, DEFAULT_PALETTE, shade } from '../../src/render/palette';
 import { formatTime, isLight, wrapText } from '../../src/render/widgets';
-import { drawGuideLines, roadPoseAt } from '../../src/render/draw';
+import { drawGuideLines, GUIDE_LINE_ALPHA, GUIDE_LINE_DASH, GUIDE_LINE_WIDTH, roadPoseAt } from '../../src/render/draw';
 import type { TerrainSpec } from '../../src/render/terrain';
 import { getTerrain } from '../../src/render/terrain';
 import type { View } from '../../src/render/view';
@@ -125,7 +125,7 @@ describe('drawGuideLines', () => {
     obstacles: [{ kind: 'wall', points: [{ x: 410, y: 450 }, { x: 470, y: 500 }], width: 28 }],
   };
 
-  it('draws one thin 30 % owner-coloured line per reachable, not-yet-linked tower and nothing for blocked ones', () => {
+  it('draws one thin dashed 45 % owner-coloured line per reachable, not-yet-linked tower and nothing for blocked ones', () => {
     const state = createState(level, 1);
     expect(state.roads['p-x']).toBeUndefined();
     expect(state.roads['e-p']).toBeDefined();
@@ -140,9 +140,21 @@ describe('drawGuideLines', () => {
     expect(Math.hypot(lx - n.x, ly - n.y)).toBeGreaterThan(20);
     expect(Math.hypot(lx - n.x, ly - n.y)).toBeLessThan(80);
     expect(Math.abs((lx - 200) * (n.y - 1000) - (ly - 1000) * (n.x - 200))).toBeLessThan(1e-6);
-    expect(props.globalAlpha).toBe(0.3);
-    expect(props.lineWidth).toBe(2);
+    // ART-7 readability: 2 px at 45 % and dashed 10/8 so it still reads at a 360 px viewport
+    expect(GUIDE_LINE_ALPHA).toBe(0.45);
+    expect(GUIDE_LINE_WIDTH).toBe(2);
+    expect(GUIDE_LINE_DASH).toEqual([10, 8]);
+    expect(props.globalAlpha).toBe(GUIDE_LINE_ALPHA);
+    expect(props.lineWidth).toBe(GUIDE_LINE_WIDTH);
     expect(props.strokeStyle).toBe(DEFAULT_PALETTE.owners.player);
+    const dashes = calls.filter(([k]) => k === 'setLineDash');
+    expect(dashes).toHaveLength(1);
+    expect(dashes[0]![1][0]).toEqual([10, 8]);
+    // dash state is set before the path is stroked and undone by restore()
+    const order = calls.map(([k]) => k);
+    expect(order.indexOf('setLineDash')).toBeLessThan(order.indexOf('stroke'));
+    expect(order.indexOf('save')).toBeLessThan(order.indexOf('setLineDash'));
+    expect(order.at(-1)).toBe('restore');
   });
 
   it('draws nothing for a foreign selection', () => {

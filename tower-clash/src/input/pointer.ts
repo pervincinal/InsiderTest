@@ -107,15 +107,19 @@ export interface GestureOptions {
   limitHintText?(nextLevel: number): string;
   /** Localised text for a tap on a tower with no clear lane from the selection (`hint.blocked`). */
   blockedHintText?(): string;
+  /** Localised text for a stream from a selected tower with no soldiers (`hint.empty`, BUG-10). */
+  emptyHintText?(): string;
 }
 
 /** What a tap / drag from `from` onto `to` should do (pure, unit-tested). */
-export type LinkDecision = { kind: 'link' } | { kind: 'unlink' } | { kind: 'limit'; nextLevel: number } | { kind: 'blocked' } | { kind: 'none' };
+export type LinkDecision = { kind: 'link' } | { kind: 'unlink' } | { kind: 'limit'; nextLevel: number } | { kind: 'blocked' } | { kind: 'empty' } | { kind: 'none' };
 
 /**
  * Rules v2 / v3 (GDD §2.0, §2.0b): an existing `from → to` stream toggles off; otherwise a new
  * one starts, unless `from` is at its per-level link limit (L1 = 1, L2 = 2, L3 = 3), which is
- * refused with a hint. A target with no clear lane from `from` is `blocked` (shake + hint).
+ * refused with a hint. A target with no clear lane from `from` is `blocked` (shake + hint); a
+ * source with no soldiers is `empty` (shake + hint — the sim would drop the link silently under
+ * rules v3 rule 6, BUG-10); stopping an existing stream never needs soldiers.
  * `allowUnlink` is false for drags (a drag always means "link"; dragging onto an existing stream
  * is a no-op).
  */
@@ -125,6 +129,7 @@ export function decideLink(state: GameState, from: string, to: string, allowUnli
   if (!connectedRoad(state, from, to)) return { kind: 'blocked' };
   const links = linksFrom(state, from);
   if (links.some((l) => l.to === to)) return allowUnlink ? { kind: 'unlink' } : { kind: 'none' };
+  if (src.units < 1) return { kind: 'empty' }; // same guard as sim `link()` (rules v3 rule 6)
   if (links.length >= maxLinksOf(src)) return { kind: 'limit', nextLevel: src.level + 1 };
   return { kind: 'link' };
 }
@@ -273,6 +278,10 @@ export class PlayGestures {
       case 'blocked':
         this.limitHint = { until: nowMs + LIMIT_HINT_MS };
         this.limitHintText = this.opts.blockedHintText?.() ?? 'Blocked';
+        return;
+      case 'empty':
+        this.limitHint = { until: nowMs + LIMIT_HINT_MS };
+        this.limitHintText = this.opts.emptyHintText?.() ?? 'No soldiers';
         return;
       case 'none':
         return;

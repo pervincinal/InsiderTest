@@ -130,6 +130,7 @@ export class PlayScreen implements Screen {
       getState: () => (this.loop.finished ? null : this.loop.state),
       limitHintText: (n) => t('hint.linkLimit', { n }),
       blockedHintText: () => t('hint.blocked'),
+      emptyHintText: () => t('hint.empty'),
       onCommand: (cmd) => {
         this.tutorial?.onCommand(cmd, this.state);
         this.loop.enqueue(cmd);

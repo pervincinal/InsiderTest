@@ -71,6 +71,7 @@ export const az: Dictionary = {
   'hud.streams': 'AXINLAR',
   'hint.linkLimit': '{n} axın üçün L{n} lazımdır',
   'hint.blocked': 'Yol bağlıdır — düz xətt yoxdur',
+  'hint.empty': 'Əsgər yoxdur — qala böyüsün',
 
   'pause.title': 'FASİLƏ',
   'pause.subtitle': 'Səviyyə {n} · {time}',

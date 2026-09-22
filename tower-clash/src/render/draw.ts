@@ -160,9 +160,11 @@ function linkRoad(state: LinkedState, link: LinkLike): Road | undefined {
 }
 
 /**
- * Every active link as a straight ribbon along its lane in the owner's colour (mid tone, 55 %; the
- * player's in the lit tone with a 1 px ink outline so their own streams read first), chevrons
- * marching toward the target (frozen under reduced motion) and an arrowhead at the target end.
+ * Every active link as a straight ribbon along its lane in the owner's colour with a 1 px ink
+ * outline so it reads on every ground (ART-7: an outline-less 55 % coral turned tan over grass).
+ * The player's is the lit tone at 72 % with a heavier arrowhead stroke so their own streams read
+ * first; foreign ones the mid tone at 68 %. Paper chevrons march toward the target (frozen under
+ * reduced motion) and an arrowhead sits at the target end.
  * Opposite links on one lane are offset to their right so both read. Sources with ≥ 1 link get a
  * soft pulsing "streaming" ring on the ground (growth paused, rules v3). Drawn under units / towers.
  */
@@ -211,15 +213,13 @@ export function drawLinks(ctx: CanvasRenderingContext2D, pal: Palette, state: Li
     const mine = l.owner === 'player';
     const tones = pal.ownerTones[l.owner];
     const body = mine ? tones.lit : tones.mid;
-    // ribbon: ink outline for the player, then the translucent body
+    // ribbon: thin ink outline (every owner), then the translucent body
     traceRibbon(ctx, road, forward, s0, s1, off);
-    if (mine) {
-      ctx.globalAlpha = 0.6;
-      ctx.strokeStyle = pal.ink;
-      ctx.lineWidth = LINK_WIDTH + 2;
-      ctx.stroke();
-    }
-    ctx.globalAlpha = mine ? 0.72 : 0.55;
+    ctx.globalAlpha = mine ? 0.6 : 0.5;
+    ctx.strokeStyle = pal.ink;
+    ctx.lineWidth = LINK_WIDTH + 2;
+    ctx.stroke();
+    ctx.globalAlpha = mine ? 0.72 : 0.68;
     ctx.strokeStyle = body;
     ctx.lineWidth = LINK_WIDTH;
     ctx.stroke();
@@ -248,11 +248,9 @@ export function drawLinks(ctx: CanvasRenderingContext2D, pal: Palette, state: Li
     ctx.lineTo(e.x - e.dx * 5 - nx * 10, e.y - e.dy * 5 - ny * 10);
     ctx.closePath();
     ctx.globalAlpha = 1;
-    if (mine) {
-      ctx.strokeStyle = pal.ink;
-      ctx.lineWidth = 3;
-      ctx.stroke();
-    }
+    ctx.strokeStyle = pal.ink;
+    ctx.lineWidth = mine ? 3 : 2;
+    ctx.stroke();
     ctx.fillStyle = mine ? tones.lit : tones.mid;
     ctx.globalAlpha = 0.95;
     ctx.fill();
@@ -300,10 +298,15 @@ function selectionRing(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y
   ctx.lineDashOffset = 0;
 }
 
+/** Guide line look (ART-7): 2 px owner colour at 45 %, dashed 10 on / 8 off in map units so it still reads at a 360 px viewport (map × 0.5). */
+export const GUIDE_LINE_ALPHA = 0.45;
+export const GUIDE_LINE_WIDTH = 2;
+export const GUIDE_LINE_DASH: readonly number[] = Object.freeze([10, 8]);
+
 /**
- * Rules v3 §2.0b(8): while a player tower is selected, a thin line (owner colour, 30 % alpha, 2 px)
- * from it to every tower it has a clear lane to, skipping targets it already streams into. Blocked
- * towers get nothing, so the player sees at a glance what is reachable.
+ * Rules v3 §2.0b(8): while a player tower is selected, a thin dashed line (owner colour, 45 % alpha,
+ * 2 px, 10/8 dashes) from it to every tower it has a clear lane to, skipping targets it already
+ * streams into. Blocked towers get nothing, so the player sees at a glance what is reachable.
  */
 export function drawGuideLines(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, sel: Tower): void {
   if (sel.owner !== 'player') return;
@@ -311,11 +314,12 @@ export function drawGuideLines(ctx: CanvasRenderingContext2D, pal: Palette, stat
   for (const l of linksFrom(state, sel.id)) linked.add(l.to);
   const r0 = towerFootprintRadius(sel.kind, sel.level) + 6;
   ctx.save();
-  ctx.globalAlpha = 0.3;
+  ctx.globalAlpha = GUIDE_LINE_ALPHA;
   ctx.strokeStyle = pal.owners[sel.owner];
-  ctx.lineWidth = 2;
+  ctx.lineWidth = GUIDE_LINE_WIDTH;
   ctx.lineCap = 'round';
-  ctx.setLineDash([]);
+  ctx.setLineDash([...GUIDE_LINE_DASH]);
+  ctx.lineDashOffset = 0;
   ctx.beginPath();
   for (const id in state.towers) {
     if (id === sel.id || linked.has(id) || !state.roads[roadIdFor(sel.id, id)]) continue;

@@ -71,6 +71,7 @@ export const ru: Dictionary = {
   'hud.streams': 'ПОТОКИ',
   'hint.linkLimit': 'Для {n} потоков нужен L{n}',
   'hint.blocked': 'Путь закрыт — нет прямой линии',
+  'hint.empty': 'Нет солдат — дай башне вырасти',
 
   'pause.title': 'ПАУЗА',
   'pause.subtitle': 'Уровень {n} · {time}',

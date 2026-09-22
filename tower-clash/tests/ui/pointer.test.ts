@@ -91,6 +91,7 @@ describe('PlayGestures (taps and drags → link / unlink commands)', () => {
       },
       limitHintText: (n) => `L${n} needed for ${n} streams`,
       blockedHintText: () => 'Blocked — no clear line',
+      emptyHintText: () => 'No soldiers — let the tower grow',
     });
     let now = 1000;
     const at = (id: string, dx = 0, dy = 0): PointerPoint => ({ id: 1, x: state.towers[id]!.x + dx, y: state.towers[id]!.y + dy, timeMs: now });
@@ -206,6 +207,52 @@ describe('PlayGestures (taps and drags → link / unlink commands)', () => {
     tap('x');
     expect(g.selectedTowerId).toBe('x');
     expect(commands).toEqual([]);
+  });
+
+  it('two blocked taps in a row raise two distinct hint objects (the renderer restarts the shake on identity)', () => {
+    const state = fixture();
+    const { g, commands, tap } = harness(state);
+    tap('p');
+    tap('x'); // neutral behind the wall
+    const first = g.limitHint;
+    expect(first).not.toBeNull();
+    tap('x');
+    expect(g.limitHint).not.toBe(first);
+    expect(g.limitHint!.until).toBeGreaterThan(first!.until);
+    expect(g.limitHintText).toBe('Blocked — no clear line');
+    expect(commands).toEqual([]);
+    expect(g.selectedTowerId).toBe('p');
+  });
+
+  it('a tap or drag from an own tower at 0 units sends nothing and raises hint.empty; stopping a stream never needs soldiers (BUG-10)', () => {
+    const state = fixture();
+    state.towers['p']!.units = 0;
+    const { g, commands, tap } = harness(state);
+    tap('p');
+    expect(g.selectedTowerId).toBe('p'); // selecting an empty tower is allowed (it shows the guide lines)
+    expect(decideLink(state, 'p', 'e')).toEqual({ kind: 'empty' });
+    tap('e');
+    expect(commands).toEqual([]); // nothing reaches the sim (which would drop it silently, rule 6)
+    expect(state.links).toEqual([]);
+    expect(g.selectedTowerId).toBe('p'); // the source stays selected
+    expect(g.limitHint).not.toBeNull();
+    expect(g.limitHintText).toBe('No soldiers — let the tower grow');
+    const first = g.limitHint;
+    // a drag is refused the same way, with a fresh hint object (the renderer restarts the shake on identity)
+    g.down({ id: 1, x: state.towers['p']!.x, y: state.towers['p']!.y, timeMs: 5000 });
+    g.move({ id: 1, x: state.towers['e']!.x, y: state.towers['e']!.y, timeMs: 5100 });
+    g.up({ id: 1, x: state.towers['e']!.x, y: state.towers['e']!.y, timeMs: 5200 });
+    expect(commands).toEqual([]);
+    expect(g.limitHint).not.toBe(first);
+    expect(g.limitHintText).toBe('No soldiers — let the tower grow');
+    // an existing stream from an empty tower can still be stopped: unlink wins over empty
+    state.towers['p']!.units = 3;
+    applyCommand(state, { type: 'link', owner: 'player', from: 'p', to: 'e' });
+    state.towers['p']!.units = 0;
+    expect(decideLink(state, 'p', 'e')).toEqual({ kind: 'unlink' });
+    // a blocked lane still reads as blocked, and an empty tower at the limit reads as empty
+    expect(decideLink(state, 'p', 'x')).toEqual({ kind: 'blocked' });
+    expect(decideLink(state, 'p', 'n')).toEqual({ kind: 'empty' });
   });
 
   it('long-press does nothing any more (no bridges to cut)', () => {
