@@ -148,7 +148,8 @@ test.describe('daily challenge', () => {
     const done = await daily(page);
     expect(done.done).toBe(true);
     expect(done.streak).toBe(1);
-    expect(done.best).toMatchObject({ stars: result.stars });
+    // the replay at ×10 may beat the first run's clock, so the card reports the best of the two
+    expect(done.best?.stars).toBeGreaterThanOrEqual(result.stars);
     await page.waitForTimeout(300);
     await shot(page, 'look3-daily-card-done');
 
