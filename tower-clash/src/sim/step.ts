@@ -170,18 +170,20 @@ function generation(state: GameState, dt: number): void {
   for (const id in state.towers) {
     const tower = state.towers[id]!;
     if (tower.owner === 'neutral') continue;
-    if (isFrozen(state, tower.owner)) continue;
-    // Rules v2.1: a tower under fire recruits nothing (same mechanism as Freeze: the accumulator pauses).
-    if (isUnderFire(state, tower)) continue;
     // Rules v3: a linked tower neither accumulates nor auto-upgrades.
     if (isLinked(state, tower.id)) continue;
 
     const cap = capacityOf(tower, state);
     if (tower.units >= cap) {
+      // Rules v2: the level is taken "on the spot" — before the freeze / under-fire gates below, which
+      // pause growth only (QA 2026-09-22: an L1 at 25 unlinked under fire stayed L1 until the fire stopped).
       tryAutoUpgrade(state, tower);
       tower.genAccMs = 0;
       continue;
     }
+    if (isFrozen(state, tower.owner)) continue;
+    // Rules v2.1: a tower under fire recruits nothing (same mechanism as Freeze: the accumulator pauses).
+    if (isUnderFire(state, tower)) continue;
     const interval = productionIntervalMs(tower, state);
     const weight = productionWeight(tower);
     // Multiplicative with overdrive: interval ÷ productionMul, accumulation × OVERDRIVE_MUL.

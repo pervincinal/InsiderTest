@@ -3,9 +3,9 @@ import { createState } from '../../src/sim/create';
 import type { GameState } from '../../src/sim/types';
 import { scenarioLevel, scriptedTick } from './util';
 
-function scenario(seed: number): GameState {
+function scenario(seed: number, ticks = 600): GameState {
   const state = createState(scenarioLevel(), seed);
-  for (let tick = 0; tick < 600; tick++) scriptedTick(state, tick);
+  for (let tick = 0; tick < ticks; tick++) scriptedTick(state, tick);
   return state;
 }
 
@@ -16,6 +16,17 @@ describe('determinism', () => {
     expect(a).toEqual(b);
     expect(a.time).toBe(30_000);
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+  });
+
+  it('120 s (2400 ticks) with mines, links of both owners, overdrive, freeze and an airstrike: byte-identical states', () => {
+    const a = scenario(42, 2400);
+    const b = scenario(42, 2400);
+    expect(a.time).toBe(120_000);
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+    expect(a).toEqual(b);
+    expect(JSON.stringify(scenario(43, 2400))).not.toBe(JSON.stringify(a)); // the seed is part of the state
+    expect(a.mines.map((m) => m.charges)).toEqual([0, 0]);
+    expect(a.links.length).toBeGreaterThan(0); // streams still running at 120 s
   });
 
   it('the scenario actually exercised the rules (lanes, obstacles, mines, streams, boosters)', () => {
