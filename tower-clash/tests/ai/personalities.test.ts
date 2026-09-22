@@ -361,3 +361,27 @@ describe('maintain (every personality)', () => {
     expect(rusherCommands(state, rusher(), new Rng(1))).toEqual([link('e', 'n')]); // and back, at 1.43/s
   });
 });
+
+describe('reinforcement reclaim (AI-7b) is the reference player’s rule only', () => {
+  it('a rusher whose only link reinforces a neighbour does not reclaim it for a shield', () => {
+    // Mirror of the reference player fixture: `a` reinforces `b`, `e` streams at `a`, no lane b–e.
+    const state = createState(
+      makeLevel({
+        towers: [
+          { id: 'a', x: 360, y: 400, owner: 'enemy1', units: 5, level: 1 },
+          { id: 'b', x: 60, y: 400, owner: 'enemy1', units: 3, level: 1 },
+          { id: 'e', x: 360, y: 1000, owner: 'player', units: 10, level: 1 },
+          { id: 'f', x: 60, y: 1000, owner: 'player', units: 10, level: 1 },
+        ],
+        obstacles: [{ kind: 'rock', points: [{ x: 210, y: 700 }] }],
+        enemies: [rusher()],
+      }),
+      1,
+    );
+    applyCommand(state, { type: 'link', owner: 'player', from: 'f', to: 'b' });
+    applyCommand(state, { type: 'link', owner: 'player', from: 'e', to: 'a' });
+    applyCommand(state, link('b', 'f')); // b's only link shields its lane: it cannot reinforce a
+    applyCommand(state, link('a', 'b'));
+    expect(rusherCommands(state, rusher(), new Rng(1))).toEqual([]); // the reference player answers [unlink a>b, link a>e]
+  });
+});

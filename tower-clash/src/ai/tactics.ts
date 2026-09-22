@@ -24,6 +24,7 @@ import {
   flipOwner,
   hasLink,
   isCapped,
+  landsEnough,
   laneFlow,
   linkRate,
   neighbours,
@@ -47,8 +48,10 @@ export const RETREAT_UNITS = 3;
 /** An attack that is landing is kept at least this long before it is judged hopeless (no tick-by-tick ping-pong). */
 export const MIN_ATTACK_MS = 5_000;
 /**
- * A linked tower at capacity below its top level cannot auto-upgrade; it drops its links for one tick to
- * take the level (faster streams, one more link) when it survives at least this long without them.
+ * A linked tower at capacity below its top level cannot auto-upgrade; it drops its links for one AI tick
+ * to take the level (faster streams, one more link) when it survives at least this long without them.
+ * The tower is marked used for the rest of the tick so no rule re-links it before the sim's next
+ * `generation` sees it unlinked (AI-6: re-linking in the same tick kept it linked forever).
  */
 export const UPGRADE_BREAK_SAFE_MS = 3_000;
 
@@ -125,17 +128,17 @@ export function actors(ctx: Ctx): Tower[] {
 }
 
 /**
- * True when `link` shields its source: a hostile stream runs the other way on the same lane and ours is
- * at least as fast, so the two cancel and nothing lands on us (GDD §2.5: counter-stream only when my
- * rate ≥ theirs).
+ * True when `link` shields its source: a hostile stream runs the other way on the same lane, so the two
+ * cancel 1:1 in weight. Ours at least as fast: nothing lands on us. Ours slower (a *partial* shield):
+ * only their surplus lands — still better than their whole stream, and the tower grows nothing while
+ * under fire anyway, so the link costs it nothing (2026-09-22: dropping an out-rated shield the moment
+ * the enemy reached L2 let its full stream land and lost level 13 under thinWalls / lean).
  */
 export function isShield(ctx: Ctx, link: PlannedLink): boolean {
   const from = ctx.state.towers[link.from];
   const to = ctx.state.towers[link.to];
   if (!from || !to || to.owner === ctx.owner) return false;
-  const reverse = ctx.state.links.find((l) => l.from === link.to && l.to === link.from && l.owner !== ctx.owner && !ctx.ended.includes(l));
-  if (!reverse) return false;
-  return linkRate(ctx.state, from, ctx.owner) >= linkRate(ctx.state, to, reverse.owner);
+  return ctx.state.links.some((l) => l.from === link.to && l.to === link.from && l.owner !== ctx.owner && !ctx.ended.includes(l));
 }
 
 /**
@@ -162,12 +165,15 @@ export function maintain(ctx: Ctx, tower: Tower, cfg: MaintainConfig): void {
   const state = ctx.state;
   const links = activeLinks(ctx, tower.id);
   if (links.length === 0) return;
-  // Upgrade break: at capacity below the top level, drop every link for a tick to take the level.
+  // Upgrade break: at capacity below the top level, drop every link for a tick to take the level (the
+  // sim upgrades an unlinked tower at capacity on its next tick, under fire or not); nothing re-links
+  // the tower this tick (`used`), so the sim sees it unlinked.
   if (!atMaxLevel(tower) && tower.units >= capacityOf(tower, state)) {
     const without = siegeOf(state, tower, { planned: ctx.planned, exclude: [...ctx.ended, ...links] }).fallsAtMs;
     if (without > UPGRADE_BREAK_SAFE_MS) {
       ctx.rule = 'upgrade';
       for (const link of links) issueUnlink(ctx, link);
+      ctx.used.add(tower.id);
       return;
     }
   }
@@ -182,7 +188,7 @@ export function maintain(ctx: Ctx, tower: Tower, cfg: MaintainConfig): void {
     }
     const shield = isShield(ctx, link);
     const flow = laneFlow(state, link, [...state.links.filter((l) => !ctx.ended.includes(l)), ...ctx.planned]);
-    const landing = flow !== undefined && flow.rate > 0;
+    const landing = flow !== undefined && landsEnough(flow);
     const falls = landing ? siege(ctx, target).fallsAtMs : Infinity;
     if (target.owner === 'neutral' && landing) {
       // A contested neutral goes to whoever lands the flipping unit; feeding a rival's capture is waste.
@@ -213,21 +219,37 @@ export interface DefendConfig {
   cap?: number;
   /** Extra sources a rule may not use (e.g. the reference player's growing keep) — defence ignores it by default. */
   mayHelp?: (tower: Tower) => boolean;
+  /**
+   * A shield may reclaim the tower's own reinforcement line when that makes the tower hold (its capture
+   * would end the line anyway — AI-7b). Off: a reinforcement is never reclaimed (the enemies' v3 defence).
+   */
+  reclaimReinforcement?: boolean;
 }
 
-/** Links of `tower` a shield may replace: supply that is not a reinforcement, or an attack whose target outlives the tower. */
-function reclaimableFor(ctx: Ctx, tower: Tower, fallsAt: number): Link | undefined {
+/**
+ * Links of `tower` a shield may replace: supply that is not a reinforcement, an attack whose target
+ * outlives the tower, and — last, with `reclaimReinforcement` — a reinforcement: the tower's capture
+ * would end it anyway (`sourceLost`), so a falling tower reclaims its own supply line to save itself
+ * (AI-7b: "it loses its last tower while its only link reinforces another").
+ */
+function reclaimableFor(ctx: Ctx, tower: Tower, fallsAt: number, shield: PlannedLink, reclaimReinforcement: boolean): Link | undefined {
+  let reinforcement: Link | undefined;
   for (const link of activeLinks(ctx, tower.id)) {
     const target = ctx.state.towers[link.to];
     if (!target) continue;
     if (target.owner === ctx.owner) {
       if (!isReinforcement(ctx, link)) return link;
+      reinforcement ??= link;
       continue;
     }
     if (isShield(ctx, link)) continue;
     if (siege(ctx, target).fallsAtMs > fallsAt) return link;
   }
-  return undefined;
+  if (!reclaimReinforcement || !reinforcement) return undefined;
+  // A reinforcement is given up only when the shield in its place makes the tower hold: losing the
+  // tower would end the line anyway, but trading a held neighbour for a tower that falls regardless is worse.
+  const held = siegeOf(ctx.state, tower, { planned: [...ctx.planned, shield], exclude: [...ctx.ended, reinforcement] }).fallsAtMs === Infinity;
+  return held ? reinforcement : undefined;
 }
 
 /**
@@ -289,7 +311,7 @@ export function defend(ctx: Ctx, tower: Tower, cfg: DefendConfig): boolean {
       if (!source || hasLink(state, tower.id, source.id)) continue;
       if (linkRate(state, tower, ctx.owner) < linkRate(state, source, a.link.owner)) continue;
       if (freeSlots(ctx, tower, cap) <= 0) {
-        const reclaim = reclaimableFor(ctx, tower, s.fallsAtMs);
+        const reclaim = reclaimableFor(ctx, tower, s.fallsAtMs, { owner: ctx.owner, from: tower.id, to: source.id }, cfg.reclaimReinforcement === true);
         if (!reclaim) continue;
         issueUnlink(ctx, reclaim);
       }
@@ -323,9 +345,11 @@ export interface AttackConfig {
    */
   reclaim?: (ctx: Ctx, source: Tower, plan?: Plan) => Link | undefined;
   /**
-   * Plan against the defender's best answer: every friendly neighbour of the target with a free link is
-   * assumed to reinforce it, and the target is assumed to stream back on the lane of every source it can
-   * match (its free links, strongest source first). Off: plan against what is on the map now.
+   * Plan against the defender's shields: the target is assumed to stream back on the lane of every
+   * source it can match (its free links, strongest source first). Off: plan against what is on the map
+   * now. (Until 2026-09-22 every friendly neighbour with a free link was also assumed to reinforce the
+   * target; with the corrected artillery model that made the bot too timid — under lean it never opened
+   * on level 13 and lost 5/5 — and the enemies' own defence counters our sources before it reinforces.)
    */
   anticipate?: boolean;
   /**
@@ -337,7 +361,10 @@ export interface AttackConfig {
   contestPenaltyMs?: number;
 }
 
-/** Hypothetical reinforcement links into `target` from its owner's neighbours that have a free link. */
+/**
+ * Hypothetical reinforcement links into `target` from its owner's neighbours that have a free link.
+ * Not used by `attack` since 2026-09-22 (see `AttackConfig.anticipate`); kept for tooling and tests.
+ */
 export function anticipatedReinforcements(state: GameState, target: Tower): PlannedLink[] {
   if (target.owner === 'neutral') return [];
   const out: PlannedLink[] = [];
@@ -407,8 +434,7 @@ export function attack(ctx: Ctx, cfg: AttackConfig): void {
       if (mine && already.fallsAtMs <= cfg.planMs) continue;
       const adjacent = sources.filter((s) => roadBetween(state, s.id, id) && !hasLink(state, s.id, id)).sort(bySpeed(state, target, ctx.owner));
       const ordered = [...adjacent.filter((s) => !lastResort(s)), ...adjacent.filter((s) => lastResort(s))];
-      const reinforcements = cfg.anticipate ? anticipatedReinforcements(state, target) : [];
-      const opts: SiegeOptions = { planned: [...ctx.planned, ...reinforcements], exclude: ctx.ended };
+      const opts: SiegeOptions = { planned: ctx.planned, exclude: ctx.ended };
       const onAdd = cfg.anticipate ? (link: PlannedLink, planned: readonly PlannedLink[]) => anticipatedShield(state, target, link, planned) : undefined;
       const plan = siegePlan(state, ctx.owner, target, ordered, cfg.planMs, opts, onAdd);
       if (!plan) continue;

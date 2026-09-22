@@ -27,8 +27,8 @@
  * captures so that at least one keep reaches L2/L3 (`GROWER_MIN_TOWERS`).
  */
 import type { Command, GameState, Link, Tower } from '../sim/index';
-import { Rng, isUnderFire } from '../sim/index';
-import { atMaxLevel, hopsToOpponent, isCapped, ownedTowers, type Plan } from './common';
+import { Rng, capacityOf, isLinked, isUnderFire } from '../sim/index';
+import { atMaxLevel, genPerSecond, hopsToOpponent, isCapped, ownedTowers, underSiege, type Plan } from './common';
 import { attack, defend, maintain, newCtx, reclaimForAttack, supply, type Ctx, type RuleTrace } from './tactics';
 
 export type { RuleTrace };
@@ -46,6 +46,15 @@ export const HOPELESS_MS = 60_000;
 export const GROWER_MIN_TOWERS = 2;
 /** Rule 2: a neutral a rival already streams at scores this much worse (the flip is a race). */
 export const CONTEST_PENALTY_MS = 10_000;
+/**
+ * Rules 2–3 (AI-7a): a lone home (fewer than `GROWER_MIN_TOWERS` towers) that reaches its next level
+ * within this grows first — the level doubles its links and speeds every stream, so a capture that
+ * starts a few seconds later lands faster and a second one runs beside it (GDD §2.0b rule 10: grow
+ * now vs attack now). It still defends meanwhile, and never waits while under fire or under siege.
+ * Measured (50 levels × 5 seeds): 8 s speeds up levels 6, 7 and 41 by 10–12 s and slows none; 10 s
+ * costs level 4 1.6 s, 15 s slows a dozen levels (1, 2, 10, 13, 18, 33–35 by 8–26 s).
+ */
+export const GROW_FIRST_MS = 8_000;
 
 /**
  * The tower kept growing: highest level below its top, rearmost (most lane hops from an enemy tower),
@@ -68,6 +77,20 @@ export function grower(state: GameState, hops: ReadonlyMap<string, number>): Tow
   return best;
 }
 
+/**
+ * The lone home that grows before it expands: our only tower, below its top level, unlinked, not under
+ * fire or siege, and within `GROW_FIRST_MS` of its next level at its own growth rate.
+ */
+export function growsFirst(state: GameState, own: readonly Tower[]): Tower | undefined {
+  if (own.length >= GROWER_MIN_TOWERS) return undefined;
+  const home = own[0];
+  if (!home || atMaxLevel(home) || isLinked(state, home.id) || isUnderFire(state, home) || underSiege(state, home)) return undefined;
+  const gen = genPerSecond(home, state);
+  if (gen <= 0) return undefined;
+  const msToLevel = ((capacityOf(home, state) - home.units) / gen) * 1000;
+  return msToLevel <= GROW_FIRST_MS ? home : undefined;
+}
+
 /** Rule 0: a supply line goes on only as free production from a capped keep (reinforcements are kept by the engine). */
 function keepSupply(ctx: Ctx, source: Tower): boolean {
   return isCapped(ctx.state, source);
@@ -83,14 +106,15 @@ export function referencePlayerCommands(state: GameState, _rng: Rng, trace?: Rul
   const hops = hopsToOpponent(state, OWNER);
   const keep = grower(state, hops);
   const own = ownedTowers(state, OWNER);
+  const growing = growsFirst(state, own);
 
   for (const t of own) maintain(ctx, t, { hopelessMs: HOPELESS_MS, keepSupply });
-  for (const t of own) defend(ctx, t, { counterMs: COUNTER_PLAN_MS });
+  for (const t of own) defend(ctx, t, { counterMs: COUNTER_PLAN_MS, reclaimReinforcement: true });
   attack(ctx, {
     rule: 'capture',
     planMs: CAPTURE_PLAN_MS,
     targets: (t) => t.owner === 'neutral',
-    sources: (t) => t.id !== keep?.id,
+    sources: (t) => t.id !== keep?.id && t.id !== growing?.id,
     reclaim,
     holdCheck: true,
     contestPenaltyMs: CONTEST_PENALTY_MS,
@@ -99,6 +123,7 @@ export function referencePlayerCommands(state: GameState, _rng: Rng, trace?: Rul
     rule: 'attack',
     planMs: ATTACK_PLAN_MS,
     targets: (t) => t.owner !== 'neutral',
+    sources: (t) => t.id !== growing?.id,
     lastResort: (t) => t.id === keep?.id,
     reclaim,
     anticipate: true,

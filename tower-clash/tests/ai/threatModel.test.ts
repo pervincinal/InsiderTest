@@ -4,6 +4,7 @@ import { C, applyCommand, createState, step } from '../../src/sim/index';
 import type { GameState } from '../../src/sim/index';
 import {
   artilleryKillRate,
+  artilleryLossOn,
   emitRate,
   fallsAtMs,
   flipOwner,
@@ -13,6 +14,7 @@ import {
   reinforcePlan,
   siegeOf,
   siegePlan,
+  surplusWeight,
   walkingLandings,
 } from '../../src/ai/common';
 
@@ -365,5 +367,53 @@ describe('map reading', () => {
       obstacles: [wall(100, 700, 620, 700)],
     });
     expect(hopsToOpponent(walled, 'player').get('p')).toBe(Infinity);
+  });
+});
+
+describe('artillery is one budget per post, shared across lanes; clashes come before shots (AI-7c)', () => {
+  it('two L1 streams into a post lose 0.625/s each (0.75/s lands in total) and the sim flips the post as the model says', () => {
+    const state = duel({
+      towers: [
+        { id: 'p', x: 360, y: 1000, owner: 'player', units: 10, level: 1 },
+        { id: 'q', x: 60, y: 1000, owner: 'player', units: 10, level: 1 },
+        { id: 'g', x: 360, y: 400, owner: 'enemy1', units: 20, level: 1, kind: 'artillery' },
+      ],
+      enemies: [],
+    });
+    const mine = { owner: 'player' as const, from: 'p', to: 'g' };
+    const other = { owner: 'player' as const, from: 'q', to: 'g' };
+    expect(artilleryLossOn(state, mine, 1, [mine])).toBe(1); // alone: all of it dies (1 < 1.25)
+    expect(artilleryLossOn(state, mine, 1, [mine, other])).toBeCloseTo(0.625, 9);
+    expect(laneFlow(state, mine, [mine])!.rate).toBe(0);
+    expect(laneFlow(state, mine, [mine, other])!.rate).toBeCloseTo(0.375, 9);
+    expect(laneFlow(state, other, [mine, other])!.rate).toBeCloseTo(0.375, 9);
+    const predicted = siegeOf(state, state.towers['g']!, { planned: [mine, other] }).fallsAtMs;
+    expect(predicted).toBeLessThan(60_000); // the old per-lane model said "never"
+    link(state, 'player', 'p', 'g');
+    link(state, 'player', 'q', 'g');
+    const actual = flipTime(state, 'g');
+    expect(actual).toBeLessThan(60_000);
+    expect(Math.abs(actual - predicted) / actual).toBeLessThan(0.2);
+  });
+
+  it('a shield on the lane cancels our stream before our own artillery can shoot it: nothing lands, and the sim agrees', () => {
+    const state = duel({
+      towers: [
+        { id: 'p', x: 360, y: 1000, owner: 'player', units: 10, level: 1 },
+        { id: 'a', x: 250, y: 620, owner: 'player', units: 5, level: 1, kind: 'artillery' }, // 110 px off the p–e lane
+        { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 10, level: 1 },
+      ],
+      enemies: [],
+    });
+    const mine = { owner: 'player' as const, from: 'p', to: 'e' };
+    const theirs = { owner: 'enemy1' as const, from: 'e', to: 'p' };
+    expect(artilleryKillRate(state, state.roads['e-p']!, 'enemy1')).toBe(1.25); // our post covers the lane
+    expect(surplusWeight(state, mine, [mine, theirs])).toBe(0);
+    expect(laneFlow(state, mine, [mine, theirs])!.rate).toBe(0);
+    expect(laneFlow(state, mine, [mine])!.rate).toBe(1); // without the shield the post is ours: no loss
+    link(state, 'player', 'p', 'e');
+    link(state, 'enemy1', 'e', 'p');
+    expect(flipTime(state, 'e', 60_000)).toBe(Infinity);
+    expect(state.towers['e']!.units).toBeGreaterThanOrEqual(8); // the shield held: the odd unit slipped through at most
   });
 });

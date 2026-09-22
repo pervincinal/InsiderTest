@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { makeLevel, wall } from '../helpers';
 import { Rng, applyCommand, createState, step } from '../../src/sim/index';
 import type { Command, GameState, TowerDef } from '../../src/sim/index';
-import { ATTACK_PLAN_MS, CAPTURE_PLAN_MS, GROWER_MIN_TOWERS, grower, hopsToOpponent, referencePlayerCommands } from '../../src/ai/index';
+import { ATTACK_PLAN_MS, CAPTURE_PLAN_MS, GROWER_MIN_TOWERS, GROW_FIRST_MS, grower, growsFirst, hopsToOpponent, ownedTowers, referencePlayerCommands } from '../../src/ai/index';
 import { CONTEST_PENALTY_MS, HOPELESS_MS } from '../../src/ai/referencePlayer';
 import { RACE_MARGIN_MS } from '../../src/ai/tactics';
+import { MIN_LANDING_SHARE } from '../../src/ai/common';
 
 /*
  * Reference player (GDD §2.5, rules v3). Every test asserts the exact commands of one tick on a small
@@ -326,5 +327,134 @@ describe('purity', () => {
       { obstacles: [wall(100, 700, 620, 700)] },
     );
     expect(bot(state)).toEqual([]);
+  });
+});
+
+describe('grow first (AI-7a): a lone home within GROW_FIRST_MS of its next level grows before it expands', () => {
+  it('an L1 at 18 (7 s to L2) opens no capture; at 12 (13 s) it captures at once', () => {
+    expect(GROW_FIRST_MS).toBe(8_000);
+    const near = game([
+      { id: 'home', x: 360, y: 1100, owner: 'player', units: 18 },
+      { id: 'n', x: 60, y: 1100, owner: 'neutral', units: 4 },
+      { id: 'foe', x: 360, y: 300, owner: 'enemy1', units: 8 },
+    ]);
+    expect(growsFirst(near, ownedTowers(near, 'player'))?.id).toBe('home');
+    expect(bot(near)).toEqual([]);
+    const far = game([
+      { id: 'home', x: 360, y: 1100, owner: 'player', units: 12 },
+      { id: 'n', x: 60, y: 1100, owner: 'neutral', units: 4 },
+      { id: 'foe', x: 360, y: 300, owner: 'enemy1', units: 8 },
+    ]);
+    expect(growsFirst(far, ownedTowers(far, 'player'))).toBeUndefined();
+    expect(bot(far)).toEqual([link('home', 'n')]);
+  });
+
+  it('grows through to the level and then streams at the L2 rate with two links', () => {
+    const state = game([
+      { id: 'home', x: 360, y: 1100, owner: 'player', units: 18 },
+      { id: 'n', x: 60, y: 1100, owner: 'neutral', units: 4 },
+      { id: 'm', x: 660, y: 1100, owner: 'neutral', units: 4 },
+      { id: 'foe', x: 360, y: 300, owner: 'enemy1', units: 8 },
+    ]);
+    let issued: Command[] = [];
+    while (state.time < 8_000 && issued.length === 0) {
+      if (state.time % 500 === 0) {
+        issued = bot(state);
+        for (const c of issued) applyCommand(state, c);
+      }
+      step(state);
+    }
+    expect(state.towers['home']!.level).toBe(2);
+    expect(state.time).toBeLessThanOrEqual(7_500);
+    expect(issued).toEqual([link('home', 'm')]); // one new stream per tower per tick (readable ribbons)
+    while (state.time % 500 !== 0) step(state);
+    expect(bot(state)).toEqual([link('home', 'n')]); // the second link the level allows
+  });
+
+  it('never waits under siege, and not at all once we hold GROWER_MIN_TOWERS towers', () => {
+    const sieged = game([
+      { id: 'home', x: 360, y: 1100, owner: 'player', units: 18 },
+      { id: 'n', x: 60, y: 1100, owner: 'neutral', units: 4 },
+      { id: 'foe', x: 360, y: 500, owner: 'enemy1', units: 8 },
+    ]);
+    enemyLink(sieged, 'foe', 'home');
+    expect(growsFirst(sieged, ownedTowers(sieged, 'player'))).toBeUndefined();
+    expect(bot(sieged).length).toBeGreaterThan(0);
+    const two = game([
+      { id: 'home', x: 360, y: 1100, owner: 'player', units: 18 },
+      { id: 'side', x: 660, y: 1100, owner: 'player', units: 18 },
+      { id: 'n', x: 60, y: 1100, owner: 'neutral', units: 4 },
+      { id: 'foe', x: 360, y: 300, owner: 'enemy1', units: 8 },
+    ]);
+    expect(growsFirst(two, ownedTowers(two, 'player'))).toBeUndefined();
+  });
+});
+
+describe('shield reclaims a reinforcement (AI-7b): a falling tower saves itself before its neighbour', () => {
+  /** `a` reinforces `b` (which falls to `f` without it); `e` streams at `a`; no lane b–e (rock), so no counter. */
+  function fixture(): GameState {
+    const state = game(
+      [
+        { id: 'a', x: 360, y: 1000, owner: 'player', units: 5 },
+        { id: 'b', x: 60, y: 1000, owner: 'player', units: 3 },
+        { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 10 },
+        { id: 'f', x: 60, y: 400, owner: 'enemy1', units: 10 },
+      ],
+      { obstacles: [{ kind: 'rock', points: [{ x: 210, y: 700 }] }] },
+    );
+    expect(state.roads['b-e']).toBeUndefined();
+    expect(state.roads['a-f']).toBeUndefined();
+    enemyLink(state, 'f', 'b');
+    enemyLink(state, 'e', 'a');
+    applyCommand(state, link('b', 'f')); // b's only link shields its lane: it cannot reinforce a
+    applyCommand(state, link('a', 'b'));
+    return state;
+  }
+
+  it('drops a->b (a reinforcement) for the shield a->e when the shield makes `a` hold', () => {
+    const state = fixture();
+    const rules: string[] = [];
+    const cmds = bot(state, (r) => rules.push(r));
+    expect(cmds).toEqual([unlink('a', 'b'), link('a', 'e')]);
+    expect(rules).toEqual(['shield', 'shield']);
+  });
+
+  it('keeps the reinforcement when the shield would not save `a` (out-rated: the stream is cancelled)', () => {
+    const state = fixture();
+    state.towers['e']!.level = 2; // 1.43/s against our 1/s: a shield cannot cancel it
+    const cmds = bot(state);
+    expect(cmds).not.toContainEqual(unlink('a', 'b'));
+    expect(cmds).not.toContainEqual(link('a', 'e'));
+  });
+});
+
+describe('partial shields and the landing share (2026-09-22, lean / thinWalls findings)', () => {
+  it('keeps an out-rated counter-stream: it still cancels 1:1, so only the enemy surplus lands', () => {
+    const state = game([
+      { id: 'p', x: 360, y: 1000, owner: 'player', units: 10, level: 1 },
+      { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 10, level: 2 }, // 1.43/s against our 1/s
+    ]);
+    enemyLink(state, 'e', 'p');
+    applyCommand(state, link('p', 'e'));
+    expect(bot(state)).toEqual([]); // not dropped as "lands nothing"
+    expect(MIN_LANDING_SHARE).toBe(0.25);
+  });
+
+  it('ends an attack that lands less than MIN_LANDING_SHARE of what it emits (an L2 stream alone into a gun post)', () => {
+    const state = game([
+      { id: 'p', x: 360, y: 1000, owner: 'player', units: 30, level: 2 }, // 1.43/s, the post shoots 1.25/s: 13 % lands
+      { id: 'g', x: 360, y: 400, owner: 'enemy1', units: 2, level: 1, kind: 'artillery' },
+    ]);
+    applyCommand(state, link('p', 'g'));
+    expect(bot(state)).toEqual([unlink('p', 'g')]);
+    // With a second stream sharing the post's fire each lands 37 %: both stay.
+    const two = game([
+      { id: 'p', x: 360, y: 1000, owner: 'player', units: 20, level: 1 },
+      { id: 'q', x: 60, y: 1000, owner: 'player', units: 20, level: 1 },
+      { id: 'g', x: 360, y: 400, owner: 'enemy1', units: 2, level: 1, kind: 'artillery' },
+    ]);
+    applyCommand(two, link('p', 'g'));
+    applyCommand(two, link('q', 'g'));
+    expect(bot(two).filter((c) => c.type === 'unlink')).toEqual([]);
   });
 });

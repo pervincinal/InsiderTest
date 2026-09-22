@@ -6,7 +6,7 @@ import type { Command, EnemyDef, GameState, Owner } from '../sim/index';
 import { Rng } from '../sim/index';
 import { opportunistCommands, rusherCommands, turtleCommands } from './personalities';
 
-export { referencePlayerCommands, grower, CAPTURE_PLAN_MS, ATTACK_PLAN_MS, GROWER_MIN_TOWERS } from './referencePlayer';
+export { referencePlayerCommands, grower, growsFirst, CAPTURE_PLAN_MS, ATTACK_PLAN_MS, GROWER_MIN_TOWERS, GROW_FIRST_MS } from './referencePlayer';
 export type { RuleTrace } from './tactics';
 export { RETREAT_UNITS } from './tactics';
 export {
@@ -43,6 +43,8 @@ export {
   siegePlan,
   reinforcePlan,
   artilleryKillRate,
+  artilleryLossOn,
+  ARTILLERY_FIRE_RATE,
   FALLS_HORIZON_MS,
 } from './common';
 export type { Neighbour, Siege, Flow, Plan, PlannedLink } from './common';

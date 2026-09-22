@@ -7,9 +7,10 @@
  * Threat model (GDD §2.0b rule 10). A stream from `from` lands `linkRate(from)` weight per second on its
  * target after the lane's travel time — the source's garrison does not matter, only its kind, level and
  * how many links it may run. On one lane two hostile streams in opposite directions cancel 1:1 in weight
- * (only the surplus lands); artillery in range of the lane kills `1000 / ARTILLERY_COOLDOWN_MS` units per
- * second of anything hostile to it; mines eat their charges once. From its first hostile landing a tower
- * is under fire and regenerates nothing (a stream landing less than `UNDER_FIRE_MS` apart keeps it so),
+ * (only the surplus lands); an artillery post kills `1000 / ARTILLERY_COOLDOWN_MS` units per second of
+ * anything hostile within its range, on any lane — one budget shared by every stream it reaches; mines
+ * eat their charges once. From its first hostile landing a tower is under fire and regenerates nothing
+ * (a stream landing less than `UNDER_FIRE_MS` apart keeps it so),
  * so a target with `units` falls `(units + 1) / net` seconds after the landings start (fortress: two
  * weight per defender). `siegeOf` walks exactly that: the streams already drawn plus the links a planner
  * is about to issue, the units already walking toward the tower, the tower's regeneration between hostile
@@ -219,21 +220,79 @@ export function projectedUnits(tower: Tower, afterMs: number, state: Visible): n
   return Math.min(capacityOf(tower, state), tower.units + Math.floor(producedIn(tower, afterMs, state)));
 }
 
-/**
- * Units per second hostile artillery kills on a lane: every owned artillery post of another owner within
- * `ARTILLERY_RANGE` of the segment fires once per `ARTILLERY_COOLDOWN_MS` (1.25/s) at whatever is in range.
- * An L1 barracks stream (1/s) into an artillery post therefore never lands; an L2 stream nets 0.18/s.
- */
-export function artilleryKillRate(state: Pick<GameState, 'towers'>, road: Road, owner: Owner): number {
+/** Hostile artillery posts (owned by another owner than `owner`) whose range covers the lane. */
+export function artilleryCovering(state: Pick<GameState, 'towers'>, road: Road, owner: Owner): Tower[] {
   const a = road.points[0]!;
   const b = road.points[road.points.length - 1]!;
-  let rate = 0;
+  const out: Tower[] = [];
   for (const id in state.towers) {
     const t = state.towers[id]!;
     if (t.kind !== 'artillery' || t.owner === 'neutral' || t.owner === owner) continue;
-    if (distPointSegment(t, a, b) <= C.ARTILLERY_RANGE) rate += 1000 / C.ARTILLERY_COOLDOWN_MS;
+    if (distPointSegment(t, a, b) <= C.ARTILLERY_RANGE) out.push(t);
   }
-  return rate;
+  return out;
+}
+
+/** Kills per second one artillery post fires: once per `ARTILLERY_COOLDOWN_MS` (1.25/s) at any hostile unit within `ARTILLERY_RANGE`. */
+export const ARTILLERY_FIRE_RATE = 1000 / C.ARTILLERY_COOLDOWN_MS;
+
+/**
+ * Gross fire covering a lane: every owned artillery post of another owner within `ARTILLERY_RANGE` of
+ * the segment, 1.25 kills/s each. A post shoots at whatever hostile unit is in range, on **any** lane,
+ * so this is not what one stream loses — `artilleryLossOn` shares each post's fire among the streams
+ * it reaches.
+ */
+export function artilleryKillRate(state: Pick<GameState, 'towers'>, road: Road, owner: Owner): number {
+  return artilleryCovering(state, road, owner).length * ARTILLERY_FIRE_RATE;
+}
+
+/**
+ * Weight per second of `link`'s stream that walks past the lane's clashes: its emit weight minus the
+ * weight of a hostile stream running the other way on the same lane (`all`: links on the map plus the
+ * planned ones). Units clash 1:1 in weight before anything else happens to them, so only the surplus of
+ * the faster stream walks on toward the target — and toward the artillery covering the far end.
+ */
+export function surplusWeight(state: GameState, link: PlannedLink, all: readonly PlannedLink[]): number {
+  const from = state.towers[link.from];
+  if (!from) return 0;
+  const raw = emitRate(state, from, link.owner) * unitWeightOf(from);
+  if (raw <= 0) return 0;
+  const reverse = all.find((l) => l.from === link.to && l.to === link.from && l.owner !== link.owner);
+  const rf = reverse ? state.towers[reverse.from] : undefined;
+  const back = reverse && rf ? emitRate(state, rf, reverse.owner) * unitWeightOf(rf) : 0;
+  return Math.max(0, raw - back);
+}
+
+/**
+ * Units per second `link`'s stream (`count` units/s reaching the guns, i.e. its surplus after the lane's
+ * clashes) loses to artillery. Each hostile post covering its lane kills at most 1.25/s in total, split
+ * among every stream in `all` (links on the map plus the planned ones; `link` itself counts once) whose
+ * surplus reaches the post's range, in proportion to their rates, and never more than the stream
+ * brings. One L1 stream (1/s) into a post: all of it dies; two L1 streams: 0.625/s each, so 0.75/s
+ * lands; an L3 (2/s) alone nets 0.75/s. The sim (rules v3 rule 7) fires at the nearest hostile unit
+ * regardless of lane, so a post's fire is one budget, not one per lane.
+ */
+export function artilleryLossOn(state: GameState, link: PlannedLink, count: number, all: readonly PlannedLink[]): number {
+  if (count <= 0) return 0;
+  const road = roadBetween(state, link.from, link.to);
+  if (!road) return 0;
+  const posts = artilleryCovering(state, road, link.owner);
+  if (posts.length === 0) return 0;
+  const isSelf = (l: PlannedLink): boolean => l.from === link.from && l.to === link.to && l.owner === link.owner;
+  let loss = 0;
+  for (const post of posts) {
+    let total = count;
+    for (const l of all) {
+      if (l.owner === post.owner || isSelf(l)) continue;
+      const from = state.towers[l.from];
+      const lane = roadBetween(state, l.from, l.to);
+      if (!from || !lane) continue;
+      if (distPointSegment(post, lane.points[0]!, lane.points[lane.points.length - 1]!) > C.ARTILLERY_RANGE) continue;
+      total += surplusWeight(state, l, all) / unitWeightOf(from);
+    }
+    loss += total > 0 ? Math.min(count, (ARTILLERY_FIRE_RATE * count) / total) : 0;
+  }
+  return Math.min(count, loss);
 }
 
 /** What one stream lands on its target once it is flowing. */
@@ -249,13 +308,15 @@ export interface Flow {
   countRate: number;
   /** True when the stream is hostile to its target's current owner. */
   hostile: boolean;
+  /** Weight per second the source emits (before clashes and guns). */
+  emitted: number;
 }
 
 /**
- * The stream of `link` as it lands: emitted count − artillery kills on the lane, in weight, minus the
- * weight of a hostile stream running the other way on the same lane (units clash 1:1, the surplus
- * walks on). `all` is every link on the map plus the planned ones (for the opposite stream). Undefined
- * when the lane does not exist or the source emits nothing.
+ * The stream of `link` as it lands: emitted weight minus a hostile stream running the other way on the
+ * same lane (units clash 1:1, the surplus walks on), minus what the artillery covering the lane kills
+ * of that surplus. `all` is every link on the map plus the planned ones (for the opposite stream and
+ * the posts' shared fire). Undefined when the lane does not exist or the source emits nothing.
  */
 export function laneFlow(state: GameState, link: PlannedLink, all: readonly PlannedLink[]): Flow | undefined {
   const from = state.towers[link.from];
@@ -267,22 +328,17 @@ export function laneFlow(state: GameState, link: PlannedLink, all: readonly Plan
   if (count <= 0) return undefined;
   const w = unitWeightOf(from);
   const raw = count * w;
-  let rate = Math.max(0, count - artilleryKillRate(state, road, link.owner)) * w;
-  const reverse = all.find((l) => l.from === link.to && l.to === link.from && l.owner !== link.owner);
-  if (reverse) {
-    const rf = state.towers[reverse.from];
-    if (rf) {
-      const rc = Math.max(0, emitRate(state, rf, reverse.owner) - artilleryKillRate(state, road, reverse.owner));
-      rate = Math.max(0, rate - rc * unitWeightOf(rf));
-    }
-  }
+  // Clashes first: a hostile stream the other way cancels ours 1:1 in weight; only the surplus walks on,
+  // and only the surplus is what the artillery covering the lane gets to shoot.
+  const surplus = surplusWeight(state, link, all) / w;
+  const rate = Math.max(0, surplus - artilleryLossOn(state, link, surplus, all)) * w;
   const mines = mineChargesOn(state, road);
   // Emit phase: an existing link has accumulated `emitAccMs` toward its next unit, a fresh one starts at 0.
   const interval = streamIntervalMs(from, state);
   const existing = state.links.find((l) => l.from === link.from && l.to === link.to && l.owner === link.owner);
   const phase = Math.max(0, interval - (existing?.emitAccMs ?? 0)) / (hasOverdrive(state, link.owner) ? C.OVERDRIVE_MUL : 1);
   const startMs = phase + travelMsFor(state, road, link.owner, unitKindOf(from)) + (mines > 0 ? (mines / raw) * 1000 : 0);
-  return { link, startMs, rate, countRate: rate / w, firstWeight: (w * rate) / raw, hostile: link.owner !== to.owner };
+  return { link, startMs, rate, countRate: rate / w, firstWeight: (w * rate) / raw, hostile: link.owner !== to.owner, emitted: raw };
 }
 
 /** ms until a walking unit lands. */
@@ -549,6 +605,19 @@ export function bySpeed(state: GameState, target: Tower, owner: Owner): (p: Towe
  * (no lane, nothing to emit, cancelled or shot down on the way) is skipped. Undefined when even all of
  * them cannot break it in time — then no link is worth issuing (GDD §2.5: never waste a link).
  */
+/**
+ * A stream that lands less than this share of what it emits is a waste of the source's growth (GDD
+ * §2.5 "never waste a link"): an L2 stream into an artillery post under lean lands 0.04 of its 1.29/s.
+ * `maintain` ends such a stream unless it shields. (Planners keep the `rate > 0` test: a source that
+ * lands little alone may land enough once the plan's other streams share the guns' fire.)
+ */
+export const MIN_LANDING_SHARE = 0.25;
+
+/** True when the flow lands at least `MIN_LANDING_SHARE` of what its source emits. */
+export function landsEnough(flow: Flow): boolean {
+  return flow.rate > 0 && flow.rate >= MIN_LANDING_SHARE * flow.emitted;
+}
+
 export function siegePlan(
   state: GameState,
   owner: Owner,
