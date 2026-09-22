@@ -8,8 +8,8 @@
   "lesson_az": "Divar xətti kəsir: daşın içindən axıda bilməzsən, onu dolan — bir tərəfi tut, o birindən irəlilə",
   "lesson_ru": "Стена перекрывает линию: сквозь камень поток не идёт, так что обойди её — держи одну сторону, дави по другой",
   "lesson_tr": "Duvar çizgiyi keser: taşın içinden akış geçmez, etrafından dolaş — bir yanı tut, diğerinden bastır",
-  "star3": 35000,
-  "star2": 70000,
+  "star3": 30000,
+  "star2": 65000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.2}
   ],

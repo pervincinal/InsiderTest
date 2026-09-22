@@ -8,8 +8,8 @@
   "lesson_az": "Qəsrin 2-ci səviyyədə başlayır. Tank bir bədəndə beş əsgərdir: mina və ya mərmi tanka dəstədən qat-qat az başa gəlir, ona görə zavodun axınını minalı xətlərdən keçir, piyada arxadan gəlsin",
   "lesson_ru": "Твоя цитадель начинает на уровне 2. Танк — пять бойцов в одном теле: мина или снаряд стоят танку куда меньше, чем колонне, так что кати поток завода по минированным линиям, а пехота пусть идёт следом",
   "lesson_tr": "Kalen 2. seviyede başlar. Tank tek bedende beş askerdir: mayın ya da mermi tanka koldan çok daha az kayıp verdirir, o yüzden fabrikanın akışını mayınlı çizgilerden sür, piyade arkadan gelsin",
-  "star3": 40000,
-  "star2": 80000,
+  "star3": 30000,
+  "star2": 60000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.7},
     {"owner": "enemy2", "personality": "opportunist", "aggression": 0.7},

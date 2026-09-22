@@ -8,8 +8,8 @@
   "lesson_az": "Qəsrin 2-ci səviyyədə başlayır. Düşmən topları hər atəşlə bir əsgər öldürür, nazik axın heç vaxt çatmır: 3-cü səviyyəyə böyü, bütün xətlərini bir top postuna yığ, sonra onun atəşini arxadakı qəsrlərə çevir",
   "lesson_ru": "Твоя цитадель начинает на уровне 2. Вражеские пушки убивают по бойцу за выстрел, и тонкий поток не доходит: дорасти до уровня 3, собери все линии на одном орудийном посту, а потом направь его огонь на замки позади",
   "lesson_tr": "Kalen 2. seviyede başlar. Düşman topları her atışta bir asker öldürür, ince akış asla varmaz: 3. seviyeye büyü, tüm çizgilerini tek bir top mevzisine yığ, sonra ateşini arkadaki kalelere çevir",
-  "star3": 85000,
-  "star2": 170000,
+  "star3": 55000,
+  "star2": 110000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.65},
     {"owner": "enemy2", "personality": "rusher", "aggression": 0.65},

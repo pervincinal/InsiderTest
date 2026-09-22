@@ -8,8 +8,8 @@
   "lesson_az": "Qəsrin 2-ci səviyyədə başlayır. Yenidən dövülmüş tac: üç kral, çaylar, minalar, toplar və tanklar — hamısı bir anda. Xəritəni oxu, qazana biləcəyin tək döyüşü seç və onu hər dəfə qazan",
   "lesson_ru": "Твоя цитадель начинает на уровне 2. Корона, отлитая вновь: три короля, реки, мины, пушки и танки — всё сразу. Читай карту, выбирай тот единственный бой, что можешь выиграть, и выигрывай его каждый раз",
   "lesson_tr": "Kalen 2. seviyede başlar. Yeniden dövülen taç: üç kral, nehirler, mayınlar, toplar ve tanklar — hepsi bir arada. Haritayı oku, kazanabileceğin tek savaşı seç ve onu her seferinde kazan",
-  "star3": 90000,
-  "star2": 180000,
+  "star3": 55000,
+  "star2": 110000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.9},
     {"owner": "enemy2", "personality": "opportunist", "aggression": 0.9},

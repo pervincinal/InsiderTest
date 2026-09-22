@@ -8,8 +8,8 @@
   "lesson_az": "Artilleriya mənzilindən keçən hər əsgəri vurur: yanından keçməzdən əvvəl postu al və ya yolu dolan",
   "lesson_ru": "Артиллерия бьёт по всем, кто проходит в её радиусе: возьми пост, прежде чем идти мимо, или обойди",
   "lesson_tr": "Topçu menzilinden geçen her askeri vurur: önünden geçmeden önce mevziyi al ya da etrafından dolaş",
-  "star3": 45000,
-  "star2": 90000,
+  "star3": 20000,
+  "star2": 40000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.4}
   ],

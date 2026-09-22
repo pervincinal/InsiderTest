@@ -8,8 +8,8 @@
   "lesson_az": "Qəsrin 2-ci səviyyədə başlayır. Bir geniş keçid, üç rəqib: hər şey ortadan keçir, ona görə sahili iki qülləylə tut və keçməzdən əvvəl qoy üç kral orada bir-birilə üzləşsin",
   "lesson_ru": "Твоя цитадель начинает на уровне 2. Один широкий брод, три соперника: всё идёт через середину, так что держи берег двумя башнями и дай трём королям сойтись там, прежде чем переходить",
   "lesson_tr": "Kalen 2. seviyede başlar. Tek geniş geçit, üç rakip: her şey ortadan geçer, o yüzden kıyıyı iki kuleyle tut ve sen geçmeden önce üç kral orada birbiriyle karşılaşsın",
-  "star3": 60000,
-  "star2": 120000,
+  "star3": 40000,
+  "star2": 80000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.6},
     {"owner": "enemy2", "personality": "opportunist", "aggression": 0.6},

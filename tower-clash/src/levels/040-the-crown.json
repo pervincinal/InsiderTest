@@ -8,8 +8,8 @@
   "lesson_az": "Qəsrin 2-ci səviyyədə başlayır. Tac: öyrəndiyin hər şey. Genişlən, keçidi qoru, minaları ağılla ödə, iki qalanı bir-bir qır və üç kral bir-birini tükədəndə tacı götür",
   "lesson_ru": "Твоя цитадель начинает на уровне 2. Корона: всё, чему ты научился. Расширяйся, стереги брод, разумно плати минам, ломай две крепости по одной и забери корону, когда три короля вымотают друг друга",
   "lesson_tr": "Kalen 2. seviyede başlar. Taç: öğrendiğin her şey. Genişle, geçidi koru, mayınları akıllıca öde, iki kaleyi teker teker kır ve üç kral birbirini tüketince tacı al",
-  "star3": 95000,
-  "star2": 180000,
+  "star3": 50000,
+  "star2": 100000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.8},
     {"owner": "enemy2", "personality": "opportunist", "aggression": 0.8},

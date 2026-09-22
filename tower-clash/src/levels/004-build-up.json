@@ -8,8 +8,8 @@
   "lesson_az": "Qoy qüllən dolsun: 25 əsgərdə özü yüksəlir, daha sürətli axıdır və iki axın apara bilir. Düşmən tısbağadır: onunla yarışma, ondan çox istehsal et",
   "lesson_ru": "Дай башне наполниться: при 25 бойцах она сама растёт, льёт быстрее и ведёт два потока. Враг сидит в обороне — не гонись, а перепроизведи его",
   "lesson_tr": "Kulen dolsun: 25 askerde kendi kendine yükselir, daha hızlı akıtır ve iki akış sürer. Düşman kaplumbağa: yarışma, ondan çok üret",
-  "star3": 40000,
-  "star2": 80000,
+  "star3": 25000,
+  "star2": 50000,
   "enemies": [
     {"owner": "enemy1", "personality": "turtle", "aggression": 0.3}
   ],

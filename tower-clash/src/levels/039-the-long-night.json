@@ -8,8 +8,8 @@
   "lesson_az": "Qəsrin 2-ci səviyyədə başlayır. Tısbağalara qarşı səbir: yarışsan, səndən çox tikirlər, ona görə qoy qüllələrin divar arxasında 3-cü səviyyəyə dolsun və yalnız onlardan iki dəfə böyük olanda vur",
   "lesson_ru": "Твоя цитадель начинает на уровне 2. Терпение против черепах: в гонке они перестроят тебя, так что дай башням наполниться до уровня 3 за стенами и бей лишь когда ты вдвое больше их",
   "lesson_tr": "Kalen 2. seviyede başlar. Kaplumbağalara karşı sabır: yarışırsan senden çok inşa ederler, o yüzden kulelerin surların ardında 3. seviyeye dolsun ve ancak onların iki katı olunca vur",
-  "star3": 100000,
-  "star2": 180000,
+  "star3": 80000,
+  "star2": 160000,
   "enemies": [
     {"owner": "enemy1", "personality": "turtle", "aggression": 0.75},
     {"owner": "enemy2", "personality": "turtle", "aggression": 0.75},
@@ -23,8 +23,8 @@
     {"id": "nw", "x": 150, "y": 720, "owner": "neutral", "units": 12},
     {"id": "ne", "x": 570, "y": 720, "owner": "neutral", "units": 12},
     {"id": "yellow", "x": 360, "y": 640, "owner": "enemy3", "units": 10, "level": 1, "kind": "barracks"},
-    {"id": "red", "x": 150, "y": 460, "owner": "enemy1", "units": 12, "level": 1, "kind": "fortress"},
-    {"id": "green", "x": 570, "y": 460, "owner": "enemy2", "units": 12, "level": 1, "kind": "fortress"},
+    {"id": "red", "x": 150, "y": 460, "owner": "enemy1", "units": 4, "level": 1, "kind": "fortress"},
+    {"id": "green", "x": 570, "y": 460, "owner": "enemy2", "units": 4, "level": 1, "kind": "fortress"},
     {"id": "crown", "x": 360, "y": 280, "owner": "neutral", "units": 12}
   ],
   "obstacles": [

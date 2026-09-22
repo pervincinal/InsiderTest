@@ -8,8 +8,8 @@
   "lesson_az": "Qalanı ac qoy: əvvəl onu bəsləyən kazarmanı al, sonra divarlar axınlarına tab gətirmir",
   "lesson_ru": "Замори крепость голодом: сначала возьми казарму, что её кормит, и стены падут под твоими потоками",
   "lesson_tr": "Kaleyi aç bırak: önce onu besleyen kışlayı al, sonra surlar akışlarına dayanamaz",
-  "star3": 35000,
-  "star2": 70000,
+  "star3": 30000,
+  "star2": 60000,
   "enemies": [
     {"owner": "enemy1", "personality": "opportunist", "aggression": 0.4}
   ],

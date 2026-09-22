@@ -8,8 +8,8 @@
   "lesson_az": "İki rəqib arasındakı neytral qalanı al: sənin divarlarında onların iki hücumçusu sənin birinə dəyər, ona görə sən böyüyərkən qoy ikisi də ona çırpılsın",
   "lesson_ru": "Возьми нейтральную крепость между двумя соперниками: на твоих стенах два их атакующих стоят одного твоего, так что пусть оба бьются о неё, пока ты растёшь",
   "lesson_tr": "İki rakip arasındaki tarafsız kaleyi al: senin surlarında onların iki saldırganı senin birine bedel, sen büyürken ikisi de ona çarpsın",
-  "star3": 45000,
-  "star2": 90000,
+  "star3": 35000,
+  "star2": 70000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.7},
     {"owner": "enemy2", "personality": "opportunist", "aggression": 0.7}

@@ -8,8 +8,8 @@
   "lesson_az": "Qəsrin 2-ci səviyyədə başlayır. Sənin topların üçə qarşı ən yaxşı müdafiədir: artilleriya postlarını saxla və qoy düşmənlər onların atəşinə yerisin",
   "lesson_ru": "Твоя цитадель начинает на уровне 2. Свои пушки — лучшая защита от троих: держи артиллерийские посты и пусть враги маршируют под их огонь",
   "lesson_tr": "Kalen 2. seviyede başlar. Sahip olduğun toplar üçe karşı en iyi savunmadır: topçu mevzilerini tut ve düşmanlar ateşlerine yürüsün",
-  "star3": 40000,
-  "star2": 100000,
+  "star3": 30000,
+  "star2": 60000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.7},
     {"owner": "enemy2", "personality": "opportunist", "aggression": 0.7},

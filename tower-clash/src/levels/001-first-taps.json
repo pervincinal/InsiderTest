@@ -11,11 +11,11 @@
   "star3": 30000,
   "star2": 60000,
   "enemies": [
-    {"owner": "enemy1", "personality": "rusher", "aggression": 0.2}
+    {"owner": "enemy1", "personality": "turtle", "aggression": 0.2}
   ],
   "towers": [
     {"id": "home", "x": 200, "y": 1100, "owner": "player", "units": 12, "level": 1, "kind": "barracks"},
-    {"id": "camp", "x": 520, "y": 760, "owner": "neutral", "units": 5},
-    {"id": "foe", "x": 200, "y": 340, "owner": "enemy1", "units": 8, "level": 1, "kind": "barracks"}
+    {"id": "camp", "x": 340, "y": 1000, "owner": "neutral", "units": 0},
+    {"id": "foe", "x": 250, "y": 830, "owner": "enemy1", "units": 3, "level": 1, "kind": "barracks"}
   ]
 }

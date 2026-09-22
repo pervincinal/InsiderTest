@@ -8,10 +8,10 @@
   "lesson_az": "Neytral qalanı ələ keçir və saxla: öz divarlarında hər müdafiəçi ikiqat sayılır",
   "lesson_ru": "Захвати нейтральную крепость и держи её: на своих стенах каждый защитник считается за двоих",
   "lesson_tr": "Tarafsız kaleyi ele geçir ve tut: kendi surlarında her savunmacı iki sayılır",
-  "star3": 35000,
-  "star2": 70000,
+  "star3": 25000,
+  "star2": 50000,
   "enemies": [
-    {"owner": "enemy1", "personality": "rusher", "aggression": 0.4}
+    {"owner": "enemy1", "personality": "rusher", "aggression": 0.3}
   ],
   "towers": [
     {"id": "home", "x": 360, "y": 1150, "owner": "player", "units": 30, "level": 2, "kind": "barracks"},

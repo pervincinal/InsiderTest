@@ -8,8 +8,8 @@
   "lesson_az": "Qəsrin 2-ci səviyyədə başlayır. Üç cəbhə, bir ordu: ikisini qala və toplarla bağla, üçüncüdə isə ən zəif kralın durduğu yerdə hücum et",
   "lesson_ru": "Твоя цитадель начинает на уровне 2. Три фронта, одна армия: два из них закрой крепостью и пушками, а бей на третьем, где стоит слабейший король",
   "lesson_tr": "Kalen 2. seviyede başlar. Üç cephe, tek ordu: ikisini kale ve toplarla kapat, üçüncüde ise en zayıf kralın durduğu yerde saldır",
-  "star3": 55000,
-  "star2": 110000,
+  "star3": 40000,
+  "star2": 80000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.75},
     {"owner": "enemy2", "personality": "opportunist", "aggression": 0.75},

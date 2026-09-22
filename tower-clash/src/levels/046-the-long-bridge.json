@@ -8,8 +8,8 @@
   "lesson_az": "Qəsrin 2-ci səviyyədə başlayır. Qəsrinin qabağındakı çayın bir keçidi var: əvvəl o biri sahili al və bəslə, çünki yolda duran qüllə arxasındakı hər xətti bağlayır",
   "lesson_ru": "Твоя цитадель начинает на уровне 2. У реки перед цитаделью один брод: возьми берег за ним первым и подпитывай его, ведь башня на пути закрывает все линии за собой",
   "lesson_tr": "Kalen 2. seviyede başlar. Kalenin önündeki nehrin tek geçidi var: önce karşı kıyıyı al ve besle, çünkü yoldaki kule arkasındaki her çizgiyi kapatır",
-  "star3": 70000,
-  "star2": 140000,
+  "star3": 50000,
+  "star2": 100000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.75},
     {"owner": "enemy2", "personality": "opportunist", "aggression": 0.75},

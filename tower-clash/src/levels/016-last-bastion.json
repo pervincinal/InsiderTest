@@ -8,8 +8,8 @@
   "lesson_az": "Qəsrə qarşı iki cəbhə: ortadakı qalanı saxla ki, hücum divarlarında qırılsın, topları cinahdan susdur, sonra hamısını qəsrə yönəlt",
   "lesson_ru": "Два фронта против цитадели: держи свою крепость в центре, чтобы натиск разбился о её стены, заглуши пушки с фланга и сходись к цитадели",
   "lesson_tr": "Kaleye karşı iki cephe: ortadaki hisarı tut ki hücum surlarında kırılsın, topları yandan sustur, sonra hep birlikte kaleye yüklen",
-  "star3": 50000,
-  "star2": 100000,
+  "star3": 25000,
+  "star2": 50000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.5}
   ],

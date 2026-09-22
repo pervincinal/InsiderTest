@@ -8,8 +8,8 @@
   "lesson_az": "Düşmənin iki qülləsi var: əvvəl zəif forpostu al, sonra bazaya bütün qüllələrindən vur — divar yalnız evdən gələn düz xətti kəsir",
   "lesson_ru": "У врага две башни: сначала возьми слабый форпост, потом бей по базе всеми своими башнями — стена перекрывает лишь прямую линию от дома",
   "lesson_tr": "Düşmanın iki kulesi var: önce zayıf karakolu al, sonra üsse sahip olduğun her kuleden vur — duvar yalnız evden gelen düz çizgiyi keser",
-  "star3": 45000,
-  "star2": 90000,
+  "star3": 25000,
+  "star2": 50000,
   "enemies": [
     {"owner": "enemy1", "personality": "turtle", "aggression": 0.3}
   ],

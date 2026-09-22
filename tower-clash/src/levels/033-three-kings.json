@@ -9,7 +9,7 @@
   "lesson_ru": "Твоя цитадель начинает на уровне 2. Три врага дерутся между собой на стыках: держись вне центра и бери нейтралов, пока они истекают кровью",
   "lesson_tr": "Kalen 2. seviyede başlar. Üç düşman temas ettikleri yerde birbiriyle savaşır: ortadan uzak dur ve onlar kan kaybederken tarafsızları al",
   "star3": 35000,
-  "star2": 75000,
+  "star2": 70000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.4},
     {"owner": "enemy2", "personality": "turtle", "aggression": 0.4},

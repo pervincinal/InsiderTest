@@ -8,8 +8,8 @@
   "lesson_az": "İki düşmən bir-biri ilə də vuruşur: hücumçu tısbağaya cumarkən sakit cinahda genişlən, sonra zəif qalanı bitir",
   "lesson_ru": "Два врага дерутся и между собой: расширяйся на тихом фланге, пока рвач бьётся о черепаху, потом добей того, кто остался слабым",
   "lesson_tr": "İki düşman birbiriyle de savaşır: saldırgan kaplumbağaya yüklenirken sessiz kanatta genişle, sonra zayıf kalanı bitir",
-  "star3": 40000,
-  "star2": 80000,
+  "star3": 30000,
+  "star2": 60000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.45},
     {"owner": "enemy2", "personality": "turtle", "aggression": 0.45}

@@ -8,8 +8,8 @@
   "lesson_az": "Əvvəl hücumçunu öldür: tısbağa 3-cü səviyyəyə dolana qədər yerində oturur, yəni səni yalnız narahat düşmən incidir və onu almaq da asandır",
   "lesson_ru": "Сначала убей рвача: черепаха сидит на месте, пока не наполнится до уровня 3, так что беспокойный враг — единственный, кто тебе вредит, и его же легче взять",
   "lesson_tr": "Önce saldırganı öldür: kaplumbağa 3. seviyeye dolana kadar yerinde oturur, yani sana yalnız huzursuz düşman zarar verir ve o daha kolay alınır",
-  "star3": 40000,
-  "star2": 80000,
+  "star3": 35000,
+  "star2": 70000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.75},
     {"owner": "enemy2", "personality": "turtle", "aggression": 0.75}

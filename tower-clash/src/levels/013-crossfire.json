@@ -8,8 +8,8 @@
   "lesson_az": "Öz topların hər dalğanı seyrəldir: artilleriya postunu saxla və düşməni onun atəşindən keçməyə məcbur et",
   "lesson_ru": "Свои пушки прореживают каждую волну: держи артиллерийский пост и заставь врага идти под его огонь",
   "lesson_tr": "Kendi topların her dalgayı seyreltir: topçu mevziini tut ve düşmanı ateşinin içinden yürüt",
-  "star3": 50000,
-  "star2": 100000,
+  "star3": 40000,
+  "star2": 80000,
   "enemies": [
     {"owner": "enemy1", "personality": "turtle", "aggression": 0.5}
   ],

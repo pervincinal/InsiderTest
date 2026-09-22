@@ -8,8 +8,8 @@
   "lesson_az": "Səhər mühasirədəsən: fənərin topdur, qəsrin isə hər zərbəni yarıya bölən qaladır, ona görə dayan, qoy hücumçular divarlarında tükənsin, sonra boşalanın içindən yarıb çıx",
   "lesson_ru": "Окружён на рассвете: твой фонарь — пушка, а цитадель — крепость, что делит каждый удар пополам, так что держись, дай рвачам истратиться о твои стены, а потом прорвись через того, кто опустел",
   "lesson_tr": "Şafakta kuşatıldın: fenerin toptur, kalen ise her inişi yarıya bölen bir kaledir; o yüzden dayan, saldırganlar surlarında tükensin, sonra boşalanın içinden yarıp çık",
-  "star3": 30000,
-  "star2": 80000,
+  "star3": 25000,
+  "star2": 50000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.85},
     {"owner": "enemy2", "personality": "rusher", "aggression": 0.85},
