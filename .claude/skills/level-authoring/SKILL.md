@@ -44,4 +44,5 @@ the HUD level chip (206 px at 24 px bold — about 15 Latin / 15 Cyrillic charac
 ## Gates before finishing
 1. `npm run levels:check` — schema, connectivity (every tower reachable through clear lanes from the player's first tower), obstacles ≥ 75 px and mines ≥ 40 px from tower centres, ids unique, features allowed in the band; `npx tsx scripts/convertLevelsV3.ts --dry` documents the 2026-09-21 road → obstacle conversion.
 2. `npm run playtest` — reference player must win every level within 180 s; the "idle" player must lose or stall (never win). Fix the level, not the bot.
+2b. Clocks: `npx tsx scripts/reclock.ts --seeds 20 [--only a-b] --write` derives `star3`/`star2` from the reference player (GDD §3 formula + max-upgrade boundary step; levels 1 and 33 are pinned and only reported), then `npm run levels:manifest`. Run it after any bot change too.
 3. Each level's `lesson` must be new or a harder variant of a previous lesson.
