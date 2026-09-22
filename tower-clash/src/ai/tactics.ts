@@ -484,6 +484,58 @@ export function attack(ctx: Ctx, cfg: AttackConfig): void {
   }
 }
 
+export interface StackConfig {
+  /** Link cap per tower (personality readability caps). */
+  cap?: number;
+  /** Which own towers may join (default: all); called with the target so a rule can keep a tower out of some sieges. */
+  sources?: (tower: Tower, target: Tower) => boolean;
+  /** Judge the join against the target's anticipated shield on the new lane. */
+  anticipate?: boolean;
+}
+
+/** A join must bring the fall forward by at least this much (ms) to be worth the source's growth. */
+export const STACK_MIN_GAIN_MS = 500;
+
+/**
+ * Rule "stack": an idle own tower — a free link and nothing else to do this tick — joins a siege we
+ * already run (a hostile tower with our stream into it, existing or issued this tick) when its stream
+ * lands and brings the fall forward by `STACK_MIN_GAIN_MS`. Under v3 a stream costs nothing but the
+ * source's growth, so a source left idle beside a siege only delays it (2026-09-22: the minimal
+ * fastest-first plan on level 1 left the camp idle while the home alone took 3 s longer). A contested
+ * neutral is joined only when the flip stays ours.
+ */
+export function stack(ctx: Ctx, cfg: StackConfig = {}): void {
+  ctx.rule = 'stack';
+  const state = ctx.state;
+  const cap = cfg.cap ?? Infinity;
+  const maySource = cfg.sources ?? (() => true);
+  const targets = new Set<string>();
+  for (const l of state.links) if (l.owner === ctx.owner && !ctx.ended.includes(l) && state.towers[l.to] && state.towers[l.to]!.owner !== ctx.owner) targets.add(l.to);
+  for (const p of ctx.planned) if (state.towers[p.to] && state.towers[p.to]!.owner !== ctx.owner) targets.add(p.to);
+  if (targets.size === 0) return;
+  for (const source of actors(ctx)) {
+    if (ctx.used.has(source.id) || freeSlots(ctx, source, cap) <= 0) continue;
+    let best: { id: string; falls: number } | undefined;
+    for (const id of [...targets].sort()) {
+      const target = state.towers[id]!;
+      if (!maySource(source, target) || !roadBetween(state, source.id, id) || hasLink(state, source.id, id) || ctx.planned.some((p) => p.from === source.id && p.to === id)) continue;
+      const link: PlannedLink = { owner: ctx.owner, from: source.id, to: id };
+      const flow = laneFlow(state, link, [...allLinks(state, options(ctx)), link]);
+      if (!flow || !landsEnough(flow)) continue;
+      const before = siege(ctx, target).fallsAtMs;
+      const after = siege(ctx, target, [link]).fallsAtMs;
+      if (!(after < before - STACK_MIN_GAIN_MS)) continue;
+      // The defender can move a shield onto the new lane — but it has only so many: joining must never
+      // make the siege slower under that shield (it then cancels this stream and frees another lane).
+      const reactions = cfg.anticipate ? anticipatedShield(state, target, link, ctx.planned) : [];
+      if (reactions.length && siege(ctx, target, [...reactions, link]).fallsAtMs > before) continue;
+      if (target.owner === 'neutral' && flipOwner(state, target, { planned: [...ctx.planned, link], exclude: ctx.ended }) !== ctx.owner) continue;
+      if (!best || after < best.falls) best = { id, falls: after };
+    }
+    if (best) issueLink(ctx, source, best.id);
+  }
+}
+
 /**
  * A shield dropped for an attack must win the race: the attack's target falls at least `RACE_MARGIN_MS`
  * before the shielding tower would once the hostile stream lands on it again.

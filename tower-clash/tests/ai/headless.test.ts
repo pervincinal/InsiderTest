@@ -35,8 +35,8 @@ describe('runHeadless', () => {
     // pinned times are the campaign clock for level 1 seed 1 (re-pin when the AI or the level changes).
     const first = runHeadless(level1, 1, referencePlayerCommands);
     const firstBoosted = runHeadless(level1, 1, referencePlayerCommands, { modifiers: MAX_MODIFIERS });
-    expect(first).toMatchObject({ outcome: 'won', timeMs: 34_850 });
-    expect(firstBoosted).toMatchObject({ outcome: 'won', timeMs: 33_900 });
+    expect(first).toMatchObject({ outcome: 'won', timeMs: 9_100 });
+    expect(firstBoosted).toMatchObject({ outcome: 'won', timeMs: 7_800 }); // 2026-09-22: `stack` — the camp joins the home's siege
 
     let baseTotal = 0;
     let boostedTotal = 0;

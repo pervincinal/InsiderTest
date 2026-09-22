@@ -20,6 +20,8 @@
  *   3. attack — focus fire on the enemy tower that falls soonest within `ATTACK_PLAN_MS`, every adjacent
  *      tower with a free link (or a supply link it can reclaim) stacked until it breaks; the growing keep
  *      joins only when the others cannot break it;
+ *   3b. stack — an idle tower (a free link, no target of its own) joins a siege we already run when its
+ *      stream lands and brings the fall forward (`STACK_MIN_GAIN_MS`);
  *   4. supply — a capped keep (top level at capacity: it makes nothing, streaming costs it nothing) pours
  *      into the friendly neighbour nearest the front that is not full.
  * A tower with no takeable target stays unlinked and grows toward its next level (faster stream, one
@@ -28,8 +30,8 @@
  */
 import type { Command, GameState, Link, Tower } from '../sim/index';
 import { Rng, capacityOf, isLinked, isUnderFire } from '../sim/index';
-import { atMaxLevel, genPerSecond, hopsToOpponent, isCapped, ownedTowers, underSiege, type Plan } from './common';
-import { attack, defend, maintain, newCtx, reclaimForAttack, supply, type Ctx, type RuleTrace } from './tactics';
+import { atMaxLevel, genPerSecond, hopsToOpponent, isCapped, isEnemyOwner, ownedTowers, underSiege, type Plan } from './common';
+import { attack, defend, maintain, newCtx, reclaimForAttack, stack, supply, type Ctx, type RuleTrace } from './tactics';
 
 export type { RuleTrace };
 
@@ -55,10 +57,21 @@ export const CONTEST_PENALTY_MS = 10_000;
  * costs level 4 1.6 s, 15 s slows a dozen levels (1, 2, 10, 13, 18, 33–35 by 8–26 s).
  */
 export const GROW_FIRST_MS = 8_000;
+/** Grow-first applies only when the enemies hold at least this many towers (AI-7a: "facing ≥ 2 enemy towers"). */
+export const GROW_FIRST_MIN_ENEMY_TOWERS = 2;
+
+/** Towers held by any enemy. */
+export function enemyTowerCount(state: GameState): number {
+  let n = 0;
+  for (const id in state.towers) if (isEnemyOwner(state.towers[id]!.owner)) n++;
+  return n;
+}
 
 /**
  * The tower kept growing: highest level below its top, rearmost (most lane hops from an enemy tower),
  * then the fullest; none while it is linked, under fire, or we hold fewer than `GROWER_MIN_TOWERS`.
+ * (Choosing it after `maintain` instead, with this tick's ended links excluded, was measured on
+ * 2026-09-22 and rejected: levels 2, 7 and 47 got 6–12 s slower.)
  */
 export function grower(state: GameState, hops: ReadonlyMap<string, number>): Tower | undefined {
   const own = ownedTowers(state, OWNER);
@@ -83,6 +96,10 @@ export function grower(state: GameState, hops: ReadonlyMap<string, number>): Tow
  */
 export function growsFirst(state: GameState, own: readonly Tower[]): Tower | undefined {
   if (own.length >= GROWER_MIN_TOWERS) return undefined;
+  // Only against a real front: with a single enemy tower on the map (tutorial band) attacking now is
+  // always faster than the level-up, and a Commander bonus that shortens the wait must never make the
+  // player slower (tests/ai/headless.test.ts pins level 1 with and without max modifiers).
+  if (enemyTowerCount(state) < GROW_FIRST_MIN_ENEMY_TOWERS) return undefined;
   const home = own[0];
   if (!home || atMaxLevel(home) || isLinked(state, home.id) || isUnderFire(state, home) || underSiege(state, home)) return undefined;
   const gen = genPerSecond(home, state);
@@ -128,6 +145,11 @@ export function referencePlayerCommands(state: GameState, _rng: Rng, trace?: Rul
     reclaim,
     anticipate: true,
   });
+  // Rule 3b: idle towers (a free link, nothing of their own to take) join the sieges already running.
+  // The growing keep stays out (measured 2026-09-22: letting it join enemy sieges cost 14 and 41 about
+  // 4 s at 20 seeds) — except when the enemies are down to their last tower: nothing is left to grow for.
+  const lastStand = enemyTowerCount(state) < GROW_FIRST_MIN_ENEMY_TOWERS;
+  stack(ctx, { sources: (t) => t.id !== growing?.id && (lastStand || t.id !== keep?.id), anticipate: true });
   supply(ctx, hops);
   return ctx.cmds;
 }

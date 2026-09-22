@@ -8,7 +8,7 @@ import { opportunistCommands, rusherCommands, turtleCommands } from './personali
 
 export { referencePlayerCommands, grower, growsFirst, CAPTURE_PLAN_MS, ATTACK_PLAN_MS, GROWER_MIN_TOWERS, GROW_FIRST_MS } from './referencePlayer';
 export type { RuleTrace } from './tactics';
-export { RETREAT_UNITS } from './tactics';
+export { RETREAT_UNITS, STACK_MIN_GAIN_MS } from './tactics';
 export {
   rusherCommands,
   turtleCommands,

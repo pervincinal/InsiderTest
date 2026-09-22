@@ -3,8 +3,8 @@ import { makeLevel, wall } from '../helpers';
 import { Rng, applyCommand, createState, step } from '../../src/sim/index';
 import type { Command, GameState, TowerDef } from '../../src/sim/index';
 import { ATTACK_PLAN_MS, CAPTURE_PLAN_MS, GROWER_MIN_TOWERS, GROW_FIRST_MS, grower, growsFirst, hopsToOpponent, ownedTowers, referencePlayerCommands } from '../../src/ai/index';
-import { CONTEST_PENALTY_MS, HOPELESS_MS } from '../../src/ai/referencePlayer';
-import { RACE_MARGIN_MS } from '../../src/ai/tactics';
+import { CONTEST_PENALTY_MS, GROW_FIRST_MIN_ENEMY_TOWERS, HOPELESS_MS } from '../../src/ai/referencePlayer';
+import { RACE_MARGIN_MS, STACK_MIN_GAIN_MS } from '../../src/ai/tactics';
 import { MIN_LANDING_SHARE } from '../../src/ai/common';
 
 /*
@@ -52,6 +52,7 @@ describe('capture (rule 2)', () => {
       { id: 'b', x: 660, y: 1100, owner: 'player', units: 12 },
       { id: 'big', x: 360, y: 700, owner: 'neutral', units: 40, level: 3 }, // 500 px: one stream 45 s, two 25 s
       { id: 'foe', x: 360, y: 100, owner: 'enemy1', units: 100, level: 3 },
+      { id: 'far', x: 660, y: 100, owner: 'enemy1', units: 100, level: 3 }, // a second enemy tower: the keep stays a keep
     ]);
     expect(grower(state, hopsToOpponent(state, 'player'))?.id).toBe('rear');
     expect(bot(state)).toEqual([link('a', 'big'), link('b', 'big')]);
@@ -64,6 +65,7 @@ describe('capture (rule 2)', () => {
       { id: 'front', x: 360, y: 900, owner: 'player', units: 5, level: 1 },
       { id: 'n', x: 60, y: 900, owner: 'neutral', units: 3 },
       { id: 'foe', x: 360, y: 300, owner: 'enemy1', units: 8 },
+      { id: 'far', x: 660, y: 100, owner: 'enemy1', units: 100, level: 3 }, // a second enemy tower: the keep stays a keep
     ]);
     const hops = hopsToOpponent(state, 'player');
     expect(grower(state, hops)?.id).toBe('rear');
@@ -142,6 +144,7 @@ describe('attack (rule 3)', () => {
       { id: 'rear', x: 360, y: 1200, owner: 'player', units: 20, level: 2 },
       { id: 'front', x: 60, y: 900, owner: 'player', units: 5, level: 1 },
       { id: 'foe', x: 60, y: 500, owner: 'enemy1', units: 30, level: 1 },
+      { id: 'far', x: 660, y: 100, owner: 'enemy1', units: 100, level: 3 }, // a second enemy tower: the keep stays a keep
     ];
     const alone = game(towers);
     expect(grower(alone, hopsToOpponent(alone, 'player'))?.id).toBe('rear');
@@ -337,6 +340,7 @@ describe('grow first (AI-7a): a lone home within GROW_FIRST_MS of its next level
       { id: 'home', x: 360, y: 1100, owner: 'player', units: 18 },
       { id: 'n', x: 60, y: 1100, owner: 'neutral', units: 4 },
       { id: 'foe', x: 360, y: 300, owner: 'enemy1', units: 8 },
+      { id: 'foe2', x: 660, y: 300, owner: 'enemy1', units: 8 },
     ]);
     expect(growsFirst(near, ownedTowers(near, 'player'))?.id).toBe('home');
     expect(bot(near)).toEqual([]);
@@ -344,6 +348,7 @@ describe('grow first (AI-7a): a lone home within GROW_FIRST_MS of its next level
       { id: 'home', x: 360, y: 1100, owner: 'player', units: 12 },
       { id: 'n', x: 60, y: 1100, owner: 'neutral', units: 4 },
       { id: 'foe', x: 360, y: 300, owner: 'enemy1', units: 8 },
+      { id: 'foe2', x: 660, y: 300, owner: 'enemy1', units: 8 },
     ]);
     expect(growsFirst(far, ownedTowers(far, 'player'))).toBeUndefined();
     expect(bot(far)).toEqual([link('home', 'n')]);
@@ -355,6 +360,7 @@ describe('grow first (AI-7a): a lone home within GROW_FIRST_MS of its next level
       { id: 'n', x: 60, y: 1100, owner: 'neutral', units: 4 },
       { id: 'm', x: 660, y: 1100, owner: 'neutral', units: 4 },
       { id: 'foe', x: 360, y: 300, owner: 'enemy1', units: 8 },
+      { id: 'foe2', x: 660, y: 300, owner: 'enemy1', units: 8 },
     ]);
     let issued: Command[] = [];
     while (state.time < 8_000 && issued.length === 0) {
@@ -371,11 +377,23 @@ describe('grow first (AI-7a): a lone home within GROW_FIRST_MS of its next level
     expect(bot(state)).toEqual([link('home', 'n')]); // the second link the level allows
   });
 
+  it('does not trigger against a single enemy tower (attacking now is always faster there)', () => {
+    expect(GROW_FIRST_MIN_ENEMY_TOWERS).toBe(2);
+    const state = game([
+      { id: 'home', x: 360, y: 1100, owner: 'player', units: 18 },
+      { id: 'n', x: 60, y: 1100, owner: 'neutral', units: 4 },
+      { id: 'foe', x: 360, y: 300, owner: 'enemy1', units: 8 },
+    ]);
+    expect(growsFirst(state, ownedTowers(state, 'player'))).toBeUndefined();
+    expect(bot(state)).toEqual([link('home', 'n')]);
+  });
+
   it('never waits under siege, and not at all once we hold GROWER_MIN_TOWERS towers', () => {
     const sieged = game([
       { id: 'home', x: 360, y: 1100, owner: 'player', units: 18 },
       { id: 'n', x: 60, y: 1100, owner: 'neutral', units: 4 },
       { id: 'foe', x: 360, y: 500, owner: 'enemy1', units: 8 },
+      { id: 'foe2', x: 660, y: 300, owner: 'enemy1', units: 8 },
     ]);
     enemyLink(sieged, 'foe', 'home');
     expect(growsFirst(sieged, ownedTowers(sieged, 'player'))).toBeUndefined();
@@ -385,6 +403,7 @@ describe('grow first (AI-7a): a lone home within GROW_FIRST_MS of its next level
       { id: 'side', x: 660, y: 1100, owner: 'player', units: 18 },
       { id: 'n', x: 60, y: 1100, owner: 'neutral', units: 4 },
       { id: 'foe', x: 360, y: 300, owner: 'enemy1', units: 8 },
+      { id: 'foe2', x: 660, y: 300, owner: 'enemy1', units: 8 },
     ]);
     expect(growsFirst(two, ownedTowers(two, 'player'))).toBeUndefined();
   });
@@ -456,5 +475,41 @@ describe('partial shields and the landing share (2026-09-22, lean / thinWalls fi
     applyCommand(two, link('p', 'g'));
     applyCommand(two, link('q', 'g'));
     expect(bot(two).filter((c) => c.type === 'unlink')).toEqual([]);
+  });
+});
+
+describe('stack (rule 3b): idle towers join a running siege', () => {
+  it('the minimal plan takes one source; an idle neighbour with a free link joins when that brings the fall forward', () => {
+    const state = game([
+      { id: 'rear', x: 360, y: 1250, owner: 'player', units: 30, level: 2 }, // the grower: stays out
+      { id: 'a', x: 60, y: 1100, owner: 'player', units: 12 },
+      { id: 'b', x: 660, y: 1100, owner: 'player', units: 12 },
+      { id: 'e', x: 360, y: 500, owner: 'enemy1', units: 3 },
+      { id: 'e2', x: 360, y: 100, owner: 'enemy1', units: 30, level: 3 },
+    ]);
+    enemyLink(state, 'e', 'e2'); // e's only link is busy: no shield to anticipate, so one stream is "enough"
+    expect(grower(state, hopsToOpponent(state, 'player'))?.id).toBe('rear');
+    const rules: string[] = [];
+    expect(bot(state, (r) => rules.push(r))).toEqual([link('a', 'e'), link('b', 'e')]);
+    expect(rules).toEqual(['attack', 'stack']);
+    expect(STACK_MIN_GAIN_MS).toBe(500);
+  });
+
+  it('the growing keep joins only when the enemies are down to their last tower', () => {
+    const towers = (): TowerDef[] => [
+      { id: 'home', x: 200, y: 1100, owner: 'player', units: 17 },
+      { id: 'camp', x: 340, y: 1000, owner: 'player', units: 1 },
+      { id: 'foe', x: 250, y: 830, owner: 'enemy1', units: 5 },
+      { id: 'n', x: 60, y: 300, owner: 'neutral', units: 40, level: 3 }, // foe's link is busy here: no shield to anticipate
+    ];
+    const one = game(towers());
+    enemyLink(one, 'foe', 'n');
+    expect(grower(one, hopsToOpponent(one, 'player'))?.id).toBe('home');
+    const rules: string[] = [];
+    expect(bot(one, (r) => rules.push(r))).toEqual([link('camp', 'foe'), link('home', 'foe')]);
+    expect(rules).toEqual(['attack', 'stack']); // level 1: the last enemy tower, the keep joins
+    const two = game([...towers(), { id: 'foe2', x: 660, y: 100, owner: 'enemy1', units: 100, level: 3 }]);
+    enemyLink(two, 'foe', 'n');
+    expect(bot(two)).toEqual([link('camp', 'foe')]);
   });
 });

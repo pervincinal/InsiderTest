@@ -24,7 +24,7 @@
 import type { Command, EnemyDef, GameState, Tower } from '../sim/index';
 import { Rng, isUnderFire } from '../sim/index';
 import { clamp01, hopsToOpponent, isCapped, linksTo, skipsAction, type Plan } from './common';
-import { actors, attack, defend, maintain, newCtx, reclaimForAttack, supply, type Ctx } from './tactics';
+import { actors, attack, defend, maintain, newCtx, reclaimForAttack, stack, supply, type Ctx } from './tactics';
 
 /** Plan horizon per personality: a target must fall within this (× the aggression scale) to be attacked, seconds. */
 export const SIEGE_PLAN_S = Object.freeze({ rusher: 30, turtle: 45, opportunist: 45 });
@@ -75,9 +75,15 @@ interface PersonalityConfig {
   anticipate?: boolean;
   /** Drop a shield for an attack that wins its race (rusher, opportunist). */
   races?: boolean;
+  /**
+   * Idle towers join sieges already running (`stack`, turtle only): with it the rusher and the
+   * opportunist pile every tower onto one target — measured 2026-09-22, level 8 (rusher, a = 0.3) went
+   * from 20/20 to 14/20 for the reference player — which is not the per-tower rusher the design asks for.
+   */
+  stacks?: boolean;
 }
 
-/** The shared tick: aggression gate → maintain → defend → attack (→ supply). */
+/** The shared tick: aggression gate → maintain → defend → attack → stack (→ supply). */
 function run(state: GameState, enemy: EnemyDef, rng: Rng, cfg: PersonalityConfig): Command[] {
   const ctx = newCtx(state, enemy.owner);
   // One rng draw per own tower, in level order, whatever the tower does this tick (determinism).
@@ -93,6 +99,7 @@ function run(state: GameState, enemy: EnemyDef, rng: Rng, cfg: PersonalityConfig
     anticipate: cfg.anticipate,
     reclaim: (c, source, plan) => reclaimForAttack(c, source, plan, cfg.races === true),
   });
+  if (cfg.stacks) stack(ctx, { cap: cfg.cap, sources: cfg.sources, anticipate: cfg.anticipate });
   if (cfg.supplies) supply(ctx, hopsToOpponent(state, enemy.owner), cfg.cap);
   return ctx.cmds;
 }
@@ -110,6 +117,7 @@ export function turtleCommands(state: GameState, enemy: EnemyDef, rng: Rng): Com
     sources: (t) => t.level >= TURTLE_MIN_LEVEL,
     supplies: true,
     anticipate: true,
+    stacks: true,
   });
 }
 
