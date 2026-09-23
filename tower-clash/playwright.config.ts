@@ -18,8 +18,20 @@ const WEBVIEW_UA = devices['Pixel 7'].userAgent
   .replace(') AppleWebKit', ' Build/UP1A.231105.001; wv) AppleWebKit')
   .replace(' Chrome/', ' Version/4.0 Chrome/');
 
+/**
+ * QA-4: parallel agents share one checkout, so each run can pick its own preview port and output
+ * directory without a scratch config: `PW_PORT` (default 4173) sets both `baseURL` and the preview
+ * server's `--port`; `PW_OUTPUT` (default `test-results`) sets `outputDir` (traces, screenshots on
+ * failure). Example: `PW_PORT=4192 PW_OUTPUT=<scratchpad>/pw-qa npx playwright test --project=chromium e2e/smoke.spec.ts`.
+ */
+const DEFAULT_PORT = 4173;
+const PORT = process.env.PW_PORT ? Number(process.env.PW_PORT) : DEFAULT_PORT;
+if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65_535) throw new Error(`PW_PORT must be a TCP port, got ${String(process.env.PW_PORT)}`);
+const OUTPUT_DIR = process.env.PW_OUTPUT || 'test-results';
+
 export default defineConfig({
   testDir: 'e2e',
+  outputDir: OUTPUT_DIR,
   timeout: 90_000,
   expect: { timeout: 10_000 },
   retries: 0,
@@ -27,7 +39,7 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   use: {
-    baseURL: 'http://localhost:4173',
+    baseURL: `http://localhost:${PORT}`,
     launchOptions,
     trace: 'retain-on-failure',
   },
@@ -47,8 +59,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run preview -- --port 4173 --strictPort',
-    port: 4173,
+    command: `npm run preview -- --port ${PORT} --strictPort`,
+    port: PORT,
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,
   },

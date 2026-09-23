@@ -28,11 +28,20 @@ Reading a weekly failure: (1) `4/5 < 90%` or a lost fixed seed → run the same 
 
 `.github/workflows/tower-clash-ci.yml` runs all three after the headless playtest: "Daily challenge gate" (`--daily $(date -u +%F) --days 30 --seeds 3`, 2.4 s), "Weekly challenge gate" (`--weekly <this week's Monday> --weeks 26 --seeds 3`, 2.1 s; `continue-on-error` until the 3★ clock items are closed — flip it to blocking then) and "Twist pool gate" (all five twists at `--seeds 5`, ≈ 2.6 s each). Use K = 5 for the twist gate: at K = 3 the 80 % rule demands 3/3, which is stricter than the spec and fails on a single robust-but-not-perfect level. When a twist row fails, rerun it at `--seeds 50` before touching the level — a level under 80 % at K = 50 is a balance bug for the Level Designer (file it under "Bugs" in `docs/BACKLOG.md`); a single lost seed at K = 5 is not.
 
+## Naive human line (informational, QA-3)
+```bash
+npm run playtest -- --naive --seeds 5                 # first-time human model on every level, react 4000 ms
+npm run playtest -- --naive --seeds 5 --react 8000    # slower hands
+```
+`scripts/lib/naivePlayer.ts`: every `--react` ms (first action at 3 s) each own tower with a free link streams to its nearest non-own tower (neutral before enemy); it never unlinks, never boosts, and re-links a tower that lost its streams only after another reaction delay. One row per level (wins/K, stars, median, `holds` = ≥ 50 % wins, `star2?` = holds and median ≤ star2) and the summary line `naive: N/50 levels won at >= 50 %, M within star2`. No gate (exit 0): levels 1–8 are expected to hold — a `NO` there is a level/design item for the Level Designer / Game Designer, traced with the losing seed before filing.
+
 ## Browser smoke (Playwright, Chromium preinstalled)
 ```bash
 cd tower-clash && npm run build && npm run e2e
 ```
 Covers: title renders → level select shows locked/unlocked → level 1 loads → reference player drives to win via `window.__towerclash.autoplay()` → result screen with stars → screenshots in `e2e/__screenshots__/`. Do not run `playwright install`; use `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers` (already set).
+
+Parallel runs (QA-4): `playwright.config.ts` reads two environment variables so agents sharing the checkout never need a scratch config. `PW_PORT` (default 4173) sets both `baseURL` and the preview server's `--port --strictPort`, so two agents on different ports get their own `vite preview`; `PW_OUTPUT` (default `test-results`) sets `outputDir` (traces, failure screenshots), so one run's cleanup does not delete another's artefacts. Example: `PW_PORT=4192 PW_OUTPUT=<scratchpad>/pw-qa npx playwright test --project=chromium e2e/smoke.spec.ts` (after `npm run build`). Only the Producer runs the plain `npm run e2e` on the default port.
 
 ## Manual feel check (for the report)
 Run `npm run dev`, play levels 1–3 with mouse; note anything that reads badly at 360 px width. Log findings under "Bugs" in `docs/BACKLOG.md`.

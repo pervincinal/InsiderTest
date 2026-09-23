@@ -3,6 +3,7 @@
  * `npm run playtest -- --daily YYYY-MM-DD [--days N] [--seeds K] [--no-twist]`
  * `npm run playtest -- --weekly YYYY-MM-DD(Monday) [--weeks N] [--seeds K] [--no-twist]`
  * `npm run playtest -- --twist <plain|lean|fastFeet|thinWalls|reinforced> [--seeds K] [--pool a-b]`
+ * `npm run playtest -- --naive [--seeds K] [--react MS]`
  * Headless balance run: for every level (or one), simulate (a) the reference player vs the enemies and
  * (b) an idle player vs the enemies, 50 ms ticks, AI every 500 ms, up to 180 s of sim time.
  *
@@ -28,6 +29,11 @@
  * Twist mode (`--twist <id>`, GDD §7.5 item 3): the reference player on every pool level (`--pool a-b`,
  * default POOL_FROM–POOL_TO) with that twist's modifiers over seeds 1..K (`--seeds K`, default 5). One
  * row per level; gate per level: wins/K ≥ 80 % (4/5 at K = 5), every win under 180 s.
+ * Naive mode (`--naive`, QA-3): the naive human line (`scripts/lib/naivePlayer.ts` — every `--react MS`,
+ * default 4000, each own tower with a free link streams to its nearest non-own tower; never unlinks, never
+ * boosts) on every level over seeds 1..K (`--seeds K`, default 5). One row per level: wins/K, stars at the
+ * level's clocks, median win time, and whether the line holds (≥ 50 % wins) within `star2`. No gate —
+ * informational (exit 0); the summary line is what the report quotes.
  * Rng streams come from `rngsFor`, exactly as the game client derives them.
  */
 import { performance } from 'node:perf_hooks';
@@ -42,6 +48,8 @@ import { DAILY_WIN_RATE, DEFAULT_POOL, TWIST_WIN_RATE, WEEKLY_WIN_RATE, dailyPla
 import type { DailyRow, PoolRange, TwistRow, WeeklyRow } from './lib/daily';
 import { TWISTS, isMondayKey } from '../src/daily/challenge';
 import type { Twist } from '../src/daily/challenge';
+import { NAIVE_REACT_MS, NAIVE_WIN_RATE, runNaive } from './lib/naivePlayer';
+import type { NaiveRow } from './lib/naivePlayer';
 
 export { runHeadless } from '../src/ai/headless';
 
@@ -75,6 +83,10 @@ interface Args {
   weekly?: string;
   /** `--weeks N`: number of consecutive weeks from `weekly`. */
   weeks: number;
+  /** `--naive`: naive human line over every level (informational). */
+  naive: boolean;
+  /** `--react MS`: reaction delay of the naive line, ms of sim time. */
+  reactMs: number;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -89,6 +101,8 @@ function parseArgs(argv: string[]): Args {
   let poolSpec: string | undefined;
   let weekly: string | undefined;
   let weeks = 1;
+  let naive = false;
+  let reactMs = NAIVE_REACT_MS;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
     const next = argv[i + 1];
@@ -113,6 +127,9 @@ function parseArgs(argv: string[]): Args {
     else if (arg.startsWith('--weekly=')) weekly = arg.slice('--weekly='.length);
     else if (arg === '--weeks' && next !== undefined) weeks = Number(next);
     else if (arg.startsWith('--weeks=')) weeks = Number(arg.slice('--weeks='.length));
+    else if (arg === '--naive') naive = true;
+    else if (arg === '--react' && next !== undefined) reactMs = Number(next);
+    else if (arg.startsWith('--react=')) reactMs = Number(arg.slice('--react='.length));
   }
   if (level !== undefined && !Number.isInteger(level)) throw new Error(`bad --level ${String(level)}`);
   if (!Number.isInteger(seed)) throw new Error(`bad --seed ${String(seed)}`);
@@ -127,11 +144,15 @@ function parseArgs(argv: string[]): Args {
   if (!Number.isInteger(weeks) || weeks < 1) throw new Error(`bad --weeks ${String(weeks)}`);
   const twistDef = twistId === undefined ? undefined : twistById(twistId);
   if (twistId !== undefined && !twistDef) throw new Error(`bad --twist ${twistId} (${TWISTS.map((t) => t.id).join('|')})`);
-  const modes = [twistDef ? '--twist' : undefined, daily !== undefined ? '--daily' : undefined, weekly !== undefined ? '--weekly' : undefined].filter((m) => m !== undefined);
+  const modes = [twistDef ? '--twist' : undefined, daily !== undefined ? '--daily' : undefined, weekly !== undefined ? '--weekly' : undefined, naive ? '--naive' : undefined].filter(
+    (m) => m !== undefined,
+  );
   if (modes.length > 1) throw new Error(`${modes.join(' and ')} are separate modes`);
   const pool = poolSpec === undefined ? DEFAULT_POOL : parsePool(poolSpec);
   if (poolSpec !== undefined && !twistDef) throw new Error('--pool only applies to --twist');
-  return { level, seed, seeds, upgrades, daily, days, twist, twistId: twistDef?.id, pool, weekly, weeks };
+  if (!Number.isInteger(reactMs) || reactMs < C.TICK_MS || reactMs % C.TICK_MS !== 0) throw new Error(`bad --react ${String(reactMs)} (ms, a positive multiple of ${C.TICK_MS})`);
+  if (reactMs !== NAIVE_REACT_MS && !naive) throw new Error('--react only applies to --naive');
+  return { level, seed, seeds, upgrades, daily, days, twist, twistId: twistDef?.id, pool, weekly, weeks, naive, reactMs };
 }
 
 /** Re-exported for tools that used to read the max ladder from here (QA-3: the catalog is the source). */
@@ -544,8 +565,50 @@ async function runTwistMode(twistId: Twist['id'], k: number, pool: Readonly<Pool
   return failed.length;
 }
 
+/**
+ * Naive mode (QA-3): the naive human line on every level over seeds 1..K. Informational — no gate,
+ * always exit 0. "holds" = wins/K ≥ NAIVE_WIN_RATE; "star2" = holds and the median win is within the
+ * level's `star2` clock. Levels 1–8 (the tutorial band) are expected to hold; a miss there is a level or
+ * design item, reported with the losing seeds so a trace can say why.
+ */
+async function runNaiveMode(levels: LevelDef[], k: number, reactMs: number): Promise<void> {
+  const header = `${pad('lvl', 4)} ${pad('name', 20)} ${pad('wins', 6)} ${pad('3*/2*/1*/0*', 12)} ${pad('median', 8)} ${pad('worst', 8)} ${pad('star2', 8)} ${pad('holds', 6)} ${pad('star2?', 7)} losing seeds`;
+  console.log(
+    `playtest naive  react=${reactMs}ms  seeds=1..${k}  upgrades=none  max=${fmtTime(MAX_MS)}  informational: holds = wins/K >= ${Math.round(NAIVE_WIN_RATE * 100)}%, star2? = holds and median <= star2 (no gate)`,
+  );
+  console.log(header);
+  console.log('-'.repeat(header.length));
+  const rows: NaiveRow[] = [];
+  let totalTicks = 0;
+  const t0 = performance.now();
+  for (const level of levels) {
+    const row = runNaive(level, k, reactMs);
+    rows.push(row);
+    totalTicks += row.ticks;
+    const medianT = row.medianMs === undefined ? '-' : fmtTime(row.medianMs);
+    const worst = row.worstMs === undefined ? '-' : fmtTime(row.worstMs);
+    const losers = row.losers.length ? row.losers.join(',') : '-';
+    console.log(
+      `${pad(String(level.id), 4)} ${pad(level.name, 20)} ${pad(`${row.wins}/${k}`, 6)} ${pad(fmtStarCounts(row.starCounts), 12)} ${pad(medianT, 8)} ${pad(worst, 8)} ${pad(fmtTime(level.star2), 8)} ${pad(row.holds ? 'yes' : 'NO', 6)} ${pad(row.withinStar2 ? 'yes' : 'no', 7)} ${losers}`,
+    );
+  }
+  const elapsed = (performance.now() - t0) / 1000;
+  console.log('-'.repeat(header.length));
+  const held = rows.filter((r) => r.holds);
+  const within = rows.filter((r) => r.withinStar2);
+  const totalWins = rows.reduce((n, r) => n + r.wins, 0);
+  console.log(`naive: ${held.length}/${rows.length} levels won at >= ${Math.round(NAIVE_WIN_RATE * 100)} %, ${within.length} within star2 (react ${reactMs} ms, all seeds ${totalWins}/${rows.length * k})`);
+  const tutorialMiss = rows.filter((r) => r.level.id <= TUTORIAL_BAND_LAST && !r.holds);
+  for (const r of tutorialMiss) console.log(`  tutorial band: lvl ${r.level.id} ${r.level.name} ${r.wins}/${k} (lost ${r.losers.join(',')}) — level/design item`);
+  console.log(`perf: ${totalTicks} ticks in ${elapsed.toFixed(2)}s = ${Math.round(totalTicks / Math.max(elapsed, 1e-6))} ticks/s`);
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
+  if (args.naive) {
+    await runNaiveMode(await selectLevels(args.level), args.seeds ?? 5, args.reactMs);
+    return;
+  }
   if (args.twistId !== undefined) {
     const failed = await runTwistMode(args.twistId, args.seeds ?? 5, args.pool);
     if (failed > 0) process.exit(1);
