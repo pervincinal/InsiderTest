@@ -533,7 +533,22 @@ export function siegeOf(state: GameState, target: Tower, options: SiegeOptions =
  * landing, and the sim resolves equal times in unit order — the earlier link.)
  */
 export function flipOwner(state: GameState, target: Tower, options: SiegeOptions = {}): Owner | undefined {
-  const all = allLinks(state, options);
+  return contestOf(state, target, options).winner;
+}
+
+/** One landing on a tower, as the parity replay sees it. */
+interface Landing {
+  owner: Owner;
+  t: number;
+  weight: number;
+}
+
+/**
+ * The landings on `target` in time order, one per call: every stream's units (first at `startMs`, then
+ * one per `1000 / countRate` ms; ties by link order, as the sim resolves equal times in unit order) merged
+ * with the units already walking. Undefined once the next landing lies beyond `FALLS_HORIZON_MS`.
+ */
+function landingReplay(state: GameState, target: Tower, all: readonly PlannedLink[]): () => Landing | undefined {
   type Stream = { owner: Owner; next: number; gap: number; weight: number; order: number };
   const streams: Stream[] = [];
   let order = 0;
@@ -544,28 +559,104 @@ export function flipOwner(state: GameState, target: Tower, options: SiegeOptions
     streams.push({ owner: l.owner, next: f.startMs, gap: 1000 / f.countRate, weight: f.rate / f.countRate, order: order++ });
   }
   const walking = walkingLandings(state, target, all)
-    .map((w, i) => ({ owner: state.units.find((u) => u.to === target.id && remainingMs(state, u) === w.t)?.owner ?? target.owner, t: w.t, weight: w.weight, order: -1 - i }))
+    .map((w) => ({ owner: state.units.find((u) => u.to === target.id && remainingMs(state, u) === w.t)?.owner ?? target.owner, t: w.t, weight: w.weight }))
     .sort((p, q) => p.t - q.t);
-  let need = target.units * defenceMultiplier(target) + 1e-9;
   let wi = 0;
-  for (let guard = 0; guard < 10_000; guard++) {
+  return () => {
     let best: Stream | undefined;
     for (const st of streams) if (!best || st.next < best.next || (st.next === best.next && st.order < best.order)) best = st;
     const walker = walking[wi];
-    if (!best && !walker) return undefined;
     if (walker && (!best || walker.t <= best.next)) {
-      if (walker.t > FALLS_HORIZON_MS) return undefined;
-      need -= walker.weight;
       wi++;
-      if (need < 0) return walker.owner;
-      continue;
+      return walker.t > FALLS_HORIZON_MS ? undefined : walker;
     }
     if (!best || best.next > FALLS_HORIZON_MS) return undefined;
-    need -= best.weight;
-    if (need < 0) return best.owner;
+    const out = { owner: best.owner, t: best.next, weight: best.weight };
     best.next += best.gap;
+    return out;
+  };
+}
+
+/** Result of `contestOf`: the parity race for a neutral, and what follows the flip. */
+export interface Contest {
+  /** Who lands the flipping unit (undefined: nobody within the horizon). */
+  winner?: Owner;
+  /** ms until that landing (Infinity when nobody flips it). */
+  flipAtMs: number;
+  /** Garrison the winner is left with (`max(1, weight − defenders consumed)`, as the sim's capture). */
+  garrison: number;
+  /**
+   * Who takes the tower back from the winner, and when: the replay goes on with the winner's streams
+   * now friendly (+ weight, capped) and everyone else's hostile, the tower regenerating between hostile
+   * landings more than `UNDER_FIRE_MS` apart (the capture clears its under-fire window). Undefined
+   * when nobody does within the horizon.
+   */
+  retake?: { owner: Owner; atMs: number };
+}
+
+/**
+ * Who lands the unit that flips a **neutral** tower, replaying every stream's landings one by one (first
+ * unit at `startMs`, then one per `1000 / countRate` ms) together with the walking units, in time order,
+ * until the landed weight exceeds the garrison — for a fortress, `units × 2 + 2` landings of weight 1:
+ * the defence accumulator must reach a whole unit beyond the last defender (`arrive`: `damage > units`),
+ * so a fortress at 1 falls to the 4th landing, not the 3rd (AI-8: the 2026-09-22 model ceded level 10's
+ * fort one landing early). A neutral neither regenerates nor streams, so the race is pure arithmetic;
+ * ties go to the earlier landing. Then the retake: who takes it back from the winner and when — a
+ * rival's capture leaves `garrison` (usually 1), which a tank or a faster stream of ours lands on next.
+ */
+export function contestOf(state: GameState, target: Tower, options: SiegeOptions = {}): Contest {
+  const all = allLinks(state, options);
+  const next = landingReplay(state, target, all);
+  const D = defenceMultiplier(target);
+  // "need" counts landings of weight 1 still to come before the flip: `units × D + D − 1`, then one more.
+  let need = target.units * D + (D - 1) + 1e-9;
+  for (let guard = 0; guard < 10_000; guard++) {
+    const l = next();
+    if (!l) break;
+    const before = need;
+    need -= l.weight;
+    if (need < 0) {
+      const consumed = before - (D - 1);
+      const garrison = Math.max(1, Math.round(l.weight - consumed));
+      return { winner: l.owner, flipAtMs: l.t, garrison, retake: retakeOf(state, target, l.owner, l.t, garrison, next) };
+    }
+  }
+  return { flipAtMs: Infinity, garrison: target.units };
+}
+
+/** The replay after a capture by `winner` at `flipAt` with `garrison` units: who takes it back, and when. */
+function retakeOf(state: GameState, target: Tower, winner: Owner, flipAt: number, garrison: number, next: () => Landing | undefined): Contest['retake'] {
+  const D = defenceMultiplier(target);
+  const owned: Tower = { ...target, owner: winner };
+  const gen = genPerSecond(owned, state);
+  const cap = capacityOf(owned, state) * D + (D - 1);
+  let need = garrison * D + (D - 1) + 1e-9;
+  let grownFrom = flipAt; // the capture clears the under-fire window: it grows until the next hostile landing
+  for (let guard = 0; guard < 10_000; guard++) {
+    const l = next();
+    if (!l) return undefined;
+    if (l.owner === winner) {
+      need = Math.min(cap, need + l.weight * D);
+      continue;
+    }
+    if (l.t > grownFrom) need = Math.min(cap, need + (gen * (l.t - grownFrom) * D) / 1000);
+    grownFrom = l.t + C.UNDER_FIRE_MS;
+    need -= l.weight;
+    if (need < 0) return { owner: l.owner, atMs: l.t };
   }
   return undefined;
+}
+
+/**
+ * True when `owner` ends up with the contested neutral: it lands the flipping unit, or takes the tower
+ * back from the rival's capture within `marginMs` of it (a race decided by one landing is a tie the
+ * rival's garrison of 1 does not survive — a tank or the faster stream lands next). `marginMs` = 0 is
+ * pure parity.
+ */
+export function contestHeld(contest: Contest, owner: Owner, marginMs: number): boolean {
+  if (contest.winner === owner) return true;
+  if (contest.winner === undefined || !contest.retake) return false;
+  return contest.retake.owner === owner && contest.retake.atMs - contest.flipAtMs <= marginMs;
 }
 
 /** Shorthand: when the tower falls to what is visibly coming (Infinity = it holds). */

@@ -3,7 +3,7 @@ import { makeLevel, wall } from '../helpers';
 import { Rng, applyCommand, createState, step } from '../../src/sim/index';
 import type { Command, GameState, TowerDef } from '../../src/sim/index';
 import { ATTACK_PLAN_MS, CAPTURE_PLAN_MS, GROWER_MIN_TOWERS, GROW_FIRST_MS, grower, growsFirst, hopsToOpponent, ownedTowers, referencePlayerCommands } from '../../src/ai/index';
-import { CONTEST_PENALTY_MS, GROW_FIRST_MIN_ENEMY_TOWERS, HOPELESS_MS } from '../../src/ai/referencePlayer';
+import { CONTEST_MARGIN_MS, GROW_FIRST_MIN_ENEMY_TOWERS, HOPELESS_MS } from '../../src/ai/referencePlayer';
 import { RACE_MARGIN_MS, STACK_MIN_GAIN_MS } from '../../src/ai/tactics';
 import { MIN_LANDING_SHARE } from '../../src/ai/common';
 
@@ -89,7 +89,7 @@ describe('capture (rule 2)', () => {
     const cmds = bot(state);
     expect(cmds[0]).toEqual(unlink('home', 'camp')); // feeding the rival's capture is waste
     expect(cmds[1]).toEqual(link('home', 'foe')); // foe's only link is busy: the stream lands unopposed
-    expect(CONTEST_PENALTY_MS).toBe(10_000);
+    expect(CONTEST_MARGIN_MS).toBe(500);
   });
 
   it('hold check: a neutral next to a stronger enemy tower is not taken (it would be lost at once)', () => {

@@ -21,7 +21,8 @@ import {
   allLinks,
   atMaxLevel,
   bySpeed,
-  flipOwner,
+  contestHeld,
+  contestOf,
   hasLink,
   isCapped,
   landsEnough,
@@ -157,6 +158,11 @@ export interface MaintainConfig {
   hopelessMs: number;
   /** Whether a supply line into an own tower that is not a reinforcement should go on. */
   keepSupply: (ctx: Ctx, source: Tower, target: Tower, link: Link) => boolean;
+  /**
+   * A stream into a contested neutral ends when the parity race is lost (`contestOf`): the rival lands
+   * the flipping unit and we do not take the tower back within this margin (default 0: pure parity).
+   */
+  contestMarginMs?: number;
 }
 
 /** Rule "maintain" for one tower (see file header). */
@@ -191,9 +197,10 @@ export function maintain(ctx: Ctx, tower: Tower, cfg: MaintainConfig): void {
     const landing = flow !== undefined && landsEnough(flow);
     const falls = landing ? siege(ctx, target).fallsAtMs : Infinity;
     if (target.owner === 'neutral' && landing) {
-      // A contested neutral goes to whoever lands the flipping unit; feeding a rival's capture is waste.
-      const winner = flipOwner(state, target, options(ctx));
-      if (winner !== undefined && winner !== ctx.owner) {
+      // A contested neutral goes to whoever lands the flipping unit; feeding a rival's capture is waste —
+      // unless we take it straight back from the rival's garrison of 1 (`contestMarginMs`, AI-8c).
+      const contest = contestOf(state, target, options(ctx));
+      if (contest.winner !== undefined && !contestHeld(contest, ctx.owner, cfg.contestMarginMs ?? 0)) {
         issueUnlink(ctx, link);
         continue;
       }
@@ -224,15 +231,23 @@ export interface DefendConfig {
    * would end the line anyway — AI-7b). Off: a reinforcement is never reclaimed (the enemies' v3 defence).
    */
   reclaimReinforcement?: boolean;
+  /**
+   * Finish the capture (AI-8b): an attack whose target falls within this is not reclaimed for a shield
+   * unless the tower falls before the capture completes even with the shield in its place. Off (the
+   * enemies): an attack is reclaimed whenever its target outlives the tower.
+   */
+  finishMs?: number;
 }
 
 /**
  * Links of `tower` a shield may replace: supply that is not a reinforcement, an attack whose target
  * outlives the tower, and — last, with `reclaimReinforcement` — a reinforcement: the tower's capture
  * would end it anyway (`sourceLost`), so a falling tower reclaims its own supply line to save itself
- * (AI-7b: "it loses its last tower while its only link reinforces another").
+ * (AI-7b: "it loses its last tower while its only link reinforces another"). With `finishMs`, an
+ * attack about to complete is kept unless the shield in its place keeps the tower standing past the
+ * capture (a shield that comes too late costs the capture and saves nothing).
  */
-function reclaimableFor(ctx: Ctx, tower: Tower, fallsAt: number, shield: PlannedLink, reclaimReinforcement: boolean): Link | undefined {
+function reclaimableFor(ctx: Ctx, tower: Tower, fallsAt: number, shield: PlannedLink, reclaimReinforcement: boolean, finishMs = 0): Link | undefined {
   let reinforcement: Link | undefined;
   for (const link of activeLinks(ctx, tower.id)) {
     const target = ctx.state.towers[link.to];
@@ -243,7 +258,13 @@ function reclaimableFor(ctx: Ctx, tower: Tower, fallsAt: number, shield: Planned
       continue;
     }
     if (isShield(ctx, link)) continue;
-    if (siege(ctx, target).fallsAtMs > fallsAt) return link;
+    const done = siege(ctx, target).fallsAtMs;
+    if (done <= fallsAt) continue; // the capture completes first: keep it
+    if (done <= finishMs) {
+      const shielded = siegeOf(ctx.state, tower, { planned: [...ctx.planned, shield], exclude: [...ctx.ended, link] }).fallsAtMs;
+      if (shielded < done) continue; // the tower falls before the capture completes even shielded: finish it
+    }
+    return link;
   }
   if (!reclaimReinforcement || !reinforcement) return undefined;
   // A reinforcement is given up only when the shield in its place makes the tower hold: losing the
@@ -311,7 +332,7 @@ export function defend(ctx: Ctx, tower: Tower, cfg: DefendConfig): boolean {
       if (!source || hasLink(state, tower.id, source.id)) continue;
       if (linkRate(state, tower, ctx.owner) < linkRate(state, source, a.link.owner)) continue;
       if (freeSlots(ctx, tower, cap) <= 0) {
-        const reclaim = reclaimableFor(ctx, tower, s.fallsAtMs, { owner: ctx.owner, from: tower.id, to: source.id }, cfg.reclaimReinforcement === true);
+        const reclaim = reclaimableFor(ctx, tower, s.fallsAtMs, { owner: ctx.owner, from: tower.id, to: source.id }, cfg.reclaimReinforcement === true, cfg.finishMs ?? 0);
         if (!reclaim) continue;
         issueUnlink(ctx, reclaim);
       }
@@ -357,8 +378,12 @@ export interface AttackConfig {
    * no faster than what our adjacent towers could pour into it after the capture.
    */
   holdCheck?: boolean;
-  /** Score penalty (ms) for a neutral a rival already streams at (the flip is a race we may lose). */
-  contestPenaltyMs?: number;
+  /**
+   * A contested neutral is taken when the parity race (`contestOf`) is ours, or we take it back from the
+   * rival's capture within this margin (default 0: pure parity). Until 2026-09-23 a contested neutral
+   * also scored a flat 10 s worse, which ceded every cheap contested neutral to an uncontested one (AI-8c).
+   */
+  contestMarginMs?: number;
 }
 
 /**
@@ -438,14 +463,19 @@ export function attack(ctx: Ctx, cfg: AttackConfig): void {
       const onAdd = cfg.anticipate ? (link: PlannedLink, planned: readonly PlannedLink[]) => anticipatedShield(state, target, link, planned) : undefined;
       const plan = siegePlan(state, ctx.owner, target, ordered, cfg.planMs, opts, onAdd);
       if (!plan) continue;
-      let penalty = 0;
+      // A contested neutral goes to whoever lands the flipping unit: only plans that win the race count,
+      // and they are scored by when *we* get the tower (our flip, or our retake) — the rival's stream
+      // brings the garrison down too, but that fall is theirs, not ours.
+      let acquiredShift = 0;
       if (target.owner === 'neutral') {
-        // A contested neutral goes to whoever lands the flipping unit: only plans that land it count.
         let others = 0;
         for (const [o, r] of plan.siege.byOwner) if (o !== ctx.owner) others += r;
         if (others > 0) {
-          if (flipOwner(state, target, { planned: [...ctx.planned, ...plan.links], exclude: ctx.ended }) !== ctx.owner) continue;
-          penalty = cfg.contestPenaltyMs ?? 0;
+          const contest = contestOf(state, target, { planned: [...ctx.planned, ...plan.links], exclude: ctx.ended });
+          if (!contestHeld(contest, ctx.owner, cfg.contestMarginMs ?? 0)) continue;
+          const acquiredAt = contest.winner === ctx.owner ? contest.flipAtMs : contest.retake!.atMs;
+          if (acquiredAt > cfg.planMs) continue;
+          acquiredShift = acquiredAt - plan.siege.fallsAtMs;
         }
         if (cfg.holdCheck) {
           let ours = 0;
@@ -458,7 +488,7 @@ export function attack(ctx: Ctx, cfg: AttackConfig): void {
           if (strongestRivalRate(state, target, ctx.owner) > ours) continue;
         }
       }
-      const sc = score(target, plan) + penalty;
+      const sc = score(target, plan) + acquiredShift;
       if (!best || sc < best.score) best = { target, plan, score: sc };
     }
     if (!best) return;
@@ -491,6 +521,8 @@ export interface StackConfig {
   sources?: (tower: Tower, target: Tower) => boolean;
   /** Judge the join against the target's anticipated shield on the new lane. */
   anticipate?: boolean;
+  /** A contested neutral is joined when the race stays ours within this margin (`contestHeld`; default 0). */
+  contestMarginMs?: number;
 }
 
 /** A join must bring the fall forward by at least this much (ms) to be worth the source's growth. */
@@ -529,7 +561,7 @@ export function stack(ctx: Ctx, cfg: StackConfig = {}): void {
       // make the siege slower under that shield (it then cancels this stream and frees another lane).
       const reactions = cfg.anticipate ? anticipatedShield(state, target, link, ctx.planned) : [];
       if (reactions.length && siege(ctx, target, [...reactions, link]).fallsAtMs > before) continue;
-      if (target.owner === 'neutral' && flipOwner(state, target, { planned: [...ctx.planned, link], exclude: ctx.ended }) !== ctx.owner) continue;
+      if (target.owner === 'neutral' && !contestHeld(contestOf(state, target, { planned: [...ctx.planned, link], exclude: ctx.ended }), ctx.owner, cfg.contestMarginMs ?? 0)) continue;
       if (!best || after < best.falls) best = { id, falls: after };
     }
     if (best) issueLink(ctx, source, best.id);
