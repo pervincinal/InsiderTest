@@ -8,8 +8,8 @@
   "lesson_az": "Qəsrin 2-ci səviyyədə başlayır. Tısbağalara qarşı səbir: yarışsan, səndən çox tikirlər, ona görə qoy qüllələrin divar arxasında 3-cü səviyyəyə dolsun və yalnız onlardan iki dəfə böyük olanda vur",
   "lesson_ru": "Твоя цитадель начинает на уровне 2. Терпение против черепах: в гонке они перестроят тебя, так что дай башням наполниться до уровня 3 за стенами и бей лишь когда ты вдвое больше их",
   "lesson_tr": "Kalen 2. seviyede başlar. Kaplumbağalara karşı sabır: yarışırsan senden çok inşa ederler, o yüzden kulelerin surların ardında 3. seviyeye dolsun ve ancak onların iki katı olunca vur",
-  "star3": 80000,
-  "star2": 160000,
+  "star3": 75000,
+  "star2": 150000,
   "enemies": [
     {"owner": "enemy1", "personality": "turtle", "aggression": 0.75},
     {"owner": "enemy2", "personality": "turtle", "aggression": 0.75},

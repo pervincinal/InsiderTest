@@ -3,18 +3,23 @@
  * player (GDD §3 "Pacing / star clocks"): star3 = 0.9 × median (K seeds) rounded to 5 s; star2 = max(2 × star3,
  * worst win rounded up to 5 s); both capped at 180 s; then the boundary step: if ≥ 80 % of 10 max-upgrade runs
  * would be 3★ at that clock, star3 steps down 5 s once. Pinned levels (`KEEP`) are reported but never written
- * (level 1 = tutorial clock, level 33 = the first shipped weekly target). Without `--write` it only prints.
+ * (level 1 = tutorial clock, level 33 = the first shipped weekly target). Tutorial band (levels 1–8): star2 is also
+ * at least the naive first-time line's median (`scripts/lib/naivePlayer.ts`, K = 5, 4 s reactions) rounded up to
+ * 5 s, so a first-time human can reach 2★ (GDD §3). Without `--write` it only prints.
  */
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { LevelDef, PlayerModifiers } from '../src/sim/types';
 import { referencePlayerCommands } from '../src/ai/referencePlayer';
 import { runHeadless } from '../src/ai/headless';
+import { NAIVE_REACT_MS, runNaive } from './lib/naivePlayer';
 
 const DIR = join(import.meta.dirname, '..', 'src', 'levels');
 const KEEP: Record<number, string> = { 1: 'tutorial clock', 33: 'weekly pin 2026-09-21' };
 const MAX_MODIFIERS: PlayerModifiers = { productionMul: 1.2, capacityMul: 1.25, startGarrisonBonus: 5, unitSpeedMul: 1.15 };
 const CAP_MS = 180_000;
+const TUTORIAL_LAST_LEVEL = 8;
+const NAIVE_SEEDS = 5;
 
 const args = process.argv.slice(2);
 const opt = (name: string, def: string): string => {
@@ -60,11 +65,20 @@ for (const file of readdirSync(DIR).filter((f) => f.endsWith('.json')).sort()) {
     star3 -= 5000;
     step = ` step(${threeStar}/10)`;
   }
-  const star2 = Math.min(CAP_MS, Math.max(2 * star3, ceil5(worst)));
+  let star2 = Math.min(CAP_MS, Math.max(2 * star3, ceil5(worst)));
+  let naive = '';
+  if (level.id <= TUTORIAL_LAST_LEVEL) {
+    const row = runNaive(level, NAIVE_SEEDS, NAIVE_REACT_MS);
+    if (row.medianMs !== undefined) {
+      const floor = Math.min(CAP_MS, ceil5(row.medianMs));
+      naive = ` naive ${(row.medianMs / 1000).toFixed(1)}s`;
+      if (floor > star2) star2 = floor;
+    }
+  }
   const same = star3 === level.star3 && star2 === level.star2;
   const keep = KEEP[level.id];
   console.log(
-    `${level.id}\t${level.name.padEnd(22)}\t${times.length}/${seeds}${losses ? ` (${losses} lost)` : ''}\tmedian ${(median / 1000).toFixed(1)}s\tworst ${(worst / 1000).toFixed(1)}s\t${level.star3 / 1000}/${level.star2 / 1000} → ${star3 / 1000}/${star2 / 1000}${step}${same ? '' : keep ? `\tKEPT (${keep})` : '\tCHANGED'}`,
+    `${level.id}\t${level.name.padEnd(22)}\t${times.length}/${seeds}${losses ? ` (${losses} lost)` : ''}\tmedian ${(median / 1000).toFixed(1)}s\tworst ${(worst / 1000).toFixed(1)}s\t${level.star3 / 1000}/${level.star2 / 1000} → ${star3 / 1000}/${star2 / 1000}${step}${naive}${same ? '' : keep ? `\tKEPT (${keep})` : '\tCHANGED'}`,
   );
   if (same || keep || !write) continue;
   const next = raw.replace(/"star3": \d+/, `"star3": ${star3}`).replace(/"star2": \d+/, `"star2": ${star2}`);

@@ -8,8 +8,8 @@
   "lesson_az": "Qəsrin 2-ci səviyyədə başlayır. Hər mina haqqını bir dəfə alır: onu ucuz qüllənin əsgərləri ilə ödə, sonra əsl ordunu təmizlədiyin xətdən axıt",
   "lesson_ru": "Твоя цитадель начинает на уровне 2. Каждая мина берёт плату один раз: заплати её людьми дешёвой башни, а потом пусти настоящую армию по расчищенной линии",
   "lesson_tr": "Kalen 2. seviyede başlar. Her mayın bedelini bir kez alır: onu ucuz bir kulenin askerleriyle öde, sonra gerçek orduyu temizlediğin çizgiden akıt",
-  "star3": 30000,
-  "star2": 60000,
+  "star3": 25000,
+  "star2": 50000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.7},
     {"owner": "enemy2", "personality": "turtle", "aggression": 0.7},

@@ -8,8 +8,8 @@
   "lesson_az": "Mərhələ finalı: sənin zavodun, onların divarları və topları, arada isə çay. Səni təhdid edən keçidləri tut, minaları bir neçə kəşfiyyatçı ilə ödə və qəsrləri bir-bir qır",
   "lesson_ru": "Финал этапа: твой завод, их стены и пушки, а между вами река. Держи броды, что тебе грозят, оплати мины парой разведчиков и ломай цитадели по одной",
   "lesson_tr": "Etap finali: senin fabrikan, onların surları ve topları, arada bir nehir. Seni tehdit eden geçitleri tut, mayınları birkaç keşif eriyle öde ve kaleleri teker teker kır",
-  "star3": 45000,
-  "star2": 90000,
+  "star3": 40000,
+  "star2": 80000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.8},
     {"owner": "enemy2", "personality": "opportunist", "aggression": 0.8}

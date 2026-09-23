@@ -9,7 +9,7 @@
   "lesson_ru": "Нейтральные башни — бесплатное производство: забери обе до боя",
   "lesson_tr": "Tarafsız kuleler bedava üretimdir: savaşmadan önce ikisini de kap",
   "star3": 25000,
-  "star2": 50000,
+  "star2": 70000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.3}
   ],

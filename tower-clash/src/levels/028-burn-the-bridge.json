@@ -8,8 +8,8 @@
   "lesson_az": "Qəsrin 2-ci səviyyədə başlayır. Çaylar divar kimi xətti kəsir, onları yalnız keçid keçir: keçiddəki sahil qülləsini tut və o biri sahil böyüməmiş oradan iki axın burax",
   "lesson_ru": "Твоя цитадель начинает на уровне 2. Реки перекрывают линию как стены, и пересечь их можно только по броду: держи башню у брода и пусти через него два потока, пока дальний берег не вырос",
   "lesson_tr": "Kalen 2. seviyede başlar. Nehirler duvar gibi çizgiyi keser, yalnız geçitten aşılır: geçitteki kıyı kulesini tut ve karşı kıyı büyümeden oradan iki akış gönder",
-  "star3": 40000,
-  "star2": 80000,
+  "star3": 35000,
+  "star2": 70000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.55},
     {"owner": "enemy2", "personality": "turtle", "aggression": 0.55}

@@ -8,8 +8,8 @@
   "lesson_az": "Qəsrin 2-ci səviyyədə başlayır. Bir vaxtda bir cəbhədə vuruş: çay hər düşməni yalnız öz keçidindən buraxır, ona görə bir keçidi dolu qülləylə tut, o birindən hücum et",
   "lesson_ru": "Твоя цитадель начинает на уровне 2. Воюй на одном фронте за раз: река пускает каждого врага только через его брод, так что держи один брод полной башней и бей через другой",
   "lesson_tr": "Kalen 2. seviyede başlar. Tek seferde tek cephede savaş: nehir her düşmanı yalnız kendi geçidinden bırakır, bir geçidi dolu kuleyle tut, diğerinden saldır",
-  "star3": 50000,
-  "star2": 145000,
+  "star3": 40000,
+  "star2": 80000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.7},
     {"owner": "enemy2", "personality": "opportunist", "aggression": 0.7}
@@ -30,7 +30,7 @@
   "obstacles": [
     {"kind": "water", "points": [{"x": -40, "y": 880}, {"x": 90, "y": 880}]},
     {"kind": "water", "points": [{"x": 200, "y": 880}, {"x": 320, "y": 880}]},
-    {"kind": "water", "points": [{"x": 400, "y": 880}, {"x": 520, "y": 880}]},
+    {"kind": "water", "points": [{"x": 400, "y": 880}, {"x": 490, "y": 880}]},
     {"kind": "water", "points": [{"x": 630, "y": 880}, {"x": 760, "y": 880}]}
   ],
   "mines": [

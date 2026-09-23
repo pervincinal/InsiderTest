@@ -9,14 +9,14 @@
   "lesson_ru": "Дай башне наполниться: при 25 бойцах она сама растёт, льёт быстрее и ведёт два потока. Враг сидит в обороне — не гонись, а перепроизведи его",
   "lesson_tr": "Kulen dolsun: 25 askerde kendi kendine yükselir, daha hızlı akıtır ve iki akış sürer. Düşman kaplumbağa: yarışma, ondan çok üret",
   "star3": 25000,
-  "star2": 50000,
+  "star2": 135000,
   "enemies": [
     {"owner": "enemy1", "personality": "turtle", "aggression": 0.3}
   ],
   "towers": [
     {"id": "home", "x": 360, "y": 1120, "owner": "player", "units": 15, "level": 1, "kind": "barracks"},
     {"id": "outpost", "x": 150, "y": 880, "owner": "neutral", "units": 5},
-    {"id": "mid", "x": 520, "y": 700, "owner": "neutral", "units": 6},
+    {"id": "mid", "x": 360, "y": 700, "owner": "neutral", "units": 6},
     {"id": "foe", "x": 360, "y": 260, "owner": "enemy1", "units": 3, "level": 1, "kind": "barracks"}
   ]
 }

@@ -8,15 +8,15 @@
   "lesson_az": "Məsafə vaxtdır: uzun xətdə ilk əsgər gec çatır, ona görə əvvəl öndəki qülləni al və bazaya yaxından hücum et",
   "lesson_ru": "Расстояние — это время: на длинной линии первый боец приходит поздно, так что сначала возьми передовую башню и бей базу вблизи",
   "lesson_tr": "Mesafe zamandır: uzun çizgide ilk asker geç varır, bu yüzden önce öndeki kuleyi al ve üsse yakından saldır",
-  "star3": 40000,
-  "star2": 80000,
+  "star3": 25000,
+  "star2": 75000,
   "enemies": [
-    {"owner": "enemy1", "personality": "rusher", "aggression": 0.3}
+    {"owner": "enemy1", "personality": "rusher", "aggression": 0.1}
   ],
   "towers": [
     {"id": "home", "x": 360, "y": 1160, "owner": "player", "units": 20, "level": 1, "kind": "barracks"},
-    {"id": "sw", "x": 160, "y": 940, "owner": "neutral", "units": 5},
-    {"id": "se", "x": 560, "y": 940, "owner": "neutral", "units": 5},
+    {"id": "sw", "x": 160, "y": 940, "owner": "neutral", "units": 3},
+    {"id": "se", "x": 560, "y": 940, "owner": "neutral", "units": 3},
     {"id": "nw", "x": 150, "y": 700, "owner": "neutral", "units": 8},
     {"id": "ne", "x": 570, "y": 700, "owner": "neutral", "units": 8},
     {"id": "fwd", "x": 360, "y": 520, "owner": "neutral", "units": 10},
@@ -24,6 +24,10 @@
   ],
   "obstacles": [
     {"kind": "wall", "points": [{"x": 40, "y": 340}, {"x": 200, "y": 340}]},
-    {"kind": "wall", "points": [{"x": 520, "y": 340}, {"x": 680, "y": 340}]}
+    {"kind": "wall", "points": [{"x": 520, "y": 340}, {"x": 680, "y": 340}]},
+    {"kind": "rock", "points": [{"x": 256, "y": 560}]},
+    {"kind": "rock", "points": [{"x": 464, "y": 560}]},
+    {"kind": "rock", "points": [{"x": 300, "y": 788}]},
+    {"kind": "rock", "points": [{"x": 420, "y": 788}]}
   ]
 }

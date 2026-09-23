@@ -9,14 +9,14 @@
   "lesson_ru": "Башня на пути прячет врага за собой: обойди её через боковую башню. Отправка не опустошает башню, а лишь останавливает её рост, так что не прерывай потоки",
   "lesson_tr": "Yoldaki kule arkasındaki düşmanı gizler: yandaki kuleden dolaş. Göndermek kuleyi boşaltmaz, sadece büyümesini durdurur; akışlarını kesme",
   "star3": 20000,
-  "star2": 40000,
+  "star2": 75000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.2}
   ],
   "towers": [
     {"id": "home", "x": 360, "y": 1120, "owner": "player", "units": 12, "level": 1, "kind": "barracks"},
     {"id": "mid", "x": 360, "y": 760, "owner": "neutral", "units": 6},
-    {"id": "side", "x": 600, "y": 980, "owner": "neutral", "units": 3},
+    {"id": "side", "x": 630, "y": 1100, "owner": "neutral", "units": 3},
     {"id": "foe", "x": 360, "y": 280, "owner": "enemy1", "units": 5, "level": 1, "kind": "barracks"}
   ]
 }

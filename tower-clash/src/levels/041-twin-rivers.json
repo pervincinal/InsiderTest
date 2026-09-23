@@ -8,8 +8,8 @@
   "lesson_az": "İki çay, iki rəqib: hücumçunun keçdiyi keçidi tut, o birindən özün keç və heç vaxt iki sahildə eyni anda vuruşma",
   "lesson_ru": "Две реки, два соперника: держи брод, по которому идёт рвач, сам перейди по другому и никогда не дерись на обоих берегах сразу",
   "lesson_tr": "İki nehir, iki rakip: saldırganın geçtiği geçidi tut, diğerinden kendin geç ve asla iki kıyıda aynı anda savaşma",
-  "star3": 65000,
-  "star2": 130000,
+  "star3": 70000,
+  "star2": 140000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.6},
     {"owner": "enemy2", "personality": "opportunist", "aggression": 0.6}

@@ -8,23 +8,25 @@
   "lesson_az": "İki baza ilə başlayırsan: hissə-hissə hücum etmə, hər ikisini eyni hədəfə axıt",
   "lesson_ru": "У тебя две базы: лей обе в одну цель вместо атак по частям",
   "lesson_tr": "İki üsle başlıyorsun: parça parça saldırma, ikisini de aynı hedefe akıt",
-  "star3": 35000,
-  "star2": 70000,
+  "star3": 40000,
+  "star2": 90000,
   "enemies": [
-    {"owner": "enemy1", "personality": "rusher", "aggression": 0.3}
+    {"owner": "enemy1", "personality": "rusher", "aggression": 0.2}
   ],
   "towers": [
     {"id": "homeW", "x": 170, "y": 1140, "owner": "player", "units": 16, "level": 1, "kind": "barracks"},
     {"id": "homeE", "x": 550, "y": 1140, "owner": "player", "units": 16, "level": 1, "kind": "barracks"},
     {"id": "nW", "x": 150, "y": 860, "owner": "neutral", "units": 6},
     {"id": "nE", "x": 570, "y": 860, "owner": "neutral", "units": 6},
-    {"id": "mid", "x": 360, "y": 660, "owner": "neutral", "units": 10},
+    {"id": "mid", "x": 360, "y": 780, "owner": "neutral", "units": 14},
     {"id": "foeW", "x": 170, "y": 420, "owner": "enemy1", "units": 4, "level": 1, "kind": "barracks"},
     {"id": "foeE", "x": 550, "y": 420, "owner": "enemy1", "units": 4, "level": 1, "kind": "barracks"},
     {"id": "base", "x": 360, "y": 180, "owner": "enemy1", "units": 8, "level": 1, "kind": "barracks"}
   ],
   "obstacles": [
     {"kind": "wall", "points": [{"x": 20, "y": 330}, {"x": 190, "y": 330}]},
-    {"kind": "wall", "points": [{"x": 530, "y": 330}, {"x": 700, "y": 330}]}
+    {"kind": "wall", "points": [{"x": 530, "y": 330}, {"x": 700, "y": 330}]},
+    {"kind": "wall", "points": [{"x": 150, "y": 700}, {"x": 210, "y": 700}]},
+    {"kind": "wall", "points": [{"x": 510, "y": 700}, {"x": 570, "y": 700}]}
   ]
 }
