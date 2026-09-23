@@ -287,7 +287,9 @@ test.describe('Tower Clash smoke', () => {
     //      three points 6 px apart along the lane — one of them always lies on a dash — and the
     //      probe's shift is the largest of the three.
     const laneLen = Math.hypot(foe.x - home.x, foe.y - home.y);
-    const guideProbes = [0.35, 0.5, 0.65].map((t) => [0, 6, 12].map((px) => along(home, foe, t + px / laneLen)));
+    // t ≥ 0.45: closer to home the lane runs under home's garrison badge (a 21 covers t ≈ 0.3–0.4 at
+    // the 360 px viewport); t ≤ 0.65 stays clear of the tutorial banner that sits over foe.
+    const guideProbes = [0.45, 0.55, 0.65].map((t) => [0, 6, 12].map((px) => along(home, foe, t + px / laneLen)));
     const guideBefore = await Promise.all(guideProbes.map((run) => Promise.all(run.map((p) => pixelAt(page, p)))));
     const probeShift = async (run: { x: number; y: number }[], i: number) =>
       Math.max(...(await Promise.all(run.map(async (p, j) => colourDistance(await pixelAt(page, p), guideBefore[i]![j]!)))));
