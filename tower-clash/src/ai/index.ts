@@ -56,6 +56,7 @@ export {
   fallsAtMs,
   contestOf,
   contestHeld,
+  holdMs,
   siegePlan,
   reinforcePlan,
   artilleryKillRate,

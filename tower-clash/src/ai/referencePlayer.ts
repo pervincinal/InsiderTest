@@ -22,7 +22,9 @@
  *      grew because it was always linked);
  *   2. capture — expand into neutrals with the cheapest streams: every tower with a free link except the
  *      growing keep (`grower`) takes the neutral that falls soonest within `CAPTURE_PLAN_MS`, stacking
- *      links when one cannot break it; a contested neutral is taken when the race is ours;
+ *      links when one cannot break it; a contested neutral is taken when the race is ours, ranked by our
+ *      acquisition plus its hold cost (`holdMs`, AI-9: what the rival still lands on it after our flip
+ *      keeps the tower under fire and the source frozen on it);
  *   3. attack — focus fire on the enemy tower that falls soonest within `ATTACK_PLAN_MS`, every adjacent
  *      tower with a free link (or a supply link it can reclaim) stacked until it breaks; the growing keep
  *      joins only when the others cannot break it;
@@ -224,6 +226,7 @@ export function referencePlayerCommands(state: GameState, _rng: Rng, trace?: Rul
     sources: (t) => t.id !== keep?.id && t.id !== growing?.id,
     reclaim,
     holdCheck: true,
+    holdCost: true,
     contestMarginMs: CONTEST_MARGIN_MS,
   });
   attack(ctx, {

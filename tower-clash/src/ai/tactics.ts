@@ -24,6 +24,7 @@ import {
   contestHeld,
   contestOf,
   hasLink,
+  holdMs,
   isCapped,
   landsEnough,
   laneFlow,
@@ -31,6 +32,7 @@ import {
   neighbours,
   ownedTowers,
   reinforcePlan,
+  rivalRate,
   roadBetween,
   siegeOf,
   siegePlan,
@@ -384,6 +386,17 @@ export interface AttackConfig {
    * also scored a flat 10 s worse, which ceded every cheap contested neutral to an uncontested one (AI-8c).
    */
   contestMarginMs?: number;
+  /**
+   * A contested neutral we win is scored with its *hold cost* (`holdMs`, AI-9): what the rival's streams
+   * and columns still land on it after our acquisition keeps it under fire, its garrison at 1 and the
+   * source that took it frozen on it as its reinforcement — so the capture is ranked as if acquired that
+   * much later (the rival's landings before the flip still count for us: they bring the garrison down).
+   * Reference player only, like the flat penalty it replaces; the enemies never paid either. (Rejecting
+   * the capture when the rival streams already on it out-rate what our adjacent towers could pour in
+   * after it was measured 2026-09-24 and dropped: lean 14 50 → 47/50, its median 36.9 → 70.5 s — the
+   * guns' neutral is the level's stepping stone, and `defend` reinforces a retaken tower anyway.)
+   */
+  holdCost?: boolean;
 }
 
 /**
@@ -468,12 +481,12 @@ export function attack(ctx: Ctx, cfg: AttackConfig): void {
       // brings the garrison down too, but that fall is theirs, not ours.
       let acquiredShift = 0;
       if (target.owner === 'neutral') {
-        let others = 0;
-        for (const [o, r] of plan.siege.byOwner) if (o !== ctx.owner) others += r;
+        const others = rivalRate(plan.siege, ctx.owner);
+        let acquiredAt = plan.siege.fallsAtMs;
         if (others > 0) {
           const contest = contestOf(state, target, { planned: [...ctx.planned, ...plan.links], exclude: ctx.ended });
           if (!contestHeld(contest, ctx.owner, cfg.contestMarginMs ?? 0)) continue;
-          const acquiredAt = contest.winner === ctx.owner ? contest.flipAtMs : contest.retake!.atMs;
+          acquiredAt = contest.winner === ctx.owner ? contest.flipAtMs : contest.retake!.atMs;
           if (acquiredAt > cfg.planMs) continue;
           acquiredShift = acquiredAt - plan.siege.fallsAtMs;
         }
@@ -487,6 +500,7 @@ export function attack(ctx: Ctx, cfg: AttackConfig): void {
           }
           if (strongestRivalRate(state, target, ctx.owner) > ours) continue;
         }
+        if (cfg.holdCost && others > 0) acquiredShift += holdMs(state, target, ctx.owner, acquiredAt, allLinks(state, { planned: [...ctx.planned, ...plan.links], exclude: ctx.ended }));
       }
       const sc = score(target, plan) + acquiredShift;
       if (!best || sc < best.score) best = { target, plan, score: sc };

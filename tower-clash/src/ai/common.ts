@@ -659,6 +659,44 @@ export function contestHeld(contest: Contest, owner: Owner, marginMs: number): b
   return contest.retake.owner === owner && contest.retake.atMs - contest.flipAtMs <= marginMs;
 }
 
+/**
+ * The *hold cost* of a contested neutral (AI-9, 2026-09-24): what the rival's streams still land on it
+ * after `owner` has taken it at `acquiredAtMs`. The rival reads the lost race off the same ribbons we
+ * do and ends its stream the tick after ours is on the map (rule c of `maintain` is shared by every
+ * bot), so its last unit leaves within one AI tick and lands a lane's travel time later; a rival column
+ * already walking lands at its remaining walk. Until the last of those lands the captured tower is under
+ * fire (it grows nothing, its garrison stays at the capture's 1) and the source that took it stays on it
+ * as its reinforcement — frozen. Returns the ms after `acquiredAtMs` until that last hostile landing, 0
+ * when everything hostile has landed by then. Measured 2026-09-24 (levels 9–50, HEAD bot): at 57 of 61
+ * contested flips on plain (42 of 46 under lean) the rival ribbon was already gone and the column held
+ * the source 0.8–3.8 s — so this is almost always 0 on the shipped levels (K = 50 lean and K = 20
+ * plain: no level moved), and it is what the flat `CONTEST_PENALTY_MS` = 10 s stood for: a full lane's
+ * travel (or the 5 s tried on 2026-09-23) overstates it and cancels the rival landings' real help with
+ * the capture — both cost lean 14 three to four seeds and plain 7 / 47 about 10 s at K = 50.
+ */
+export function holdMs(state: GameState, target: Tower, owner: Owner, acquiredAtMs: number, all: readonly PlannedLink[]): number {
+  let end = acquiredAtMs;
+  for (const l of all) {
+    if (l.to !== target.id || l.owner === owner) continue;
+    const from = state.towers[l.from];
+    const road = roadBetween(state, l.from, l.to);
+    if (!from || !road || emitRate(state, from, l.owner) <= 0) continue;
+    end = Math.max(end, C.AI_TICK_MS + travelMsFor(state, road, l.owner, unitKindOf(from)));
+  }
+  for (const u of state.units) {
+    if (u.to !== target.id || u.owner === owner) continue;
+    end = Math.max(end, remainingMs(state, u));
+  }
+  return end - acquiredAtMs;
+}
+
+/** Weight per second every rival stream (not `owner`'s) lands on `target` once it flows, from a siege's `byOwner`. */
+export function rivalRate(siege: Pick<Siege, 'byOwner'>, owner: Owner): number {
+  let sum = 0;
+  for (const [o, r] of siege.byOwner) if (o !== owner) sum += r;
+  return sum;
+}
+
 /** Shorthand: when the tower falls to what is visibly coming (Infinity = it holds). */
 export function fallsAtMs(state: GameState, target: Tower, options?: SiegeOptions): number {
   return siegeOf(state, target, options).fallsAtMs;
