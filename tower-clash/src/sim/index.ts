@@ -24,6 +24,7 @@ export {
   maxLinksOf,
   linksFrom,
   isLinked,
+  laneStalemate,
   isUnderFire,
   isFrozen,
   hasOverdrive,

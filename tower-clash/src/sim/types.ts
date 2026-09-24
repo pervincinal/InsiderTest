@@ -184,6 +184,8 @@ export type SimEvent =
   | { type: 'linked'; owner: Owner; from: string; to: string }
   | { type: 'unlinked'; owner: Owner; from: string; to: string; reason: UnlinkReason }
   | { type: 'unitDied'; x: number; y: number; owner: Owner; cause: 'clash' | 'artillery' | 'mine' }
+  /** A unit reached `towerId` (`owner` = the unit's owner). `hostile` false = reinforcement; true = a landing on a foreign tower (precedes the `capture` event when it flips the tower). Lane deaths never land. */
+  | { type: 'landed'; towerId: string; owner: Owner; weight: number; hostile: boolean }
   | { type: 'won'; timeMs: number }
   | { type: 'lost'; timeMs: number };
 

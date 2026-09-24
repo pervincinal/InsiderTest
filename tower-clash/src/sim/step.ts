@@ -380,7 +380,29 @@ function artillery(state: GameState, dt: number): void {
   if (dead.size) state.units = state.units.filter((u) => !dead.has(u.id));
 }
 
+/**
+ * True while the link's lane carries a shield: at least one unit of the link owner walking `from → to`
+ * and at least one unit of another owner walking the other way. Opposing streams cancel 1:1 on a lane
+ * (GDD §2.0b rule 10), so while this holds the link lands nothing — the play screen uses it to tell the
+ * player a stream is stuck (BUG-13). Pure read; units of the same owner never shield each other.
+ */
+export function laneStalemate(state: Pick<GameState, 'units'>, link: Pick<Link, 'owner' | 'from' | 'to' | 'roadId'>): boolean {
+  let outbound = false;
+  let opposing = false;
+  for (const u of state.units) {
+    if (u.roadId !== link.roadId) continue;
+    if (u.owner === link.owner) {
+      if (u.from === link.from && u.to === link.to) outbound = true;
+    } else if (u.from === link.to && u.to === link.from) {
+      opposing = true;
+    }
+    if (outbound && opposing) return true;
+  }
+  return false;
+}
+
 function arrive(state: GameState, tower: Tower, unit: Unit): void {
+  state.events.push({ type: 'landed', towerId: tower.id, owner: unit.owner, weight: unit.weight, hostile: tower.owner !== unit.owner });
   if (tower.owner === unit.owner) {
     tower.units = Math.min(capacityOf(tower, state), tower.units + unit.weight);
     tryAutoUpgrade(state, tower); // reinforcements count toward the auto-upgrade too
