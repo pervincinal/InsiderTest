@@ -41,6 +41,7 @@ Tower Clash 1.0 is the "Streams update" (v0.4.0) plus one week of content and ha
 - Sending never empties your tower: the soldiers stay home, the tower only stops growing while it streams. Each stream flows at the tower's level speed — 1 / 1.4 / 2 soldiers per second at level 1 / 2 / 3 (a tank factory sends a tank every 4 / 2.8 / 2 s) — and needs at least one soldier at home; a tower shot down to 0 drops its streams and grows again.
 - Bridges, the long-press bridge cut and barriers are gone: rivers are water with gaps where the bridges stood, old barriers became walls or mines. Mines are points on the map that take the first soldiers to pass over them.
 - All 50 levels re-authored on the new rules (walls from level 5, mines from 17, tower kinds unchanged); star clocks re-measured with the reference player; enemy AI and the reference bot play the lane model; lesson lines rewritten in EN/AZ/RU/TR. Store screenshots are re-captured after this change (`LAUNCH_CHECKLIST.md` G10 / A11 / R3).
+- **Build 6 (2026-09-24, still 1.0.0):** the tutorial band was rebuilt for first-time players on rules v3, a stalemate hint now appears when neither side can attack, a readability pass landed, and the bot and star clocks were re-derived — Android `versionCode` / iOS build number 6.
 
 **In this build — Grand Campaign, levels 41–50 (GDD §3 band 5)**
 - Ten new levels after 40 "The Crown" (`bb5c147`, LV-9): Twin Rivers, Siege Engine, Iron Convoy, Minefield Crossing, Three Fronts, The Long Bridge, Scorched Earth, Kings' Council, Last Light, The Crown Reforged. No new mechanic — three enemies, walls and mines on every map (Rules v3: the former bridges are gaps in the water), 10–12 towers, enemy aggression rising 0.6 → 0.9; names and lessons in EN/AZ/RU/TR; 3★ clocks 20–50 s by the v2 policy. Unlocks like every other level, with a star on the one before.
@@ -89,7 +90,7 @@ Tower Clash 1.0 is the "Streams update" (v0.4.0) plus one week of content and ha
 - Real RevenueCat / AdMob keys, store products, sandbox purchases (ECON-1, Phase B); real-device pass (QA-2, MM-1); signed release builds (MM-3); `app-ads.txt` at a site root (ECON-8).
 - Localised AZ/RU/TR App Store screenshot sets (Apple sets are EN only, by design); frames from levels 17+ (PUB-6).
 
-Still true on every build: no accounts, no analytics. The web/PWA build makes no network calls after loading and never asks for payment — its shop runs on the demo "Test store". `README.md`, `package.json` and the native projects say 1.0.0 / build 5 since 2026-09-21.
+Still true on every build: no accounts, no analytics. The web/PWA build makes no network calls after loading and never asks for payment — its shop runs on the demo "Test store". `README.md`, `package.json` and the native projects say 1.0.0 / build 6 since 2026-09-24 (build 5 was 2026-09-21).
 
 ### Azərbaycanca
 
@@ -100,6 +101,7 @@ Tower Clash 1.0 = "Axınlar yeniləməsi" (v0.4.0) + bir həftəlik məzmun və 
 - Göndərmək qülləni heç vaxt boşaltmır: əsgərlər yerində qalır, qüllə axın verərkən yalnız böyümür. Hər axın qüllənin səviyyə sürəti ilə gedir — 1 / 2 / 3-cü səviyyədə saniyədə 1 / 1.4 / 2 əsgər (tank zavodu hər 4 / 2.8 / 2 s-də bir tank) — və evdə ən azı bir əsgər tələb edir; 0-a endirilmiş qüllə axınlarını itirir və yenidən böyüyür.
 - Körpülər, uzun basışla körpü kəsmə və sədlər yoxdur: çaylar körpülərin yerində boşluqları olan su zolağıdır, köhnə sədlər divara ya minaya çevrilib. Minalar xəritədə nöqtədir — üstündən keçən ilk əsgərləri aparır.
 - Bütün 50 səviyyə yeni qaydalarla yenidən qurulub (divarlar 5-ci, minalar 17-ci səviyyədən, qüllə növləri dəyişməyib); ulduz vaxtları istinad oyunçusu ilə yenidən ölçülüb; düşmən AI-ı və istinad botu xətt modelini oynayır; dərs sətirləri EN/AZ/RU/TR yenidən yazılıb. Mağaza ekran görüntüləri bu dəyişiklikdən sonra yenidən çəkilir (`LAUNCH_CHECKLIST.md` G10 / A11 / R3).
+- **Build 6 (2026-09-24, versiya 1.0.0 qalır):** qaydalar v3 üçün ilk dəfə oynayanlara dərs bandı yenidən qurulub, pat vəziyyətində ipucu göstərilir, oxunaqlıq keçidi edilib, bot və ulduz vaxtları yenidən çıxarılıb — Android `versionCode` / iOS build nömrəsi 6.
 
 **Bu build-də — Böyük Kampaniya, 41–50-ci səviyyələr (GDD §3, 5-ci band)**
 - 40 "The Crown"dan sonra on yeni səviyyə (`bb5c147`, LV-9): Əkiz Çaylar, Mühasirə Maşını, Dəmir Karvan, Mina Sahəsi Keçidi, Üç Cəbhə, Uzun Körpü, Yanmış Torpaq, Krallar Şurası, Son İşıq, Yenidən Dövülmüş Tac. Yeni mexanika yoxdur — üç rəqib, hər xəritədə divar və mina (Qaydalar v3: köhnə körpülər suda boşluqdur), 10–12 qüllə, düşmən aqressiyası 0.6 → 0.9; adlar və dərslər EN/AZ/RU/TR; 3★ vaxtları v2 siyasəti ilə 20–50 s. Hər səviyyə kimi, əvvəlkində ulduz olanda açılır.
@@ -148,7 +150,7 @@ Tower Clash 1.0 = "Axınlar yeniləməsi" (v0.4.0) + bir həftəlik məzmun və 
 - Real RevenueCat / AdMob açarları, mağaza məhsulları, sandbox alışları (ECON-1, B mərhələsi); real telefonda yoxlama (QA-2, MM-1); imzalanmış release build-lər (MM-3); sayt kökündə `app-ads.txt` (ECON-8).
 - App Store üçün AZ/RU/TR skrinşot dəstləri (Apple dəstləri qəsdən yalnız EN-dir); 17+ səviyyələrdən kadrlar (PUB-6).
 
-Hər build-də dəyişməyən: hesab və analitika yoxdur. Veb/PWA build yükləndikdən sonra şəbəkə sorğusu göndərmir və heç vaxt ödəniş istəmir — mağazası demo "Test store" üzərində işləyir. 2026-09-21-dən `README.md`, `package.json` və native layihələr 1.0.0 / build 5 göstərir.
+Hər build-də dəyişməyən: hesab və analitika yoxdur. Veb/PWA build yükləndikdən sonra şəbəkə sorğusu göndərmir və heç vaxt ödəniş istəmir — mağazası demo "Test store" üzərində işləyir. 2026-09-24-dən `README.md`, `package.json` və native layihələr 1.0.0 / build 6 göstərir (build 5: 2026-09-21).
 
 ---
 

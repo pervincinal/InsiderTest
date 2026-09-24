@@ -2,7 +2,7 @@
   "name": "tower-clash",
   "version": "1.0.0",
   "config": {
-    "buildNumber": 5
+    "buildNumber": 6
   },
   "private": true,
   "type": "module",
