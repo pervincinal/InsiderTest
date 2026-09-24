@@ -72,6 +72,7 @@ export const az: Dictionary = {
   'hint.linkLimit': '{n} axın üçün L{n} lazımdır',
   'hint.blocked': 'Yol bağlıdır — düz xətt yoxdur',
   'hint.empty': 'Əsgər yoxdur — qala böyüsün',
+  'hint.stalemate': 'Pat vəziyyəti — axını dayandır, başqa tərəfdən vur',
 
   'pause.title': 'FASİLƏ',
   'pause.subtitle': 'Səviyyə {n} · {time}',

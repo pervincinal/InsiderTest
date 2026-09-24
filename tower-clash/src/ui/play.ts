@@ -1,9 +1,10 @@
-import type { Command, GameState, LevelDef, SimEvent, Tower } from '../sim/types';
+import type { Command, GameState, LevelDef, Link, SimEvent, Tower } from '../sim/types';
 import { Rng } from '../sim/rng';
 import { C } from '../sim/constants';
 import { SnapshotRing, applyContinue } from '../sim/snapshot';
 import { createState } from '../sim/create';
 import { linksFrom, maxLinksOf } from '../sim/step';
+import { laneStalemate } from '../sim/index';
 import { TRIPLE_STREAM_LINKS } from '../economy/achievements';
 import { getOutcome } from '../sim/outcome';
 import { LEVEL_META, levelIndex } from '../levels/index';
@@ -62,6 +63,55 @@ interface Snapshot {
   rng: { player: number; enemies: Record<string, number> };
 }
 
+/** Sim ms a player stream may run without landing anything before the stalemate hint may fire (FE-1 / BUG-13). */
+export const STALEMATE_HINT_MS = 8000;
+
+/**
+ * Stalemate hint (FE-1, GDD §2.0b "Structural consequence"): equal streams on one lane cancel
+ * forever, and a first-time player does not realise the stream must be stopped and re-aimed.
+ * One window per player link (keyed `from->to`): it opens at the link's creation and restarts on
+ * every `landed` event of the player's on the link's target; once it has run `STALEMATE_HINT_MS`
+ * of sim time and the sim reports the lane as a stalemate (`laneStalemate`), the hint fires — once
+ * per link. A link that ends drops its window, so a re-created link gets a fresh chance.
+ * Disabled on the tutorial's first level. Pure bookkeeping: the sim is only read.
+ */
+export class StalemateWatch {
+  private readonly lanes = new Map<string, { to: string; since: number; shown: boolean }>();
+
+  constructor(
+    private readonly enabled: boolean,
+    private readonly isStalemate: (state: GameState, link: Link) => boolean = laneStalemate,
+  ) {}
+
+  /** Something of the player's landed on `towerId` at sim time `time`: the windows of the links into it restart. */
+  onLanded(towerId: string, time: number): void {
+    for (const w of this.lanes.values()) if (w.to === towerId) w.since = time;
+  }
+
+  /** Once per tick. Returns the (at most one) player link whose hint fires now, or null. */
+  check(state: GameState): Link | null {
+    const live = new Set<string>();
+    let fire: Link | null = null;
+    for (const link of state.links) {
+      if (link.owner !== 'player') continue;
+      const key = `${link.from}->${link.to}`;
+      live.add(key);
+      let w = this.lanes.get(key);
+      if (!w) {
+        w = { to: link.to, since: link.createdMs, shown: false };
+        this.lanes.set(key, w);
+      }
+      if (!this.enabled || w.shown || fire !== null || state.time - w.since < STALEMATE_HINT_MS) continue;
+      if (this.isStalemate(state, link)) {
+        w.shown = true;
+        fire = link;
+      }
+    }
+    for (const key of this.lanes.keys()) if (!live.has(key)) this.lanes.delete(key); // the link ended: forget it
+    return fire;
+  }
+}
+
 export class PlayScreen implements Screen {
   readonly name = 'play' as const;
   readonly loop: GameLoop;
@@ -88,6 +138,8 @@ export class PlayScreen implements Screen {
   /** A rewarded video for a free booster charge is in flight (sim paused meanwhile). */
   private adPending = false;
   readonly toast = new Toast();
+  /** Stalemate hint bookkeeping (FE-1): fed by `landed` events, checked after every sim frame. */
+  private readonly stalemate: StalemateWatch;
   /** Debug (e2e): throw every garrison at the enemy each AI tick so the level is lost quickly. */
   private suicide = false;
   /** Facts about this match for the achievement rules (ECON-4), collected from sim events. */
@@ -126,6 +178,7 @@ export class PlayScreen implements Screen {
     this.playerRng = rngs.player;
     rngs.enemies.forEach((rng, owner) => this.enemyRngs.set(owner, rng));
     this.tutorial = tutorialFor(level.id, app.save.stars[String(level.id)] ?? 0);
+    this.stalemate = new StalemateWatch(level.id !== 1); // the first tutorial level teaches one stream, no hint there
     this.gestures = new PlayGestures({
       getState: () => (this.loop.finished ? null : this.loop.state),
       limitHintText: (n) => t('hint.linkLimit', { n }),
@@ -284,6 +337,8 @@ export class PlayScreen implements Screen {
         }
       } else if (ev.type === 'unlinked') {
         if (ev.owner === 'player' && ev.reason === 'manual') playSfx('button'); // auto-ends (target full, source empty / lost) stay silent
+      } else if (ev.type === 'landed') {
+        if (ev.owner === 'player') this.stalemate.onLanded(ev.towerId, this.state.time);
       }
     }
     onSimEvents(events, this.state);
@@ -293,7 +348,10 @@ export class PlayScreen implements Screen {
     this.nowMs = nowMs;
     this.gestures.tick(nowMs);
     this.tutorial?.onSelect(this.gestures.selectedTowerId, this.state);
-    if (this.loop.advance(dtMs) > 0) this.ring.record(this.snapshot()); // the ring clones at most once per interval
+    if (this.loop.advance(dtMs) > 0) {
+      this.ring.record(this.snapshot()); // the ring clones at most once per interval
+      if (this.stalemate.check(this.state)) this.toast.show(t('hint.stalemate'), 'error', nowMs, 3200);
+    }
     onSimFrame(this.state); // own-unit arrivals are detected by diffing units (no sim event for them)
     if (this.loop.finished && !this.finishedHandled) {
       this.finishedHandled = true;

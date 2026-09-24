@@ -72,6 +72,7 @@ export const ru: Dictionary = {
   'hint.linkLimit': 'Для {n} потоков нужен L{n}',
   'hint.blocked': 'Путь закрыт — нет прямой линии',
   'hint.empty': 'Нет солдат — дай башне вырасти',
+  'hint.stalemate': 'Патовая ситуация — останови поток и ударь с другой стороны',
 
   'pause.title': 'ПАУЗА',
   'pause.subtitle': 'Уровень {n} · {time}',

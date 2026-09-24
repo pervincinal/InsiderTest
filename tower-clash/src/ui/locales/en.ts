@@ -77,6 +77,7 @@ export const en = {
   'hint.linkLimit': 'L{n} needed for {n} streams',
   'hint.blocked': 'Blocked — no clear line',
   'hint.empty': 'No soldiers — let the tower grow',
+  'hint.stalemate': 'Stalemate — stop the stream and hit from another side',
 
   'pause.title': 'PAUSED',
   'pause.subtitle': 'Level {n} · {time}',
