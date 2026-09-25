@@ -187,3 +187,77 @@ export function runNaive(level: LevelDef, k: number, reactMs: number = NAIVE_REA
     ticks,
   };
 }
+
+/**
+ * `--gate a-b` (CI naive gate): per-level minimum win share of the naive line at the default reaction
+ * (`NAIVE_REACT_MS`). The tutorial band 1–8 must win ≥ 80 % (4/5 at K = 5), the second band 9–16
+ * ≥ 60 % (3/5). Levels past `NAIVE_GATE_LAST` have no threshold: the line stays informational there.
+ */
+export const NAIVE_GATE_BANDS: readonly Readonly<{ from: number; to: number; rate: number }>[] = Object.freeze([
+  Object.freeze({ from: 1, to: 8, rate: 0.8 }),
+  Object.freeze({ from: 9, to: 16, rate: 0.6 }),
+]);
+/** Last level id with a naive gate threshold. */
+export const NAIVE_GATE_LAST = 16;
+
+/** The naive gate's minimum win share for a level, or undefined past `NAIVE_GATE_LAST`. */
+export function naiveGateRate(levelId: number): number | undefined {
+  return NAIVE_GATE_BANDS.find((b) => levelId >= b.from && levelId <= b.to)?.rate;
+}
+
+/** Fewest wins out of `k` seeds that satisfy `rate` (4 of 5 at 0.8; 3 of 5 at 0.6; 8 of 10 at 0.8). */
+export function naiveGateMinWins(rate: number, k: number): number {
+  return Math.ceil(rate * k - 1e-9);
+}
+
+export interface NaiveGateRange {
+  from: number;
+  to: number;
+}
+
+export interface NaiveGateFailure {
+  levelId: number;
+  name: string;
+  wins: number;
+  k: number;
+  /** Wins the level needed. */
+  minWins: number;
+  rate: number;
+  losers: number[];
+}
+
+/** Parse `a-b` (1 ≤ a ≤ b ≤ `NAIVE_GATE_LAST`) for `--gate`. */
+export function parseNaiveGate(spec: string): NaiveGateRange {
+  const m = /^(\d+)-(\d+)$/.exec(spec.trim());
+  if (!m) throw new Error(`bad --gate ${spec} (a-b, e.g. 1-${NAIVE_GATE_LAST})`);
+  const from = Number(m[1]);
+  const to = Number(m[2]);
+  if (from < 1 || to < from) throw new Error(`bad --gate ${spec} (need 1 <= a <= b)`);
+  if (to > NAIVE_GATE_LAST) throw new Error(`bad --gate ${spec}: the naive gate covers levels 1-${NAIVE_GATE_LAST} only (later levels are informational)`);
+  return { from, to };
+}
+
+/**
+ * Apply the naive gate to the rows of a `--naive` run: every level in `range` must be present and
+ * win at least `naiveGateRate(id)` of its seeds. Returns one failure per level under its threshold;
+ * a level of the range missing from `rows` is a failure too (0 wins of 0) so a partial run cannot pass.
+ * Throws when a row's reaction is not the default: the thresholds are calibrated for `NAIVE_REACT_MS`.
+ */
+export function naiveGate(rows: readonly Pick<NaiveRow, 'level' | 'reactMs' | 'wins' | 'seeds' | 'losers'>[], range: NaiveGateRange): NaiveGateFailure[] {
+  if (range.from < 1 || range.to < range.from || range.to > NAIVE_GATE_LAST) throw new Error(`naive gate: bad range ${range.from}-${range.to} (1 <= a <= b <= ${NAIVE_GATE_LAST})`);
+  const byId = new Map<number, (typeof rows)[number]>();
+  for (const r of rows) {
+    if (r.reactMs !== NAIVE_REACT_MS) throw new Error(`naive gate: level ${r.level.id} ran at react ${r.reactMs} ms; the gate is defined at ${NAIVE_REACT_MS} ms`);
+    byId.set(r.level.id, r);
+  }
+  const failures: NaiveGateFailure[] = [];
+  for (let id = range.from; id <= range.to; id++) {
+    const rate = naiveGateRate(id)!;
+    const row = byId.get(id);
+    const k = row?.seeds.length ?? 0;
+    const minWins = row ? naiveGateMinWins(rate, k) : 1;
+    const wins = row?.wins ?? 0;
+    if (wins < minWins) failures.push({ levelId: id, name: row?.level.name ?? '(not run)', wins, k, minWins, rate, losers: row?.losers ?? [] });
+  }
+  return failures;
+}

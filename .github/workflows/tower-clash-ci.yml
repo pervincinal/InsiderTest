@@ -75,6 +75,15 @@ jobs:
             npm run playtest -- --twist "$twist" --seeds 5 || exit 1
           done
 
+      # Naive human gate (QA-3): the first-time-player model (scripts/lib/naivePlayer.ts: one stream per
+      # tower to the nearest non-own tower every 4 s, never unlinks, never boosts) on every level over
+      # seeds 1..5; `--gate 1-16` fails the step when a level of 1–8 wins < 4/5 or a level of 9–16
+      # < 3/5 at the default 4000 ms reaction (levels 17–50 stay informational). A failed row is a
+      # level/design item for the Level Designer, traced with the losing seed before filing. Measured
+      # 13 s locally (2026-09-25, all 50 levels; the gate reads the first 16 rows).
+      - name: Naive human gate (levels 1-16 x 5 seeds)
+        run: npm run playtest -- --naive --seeds 5 --gate 1-16
+
       - name: Build
         run: npm run build
 
@@ -93,8 +102,9 @@ jobs:
       # Default Playwright project (`chromium`, Pixel 5 metrics): smoke (title → level select →
       # level 1: select home → rules v3 guide lines → stream that keeps the garrison → win → result;
       # blocked-tap hint through the level 5 wall), content (every authored level loads; wall / water /
-      # rock screenshots), tutorial, daily / weekly, economy, lazy chunks, layers and perf (frame-time
-      # budget on the top level).
+      # rock screenshots), tutorial, stalemate hint (FE-1/FE-2: level 2 counter-stream fires it once
+      # at 8 s of sim time, never on level 1), daily / weekly, economy, lazy chunks, layers and perf
+      # (frame-time budget on the top level).
       - name: Browser e2e (smoke + content + economy + perf)
         timeout-minutes: 15
         run: npm run e2e

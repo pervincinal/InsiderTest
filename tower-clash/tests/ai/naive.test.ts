@@ -3,7 +3,21 @@ import { loadLevel } from '../../src/levels/index';
 import { C, createState, DEFAULT_MODIFIERS } from '../../src/sim/index';
 import { runHeadless, starsFor } from '../../src/ai/headless';
 import { Rng } from '../../src/sim/rng';
-import { NAIVE_FIRST_MS, NAIVE_REACT_MS, isReactionTick, makeNaivePlayer, naiveTarget, runNaive } from '../../scripts/lib/naivePlayer';
+import {
+  NAIVE_FIRST_MS,
+  NAIVE_GATE_BANDS,
+  NAIVE_GATE_LAST,
+  NAIVE_REACT_MS,
+  isReactionTick,
+  makeNaivePlayer,
+  naiveGate,
+  naiveGateMinWins,
+  naiveGateRate,
+  naiveTarget,
+  parseNaiveGate,
+  runNaive,
+} from '../../scripts/lib/naivePlayer';
+import type { NaiveRow } from '../../scripts/lib/naivePlayer';
 import { makeLevel } from '../helpers';
 
 const level1 = (await loadLevel(1))!;
@@ -96,5 +110,91 @@ describe('naive human line (QA-3)', () => {
   it('rejects a reaction delay that is not a whole number of ticks', () => {
     expect(() => makeNaivePlayer({ reactMs: 4010 })).toThrow(/reactMs/);
     expect(() => makeNaivePlayer({ reactMs: 0 })).toThrow(/reactMs/);
+  });
+
+  describe('CI gate (`--gate a-b`)', () => {
+    /** A gate row: level id/name, K seeds 1..k, `wins` wins (the losers are the last seeds). */
+    const row = (id: number, wins: number, k = 5, reactMs = NAIVE_REACT_MS): Pick<NaiveRow, 'level' | 'reactMs' | 'wins' | 'seeds' | 'losers'> => ({
+      level: { ...level1, id, name: `L${id}` },
+      reactMs,
+      wins,
+      seeds: Array.from({ length: k }, (_, i) => i + 1),
+      losers: Array.from({ length: k - wins }, (_, i) => wins + i + 1),
+    });
+
+    it('thresholds: 80 % for levels 1–8, 60 % for 9–16, none after (4/5 and 3/5 at K = 5)', () => {
+      expect(NAIVE_GATE_BANDS.map((b) => [b.from, b.to, b.rate])).toEqual([
+        [1, 8, 0.8],
+        [9, 16, 0.6],
+      ]);
+      expect(NAIVE_GATE_LAST).toBe(16);
+      for (let id = 1; id <= 8; id++) expect(naiveGateRate(id)).toBe(0.8);
+      for (let id = 9; id <= 16; id++) expect(naiveGateRate(id)).toBe(0.6);
+      expect(naiveGateRate(17)).toBeUndefined();
+      expect(naiveGateRate(50)).toBeUndefined();
+      expect(naiveGateMinWins(0.8, 5)).toBe(4);
+      expect(naiveGateMinWins(0.6, 5)).toBe(3);
+      expect(naiveGateMinWins(0.8, 3)).toBe(3); // K = 3 demands 3/3: use K = 5 in CI
+      expect(naiveGateMinWins(0.6, 3)).toBe(2);
+      expect(naiveGateMinWins(0.8, 10)).toBe(8);
+      expect(naiveGateMinWins(0.6, 10)).toBe(6);
+      expect(naiveGateMinWins(0.8, 1)).toBe(1);
+    });
+
+    it('passes a clean 1–16 run and reports exactly the levels under their band threshold, in id order', () => {
+      const clean = Array.from({ length: 16 }, (_, i) => row(i + 1, 5));
+      expect(naiveGate(clean, { from: 1, to: 16 })).toEqual([]);
+      const edge = Array.from({ length: 16 }, (_, i) => row(i + 1, i + 1 <= 8 ? 4 : 3)); // exactly on the thresholds
+      expect(naiveGate(edge, { from: 1, to: 16 })).toEqual([]);
+      const rows = [
+        ...Array.from({ length: 16 }, (_, i) => row(i + 1, 5)).filter((r) => ![3, 9, 12].includes(r.level.id)),
+        row(3, 3), // 3/5 < 4/5 in the tutorial band
+        row(9, 3), // 3/5 is enough after level 8
+        row(12, 2), // 2/5 < 3/5
+      ];
+      const failures = naiveGate(rows, { from: 1, to: 16 });
+      expect(failures).toEqual([
+        { levelId: 3, name: 'L3', wins: 3, k: 5, minWins: 4, rate: 0.8, losers: [4, 5] },
+        { levelId: 12, name: 'L12', wins: 2, k: 5, minWins: 3, rate: 0.6, losers: [3, 4, 5] },
+      ]);
+      // the range narrows what is gated: outside rows are ignored, and the same rows pass a range without the misses
+      expect(naiveGate(rows, { from: 4, to: 11 })).toEqual([]);
+      expect(naiveGate(rows, { from: 12, to: 12 }).map((f) => f.levelId)).toEqual([12]);
+      // K other than 5 scales by the share: 8/10 and 6/10 hold, 7/10 in the tutorial band does not
+      expect(naiveGate([row(1, 8, 10), row(9, 6, 10)], { from: 1, to: 1 })).toEqual([]);
+      expect(naiveGate([row(1, 7, 10)], { from: 1, to: 1 }).map((f) => [f.levelId, f.minWins])).toEqual([[1, 8]]);
+    });
+
+    it('a level of the range that was not run fails (0 of 0): a partial run cannot pass the gate', () => {
+      const failures = naiveGate([row(1, 5), row(2, 5)], { from: 1, to: 3 });
+      expect(failures).toEqual([{ levelId: 3, name: '(not run)', wins: 0, k: 0, minWins: 1, rate: 0.8, losers: [] }]);
+    });
+
+    it('rejects rows from another reaction delay and ranges outside 1–16', () => {
+      expect(() => naiveGate([row(1, 5, 5, 8000)], { from: 1, to: 1 })).toThrow(/react 8000 ms/);
+      expect(() => naiveGate([row(1, 5)], { from: 1, to: 17 })).toThrow(/bad range/);
+      expect(() => naiveGate([row(1, 5)], { from: 0, to: 1 })).toThrow(/bad range/);
+      expect(() => naiveGate([row(1, 5)], { from: 3, to: 2 })).toThrow(/bad range/);
+    });
+
+    it('parses `a-b` for --gate and refuses anything past NAIVE_GATE_LAST or out of order', () => {
+      expect(parseNaiveGate('1-16')).toEqual({ from: 1, to: 16 });
+      expect(parseNaiveGate(' 9-16 ')).toEqual({ from: 9, to: 16 });
+      expect(parseNaiveGate('3-3')).toEqual({ from: 3, to: 3 });
+      expect(() => parseNaiveGate('1-17')).toThrow(/levels 1-16 only/);
+      expect(() => parseNaiveGate('5-3')).toThrow(/1 <= a <= b/);
+      expect(() => parseNaiveGate('0-3')).toThrow(/1 <= a <= b/);
+      expect(() => parseNaiveGate('1')).toThrow(/a-b/);
+      expect(() => parseNaiveGate('a-b')).toThrow(/a-b/);
+    });
+
+    it('HEAD passes the CI gate on the tutorial band at K = 5 (levels 1–8, the cheap half of the CI step)', async () => {
+      const rows: NaiveRow[] = [];
+      for (let id = 1; id <= 8; id++) {
+        const level = (await loadLevel(id))!;
+        rows.push(runNaive(level, 5, NAIVE_REACT_MS));
+      }
+      expect(naiveGate(rows, { from: 1, to: 8 })).toEqual([]);
+    });
   });
 });

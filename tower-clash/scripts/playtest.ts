@@ -3,7 +3,7 @@
  * `npm run playtest -- --daily YYYY-MM-DD [--days N] [--seeds K] [--no-twist]`
  * `npm run playtest -- --weekly YYYY-MM-DD(Monday) [--weeks N] [--seeds K] [--no-twist]`
  * `npm run playtest -- --twist <plain|lean|fastFeet|thinWalls|reinforced> [--seeds K] [--pool a-b]`
- * `npm run playtest -- --naive [--seeds K] [--react MS]`
+ * `npm run playtest -- --naive [--seeds K] [--react MS] [--gate a-b]`
  * Headless balance run: for every level (or one), simulate (a) the reference player vs the enemies and
  * (b) an idle player vs the enemies, 50 ms ticks, AI every 500 ms, up to 180 s of sim time.
  *
@@ -48,8 +48,8 @@ import { DAILY_WIN_RATE, DEFAULT_POOL, TWIST_WIN_RATE, WEEKLY_WIN_RATE, dailyPla
 import type { DailyRow, PoolRange, TwistRow, WeeklyRow } from './lib/daily';
 import { TWISTS, isMondayKey } from '../src/daily/challenge';
 import type { Twist } from '../src/daily/challenge';
-import { NAIVE_REACT_MS, NAIVE_WIN_RATE, runNaive } from './lib/naivePlayer';
-import type { NaiveRow } from './lib/naivePlayer';
+import { NAIVE_GATE_LAST, NAIVE_REACT_MS, NAIVE_WIN_RATE, naiveGate, naiveGateMinWins, naiveGateRate, parseNaiveGate, runNaive } from './lib/naivePlayer';
+import type { NaiveGateRange, NaiveRow } from './lib/naivePlayer';
 
 export { runHeadless } from '../src/ai/headless';
 
@@ -87,6 +87,8 @@ interface Args {
   naive: boolean;
   /** `--react MS`: reaction delay of the naive line, ms of sim time. */
   reactMs: number;
+  /** `--gate a-b`: naive mode gate over level ids a..b (1–NAIVE_GATE_LAST); undefined = informational. */
+  gate?: NaiveGateRange;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -103,6 +105,7 @@ function parseArgs(argv: string[]): Args {
   let weeks = 1;
   let naive = false;
   let reactMs = NAIVE_REACT_MS;
+  let gateSpec: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
     const next = argv[i + 1];
@@ -130,6 +133,8 @@ function parseArgs(argv: string[]): Args {
     else if (arg === '--naive') naive = true;
     else if (arg === '--react' && next !== undefined) reactMs = Number(next);
     else if (arg.startsWith('--react=')) reactMs = Number(arg.slice('--react='.length));
+    else if (arg === '--gate' && next !== undefined) gateSpec = next;
+    else if (arg.startsWith('--gate=')) gateSpec = arg.slice('--gate='.length);
   }
   if (level !== undefined && !Number.isInteger(level)) throw new Error(`bad --level ${String(level)}`);
   if (!Number.isInteger(seed)) throw new Error(`bad --seed ${String(seed)}`);
@@ -152,7 +157,11 @@ function parseArgs(argv: string[]): Args {
   if (poolSpec !== undefined && !twistDef) throw new Error('--pool only applies to --twist');
   if (!Number.isInteger(reactMs) || reactMs < C.TICK_MS || reactMs % C.TICK_MS !== 0) throw new Error(`bad --react ${String(reactMs)} (ms, a positive multiple of ${C.TICK_MS})`);
   if (reactMs !== NAIVE_REACT_MS && !naive) throw new Error('--react only applies to --naive');
-  return { level, seed, seeds, upgrades, daily, days, twist, twistId: twistDef?.id, pool, weekly, weeks, naive, reactMs };
+  const gate = gateSpec === undefined ? undefined : parseNaiveGate(gateSpec);
+  if (gate && !naive) throw new Error('--gate only applies to --naive');
+  if (gate && reactMs !== NAIVE_REACT_MS) throw new Error(`--gate is defined at the default reaction (${NAIVE_REACT_MS} ms); drop --react`);
+  if (gate && level !== undefined && (level < gate.from || level > gate.to)) throw new Error(`--level ${level} is outside --gate ${gate.from}-${gate.to}`);
+  return { level, seed, seeds, upgrades, daily, days, twist, twistId: twistDef?.id, pool, weekly, weeks, naive, reactMs, gate };
 }
 
 /** Re-exported for tools that used to read the max ladder from here (QA-3: the catalog is the source). */
@@ -566,15 +575,23 @@ async function runTwistMode(twistId: Twist['id'], k: number, pool: Readonly<Pool
 }
 
 /**
- * Naive mode (QA-3): the naive human line on every level over seeds 1..K. Informational — no gate,
- * always exit 0. "holds" = wins/K ≥ NAIVE_WIN_RATE; "star2" = holds and the median win is within the
- * level's `star2` clock. Levels 1–8 (the tutorial band) are expected to hold; a miss there is a level or
- * design item, reported with the losing seeds so a trace can say why.
+ * Naive mode (QA-3): the naive human line on every level over seeds 1..K. Informational without
+ * `--gate` — always exit 0. "holds" = wins/K ≥ NAIVE_WIN_RATE; "star2" = holds and the median win is
+ * within the level's `star2` clock. Levels 1–8 (the tutorial band) are expected to hold; a miss there
+ * is a level or design item, reported with the losing seeds so a trace can say why.
+ *
+ * With `--gate a-b` (CI, levels 1–NAIVE_GATE_LAST, default reaction only): every level of the range
+ * must win ≥ `naiveGateRate(id)` of its seeds (80 % for 1–8 = 4/5, 60 % for 9–16 = 3/5 at K = 5;
+ * `naiveGate` in scripts/lib/naivePlayer.ts). Returns the number of failed levels (0 without a gate).
  */
-async function runNaiveMode(levels: LevelDef[], k: number, reactMs: number): Promise<void> {
-  const header = `${pad('lvl', 4)} ${pad('name', 20)} ${pad('wins', 6)} ${pad('3*/2*/1*/0*', 12)} ${pad('median', 8)} ${pad('worst', 8)} ${pad('star2', 8)} ${pad('holds', 6)} ${pad('star2?', 7)} losing seeds`;
+async function runNaiveMode(levels: LevelDef[], k: number, reactMs: number, gate: NaiveGateRange | undefined): Promise<number> {
+  const header = `${pad('lvl', 4)} ${pad('name', 20)} ${pad('wins', 6)} ${pad('3*/2*/1*/0*', 12)} ${pad('median', 8)} ${pad('worst', 8)} ${pad('star2', 8)} ${pad('holds', 6)} ${pad('star2?', 7)} ${pad('gate', 6)} losing seeds`;
+  const gateNote = gate
+    ? `gate lvl ${gate.from}-${gate.to}: wins/K >= ${Math.round(naiveGateRate(gate.from)! * 100)}%` +
+      (naiveGateRate(gate.to) !== naiveGateRate(gate.from) ? ` (lvl 1-8) / >= ${Math.round(naiveGateRate(gate.to)! * 100)}% (lvl 9-${NAIVE_GATE_LAST})` : '')
+    : 'no gate';
   console.log(
-    `playtest naive  react=${reactMs}ms  seeds=1..${k}  upgrades=none  max=${fmtTime(MAX_MS)}  informational: holds = wins/K >= ${Math.round(NAIVE_WIN_RATE * 100)}%, star2? = holds and median <= star2 (no gate)`,
+    `playtest naive  react=${reactMs}ms  seeds=1..${k}  upgrades=none  max=${fmtTime(MAX_MS)}  informational: holds = wins/K >= ${Math.round(NAIVE_WIN_RATE * 100)}%, star2? = holds and median <= star2 (${gateNote})`,
   );
   console.log(header);
   console.log('-'.repeat(header.length));
@@ -588,8 +605,10 @@ async function runNaiveMode(levels: LevelDef[], k: number, reactMs: number): Pro
     const medianT = row.medianMs === undefined ? '-' : fmtTime(row.medianMs);
     const worst = row.worstMs === undefined ? '-' : fmtTime(row.worstMs);
     const losers = row.losers.length ? row.losers.join(',') : '-';
+    const gated = gate !== undefined && level.id >= gate.from && level.id <= gate.to;
+    const gateCol = gated ? (row.wins >= naiveGateMinWins(naiveGateRate(level.id)!, k) ? 'ok' : 'FAIL') : '-';
     console.log(
-      `${pad(String(level.id), 4)} ${pad(level.name, 20)} ${pad(`${row.wins}/${k}`, 6)} ${pad(fmtStarCounts(row.starCounts), 12)} ${pad(medianT, 8)} ${pad(worst, 8)} ${pad(fmtTime(level.star2), 8)} ${pad(row.holds ? 'yes' : 'NO', 6)} ${pad(row.withinStar2 ? 'yes' : 'no', 7)} ${losers}`,
+      `${pad(String(level.id), 4)} ${pad(level.name, 20)} ${pad(`${row.wins}/${k}`, 6)} ${pad(fmtStarCounts(row.starCounts), 12)} ${pad(medianT, 8)} ${pad(worst, 8)} ${pad(fmtTime(level.star2), 8)} ${pad(row.holds ? 'yes' : 'NO', 6)} ${pad(row.withinStar2 ? 'yes' : 'no', 7)} ${pad(gateCol, 6)} ${losers}`,
     );
   }
   const elapsed = (performance.now() - t0) / 1000;
@@ -600,13 +619,24 @@ async function runNaiveMode(levels: LevelDef[], k: number, reactMs: number): Pro
   console.log(`naive: ${held.length}/${rows.length} levels won at >= ${Math.round(NAIVE_WIN_RATE * 100)} %, ${within.length} within star2 (react ${reactMs} ms, all seeds ${totalWins}/${rows.length * k})`);
   const tutorialMiss = rows.filter((r) => r.level.id <= TUTORIAL_BAND_LAST && !r.holds);
   for (const r of tutorialMiss) console.log(`  tutorial band: lvl ${r.level.id} ${r.level.name} ${r.wins}/${k} (lost ${r.losers.join(',')}) — level/design item`);
+  let failed = 0;
+  if (gate) {
+    const failures = naiveGate(rows, gate);
+    for (const f of failures) {
+      console.log(`  FAIL lvl ${f.levelId} ${f.name}: ${f.wins}/${f.k} < ${Math.round(f.rate * 100)}% (need ${f.minWins}/${f.k}${f.losers.length ? `, lost ${f.losers.join(',')}` : ''}) — level/design item for the Level Designer`);
+    }
+    failed = failures.length;
+    console.log(`naive gate lvl ${gate.from}-${gate.to}: ${failed} failed level(s)`);
+  }
   console.log(`perf: ${totalTicks} ticks in ${elapsed.toFixed(2)}s = ${Math.round(totalTicks / Math.max(elapsed, 1e-6))} ticks/s`);
+  return failed;
 }
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   if (args.naive) {
-    await runNaiveMode(await selectLevels(args.level), args.seeds ?? 5, args.reactMs);
+    const failed = await runNaiveMode(await selectLevels(args.level), args.seeds ?? 5, args.reactMs, args.gate);
+    if (failed > 0) process.exit(1);
     return;
   }
   if (args.twistId !== undefined) {
