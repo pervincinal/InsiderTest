@@ -447,7 +447,12 @@ function spawnDust(fx: ParticleSystem, pal: Palette, units: UnitDraw[], nowMs: n
   }
 }
 
-function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, ui: PlayUi, nowMs: number, biome: Biome): void {
+/** Round a logical offset to whole device pixels (`dev` = device px per logical px) so a shaking tower keeps its sprite-cache phase (PERF-4). */
+function snapToDevice(v: number, dev: number): number {
+  return dev > 0 ? Math.round(v * dev) / dev : v;
+}
+
+function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, ui: PlayUi, nowMs: number, biome: Biome, dev: number): void {
   const motion = motionAllowed();
   const towers = Object.values(state.towers).sort((a, b) => a.y - b.y);
   for (const t of towers) drawTowerShadow(ctx, pal, t.x, t.y, t.kind, t.level);
@@ -467,7 +472,7 @@ function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState
   fx?.landings(state, attackers, pal, nowMs);
   for (const t of towers) {
     while (ui_ < units.length && units[ui_]!.y <= t.y + 4) drawUnit(units[ui_++]!);
-    const shake = hint && ui.selectedTowerId === t.id && motion ? hint.shake : 0;
+    const shake = hint && ui.selectedTowerId === t.id && motion ? snapToDevice(hint.shake, dev) : 0;
     if (shake) ctx.translate(shake, 0);
     drawTowerSprite(ctx, pal, t, {
       nowMs,
@@ -618,7 +623,9 @@ export function drawGame(ctx: CanvasRenderingContext2D, state: GameState, view: 
   const motion = motionAllowed();
   const spec = terrainSpec(state, theme);
   // capture shake moves the whole world (not the HUD)
-  const shake = motion ? (ui.particles?.shake(nowMs) ?? { dx: 0, dy: 0 }) : { dx: 0, dy: 0 };
+  const dev = view.dpr * view.scale;
+  const raw = motion ? (ui.particles?.shake(nowMs) ?? { dx: 0, dy: 0 }) : { dx: 0, dy: 0 };
+  const shake = { dx: snapToDevice(raw.dx, dev), dy: snapToDevice(raw.dy, dev) };
   const layers = layered && ui.outcome === 'playing' && !ui.paused ? view.layers : undefined;
 
   // Letterbox bars in device space (deep water, themed), then the map in logical space.
@@ -643,7 +650,7 @@ export function drawGame(ctx: CanvasRenderingContext2D, state: GameState, view: 
   drawLinks(ctx, pal, state, nowMs, motion);
   drawMineLights(ctx, pal, state, nowMs);
   drawGroundMarks(ctx, pal, state, ui, nowMs);
-  drawWorld(ctx, pal, state, ui, nowMs, spec.biome ?? 'grass');
+  drawWorld(ctx, pal, state, ui, nowMs, spec.biome ?? 'grass', dev);
   ui.particles?.draw(ctx, nowMs);
   ctx.restore();
   if (ui.outcome === 'lost') {
