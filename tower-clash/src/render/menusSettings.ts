@@ -4,7 +4,7 @@ import { shade } from './palette';
 import type { View } from './view';
 import type { Rect } from './widgets';
 import { drawButton, drawCard, drawCoin, drawExtrudedText, drawGlassBand, drawStars, fitFontPx, font } from './widgets';
-import { drawSegmented, drawToggle, paletteGlyph } from './menuWidgets';
+import { drawChevronDisc, drawSegmented, drawToggle, paletteGlyph } from './menuWidgets';
 import type { SettingsAboutLayout } from './menuLayout';
 import { SETTINGS } from './layout';
 import type { ToastOpts } from './economyWidgets';
@@ -121,6 +121,10 @@ export function drawSettings(view: View, pal: Palette, o: SettingsOpts): void {
     MOTION_SEGMENTS.findIndex((m) => m.value === o.reducedMotion),
     20,
   );
+  // "How to play" (FE-3): the whole row opens the card; a chevron disc at the right says so
+  const howtoLabel: Rect = { x: SETTINGS.howto.x + SETTINGS.howto.w - 70, y: SETTINGS.howto.y + 4, w: 70, h: 56 };
+  settingsRow(ctx, pal, howtoLabel, t('settings.howto'), t('settings.howtoSub'));
+  drawChevronDisc(ctx, pal, SETTINGS.howto.x + SETTINGS.howto.w - 36, SETTINGS.howto.y + SETTINGS.howto.h / 2 - 2, 24, o.pressed === SETTINGS.howto);
   // language: label line, then a full-width picker (I18N)
   const langLabel: Rect = { x: card.x + card.w - 36, y: SETTINGS.languageLabelY, w: 0, h: 56 };
   settingsRow(ctx, pal, langLabel, t('settings.language'), t('settings.languageSub'), false);

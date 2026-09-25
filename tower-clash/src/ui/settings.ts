@@ -1,6 +1,6 @@
 /**
  * Settings screen (M3-3 + I18N): sound, colour-blind palette, reduced motion (auto/on/off
- * override), UI language and a two-step reset of the progress; the About card
+ * override), the "How to play" card (FE-3), UI language and a two-step reset of the progress; the About card
  * shows the version, the store support id (COPY) and the ads SDK's privacy options (native).
  * Every change persists immediately; BACK returns to the screen that opened it (title, or the
  * paused play screen). Loaded lazily with its drawing (PERF-1, src/ui/lazyScreens.ts).
@@ -112,7 +112,7 @@ export class SettingsScreen implements Screen {
 
   private rects(): Rect[] {
     if (this.confirming) return [SETTINGS.confirm.yes, SETTINGS.confirm.no];
-    const list = [SETTINGS.back, SETTINGS.sound, SETTINGS.colorBlind, SETTINGS.motion, SETTINGS.language, SETTINGS.reset];
+    const list = [SETTINGS.back, SETTINGS.sound, SETTINGS.colorBlind, SETTINGS.motion, SETTINGS.howto, SETTINGS.language, SETTINGS.reset];
     if (this.about.copy) list.push(this.about.copy);
     if (this.about.privacy) list.push(this.about.privacy);
     return list;
@@ -176,6 +176,11 @@ export class SettingsScreen implements Screen {
     if (hit === SETTINGS.sound) {
       toggleMuted();
       playSfx('button');
+      return;
+    }
+    if (hit === SETTINGS.howto) {
+      playSfx('button');
+      this.app.openHowTo(this);
       return;
     }
     if (hit === this.about.copy) {

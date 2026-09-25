@@ -52,6 +52,7 @@ function fakeApp(save: SaveData) {
       current = screen;
     },
     openSettings() {},
+    openHowTo() {},
     setSpeed() {},
     setLanguage() {},
     dayKey: () => DAY,

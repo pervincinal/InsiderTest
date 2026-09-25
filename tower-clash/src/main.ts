@@ -377,6 +377,11 @@ class TowerClashApp implements App {
     void this.goLazy((L) => new L.SettingsScreen(this, () => this.go(from)));
   }
 
+  /** "How to play" card (FE-3): from the settings screen or the pause menu; closing returns to `from`. */
+  openHowTo(from: Screen): void {
+    void this.goLazy((L) => new L.HowToScreen(this, () => this.go(from)));
+  }
+
   setLanguage(code: Language): void {
     this.save.settings.language = code;
     writeSave(this.save);
@@ -395,7 +400,7 @@ class TowerClashApp implements App {
       return true;
     }
     if (cur.name === 'loading') return true; // swallowed: the pending screen arrives in a moment
-    if (cur.name === 'settings' || cur.name === 'result' || cur.name === 'levelSelect' || cur.name === 'shop' || cur.name === 'achievements') {
+    if (cur.name === 'settings' || cur.name === 'howto' || cur.name === 'result' || cur.name === 'levelSelect' || cur.name === 'shop' || cur.name === 'achievements') {
       cur.key?.(new KeyboardEvent('keydown', { key: 'Escape' }));
       return true;
     }

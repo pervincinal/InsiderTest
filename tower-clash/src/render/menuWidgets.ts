@@ -1,7 +1,7 @@
 import type { Palette } from './palette';
 import { shade } from './palette';
 import type { Rect, Segment } from './widgets';
-import { BUTTON_EDGE, PRESS_DROP, SHADOW_INK, drawButton, font, inRect, innerHighlight, roundRect } from './widgets';
+import { BUTTON_EDGE, PRESS_DROP, SHADOW_INK, drawButton, drawRoundButton, font, inRect, innerHighlight, roundRect } from './widgets';
 import { t } from '../ui/i18n';
 
 /*
@@ -156,5 +156,23 @@ export function drawFlag(ctx: CanvasRenderingContext2D, color: string, x: number
   ctx.lineTo(x + w * 0.5, y - h + fh * 0.35 + wave * 0.5);
   ctx.closePath();
   ctx.fill();
+  ctx.restore();
+}
+
+/** Round clay disc with a "›" chevron: a settings row that opens another screen (FE-3 "How to play"). */
+export function drawChevronDisc(ctx: CanvasRenderingContext2D, pal: Palette, cx: number, cy: number, r: number, pressed = false): void {
+  drawRoundButton(ctx, pal, cx, cy, r, { pressed });
+  const press = pressed ? PRESS_DROP : 0;
+  const s = r * 0.34;
+  ctx.save();
+  ctx.strokeStyle = pal.ink;
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(cx - s * 0.5, cy + press - s);
+  ctx.lineTo(cx + s * 0.5, cy + press);
+  ctx.lineTo(cx - s * 0.5, cy + press + s);
+  ctx.stroke();
   ctx.restore();
 }

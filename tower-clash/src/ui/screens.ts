@@ -34,7 +34,7 @@ import type { WeeklyOutcome } from './weekly';
 
 /** A screen owns drawing and input while it is current. */
 export interface Screen {
-  readonly name: 'title' | 'levelSelect' | 'play' | 'result' | 'settings' | 'shop' | 'achievements' | 'loading';
+  readonly name: 'title' | 'levelSelect' | 'play' | 'result' | 'settings' | 'howto' | 'shop' | 'achievements' | 'loading';
   enter?(): void;
   exit?(): void;
   update?(dtMs: number, nowMs: number): void;
@@ -88,6 +88,8 @@ export interface App {
   go(screen: Screen): void;
   /** Open the settings screen; BACK returns to `from` (title, or the paused play screen). */
   openSettings(from: Screen): void;
+  /** Open the "How to play" card (FE-3); CLOSE / BACK / ESC return to `from` (settings, or the paused play screen). */
+  openHowTo(from: Screen): void;
   /** Sim speed multiplier for this and future levels (pause-menu toggle, debug). */
   setSpeed(n: number): void;
   /** Switch the UI language and persist it (settings picker, title chip). */

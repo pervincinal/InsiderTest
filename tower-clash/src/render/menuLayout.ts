@@ -42,6 +42,39 @@ export function settingsAboutLayout(hasSupportId: boolean, hasPrivacy: boolean):
   return { card: { x: a.x, y: a.y, w: a.w, h: y + 22 - a.y }, versionY, supportY, copy, privacy };
 }
 
+/* ---------- "How to play" card (FE-3) ---------- */
+
+/**
+ * One card, no scrolling: glass header (BACK · title), five rule rows (icon box left, one wrapped
+ * sentence right) and a CLOSE button. Everything fits 720×1280, so it fits 360×640 at DPR 1 too.
+ */
+export const HOWTO = Object.freeze({
+  headerH: 100,
+  back: { x: 18, y: 20, w: 140, h: 60 } as Rect,
+  card: { x: 40, y: 124, w: 640, h: 1032 } as Rect,
+  rows: 5,
+  row: { x: 60, y0: 150, w: 600, h: 176 },
+  /** Icon box inside a row (left) and the text column (right). */
+  icon: { x: 68, w: 120, h: 120 },
+  text: { x: 204, w: 448 },
+  textPx: 22,
+  lineH: 30,
+  maxLines: 3,
+  close: { x: 180, y: 1054, w: 360, h: 72 } as Rect,
+});
+
+/** Row `i` (0-based) of the card. */
+export function howtoRowRect(i: number): Rect {
+  const r = HOWTO.row;
+  return { x: r.x, y: r.y0 + i * r.h, w: r.w, h: r.h };
+}
+
+/** Icon box of row `i`, vertically centred in the row. */
+export function howtoIconRect(i: number): Rect {
+  const row = howtoRowRect(i);
+  return { x: HOWTO.icon.x, y: row.y + (row.h - HOWTO.icon.h) / 2, w: HOWTO.icon.w, h: HOWTO.icon.h };
+}
+
 /* ---------- achievements (ECONOMY.md §2.1) ---------- */
 
 /**

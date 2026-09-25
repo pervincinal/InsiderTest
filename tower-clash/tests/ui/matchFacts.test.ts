@@ -31,6 +31,7 @@ function fakeApp(save: SaveData) {
       current = screen;
     },
     openSettings() {},
+    openHowTo() {},
     setSpeed() {},
     setLanguage() {},
     dayKey: () => '2026-09-22',

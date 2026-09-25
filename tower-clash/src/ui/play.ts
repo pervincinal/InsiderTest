@@ -633,6 +633,7 @@ export class PlayScreen implements Screen {
       else if (inRect(PAUSE.speed, p.x, p.y)) this.toggleSpeed();
       else if (inRect(PAUSE.sound, p.x, p.y) || inRect(HUD.mute, p.x, p.y)) toggleMuted();
       else if (inRect(PAUSE.settings, p.x, p.y)) this.app.openSettings(this);
+      else if (inRect(PAUSE.howto, p.x, p.y)) this.app.openHowTo(this);
       else if (inRect(PAUSE.retry, p.x, p.y)) this.restart();
       else if (inRect(PAUSE.menu, p.x, p.y) || inRect(HUD.menu, p.x, p.y)) this.app.goLevels();
       return;

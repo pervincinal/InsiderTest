@@ -53,15 +53,17 @@ export const RESULT = Object.freeze({
   extra: { x: 150, y: 874, w: 420, h: 62 } as Rect,
 });
 
-/** Pause menu (M1-11 + M3-3): resume, speed toggle ×1/×2, sound + settings, retry, menu. */
+/** Pause menu (M1-11 + M3-3 + FE-3): resume, speed toggle ×1/×2, sound + settings, retry, menu, how to play. */
 export const PAUSE = Object.freeze({
-  card: { x: 100, y: 376, w: 520, h: 610 } as Rect,
+  card: { x: 100, y: 376, w: 520, h: 690 } as Rect,
   resume: { x: 210, y: 566, w: 300, h: 76 } as Rect,
   speed: { x: 210, y: 662, w: 300, h: 64 } as Rect,
   sound: { x: 180, y: 746, w: 170, h: 64 } as Rect,
   settings: { x: 370, y: 746, w: 170, h: 64 } as Rect,
   retry: { x: 180, y: 872, w: 170, h: 72 } as Rect,
   menu: { x: 370, y: 872, w: 170, h: 72 } as Rect,
+  /** "How to play" card (FE-3), under RETRY / MENU; the card returns here. */
+  howto: { x: 180, y: 960, w: 360, h: 64 } as Rect,
 });
 
 /**
@@ -97,10 +99,12 @@ export const SETTINGS = Object.freeze({
   colorBlind: { x: 470, y: 312, w: 160, h: 56 } as Rect,
   motion: { x: 372, y: 408, w: 258, h: 56 } as Rect,
   /**
-   * Language row: label line at `languageLabelY`, then a full-width picker (one segment per language,
-   * I18N). The row the rules-v2 removal of the send ratio freed (y ≈ 504) is left blank on purpose so
-   * the picker / reset rects (mirrored by the e2e specs) keep their positions.
+   * "How to play" row (FE-3): the whole row is the tap target (label left, chevron disc right). It
+   * takes the slot the rules-v2 removal of the send ratio freed (y ≈ 504), so the language picker /
+   * reset rects (mirrored by the e2e specs) keep their positions.
    */
+  howto: { x: 86, y: 500, w: 548, h: 64 } as Rect,
+  /** Language row: label line at `languageLabelY`, then a full-width picker (one segment per language, I18N). */
   languageLabelY: 600,
   language: { x: 86, y: 664, w: 548, h: 56 } as Rect,
   reset: { x: 160, y: 800, w: 400, h: 72 } as Rect,

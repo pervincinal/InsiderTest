@@ -509,6 +509,7 @@ function drawPauseCard(ctx: CanvasRenderingContext2D, state: GameState, ui: Play
   ctx.textAlign = 'center';
   drawButton(ctx, pal, PAUSE.retry, t('common.retry'), { fontPx: 26 });
   drawButton(ctx, pal, PAUSE.menu, t('common.menu'), { fontPx: 26 });
+  drawButton(ctx, pal, PAUSE.howto, t('pause.howto'), { fontPx: 24 });
 }
 
 function drawResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: PlayUi, since: number): void {

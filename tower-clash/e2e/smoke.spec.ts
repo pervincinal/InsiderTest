@@ -21,7 +21,9 @@ import type { Page } from '@playwright/test';
 const TITLE_PLAY = { x: 180, y: 640, w: 360, h: 96 };
 const TITLE_SETTINGS = { x: 180, y: 780, w: 172, h: 64 };
 // src/render/layout.ts — SETTINGS (+ the language picker: one segment per language in src/ui/i18n.ts LANGUAGES order)
-const SETTINGS = { back: { x: 18, y: 20, w: 140, h: 60 }, sound: { x: 470, y: 216, w: 160, h: 56 }, language: { x: 86, y: 664, w: 548, h: 56 } };
+const SETTINGS = { back: { x: 18, y: 20, w: 140, h: 60 }, sound: { x: 470, y: 216, w: 160, h: 56 }, howto: { x: 86, y: 500, w: 548, h: 64 }, language: { x: 86, y: 664, w: 548, h: 56 } };
+// src/render/menuLayout.ts — HOWTO (the "How to play" card, FE-3)
+const HOWTO = { back: { x: 18, y: 20, w: 140, h: 60 }, close: { x: 180, y: 1054, w: 360, h: 72 } };
 const LANGUAGE_ORDER = ['en', 'az', 'ru', 'tr'] as const;
 // src/render/layout.ts — TITLE.lang (language chip, tap → next language)
 const TITLE_LANG = { x: 630, y: 18, w: 72, h: 44 };
@@ -36,7 +38,7 @@ function levelNodeRect(index: number, scroll = 0): { x: number; y: number; w: nu
 const HUD = { mapTop: 96, mapBottom: 1180, pause: { x: 636, y: 18, w: 66, h: 60 }, mute: { x: 560, y: 18, w: 62, h: 60 } };
 const BOOSTERS = { overdrive: { x: 232, y: 1186, w: 66, h: 88 } };
 const RESULT = { next: { x: 84, y: 780, w: 170, h: 72 } };
-const PAUSE = { resume: { x: 210, y: 566, w: 300, h: 76 }, speed: { x: 210, y: 662, w: 300, h: 64 } };
+const PAUSE = { resume: { x: 210, y: 566, w: 300, h: 76 }, speed: { x: 210, y: 662, w: 300, h: 64 }, howto: { x: 180, y: 960, w: 360, h: 64 } };
 // src/render/layout.ts — TITLE.wallet (tap → shop), SHOP (header back, crystal pack cards, restore button)
 const TITLE_WALLET = { x: 120, y: 1172, w: 480, h: 52 };
 const SHOP_BACK = { x: 18, y: 20, w: 140, h: 60 };
@@ -486,6 +488,47 @@ test.describe('Tower Clash smoke', () => {
     await tapAt(page, west1.x, west1.y);
     await expect.poll(() => playerLinks(page), { message: 'home is still selected: the clear target links at once' }).toEqual([{ owner: 'player', from: 'home', to: 'west1' }]);
     expect(await limitHint(page)).toBeNull();
+    expect(pageErrors).toEqual([]);
+  });
+
+  test('FE-3: the "How to play" card opens from settings and from the pause menu and closes back to each', async ({ page }) => {
+    const pageErrors: string[] = [];
+    page.on('pageerror', (err) => pageErrors.push(String(err)));
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.__towerclash?.getScreen === 'function');
+
+    // settings row → card (title text, look shot) → CLOSE returns to settings; ESC closes too
+    await tapRect(page, TITLE_SETTINGS);
+    await expect.poll(() => screen(page)).toBe('settings');
+    await tapRect(page, SETTINGS.howto);
+    await expect.poll(() => screen(page)).toBe('howto');
+    expect(await text(page, 'howto.title')).toBe('HOW TO PLAY');
+    await page.waitForTimeout(250);
+    await lookShot(page, 'look3-howto');
+    await tapRect(page, HOWTO.close);
+    await expect.poll(() => screen(page)).toBe('settings');
+    await tapRect(page, SETTINGS.howto);
+    await expect.poll(() => screen(page)).toBe('howto');
+    await page.keyboard.press('Escape');
+    await expect.poll(() => screen(page)).toBe('settings');
+    await tapRect(page, SETTINGS.back);
+    await expect.poll(() => screen(page)).toBe('title');
+
+    // pause menu → card → BACK returns to the paused game with the sim still frozen
+    await page.evaluate(() => window.__towerclash.loadLevel(1, 1));
+    await expect.poll(() => screen(page)).toBe('play');
+    await page.keyboard.press('p');
+    await page.waitForTimeout(100);
+    const pausedAt = await simTime(page);
+    await tapRect(page, PAUSE.howto);
+    await expect.poll(() => screen(page)).toBe('howto');
+    expect(await text(page, 'howto.title')).toBe('HOW TO PLAY');
+    await tapRect(page, HOWTO.back);
+    await expect.poll(() => screen(page)).toBe('play');
+    await page.waitForTimeout(200);
+    expect(await simTime(page)).toBe(pausedAt);
+    await tapRect(page, PAUSE.resume);
+    await expect.poll(() => simTime(page)).toBeGreaterThan(pausedAt);
     expect(pageErrors).toEqual([]);
   });
 
