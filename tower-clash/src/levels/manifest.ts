@@ -65,11 +65,11 @@ export const LEVEL_MANIFEST: readonly LevelManifestEntry[] = [
   { id: 41, name: 'Twin Rivers', name_az: 'Əkiz Çaylar', name_ru: 'Две реки', name_tr: 'İkiz Nehirler', star3: 70000, star2: 140000, load: () => import('./041-twin-rivers.json').then(def) },
   { id: 42, name: 'Siege Engine', name_az: 'Mühasirə Maşını', name_ru: 'Осадная машина', name_tr: 'Kuşatma Aracı', star3: 60000, star2: 120000, load: () => import('./042-siege-engine.json').then(def) },
   { id: 43, name: 'Iron Convoy', name_az: 'Dəmir Karvan', name_ru: 'Стальной обоз', name_tr: 'Demir Konvoy', star3: 30000, star2: 60000, load: () => import('./043-iron-convoy.json').then(def) },
-  { id: 44, name: 'Minefield Crossing', name_az: 'Mina Sahəsi Keçidi', name_ru: 'Через минное поле', name_tr: 'Mayın Tarlası Geçidi', star3: 25000, star2: 50000, load: () => import('./044-minefield-crossing.json').then(def) },
+  { id: 44, name: 'Minefield Crossing', name_az: 'Mina Keçidi', name_ru: 'Через минное поле', name_tr: 'Mayın Tarlası Geçidi', star3: 25000, star2: 50000, load: () => import('./044-minefield-crossing.json').then(def) },
   { id: 45, name: 'Three Fronts', name_az: 'Üç Cəbhə', name_ru: 'Три фронта', name_tr: 'Üç Cephe', star3: 40000, star2: 80000, load: () => import('./045-three-fronts.json').then(def) },
   { id: 46, name: 'River Gate', name_az: 'Çay Qapısı', name_ru: 'Врата реки', name_tr: 'Nehir Kapısı', star3: 45000, star2: 90000, load: () => import('./046-the-long-bridge.json').then(def) },
   { id: 47, name: 'Scorched Earth', name_az: 'Yanmış Torpaq', name_ru: 'Выжженная земля', name_tr: 'Yakılmış Toprak', star3: 40000, star2: 90000, load: () => import('./047-scorched-earth.json').then(def) },
   { id: 48, name: 'Kings\' Council', name_az: 'Krallar Şurası', name_ru: 'Совет королей', name_tr: 'Krallar Meclisi', star3: 45000, star2: 90000, load: () => import('./048-kings-council.json').then(def) },
   { id: 49, name: 'Last Light', name_az: 'Son İşıq', name_ru: 'Свет в ночи', name_tr: 'Son Işık', star3: 25000, star2: 50000, load: () => import('./049-last-light.json').then(def) },
-  { id: 50, name: 'The Crown Reforged', name_az: 'Yenidən Dövülmüş Tac', name_ru: 'Корона, отлитая вновь', name_tr: 'Yeniden Dövülen Taç', star3: 40000, star2: 90000, load: () => import('./050-the-crown-reforged.json').then(def) },
+  { id: 50, name: 'The Crown Reforged', name_az: 'Tacın Dönüşü', name_ru: 'Корона, отлитая вновь', name_tr: 'Yeniden Dövülen Taç', star3: 40000, star2: 90000, load: () => import('./050-the-crown-reforged.json').then(def) },
 ];

@@ -5,7 +5,7 @@
   "name_ru": "Снабжение",
   "name_tr": "İkmal Hattı",
   "lesson": "A tower in the way hides the enemy behind it: go around it by the side tower. Sending never empties your tower, it only stops it growing, so keep your streams running",
-  "lesson_az": "Yolda duran qüllə arxasındakı düşməni gizlədir: yan qüllədən dolan. Göndərmək qülləni boşaltmır, yalnız böyüməsini dayandırır, ona görə axınlarını saxlama",
+  "lesson_az": "Yolda duran qüllə arxasındakı düşməni gizlədir: yan qüllədən dolan. Göndərmək qülləni boşaltmır, yalnız böyüməsini dayandırır, ona görə axınlarını dayandırma",
   "lesson_ru": "Башня на пути прячет врага за собой: обойди её через боковую башню. Отправка не опустошает башню, а лишь останавливает её рост, так что не прерывай потоки",
   "lesson_tr": "Yoldaki kule arkasındaki düşmanı gizler: yandaki kuleden dolaş. Göndermek kuleyi boşaltmaz, sadece büyümesini durdurur; akışlarını kesme",
   "star3": 20000,
