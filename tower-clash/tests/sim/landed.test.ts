@@ -65,6 +65,11 @@ describe('landed event', () => {
     step(clash);
     expect(clash.units).toEqual([]);
     expect(types(clash.events)).toEqual(['unitDied', 'unitDied']);
+    // BUG-14: every death names its lane so the play screen can count clashes per link.
+    expect(clash.events).toEqual([
+      { type: 'unitDied', x: 360, y: 700, owner: 'enemy1', cause: 'clash', roadId: roadIdFor('p', 'e') },
+      { type: 'unitDied', x: 360, y: 700, owner: 'player', cause: 'clash', roadId: roadIdFor('p', 'e') },
+    ]);
     // Artillery: the last unit before the gun dies 120 px out.
     const gun = createState(
       makeLevel({ towers: [{ id: 'p', x: 360, y: 1000, owner: 'player', units: 10, kind: 'artillery' }, { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 10 }] }),

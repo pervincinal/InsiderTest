@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { GameState, Link } from '../../src/sim/types';
 import { createState } from '../../src/sim/create';
 import { applyCommand } from '../../src/sim/commands';
+import { roadIdFor } from '../../src/sim/create';
 import { STALEMATE_HINT_MS, StalemateWatch } from '../../src/ui/play';
 import { makeLevel } from '../helpers';
 
@@ -87,6 +88,34 @@ describe('StalemateWatch (FE-1)', () => {
     expect(watch.check(at(state, 16_950))).toBeNull();
     expect(watch.check(at(state, 17_000))).not.toBeNull();
     expect(watch.check(at(state, 40_000))).toBeNull();
+  });
+
+  it('BUG-14: player units clashing on the spawn tick count as an opposing stream even though none survives the tick', () => {
+    const state = linked();
+    const watch = new StalemateWatch(true, never); // `laneStalemate` sees no outbound unit: they die on the tick they spawn
+    watch.check(at(state, 50));
+    for (let time = 1000; time < 8000; time += 1000) {
+      watch.onClash(roadIdFor('p', 'e'));
+      expect(watch.check(at(state, time))).toBeNull(); // inside the 8 s window: a clash alone fires nothing
+    }
+    expect(watch.check(at(state, 7950))).toBeNull(); // no clash noted for this tick and the window is not up
+    watch.onClash(roadIdFor('p', 'e'));
+    expect(watch.check(at(state, 8000))).not.toBeNull();
+    watch.onClash(roadIdFor('p', 'e'));
+    expect(watch.check(at(state, 9000))).toBeNull(); // once per link
+  });
+
+  it('a clash on another lane is not this link\'s opposing stream, and a noted clash is consumed by the next check', () => {
+    const state = linked();
+    const watch = new StalemateWatch(true, never);
+    watch.onClash('e-q'); // some other lane
+    expect(watch.check(at(state, 8000))).toBeNull();
+    watch.onClash(roadIdFor('p', 'e'));
+    watch.check(at(state, 8050)); // fires here (consumed)
+    const again = new StalemateWatch(true, never);
+    again.onClash(roadIdFor('p', 'e'));
+    expect(again.check(at(state, 50))).toBeNull(); // window not up: the clash is dropped, not banked
+    expect(again.check(at(state, 8000))).toBeNull();
   });
 
   it('only player links are watched and at most one hint fires per tick', () => {

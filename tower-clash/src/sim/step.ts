@@ -159,7 +159,7 @@ export function unitPosition(state: GameState, unit: Unit): { x: number; y: numb
 
 function kill(state: GameState, unit: Unit, cause: 'clash' | 'artillery' | 'mine'): void {
   const pos = unitPosition(state, unit);
-  state.events.push({ type: 'unitDied', x: pos.x, y: pos.y, owner: unit.owner, cause });
+  state.events.push({ type: 'unitDied', x: pos.x, y: pos.y, owner: unit.owner, cause, roadId: unit.roadId });
 }
 
 /**

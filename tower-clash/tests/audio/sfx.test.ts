@@ -216,9 +216,9 @@ describe('event → sfx mapping', () => {
     const events: SimEvent[] = [
       { type: 'upgrade', towerId: 'a', level: 2 },
       { type: 'upgrade', towerId: 'b', level: 2 },
-      { type: 'unitDied', x: 0, y: 0, owner: 'player', cause: 'artillery' },
-      { type: 'unitDied', x: 0, y: 0, owner: 'enemy1', cause: 'clash' },
-      { type: 'unitDied', x: 0, y: 0, owner: 'enemy1', cause: 'mine' },
+      { type: 'unitDied', x: 0, y: 0, owner: 'player', cause: 'artillery', roadId: 'a-b' },
+      { type: 'unitDied', x: 0, y: 0, owner: 'enemy1', cause: 'clash', roadId: 'a-b' },
+      { type: 'unitDied', x: 0, y: 0, owner: 'enemy1', cause: 'mine', roadId: 'a-b' },
       { type: 'won', timeMs: 1000 },
       { type: 'lost', timeMs: 1000 },
     ];
@@ -256,7 +256,7 @@ describe('arrivals', () => {
       speed: 100,
     });
     expect(tr.tick({ units: [unit(1, 'player'), unit(2, 'player'), unit(3, 'player'), unit(4, 'enemy1')] })).toBe(0);
-    tr.noteEvents([{ type: 'unitDied', x: 0, y: 0, owner: 'player', cause: 'clash' }]);
+    tr.noteEvents([{ type: 'unitDied', x: 0, y: 0, owner: 'player', cause: 'clash', roadId: 'a-b' }]);
     expect(tr.tick({ units: [unit(3, 'player')] })).toBe(1); // 1 and 2 vanished, one of them died
     expect(tr.tick({ units: [] })).toBe(1);
     expect(tr.tick({ units: [] })).toBe(0);

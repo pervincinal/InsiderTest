@@ -51,7 +51,7 @@ describe('artillery', () => {
     const state = level([{ progress: 0.7 }, { progress: 0.8 }]);
     step(state);
     expect(unitsOf(state, 'enemy1').map((u) => u.progress)).toEqual([0.71]);
-    expect(state.events).toContainEqual({ type: 'unitDied', x: 360, y: 400 + 0.81 * 600, owner: 'enemy1', cause: 'artillery' });
+    expect(state.events).toContainEqual({ type: 'unitDied', x: 360, y: 400 + 0.81 * 600, owner: 'enemy1', cause: 'artillery', roadId: 'e-p' });
   });
 
   it('fires again after an 800 ms cooldown, picking the nearest', () => {
@@ -85,7 +85,7 @@ describe('mines (rules v3)', () => {
     step(state);
     expect(state.units).toEqual([]);
     expect(state.mines[0]!.charges).toBe(2);
-    expect(state.events).toContainEqual({ type: 'unitDied', x: 360, y: 700 - 0.005 * 600, owner: 'player', cause: 'mine' });
+    expect(state.events).toContainEqual({ type: 'unitDied', x: 360, y: 700 - 0.005 * 600, owner: 'player', cause: 'mine', roadId: 'e-p' });
     const tank = spawn(state, { owner: 'enemy1', from: 'e', to: 'p', progress: 0.495, weight: 5, kind: 'tank' });
     step(state);
     expect(state.units).toEqual([tank]);

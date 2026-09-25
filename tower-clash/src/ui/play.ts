@@ -73,10 +73,15 @@ export const STALEMATE_HINT_MS = 8000;
  * every `landed` event of the player's on the link's target; once it has run `STALEMATE_HINT_MS`
  * of sim time and the sim reports the lane as a stalemate (`laneStalemate`), the hint fires — once
  * per link. A link that ends drops its window, so a re-created link gets a fresh chance.
+ * BUG-14: when the opposing stream meets the player's units on the spawn tick, they die before
+ * `laneStalemate` (which reads surviving units at tick end) can see them — so a clash death of a
+ * player unit on the link's lane (`onClash`) counts as "opposing stream seen" for the next check.
  * Disabled on the tutorial's first level. Pure bookkeeping: the sim is only read.
  */
 export class StalemateWatch {
   private readonly lanes = new Map<string, { to: string; since: number; shown: boolean }>();
+  /** Lanes on which a player unit died in a clash since the last `check`. */
+  private readonly clashed = new Set<string>();
 
   constructor(
     private readonly enabled: boolean,
@@ -86,6 +91,11 @@ export class StalemateWatch {
   /** Something of the player's landed on `towerId` at sim time `time`: the windows of the links into it restart. */
   onLanded(towerId: string, time: number): void {
     for (const w of this.lanes.values()) if (w.to === towerId) w.since = time;
+  }
+
+  /** A player unit died in a clash on `roadId`: the lane carries an opposing stream even if nothing survives the tick. */
+  onClash(roadId: string): void {
+    this.clashed.add(roadId);
   }
 
   /** Once per tick. Returns the (at most one) player link whose hint fires now, or null. */
@@ -102,12 +112,13 @@ export class StalemateWatch {
         this.lanes.set(key, w);
       }
       if (!this.enabled || w.shown || fire !== null || state.time - w.since < STALEMATE_HINT_MS) continue;
-      if (this.isStalemate(state, link)) {
+      if (this.clashed.has(link.roadId) || this.isStalemate(state, link)) {
         w.shown = true;
         fire = link;
       }
     }
     for (const key of this.lanes.keys()) if (!live.has(key)) this.lanes.delete(key); // the link ended: forget it
+    this.clashed.clear();
     return fire;
   }
 }
@@ -326,6 +337,7 @@ export class PlayScreen implements Screen {
         if (t) this.effects.push({ x: t.x, y: t.y, color: pal.owners[ev.by], bornMs: this.nowMs, lifeMs: 450, kind: 'ring' });
       } else if (ev.type === 'unitDied') {
         this.effects.push({ x: ev.x, y: ev.y, color: pal.owners[ev.owner], bornMs: this.nowMs, lifeMs: 300, kind: 'puff' });
+        if (ev.owner === 'player' && ev.cause === 'clash') this.stalemate.onClash(ev.roadId);
       } else if (ev.type === 'upgrade') {
         const t = this.state.towers[ev.towerId];
         if (t?.owner === 'player' && ev.level >= L3_LEVEL) m.upgradedToL3 = true;
