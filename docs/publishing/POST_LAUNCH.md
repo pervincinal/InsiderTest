@@ -14,7 +14,7 @@ Owner: Publisher (this file); each row names the role that does the work. Writte
 
 | When | Web (Pages) | Google Play | App Store | Team |
 |---|---|---|---|---|
-| L−1 | `npm run check` + `playtest` green on the tag commit; `POST_LAUNCH.md` §4 daily table re-run for L … L+27 | AAB from the release job on the **internal testing** track (`LAUNCH_CHECKLIST.md` G5, MZ15) | TestFlight build (A6) | Version 1.0.0 / build 5 synced (Mobile Engineer), "What's new" texts pasted (Publisher) |
+| L−1 | `npm run check` + `playtest` green on the tag commit; `POST_LAUNCH.md` §4 daily table re-run for L … L+27 | AAB from the release job on the **internal testing** track (`LAUNCH_CHECKLIST.md` G5, MZ15) | TestFlight build (A6) | Version 1.0.0 / build 6 synced (Mobile Engineer, `ac41e5d`), "What's new" texts pasted (Publisher) |
 | **L** | Tag created; Pages deploy of the tag commit; URL and privacy / support pages checked (§8 T2–T3) | Closed testing (12+ testers, ≥ 14 days for a new personal account — G19) | TestFlight external group (≤ 10 000 testers, Apple review of the build ≈ 1 day) | Daily report announces the tag; triage rota starts (§5) |
 | L+1 … L+13 | Public web; first reviews arrive by support mail only (no store yet) | Closed testing runs; sandbox purchases + restore + refund verified (MZ14); Data safety / Ads declaration submitted (G13–G16) | App Privacy, age rating, IAP products submitted **with** the version (A13–A18, MZ3) | Hotfix window: 1.0.x for anything S1/S2 (§5); band 5 pack finishes (§6) |
 | L+14 | — | **Production, soft-launch countries** (§2.2), 100 % rollout inside those countries | **Release in the same countries** (App Store Connect → Pricing and Availability) | Producer's go / no-go on the §3 week-2 gate |
@@ -40,7 +40,7 @@ Owner: Publisher (this file); each row names the role that does the work. Writte
 
 Default if no answer: the team prepares the four soft-launch countries in the listing texts (`STORE_LISTING.md` already has EN + AZ, with RU/TR sets for the day those locales exist) and the stakeholder ticks the countries in the console — the team cannot.
 
-### 2.3 What the stakeholder must do (all already in `LAUNCH_CHECKLIST.md`; status as of 2026-09-20)
+### 2.3 What the stakeholder must do (all already in `LAUNCH_CHECKLIST.md`; status as of 2026-09-20, unchanged on 2026-09-25 — the click-by-click order is `LAUNCH_CHECKLIST.md` §0)
 
 | Order | Step | Checklist row | Status | Unblocks |
 |---|---|---|---|---|
