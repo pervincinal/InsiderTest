@@ -114,7 +114,7 @@ const shotsFor = (set) => SHOTS.filter((s) => !s.appleOnly || set.exact);
  */
 const LEVEL_5 = { home: { x: 360, y: 1140 }, west1: { x: 150, y: 860 }, east1: { x: 570, y: 860 } };
 /** Result frame: level and seeds on which the reference player wins with three stars (see `FRAMES.result`). */
-const RESULT_LEVEL = { id: 8, seeds: [14, 5, 11, 18, 3, 2], fastUntilMs: 20_000 };
+const RESULT_LEVEL = { id: 9, seeds: [4, 5, 14], fastUntilMs: 20_000 };
 
 /** Uncaptioned IAP review frame (Apple): the shop's Crystals tab, written by the first set rendered. */
 const IAP_REVIEW = { file: join(STORE, 'iap-review', 'shop-crystals.png'), tab: 'crystals' };
@@ -497,11 +497,13 @@ const FRAMES = {
     await playUntil(page, 15, 30_000);
   },
 
-  // the reference player wins level 8 "Two Bases" with 3 stars: result card, three gold stars.
+  // the reference player wins level 9 "Stone Walls" with 3 stars: result card, three gold stars.
   // Rules v3 moved level 1's clock under the bot (it wins "First Taps" at ≈ 32–35 s against a 30 s
   // 3★ clock — star3 is 0.9 × its median by design), so the frame uses the earliest level where the
-  // bot 3-stars on a known seed with margin: level 8, seeds 14 / 5 / 11 / 18 win at 30.1–30.6 s
-  // against 35 s (`npx tsx` over `runHeadless`, 2026-09-21). The fresh save still shows the
+  // bot 3-stars on a known seed: since the build-6 re-lay of the tutorial band (BUG-13 / LV-15,
+  // 2026-09-24) levels 1–8 are 2★ on every seed 1–20 for the bot (level 8 too — the former seeds
+  // 14 / 5 / 11 / 18 now win at ~52 s), so it is level 9, seeds 4 / 5 / 14, which win at 24.4–24.9 s
+  // (`npm run playtest -- --level 9 --seed S`, 2026-09-25). The fresh save still shows the
   // "First victory" achievement toast and the first coins, as the level 1 frame did.
   result: async (page, ctx) => {
     ctx.result = await playToResult(page, RESULT_LEVEL.id, RESULT_LEVEL.seeds, RESULT_LEVEL.fastUntilMs);

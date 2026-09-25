@@ -140,7 +140,7 @@ Screenshot order and captions (same frames in every set; the `SHOTS` table in `r
 | 04 | Level 4 "Build-up": a player tower reaching 25 and turning into the L2 sprite (`04-level-04-upgrade`) | Fill up to level up | Doldur, səviyyə qalxsın | Наполни и прокачай | Doldur, seviye atla | done |
 | 05 | Level 5: the limit hint "L2 needed for 2 streams" on an L1 tower that already runs one stream (`05-level-05-limit-hint`) | Bigger towers, more streams | Böyük qüllə, çox axın | Выше башня — больше потоков | Büyük kule, çok akış | done |
 | 06 | Level 9 "Stone Walls" (first fortress), player stream into the fortress (`06-level-09-fortress`) | Storm the fortress | Qalanı ələ keçir | Штурмуй крепость | Kaleyi fethet | done |
-| 07 | Result screen, 3 stars — a level 8 "Two Bases" win (level 1 cannot be 3-starred by the reference line under v3) (`07-result-win`) | Three-star every level | Hər səviyyədə üç ulduz | Везде по три звезды | Her bölümde üç yıldız | done |
+| 07 | Result screen, 3 stars — a level 9 "Stone Walls" win (levels 1–8 cannot be 3-starred by the reference line since the build-6 re-lay; level 8 was used until 2026-09-25) (`07-result-win`) | Three-star every level | Hər səviyyədə üç ulduz | Везде по три звезды | Her bölümde üç yıldız | done |
 | 08 | Shop, **Upgrades** tab (five Commander tracks, gold prices, seeded mid-game save) (`08-shop-upgrades`) | Boost your commander | Komandirini gücləndir | Прокачай командира | Komutanını güçlendir | done |
 | 09 | Level 15 (artillery citadel) — **App Store sets only** (`09-level-15-citadel`) | Silence the guns | Topları susdur | Заглуши пушки (Apple sets are EN only) | Topları sustur (Apple sets are EN only) | done (Apple 6.7" / 6.5" only; not in the Google set, which stays at 8) |
 
