@@ -15,7 +15,11 @@ import { DEFAULT_MODIFIERS } from '../../src/sim/index';
 import type { LevelDef, PlayerModifiers } from '../../src/sim/index';
 import { referencePlayerCommands } from '../../src/ai/index';
 import { runHeadless, starsFor } from '../../src/ai/headless';
-import type { RunResult } from '../../src/ai/headless';
+import type { PlayerBot, RunResult } from '../../src/ai/headless';
+
+/** The bot a challenge run plays with: a fresh instance per seed (`makeNaivePlayer` keeps memory); the default is the reference player. */
+export type PlayerFactory = () => PlayerBot;
+const referencePlayer: PlayerFactory = () => referencePlayerCommands;
 
 /** Gate over the K seeds around the fixed one (the fixed seed itself must always be won). */
 export const DAILY_WIN_RATE = 0.9;
@@ -94,9 +98,10 @@ function median(values: readonly number[]): number | undefined {
 /**
  * Reference player on one day's challenge over `seedCount` seeds (the fixed one first). `level` must
  * be the challenge's level. `twist: false` runs the same level and seeds with no modifiers — the
- * control that tells a twist-caused loss from a level-caused one.
+ * control that tells a twist-caused loss from a level-caused one. `player` swaps the line (QA-7:
+ * `() => makeNaivePlayer()` for the naive human line; `ok` then reads as the same gate but is informational).
  */
-export function runDaily(challenge: DailyChallenge, level: LevelDef, seedCount: number, twist = true): DailyRow {
+export function runDaily(challenge: DailyChallenge, level: LevelDef, seedCount: number, twist = true, player: PlayerFactory = referencePlayer): DailyRow {
   if (level.id !== challenge.levelId) throw new Error(`daily: level ${level.id} is not the ${challenge.dayKey} challenge (${challenge.levelId})`);
   const modifiers = twist ? challenge.twist.modifiers : DEFAULT_MODIFIERS;
   const seeds = dailySeeds(challenge, seedCount);
@@ -105,7 +110,7 @@ export function runDaily(challenge: DailyChallenge, level: LevelDef, seedCount: 
   const losers: number[] = [];
   let ticks = 0;
   for (const seed of seeds) {
-    const r = runHeadless(level, seed, referencePlayerCommands, { modifiers });
+    const r = runHeadless(level, seed, player(), { modifiers });
     results.push(r);
     ticks += r.ticks;
     if (r.outcome === 'won') winTimes.push(r.timeMs);
@@ -195,8 +200,9 @@ export interface WeeklyRow {
  * the client builds it: the week's level, fixed seed and twist modifiers, no upgrades. `level` must be
  * the challenge's level. `twist: false` is the no-modifier control, as for `runDaily`. Besides the
  * daily gate the row reports the 3★ target: which seeds finished within `challenge.targetMs`.
+ * `player` swaps the line (QA-7: the naive human line), as for `runDaily`.
  */
-export function runWeekly(challenge: WeeklyChallenge, level: LevelDef, seedCount: number, twist = true): WeeklyRow {
+export function runWeekly(challenge: WeeklyChallenge, level: LevelDef, seedCount: number, twist = true, player: PlayerFactory = referencePlayer): WeeklyRow {
   if (level.id !== challenge.levelId) throw new Error(`weekly: level ${level.id} is not the ${challenge.weekKey} challenge (${challenge.levelId})`);
   const modifiers = twist ? challenge.twist.modifiers : DEFAULT_MODIFIERS;
   const seeds = weeklySeeds(challenge, seedCount);
@@ -208,7 +214,7 @@ export function runWeekly(challenge: WeeklyChallenge, level: LevelDef, seedCount
   let bestSeed: number | undefined;
   let ticks = 0;
   for (const seed of seeds) {
-    const r = runHeadless(level, seed, referencePlayerCommands, { modifiers });
+    const r = runHeadless(level, seed, player(), { modifiers });
     results.push(r);
     ticks += r.ticks;
     if (r.outcome === 'won') {

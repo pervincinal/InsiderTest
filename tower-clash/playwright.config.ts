@@ -1,4 +1,6 @@
 import { existsSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
 
 /**
@@ -28,6 +30,28 @@ const DEFAULT_PORT = 4173;
 const PORT = process.env.PW_PORT ? Number(process.env.PW_PORT) : DEFAULT_PORT;
 if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65_535) throw new Error(`PW_PORT must be a TCP port, got ${String(process.env.PW_PORT)}`);
 const OUTPUT_DIR = process.env.PW_OUTPUT || 'test-results';
+
+/**
+ * QA-6: the preview serves a snapshot of dist/, never dist/ itself. Agents share one checkout and a
+ * parallel `npm run build` / `npm run e2e` rewrites dist/ with fresh content hashes mid-run: a page
+ * that booted on the old index.html then 404s on every lazy chunk (2026-09-25 trace under load:
+ * `lazyScreens-BffMi0Eb.js?r=…` → 404 right after dist/ became `lazyScreens-Dtx9ipZ5.js`; the lazy
+ * "menu chunk" and the smoke "language" tests failed), and a boot that lands inside the rewrite
+ * window finds no `index-*.js` and never comes up — the silent 90 s timeouts seen on lazy.spec.
+ * The copy is taken by the web-server command, i.e. once per server start, before any test. It is
+ * keyed by port under the OS temp dir (≈ 5 MB): a second run that attaches to a running server
+ * (`reuseExistingServer`, local only) sees the same files that server has served all along, and no
+ * run's 'clear output' can delete another's snapshot. Whatever happens to dist/ meanwhile, a running
+ * suite keeps serving the build it started with.
+ */
+const DIST_SNAPSHOT = path.join(os.tmpdir(), 'tower-clash-e2e', String(PORT), 'dist');
+const PREVIEW_COMMAND = [
+  `test -d dist || { echo 'e2e: no dist/ — run npm run build first' >&2; exit 1; }`,
+  `rm -rf "${DIST_SNAPSHOT}"`,
+  `mkdir -p "${DIST_SNAPSHOT}"`,
+  `cp -R dist/. "${DIST_SNAPSHOT}"`,
+  `npm run preview -- --outDir "${DIST_SNAPSHOT}" --port ${PORT} --strictPort`,
+].join(' && ');
 
 export default defineConfig({
   testDir: 'e2e',
@@ -59,7 +83,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `npm run preview -- --port ${PORT} --strictPort`,
+    command: PREVIEW_COMMAND,
     port: PORT,
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,

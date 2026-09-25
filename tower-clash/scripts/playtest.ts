@@ -1,7 +1,7 @@
 /**
  * `npm run playtest [-- --level N] [-- --seed S] [-- --seeds N] [-- --upgrades none|max]`
- * `npm run playtest -- --daily YYYY-MM-DD [--days N] [--seeds K] [--no-twist]`
- * `npm run playtest -- --weekly YYYY-MM-DD(Monday) [--weeks N] [--seeds K] [--no-twist]`
+ * `npm run playtest -- --daily YYYY-MM-DD [--days N] [--seeds K] [--no-twist] [--naive [--react MS]]`
+ * `npm run playtest -- --weekly YYYY-MM-DD(Monday) [--weeks N] [--seeds K] [--no-twist] [--naive [--react MS]]`
  * `npm run playtest -- --twist <plain|lean|fastFeet|thinWalls|reinforced> [--seeds K] [--pool a-b]`
  * `npm run playtest -- --naive [--seeds K] [--react MS] [--gate a-b]`
  * Headless balance run: for every level (or one), simulate (a) the reference player vs the enemies and
@@ -34,7 +34,11 @@
  * boosts) on every level over seeds 1..K (`--seeds K`, default 5). One row per level: wins/K, stars at the
  * level's clocks, median win time, and whether the line holds (≥ 50 % wins) within `star2`. No gate —
  * informational (exit 0); the summary line is what the report quotes.
- * Rng streams come from `rngsFor`, exactly as the game client derives them.
+ * `--daily … --naive` / `--weekly … --naive` (QA-7): the same naive line on each day's / week's challenge
+ * (its level, fixed seed and twist, K seeds from the fixed one): one row per day / week with wins/K, the
+ * median win time and whether the line holds (≥ 50 % wins). Informational, no gate (exit 0).
+ * The flag rules live in scripts/lib/playtestArgs.ts (unit-tested); rng streams come from `rngsFor`,
+ * exactly as the game client derives them.
  */
 import { performance } from 'node:perf_hooks';
 import { loadAllLevels, loadLevel } from '../src/levels/index';
@@ -44,125 +48,25 @@ import { referencePlayerCommands } from '../src/ai/index';
 import { HEADLESS_MAX_MS, runHeadless, starsFor } from '../src/ai/headless';
 import type { RunResult } from '../src/ai/headless';
 import { maxedModifiers } from '../src/economy/maxUpgrades';
-import { DAILY_WIN_RATE, DEFAULT_POOL, TWIST_WIN_RATE, WEEKLY_WIN_RATE, dailyPlan, inPool, parsePool, runDaily, runTwist, runWeekly, twistById, weeklyPlan } from './lib/daily';
+import { DAILY_WIN_RATE, TWIST_WIN_RATE, WEEKLY_WIN_RATE, dailyPlan, inPool, runDaily, runTwist, runWeekly, twistById, weeklyPlan } from './lib/daily';
 import type { DailyRow, PoolRange, TwistRow, WeeklyRow } from './lib/daily';
-import { TWISTS, isMondayKey } from '../src/daily/challenge';
 import type { Twist } from '../src/daily/challenge';
-import { NAIVE_GATE_LAST, NAIVE_REACT_MS, NAIVE_WIN_RATE, naiveGate, naiveGateMinWins, naiveGateRate, parseNaiveGate, runNaive } from './lib/naivePlayer';
+import { NAIVE_GATE_LAST, NAIVE_WIN_RATE, makeNaivePlayer, naiveGate, naiveGateMinWins, naiveGateRate, runNaive } from './lib/naivePlayer';
 import type { NaiveGateRange, NaiveRow } from './lib/naivePlayer';
+import { parseArgs } from './lib/playtestArgs';
+import type { Upgrades } from './lib/playtestArgs';
 
 export { runHeadless } from '../src/ai/headless';
+export { parseArgs } from './lib/playtestArgs';
+export type { Args, Upgrades } from './lib/playtestArgs';
 
 const MAX_MS = HEADLESS_MAX_MS;
-const DEFAULT_SEED = 1;
 /** Multi-seed gate: levels up to this id must win every seed. */
 const TUTORIAL_BAND_LAST = 8;
 /** Multi-seed gate for later levels. */
 const LATER_WIN_RATE = 0.95;
 /** `--upgrades max` gate (ECONOMY.md §3.2): median stars over every level × seed. */
 export const MAX_UPGRADES_MEDIAN_STARS = 2.5;
-
-type Upgrades = 'none' | 'max';
-
-interface Args {
-  level?: number;
-  seed: number;
-  seeds?: number;
-  upgrades: Upgrades;
-  /** `--daily D`: first day key of the daily-challenge sweep. */
-  daily?: string;
-  /** `--days N`: number of consecutive days from `daily`. */
-  days: number;
-  /** `--no-twist`: daily mode without the twist modifiers (control run). */
-  twist: boolean;
-  /** `--twist <id>`: pool × twist sweep under this twist. */
-  twistId?: Twist['id'];
-  /** `--pool a-b`: level id range for the twist sweep (default `DEFAULT_POOL`). */
-  pool: Readonly<PoolRange>;
-  /** `--weekly M`: first Monday key of the weekly-challenge sweep. */
-  weekly?: string;
-  /** `--weeks N`: number of consecutive weeks from `weekly`. */
-  weeks: number;
-  /** `--naive`: naive human line over every level (informational). */
-  naive: boolean;
-  /** `--react MS`: reaction delay of the naive line, ms of sim time. */
-  reactMs: number;
-  /** `--gate a-b`: naive mode gate over level ids a..b (1–NAIVE_GATE_LAST); undefined = informational. */
-  gate?: NaiveGateRange;
-}
-
-function parseArgs(argv: string[]): Args {
-  let level: number | undefined;
-  let seed = DEFAULT_SEED;
-  let seeds: number | undefined;
-  let upgrades = 'none';
-  let daily: string | undefined;
-  let days = 1;
-  let twist = true;
-  let twistId: string | undefined;
-  let poolSpec: string | undefined;
-  let weekly: string | undefined;
-  let weeks = 1;
-  let naive = false;
-  let reactMs = NAIVE_REACT_MS;
-  let gateSpec: string | undefined;
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i]!;
-    const next = argv[i + 1];
-    if (arg === '--level' && next !== undefined) level = Number(next);
-    else if (arg.startsWith('--level=')) level = Number(arg.slice('--level='.length));
-    else if (arg === '--seeds' && next !== undefined) seeds = Number(next);
-    else if (arg.startsWith('--seeds=')) seeds = Number(arg.slice('--seeds='.length));
-    else if (arg === '--seed' && next !== undefined) seed = Number(next);
-    else if (arg.startsWith('--seed=')) seed = Number(arg.slice('--seed='.length));
-    else if (arg === '--upgrades' && next !== undefined) upgrades = next;
-    else if (arg.startsWith('--upgrades=')) upgrades = arg.slice('--upgrades='.length);
-    else if (arg === '--daily' && next !== undefined) daily = next;
-    else if (arg.startsWith('--daily=')) daily = arg.slice('--daily='.length);
-    else if (arg === '--days' && next !== undefined) days = Number(next);
-    else if (arg.startsWith('--days=')) days = Number(arg.slice('--days='.length));
-    else if (arg === '--no-twist') twist = false;
-    else if (arg === '--twist' && next !== undefined) twistId = next;
-    else if (arg.startsWith('--twist=')) twistId = arg.slice('--twist='.length);
-    else if (arg === '--pool' && next !== undefined) poolSpec = next;
-    else if (arg.startsWith('--pool=')) poolSpec = arg.slice('--pool='.length);
-    else if (arg === '--weekly' && next !== undefined) weekly = next;
-    else if (arg.startsWith('--weekly=')) weekly = arg.slice('--weekly='.length);
-    else if (arg === '--weeks' && next !== undefined) weeks = Number(next);
-    else if (arg.startsWith('--weeks=')) weeks = Number(arg.slice('--weeks='.length));
-    else if (arg === '--naive') naive = true;
-    else if (arg === '--react' && next !== undefined) reactMs = Number(next);
-    else if (arg.startsWith('--react=')) reactMs = Number(arg.slice('--react='.length));
-    else if (arg === '--gate' && next !== undefined) gateSpec = next;
-    else if (arg.startsWith('--gate=')) gateSpec = arg.slice('--gate='.length);
-  }
-  if (level !== undefined && !Number.isInteger(level)) throw new Error(`bad --level ${String(level)}`);
-  if (!Number.isInteger(seed)) throw new Error(`bad --seed ${String(seed)}`);
-  if (seeds !== undefined && (!Number.isInteger(seeds) || seeds < 1)) throw new Error(`bad --seeds ${String(seeds)}`);
-  if (upgrades !== 'none' && upgrades !== 'max') throw new Error(`bad --upgrades ${upgrades} (none|max)`);
-  if (daily !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(daily)) throw new Error(`bad --daily ${daily} (YYYY-MM-DD)`);
-  if (!Number.isInteger(days) || days < 1) throw new Error(`bad --days ${String(days)}`);
-  if (weekly !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(weekly)) throw new Error(`bad --weekly ${weekly} (YYYY-MM-DD, a Monday)`);
-  if (weekly !== undefined && !isMondayKey(weekly)) {
-    throw new Error(`bad --weekly ${weekly}: not a Monday (UTC). The weekly key is the week's Monday, e.g. 2026-09-21 (\`date -u -d "-$(( $(date -u +%u) - 1 )) days" +%F\`).`);
-  }
-  if (!Number.isInteger(weeks) || weeks < 1) throw new Error(`bad --weeks ${String(weeks)}`);
-  const twistDef = twistId === undefined ? undefined : twistById(twistId);
-  if (twistId !== undefined && !twistDef) throw new Error(`bad --twist ${twistId} (${TWISTS.map((t) => t.id).join('|')})`);
-  const modes = [twistDef ? '--twist' : undefined, daily !== undefined ? '--daily' : undefined, weekly !== undefined ? '--weekly' : undefined, naive ? '--naive' : undefined].filter(
-    (m) => m !== undefined,
-  );
-  if (modes.length > 1) throw new Error(`${modes.join(' and ')} are separate modes`);
-  const pool = poolSpec === undefined ? DEFAULT_POOL : parsePool(poolSpec);
-  if (poolSpec !== undefined && !twistDef) throw new Error('--pool only applies to --twist');
-  if (!Number.isInteger(reactMs) || reactMs < C.TICK_MS || reactMs % C.TICK_MS !== 0) throw new Error(`bad --react ${String(reactMs)} (ms, a positive multiple of ${C.TICK_MS})`);
-  if (reactMs !== NAIVE_REACT_MS && !naive) throw new Error('--react only applies to --naive');
-  const gate = gateSpec === undefined ? undefined : parseNaiveGate(gateSpec);
-  if (gate && !naive) throw new Error('--gate only applies to --naive');
-  if (gate && reactMs !== NAIVE_REACT_MS) throw new Error(`--gate is defined at the default reaction (${NAIVE_REACT_MS} ms); drop --react`);
-  if (gate && level !== undefined && (level < gate.from || level > gate.to)) throw new Error(`--level ${level} is outside --gate ${gate.from}-${gate.to}`);
-  return { level, seed, seeds, upgrades, daily, days, twist, twistId: twistDef?.id, pool, weekly, weeks, naive, reactMs, gate };
-}
 
 /** Re-exported for tools that used to read the max ladder from here (QA-3: the catalog is the source). */
 export { maxedModifiers } from '../src/economy/maxUpgrades';
@@ -632,8 +536,68 @@ async function runNaiveMode(levels: LevelDef[], k: number, reactMs: number, gate
   return failed;
 }
 
+/**
+ * QA-7: the naive human line on each day's / week's challenge — the challenge's level, fixed seed and
+ * twist (or the `--no-twist` control), K seeds from the fixed one, the naive bot instead of the
+ * reference player. One row per challenge: wins/K, median win time, `holds` = wins/K ≥ NAIVE_WIN_RATE,
+ * losing seeds. Informational: no gate, always 0 failures; the summary line names the challenges the
+ * line loses at ≥ 50 % so a level/design item can be traced from the losing seed.
+ */
+async function runChallengeNaiveMode(kind: 'daily' | 'weekly', from: string, count: number, k: number, twist: boolean, reactMs: number): Promise<number> {
+  const plan: (DailyRow['challenge'] | WeeklyRow['challenge'])[] = kind === 'daily' ? dailyPlan(from, count) : weeklyPlan(from, count);
+  const keyOf = (c: DailyRow['challenge'] | WeeklyRow['challenge']): string => ('dayKey' in c ? c.dayKey : c.weekKey);
+  const unit = kind === 'daily' ? 'day' : 'week';
+  const header = `${pad(unit, 10)} ${pad('lvl', 4)} ${pad('name', 20)} ${pad('twist', 10)} ${pad('seed', 8)} ${pad('wins', 6)} ${pad('median', 8)} ${pad('holds', 6)} losing seeds`;
+  console.log(
+    `playtest ${kind} naive  ${from} +${count - 1} ${unit}(s)  react=${reactMs}ms  seeds=K=${k} (fixed, fixed+1, …)  twist=${twist ? 'on' : 'OFF (control)'}  upgrades=none  max=${fmtTime(MAX_MS)}  informational: holds = wins/K >= ${Math.round(NAIVE_WIN_RATE * 100)}%, no gate`,
+  );
+  console.log(header);
+  console.log('-'.repeat(header.length));
+  const rows: (DailyRow | WeeklyRow)[] = [];
+  let totalTicks = 0;
+  const t0 = performance.now();
+  for (const challenge of plan) {
+    const level = await loadLevel(challenge.levelId);
+    if (!level) {
+      console.error(`No level with id ${challenge.levelId} for ${keyOf(challenge)}`);
+      process.exit(1);
+    }
+    const player = () => makeNaivePlayer({ reactMs });
+    const row = 'dayKey' in challenge ? runDaily(challenge, level, k, twist, player) : runWeekly(challenge, level, k, twist, player);
+    rows.push(row);
+    totalTicks += row.ticks;
+    const holds = row.wins / k >= NAIVE_WIN_RATE;
+    const medianT = row.medianMs === undefined ? '-' : fmtTime(row.medianMs);
+    const losers = row.losers.length ? row.losers.join(',') : '-';
+    console.log(
+      `${pad(keyOf(challenge), 10)} ${pad(String(level.id), 4)} ${pad(level.name, 20)} ${pad(challenge.twist.id, 10)} ${pad(String(challenge.seed), 8)} ${pad(`${row.wins}/${k}`, 6)} ${pad(medianT, 8)} ${pad(holds ? 'yes' : 'NO', 6)} ${losers}`,
+    );
+  }
+  const elapsed = (performance.now() - t0) / 1000;
+  console.log('-'.repeat(header.length));
+  const held = rows.filter((r) => r.wins / k >= NAIVE_WIN_RATE);
+  const totalWins = rows.reduce((n, r) => n + r.wins, 0);
+  console.log(
+    `naive ${kind}: ${held.length}/${rows.length} ${unit}(s) won at >= ${Math.round(NAIVE_WIN_RATE * 100)} % (react ${reactMs} ms, all seeds ${totalWins}/${rows.length * k})`,
+  );
+  for (const r of rows) {
+    if (r.wins / k >= NAIVE_WIN_RATE) continue;
+    console.log(`  ${keyOf(r.challenge)} lvl ${r.level.id} ${r.level.name} [${r.challenge.twist.id}]: ${r.wins}/${k}${r.losers.length ? ` (lost ${r.losers.join(',')})` : ''} — informational`);
+  }
+  console.log(`perf: ${totalTicks} ticks in ${elapsed.toFixed(2)}s = ${Math.round(totalTicks / Math.max(elapsed, 1e-6))} ticks/s`);
+  return 0;
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
+  if (args.naive && args.daily !== undefined) {
+    await runChallengeNaiveMode('daily', args.daily, args.days, args.seeds ?? 5, args.twist, args.reactMs);
+    return;
+  }
+  if (args.naive && args.weekly !== undefined) {
+    await runChallengeNaiveMode('weekly', args.weekly, args.weeks, args.seeds ?? 5, args.twist, args.reactMs);
+    return;
+  }
   if (args.naive) {
     const failed = await runNaiveMode(await selectLevels(args.level), args.seeds ?? 5, args.reactMs, args.gate);
     if (failed > 0) process.exit(1);

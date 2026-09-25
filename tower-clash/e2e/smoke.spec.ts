@@ -562,7 +562,7 @@ test.describe('Tower Clash smoke', () => {
     // tutorial hint of level 1 is translated
     await page.evaluate(() => window.__towerclash.loadLevel(1, 1));
     await expect.poll(() => screen(page)).toBe('play');
-    await expect.poll(() => hint(page)).toBe('Öz qüllənə vur');
+    await expect.poll(() => hint(page)).toBe('Öz qüllənə toxun');
 
     // the choice survives a reload; the title chip cycles languages (az → ru) and persists too
     await page.reload();

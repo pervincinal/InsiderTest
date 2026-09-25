@@ -18,6 +18,8 @@ import {
   runNaive,
 } from '../../scripts/lib/naivePlayer';
 import type { NaiveRow } from '../../scripts/lib/naivePlayer';
+import { runDaily, runWeekly } from '../../scripts/lib/daily';
+import { challengeFor, weeklyFor } from '../../src/daily/challenge';
 import { makeLevel } from '../helpers';
 
 const level1 = (await loadLevel(1))!;
@@ -195,6 +197,33 @@ describe('naive human line (QA-3)', () => {
         rows.push(runNaive(level, 5, NAIVE_REACT_MS));
       }
       expect(naiveGate(rows, { from: 1, to: 8 })).toEqual([]);
+    });
+  });
+  describe('on the daily / weekly challenge (QA-7: `--daily … --naive`, `--weekly … --naive`)', () => {
+    it('runDaily with the naive factory plays the day\'s level at its fixed seed under the twist, with the naive bot (tick for tick)', async () => {
+      const challenge = challengeFor('2026-09-25');
+      const level = (await loadLevel(challenge.levelId))!;
+      const row = runDaily(challenge, level, 3, true, () => makeNaivePlayer());
+      expect(row.seeds).toEqual([challenge.seed, challenge.seed + 1, challenge.seed + 2]);
+      expect(row.modifiers).toEqual(challenge.twist.modifiers);
+      for (let i = 0; i < 3; i++) {
+        const direct = runHeadless(level, challenge.seed + i, makeNaivePlayer(), { modifiers: challenge.twist.modifiers });
+        expect(row.results[i]).toEqual(direct);
+      }
+      // the reference player (default factory) is a different line on the same seeds
+      const ref = runDaily(challenge, level, 3);
+      expect(ref.results).not.toEqual(row.results);
+    });
+
+    it('runWeekly with the naive factory does the same on the week\'s challenge, and the control drops the twist', async () => {
+      const challenge = weeklyFor('2026-09-21');
+      const level = (await loadLevel(challenge.levelId))!;
+      const row = runWeekly(challenge, level, 2, true, () => makeNaivePlayer({ reactMs: 8000 }));
+      expect(row.modifiers).toEqual(challenge.twist.modifiers);
+      expect(row.results[0]).toEqual(runHeadless(level, challenge.seed, makeNaivePlayer({ reactMs: 8000 }), { modifiers: challenge.twist.modifiers }));
+      const control = runWeekly(challenge, level, 2, false, () => makeNaivePlayer({ reactMs: 8000 }));
+      expect(control.modifiers).toEqual(DEFAULT_MODIFIERS);
+      expect(control.results[0]).toEqual(runHeadless(level, challenge.seed, makeNaivePlayer({ reactMs: 8000 })));
     });
   });
 });

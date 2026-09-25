@@ -49,3 +49,5 @@ Parallel runs (QA-4): `playwright.config.ts` reads two environment variables so 
 
 ## Manual feel check (for the report)
 Run `npm run dev`, play levels 1–3 with mouse; note anything that reads badly at 360 px width. Log findings under "Bugs" in `docs/BACKLOG.md`.
+
+Challenge naive rows: `npm run playtest -- --daily <day> --days N --naive` and `--weekly <monday> --weeks N --naive` run the naive first-time line instead of the reference player (K seeds, 4 s reactions, twist applied) — informational, exit 0, one row per day/week; `--gate` and `--twist` do not combine with it.

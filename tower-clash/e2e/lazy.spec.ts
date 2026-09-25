@@ -10,6 +10,16 @@ import type { Page } from '@playwright/test';
  * `?r=<time>` query. The requests are aborted with `page.route` (query included, so the re-fetch
  * is aborted as long as the route is on); the service worker is blocked so the cache-first
  * strategy cannot serve them from a previous run.
+ *
+ * Boot (QA-6): `page.goto` in the test runner has no navigation timeout of its own, so a stalled
+ * navigation only surfaces as the 90 s test timeout (seen twice on "menu chunk" in full-suite runs,
+ * never alone; not reproduced in 3 full-suite runs + 37 sequenced boots under a load average of 5–7).
+ * `boot` therefore navigates with `waitUntil: 'commit'` (the document is in; Chromium's `load`
+ * lifecycle is not waited on), polls the game's debug surface under its own bound, and retries the
+ * navigation once — a stalled boot fails in ≤ 40 s with a message that names the phase instead of
+ * eating the whole test budget. The route stays registered before the navigation: with any route
+ * on, Playwright pauses every request (the document included) and continues the non-matching ones
+ * server-side; measured cost on this machine ≈ 0 (Chromium `load` at 70–150 ms with the route on).
  */
 
 test.use({ serviceWorkers: 'block' });
@@ -30,14 +40,31 @@ const simTime = (page: Page) => page.evaluate(() => window.__towerclash.getState
 const toast = (page: Page) => page.evaluate(() => window.__towerclash.getToast());
 const text = (page: Page, key: string) => page.evaluate((k) => window.__towerclash.getText(k), key);
 
+/** QA-6 boot budgets, per attempt: the document must commit within the first, the debug surface must appear within the second. */
+const BOOT_NAV_TIMEOUT_MS = 10_000;
+const BOOT_SURFACE_TIMEOUT_MS = 10_000;
+const BOOT_ATTEMPTS = 2;
+
 async function boot(page: Page, seeded: Record<string, unknown> = { version: 3 }): Promise<string[]> {
   const pageErrors: string[] = [];
   page.on('pageerror', (err) => pageErrors.push(String(err)));
   await page.addInitScript(([key, data]) => localStorage.setItem(key, JSON.stringify(data)), [SAVE_KEY, seeded] as const);
-  await page.goto('/');
-  await page.waitForFunction(() => typeof window.__towerclash?.loadLevel === 'function');
-  await expect.poll(() => screen(page)).toBe('title');
-  return pageErrors;
+  const failures: string[] = [];
+  for (let attempt = 1; attempt <= BOOT_ATTEMPTS; attempt++) {
+    let phase = `navigation (${BOOT_NAV_TIMEOUT_MS} ms)`;
+    try {
+      await page.goto('/', { waitUntil: 'commit', timeout: BOOT_NAV_TIMEOUT_MS });
+      phase = `debug surface (${BOOT_SURFACE_TIMEOUT_MS} ms)`;
+      await page.waitForFunction(() => typeof window.__towerclash?.loadLevel === 'function', undefined, { timeout: BOOT_SURFACE_TIMEOUT_MS });
+      phase = 'title screen';
+      await expect.poll(() => screen(page)).toBe('title');
+      return pageErrors;
+    } catch (err) {
+      failures.push(`attempt ${attempt} stalled in ${phase}: ${String(err).split('\n')[0]}`);
+      console.warn(`boot: ${failures[failures.length - 1]}`);
+    }
+  }
+  throw new Error(`boot: the game did not come up in ${BOOT_ATTEMPTS} attempts\n${failures.join('\n')}`);
 }
 
 async function tapRect(page: Page, r: { x: number; y: number; w: number; h: number }): Promise<void> {
