@@ -16,7 +16,11 @@ export type SfxName =
   | 'artillery'
   | 'won'
   | 'lost'
-  | 'button';
+  | 'button'
+  /** A refused tap: link limit, blocked lane or empty source (`PlayGestures.limitHint`, ART-9). */
+  | 'refuse'
+  /** The stalemate hint toast (`hint.stalemate`, ART-9). */
+  | 'stalemate';
 
 /** `gain`: we captured it; `loss`: an enemy took ours; `other`: an enemy took neutral/another enemy's. */
 export type CaptureKind = 'gain' | 'loss' | 'other';
@@ -41,6 +45,7 @@ export const RATE_LIMIT_S: Readonly<Partial<Record<SfxName, number>>> = Object.f
   unitDied: 0.08,
   artillery: 0.1,
   send: 0.05,
+  refuse: 0.12, // a tap-spam of refusals is one thud per tap, never a rumble
 });
 
 /** Tolerance for clock arithmetic so a gap of exactly the limit is accepted. */

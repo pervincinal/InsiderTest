@@ -362,7 +362,10 @@ export class PlayScreen implements Screen {
     this.tutorial?.onSelect(this.gestures.selectedTowerId, this.state);
     if (this.loop.advance(dtMs) > 0) {
       this.ring.record(this.snapshot()); // the ring clones at most once per interval
-      if (this.stalemate.check(this.state)) this.toast.show(t('hint.stalemate'), 'error', nowMs, 3200);
+      if (this.stalemate.check(this.state)) {
+        this.toast.show(t('hint.stalemate'), 'error', nowMs, 3200);
+        playSfx('stalemate');
+      }
     }
     onSimFrame(this.state); // own-unit arrivals are detected by diffing units (no sim event for them)
     if (this.loop.finished && !this.finishedHandled) {
@@ -647,7 +650,10 @@ export class PlayScreen implements Screen {
       this.gestures.cancel();
       return;
     }
+    const hintBefore = this.gestures.limitHint;
     this.gestures.up(p);
+    // A refusal (link limit / blocked lane / empty source) is a fresh `limitHint` object: one thud per refused tap.
+    if (this.gestures.limitHint && this.gestures.limitHint !== hintBefore) playSfx('refuse');
   }
 
   cancel(): void {

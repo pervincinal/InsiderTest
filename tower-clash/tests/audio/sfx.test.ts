@@ -24,7 +24,7 @@ import {
 import type { SfxName } from '../../src/audio/index';
 import { FakeAudioContext } from './fakeAudio';
 
-const ALL: SfxName[] = ['send', 'arrive', 'capture', 'upgrade', 'unitDied', 'artillery', 'won', 'lost', 'button'];
+const ALL: SfxName[] = ['send', 'arrive', 'capture', 'upgrade', 'unitDied', 'artillery', 'won', 'lost', 'button', 'refuse', 'stalemate'];
 
 let ctx: FakeAudioContext;
 let save: SaveData;
@@ -276,5 +276,73 @@ describe('arrivals', () => {
     expect(ctx.voices().length).toBe(1);
     onSimFrame(state);
     expect(ctx.voices().length).toBe(1);
+  });
+});
+
+/*
+ * ART-9 (rules v3): the refused tap (link limit / blocked lane / empty source share one thud) and the
+ * stalemate hint chime. Both are short, no louder than `send`, and the chime is a rising two-note
+ * question distinct from the capture jingle.
+ */
+describe('v3 sounds (ART-9)', () => {
+  beforeEach(() => unlockAudio());
+
+  /** Loudest envelope peak (the linear attack ramp) scheduled since the last `clear`. */
+  const peakGain = (): number => Math.max(0, ...ctx.gains.map((g) => g.gain.events.find((e) => e.kind === 'linear')?.value ?? 0));
+
+  /** Peak gain of the `send` tick, the loudness ceiling for both new sounds. */
+  function sendPeak(): number {
+    ctx.clear();
+    ctx.currentTime += 1;
+    expect(playSfx('send', { count: 1 })).toBe(true);
+    return peakGain();
+  }
+
+  it('refuse: a ≤ 400 ms low thud (falling tone + soft noise knock), no louder than send', () => {
+    const ceiling = sendPeak();
+    ctx.clear();
+    ctx.currentTime += 1;
+    expect(playSfx('refuse')).toBe(true);
+    expect(longestVoiceS()).toBeGreaterThan(0);
+    expect(longestVoiceS()).toBeLessThanOrEqual(0.4);
+    expect(peakGain()).toBeLessThanOrEqual(ceiling);
+    expect(ctx.oscillators.length).toBe(1);
+    expect(ctx.sources.length).toBe(1); // the noise knock
+    const tone = ctx.oscillators[0]!.frequency.events;
+    expect(tone[0]!.value).toBeLessThan(sendPitchHz(1)); // starts under the lowest send pitch
+    expect(tone[1]!.value).toBeLessThan(tone[0]!.value); // ... and falls
+  });
+
+  it('refuse is rate-limited so a tap-spam stays one thud per tap', () => {
+    expect(RATE_LIMIT_S.refuse).toBeGreaterThan(0);
+    ctx.clear();
+    ctx.currentTime += 1;
+    expect(playSfx('refuse')).toBe(true);
+    expect(playSfx('refuse')).toBe(false);
+    ctx.currentTime += RATE_LIMIT_S.refuse!;
+    expect(playSfx('refuse')).toBe(true);
+  });
+
+  it('stalemate: a ≤ 400 ms two-note rising "hm?" on sines, no louder than send, unlike the capture jingle', () => {
+    const ceiling = sendPeak();
+    ctx.clear();
+    ctx.currentTime += 1;
+    expect(playSfx('stalemate')).toBe(true);
+    expect(longestVoiceS()).toBeLessThanOrEqual(0.4);
+    expect(peakGain()).toBeLessThanOrEqual(ceiling);
+    expect(ctx.sources.length).toBe(0); // pure tones, no noise
+    const notes = ctx.oscillators.map((o) => ({ hz: o.frequency.events[0]!.value, at: o.startAt!, type: o.type }));
+    expect(notes.length).toBe(2);
+    expect(notes.every((n) => n.type === 'sine')).toBe(true);
+    expect(notes[1]!.hz).toBeGreaterThan(notes[0]!.hz);
+    expect(notes[1]!.at).toBeGreaterThan(notes[0]!.at);
+    // distinct from the capture 'gain' chime (two triangles) and the send/button clicks
+    ctx.clear();
+    ctx.currentTime += 1;
+    playSfx('capture', { capture: 'gain' });
+    const capture = ctx.oscillators.map((o) => o.frequency.events[0]!.value);
+    for (const n of notes) expect(capture).not.toContain(n.hz);
+    expect(notes.map((n) => n.hz)).not.toContain(sendPitchHz(1));
+    expect(RATE_LIMIT_S.stalemate).toBeUndefined(); // fires once per link anyway (StalemateWatch)
   });
 });

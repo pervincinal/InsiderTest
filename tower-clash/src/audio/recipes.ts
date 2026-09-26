@@ -55,6 +55,19 @@ export function playRecipe(s: Synth, name: SfxName, opts: SfxOptions): void {
     case 'button':
       blip(s, 1400, 24, 'square', { gain: 0.08 });
       return;
+    case 'refuse':
+      // Short low "thud" for a refused tap: a falling triangle (harmonics keep it audible on phone
+      // speakers that drop everything under ~200 Hz) plus a soft knock of low-passed noise. Quieter
+      // than the capture-loss thud (0.45): a refusal is the player's own tap, not an event.
+      sweep(s, 200, 70, 110, 'triangle', { gain: 0.2 });
+      noiseBurst(s, 45, 420, { gain: 0.1 });
+      return;
+    case 'stalemate':
+      // Soft two-note "hm?": a rising fourth G4 → C5 on sines, a question rather than a reward
+      // (capture 'gain' is a fifth on triangles an octave up; send/button are single clicks).
+      blip(s, 392, 150, 'sine', { gain: 0.18 });
+      blip(s, 523.3, 210, 'sine', { gain: 0.18, delayS: 0.16 });
+      return;
   }
 }
 
