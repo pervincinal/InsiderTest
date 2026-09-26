@@ -698,9 +698,10 @@ function render(ctx: CanvasRenderingContext2D, pal: Palette, spec: TerrainSpec):
   // directional edge bevel (lit upper-left, shaded lower-right), inner half visible
   strokeBevel(ctx, outline, grass, 9);
 
-  // obstacles (walls / rivers / boulders) under the props
+  // obstacles (walls / rivers / boulders) under the props; ash and the twilight moor get dark boulders
   const kind = spec.biome ?? 'grass';
-  drawObstacles(ctx, pal, theme, grass, biome.wall, spec, rng, kind === 'volcanic');
+  const darkRocks = kind === 'volcanic' || kind === 'twilight';
+  drawObstacles(ctx, pal, theme, grass, biome.wall, spec, rng, darkRocks);
 
   // decorations: keep off obstacles, mines and towers
   const place = (minObstacle: number, minTower: number): Pt | null => {
@@ -712,7 +713,7 @@ function render(ctx: CanvasRenderingContext2D, pal: Palette, spec: TerrainSpec):
     }
     return null;
   };
-  const clumps = kind === 'sand' ? 7 : kind === 'volcanic' ? 6 : 10;
+  const clumps = kind === 'sand' ? 7 : kind === 'volcanic' ? 6 : kind === 'twilight' ? 8 : 10;
   const items: { p: Pt; s: number; f: (p: Pt, s: number) => void }[] = [];
   for (let i = 0; i < clumps; i++) {
     const p = place(44, 100);
@@ -723,13 +724,14 @@ function render(ctx: CanvasRenderingContext2D, pal: Palette, spec: TerrainSpec):
       if (kind === 'snow') drawPine(ctx, pal, biome.bush, q.x, q.y, ss);
       else if (kind === 'sand') drawCactus(ctx, pal, biome.bush, q.x, q.y, ss * 0.9);
       else if (kind === 'volcanic') drawRock(ctx, pal, q.x, q.y, ss, rng, true);
+      else if (kind === 'twilight' && alt) drawRock(ctx, pal, q.x, q.y, ss * 0.7, rng, true, 1.9); // standing stone
       else drawBush(ctx, pal, kind === 'autumn' && alt ? pal.biomes.grass.bush : biome.bush, q.x, q.y, ss);
     };
     items.push({ p, s, f });
   }
   for (let i = 0; i < 3; i++) {
     const p = place(40, 92);
-    if (p) items.push({ p, s: 11 + rng() * 8, f: (q, ss) => drawRock(ctx, pal, q.x, q.y, ss, rng, kind === 'volcanic') });
+    if (p) items.push({ p, s: 11 + rng() * 8, f: (q, ss) => drawRock(ctx, pal, q.x, q.y, ss, rng, darkRocks) });
   }
   items.sort((a, b) => a.p.y - b.p.y);
   for (const it of items) it.f(it.p, it.s);

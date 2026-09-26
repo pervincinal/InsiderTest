@@ -15,8 +15,8 @@ export interface Tones {
   shade: string;
 }
 
-/** Level bands (§3): 1–8 grass, 9–16 autumn, 17–24 sand, 25–32 snow, 33+ volcanic (41–50 inherit it until a band-6 biome is designed). */
-export type Biome = 'grass' | 'autumn' | 'sand' | 'snow' | 'volcanic';
+/** Level bands (§3): 1–8 grass, 9–16 autumn, 17–24 sand, 25–32 snow, 33–40 volcanic, 41+ twilight (ART-8 "twilight highlands": heather at dusk). */
+export type Biome = 'grass' | 'autumn' | 'sand' | 'snow' | 'volcanic' | 'twilight';
 
 export interface BiomeColors {
   grass: Tones;
@@ -166,6 +166,21 @@ const BIOMES: Record<Biome, BiomeColors> = Object.freeze({
     wall: { lit: '#8f8391', mid: '#5f5565', shade: '#2e2833' },
     dots: ['#ffb703', '#ff5a1f', '#ffd35c'],
   },
+  /*
+   * Twilight highlands (band 5, ART-8): heather-violet moor under a dusk sky, the island's cliff
+   * top catching a warm amber rim light, pale lilac paths, slate walls, dark boulders and tall
+   * standing stones; the dots are amber fireflies and pale heather bloom. The ground sits at
+   * relative luminance 0.23 — well above volcanic ash (0.07) so the streams' 1 px ink outline reads
+   * (3.8:1) and ΔE ≥ 38 from every owner mid tone in both palettes (tests/render/biome.test.ts).
+   */
+  twilight: {
+    grass: { lit: '#a898cf', mid: '#8a7ab5', shade: '#665794' },
+    cliff: { lit: '#c48a5c', shade: '#4b4463' },
+    path: { lit: '#e9dff7', shade: '#c4b5df' },
+    bush: { lit: '#cf95d6', mid: '#5f3f85', shade: '#3e2757' },
+    wall: { lit: '#9aa0b8', mid: '#626a86', shade: '#343a50' },
+    dots: ['#ffd35c', '#ffb703', '#f6ecff'],
+  },
 });
 
 const OWNER_TONES: Record<Owner, Tones> = Object.freeze({
@@ -276,7 +291,8 @@ export function biomeFor(levelId: number): Biome {
   if (levelId <= 16) return 'autumn';
   if (levelId <= 24) return 'sand';
   if (levelId <= 32) return 'snow';
-  return 'volcanic';
+  if (levelId <= 40) return 'volcanic';
+  return 'twilight';
 }
 
 const shadeCache = new Map<string, string>();
