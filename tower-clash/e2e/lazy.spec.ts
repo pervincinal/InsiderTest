@@ -32,6 +32,10 @@ const MENU_CHUNK = /\/assets\/lazyScreens-[^/?]*\.js(\?.*)?$/;
 const SKIN_CHUNK = /\/assets\/skinShapes-[^/?]*\.js(\?.*)?$/;
 const THEMES_CHUNK = /\/assets\/themes-[^/?]*\.js(\?.*)?$/;
 const LEVEL15_CHUNK = /\/assets\/015-[^/?]*\.js(\?.*)?$/;
+// PERF-6: pause menu + result card drawing (src/render/hudOverlays.ts), warmed by the play screen
+const OVERLAYS_CHUNK = /\/assets\/hudOverlays-[^/?]*\.js(\?.*)?$/;
+// src/render/layout.ts — RESULT.retry
+const RESULT_RETRY = { x: 275, y: 780, w: 170, h: 72 };
 // src/render/palette.ts — DEFAULT_THEME.letterbox (#1f8fc2): what the ground layer shows without the neon theme
 const DEFAULT_LETTERBOX = [31, 143, 194];
 
@@ -200,6 +204,63 @@ test.describe('lazy chunks under a failing network', () => {
     expect(playAt - started, 'the wait for the chunks is short').toBeLessThan(5_000);
     expect(await page.evaluate(() => window.__towerclash.getState()?.levelId)).toBe(15);
     await expect.poll(() => simTime(page)).toBeGreaterThan(200);
+    expect(errors).toEqual([]);
+  });
+
+  test('hudOverlays chunk (PERF-6): with the download failing the result still shows a plain card, no throw; the chunk is re-fetched under `?r=` once the network is back and RETRY works', async ({ page }) => {
+    const aborted: string[] = [];
+    await page.route(OVERLAYS_CHUNK, (route) => {
+      aborted.push(route.request().url());
+      void route.abort('failed');
+    });
+    const errors = await boot(page);
+    expect(await page.evaluate(() => window.__towerclash.loadLevel(1, 1))).toBe(true);
+    await expect.poll(() => screen(page)).toBe('play');
+    // the play screen warms the chunk right after its first frame (main.ts enterLevel → warmHudOverlays)
+    await expect.poll(() => aborted.length, { timeout: 5_000 }).toBeGreaterThanOrEqual(1);
+    await page.evaluate(() => {
+      window.__towerclash.setSpeed(10);
+      window.__towerclash.autoplay();
+    });
+    await expect.poll(() => screen(page), { timeout: 75_000, intervals: [250] }).toBe('result');
+    expect((await page.evaluate(() => window.__towerclash.getResult()))?.outcome).toBe('won');
+    // the plain card is drawn frame after frame; draw-time retries are throttled (src/lazyChunk.ts RETRY_AFTER_MS),
+    // so the result screen asks again once per back-off window — under a fresh URL (module map, BUG-8)
+    await expect.poll(() => aborted.filter((u) => u.includes('?r=')).length, { timeout: 8_000 }).toBeGreaterThanOrEqual(1);
+    expect(await screen(page)).toBe('result');
+    expect(aborted.length).toBeLessThan(30);
+    expect(errors).toEqual([]);
+
+    // Network back: the result screen's next draw-time retry lands the real card (BUG-8 recovery), and its RETRY button restarts the level.
+    await page.unroute(OVERLAYS_CHUNK);
+    const fetched = page.waitForResponse((r) => OVERLAYS_CHUNK.test(r.url()) && r.url().includes('?r='), { timeout: 15_000 });
+    expect((await fetched).ok()).toBe(true);
+    await page.waitForTimeout(200);
+    expect(await screen(page)).toBe('result');
+    await tapRect(page, RESULT_RETRY);
+    await expect.poll(() => screen(page), { timeout: 5_000 }).toBe('play');
+    expect(errors).toEqual([]);
+  });
+
+  test('PERF-6 preload: the overlay chunk is fetched once at level start, long before the result; the result never waits and nothing is re-fetched', async ({ page }) => {
+    const fetched: { url: string; at: number }[] = [];
+    page.on('response', (r) => {
+      if (OVERLAYS_CHUNK.test(r.url()) && r.ok()) fetched.push({ url: r.url(), at: Date.now() });
+    });
+    const errors = await boot(page);
+    expect(await page.evaluate(() => window.__towerclash.loadLevel(1, 1))).toBe(true);
+    await expect.poll(() => screen(page)).toBe('play');
+    await expect.poll(() => fetched.length, { timeout: 5_000, message: 'overlay chunk warmed after the first play frame' }).toBe(1);
+    const warmedAt = fetched[0]!.at;
+    await page.evaluate(() => {
+      window.__towerclash.setSpeed(10);
+      window.__towerclash.autoplay();
+    });
+    await expect.poll(() => screen(page), { timeout: 75_000, intervals: [250] }).toBe('result');
+    const resultAt = Date.now();
+    expect(fetched, 'exactly one fetch, no `?r=` re-fetch').toHaveLength(1);
+    expect(fetched[0]!.url).not.toContain('?r=');
+    expect(warmedAt, 'the chunk landed before the result screen opened').toBeLessThan(resultAt);
     expect(errors).toEqual([]);
   });
 });

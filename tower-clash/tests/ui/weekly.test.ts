@@ -13,6 +13,7 @@ import { TWISTS, WEEKLY_BEST_KEEP, WEEKLY_REWARD, WEEKLY_UNLOCK_AFTER_LEVEL, wee
 import { msToNextMonday, previousWeekKey, recordWeeklyResult, shownWeekStreak, weeklyDone, weeklyTargetDone, weeklyUnlocked } from '../../src/ui/weekly';
 import { t } from '../../src/ui/i18n';
 import { makeLevel } from '../helpers';
+import { suicideCommands } from '../../src/debug';
 
 /*
  * Weekly Challenge (GDD §8) over the save and the play screen: 100 gold once per week on the first
@@ -360,7 +361,7 @@ describe('PlayScreen in weekly mode', () => {
     });
     const play = new PlayScreen(shell.app, hard, 7, 20, { weekly: weekly() });
     shell.app.go(play);
-    play.setSuicide(true);
+    play.setLoseBot(suicideCommands);
     const clock = { now: 0 };
     while (shell.current() === play && play.state.time < 300_000) {
       clock.now += 250;

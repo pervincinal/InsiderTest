@@ -10,6 +10,7 @@ import type { App, Screen, StartOptions } from '../../src/ui/screens';
 import { ResultScreen } from '../../src/ui/screens';
 import { PlayScreen } from '../../src/ui/play';
 import { makeLevel } from '../helpers';
+import { suicideCommands } from '../../src/debug';
 
 /* Minimal application shell: records navigation and level starts, no DOM. */
 function fakeApp(save: SaveData) {
@@ -81,7 +82,7 @@ function loseLevel(level: LevelDef) {
   const shell = fakeApp(save);
   const play = new PlayScreen(shell.app, level, SEED, 20);
   shell.app.go(play);
-  play.setSuicide(true);
+  play.setLoseBot(suicideCommands);
   const clock = { now: 0 };
   runUntilFinished(play, shell, clock);
   const result = shell.current();
@@ -94,7 +95,7 @@ function replayTo(level: LevelDef, timeMs: number): GameState {
   const shell = fakeApp(defaultSave());
   const play = new PlayScreen(shell.app, level, SEED, 20);
   shell.app.go(play);
-  play.setSuicide(true);
+  play.setLoseBot(suicideCommands);
   let now = 0;
   while (play.state.time < timeMs) {
     now += 2.5; // × 20 = one 50 ms tick
@@ -172,7 +173,7 @@ describe('continue after defeat — rewind (ECONOMY.md §3.5, ECON-6b)', () => {
     const level = losingLevel();
     const { shell, play, clock, result } = loseLevel(level);
     result.continueWithCrystals();
-    play.setSuicide(false);
+    play.setLoseBot(null);
     // force a win now: by sim time this is a 3★ finish, by the original clock only 2★
     const state = play.state;
     level.star3 = state.time + 5000;

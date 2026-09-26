@@ -1,14 +1,14 @@
-import type { Command, GameState, LevelDef, Link, SimEvent, Tower } from '../sim/types';
+import type { Command, GameState, LevelDef, Link, SimEvent } from '../sim/types';
 import { Rng } from '../sim/rng';
 import { C } from '../sim/constants';
 import { SnapshotRing, applyContinue } from '../sim/snapshot';
 import { createState } from '../sim/create';
-import { linksFrom, maxLinksOf } from '../sim/step';
+import { linksFrom } from '../sim/step';
 import { laneStalemate } from '../sim/index';
 import { TRIPLE_STREAM_LINKS } from '../economy/achievements';
 import { getOutcome } from '../sim/outcome';
 import { LEVEL_META, levelIndex } from '../levels/index';
-import { enemyCommands, isAiTick, referencePlayerCommands, rngsFor } from '../ai/index';
+import { enemyCommands, isAiTick, rngsFor } from '../ai/index';
 import type { View } from '../render/view';
 import { applyTransform, clipToMap } from '../render/view';
 import { drawGame } from '../render/draw';
@@ -16,7 +16,7 @@ import { BOOSTERS, HUD, PAUSE } from '../render/layout';
 import { inRect } from '../render/widgets';
 import { ParticleSystem } from '../render/particles';
 import type { HudPlayUi } from '../render/hud';
-import { boosterColor } from '../render/hud';
+import { boosterColor, warmHudOverlays } from '../render/hud';
 import type { PointerPoint } from '../input/pointer';
 import { PlayGestures, hitTower } from '../input/pointer';
 import { GameLoop } from './loop';
@@ -41,6 +41,9 @@ import { recordWeeklyResult } from './weekly';
 import { isMuted, onSimEvents, onSimFrame, playSfx, resetAudioLevel, toggleMuted } from '../audio/index';
 import { hapticCapture } from '../native/index';
 import { t } from './i18n';
+
+/** Player-side bot for the debug autoplay (the reference player's signature). */
+export type PlayerBot = (state: GameState, rng: Rng) => Command[];
 
 /** Transient visual effect driven by sim events (capture flash / death puff). */
 interface Effect {
@@ -132,7 +135,9 @@ export class PlayScreen implements Screen {
   private readonly particles = new ParticleSystem();
   private enemyRngs = new Map<string, Rng>();
   private playerRng: Rng;
-  private autoplay = false;
+  /** Debug-only command sources (src/debug.ts): the reference player (autoplay) and "auto lose"; null when off. */
+  private playerBot: PlayerBot | null = null;
+  private loseBot: ((state: GameState) => Command[]) | null = null;
   private finishedHandled = false;
   private nowMs = 0;
   private earnings: ResultEarnings = { stars: 0, gold: 0, crystals: 0, notes: [], replayCapped: false };
@@ -152,7 +157,6 @@ export class PlayScreen implements Screen {
   /** Stalemate hint bookkeeping (FE-1): fed by `landed` events, checked after every sim frame. */
   private readonly stalemate: StalemateWatch;
   /** Debug (e2e): throw every garrison at the enemy each AI tick so the level is lost quickly. */
-  private suicide = false;
   /** Facts about this match for the achievement rules (ECON-4), collected from sim events. */
   readonly match: MatchSummary = emptyMatch();
   /** Daily Challenge match (GDD §7): fixed twist modifiers, no upgrades, boosters and continues off. */
@@ -269,53 +273,19 @@ export class PlayScreen implements Screen {
       const rng = this.enemyRngs.get(enemy.owner);
       if (rng) cmds.push(...enemyCommands(state, enemy, rng));
     }
-    if (this.autoplay) {
-      cmds.push(...referencePlayerCommands(state, this.playerRng));
-    }
-    if (this.suicide) cmds.push(...this.suicideCommands(state));
+    if (this.playerBot) cmds.push(...this.playerBot(state, this.playerRng));
+    if (this.loseBot) cmds.push(...this.loseBot(state));
     return cmds;
   }
 
-  /**
-   * Debug helper (e2e "auto lose"): a stream never drains its source under rules v3 and nothing
-   * the player does can weaken an own tower, so the fastest defeat is to stop growing and let the
-   * enemy come: every player tower with a free link streams into the strongest hostile tower it
-   * has a clear lane to that is not already streaming back on that lane (a counter-stream would
-   * cancel the attack 1:1 and protect us), else into a player neighbour. Growth pauses either way.
-   */
-  private suicideCommands(state: GameState): Command[] {
-    const cmds: Command[] = [];
-    const neighbours = (id: string): Tower[] => {
-      const out: Tower[] = [];
-      for (const r of Object.values(state.roads)) {
-        const otherId = r.a === id ? r.b : r.b === id ? r.a : null;
-        const other = otherId ? state.towers[otherId] : undefined;
-        if (other) out.push(other);
-      }
-      return out;
-    };
-    const streamsInto = (from: string, to: string): boolean => state.links.some((l) => l.from === from && l.to === to);
-    for (const t of Object.values(state.towers)) {
-      if (t.owner !== 'player' || t.units <= 0 || linksFrom(state, t.id).length >= maxLinksOf(t)) continue;
-      let best: { to: string; score: number } | null = null;
-      for (const other of neighbours(t.id)) {
-        if (streamsInto(t.id, other.id) || streamsInto(other.id, t.id)) continue;
-        // a hostile target first (the strongest, so our trickle matters least); a player neighbour only pauses growth
-        const score = other.owner === 'player' ? -1 : (other.owner === 'neutral' ? 0 : 1000) + other.units;
-        if (!best || score > best.score) best = { to: other.id, score };
-      }
-      if (best) cmds.push({ type: 'link', owner: 'player', from: t.id, to: best.to });
-    }
-    return cmds;
+  /** Debug (e2e autoplay): a bot that issues the player's commands on every AI tick, or null to stop. */
+  setPlayerBot(bot: PlayerBot | null): void {
+    this.playerBot = bot;
   }
 
-  setAutoplay(on: boolean): void {
-    this.autoplay = on;
-  }
-
-  /** Debug (e2e): lose the level as fast as the sim allows. */
-  setSuicide(on: boolean): void {
-    this.suicide = on;
+  /** Debug (e2e "auto lose"): a command source that throws the level, or null to stop. */
+  setLoseBot(bot: ((state: GameState) => Command[]) | null): void {
+    this.loseBot = bot;
   }
 
   setSpeed(n: number): void {
@@ -327,6 +297,7 @@ export class PlayScreen implements Screen {
     const m = this.match;
     for (const ev of events) {
       if (ev.type === 'capture') {
+        warmHudOverlays(); // the result card's chunk (PERF-6): a capture means an outcome is on its way
         if (ev.by === 'player') hapticCapture();
         if (ev.from === 'player') m.lostTower = true;
         const t = this.state.towers[ev.towerId];
@@ -370,6 +341,7 @@ export class PlayScreen implements Screen {
     onSimFrame(this.state); // own-unit arrivals are detected by diffing units (no sim event for them)
     if (this.loop.finished && !this.finishedHandled) {
       this.finishedHandled = true;
+      warmHudOverlays(); // outcome decided: a last chance for the result card to land before its first frame
       this.finish();
     }
   }

@@ -374,59 +374,6 @@ export function drawStars(ctx: CanvasRenderingContext2D, pal: Palette, cx: numbe
   for (let i = 0; i < 3; i++) drawStar(ctx, pal, cx + (i - 1) * gap, cy, size, i < count, scales?.[i] ?? 1);
 }
 
-/**
- * Star pop-in: `t` is the animation progress (0 = not started, ≥1 = settled). The star scales in
- * with overshoot while a gold glow burst expands and fades behind it.
- */
-export function drawStarPop(ctx: CanvasRenderingContext2D, pal: Palette, cx: number, cy: number, size: number, on: boolean, t: number): void {
-  if (t <= 0) return;
-  const u = Math.min(1, t);
-  if (on && u < 1) {
-    const burst = 1 - u;
-    ctx.save();
-    ctx.globalAlpha = burst * 0.55;
-    ctx.fillStyle = pal.star;
-    ctx.beginPath();
-    ctx.arc(cx, cy, size * (1.2 + u * 1.6), 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = burst * 0.9;
-    ctx.strokeStyle = shade(pal.star, 0.4);
-    ctx.lineWidth = 3;
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2 + 0.3;
-      const r0 = size * (1.3 + u * 1.2);
-      const r1 = r0 + size * 0.45 * (1 - u);
-      ctx.beginPath();
-      ctx.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
-      ctx.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-  drawStar(ctx, pal, cx, cy, size, on, easeOutBack(u));
-}
-
-/** Text with an outline so numerals stay legible on any colour. Default outline is ink. */
-export function outlinedText(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  x: number,
-  y: number,
-  fill: string,
-  px: number,
-  outline = 'rgba(30, 42, 68, 0.9)',
-  weight: FontWeight = '700',
-): void {
-  ctx.font = font(px, weight);
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.lineJoin = 'round';
-  ctx.lineWidth = Math.max(3, px * 0.18);
-  ctx.strokeStyle = outline;
-  ctx.strokeText(text, x, y);
-  ctx.fillStyle = fill;
-  ctx.fillText(text, x, y);
-}
 
 /** Greedy word wrap for the current ctx.font. */
 export function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, maxLines = 3): string[] {
@@ -483,20 +430,6 @@ export function drawCoin(ctx: CanvasRenderingContext2D, pal: Palette, cx: number
   ctx.ellipse(cx - r * 0.35, cy - r * 0.38, r * 0.22, r * 0.13, -0.7, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
-}
-
-/** Ease-out with overshoot, for pop-in animations. t in 0..1. */
-export function easeOutBack(t: number): number {
-  const c1 = 1.70158;
-  const c3 = c1 + 1;
-  const u = Math.max(0, Math.min(1, t)) - 1;
-  return 1 + c3 * u * u * u + c1 * u * u;
-}
-
-/** Smooth ease-out (cubic). t in 0..1. */
-export function easeOutCubic(t: number): number {
-  const u = 1 - Math.max(0, Math.min(1, t));
-  return 1 - u * u * u;
 }
 
 /* ---------- M3 widgets: round buttons, segmented control, toggle, cooldown ring ---------- */
@@ -600,32 +533,6 @@ export function drawSpeakerGlyph(ctx: CanvasRenderingContext2D, color: string, c
     ctx.lineTo(cx + s * 0.4, cy + s * 0.35);
     ctx.stroke();
   }
-  ctx.restore();
-}
-
-/** Lightbulb (defeat tip): lit globe with three rays and a small base; `s` is roughly half the height. */
-export function drawBulbGlyph(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number, fill: string, outline: string): void {
-  const gy = cy - s * 0.25;
-  ctx.save();
-  ctx.lineCap = 'round';
-  ctx.strokeStyle = fill;
-  ctx.lineWidth = Math.max(1.5, s * 0.22);
-  for (const a of [-Math.PI / 2, -Math.PI / 2 - 0.85, -Math.PI / 2 + 0.85]) {
-    ctx.beginPath();
-    ctx.moveTo(cx + Math.cos(a) * s * 1.05, gy + Math.sin(a) * s * 1.05);
-    ctx.lineTo(cx + Math.cos(a) * s * 1.45, gy + Math.sin(a) * s * 1.45);
-    ctx.stroke();
-  }
-  ctx.beginPath();
-  ctx.arc(cx, gy, s * 0.72, 0, Math.PI * 2);
-  ctx.fillStyle = fill;
-  ctx.fill();
-  ctx.lineWidth = Math.max(1.5, s * 0.18);
-  ctx.strokeStyle = outline;
-  ctx.stroke();
-  roundRect(ctx, { x: cx - s * 0.36, y: cy + s * 0.42, w: s * 0.72, h: s * 0.5 }, s * 0.12);
-  ctx.fillStyle = outline;
-  ctx.fill();
   ctx.restore();
 }
 

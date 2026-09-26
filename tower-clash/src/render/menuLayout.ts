@@ -1,10 +1,99 @@
 import type { Rect } from './widgets';
-import { SETTINGS } from './layout';
 
 /*
- * Geometry only the lazily loaded menu screens use (settings About card, achievements, shop):
- * kept out of layout.ts so it stays off the eager chunk (scripts/checkBundle.mjs budget).
+ * Geometry only the lazily loaded menu screens use (settings, level map, achievements, shop):
+ * kept out of layout.ts so it stays off the eager chunk (scripts/checkBundle.mjs budget, PERF-6).
  */
+
+/* ---------- settings ---------- */
+
+/**
+ * Settings screen (M3-3): glass header with BACK, a tall clay card with one row per setting
+ * (label left, control right) and a RESET PROGRESS button that opens a confirm card.
+ */
+export const SETTINGS = Object.freeze({
+  headerH: 100,
+  back: { x: 18, y: 20, w: 140, h: 60 } as Rect,
+  card: { x: 50, y: 150, w: 620, h: 750 } as Rect,
+  rowH: 96,
+  labelX: 86,
+  /** Row controls, top to bottom. */
+  sound: { x: 470, y: 216, w: 160, h: 56 } as Rect,
+  colorBlind: { x: 470, y: 312, w: 160, h: 56 } as Rect,
+  motion: { x: 372, y: 408, w: 258, h: 56 } as Rect,
+  /**
+   * "How to play" row (FE-3): the whole row is the tap target (label left, chevron disc right). It
+   * takes the slot the rules-v2 removal of the send ratio freed (y ≈ 504), so the language picker /
+   * reset rects (mirrored by the e2e specs) keep their positions.
+   */
+  howto: { x: 86, y: 500, w: 548, h: 64 } as Rect,
+  /** Language row: label line at `languageLabelY`, then a full-width picker (one segment per language, I18N). */
+  languageLabelY: 600,
+  language: { x: 86, y: 664, w: 548, h: 56 } as Rect,
+  reset: { x: 160, y: 800, w: 400, h: 72 } as Rect,
+  confirm: {
+    card: { x: 90, y: 470, w: 540, h: 320 } as Rect,
+    yes: { x: 130, y: 676, w: 210, h: 72 } as Rect,
+    no: { x: 380, y: 676, w: 210, h: 72 } as Rect,
+  },
+  /** About card under the settings card: version, support id (copy), privacy options (native). */
+  about: { x: 50, y: 920, w: 620 },
+  aboutRowH: 62,
+});
+
+/* ---------- level select: winding path map ---------- */
+
+/** Level-select geometry (content space scrolls vertically under a fixed header). */
+export const LEVEL_MAP = Object.freeze({
+  headerH: 100,
+  back: { x: 18, y: 20, w: 140, h: 60 } as Rect,
+  /** Gold + crystal pills in the header (tap → shop). */
+  wallet: { x: 402, y: 24, w: 300, h: 52 } as Rect,
+  /** Commander summary chip at the bottom (tap → shop, upgrades tab). */
+  commander: { x: 60, y: 1206, w: 600, h: 54 } as Rect,
+  /** Daily Challenge card (GDD §7): sticky under the header, over the scrolling map (tap → start). */
+  daily: { x: 30, y: 112, w: 660, h: 104 } as Rect,
+  /** DAILY / WEEKLY tabs in the card's title row (GDD §8.2): 44 px tap targets over a 36 px segmented pill. */
+  dailyTabDaily: { x: 126, y: 118, w: 118, h: 44 } as Rect,
+  dailyTabWeekly: { x: 244, y: 118, w: 118, h: 44 } as Rect,
+  /** Node radius (hit rect is the 2r square). */
+  nodeR: 46,
+  /** Content-space y of the first node and the vertical step between nodes. */
+  top: 260,
+  step: 150,
+  /** Horizontal swing of the winding path around the centre. */
+  amp: 185,
+  /** Nodes per full left-right cycle. */
+  period: 5,
+  /** Extra content below the last node. */
+  tail: 220,
+});
+
+/** Content-space centre of level node `index`. */
+export function levelNodeCentre(index: number): { x: number; y: number } {
+  return {
+    x: 360 + LEVEL_MAP.amp * Math.sin((index * Math.PI * 2) / LEVEL_MAP.period),
+    y: LEVEL_MAP.top + index * LEVEL_MAP.step,
+  };
+}
+
+/** Screen-space hit rect of level node `index` when the map is scrolled by `scroll` px. */
+export function levelNodeRect(index: number, scroll: number): Rect {
+  const c = levelNodeCentre(index);
+  const r = LEVEL_MAP.nodeR;
+  return { x: c.x - r, y: c.y - scroll - r, w: r * 2, h: r * 2 };
+}
+
+/** Largest scroll offset for `count` levels (0 when everything fits). */
+export function levelMapMaxScroll(count: number, viewH = 1280): number {
+  const contentBottom = LEVEL_MAP.top + Math.max(0, count - 1) * LEVEL_MAP.step + LEVEL_MAP.tail;
+  return Math.max(0, contentBottom - viewH);
+}
+
+/* ---------- shop tabs ---------- */
+
+export const SHOP_TABS = ['crystals', 'bundles', 'skins', 'upgrades'] as const;
+export type ShopTab = (typeof SHOP_TABS)[number];
 
 /* ---------- settings: About card ---------- */
 

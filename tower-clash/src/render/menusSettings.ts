@@ -6,7 +6,7 @@ import type { Rect } from './widgets';
 import { drawButton, drawCard, drawCoin, drawExtrudedText, drawGlassBand, drawStars, fitFontPx, font } from './widgets';
 import { drawChevronDisc, drawSegmented, drawToggle, paletteGlyph } from './menuWidgets';
 import type { SettingsAboutLayout } from './menuLayout';
-import { SETTINGS } from './layout';
+import { SETTINGS } from './menuLayout';
 import type { ToastOpts } from './economyWidgets';
 import { drawToast } from './economyWidgets';
 import { beginFrame, drawWater } from './menus';

@@ -5,7 +5,7 @@ import type { View } from './view';
 import type { Rect } from './widgets';
 import { drawButton, drawCard, drawExtrudedText, drawGlassBand, drawPill, drawStar, drawStars, fitFontPx, font, formatTime, withShadow } from './widgets';
 import { drawFlag, drawLock } from './menuWidgets';
-import { LEVEL_MAP, levelNodeCentre, levelNodeRect } from './layout';
+import { LEVEL_MAP, levelNodeCentre, levelNodeRect } from './menuLayout';
 import type { ToastOpts } from './economyWidgets';
 import { drawToast, drawWallet } from './economyWidgets';
 import { drawCrystal, drawGoldCoin } from './sprites';

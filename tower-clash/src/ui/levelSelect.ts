@@ -7,7 +7,7 @@ import { C } from '../sim/constants';
 import { LEVEL_META, getLevelMeta } from '../levels/index';
 import { levelName, t } from './i18n';
 import type { View } from '../render/view';
-import { LEVEL_MAP, levelMapMaxScroll, levelNodeCentre, levelNodeRect } from '../render/layout';
+import { LEVEL_MAP, levelMapMaxScroll, levelNodeCentre, levelNodeRect } from '../render/menuLayout';
 import type { Rect } from '../render/widgets';
 import { formatTime, inRect } from '../render/widgets';
 import type { DailyCardOpts, WeeklyCardOpts } from '../render/menusLevels';

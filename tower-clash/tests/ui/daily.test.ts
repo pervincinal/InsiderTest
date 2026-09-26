@@ -14,6 +14,7 @@ import { challengeDone, challengeUnlocked, msToUtcMidnight, previousDayKey, reco
 import { nextStreakMilestone } from '../../src/ui/levelSelect';
 import { t } from '../../src/ui/i18n';
 import { makeLevel } from '../helpers';
+import { suicideCommands } from '../../src/debug';
 
 /*
  * Daily Challenge (GDD §7) over the save and the play screen: the reward is paid once per UTC day,
@@ -340,7 +341,7 @@ describe('PlayScreen in challenge mode', () => {
     });
     const play = new PlayScreen(shell.app, level, 7, 20, { challenge: challenge() });
     shell.app.go(play);
-    play.setSuicide(true);
+    play.setLoseBot(suicideCommands);
     const clock = { now: 0 };
     while (shell.current() === play && play.state.time < 300_000) {
       clock.now += 250;

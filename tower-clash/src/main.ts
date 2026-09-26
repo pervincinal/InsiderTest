@@ -4,36 +4,33 @@ import { chunkFailures, chunkRecoverable, loadChunk, reloadOnce } from './lazyCh
 import type { Palette } from './render/palette';
 import { getPalette } from './render/palette';
 import type { View } from './render/view';
-import { createView, resize, toClient } from './render/view';
+import { createView, resize } from './render/view';
 import { blankLayer, createLayers } from './render/layers';
 import { preloadCosmetics, warmCosmetics } from './render/cosmetics';
+import { warmHudOverlays } from './render/hud';
 import { equippedSkin } from './economy/entitlements';
 import { attachPointer } from './input/pointer';
 import type { PointerPoint } from './input/pointer';
 import type { SaveData } from './ui/save';
-import { currentLevelIndex, isLevelUnlocked, loadSave, writeSave } from './ui/save';
+import { currentLevelIndex, loadSave, writeSave } from './ui/save';
 import type { App, NativeInfoOverride, Screen, StartOptions } from './ui/screens';
 import { ResultScreen, TitleScreen, beginMapFrame, endMapFrame } from './ui/screens';
 import { PlayScreen } from './ui/play';
 import { applyMotionPref } from './ui/motion';
-import type { Language, TranslationKey } from './ui/i18n';
-import { browserLanguages, currentLanguage, detectLanguage, onLanguageChange, setLanguage, t } from './ui/i18n';
+import type { Language } from './ui/i18n';
+import { browserLanguages, detectLanguage, onLanguageChange, setLanguage, t } from './ui/i18n';
 import { drawSpinner } from './render/economyWidgets';
 import { initAudio, toggleMuted, unlockAudio } from './audio/index';
 import { initNative } from './native/index';
-import type { ShopTab } from './render/layout';
+import type { ShopTab } from './render/menuLayout';
 import type { AdSession, FakeAdsProvider } from './economy/adsFlow';
 import { createAdSession, createFakeAds, setAdsProvider } from './economy/adsFlow';
 import { getStore } from './economy/store';
 import { getAds } from './economy/ads';
 import type { FakeStoreOptions } from './economy/providers/fakeStore';
-import { configureFakeStore } from './economy/providers/fakeStore';
-import { grantProduct } from './economy/wallet';
 import type { GrantResult } from './economy/wallet';
 import type { DailyChallenge, WeeklyChallenge } from './daily/challenge';
 import { challengeFor, dayKeyOf, weekKeyOf, weeklyFor } from './daily/challenge';
-import { challengeDone, challengeUnlocked, shownStreak } from './ui/daily';
-import { shownWeekStreak, weeklyDone, weeklyTargetDone, weeklyUnlocked } from './ui/weekly';
 
 /**
  * The level map, shop, achievements and settings screens (and the menu drawing they need) are a
@@ -200,26 +197,27 @@ function whenIdle(fn: () => void): void {
   else setTimeout(fn, 50);
 }
 
-class TowerClashApp implements App {
+/** The app; the non-`private` fields and methods are read by the lazy debug surface (src/debug.ts) as well. */
+export class TowerClashApp implements App {
   readonly view: View;
   readonly save: SaveData;
   readonly ads: AdSession = createAdSession();
-  private current: Screen;
+  current: Screen;
   private lastFrame = 0;
-  private speed = 1;
-  private play: PlayScreen | null = null;
-  private fakeAds: FakeAdsProvider | null = null;
-  private lazy: LazyScreens | null = null;
+  speed = 1;
+  play: PlayScreen | null = null;
+  fakeAds: FakeAdsProvider | null = null;
+  lazy: LazyScreens | null = null;
   private lazyPromise: Promise<LazyScreens> | null = null;
   private preloadQueued = false;
   /** Level start in flight (its chunk downloading), so debug hooks can target the coming play screen. */
-  private pendingStart: Promise<PlayScreen | null> | null = null;
+  pendingStart: Promise<PlayScreen | null> | null = null;
   private startSeq = 0;
   nativeInfo?: NativeInfoOverride;
   /** Debug override of the Daily Challenge day (e2e determinism). */
-  private dayKeyOverride: string | null = null;
+  dayKeyOverride: string | null = null;
   /** Debug override of the Weekly Challenge week (a Monday key). */
-  private weekKeyOverride: string | null = null;
+  weekKeyOverride: string | null = null;
 
   constructor(canvas: HTMLCanvasElement, save: SaveData) {
     this.view = createView(canvas);
@@ -424,12 +422,12 @@ class TowerClashApp implements App {
     void this.openAchievements(back);
   }
 
-  private openShop(tab: ShopTab, back: () => void): Promise<void> {
+  openShop(tab: ShopTab, back: () => void): Promise<void> {
     warmCosmetics(); // the shop previews every roof / helmet / theme: fetch both chunks alongside the screen
     return this.goLazy((L) => new L.ShopScreen(this, tab, back));
   }
 
-  private openAchievements(back: () => void): Promise<void> {
+  openAchievements(back: () => void): Promise<void> {
     return this.goLazy((L) => new L.AchievementsScreen(this, back));
   }
 
@@ -509,7 +507,10 @@ class TowerClashApp implements App {
     const play = new PlayScreen(this, level, seed, this.speed, opts);
     this.play = play;
     this.go(play);
-    whenIdle(() => this.preloadLevel(LEVEL_META[levelIndex(level.id) + 1]?.id)); // NEXT is instant
+    whenIdle(() => {
+      this.preloadLevel(LEVEL_META[levelIndex(level.id) + 1]?.id); // NEXT is instant
+      warmHudOverlays(); // pause menu / result card chunk (PERF-6), in before the first pause or capture
+    });
     return play;
   }
 
@@ -518,7 +519,7 @@ class TowerClashApp implements App {
    * about to create (Playwright calls `loadLevel(); autoplay()` back to back without awaiting).
    * False when there is neither.
    */
-  private withPlay(fn: (play: PlayScreen) => void): boolean {
+  withPlay(fn: (play: PlayScreen) => void): boolean {
     if (this.pendingStart) {
       void this.pendingStart.then((play) => play && fn(play));
       return true;
@@ -528,13 +529,13 @@ class TowerClashApp implements App {
     return true;
   }
 
-  private setFakeAds(on: boolean, delayMs = 0): void {
+  setFakeAds(on: boolean, delayMs = 0): void {
     this.fakeAds = on ? createFakeAds(delayMs) : null;
     setAdsProvider(this.fakeAds);
   }
 
   /** The shop returns to the screen that opened it (result screens stay alive underneath). */
-  private backFromShop(): () => void {
+  backFromShop(): () => void {
     const from = this.current;
     if (from.name === 'shop') return () => this.goTitle();
     if (from instanceof ResultScreen) return () => this.go(from);
@@ -555,110 +556,6 @@ class TowerClashApp implements App {
     this.current.draw(this.view, now);
     this.preloadLazy(); // after the first paint; a no-op from then on
     requestAnimationFrame((f) => this.frame(f));
-  }
-
-  debug(): TowerClashDebug {
-    return {
-      getState: () => this.play?.state ?? null,
-      getScreen: () => this.current.name,
-      loadLevel: (id, seed) => this.startLevel(id, seed),
-      autoplay: () => this.withPlay((play) => play.setAutoplay(true)),
-      setSpeed: (n) => this.setSpeed(n),
-      getSpeed: () => this.play?.loop.speed ?? this.speed,
-      toClient: (x, y) => toClient(this.view, x, y),
-      getTutorialHint: () => (this.current === this.play ? (this.play?.tutorialStep()?.text ?? null) : null),
-      getLimitHint: () => (this.current === this.play && this.play?.gestures.limitHint ? this.play.gestures.limitHintText : null),
-      getLanguage: () => currentLanguage(),
-      getText: (key) => t(key as TranslationKey),
-      getToast: () => this.current.toast?.opts(performance.now())?.text ?? null,
-      getResult: () => {
-        if (!(this.current instanceof ResultScreen)) return null;
-        const { outcome, stars, coinsEarned, coinsTotal } = this.current.info.ui;
-        const { earnings, achievements } = this.current.info;
-        const { tip, howto } = this.current.extras();
-        return { outcome, stars, coinsEarned, coinsTotal, crystalsEarned: earnings.crystals, achievements: achievements.unlocked.map((a) => a.id), tip, howto };
-      },
-      isLevelUnlocked: (id) => isLevelUnlocked(this.save, LEVEL_META, levelIndex(id)),
-      setLevelSelectScroll: (y) => {
-        const L = this.lazy;
-        if (L && this.current instanceof L.LevelSelectScreen) this.current.setScroll(y);
-      },
-      getLevelSelectScroll: () => {
-        const L = this.lazy;
-        return L && this.current instanceof L.LevelSelectScreen ? this.current.getScroll() : 0;
-      },
-      getCoins: () => this.save.gold,
-      back: () => this.onBack(),
-      openShop: (tab = 'crystals') => this.openShop(tab, this.backFromShop()),
-      aiAvailable: true,
-      setDayKey: (key) => {
-        this.dayKeyOverride = key;
-      },
-      daily: {
-        get: (dayKey = this.dayKey()) => {
-          const challenge = challengeFor(dayKey);
-          const c = this.save.challenge;
-          return { challenge, unlocked: challengeUnlocked(this.save), done: challengeDone(this.save, dayKey), streak: shownStreak(this.save, dayKey), lastWinDay: c.lastWinDay, best: c.best[dayKey] ?? null };
-        },
-        start: (dayKey) => this.startChallenge(dayKey),
-      },
-      setWeekKey: (key) => {
-        this.weekKeyOverride = key === null ? null : weekKeyOf(new Date(`${key}T12:00:00Z`));
-      },
-      weekly: {
-        get: (weekKey = this.weekKey()) => {
-          const challenge = weeklyFor(weekKey);
-          const w = this.save.weekly;
-          return { challenge, unlocked: weeklyUnlocked(this.save), done: weeklyDone(this.save, weekKey), target: weeklyTargetDone(this.save, weekKey), streak: shownWeekStreak(this.save, weekKey), lastWinWeek: w.lastWinWeek, best: w.best[weekKey] ?? null };
-        },
-        start: (weekKey) => this.startWeekly(weekKey),
-        tab: () => {
-          const L = this.lazy;
-          return L && this.current instanceof L.LevelSelectScreen ? this.current.getCardTab() : null;
-        },
-      },
-      economy: {
-        getSave: () => this.save,
-        grant: (productId) => grantProduct(this.save, productId, `debug-${Date.now()}-${Math.random()}`),
-        setAdsAvailable: (on) => this.setFakeAds(on),
-        configureFakeStore: (opts) => configureFakeStore(opts),
-        getAdStats: () => ({
-          interstitialsShown: this.ads.interstitialsShown,
-          rewardedShown: this.ads.rewardedShown,
-          fakeInterstitials: this.fakeAds?.interstitials ?? 0,
-          fakeRewarded: this.fakeAds?.rewarded ?? 0,
-        }),
-        openShop: (tab) => this.openShop(tab, this.backFromShop()),
-        autoLose: () => {
-          if (!this.pendingStart && this.current !== this.play) return false;
-          return this.withPlay((play) => play.setSuicide(true));
-        },
-        resultAction: (action) => {
-          const cur = this.current;
-          if (!(cur instanceof ResultScreen)) return false;
-          if (action === 'doubleGold') cur.doubleGold();
-          else if (action === 'continueCrystals') cur.continueWithCrystals();
-          else if (action === 'continueAd') cur.continueWithAd();
-          else cur.skipLevel();
-          return true;
-        },
-        getClock: () => (this.play ? { timeMs: this.play.state.time, elapsedMs: this.play.elapsedMs(), continued: this.play.hasContinued } : null),
-        shopScroll: (y) => {
-          const L = this.lazy;
-          if (!L || !(this.current instanceof L.ShopScreen)) return -1;
-          if (y !== undefined) this.current.setScroll(y);
-          return this.current.scrollY;
-        },
-        openAchievements: () => this.openAchievements(this.backFromShop()),
-        setNativeInfo: (info) => {
-          this.nativeInfo = info ?? undefined;
-        },
-        getAboutInfo: () => {
-          const L = this.lazy;
-          return L && this.current instanceof L.SettingsScreen ? this.current.aboutInfo : null;
-        },
-      },
-    };
   }
 }
 
@@ -717,8 +614,9 @@ async function boot(): Promise<void> {
   await waitForFonts(language);
   onLanguageChange((code) => void waitForFonts(code, 800)); // warm the Cyrillic face when switching to Russian
   const app = new TowerClashApp(canvas, save);
-  window.__towerclash = app.debug();
   registerServiceWorker();
+  // the Playwright surface is a lazy chunk (PERF-6): installed after the first paint, off the eager bundle
+  whenIdle(() => void loadChunk('debug', () => import('./debug')).then((m) => void (window.__towerclash = m.installDebug(app))).catch(() => undefined));
 }
 
 void boot();

@@ -4,7 +4,7 @@ import { LEVEL_META, levelIndex } from '../levels/index';
 import type { Palette } from '../render/palette';
 import type { View } from '../render/view';
 import { applyDeviceTransform, applyTransform, clipToMap } from '../render/view';
-import type { ShopTab } from '../render/layout';
+import type { ShopTab } from '../render/menuLayout';
 import { HUD, RESULT, TITLE } from '../render/layout';
 import type { Rect } from '../render/widgets';
 import { inRect } from '../render/widgets';

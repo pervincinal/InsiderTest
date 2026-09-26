@@ -7,7 +7,7 @@ import { t } from '../ui/i18n';
 /*
  * Widgets only the lazily loaded menu screens use (settings, shop, level map): kept out of
  * widgets.ts so they stay off the eager chunk (scripts/checkBundle.mjs budget, PERF-1 / PERF-3 /
- * PERF-5). `drawStar` stays eager: the HUD's result stars (`drawStarPop`) draw through it.
+ * PERF-5). `drawStar` stays eager: the HUD's plain result card (`drawStars`) and the lazy result card's `drawStarPop` (hudOverlays.ts) draw through it.
  */
 
 /**

@@ -6,9 +6,8 @@
  * paused play screen). Loaded lazily with its drawing (PERF-1, src/ui/lazyScreens.ts).
  */
 import type { View } from '../render/view';
-import { SETTINGS } from '../render/layout';
 import type { SettingsAboutLayout } from '../render/menuLayout';
-import { settingsAboutLayout } from '../render/menuLayout';
+import { SETTINGS, settingsAboutLayout } from '../render/menuLayout';
 import type { Rect } from '../render/widgets';
 import { inRect } from '../render/widgets';
 import { segmentAt } from '../render/menuWidgets';

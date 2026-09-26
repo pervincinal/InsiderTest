@@ -18,9 +18,8 @@ import {
   roundRect,
 } from './widgets';
 import { drawSegmented } from './menuWidgets';
-import type { ShopTab } from './layout';
-import { SHOP_TABS } from './layout';
-import { SHOP, shopBuyRect, shopRowBuyRect } from './menuLayout';
+import type { ShopTab } from './menuLayout';
+import { SHOP, SHOP_TABS, shopBuyRect, shopRowBuyRect } from './menuLayout';
 import type { UpgradeKind } from './sprites';
 import type { ToastOpts } from './economyWidgets';
 import { drawSpinner, drawToast, drawWallet, formatAmount } from './economyWidgets';

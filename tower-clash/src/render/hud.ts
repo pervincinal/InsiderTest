@@ -1,31 +1,26 @@
 import type { GameState } from '../sim/types';
 import { C } from '../sim/constants';
+import { chunkBackoff, loadChunk } from '../lazyChunk';
 import { shade } from './palette';
 import type { View } from './view';
 import { BOOSTERS, HUD, PAUSE, RESULT } from './layout';
 import type { Rect } from './widgets';
 import {
   drawBoltGlyph,
-  drawBulbGlyph,
   drawButton,
   drawCard,
   drawCoin,
   drawCooldownRing,
   drawCrosshairGlyph,
-  drawExtrudedText,
-  drawGearGlyph,
   drawGlassBand,
   drawPill,
   drawRoundButton,
   drawSnowflakeGlyph,
   drawSpeakerGlyph,
-  drawStarPop,
-  easeOutBack,
-  easeOutCubic,
+  drawStars,
   fitFontPx,
   font,
   formatTime,
-  innerHighlight,
   roundRect,
   wrapText,
 } from './widgets';
@@ -33,10 +28,10 @@ import type { PlayUi } from './draw';
 import { prefersReducedMotion } from './particles';
 import { reducedMotionOverride } from '../ui/motion';
 import type { BoosterKind, BoosterStatus } from '../ui/boosters';
-import type { Palette } from './palette';
-import { badgeY, drawCrystal, drawGoldCoin, drawVideoGlyph } from './sprites';
+import { badgeY, drawVideoGlyph } from './sprites';
 import type { ToastOpts } from './economyWidgets';
-import { drawSpinner, drawToast, drawWallet } from './economyWidgets';
+import { drawToast, drawWallet } from './economyWidgets';
+import type { HudOverlayDrawers } from './hudOverlays';
 import { currentLanguage, levelLesson, levelName, t } from '../ui/i18n';
 
 /*
@@ -135,6 +130,16 @@ function extrasOf(ui: PlayUi): HudExtras | undefined {
 
 function clockOf(ui: PlayUi, state: Pick<GameState, 'time'>): number {
   return (ui as HudPlayUi).clockMs ?? state.time;
+}
+
+/** The play screen's HUD extras on `ui`, for the lazy overlay chunk (src/render/hudOverlays.ts). */
+export function hudExtrasOf(ui: PlayUi): HudExtras | undefined {
+  return extrasOf(ui);
+}
+
+/** The match clock the overlay chunk shows (see `HudPlayUi.clockMs`). */
+export function hudClockOf(ui: PlayUi, state: Pick<GameState, 'time'>): number {
+  return clockOf(ui, state);
 }
 
 /** Booster accent colours: gold bolt, ice snowflake, red crosshair (all from the active palette). */
@@ -481,262 +486,112 @@ function dimWorld(ctx: CanvasRenderingContext2D, lost: boolean): void {
   ctx.fillRect(0, 0, C.MAP_W, C.MAP_H);
 }
 
-function drawPauseCard(ctx: CanvasRenderingContext2D, state: GameState, ui: PlayUi): void {
-  const pal = ui.palette;
-  const hud = extrasOf(ui);
-  const card = PAUSE.card;
-  drawCard(ctx, pal, card);
-  const pausedTitle = t('pause.title');
-  drawExtrudedText(ctx, pausedTitle, 360, card.y + 72, fitFontPx(ctx, pausedTitle, 60, 460), { face: pal.paper, side: shade(pal.owners.player, -0.3), outline: pal.ink, depth: 5 });
-  ctx.fillStyle = pal.textDim;
-  ctx.font = font(24, '500');
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(t('pause.subtitle', { n: ui.level.id, time: formatTime(clockOf(ui, state)) }), 360, card.y + 136, card.w - 40);
-  drawButton(ctx, pal, PAUSE.resume, t('pause.resume'), { fill: pal.owners.player, fontPx: 30 });
-  const fast = ui.speed !== 1;
-  drawButton(ctx, pal, PAUSE.speed, t('pause.speed', { n: ui.speed }), { fontPx: 24, border: fast ? pal.accent : undefined, text: fast ? pal.accent : undefined });
-  // sound toggle (glyph + state) · settings (gear)
-  const muted = hud?.muted ?? false;
-  const sb = PAUSE.sound;
-  drawButton(ctx, pal, sb, '');
-  drawSpeakerGlyph(ctx, muted ? pal.textDim : pal.ink, sb.x + 34, sb.y + (sb.h - 4) / 2, 14, !muted);
-  ctx.fillStyle = muted ? pal.textDim : pal.ink;
-  ctx.font = font(20);
-  ctx.textAlign = 'left';
-  ctx.fillText(muted ? t('pause.muted') : t('pause.sound'), sb.x + 62, sb.y + (sb.h - 4) / 2 + 1, sb.w - 72);
-  const gb = PAUSE.settings;
-  drawButton(ctx, pal, gb, '');
-  drawGearGlyph(ctx, pal.ink, gb.x + 32, gb.y + (gb.h - 4) / 2, 12);
-  ctx.fillStyle = pal.ink;
-  ctx.font = font(20);
-  ctx.fillText(t('pause.settings'), gb.x + 56, gb.y + (gb.h - 4) / 2 + 1, gb.w - 66);
-  ctx.textAlign = 'center';
-  drawButton(ctx, pal, PAUSE.retry, t('common.retry'), { fontPx: 26 });
-  drawButton(ctx, pal, PAUSE.menu, t('common.menu'), { fontPx: 26 });
-  drawButton(ctx, pal, PAUSE.howto, t('pause.howto'), { fontPx: 24 });
+/*
+ * The pause menu and the result card live in a lazy chunk (PERF-6, src/render/hudOverlays.ts): the
+ * play screen warms it at level start, on the first capture and when the outcome is decided
+ * (`warmHudOverlays`), so the card is normally in long before it is needed. Until it lands — or when
+ * it never does — a plain card with the same buttons keeps the match readable and leaves the player
+ * a way out; draw time backs off a few seconds after a failure instead of hitting the network every
+ * frame, and a failed download is retried under a fresh URL (src/lazyChunk.ts).
+ */
+const OVERLAY_CHUNK = 'hudOverlays';
+let overlays: HudOverlayDrawers | null = null;
+let overlaysPromise: Promise<HudOverlayDrawers> | null = null;
+
+/** Load the pause / result card drawers (idempotent; a failed download is forgotten so the next call retries). */
+export function loadHudOverlays(): Promise<HudOverlayDrawers> {
+  overlaysPromise ??= loadChunk(OVERLAY_CHUNK, () => import('./hudOverlays'))
+    .then((m) => (overlays = m.HUD_OVERLAYS))
+    .catch((err: unknown) => {
+      overlaysPromise = null;
+      throw err;
+    });
+  return overlaysPromise;
 }
 
-function drawResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: PlayUi, since: number): void {
+/** True once the overlay chunk is in (synchronous check for the play screen's preload). */
+export function hudOverlaysLoaded(): boolean {
+  return overlays !== null;
+}
+
+/** Start the overlay download unless one failed a moment ago (draw-time / event-time back-off). Never rejects. */
+export function warmHudOverlays(): void {
+  if (!overlays && !chunkBackoff(OVERLAY_CHUNK)) void loadHudOverlays().catch(() => undefined);
+}
+
+/** Plain pause card while the chunk is missing: title, subtitle and the same buttons at the same rects. */
+function drawPlainPauseCard(ctx: CanvasRenderingContext2D, state: GameState, ui: PlayUi): void {
+  const pal = ui.palette;
+  const card = PAUSE.card;
+  drawCard(ctx, pal, card);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = pal.ink;
+  const title = t('pause.title');
+  ctx.font = font(fitFontPx(ctx, title, 60, 460));
+  ctx.fillText(title, 360, card.y + 72);
+  ctx.fillStyle = pal.textDim;
+  ctx.font = font(24, '500');
+  ctx.fillText(t('pause.subtitle', { n: ui.level.id, time: formatTime(clockOf(ui, state)) }), 360, card.y + 136, card.w - 40);
+  const rows: [Rect, string][] = [
+    [PAUSE.resume, t('pause.resume')],
+    [PAUSE.speed, t('pause.speed', { n: ui.speed })],
+    [PAUSE.sound, extrasOf(ui)?.muted ? t('pause.muted') : t('pause.sound')],
+    [PAUSE.settings, t('pause.settings')],
+    [PAUSE.retry, t('common.retry')],
+    [PAUSE.menu, t('common.menu')],
+    [PAUSE.howto, t('pause.howto')],
+  ];
+  for (const [r, label] of rows) drawButton(ctx, pal, r, label, { fill: r === PAUSE.resume ? pal.owners.player : undefined, fontPx: 24 });
+}
+
+/** Plain result card while the chunk is missing: outcome, time, stars and NEXT / RETRY / MENU (no offers, no tip). */
+function drawPlainResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: PlayUi): void {
   const pal = ui.palette;
   const won = ui.outcome === 'won';
   const card = RESULT.card;
-  // slide up with a bounce
-  const slide = (1 - easeOutBack(Math.min(1, since / 460))) * (C.MAP_H - card.y + 40);
-  ctx.save();
-  ctx.translate(0, slide);
+  const pressed = extrasOf(ui)?.pressed ?? null;
   drawCard(ctx, pal, card);
-  // banner: coloured top of the card
-  ctx.save();
-  roundRect(ctx, { x: card.x, y: card.y, w: card.w, h: card.h - 6 }, 28);
-  ctx.clip();
-  const bannerH = 158;
-  const bannerColor = won ? pal.owners.player : pal.owners.enemy1;
-  const g = ctx.createLinearGradient(0, card.y, 0, card.y + bannerH);
-  g.addColorStop(0, shade(bannerColor, 0.18));
-  g.addColorStop(1, bannerColor);
-  ctx.fillStyle = g;
-  ctx.fillRect(card.x, card.y, card.w, bannerH);
-  ctx.fillStyle = shade(bannerColor, -0.3);
-  ctx.fillRect(card.x, card.y + bannerH - 5, card.w, 5);
-  ctx.restore();
-  innerHighlight(ctx, { x: card.x, y: card.y, w: card.w, h: card.h - 6 }, 28, 0.5, 3);
-  const titleScale = easeOutBack(Math.min(1, Math.max(0, (since - 120) / 380)));
-  const title = won ? t('result.victory') : t('result.defeat');
-  const titlePx = fitFontPx(ctx, title, 92, card.w - 60);
-  ctx.save();
-  ctx.translate(360, card.y + 82);
-  ctx.scale(titleScale, titleScale);
-  if (won) drawExtrudedText(ctx, title, 0, 0, titlePx, { face: pal.gold, side: pal.goldShade, outline: pal.ink, depth: 8 });
-  else drawExtrudedText(ctx, title, 0, 0, titlePx, { face: pal.paper, side: shade(pal.owners.enemy1, -0.45), outline: pal.ink, depth: 8 });
-  ctx.restore();
-
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
+  ctx.fillStyle = won ? pal.gold : pal.ink;
+  const title = won ? t('result.victory') : t('result.defeat');
+  ctx.font = font(fitFontPx(ctx, title, 92, card.w - 60));
+  ctx.fillText(title, 360, card.y + 82);
   ctx.fillStyle = pal.ink;
   ctx.font = font(30);
-  // a defeat has no star row: the time sits a little higher and the tip block takes the stars' place (FE-4)
   ctx.fillText(t('result.time', { time: formatTime(clockOf(ui, state)) }), 360, card.y + (won ? 200 : 190), card.w - 60);
-
-  // stars pop in one after another with a gold burst
-  if (won) {
-    const starY = card.y + 272;
-    for (let i = 0; i < 3; i++) {
-      const t = (since - 420 - i * 260) / 380;
-      drawStarPop(ctx, pal, 360 + (i - 1) * 100, starY, 38, i < ui.stars, t);
-    }
-  }
-
-  const hud = extrasOf(ui);
-  const ex = hud?.result;
-  const pressed = hud?.pressed ?? null;
-  if (won) {
-    ctx.fillStyle = pal.textDim;
-    ctx.font = font(20, '500');
-    ctx.fillText(t('result.starRule', { t3: formatTime(ui.level.star3), t2: formatTime(ui.level.star2) }), 360, card.y + 326, card.w - 60);
-    // gold counts up (a crystal reward sits beside it)
-    const countT = easeOutCubic((since - 900) / 800);
-    const shown = Math.round(ui.coinsEarned * countT);
-    const pop = 1 + 0.12 * Math.max(0, 1 - Math.abs((since - 1700) / 180));
-    ctx.font = font(34);
-    const label = `+${shown}`;
-    const labelW = ctx.measureText(label).width;
-    const crystals = ex?.crystalsEarned ?? 0;
-    const cx = crystals > 0 ? 260 : 360;
-    ctx.save();
-    ctx.translate(cx, card.y + 376);
-    ctx.scale(pop, pop);
-    drawGoldCoin(ctx, pal, -labelW / 2 - 24, 0, 17);
-    ctx.fillStyle = pal.ink;
-    ctx.font = font(34);
-    ctx.fillText(label, 8, 1);
-    ctx.restore();
-    if (crystals > 0) {
-      const cl = `+${Math.round(crystals * countT)}`;
-      ctx.font = font(34);
-      const clw = ctx.measureText(cl).width;
-      ctx.save();
-      ctx.translate(470, card.y + 376);
-      ctx.scale(pop, pop);
-      drawCrystal(ctx, pal, -clw / 2 - 22, 0, 17);
-      ctx.fillStyle = pal.ink;
-      ctx.fillText(cl, 8, 1);
-      ctx.restore();
-    }
-    ctx.fillStyle = pal.textDim;
-    ctx.font = font(18, '500');
-    const daily = ex?.daily;
-    const weekly = ex?.weekly;
-    const note = daily
-      ? daily.firstWin
-        ? t('daily.resultWon', { gold: daily.gold, crystals: daily.crystals, streak: daily.streak })
-        : t('daily.resultBest', { stars: daily.best?.stars ?? ui.stars, time: formatTime(daily.best?.timeMs ?? clockOf(ui, state)) })
-      : weekly
-        ? weekly.firstWin
-          ? t('weekly.resultWon', { gold: weekly.gold, streak: weekly.streak })
-          : t('weekly.resultBest', { stars: weekly.best?.stars ?? ui.stars, time: formatTime(weekly.best?.timeMs ?? clockOf(ui, state)) })
-        : ex?.notes.length
-        ? ex.notes.join(' · ')
-        : ex?.replayCapped
-          ? t('result.replayCapped')
-          : ui.coinsEarned > 0
-            ? t('result.goldTotal', { n: ui.coinsTotal })
-            : t('result.alreadyCleared', { n: ui.coinsTotal });
-    ctx.font = font(fitFontPx(ctx, note, 18, card.w - 60, '500'), '500');
-    ctx.fillText(note, 360, card.y + 416, card.w - 60);
-  } else {
-    drawDefeatTip(ctx, pal, ex?.tip ?? levelLesson(ui.level), ex?.howto ?? false, pressed);
-    // Reinforcements: crystals and / or a rewarded video (ECONOMY.md §3.5)
-    if (ex && (ex.continueCrystals !== null || ex.continueAd)) {
-      const both = ex.continueCrystals !== null && ex.continueAd;
-      ctx.textAlign = 'center';
-      ctx.fillStyle = pal.textDim;
-      ctx.font = font(16, '500');
-      ctx.fillText(t('result.reinforcements', { s: Math.round(C.CONTINUE_REWIND_MS / 1000), n: C.CONTINUE_INFANTRY }), 360, RESULT.continueSolo.y - 18, card.w - 60);
-      if (ex.continueCrystals !== null) {
-        const r = both ? RESULT.continueCrystals : RESULT.continueSolo;
-        drawOfferButton(ctx, pal, r, t('common.continue'), String(ex.continueCrystals), 'crystal', { pressed: pressed === r, pending: ex.pending, nowMs: since });
-      }
-      if (ex.continueAd) {
-        const r = both ? RESULT.continueAd : RESULT.continueSolo;
-        drawOfferButton(ctx, pal, r, t('common.continue'), t('common.watch'), 'video', { pressed: pressed === r, pending: ex.pending, nowMs: since });
-      }
-      ctx.textAlign = 'center';
-    }
-  }
+  if (won) drawStars(ctx, pal, 360, card.y + 272, ui.stars, 38);
   drawButton(ctx, pal, RESULT.next, t('common.next'), { fill: won ? pal.owners.player : undefined, disabled: !won || !ui.hasNext, fontPx: 26, pressed: pressed === RESULT.next });
   drawButton(ctx, pal, RESULT.retry, t('common.retry'), { fontPx: 26, pressed: pressed === RESULT.retry });
   drawButton(ctx, pal, RESULT.menu, t('common.menu'), { fontPx: 26, pressed: pressed === RESULT.menu });
-  if (ex) {
-    if (won && ex.doubleGold !== null && !ex.doubled) {
-      drawOfferButton(ctx, pal, RESULT.extra, t('result.doubleGold', { n: ex.doubleGold }), t('common.watch'), 'video', { pressed: pressed === RESULT.extra, pending: ex.pending, nowMs: since });
-    } else if (won && ex.doubled) {
-      ctx.fillStyle = pal.textDim;
-      ctx.font = font(18, '500');
-      ctx.fillText(t('result.goldDoubled'), 360, RESULT.extra.y + RESULT.extra.h / 2);
-    } else if (!won && ex.skipCrystals !== null) {
-      drawOfferButton(ctx, pal, RESULT.extra, t('result.skipLevel'), String(ex.skipCrystals), 'crystal', { pressed: pressed === RESULT.extra, pending: ex.pending, nowMs: since, outline: true });
-    }
-  }
-  ctx.restore();
+  // the offers the result screen hit-tests (ResultScreen.rects) stay visible as plain buttons
+  const ex = extrasOf(ui)?.result;
+  if (!ex) return;
+  const both = ex.continueCrystals !== null && ex.continueAd;
+  const offers: [Rect, string][] = [];
+  if (ex.continueCrystals !== null) offers.push([both ? RESULT.continueCrystals : RESULT.continueSolo, `${t('common.continue')} · ${ex.continueCrystals}`]);
+  if (ex.continueAd) offers.push([both ? RESULT.continueAd : RESULT.continueSolo, `${t('common.continue')} · ${t('common.watch')}`]);
+  if (won && ex.doubleGold !== null && !ex.doubled) offers.push([RESULT.extra, `${t('result.doubleGold', { n: ex.doubleGold })} · ${t('common.watch')}`]);
+  else if (!won && ex.skipCrystals !== null) offers.push([RESULT.extra, `${t('result.skipLevel')} · ${ex.skipCrystals}`]);
+  if (ex.howto) offers.push([RESULT.howto, t('result.howto')]);
+  for (const [r, label] of offers) drawButton(ctx, pal, r, label, { fontPx: 18, flat: true, pressed: pressed === r });
 }
 
 /**
- * Defeat tip (FE-4): a lightbulb + "Tip" caption, the level's lesson centred in ≤ 3 lines (18 px, or
- * 16 px when the lesson would be cut) and, on the second consecutive defeat of the level, a small
- * HOW TO PLAY link-button at the block's foot (RESULT.howto). Same wrap helper as the lesson banner.
+ * Pause menu (while playing and paused) or the result card (won / lost). Call only when one applies.
+ * Draws through the lazy overlay chunk once it is in, the plain cards until then.
  */
-function drawDefeatTip(ctx: CanvasRenderingContext2D, pal: Palette, text: string, howto: boolean, pressed: Rect | null): void {
-  const r = RESULT.tip;
-  const cap = t('result.tip');
-  ctx.font = font(14, '500');
-  const capW = ctx.measureText(cap).width;
-  const x0 = 360 - (capW + 26) / 2;
-  drawBulbGlyph(ctx, x0 + 9, r.y + 13, 9, pal.star, pal.ink);
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = pal.textDim;
-  ctx.fillText(cap, x0 + 26, r.y + 14);
-  let px = 18;
-  ctx.font = font(px, '500');
-  let lines = wrapText(ctx, text, r.w, 3);
-  if (lines[lines.length - 1]?.endsWith('…')) {
-    px = 16;
-    ctx.font = font(px, '500');
-    lines = wrapText(ctx, text, r.w, 3);
-  }
-  const lineH = px + 3;
-  ctx.textAlign = 'center';
-  ctx.fillStyle = pal.ink;
-  lines.forEach((l, i) => ctx.fillText(l, 360, r.y + 38 + i * lineH, r.w));
-  if (howto) drawButton(ctx, pal, RESULT.howto, t('result.howto'), { fontPx: 16, flat: true, pressed: pressed === RESULT.howto });
-}
-
-/**
- * Offer button: label left, a price tag right (crystal glyph + amount, or a video glyph + WATCH).
- * `outline` draws the paper variant (secondary offer).
- */
-function drawOfferButton(
-  ctx: CanvasRenderingContext2D,
-  pal: Palette,
-  r: Rect,
-  label: string,
-  tag: string,
-  glyph: 'crystal' | 'video',
-  o: { pressed: boolean; pending: boolean; nowMs: number; outline?: boolean },
-): void {
-  const fill = o.outline ? undefined : glyph === 'video' ? pal.owners.enemy2 : pal.owners.player;
-  drawButton(ctx, pal, r, '', { fill, pressed: o.pressed, flat: true });
-  const cy = r.y + (r.h - 4) / 2 + (o.pressed ? 3 : 0);
-  const text = fill ? pal.paper : pal.ink;
-  ctx.textBaseline = 'middle';
-  if (o.pending) {
-    drawSpinner(ctx, text, r.x + r.w / 2, cy, 11, o.nowMs);
-    return;
-  }
-  ctx.fillStyle = text;
-  ctx.font = font(21);
-  ctx.textAlign = 'left';
-  ctx.fillText(label, r.x + 18, cy + 1, r.w * 0.58);
-  ctx.font = font(19);
-  const tw = ctx.measureText(tag).width;
-  const gx = r.x + r.w - 18 - tw - 28;
-  if (glyph === 'crystal') drawCrystal(ctx, pal, gx + 6, cy, 11);
-  else drawVideoGlyph(ctx, pal, gx + 8, cy, 10);
-  ctx.textAlign = 'left';
-  ctx.fillStyle = text;
-  ctx.fillText(tag, gx + 26, cy + 1);
-  ctx.textAlign = 'center';
-}
-
-/** Pause menu (while playing and paused) or the result card (won / lost). Call only when one applies. */
 export function drawOverlays(ctx: CanvasRenderingContext2D, state: GameState, _view: View, ui: PlayUi, nowMs: number): void {
   ctx.save();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
+  const ov = overlays;
+  if (!ov) warmHudOverlays();
   if (ui.outcome === 'playing') {
     dimWorld(ctx, false);
-    drawPauseCard(ctx, state, ui);
+    if (ov) ov.pause(ctx, state, ui);
+    else drawPlainPauseCard(ctx, state, ui);
     ctx.restore();
     return;
   }
@@ -747,7 +602,8 @@ export function drawOverlays(ctx: CanvasRenderingContext2D, state: GameState, _v
     overlayShownAt.set(state, nowMs);
   }
   const since = nowMs > 0 && motionAllowed() ? nowMs - shown : 10_000;
-  drawResultCard(ctx, state, ui, since);
+  if (ov) ov.result(ctx, state, ui, since);
+  else drawPlainResultCard(ctx, state, ui);
   const toast = extrasOf(ui)?.toast;
   if (toast) drawToast(ctx, ui.palette, toast);
   ctx.restore();
