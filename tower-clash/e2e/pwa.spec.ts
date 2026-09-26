@@ -27,25 +27,23 @@ import type { BrowserContext, Page } from '@playwright/test';
  * navigation and cached subresources still resolve from the worker's cache with the route on, since
  * a request the worker answers from Cache Storage never reaches the network layer.
  *
- * One test, four steps that build on the same registration:
+ * One test, three steps that build on the same registration:
  *  1. first launch: the worker registers, `navigator.serviceWorker.ready` resolves, the page is
  *     claimed, and the single `towerclash-*` cache holds every PRECACHE entry of public/sw.js
- *     (index.html, manifest, icons, fonts — the list is read from the file, not copied here).
- *  2. second launch (online): the document and everything after it go through the worker's
- *     cache-first handler, so the entry chunk `assets/index-*.js`, the level-1 chunk and the lazy
- *     screens (idle preloads, src/main.ts `preloadLazy`) land in the runtime cache.
- *     BUG-18: after the *first* launch alone the entry chunk is not cached — it was fetched before
- *     the worker claimed the page and PRECACHE does not list it — so a player who opened the game
- *     once and went offline gets the cached index.html with no script. Until public/sw.js precaches
- *     the entry chunk this spec warms it with the second launch; once fixed, move the entry-chunk
- *     assertion into step 1 and drop the second launch.
- *  3. offline: reload → the title renders from the cache, `navigator.onLine` is false, level 1
+ *     (index.html, manifest, icons, fonts — the list is read from the file, not copied here) plus
+ *     the hashed entry chunk `assets/index-*.js` and any `<link rel="modulepreload">` the served
+ *     index.html names (BUG-18: the entry chunk is fetched before the worker claims the page, so
+ *     the runtime cache never sees it; the worker now derives it from the cached index.html at
+ *     `install`, i.e. "opened once, then offline" must boot). The idle preloads that follow the
+ *     claim (level-1 chunk, lazy screens — src/main.ts `preloadLazy`) land in the runtime cache
+ *     through the cache-first handler; step 1 waits for them so step 2 can start level 1 offline.
+ *  2. offline: reload → the title renders from the cache, `navigator.onLine` is false, level 1
  *     starts from the cached chunk and the sim advances; a reload while still offline boots again;
  *     a level whose chunk was never fetched (level 3 — level 2 is preloaded when level 1 starts, so
  *     3 is the first cold one) fails gracefully: `loadLevel` resolves false, the title is current,
  *     the game's own toast (`common.loadFailed`, src/main.ts `chunkFailed`) is on screen, and no
  *     uncaught error reached `window.onerror`.
- *  4. back online: the same level loads on the next tap through the `?r=` re-fetch (BUG-8 path,
+ *  3. back online: the same level loads on the next tap through the `?r=` re-fetch (BUG-8 path,
  *     src/lazyChunk.ts) and its chunk is now in the runtime cache.
  */
 
@@ -120,31 +118,31 @@ test.describe('PWA offline (QA-8)', () => {
     await page.addInitScript(([key, data]) => localStorage.setItem(key, JSON.stringify(data)), [SAVE_KEY, { version: 3 }] as const);
 
     let cacheName = '';
-    await test.step('1. first launch: the worker registers and precaches the shell', async () => {
+    await test.step('1. first launch: the worker registers and precaches the shell and the entry chunk', async () => {
       await navigate(page);
       expect(await swReady(page, 20_000)).toBe(new URL('/', page.url()).href);
       await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, { timeout: 20_000 });
+      // what the served index.html loads before any game code runs — the worker must have stored it at install
+      const shellModules = await page.evaluate(() =>
+        [...document.querySelectorAll<HTMLElement>('script[type="module"][src], link[rel="modulepreload"][href]')].map(
+          (el) => new URL(el.getAttribute('src') ?? el.getAttribute('href') ?? '', location.href).pathname,
+        ),
+      );
+      expect(shellModules).toEqual(expect.arrayContaining([expect.stringMatching(ENTRY_CHUNK)]));
       const caches = await cachedPaths(page);
       expect(Object.keys(caches)).toHaveLength(1);
       cacheName = Object.keys(caches)[0]!;
       expect(cacheName).toMatch(/^towerclash-v\d+$/);
       for (const p of PRECACHE) expect(caches[cacheName], `precached ${p}`).toContain(p);
-      expect(pageErrors).toEqual([]);
-    });
-
-    let entryChunk = '';
-    await test.step('2. second launch: the entry chunk and the idle preloads go through the worker into the runtime cache', async () => {
-      entryChunk = await page.evaluate(() => new URL(document.querySelector('script[type="module"][src]')!.getAttribute('src')!, location.href).pathname);
-      expect(entryChunk).toMatch(ENTRY_CHUNK);
-      await navigate(page);
-      expect(await controlled(page)).toBe(true);
+      for (const p of shellModules) expect(caches[cacheName], `entry chunk / modulepreload ${p} precached at install (BUG-18)`).toContain(p);
+      // the idle preloads go through the claimed page's worker into the runtime cache
       await expect
         .poll(async () => (await cachedPaths(page))[cacheName] ?? [], { timeout: 20_000 })
-        .toEqual(expect.arrayContaining([entryChunk, expect.stringMatching(LEVEL1_CHUNK), expect.stringMatching(MENU_CHUNK)]));
+        .toEqual(expect.arrayContaining([expect.stringMatching(LEVEL1_CHUNK), expect.stringMatching(MENU_CHUNK)]));
       expect(pageErrors).toEqual([]);
     });
 
-    await test.step('3. offline: the title and level 1 come from the cache; a cold level chunk fails with the toast', async () => {
+    await test.step('2. offline: the title and level 1 come from the cache; a cold level chunk fails with the toast', async () => {
       await goOffline(context);
       await navigate(page);
       expect(await onLine(page)).toBe(false);
@@ -170,7 +168,7 @@ test.describe('PWA offline (QA-8)', () => {
       expect(pageErrors).toEqual([]);
     });
 
-    await test.step('4. back online: the cold level loads on the next tap and its chunk is cached', async () => {
+    await test.step('3. back online: the cold level loads on the next tap and its chunk is cached', async () => {
       await goOnline(context);
       expect(await onLine(page)).toBe(true);
       const refetch = page.waitForResponse((r) => COLD_CHUNK.test(r.url()) && r.url().includes('?r='), { timeout: 15_000 });

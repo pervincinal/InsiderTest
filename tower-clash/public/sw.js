@@ -1,6 +1,11 @@
 /*
  * Tower Clash service worker.
- * - Precaches the app shell (index, manifest, icons, Fredoka font subsets) on install.
+ * - Precaches the app shell (index, manifest, icons, Fredoka font subsets) on install, then reads
+ *   the cached index.html and precaches the hashed entry chunk it references (`<script type="module"
+ *   src="./assets/index-*.js">`) and any `<link rel="modulepreload">` (BUG-18: on the first visit
+ *   the entry chunk is fetched before the worker claims the page, so the runtime cache below never
+ *   sees it; without this a player who opened the game once and went offline got the cached shell
+ *   with no script). The list is derived at install, so it follows every build's content hashes.
  * - Cache-first for same-origin static files (./assets/* are content-hashed by Vite, so a cached
  *   copy is always correct); the response is stored on first use. This also covers the lazy
  *   chunks (shop / achievements / settings screens, az / ru / tr dictionaries) once opened.
@@ -8,7 +13,7 @@
  *   picked up on the next launch while the game still opens with no connection.
  * Bump CACHE_VERSION when the shell files change shape; old caches are deleted on activate.
  */
-const CACHE_VERSION = 'v3';
+const CACHE_VERSION = 'v4';
 const CACHE_NAME = `towerclash-${CACHE_VERSION}`;
 const PRECACHE = [
   './',
@@ -25,11 +30,46 @@ const PRECACHE = [
   './fonts/nunito-cyrillic.woff2',
 ];
 
+const scopeUrl = new URL(self.registration.scope);
+
+function isSameOrigin(url) {
+  return url.origin === self.location.origin;
+}
+
+/**
+ * Same-origin URLs of the module scripts the shell loads before any of the game's own code runs:
+ * every `<script type="module" src>` and `<link rel="modulepreload" href>` in index.html, resolved
+ * against the worker's scope (Vite emits them relative to `base: './'`). Attribute order is not
+ * assumed (Vite writes `type="module" crossorigin src=...`).
+ */
+function shellModuleUrls(html) {
+  const urls = [];
+  const tags = html.match(/<(?:script|link)\b[^>]*>/gi) || [];
+  for (const tag of tags) {
+    const isModuleScript = /^<script/i.test(tag) && /\btype=["']module["']/i.test(tag);
+    const isModulePreload = /^<link/i.test(tag) && /\brel=["']modulepreload["']/i.test(tag);
+    if (!isModuleScript && !isModulePreload) continue;
+    const attr = (isModuleScript ? /\bsrc=["']([^"']+)["']/i : /\bhref=["']([^"']+)["']/i).exec(tag);
+    if (!attr) continue;
+    const url = new URL(attr[1], scopeUrl);
+    if (isSameOrigin(url) && !urls.includes(url.href)) urls.push(url.href);
+  }
+  return urls;
+}
+
+/** Precache the entry chunk (and modulepreloads) named by the index.html just stored by PRECACHE. */
+async function precacheShellModules(cache) {
+  const shell = await cache.match('./index.html');
+  if (!shell) return;
+  const urls = shellModuleUrls(await shell.text());
+  if (urls.length > 0) await cache.addAll(urls);
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(CACHE_NAME)
-      .then((cache) => cache.addAll(PRECACHE))
+      .then((cache) => cache.addAll(PRECACHE).then(() => precacheShellModules(cache)))
       .then(() => self.skipWaiting()),
   );
 });
@@ -42,12 +82,6 @@ self.addEventListener('activate', (event) => {
       .then(() => self.clients.claim()),
   );
 });
-
-const scopeUrl = new URL(self.registration.scope);
-
-function isSameOrigin(url) {
-  return url.origin === self.location.origin;
-}
 
 function isRuntimeAsset(url) {
   return isSameOrigin(url) && url.pathname.startsWith(new URL('./assets/', scopeUrl).pathname);
