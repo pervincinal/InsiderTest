@@ -25,7 +25,7 @@ import type { AchievementGrant } from '../economy/achievements';
 import { evaluateAchievements } from '../economy/achievements';
 import { equippedSkin } from '../economy/entitlements';
 import type { Language } from './i18n';
-import { currentLanguage, nextLanguage, t } from './i18n';
+import { currentLanguage, levelLesson, nextLanguage, t } from './i18n';
 import { achievementName } from './catalogText';
 import type { DailyChallenge, WeeklyChallenge } from '../daily/challenge';
 import type { DailyOutcome } from './daily';
@@ -309,6 +309,26 @@ export interface ResultInfo {
 
 const DOUBLE_GOLD = AD_PLACEMENTS.find((p) => p.id === 'rv_double_gold')!;
 
+/**
+ * Consecutive defeats of one level in this app session (FE-4 defeat tip): the HOW TO PLAY link
+ * appears from the second one. A win, or a result on another level, clears it. Never saved.
+ */
+let defeatStreak: { levelId: number; count: number } | null = null;
+
+/** Book a result; returns the level's consecutive-defeat count after it (0 after a win). */
+export function noteResult(levelId: number, won: boolean): number {
+  if (won) {
+    defeatStreak = null;
+    return 0;
+  }
+  defeatStreak = defeatStreak?.levelId === levelId ? { levelId, count: defeatStreak.count + 1 } : { levelId, count: 1 };
+  return defeatStreak.count;
+}
+
+export function resetDefeatStreakForTests(): void {
+  defeatStreak = null;
+}
+
 /** Wallet notes are plain English data (`"10 levels cleared"`, `"Band 1 at 3★"`); render them in the UI language. */
 export function translateNote(note: string): string {
   const levels = /^(\d+) levels cleared$/.exec(note);
@@ -332,11 +352,15 @@ export class ResultScreen implements Screen {
   private leaving = false;
   private nowMs = 0;
   readonly toast = new Toast();
+  /** Consecutive defeats of this level in the session, this one included (0 on a win). */
+  private readonly defeatCount: number;
 
   constructor(
     private readonly app: App,
     readonly info: ResultInfo,
-  ) {}
+  ) {
+    this.defeatCount = noteResult(info.level.id, info.ui.outcome === 'won');
+  }
 
   enter(): void {
     onResultShown(this.app.ads);
@@ -387,6 +411,8 @@ export class ResultScreen implements Screen {
       continueAd: continueOffered && canShowRewarded(this.app.ads, save, CONTINUE_AD.id),
       skipCrystals: this.skipOffered() && !fixed ? CRYSTAL_SERVICES.levelSkip.costCrystals : null,
       pending: this.pending,
+      tip: this.won ? null : levelLesson(this.info.level),
+      howto: !this.won && this.defeatCount >= 2,
     };
   }
 
@@ -412,6 +438,7 @@ export class ResultScreen implements Screen {
     const both = ex.continueCrystals !== null && ex.continueAd;
     if (ex.continueCrystals !== null) list.push(both ? RESULT.continueCrystals : RESULT.continueSolo);
     if (ex.continueAd) list.push(both ? RESULT.continueAd : RESULT.continueSolo);
+    if (ex.howto) list.push(RESULT.howto);
     return list;
   }
 
@@ -454,6 +481,10 @@ export class ResultScreen implements Screen {
     else if (hit === RESULT.menu || hit === HUD.menu) this.leave(() => this.app.goLevels());
     else if (hit === RESULT.next && ui.outcome === 'won' && ui.hasNext) this.leave(() => this.nextLevel());
     else if (hit === HUD.wallet) this.app.goShop('crystals', () => this.app.go(this));
+    else if (hit === RESULT.howto) {
+      playSfx('button');
+      this.app.openHowTo(this); // the card's CLOSE / BACK / ESC return to this result screen
+    }
     else if (hit === RESULT.extra) {
       if (this.won) this.doubleGold();
       else this.skipLevel();

@@ -603,6 +603,32 @@ export function drawSpeakerGlyph(ctx: CanvasRenderingContext2D, color: string, c
   ctx.restore();
 }
 
+/** Lightbulb (defeat tip): lit globe with three rays and a small base; `s` is roughly half the height. */
+export function drawBulbGlyph(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number, fill: string, outline: string): void {
+  const gy = cy - s * 0.25;
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = fill;
+  ctx.lineWidth = Math.max(1.5, s * 0.22);
+  for (const a of [-Math.PI / 2, -Math.PI / 2 - 0.85, -Math.PI / 2 + 0.85]) {
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(a) * s * 1.05, gy + Math.sin(a) * s * 1.05);
+    ctx.lineTo(cx + Math.cos(a) * s * 1.45, gy + Math.sin(a) * s * 1.45);
+    ctx.stroke();
+  }
+  ctx.beginPath();
+  ctx.arc(cx, gy, s * 0.72, 0, Math.PI * 2);
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.lineWidth = Math.max(1.5, s * 0.18);
+  ctx.strokeStyle = outline;
+  ctx.stroke();
+  roundRect(ctx, { x: cx - s * 0.36, y: cy + s * 0.42, w: s * 0.72, h: s * 0.5 }, s * 0.12);
+  ctx.fillStyle = outline;
+  ctx.fill();
+  ctx.restore();
+}
+
 /** Cog: ring with eight teeth and a hollow hub. */
 export function drawGearGlyph(ctx: CanvasRenderingContext2D, color: string, cx: number, cy: number, s: number): void {
   ctx.save();

@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
@@ -50,7 +52,18 @@ const SKIN_ROOFS_TOP = 194; // SHOP.row.y0 - 6
 const SKIN_HELMETS_TOP = SKIN_ROOFS_TOP + 46 + 2 * (236 + 16) - 16 + 22;
 const SKIN_THEMES_TOP = SKIN_HELMETS_TOP + 46 + 2 * (236 + 16) - 16 + 22;
 // src/render/layout.ts — RESULT
-const RESULT = { next: { x: 84, y: 780, w: 170, h: 72 }, menu: { x: 466, y: 780, w: 170, h: 72 }, continueAd: { x: 368, y: 700, w: 268, h: 62 } };
+const RESULT = { next: { x: 84, y: 780, w: 170, h: 72 }, menu: { x: 466, y: 780, w: 170, h: 72 }, continueAd: { x: 368, y: 700, w: 268, h: 62 }, howto: { x: 250, y: 638, w: 220, h: 34 } };
+// src/render/menuLayout.ts — HOWTO.close
+const HOWTO_CLOSE = { x: 180, y: 1054, w: 360, h: 72 };
+const SHOTS = fileURLToPath(new URL('./__screenshots__/', import.meta.url));
+const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}${name}.png`, scale: 'css' });
+const LEVELS_DIR = fileURLToPath(new URL('../src/levels/', import.meta.url));
+/** English lesson of a level, read from its JSON (data, not code — the spec still imports nothing from src/). */
+function lessonOf(id: number): string {
+  const file = readdirSync(LEVELS_DIR).find((f) => f.startsWith(`${String(id).padStart(3, '0')}-`) && f.endsWith('.json'));
+  if (!file) throw new Error(`no level JSON for ${id}`);
+  return (JSON.parse(readFileSync(LEVELS_DIR + file, 'utf8')) as { lesson: string }).lesson;
+}
 const SAVE_KEY = 'towerclash.save.v3';
 // src/economy/catalog.ts — COMMANDER_UPGRADES: Capacity (row 1) is the cheap 5-step ladder (60 / 120 …, +5 % per
 // tier); Production (row 0) starts at 200 after the 2026-09-13 retune. CRYSTAL_SERVICES.continue, SKINS.
@@ -351,6 +364,12 @@ test.describe('economy', () => {
     );
     await expect.poll(() => screen(page), { timeout: 60_000, intervals: [250] }).toBe('result');
     expect((await page.evaluate(() => window.__towerclash.getResult()))?.outcome).toBe('lost');
+    // FE-4 defeat tip: the level's lesson under the title; no HOW TO PLAY link on the first defeat of the session
+    const firstResult = await page.evaluate(() => window.__towerclash.getResult());
+    expect(firstResult?.tip).toBe(lessonOf(REWIND_LEVEL));
+    expect(firstResult?.howto).toBe(false);
+    await page.waitForTimeout(800); // the card's slide-up and title pop settle
+    await shot(page, 'look3-result-defeat-tip');
     const lost = await page.evaluate(() => window.__towerclash.economy.getClock()!);
     expect(lost.continued).toBe(false);
     expect(lost.elapsedMs).toBe(lost.timeMs);
@@ -385,6 +404,13 @@ test.describe('economy', () => {
       await tapRect(page, RESULT.next);
       await page.waitForTimeout(200);
       expect(await screen(page)).toBe('result');
+      // second consecutive defeat of the level: the tip's HOW TO PLAY link opens the card; CLOSE returns to this result
+      expect((await page.evaluate(() => window.__towerclash.getResult()))?.howto).toBe(true);
+      await tapRect(page, RESULT.howto);
+      await expect.poll(() => screen(page)).toBe('howto');
+      await tapRect(page, HOWTO_CLOSE);
+      await expect.poll(() => screen(page)).toBe('result');
+      expect((await page.evaluate(() => window.__towerclash.getResult()))?.tip).toBe(lessonOf(REWIND_LEVEL));
     }
     expect((await save(page)).adCounters.rewardedByPlacement['rv_continue']).toBe(1);
     expect(errors).toEqual([]);

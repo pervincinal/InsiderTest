@@ -93,6 +93,8 @@ export const az: Dictionary = {
 
   'result.victory': 'QƏLƏBƏ',
   'result.defeat': 'MƏĞLUBİYYƏT',
+  'result.tip': 'Məsləhət',
+  'result.howto': 'NECƏ OYNAMALI',
   'result.time': 'Vaxt {time}',
   'result.starRule': '3 ulduz: {t3}-dək · 2 ulduz: {t2}-dək',
   'result.replayCapped': 'günlük təkrar qızıl limiti doldu',

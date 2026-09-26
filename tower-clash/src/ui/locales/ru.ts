@@ -93,6 +93,8 @@ export const ru: Dictionary = {
 
   'result.victory': 'ПОБЕДА',
   'result.defeat': 'ПОРАЖЕНИЕ',
+  'result.tip': 'Совет',
+  'result.howto': 'КАК ИГРАТЬ',
   'result.time': 'Время {time}',
   'result.starRule': '3 звезды до {t3} · 2 до {t2}',
   'result.replayCapped': 'дневной лимит золота за повтор исчерпан',

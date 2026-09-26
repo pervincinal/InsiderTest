@@ -98,6 +98,8 @@ export const en = {
 
   'result.victory': 'VICTORY',
   'result.defeat': 'DEFEAT',
+  'result.tip': 'Tip',
+  'result.howto': 'HOW TO PLAY',
   'result.time': 'Time {time}',
   'result.starRule': '3 stars under {t3} · 2 under {t2}',
   'result.replayCapped': 'daily replay gold cap reached',

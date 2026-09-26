@@ -51,6 +51,13 @@ export const RESULT = Object.freeze({
   continueSolo: { x: 180, y: 700, w: 360, h: 62 } as Rect,
   /** ×2 gold (win) or skip level (defeat). */
   extra: { x: 150, y: 874, w: 420, h: 62 } as Rect,
+  /**
+   * Defeat tip (FE-4): lightbulb caption + the level's lesson (≤ 3 lines) under the time line, in
+   * place of the hollow stars; ends above the Reinforcements label (continueSolo.y − 18 − 8 px).
+   */
+  tip: { x: 90, y: 540, w: 540, h: 132 } as Rect,
+  /** "HOW TO PLAY" link-button at the foot of the tip (second consecutive defeat of the same level). */
+  howto: { x: 250, y: 638, w: 220, h: 34 } as Rect,
 });
 
 /** Pause menu (M1-11 + M3-3 + FE-3): resume, speed toggle ×1/×2, sound + settings, retry, menu, how to play. */

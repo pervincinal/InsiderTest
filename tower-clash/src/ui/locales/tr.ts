@@ -93,6 +93,8 @@ export const tr: Dictionary = {
 
   'result.victory': 'ZAFER',
   'result.defeat': 'YENİLGİ',
+  'result.tip': 'İpucu',
+  'result.howto': 'NASIL OYNANIR',
   'result.time': 'Süre {time}',
   'result.starRule': '3 yıldız: {t3} altı · 2 yıldız: {t2} altı',
   'result.replayCapped': 'günlük tekrar altın sınırına ulaşıldı',

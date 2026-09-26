@@ -6,6 +6,7 @@ import { BOOSTERS, HUD, PAUSE, RESULT } from './layout';
 import type { Rect } from './widgets';
 import {
   drawBoltGlyph,
+  drawBulbGlyph,
   drawButton,
   drawCard,
   drawCoin,
@@ -96,6 +97,10 @@ export interface ResultExtras {
   skipCrystals: number | null;
   /** An ad / purchase is in flight: buttons show a spinner and ignore taps. */
   pending: boolean;
+  /** Defeat tip (FE-4): the level's lesson in the UI language; null on a win. */
+  tip: string | null;
+  /** "HOW TO PLAY" link under the tip (second consecutive defeat of the same level in this session). */
+  howto: boolean;
   /** Daily Challenge result (GDD §7): the reward line (first win) or the day's best (replay). */
   daily?: {
     won: boolean;
@@ -550,13 +555,16 @@ function drawResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: Pla
   ctx.textBaseline = 'middle';
   ctx.fillStyle = pal.ink;
   ctx.font = font(30);
-  ctx.fillText(t('result.time', { time: formatTime(clockOf(ui, state)) }), 360, card.y + 200, card.w - 60);
+  // a defeat has no star row: the time sits a little higher and the tip block takes the stars' place (FE-4)
+  ctx.fillText(t('result.time', { time: formatTime(clockOf(ui, state)) }), 360, card.y + (won ? 200 : 190), card.w - 60);
 
   // stars pop in one after another with a gold burst
-  const starY = card.y + 272;
-  for (let i = 0; i < 3; i++) {
-    const t = (since - 420 - i * 260) / 380;
-    drawStarPop(ctx, pal, 360 + (i - 1) * 100, starY, 38, won && i < ui.stars, t);
+  if (won) {
+    const starY = card.y + 272;
+    for (let i = 0; i < 3; i++) {
+      const t = (since - 420 - i * 260) / 380;
+      drawStarPop(ctx, pal, 360 + (i - 1) * 100, starY, 38, i < ui.stars, t);
+    }
   }
 
   const hud = extrasOf(ui);
@@ -617,9 +625,7 @@ function drawResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: Pla
     ctx.font = font(fitFontPx(ctx, note, 18, card.w - 60, '500'), '500');
     ctx.fillText(note, 360, card.y + 416, card.w - 60);
   } else {
-    ctx.fillStyle = pal.textDim;
-    ctx.font = font(22, '500');
-    ctx.fillText(t('result.allLost'), 360, card.y + 318, card.w - 60);
+    drawDefeatTip(ctx, pal, ex?.tip ?? levelLesson(ui.level), ex?.howto ?? false, pressed);
     // Reinforcements: crystals and / or a rewarded video (ECONOMY.md §3.5)
     if (ex && (ex.continueCrystals !== null || ex.continueAd)) {
       const both = ex.continueCrystals !== null && ex.continueAd;
@@ -653,6 +659,37 @@ function drawResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: Pla
     }
   }
   ctx.restore();
+}
+
+/**
+ * Defeat tip (FE-4): a lightbulb + "Tip" caption, the level's lesson centred in ≤ 3 lines (18 px, or
+ * 16 px when the lesson would be cut) and, on the second consecutive defeat of the level, a small
+ * HOW TO PLAY link-button at the block's foot (RESULT.howto). Same wrap helper as the lesson banner.
+ */
+function drawDefeatTip(ctx: CanvasRenderingContext2D, pal: Palette, text: string, howto: boolean, pressed: Rect | null): void {
+  const r = RESULT.tip;
+  const cap = t('result.tip');
+  ctx.font = font(14, '500');
+  const capW = ctx.measureText(cap).width;
+  const x0 = 360 - (capW + 26) / 2;
+  drawBulbGlyph(ctx, x0 + 9, r.y + 13, 9, pal.star, pal.ink);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = pal.textDim;
+  ctx.fillText(cap, x0 + 26, r.y + 14);
+  let px = 18;
+  ctx.font = font(px, '500');
+  let lines = wrapText(ctx, text, r.w, 3);
+  if (lines[lines.length - 1]?.endsWith('…')) {
+    px = 16;
+    ctx.font = font(px, '500');
+    lines = wrapText(ctx, text, r.w, 3);
+  }
+  const lineH = px + 3;
+  ctx.textAlign = 'center';
+  ctx.fillStyle = pal.ink;
+  lines.forEach((l, i) => ctx.fillText(l, 360, r.y + 38 + i * lineH, r.w));
+  if (howto) drawButton(ctx, pal, RESULT.howto, t('result.howto'), { fontPx: 16, flat: true, pressed: pressed === RESULT.howto });
 }
 
 /**

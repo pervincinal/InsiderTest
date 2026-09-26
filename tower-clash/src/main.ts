@@ -80,7 +80,7 @@ export interface TowerClashDebug {
   /** Text of the current screen's toast while it is on screen, or null. */
   getToast(): string | null;
   /** Result screen numbers, or null when not on the result screen. */
-  getResult(): { outcome: string; stars: number; coinsEarned: number; coinsTotal: number; crystalsEarned: number; achievements: string[] } | null;
+  getResult(): { outcome: string; stars: number; coinsEarned: number; coinsTotal: number; crystalsEarned: number; achievements: string[]; tip: string | null; howto: boolean } | null;
   /** Level-select lock state for a level id (undefined id → false). */
   isLevelUnlocked(id: number): boolean;
   /** Level-select path map scroll (logical px); setting is a no-op on other screens. */
@@ -575,7 +575,8 @@ class TowerClashApp implements App {
         if (!(this.current instanceof ResultScreen)) return null;
         const { outcome, stars, coinsEarned, coinsTotal } = this.current.info.ui;
         const { earnings, achievements } = this.current.info;
-        return { outcome, stars, coinsEarned, coinsTotal, crystalsEarned: earnings.crystals, achievements: achievements.unlocked.map((a) => a.id) };
+        const { tip, howto } = this.current.extras();
+        return { outcome, stars, coinsEarned, coinsTotal, crystalsEarned: earnings.crystals, achievements: achievements.unlocked.map((a) => a.id), tip, howto };
       },
       isLevelUnlocked: (id) => isLevelUnlocked(this.save, LEVEL_META, levelIndex(id)),
       setLevelSelectScroll: (y) => {
