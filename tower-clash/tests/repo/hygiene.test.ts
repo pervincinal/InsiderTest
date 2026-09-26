@@ -61,9 +61,34 @@ const pwNumber = (key: string): number => {
 };
 
 describe('tower-clash/playwright.config.ts (BUG-16)', () => {
-  it('blocks service workers for every project', () => {
+  it('blocks service workers by default', () => {
     const use = /\n  use: \{([\s\S]*?)\n  \},/.exec(PW_CONFIG)?.[1] ?? '';
     expect(use).toMatch(/serviceWorkers:\s*'block'/);
+    expect(pwNumber('retries'), 'no retries outside the pwa project').toBe(0);
+  });
+
+  /*
+   * QA-8: the PWA offline path is the one thing that needs the worker, so exactly one project
+   * (`pwa`, e2e/pwa.spec.ts only) allows it — with the worker network-emulation flag the spec's
+   * `setOffline` depends on, one retry for the BUG-16 stall, and its own output folder — and the
+   * default project must not pick that spec up.
+   */
+  it('allows service workers in the pwa project only (QA-8)', () => {
+    const projects = /\n  projects: \[([\s\S]*?)\n  \],/.exec(PW_CONFIG)?.[1] ?? '';
+    const blocks = projects.split(/\n    \{\n/).filter((p) => p.trim());
+    const allowing = blocks.filter((p) => /serviceWorkers:\s*'allow'/.test(p));
+    expect(allowing).toHaveLength(1);
+    const pwa = allowing[0]!;
+    expect(pwa).toMatch(/name:\s*'pwa'/);
+    expect(pwa).toMatch(/testMatch:\s*\/pwa\\\.spec\\\.ts\$\//);
+    expect(pwa).toMatch(/retries:\s*1\b/);
+    expect(pwa).toMatch(/outputDir:\s*path\.join\(OUTPUT_DIR,\s*'pwa'\)/);
+    expect(blocks.filter((p) => /retries:/.test(p))).toHaveLength(1);
+    const chromium = blocks.find((p) => /name:\s*'chromium'/.test(p)) ?? '';
+    expect(chromium).toMatch(/testIgnore:\s*\/\(webview\|pwa\)\\\.spec\\\.ts\$\//);
+    expect(PW_CONFIG).toMatch(/process\.env\.PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS \?\?= '1'/);
+    expect(E2E_SPECS).toContain('pwa.spec.ts');
+    expect(readFileSync(new URL('pwa.spec.ts', E2E_DIR), 'utf8')).toMatch(/test\.use\(\{ serviceWorkers: 'allow' \}\)/);
   });
 
   it('bounds actions, navigations and expect polls well under the test timeout', () => {

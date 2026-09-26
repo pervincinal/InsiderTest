@@ -116,6 +116,16 @@ jobs:
         timeout-minutes: 10
         run: npm run e2e:webview
 
+      # PWA offline path (`pwa` project, QA-8): the only project with the service worker allowed
+      # (public/sw.js under a real registration, worker network emulation on): the first launch
+      # precaches the shell, the second launch runs offline (title, level 1 from the cache), a cold
+      # level chunk fails with the game's offline toast, and it loads once back online. This project
+      # alone has `retries: 1` (BUG-16: headless-Chromium stall on a worker-routed chunk, ~1/500
+      # boots); its artefacts land in test-results/pwa. Measured ≈ 5 s locally (2026-09-26).
+      - name: Browser e2e (PWA offline)
+        timeout-minutes: 5
+        run: npm run e2e:pwa
+
       - name: Upload Playwright report, traces and screenshots
         if: failure()
         uses: actions/upload-artifact@v4

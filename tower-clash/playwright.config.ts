@@ -45,6 +45,17 @@ const OUTPUT_DIR = process.env.PW_OUTPUT || 'test-results';
  * suite keeps serving the build it started with.
  */
 const DIST_SNAPSHOT = path.join(os.tmpdir(), 'tower-clash-e2e', String(PORT), 'dist');
+
+/**
+ * QA-8: the `pwa` project below is the one place the service worker runs, and `e2e/pwa.spec.ts` takes
+ * the game offline with `context.setOffline(true)`. Playwright only applies offline emulation (and
+ * `context.route`) to a service-worker target when this flag is set at browser launch; without it
+ * the page goes offline while every request the worker's fetch handler forwards to the network still
+ * reaches the preview server (measured 2026-09-26: a never-cached chunk fetched through the worker
+ * came back 200 "offline"). Set here so every worker process that launches a browser sees it; the
+ * other projects block the worker, so it changes nothing for them. `??=` keeps an explicit override.
+ */
+process.env.PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS ??= '1';
 const PREVIEW_COMMAND = [
   `test -d dist || { echo 'e2e: no dist/ — run npm run build first' >&2; exit 1; }`,
   `rm -rf "${DIST_SNAPSHOT}"`,
@@ -94,7 +105,24 @@ export default defineConfig({
       // Default project: `npm run e2e` (smoke, content, economy, perf). Mobile-sized Chromium.
       name: 'chromium',
       use: { ...devices['Pixel 5'] },
-      testIgnore: /webview\.spec\.ts$/,
+      testIgnore: /(webview|pwa)\.spec\.ts$/,
+    },
+    {
+      /**
+       * PWA offline path: `npm run e2e:pwa` (QA-8). The only project with the service worker allowed
+       * (public/sw.js precache + runtime cache under a real registration, then `setOffline`), so only
+       * e2e/pwa.spec.ts runs here. `retries: 1` on this project alone: BUG-16 is a headless-Chromium
+       * main-thread stall on a worker-routed lazy chunk `import()` (~1 per 500 boots, not game or spec
+       * logic); the rest of the suite avoids it by blocking the worker, which is the thing under test
+       * here, so a stalled boot is retried once instead of failing the run. Every step stays bounded
+       * (the shared action / navigation / expect budgets, polls ≤ 20 s, the test 60 s) so a stall
+       * fails fast and names its step. Artefacts go to their own subfolder of `PW_OUTPUT`.
+       */
+      name: 'pwa',
+      use: { ...devices['Pixel 5'], serviceWorkers: 'allow' },
+      testMatch: /pwa\.spec\.ts$/,
+      retries: 1,
+      outputDir: path.join(OUTPUT_DIR, 'pwa'),
     },
     {
       // Android WebView emulation: `npm run e2e:webview` (QA-1). Pixel 7 metrics, WebView UA,
