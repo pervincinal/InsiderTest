@@ -57,7 +57,15 @@ export default defineConfig({
   testDir: 'e2e',
   outputDir: OUTPUT_DIR,
   timeout: 90_000,
-  expect: { timeout: 10_000 },
+  /**
+   * BUG-16: bounded per-step budgets, so a stalled step fails in seconds naming itself (e.g.
+   * "keyboard.press: Timeout 20000ms exceeded") instead of silently eating the 90 s test budget.
+   * Every legitimately long wait in e2e/ carries its own explicit timeout (`expect.poll` up to
+   * 75 s for the ×10 autoplay wins, `waitForFunction` 20 s, `waitForResponse` 15 s); what these
+   * defaults bound are boot `waitForFunction`s, `page.goto`, clicks / key presses and screenshots,
+   * all sub-second under load. `page.evaluate` has no timeout of its own and stays on the test budget.
+   */
+  expect: { timeout: 15_000 },
   retries: 0,
   workers: 1,
   fullyParallel: false,
@@ -66,6 +74,20 @@ export default defineConfig({
     baseURL: `http://localhost:${PORT}`,
     launchOptions,
     trace: 'retain-on-failure',
+    actionTimeout: 20_000,
+    navigationTimeout: 20_000,
+    /**
+     * BUG-16: no test exercises public/sw.js (smoke only fetches it with `page.request`), yet with
+     * the default 'allow' it installs on every boot, claims the page ~150 ms in, and from then on
+     * serves every lazy chunk (`import()`) from its cache-first handler while Playwright's
+     * DevTools auto-attach (`waitForDebuggerOnStart`) is wired to it. Both recorded renderer
+     * hangs (weekly `keyboard.press('r')` 2026-09-25, and the same signature on a level-map load in
+     * the 2026-09-26 boot rig, on another build) sat on a level chunk `import()` routed through the
+     * worker that was never answered while the page's main thread stopped acknowledging input,
+     * `evaluate` and its own network events. The lazy specs already blocked the worker for the
+     * same determinism; this makes the whole suite fetch straight from the preview server.
+     */
+    serviceWorkers: 'block',
   },
   projects: [
     {
