@@ -27,9 +27,15 @@ describe('getStore selection', () => {
     expect(getStore()).toBe(fakeStore);
   });
 
-  it('returns the RevenueCat store inside a native shell', () => {
+  it('returns the lazy RevenueCat wrapper inside a native shell: not the fake, unavailable until init() loads the chunk', async () => {
     native.isNative = true;
-    expect(getStore()).toBe(revenueCatStore);
+    const store = getStore();
+    expect(store).not.toBe(fakeStore);
+    expect(store.isAvailable()).toBe(false);
+    expect(await store.getProducts(['crystals_small'])).toEqual([]);
+    expect(await store.purchase('crystals_small')).toEqual({ ok: false, productId: 'crystals_small', error: 'unavailable' });
+    expect(await store.restore()).toEqual([]);
+    expect(await store.getSupportId()).toBeNull();
   });
 
   it('caches the choice until reset', () => {
@@ -37,7 +43,7 @@ describe('getStore selection', () => {
     native.isNative = true;
     expect(getStore()).toBe(first);
     resetStoreForTests();
-    expect(getStore()).toBe(revenueCatStore);
+    expect(getStore()).not.toBe(fakeStore);
   });
 });
 

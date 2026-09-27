@@ -2,6 +2,13 @@
  * Advertising abstraction. The UI talks only to `AdsProvider`; the concrete provider is AdMob
  * inside a native shell (`providers/admob.ts`) and a no-op on the web (`providers/noAds.ts`).
  *
+ * The AdMob provider (and `providers/config.ts` + `capacitor.config.ts` behind it) is NOT part of
+ * the eager web bundle (PERF-7): `getAds()` returns a thin wrapper inside a native shell whose
+ * `init()` loads `./providers/admob` with a dynamic `import()` and delegates everything to it
+ * from then on. Before that resolves — and forever if the chunk fails to load — the wrapper
+ * behaves exactly like the no-op provider (`isAvailable()` false, every call resolves with its
+ * "no ad" value). The web build never requests the chunk.
+ *
  * Contract for callers (Frontend Engineer):
  *   - Call `init()` once at startup (never rejects). It may show the Google UMP consent form
  *     (EEA/UK) — do it on the title screen, not mid-battle. There is NO iOS App Tracking
@@ -24,7 +31,6 @@
  * Owned by the Mobile Engineer.
  */
 import { isNative } from '../native/index';
-import { adMobAds } from './providers/admob';
 import { noAds } from './providers/noAds';
 
 export interface RewardedResult {
@@ -57,13 +63,62 @@ export interface AdsProvider {
 
 let ads: AdsProvider | null = null;
 
-/** The ads provider for this runtime: AdMob inside a native shell, no-op everywhere else. */
+/** The AdMob provider once its chunk has loaded (native shells only). */
+let native: AdsProvider | null = null;
+let nativeInit: Promise<void> | null = null;
+
+/**
+ * Native-shell provider: loads `providers/admob` on demand inside `init()` and delegates to it.
+ * Until the chunk is loaded (or when loading fails) it answers like `noAds`.
+ */
+const lazyAdMob: AdsProvider = {
+  init(): Promise<void> {
+    if (!nativeInit) {
+      nativeInit = (async () => {
+        try {
+          const { adMobAds } = await import('./providers/admob');
+          native = adMobAds;
+          await adMobAds.init();
+        } catch (err) {
+          // Chunk missing / SDK evaluation failed: stay a no-op, the UI hides every ad button.
+          console.warn('[ads] AdMob provider failed to load:', err);
+        }
+      })();
+    }
+    return nativeInit;
+  },
+  isAvailable(): boolean {
+    return native !== null && native.isAvailable();
+  },
+  showInterstitial(): Promise<boolean> {
+    return native ? native.showInterstitial() : noAds.showInterstitial();
+  },
+  showRewarded(placementId: string): Promise<RewardedResult> {
+    return native ? native.showRewarded(placementId) : noAds.showRewarded(placementId);
+  },
+  privacyOptionsRequired(): Promise<boolean> {
+    return native ? native.privacyOptionsRequired() : noAds.privacyOptionsRequired();
+  },
+  showPrivacyOptions(): Promise<void> {
+    return native ? native.showPrivacyOptions() : noAds.showPrivacyOptions();
+  },
+};
+
+/**
+ * The ads provider for this runtime: AdMob inside a native shell (loaded lazily by `init()`),
+ * no-op everywhere else.
+ */
 export function getAds(): AdsProvider {
-  if (!ads) ads = isNative() ? adMobAds : noAds;
+  if (!ads) ads = isNative() ? lazyAdMob : noAds;
   return ads;
 }
 
-/** Test hook: forget the cached provider so the next `getAds()` re-evaluates `isNative()`. */
+/**
+ * Test hook: forget the cached provider (and the lazily loaded AdMob module) so the next
+ * `getAds()` re-evaluates `isNative()` and the next `init()` imports again.
+ */
 export function resetAdsForTests(): void {
   ads = null;
+  native = null;
+  nativeInit = null;
 }

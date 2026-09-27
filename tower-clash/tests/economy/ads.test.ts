@@ -25,9 +25,23 @@ describe('getAds selection', () => {
     expect(getAds()).toBe(noAds);
   });
 
-  it('returns the AdMob provider inside a native shell', () => {
+  it('returns the lazy AdMob wrapper inside a native shell: not the no-op, unavailable until init() loads the chunk', async () => {
     native.isNative = true;
-    expect(getAds()).toBe(adMobAds);
+    const ads = getAds();
+    expect(ads).not.toBe(noAds);
+    expect(ads.isAvailable()).toBe(false);
+    expect(await ads.showInterstitial()).toBe(false);
+    expect(await ads.showRewarded('level_retry')).toEqual({ rewarded: false });
+    expect(await ads.privacyOptionsRequired()).toBe(false);
+    await expect(ads.showPrivacyOptions()).resolves.toBeUndefined();
+  });
+
+  it('caches the choice until reset', () => {
+    const first = getAds();
+    native.isNative = true;
+    expect(getAds()).toBe(first);
+    resetAdsForTests();
+    expect(getAds()).not.toBe(noAds);
   });
 });
 

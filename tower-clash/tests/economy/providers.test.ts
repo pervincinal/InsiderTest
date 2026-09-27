@@ -1,14 +1,17 @@
 /**
  * QA guard: the native store / ads SDKs must never be evaluated on the web.
  *
- * `src/economy/store.ts` and `ads.ts` statically import their native providers
- * (`providers/revenueCat.ts`, `providers/admob.ts`), and those reach the plugin packages only
- * through a dynamic `import()` that runs after an `isNative()` / `getPlatform()` check. Both plugin
- * packages are mocked here with a factory that records the evaluation and then throws: on the web
- * the counter must stay at zero through module load, provider selection and `init()`; inside a
- * (mocked) native shell the import must happen and a throwing SDK must leave the provider
- * unavailable without rejecting. A source-level check completes the picture so a static import
- * added by mistake fails here before `scripts/checkBundle.mjs` sees the built bundle.
+ * `src/economy/store.ts` and `ads.ts` load their native providers (`providers/revenueCat.ts`,
+ * `providers/admob.ts`) with a dynamic `import()` inside `init()` of the wrapper they return in a
+ * native shell (PERF-7; the web build never requests that chunk — see
+ * tests/economy/lazyProviders.test.ts), and those providers reach the plugin packages only
+ * through a second dynamic `import()` that runs after an `isNative()` / `getPlatform()` check.
+ * Both plugin packages are mocked here with a factory that records the evaluation and then
+ * throws: on the web the counter must stay at zero through module load, provider selection and
+ * `init()`; inside a (mocked) native shell the whole chain wrapper → provider → plugin must run
+ * and a throwing SDK must leave the provider unavailable without rejecting. A source-level check
+ * completes the picture so a static import added by mistake fails here before
+ * `scripts/checkBundle.mjs` sees the built bundle.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -98,34 +101,42 @@ describe('native runtime loads the plugins lazily and survives a broken SDK', ()
   it('RevenueCat is imported only inside init() with a key, and a throwing SDK leaves the store unavailable', async () => {
     native.isNative = true;
     native.platform = 'android';
-    expect(getStore()).toBe(revenueCatStore);
+    let store = getStore();
+    expect(store).not.toBe(fakeStore);
     expect(probe.revenueCat).toBe(0);
 
-    // No key: init returns before touching the plugin.
-    await revenueCatStore.init();
+    // No key: the provider chunk loads, but its init returns before touching the plugin.
+    await store.init();
     expect(probe.revenueCat).toBe(0);
+    expect(store.isAvailable()).toBe(false);
     expect(revenueCatStore.isAvailable()).toBe(false);
 
+    resetStoreForTests();
     resetRevenueCatForTests();
     keys.revenueCat = 'goog_test_key';
-    await expect(revenueCatStore.init()).resolves.toBeUndefined();
+    store = getStore();
+    await expect(store.init()).resolves.toBeUndefined();
     expect(probe.revenueCat).toBe(1);
+    expect(store.isAvailable()).toBe(false);
+    expect(await store.purchase('remove_ads')).toEqual({ ok: false, productId: 'remove_ads', error: 'unavailable' });
+    expect(await store.restore()).toEqual([]);
+    expect(await store.getProducts(['remove_ads'])).toEqual([]);
+    // The wrapper delegated to the real provider module (same answers, same state).
     expect(revenueCatStore.isAvailable()).toBe(false);
-    expect(await revenueCatStore.purchase('remove_ads')).toEqual({ ok: false, productId: 'remove_ads', error: 'unavailable' });
-    expect(await revenueCatStore.restore()).toEqual([]);
-    expect(await revenueCatStore.getProducts(['remove_ads'])).toEqual([]);
   });
 
   it('AdMob is imported only inside init(), and a throwing SDK leaves ads unavailable', async () => {
     native.isNative = true;
     native.platform = 'ios';
-    expect(getAds()).toBe(adMobAds);
+    const ads = getAds();
+    expect(ads).not.toBe(noAds);
     expect(probe.admob).toBe(0);
-    await expect(adMobAds.init()).resolves.toBeUndefined();
+    await expect(ads.init()).resolves.toBeUndefined();
     expect(probe.admob).toBe(1);
+    expect(ads.isAvailable()).toBe(false);
     expect(adMobAds.isAvailable()).toBe(false);
-    expect(await adMobAds.showInterstitial()).toBe(false);
-    expect(await adMobAds.showRewarded('level_retry')).toEqual({ rewarded: false });
+    expect(await ads.showInterstitial()).toBe(false);
+    expect(await ads.showRewarded('level_retry')).toEqual({ rewarded: false });
   });
 });
 

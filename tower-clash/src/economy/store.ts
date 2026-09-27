@@ -3,6 +3,14 @@
  * RevenueCat inside a native shell (`providers/revenueCat.ts`) and an in-memory fake on the
  * web / in dev / in e2e (`providers/fakeStore.ts`).
  *
+ * The RevenueCat provider (and `providers/config.ts` + `capacitor.config.ts` behind it) is NOT
+ * part of the eager web bundle (PERF-7): `getStore()` returns a thin wrapper inside a native
+ * shell whose `init()` loads `./providers/revenueCat` with a dynamic `import()` and delegates
+ * everything to it from then on. Before that resolves — and forever if the chunk fails to load —
+ * the wrapper answers like an unconfigured store (`isAvailable()` false, `purchase()` resolves
+ * `error: 'unavailable'`, empty products/restore, `null` support id). The web build never
+ * requests the chunk.
+ *
  * Contract for callers (Frontend Engineer):
  *   - Product ids are opaque strings from `src/economy/catalog.ts`.
  *   - Grant entitlements / currency ONLY when `purchase()` resolves `{ ok: true }`. Never grant
@@ -20,7 +28,6 @@
  */
 import { isNative } from '../native/index';
 import { fakeStore } from './providers/fakeStore';
-import { revenueCatStore } from './providers/revenueCat';
 
 export interface StoreProduct {
   /** Catalog / store product id (opaque). */
@@ -69,13 +76,63 @@ export interface StoreProvider {
 
 let store: StoreProvider | null = null;
 
-/** The store for this runtime: RevenueCat inside a native shell, the fake everywhere else. */
+/** The RevenueCat provider once its chunk has loaded (native shells only). */
+let native: StoreProvider | null = null;
+let nativeInit: Promise<void> | null = null;
+
+/**
+ * Native-shell provider: loads `providers/revenueCat` on demand inside `init()` and delegates to
+ * it. Until the chunk is loaded (or when loading fails) it answers like an unconfigured store —
+ * the same values `revenueCatStore` itself returns before its own `init()`.
+ */
+const lazyRevenueCat: StoreProvider = {
+  init(): Promise<void> {
+    if (!nativeInit) {
+      nativeInit = (async () => {
+        try {
+          const { revenueCatStore } = await import('./providers/revenueCat');
+          native = revenueCatStore;
+          await revenueCatStore.init();
+        } catch (err) {
+          // Chunk missing / SDK evaluation failed: stay unavailable, the UI hides buy buttons.
+          console.warn('[store] RevenueCat provider failed to load:', err);
+        }
+      })();
+    }
+    return nativeInit;
+  },
+  isAvailable(): boolean {
+    return native !== null && native.isAvailable();
+  },
+  getProducts(ids: string[]): Promise<StoreProduct[]> {
+    return native ? native.getProducts(ids) : Promise.resolve([]);
+  },
+  purchase(id: string): Promise<PurchaseResult> {
+    return native ? native.purchase(id) : Promise.resolve({ ok: false, productId: id, error: 'unavailable' });
+  },
+  restore(): Promise<string[]> {
+    return native ? native.restore() : Promise.resolve([]);
+  },
+  getSupportId(): Promise<string | null> {
+    return native ? native.getSupportId() : Promise.resolve(null);
+  },
+};
+
+/**
+ * The store for this runtime: RevenueCat inside a native shell (loaded lazily by `init()`), the
+ * fake everywhere else.
+ */
 export function getStore(): StoreProvider {
-  if (!store) store = isNative() ? revenueCatStore : fakeStore;
+  if (!store) store = isNative() ? lazyRevenueCat : fakeStore;
   return store;
 }
 
-/** Test hook: forget the cached provider so the next `getStore()` re-evaluates `isNative()`. */
+/**
+ * Test hook: forget the cached provider (and the lazily loaded RevenueCat module) so the next
+ * `getStore()` re-evaluates `isNative()` and the next `init()` imports again.
+ */
 export function resetStoreForTests(): void {
   store = null;
+  native = null;
+  nativeInit = null;
 }

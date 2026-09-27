@@ -182,6 +182,9 @@ The game never talks to a store SDK directly. Two small interfaces in `tower-cla
 | `src/economy/providers/admob.ts` | AdMob: initialize (max ad content rating G) → UMP consent form (EEA/UK only) → preload interstitial + rewarded; `showRewarded()` reports `rewarded: true` only on the SDK's reward event; **no iOS tracking prompt**, iOS requests non-personalised ads (`npa`) — see §8.7 |
 | `src/economy/providers/config.ts` | where the keys/ids are read from (below) |
 
+`revenueCat.ts`, `admob.ts` and `config.ts` (with the `capacitor.config.ts` it reads) are loaded on demand inside the native shell: `getStore()` / `getAds()` return a small wrapper there whose `init()` pulls the provider in with a dynamic `import()` and then delegates to it; until that resolves (or if the chunk fails to load) the wrapper answers "unavailable", exactly like the provider before its own `init()`.
+The web / PWA build never downloads these chunks (PERF-7 — they are separate files under `dist/assets/`, only referenced from the `init()` call), so nothing in this table costs the browser player any bytes; `node scripts/checkBundle.mjs` guards that.
+
 Settings-screen hooks promised by the privacy policy (`docs/publishing/PRIVACY_POLICY.md` B.2 / B.7, backlog ECON-2) — the Frontend Engineer wires the UI against exactly these names:
 
 | Method | Provider behaviour | UI contract |
