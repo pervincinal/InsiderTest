@@ -9,7 +9,7 @@
   "lesson_ru": "Всё вместе: держи свои стены, возьми пушки с фланга, затем ломай цитадель всеми потоками, что у тебя есть",
   "lesson_tr": "Hepsi bir arada: kendi surlarını tut, topları yandan al, sonra elindeki tüm akışlarla iç kaleyi kır",
   "star3": 35000,
-  "star2": 70000,
+  "star2": 95000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.7}
   ],

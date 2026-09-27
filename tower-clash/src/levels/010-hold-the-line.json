@@ -9,7 +9,7 @@
   "lesson_ru": "Захвати нейтральную крепость и держи её: на своих стенах каждый защитник считается за двоих",
   "lesson_tr": "Tarafsız kaleyi ele geçir ve tut: kendi surlarında her savunmacı iki sayılır",
   "star3": 20000,
-  "star2": 50000,
+  "star2": 70000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.3}
   ],

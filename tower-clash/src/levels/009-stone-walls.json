@@ -9,7 +9,7 @@
   "lesson_ru": "Твоя цитадель теперь начинает на уровне 2: два потока, и быстрее. Крепость: два атакующих на защитника, так что окружи её и лей со всех сторон",
   "lesson_tr": "Kalen artık 2. seviyede başlar: iki akış, üstelik daha hızlı. Hisar: her savunmacıya iki saldırgan, o yüzden onu kuşat ve her yandan akıt",
   "star3": 25000,
-  "star2": 50000,
+  "star2": 65000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.3}
   ],

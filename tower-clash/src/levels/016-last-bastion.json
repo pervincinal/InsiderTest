@@ -9,7 +9,7 @@
   "lesson_ru": "Два фронта против цитадели: держи свою крепость в центре, чтобы натиск разбился о её стены, заглуши пушки с фланга и сходись к цитадели",
   "lesson_tr": "Kaleye karşı iki cephe: ortadaki hisarı tut ki hücum surlarında kırılsın, topları yandan sustur, sonra hep birlikte kaleye yüklen",
   "star3": 20000,
-  "star2": 40000,
+  "star2": 75000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.5}
   ],
