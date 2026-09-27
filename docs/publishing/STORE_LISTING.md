@@ -14,6 +14,8 @@ What must NOT be claimed: leaderboards, multiplayer, cloud save, more than 50 le
 
 **Status 2026-09-25 (release-readiness pass, HEAD `4b7738f`, 1.0.0 / build 6).** Build 6 (`ac41e5d`, 2026-09-24) changed no claim: the tutorial band (levels 1–8) was rebuilt for first-time players, a stalemate hint was added, guide lines and enemy ribbons were restyled, star clocks re-derived — every text below is unchanged and still true (no road / bridge / barrier wording anywhere in §1–§3; 50 levels; four languages). The screenshot sets on disk are the Rules v3 render of 2026-09-21 (`0e0ee66`); the maps of levels 1 / 4 / 8 and the ribbon styling changed after that render, so the sets are **re-rendered on build 6 before upload** (G10 / A11) — same frames, same captions, nothing to re-approve.
 
+**Status 2026-09-27 (build 7, PUB-11).** One claim changed: levels 41–50 got their own biome, the twilight highlands (`e52186a`, ART-8), so "FIVE ISLANDS" became **"SIX ISLANDS"** in §1.1 / §1.2 (EN 3984 / AZ 3955 characters, limit 4000); nothing else in the build-7 changes — the "How to play" card (FE-3), the defeat tip (FE-4), the refuse / stalemate sounds (ART-9), the PWA offline fix (BUG-18), the faster first load (PERF-4 / PERF-6), the level 36 retune (LV-17), the Azerbaijani text pass (L10N-1) — contradicts a listing text; the "What's new" block for build 7 is in `RELEASE_NOTES.md`. Screenshots: the sets were re-rendered on build 6 (`e3117c7`, 2026-09-25); on build 7 the **AZ Google set** (`raw-az/`, `az/`) was re-rendered because L10N-1 changed the tutorial hint, lesson banners and the shop tab that are on those frames, and frame 02's AZ caption follows the new glossary ("Toxun — axın davam edir"); EN / RU / TR and both Apple sets are unchanged. No frame shows a level ≥ 41, so the sixth biome is in no screenshot — a 41+ frame stays PUB-6 (1.0.1).
+
 ---
 
 ## 1. Google Play
@@ -58,8 +60,8 @@ GOLD, CRYSTALS AND UPGRADES
 • Crystals come from milestones, achievements, the daily chest and optional purchases; they buy tower, helmet and island skins, a booster crate, or a second chance after a defeat.
 • Every level is winnable without spending anything — upgrades are a shortcut, never a requirement.
 
-FIVE ISLANDS
-• Grass, autumn, sand, snow and volcanic islands, drawn in a soft clay style with sunlit shadows.
+SIX ISLANDS
+• Grass, autumn, sand, snow, volcanic and twilight islands, drawn in a soft clay style with sunlit shadows.
 
 BUILT FOR PHONES
 • Portrait, one hand, every level under three minutes.
@@ -104,8 +106,8 @@ QIZIL, KRİSTAL VƏ TƏKMİLLƏŞDİRMƏLƏR
 • Kristallar mərhələlərdən, nailiyyətlərdən, gündəlik sandıqdan və könüllü alışlardan gəlir; qüllə, dəbilqə və ada görünüşləri, gücləndirici sandığı və ya məğlubiyyətdən sonra ikinci şans alır.
 • Hər səviyyə heç nə xərcləmədən keçilə bilər — təkmilləşdirmələr qısa yoldur, tələb deyil.
 
-BEŞ ADA
-• Çəmən, payız, qum, qar və vulkan adaları — günəşli kölgələrlə yumşaq gil üslubunda.
+ALTI ADA
+• Çəmən, payız, qum, qar, vulkan və alaqaranlıq adaları — günəşli kölgələrlə yumşaq gil üslubunda.
 
 TELEFON ÜÇÜN HAZIRLANIB
 • Şaquli ekran, bir əl, hər səviyyə üç dəqiqədən qısa.
@@ -127,15 +129,15 @@ Qeyd: menyular, işarələr, təlimat, səviyyə adları və dərslər azərbayc
 |---|---|---|
 | App icon | 512×512 PNG, 32-bit | `tower-clash/public/icons/icon-512.png` (same mark as `resources/icon.svg`) |
 | Feature graphic | 1024×500 PNG/JPG | `tower-clash/store/feature-graphic.png` (144 KB) |
-| Phone screenshots | 2–8, 9:16, 320–3840 px | `tower-clash/store/screenshots/en/01..08.png`, `az/`, `ru/`, `tr/` (one set per store language; caption *and* the game's own UI in that language, PUB-7), 1080×1920, each < 600 KB (Rules v3 render, `0e0ee66`, 2026-09-21, all four languages; re-render on build 6 before upload — `LAUNCH_CHECKLIST.md` G10) |
+| Phone screenshots | 2–8, 9:16, 320–3840 px | `tower-clash/store/screenshots/en/01..08.png`, `az/`, `ru/`, `tr/` (one set per store language; caption *and* the game's own UI in that language, PUB-7), 1080×1920, each < 600 KB (Rules v3 render, `0e0ee66`, 2026-09-21, all four languages; re-rendered on build 6, `e3117c7`, 2026-09-25; AZ set re-rendered on build 7, 2026-09-27, after L10N-1 — `LAUNCH_CHECKLIST.md` G10) |
 | IAP review screenshot (Apple only, not shown on any store page) | ≥ 640×920 | `tower-clash/store/iap-review/shop-crystals.png`, 1290×2796, uncaptioned shop Crystals tab (see §6.1) |
 
-Screenshot order and captions (same frames in every set; the `SHOTS` table in `renderStoreShots.mjs` is the source of truth). **Status (2026-09-17, v0.4.0 retake by the Tech Artist, commit `577b894`; Publisher check of `store/screenshots/raw/*.png` and `en/`, `az/`):** all eight frames are rules-v2 renders — STREAMS pill in the HUD, no SEND toggle, the new tutorial hint on 02 — and the set is ready to upload. **2026-09-21, Rules v3 (`0e0ee66`):** the whole set (Google, Apple, AZ/RU/TR) was re-rendered under v3 — frame 03 shows straight lanes and the wall of level 5 "Around the Wall", rivers are water with fords, ribbons are straight; "done" below means "rendered under Rules v3 on 2026-09-21". **2026-09-25:** re-render on build 6 before upload (the level 1 / 4 / 8 maps and the ART-7 ribbon styling changed after the render; the frame list and captions stay). Google Play allows up to 8 phone screenshots, App Store up to 10 (frame 09 is App Store only).
+Screenshot order and captions (same frames in every set; the `SHOTS` table in `renderStoreShots.mjs` is the source of truth). **Status (2026-09-17, v0.4.0 retake by the Tech Artist, commit `577b894`; Publisher check of `store/screenshots/raw/*.png` and `en/`, `az/`):** all eight frames are rules-v2 renders — STREAMS pill in the HUD, no SEND toggle, the new tutorial hint on 02 — and the set is ready to upload. **2026-09-21, Rules v3 (`0e0ee66`):** the whole set (Google, Apple, AZ/RU/TR) was re-rendered under v3 — frame 03 shows straight lanes and the wall of level 5 "Around the Wall", rivers are water with fords, ribbons are straight; "done" below means "rendered under Rules v3 on 2026-09-21". **2026-09-25:** re-rendered on build 6 (`e3117c7` — the level 1 / 4 / 8 maps and the ART-7 ribbon styling had changed after the 09-21 render; the frame list and captions stayed, the result frame moved to level 9). **2026-09-27 (build 7):** the AZ Google set re-rendered after the L10N-1 Azerbaijani pass (tutorial hint "Öz qüllənə toxun", lesson banners of levels 1 / 4 / 9, shop tab "TƏLİM"); frame 02's AZ caption is now "Toxun — axın davam edir" (glossary: toxun, not vur); EN / RU / TR and the Apple sets are unchanged, and no frame shows a level ≥ 41, so the sixth biome is not in any set. Google Play allows up to 8 phone screenshots, App Store up to 10 (frame 09 is App Store only).
 
 | # | Frame (raw file name) | EN caption | AZ caption | RU caption | TR caption | Status |
 |---|---|---|---|---|---|---|
 | 01 | Title screen with the language chip (`01-title`) | Capture every tower | Bütün qüllələri tut | Захвати все башни | Tüm kuleleri ele geçir | done |
-| 02 | Level 1 "First Taps" on a fresh save, tutorial hint "Tap your tower" and the lesson banner (`02-level-01-tutorial`) | Tap, and the stream flows | Vur — axın davam edir | Нажми — поток пошёл | Dokun, akış başlasın | done |
+| 02 | Level 1 "First Taps" on a fresh save, tutorial hint "Tap your tower" and the lesson banner (`02-level-01-tutorial`) | Tap, and the stream flows | Toxun — axın davam edir | Нажми — поток пошёл | Dokun, akış başlasın | done |
 | 03 | Level 5 "Around the Wall": a blue player stream and a red enemy stream on straight lanes either side of the wall (`03-level-05-streams`) | Streams keep flowing | Axınlar dayanmır | Потоки не иссякают | Akışlar durmaz | done |
 | 04 | Level 4 "Build-up": a player tower reaching 25 and turning into the L2 sprite (`04-level-04-upgrade`) | Fill up to level up | Doldur, səviyyə qalxsın | Наполни и прокачай | Doldur, seviye atla | done |
 | 05 | Level 5: the limit hint "L2 needed for 2 streams" on an L1 tower that already runs one stream (`05-level-05-limit-hint`) | Bigger towers, more streams | Böyük qüllə, çox axın | Выше башня — больше потоков | Büyük kule, çok akış | done |
@@ -186,8 +188,8 @@ App Store screenshots (exact device sizes, rendered by `node store/tools/renderS
 
 | Device size | Requirement | File |
 |---|---|---|
-| iPhone 6.7" | 1290×2796 | `tower-clash/store/screenshots/apple-6.7/en/01..09.png` (Rules v3 render, `0e0ee66`, 2026-09-21; re-render on build 6 before upload — `LAUNCH_CHECKLIST.md` A11) |
-| iPhone 6.5" | 1284×2778 | `tower-clash/store/screenshots/apple-6.5/en/01..09.png` (Rules v3 render, `0e0ee66`, 2026-09-21; re-render on build 6 before upload — `LAUNCH_CHECKLIST.md` A11) |
+| iPhone 6.7" | 1290×2796 | `tower-clash/store/screenshots/apple-6.7/en/01..09.png` (Rules v3 render, `0e0ee66`, 2026-09-21; re-rendered on build 6, `e3117c7`, 2026-09-25; unchanged on build 7 — `LAUNCH_CHECKLIST.md` A11) |
+| iPhone 6.5" | 1284×2778 | `tower-clash/store/screenshots/apple-6.5/en/01..09.png` (Rules v3 render, `0e0ee66`, 2026-09-21; re-rendered on build 6, `e3117c7`, 2026-09-25; unchanged on build 7 — `LAUNCH_CHECKLIST.md` A11) |
 
 Same frames and captions as the Google set (English only — Azerbaijani is not an App Store locale), plus the App-Store-only frame 09 (level 15 artillery citadel, "Silence the guns"), rendered at the exact device sizes by `--apple`; the set was re-rendered for Rules v3 on 2026-09-21 (walls, fords, straight ribbons) and is ready to upload (9 of the 10 allowed). iPad screenshots are not needed if the app is marked iPhone-only in App Store Connect (recommended; the game is portrait phone-first).
 
@@ -244,7 +246,7 @@ console.log("subtitle AZ", c("Bütün qüllələri tut"));
 console.log("keywords EN", c("tower,war,strategy,rts,capture,conquer,castle,army,offline,tap,casual,defense,attack,soldiers"));
 '
 ```
-Results on 2026-09-21 (after 40 → 50; the digit swap keeps every length): 76 / 75 / 150 / 158 / 19 / 93. IAP names and descriptions in §6.1 were counted the same way (≤ 30 / ≤ 45). Full descriptions §1.1 / §1.2 on 2026-09-21, after the Grand Campaign and Weekly Challenge bullets: **3981 / 3947** (limit 4000; 2026-09-20 they were 3665 / 3650).
+Results on 2026-09-21 (after 40 → 50; the digit swap keeps every length): 76 / 75 / 150 / 158 / 19 / 93. IAP names and descriptions in §6.1 were counted the same way (≤ 30 / ≤ 45). Full descriptions §1.1 / §1.2 on 2026-09-21, after the Grand Campaign and Weekly Challenge bullets: **3981 / 3947** (limit 4000; 2026-09-20 they were 3665 / 3650); on 2026-09-27, after "SIX ISLANDS": **3984 / 3955** (code points, `node -e "[...s].length"`).
 
 ---
 

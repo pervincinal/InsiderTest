@@ -3,6 +3,8 @@
  * Renders the store assets from the real game with Playwright (PUB-2, PUB-5).
  *
  *   cd tower-clash && npm run build && node store/tools/renderStoreShots.mjs [--google] [--apple] [--all] [--port=4180]
+ *   Env: PW_PORT=<n> (default 4180, `--port=` wins), PW_OUTPUT=<dir> (write under <dir> instead of store/),
+ *        PW_DIST=<dir> (serve that dist snapshot instead of dist/).
  *
  * Default (no flag) = `--google`. Output (all PNG, every file kept under 600 KB):
  *
@@ -60,7 +62,10 @@ import { pngSize, recompressPng } from './pngRecompress.mjs';
 const sharp = await import('sharp').then((m) => m.default ?? m).catch(() => null);
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..'); // tower-clash/
-const STORE = join(ROOT, 'store');
+/** `PW_OUTPUT=<dir>` writes every asset under that directory instead of `store/` (a scratch render to compare or cherry-pick from). */
+const STORE = process.env.PW_OUTPUT ? resolve(process.env.PW_OUTPUT) : join(ROOT, 'store');
+/** `PW_DIST=<dir>` serves that build snapshot instead of `dist/` (a parallel `npm run build` cannot rewrite it mid-run, BUG-15). */
+const DIST = process.env.PW_DIST ? resolve(process.env.PW_DIST) : join(ROOT, 'dist');
 const HEADLESS_SHELL = '/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell';
 const MAX_BYTES = 600 * 1024;
 
@@ -69,7 +74,7 @@ const MAX_BYTES = 600 * 1024;
 const args = process.argv.slice(2);
 const flag = (name) => args.includes(`--${name}`);
 const portArg = args.find((a) => a.startsWith('--port='));
-const PORT = portArg ? Number(portArg.slice('--port='.length)) : 4180;
+const PORT = portArg ? Number(portArg.slice('--port='.length)) : Number(process.env.PW_PORT) || 4180;
 const URL = `http://localhost:${PORT}/`;
 const DO_APPLE = flag('apple') || flag('all');
 const DO_GOOGLE = flag('google') || flag('all') || !flag('apple');
@@ -88,7 +93,7 @@ const SHOTS = [
   { name: 'title', capture: 'title',
     en: 'Capture every tower', az: 'Bütün qüllələri tut', ru: 'Захвати все башни', tr: 'Tüm kuleleri ele geçir' },
   { name: 'level-01-tutorial', capture: 'tutorial',
-    en: 'Tap, and the stream flows', az: 'Vur — axın davam edir', ru: 'Нажми — поток пошёл', tr: 'Dokun, akış başlasın' },
+    en: 'Tap, and the stream flows', az: 'Toxun — axın davam edir', ru: 'Нажми — поток пошёл', tr: 'Dokun, akış başlasın' },
   { name: 'level-05-streams', capture: 'streams',
     en: 'Streams keep flowing', az: 'Axınlar dayanmır', ru: 'Потоки не иссякают', tr: 'Akışlar durmaz' },
   { name: 'level-04-upgrade', capture: 'upgrade',
@@ -219,9 +224,9 @@ const httpOk = (url) =>
   });
 
 async function startPreview() {
-  if (!existsSync(join(ROOT, 'dist', 'index.html'))) throw new Error('dist/ missing — run `npm run build` first');
+  if (!existsSync(join(DIST, 'index.html'))) throw new Error(`${DIST}/index.html missing — run \`npm run build\` first`);
   const vite = join(ROOT, 'node_modules', 'vite', 'bin', 'vite.js');
-  const child = spawn(process.execPath, [vite, 'preview', '--port', String(PORT), '--strictPort'], {
+  const child = spawn(process.execPath, [vite, 'preview', '--port', String(PORT), '--strictPort', '--outDir', DIST], {
     cwd: ROOT,
     stdio: ['ignore', 'pipe', 'pipe'],
   });

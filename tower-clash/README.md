@@ -1,6 +1,6 @@
 # Tower Clash
 
-**Capture every tower.** A one-thumb, capture-the-towers real-time strategy game for phones and browsers. Tap one of your towers, tap a target, and a stream of soldiers marches until you stop it; towers upgrade themselves as they fill; when an enemy garrison hits zero the tower is yours. 50 hand-made levels, fortresses, artillery, tanks, walls, mines, up to three enemies at once, three-star timers; boosters, Commander upgrades, skins (7 tower roofs, 7 soldier helmets, 3 terrain themes, 4 silhouettes), achievements, a daily reward, a Daily and a Weekly Challenge and a 20-second rewind after a defeat — plays offline, no account. The web version has no ads and nothing to pay for: its shop runs on a demo "Test store" where no money changes hands. The Google Play / App Store apps (in preparation) will offer optional in-app purchases and ads that a one-time purchase removes — see [`../docs/publishing/PRIVACY_POLICY.md`](../docs/publishing/PRIVACY_POLICY.md).
+**Capture every tower.** A one-thumb, capture-the-towers real-time strategy game for phones and browsers. Tap one of your towers, tap a target, and a stream of soldiers marches until you stop it; towers upgrade themselves as they fill; when an enemy garrison hits zero the tower is yours. 50 hand-made levels on six islands (grass, autumn, sand, snow, volcanic, twilight highlands), fortresses, artillery, tanks, walls, mines, up to three enemies at once, three-star timers; boosters, Commander upgrades, skins (7 tower roofs, 7 soldier helmets, 3 terrain themes, 4 silhouettes), achievements, a daily reward, a Daily and a Weekly Challenge and a 20-second rewind after a defeat — plays offline, no account. The web version has no ads and nothing to pay for: its shop runs on a demo "Test store" where no money changes hands. The Google Play / App Store apps (in preparation) will offer optional in-app purchases and ads that a one-time purchase removes — see [`../docs/publishing/PRIVACY_POLICY.md`](../docs/publishing/PRIVACY_POLICY.md).
 
 Play in the browser: **https://pervincinal.github.io/InsiderTest/** (active once GitHub Pages is enabled in repo settings — see [`../docs/DEPLOY.md`](../docs/DEPLOY.md))
 
@@ -37,11 +37,12 @@ Menus, hints, the tutorial, level names and lesson lines are in English, Azerbai
 - **Achievements** (trophy button): eleven of them with progress bars, each paying crystals.
 - **Daily reward** on the title screen: a 7-day streak of gold and crystals.
 - **Continue with rewind:** after a defeat, *Reinforcements* (10 crystals) rewinds the battle 20 seconds, adds a free Freeze and +15 soldiers on your strongest tower, and resumes — once per attempt. The clock keeps the original start, so continuing never improves your stars. A *Level skip* is offered after three defeats on the same level.
+- **How to play** (Settings and the pause menu): the five rules on one illustrated card; after a defeat the result card repeats the level's lesson, and after two defeats in a row it offers the card.
 - **Settings** (gear on the title screen and in the pause menu): sound, colour-blind palette, reduced motion, language (English, Azerbaijani, Russian, Turkish), reset progress. The native apps add *Privacy options* (re-opens the ad consent form where the law requires it) and a *Support ID* under About; neither exists on the web because the web build has no ads and no store SDK.
 
 ## Install on a phone (PWA — no store needed)
 
-The web build is an installable Progressive Web App: it works offline and opens fullscreen from the home screen.
+The web build is an installable Progressive Web App: opened once online, it boots and plays offline from then on (the service worker caches the whole game at install) and opens fullscreen from the home screen.
 
 - **iPhone / iPad (Safari only):** open the play link → Share → **Add to Home Screen** → Add.
 - **Android (Chrome):** open the play link → ⋮ menu → **Install app** (or *Add to Home screen*) → Install.
@@ -76,7 +77,7 @@ No engine, no art assets: TypeScript, HTML5 Canvas 2D and WebAudio. The simulati
 
 ## Credits and license
 
-Built by an autonomous Claude agent team (producer, engineers, level designer, QA, publisher) with a human stakeholder reading daily reports. Version 1.0.0 — see [`../docs/publishing/RELEASE_NOTES.md`](../docs/publishing/RELEASE_NOTES.md).
+Built by an autonomous Claude agent team (producer, engineers, level designer, QA, publisher) with a human stakeholder reading daily reports. Version 1.0.0, build 7 — see [`../docs/publishing/RELEASE_NOTES.md`](../docs/publishing/RELEASE_NOTES.md).
 
 License: All rights reserved (placeholder).
 
@@ -84,7 +85,7 @@ License: All rights reserved (placeholder).
 
 # Tower Clash (Azərbaycanca)
 
-**Bütün qüllələri tut.** Telefon və brauzer üçün bir barmaqla oynanan qüllə tutma real vaxt strategiya oyunu. Öz qüllənə toxun, hədəfə toxun — əsgər axını sən dayandırana qədər yeriyir; qüllələr dolduqca özləri təkmilləşir; düşmən qarnizonu sıfıra düşəndə qüllə sənindir. 50 əl ilə hazırlanmış səviyyə, qalalar, toplar, tanklar, divarlar, minalar, eyni anda üçə qədər rəqib, üç ulduzlu vaxt limiti; gücləndiricilər, Komandir təkmilləşdirmələri, görünüşlər (7 qüllə damı, 7 əsgər dəbilqəsi, 3 relyef mövzusu, 4 siluet), nailiyyətlər, gündəlik mükafat, Günlük və Həftəlik Çağırış və məğlubiyyətdən sonra 20 saniyəlik geri sarma — oflayn oynanır, hesabsız. Veb versiyada reklam yoxdur və ödəniləsi heç nə yoxdur: mağazası demo "Test store" üzərində işləyir, pul dəyişmir. Hazırlanan Google Play / App Store tətbiqlərində könüllü tətbiqdaxili alışlar və bir alışla silinən reklamlar olacaq — bax [`../docs/publishing/PRIVACY_POLICY.md`](../docs/publishing/PRIVACY_POLICY.md).
+**Bütün qüllələri tut.** Telefon və brauzer üçün bir barmaqla oynanan qüllə tutma real vaxt strategiya oyunu. Öz qüllənə toxun, hədəfə toxun — əsgər axını sən dayandırana qədər yeriyir; qüllələr dolduqca özləri təkmilləşir; düşmən qarnizonu sıfıra düşəndə qüllə sənindir. altı adada (çəmən, payız, qum, qar, vulkan, alaqaranlıq yaylası) 50 əl ilə hazırlanmış səviyyə, qalalar, toplar, tanklar, divarlar, minalar, eyni anda üçə qədər rəqib, üç ulduzlu vaxt limiti; gücləndiricilər, Komandir təkmilləşdirmələri, görünüşlər (7 qüllə damı, 7 əsgər dəbilqəsi, 3 relyef mövzusu, 4 siluet), nailiyyətlər, gündəlik mükafat, Günlük və Həftəlik Çağırış və məğlubiyyətdən sonra 20 saniyəlik geri sarma — oflayn oynanır, hesabsız. Veb versiyada reklam yoxdur və ödəniləsi heç nə yoxdur: mağazası demo "Test store" üzərində işləyir, pul dəyişmir. Hazırlanan Google Play / App Store tətbiqlərində könüllü tətbiqdaxili alışlar və bir alışla silinən reklamlar olacaq — bax [`../docs/publishing/PRIVACY_POLICY.md`](../docs/publishing/PRIVACY_POLICY.md).
 
 Brauzerdə oyna: **https://pervincinal.github.io/InsiderTest/** (repo parametrlərində GitHub Pages aktivləşdirilən kimi işləyir — bax [`../docs/DEPLOY.md`](../docs/DEPLOY.md))
 
@@ -112,6 +113,7 @@ Masaüstündə klaviatura: `P` / `Space` pauza, `Esc` səviyyə siyahısına, `M
 - **Nailiyyətlər** (kubok düyməsi): tərəqqi zolaqlı on bir nailiyyət, hər biri kristal verir.
 - **Gündəlik mükafat** baş ekranda: 7 günlük qızıl və kristal seriyası.
 - **Geri sarma ilə davam:** məğlubiyyətdən sonra *Əlavə qüvvə* (10 kristal) döyüşü 20 saniyə geriyə sarır, pulsuz Freeze və ən güclü qüllənə +15 əsgər verir və davam edir — hər cəhddə bir dəfə. Saat orijinal başlanğıcı saxlayır, yəni davam etmək ulduzu yaxşılaşdırmır. Eyni səviyyədə üç məğlubiyyətdən sonra *Səviyyəni keçmək* təklif olunur.
+- **Necə oynanır** (Parametrlərdə və pauza menyusunda): beş qayda bir illüstrasiyalı kartda; məğlubiyyətdən sonra nəticə kartı səviyyənin dərsini təkrarlayır, iki ardıcıl məğlubiyyətdən sonra kartı təklif edir.
 - **Parametrlər** (baş ekranda və pauza menyusunda dişli): səs, rəng korluğu palitrası, azaldılmış hərəkət, dil (azərbaycanca, ingiliscə, rusca, türkcə), irəliləyişi sıfırlama. Native tətbiqlər *Məxfilik seçimləri* (qanunun tələb etdiyi yerdə reklam razılıq formasını yenidən açır) və Haqqında bölməsində *Dəstək ID* əlavə edir; vebdə reklam və mağaza SDK-sı olmadığı üçün bunlar yoxdur.
 
 ## Telefona quraşdırma (PWA — mağaza lazım deyil)
@@ -119,7 +121,7 @@ Masaüstündə klaviatura: `P` / `Space` pauza, `Esc` səviyyə siyahısına, `M
 - **iPhone / iPad (yalnız Safari):** oyun linkini aç → Paylaş → **Ana ekrana əlavə et** → Əlavə et.
 - **Android (Chrome):** oyun linkini aç → ⋮ menyu → **Tətbiqi quraşdır** (və ya *Ana ekrana əlavə et*) → Quraşdır.
 
-Quraşdırıldıqdan sonra oyun oflayn işləyir və ana ekrandan tam ekran açılır.
+Bir dəfə internetlə açılandan sonra oyun oflayn da açılır və işləyir (service worker bütün oyunu quraşdırılanda keşə yazır) və ana ekrandan tam ekran açılır.
 
 ## CI-dan Android APK
 
@@ -131,6 +133,6 @@ Node 22 lazımdır. `tower-clash/` qovluğunda: `npm ci`, sonra `npm run dev` (y
 
 ## Müəlliflər və lisenziya
 
-Avtonom Claude agent komandası tərəfindən hazırlanıb (prodüser, mühəndislər, səviyyə dizayneri, QA, nəşriyyatçı); insan tərəf gündəlik hesabatları oxuyur. Versiya 1.0.0 — bax [`../docs/publishing/RELEASE_NOTES.md`](../docs/publishing/RELEASE_NOTES.md).
+Avtonom Claude agent komandası tərəfindən hazırlanıb (prodüser, mühəndislər, səviyyə dizayneri, QA, nəşriyyatçı); insan tərəf gündəlik hesabatları oxuyur. Versiya 1.0.0, build 7 — bax [`../docs/publishing/RELEASE_NOTES.md`](../docs/publishing/RELEASE_NOTES.md).
 
 Lisenziya: Bütün hüquqlar qorunur (müvəqqəti qeyd).
