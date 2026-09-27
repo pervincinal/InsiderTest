@@ -119,14 +119,14 @@ The pickers are keyed by the calendar date, not by L, so this table is valid wha
 |---|---|---|---|---|---|---|
 | 09-21 Mon | 44 Minefield Crossing | Lean rations | | 10-05 Mon | 25 Heavy Metal | Thin walls |
 | 09-22 Tue | 31 Guns over the River | Reinforced | | 10-06 Tue | 23 First Blood | Reinforced |
-| 09-23 Wed | 21 Behind the Wall | Thin walls | | 10-07 Wed | 17 Minefield | Fast feet |
-| 09-24 Thu | 36 Three Bridges | Fast feet | | 10-08 Thu | 39 The Long Night | Lean rations |
+| 09-23 Wed | 21 Mined Flank | Thin walls | | 10-07 Wed | 17 Minefield | Fast feet |
+| 09-24 Thu | 36 One Wide Ford | Fast feet | | 10-08 Thu | 39 The Long Night | Lean rations |
 | 09-25 Fri | 22 Castle in the Middle | Lean rations | | 10-09 Fri | 47 Scorched Earth | Reinforced |
 | 09-26 Sat | 50 The Crown Reforged | Reinforced | | 10-10 Sat | 38 Ring of Fire | Lean rations |
 | 09-27 Sun | 49 Last Light | Fast feet | | 10-11 Sun | 14 Guns and Walls | Fast feet |
 | 09-28 Mon | 16 Last Bastion | Thin walls | | 10-12 Mon | 33 Three Kings | Classic |
 | 09-29 Tue | 9 Stone Walls | Classic | | 10-13 Tue | 15 The Citadel | Fast feet |
-| 09-30 Wed | 20 Roadblock | Fast feet | | 10-14 Wed | 30 Drawbridge | Reinforced |
+| 09-30 Wed | 20 The Boulder | Fast feet | | 10-14 Wed | 30 One Front | Reinforced |
 | 10-01 Thu | 32 Siege Works | Lean rations | | 10-15 Thu | 11 Starve the Keep | Fast feet |
 | 10-02 Fri | 13 Crossfire | Thin walls | | 10-16 Fri | 41 Twin Rivers | Thin walls |
 | 10-03 Sat | 10 Hold the Line | Lean rations | | 10-17 Sat | 42 Siege Engine | Fast feet |
