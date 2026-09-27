@@ -21,15 +21,15 @@
  *   --apple
  *   store/screenshots/raw-apple-6.7/NN-<name>.png – 1290×2796 frames (viewport 430×932 @3x)
  *   store/screenshots/raw-apple-6.5/NN-<name>.png – 1284×2778 frames (viewport 428×926 @3x)
- *   store/screenshots/apple-6.7/en/01..09.png     – captioned, exactly 1290×2796 (iPhone 6.7"; 09 = App Store extra)
- *   store/screenshots/apple-6.5/en/01..09.png     – captioned, exactly 1284×2778 (iPhone 6.5"), English only
+ *   store/screenshots/apple-6.7/en/01..10.png     – captioned, exactly 1290×2796 (iPhone 6.7"; 09–10 = App Store extras)
+ *   store/screenshots/apple-6.5/en/01..10.png     – captioned, exactly 1284×2778 (iPhone 6.5"), English only
  *   store/iap-review/shop-crystals.png            – uncaptioned 1290×2796 shop frame, Crystals tab: the
  *                                                   App Store Connect "review screenshot" for every in-app
  *                                                   purchase (≥ 640×920). Without `--apple` it is written
  *                                                   from the Google set instead (1080×1920).
  *
- *   Frame 08 (ECON-7) is the shop on its Upgrades tab (Commander upgrades, paid with in-game gold) on a
- *   seeded mid-game save. The public sets deliberately do not use the Crystals tab: it shows the
+ *   Frame 10 (ECON-7, App Store only since PUB-6) is the shop on its Upgrades tab (Commander upgrades,
+ *   paid with in-game gold) on a seeded mid-game save. The public sets deliberately do not use the Crystals tab: it shows the
  *   catalogue's fallback USD prices and the web build's "Test store" line, and a fixed-currency price
  *   in a public screenshot is a consumer-law problem in the EU (STORE_LISTING.md §1.3). The IAP review
  *   frame is the Crystals tab because Apple needs the purchasable product visible in-app.
@@ -39,6 +39,13 @@
  *   channel (canvas posterise) and, when the transitive `sharp` module of `@capacitor/assets`
  *   can be imported, a dithered 256-colour palette (libimagequant). `sharp` is optional: without
  *   it the posterise steps alone still produce a file under the limit.
+ *
+ * PUB-6 (2026-09-27): frames 04 / 06 / 08 come from the mid and late campaign — level 24 "The Gauntlet"
+ * (band-3 finale: two enemy colours, five mines, boulders), level 45 "Three Fronts" (band 5, twilight
+ * highlands: three enemies, a stone wall with a gap, a mine, artillery) and the WEEKLY tab of the
+ * challenge card on the level map (a seeded save with levels 1–32 cleared, week key pinned to
+ * `WEEK_KEY` so the card's level / twist is reproducible; the countdown pill reads the real clock).
+ * The result frame is captured before the seeded reload, so it still shows the fresh-save toast.
  *
  * In-game language (PUB-7): every set lists its languages (`SETS[].langs`); the raw frames are captured
  * once per language in a fresh browser context whose `towerclash.save.v3` is pre-seeded with
@@ -82,12 +89,15 @@ const DO_GOOGLE = flag('google') || flag('all') || !flag('apple');
 const IAP_REVIEW_SET = DO_APPLE ? 'apple-6.7' : 'google';
 
 /**
- * Order matters: index N becomes <lang>/0N.png (STORE_LISTING.md §1.3 retake list, v0.4.0 set,
- * re-captured under Rules v3 — GDD §2.0b: no roads, straight lanes, walls / rivers / boulders and
- * point mines on the terrain). `capture` names the frame routine in `captureRaw`; `appleOnly`
+ * Order matters: index N becomes <lang>/NN.png (STORE_LISTING.md §1.3 frame table — v0.4.0 set,
+ * re-captured under Rules v3, GDD §2.0b: no roads, straight lanes, walls / rivers / boulders and
+ * point mines on the terrain; PUB-6 re-cut 2026-09-27: 04 level 24, 06 level 45, 08 the WEEKLY tab;
+ * the former 04 "Fill up to level up" and 05 "L2 needed for 2 streams" frames were retired, the shop
+ * moved to the App Store extras). `capture` names the frame routine in `captureRaw`; `appleOnly`
  * frames are skipped in the Google set (8 phone screenshots max there, 10 on the App Store).
- * Level names as of the v3 re-authoring: 1 "First Taps", 4 "Build Up", 5 "Around the Wall"
- * (was "Two Roads"), 9 "Stone Walls", 15 "The Citadel".
+ * Capture order = display order: the frames after `result` reload the page on `MID_SAVE`.
+ * Level names as of the v3 re-authoring: 1 "First Taps", 5 "Around the Wall" (was "Two Roads"),
+ * 9 "Stone Walls", 15 "The Citadel", 24 "The Gauntlet", 45 "Three Fronts".
  */
 const SHOTS = [
   { name: 'title', capture: 'title',
@@ -96,46 +106,50 @@ const SHOTS = [
     en: 'Tap, and the stream flows', az: 'Toxun — axın davam edir', ru: 'Нажми — поток пошёл', tr: 'Dokun, akış başlasın' },
   { name: 'level-05-streams', capture: 'streams',
     en: 'Streams keep flowing', az: 'Axınlar dayanmır', ru: 'Потоки не иссякают', tr: 'Akışlar durmaz' },
-  { name: 'level-04-upgrade', capture: 'upgrade',
-    en: 'Fill up to level up', az: 'Doldur, səviyyə qalxsın', ru: 'Наполни и прокачай', tr: 'Doldur, seviye atla' },
-  { name: 'level-05-limit-hint', capture: 'limitHint',
-    en: 'Bigger towers, more streams', az: 'Böyük qüllə, çox axın', ru: 'Выше башня — больше потоков', tr: 'Büyük kule, çok akış' },
+  { name: 'level-24-gauntlet', capture: 'gauntlet',
+    en: 'Mines, rocks, two rivals', az: 'Minalar, qayalar, iki rəqib', ru: 'Мины, валуны, два соперника', tr: 'Mayınlar, kayalar, iki rakip' },
   { name: 'level-09-fortress', capture: 'fortress',
     en: 'Storm the fortress', az: 'Qalanı ələ keçir', ru: 'Штурмуй крепость', tr: 'Kaleyi fethet' },
+  { name: 'level-45-three-fronts', capture: 'threeFronts',
+    en: 'Three enemies, one crown', az: 'Üç düşmən, bir tac', ru: 'Три врага, одна корона', tr: 'Üç düşman, tek taç' },
   { name: 'result-win', capture: 'result',
     en: 'Three-star every level', az: 'Hər səviyyədə üç ulduz', ru: 'Везде по три звезды', tr: 'Her bölümde üç yıldız' },
-  { name: 'shop-upgrades', capture: 'shop', shop: 'upgrades',
-    en: 'Boost your commander', az: 'Komandirini gücləndir', ru: 'Прокачай командира', tr: 'Komutanını güçlendir' },
+  { name: 'weekly-challenge', capture: 'weekly',
+    en: 'A new challenge every week', az: 'Hər həftə yeni çağırış', ru: 'Новый вызов каждую неделю', tr: 'Her hafta yeni bir meydan okuma' },
   { name: 'level-15-citadel', capture: 'citadel', appleOnly: true,
     en: 'Silence the guns', az: 'Topları susdur', ru: 'Заглуши пушки', tr: 'Topları sustur' },
+  { name: 'shop-upgrades', capture: 'shop', shop: 'upgrades', appleOnly: true,
+    en: 'Boost your commander', az: 'Komandirini gücləndir', ru: 'Прокачай командира', tr: 'Komutanını güçlendir' },
 ];
 /** Frames of one set, in order (the Google set drops the App-Store-only extras). */
 const shotsFor = (set) => SHOTS.filter((s) => !s.appleOnly || set.exact);
 
-/**
- * Level layouts the frame routines tap (logical 720×1280 tower positions, from src/levels/*.json).
- * Level 5 "Around the Wall" (v3): a vertical stone wall x = 360, y 420…980 splits the map; the home
- * tower at the bottom sees both first-row towers past the wall's end, so both taps open a lane.
- */
-const LEVEL_5 = { home: { x: 360, y: 1140 }, west1: { x: 150, y: 860 }, east1: { x: 570, y: 860 } };
 /** Result frame: level and seeds on which the reference player wins with three stars (see `FRAMES.result`). */
 const RESULT_LEVEL = { id: 9, seeds: [4, 5, 14], fastUntilMs: 20_000 };
+/** Logical hit rects the weekly frame taps: PLAY on the title (src/render/layout.ts `TITLE.play`) and the WEEKLY tab of the challenge card (src/render/menuLayout.ts `LEVEL_MAP.dailyTabWeekly`). */
+const TITLE_PLAY = { x: 180, y: 640, w: 360, h: 96 };
+const WEEKLY_TAB = { x: 244, y: 118, w: 118, h: 44 };
+/** Week the WEEKLY card shows (a Monday UTC key, `__towerclash.setWeekKey`): pinned so the card's level and twist do not change between renders. */
+const WEEK_KEY = '2026-09-28';
 
 /** Uncaptioned IAP review frame (Apple): the shop's Crystals tab, written by the first set rendered. */
 const IAP_REVIEW = { file: join(STORE, 'iap-review', 'shop-crystals.png'), tab: 'crystals' };
 
 /**
- * Save-v3 seed for the shop frames (`towerclash.save.v3`, normalised by `loadSave` on reload): a
- * plausible mid-game player — levels 1–14 cleared, some gold and crystals earned in play, two
- * Commander tracks already trained so the Upgrades tab shows filled tier pips and "Now / Next"
- * lines. Nothing here is a purchase: no entitlements, no skins, `purchases: []`.
+ * Save-v3 seed for the WEEKLY and shop frames (`towerclash.save.v3`, normalised by `loadSave` on
+ * reload): a plausible late-campaign player — levels 1–32 cleared (the weekly unlocks once level 32
+ * has a star, `WEEKLY_UNLOCK_AFTER_LEVEL`), some gold and crystals earned in play, two Commander
+ * tracks already trained so the Upgrades tab shows filled tier pips and "Now / Next" lines, and the
+ * week before `WEEK_KEY` won so the card shows a live week streak but not DONE. Nothing here is a
+ * purchase: no entitlements, no skins, `purchases: []`.
  */
-const SHOP_SAVE = {
+const MID_SAVE = {
   version: 3,
   gold: 1450,
   crystals: 140,
-  stars: Object.fromEntries(Array.from({ length: 14 }, (_, i) => [String(i + 1), (i + 1) % 3 === 0 ? 2 : 3])),
+  stars: Object.fromEntries(Array.from({ length: 32 }, (_, i) => [String(i + 1), (i + 1) % 3 === 0 ? 2 : 3])),
   upgrades: { production: 2, capacity: 1 },
+  weekly: { lastWinWeek: '2026-09-21', streak: 2, best: { '2026-09-21': { stars: 2, timeMs: 41_300, target: false } } },
 };
 
 /**
@@ -254,8 +268,6 @@ const FRAME_CONDITIONS = () => {
     switch (key) {
       case 'bothStreams': // a player ribbon and an enemy ribbon on their straight lanes at the same moment
         return st.links.some((l) => l.owner === 'player') && st.links.some((l) => l.owner !== 'player');
-      case 'homeL2': // the player's home tower has just auto-upgraded
-        return (st.towers.home?.level ?? 1) >= 2;
       case 'playerToKeep': // the player streams into the fortress
         return st.links.some((l) => l.owner === 'player' && l.to === 'keep');
       case 'fortressUnderFire': // …while the fortress's counter-stream keeps a player tower under fire (swords badge)
@@ -263,6 +275,18 @@ const FRAME_CONDITIONS = () => {
           st.links.some((l) => l.owner === 'player' && l.to === 'keep') &&
           Object.values(st.towers).some((t) => t.owner === 'player' && st.time < t.underFireUntilMs)
         );
+      case 'rivalsAndMines': { // level 24: ≥ 12 s in, the player and both enemy colours stream at once, ≥ 3 of the 5 mines still live
+        const streaming = new Set(st.links.map((l) => l.owner));
+        return st.time >= 12_000 && streaming.has('player') && streaming.has('enemy1') && streaming.has('enemy2') && st.mines.filter((m) => m.charges > 0).length >= 3;
+      }
+      case 'threeFrontsMine': // level 45: `threeFronts` while its single mine is still live
+        return window.__storeShotCondition(st, 'threeFronts') && st.mines.every((m) => m.charges > 0);
+      case 'threeFronts': { // level 45: ≥ 12 s in, all three enemies still hold a tower, the player and ≥ 2 enemy colours stream at once
+        const holding = new Set(Object.values(st.towers).map((t) => t.owner));
+        const streaming = new Set(st.links.map((l) => l.owner));
+        const enemiesStreaming = [...streaming].filter((o) => o.startsWith('enemy')).length;
+        return st.time >= 12_000 && ['enemy1', 'enemy2', 'enemy3'].every((o) => holding.has(o)) && streaming.has('player') && enemiesStreaming >= 2;
+      }
       default:
         throw new Error(`unknown frame condition ${key}`);
     }
@@ -419,7 +443,11 @@ async function playWhile(page, id, cond, { seed = 1, autoplay = true, speed = 10
   return page.evaluate((key) => window.__storeShotCondition(window.__towerclash.getState(), key), cond);
 }
 
-/** Tap a logical (720×1280) point (same path as the e2e suite: `toClient` + a mouse click). */
+/**
+ * Tap a logical (720×1280) point (same path as the e2e suite: `toClient` + a mouse click). The retired
+ * `upgrade` (level 4 → L2) and `limitHint` (level 5 "L2 needed for 2 streams") routines that tapped
+ * level 5's towers are in git history (`16d720b`) should a re-cut want them back.
+ */
 async function tapAt(page, p) {
   const c = await page.evaluate(([x, y]) => window.__towerclash.toClient(x, y), [p.x, p.y]);
   await page.mouse.click(c.x, c.y);
@@ -458,30 +486,20 @@ const FRAMES = {
       playWhile(page, 5, 'bothStreams', { seed, speed: 4, maxMs: 60_000 }),
     ),
 
-  // level 4 "Build Up", no streams: the player tower fills to 25 and turns into the L2 sprite (upgrade burst)
-  upgrade: async (page) => {
-    const ok = await playWhile(page, 4, 'homeL2', { autoplay: false, speed: 1, maxMs: 60_000 });
-    if (!ok) throw new Error('level 4: home did not reach L2');
-  },
+  // level 24 "The Gauntlet" (band-3 finale, sand biome): two enemy colours (red / green barracks at the
+  // top), five point mines on the lanes, two boulders beside the artillery post. Taken ≥ 12 s in so the
+  // player's and both enemies' ribbons are on the map at once and at least three mines are still live
+  // (lamp + charge chip), polled at ×4 like the fortress frame.
+  gauntlet: (page) =>
+    withSeeds('level 24 rivals and mines', 6, (seed) => playWhile(page, 24, 'rivalsAndMines', { seed, speed: 4, maxMs: 80_000 })),
 
-  // level 5, manual: one stream from the L1 home (guide lines show the reachable towers, the wall blocks
-  // the rest), then a second target → "L2 needed for 2 streams" (tower shakes)
-  limitHint: async (page) => {
-    await page.evaluate(() => {
-      window.__towerclash.setSpeed(1);
-      window.__towerclash.loadLevel(5, 1);
-    });
-    await page.waitForFunction(() => window.__towerclash.getScreen() === 'play' && window.__towerclash.getState()?.levelId === 5);
-    await page.waitForTimeout(400);
-    await tapAt(page, LEVEL_5.home);
-    await page.waitForTimeout(120);
-    await tapAt(page, LEVEL_5.west1);
-    await page.waitForFunction(() => (window.__towerclash.getState()?.links ?? []).some((l) => l.owner === 'player'));
-    await page.waitForTimeout(350); // first units on the lane
-    await tapAt(page, LEVEL_5.east1);
-    await page.waitForFunction(() => window.__towerclash.getLimitHint() !== null, null, { polling: 'raf', timeout: 5000 });
-    await page.waitForTimeout(120); // bubble fully faded in, tower mid-shake
-    if ((await page.evaluate(() => window.__towerclash.getLimitHint())) === null) throw new Error('level 5: limit hint gone before the capture');
+  // level 45 "Three Fronts" (band 5, twilight highlands): three enemies (red / yellow / green), the two
+  // angled wall segments in front of the fortress leave a gap in the middle, one mine between the guns
+  // and the yellow keep. Preferred take: that mine still live; otherwise the plain three-fronts moment.
+  threeFronts: async (page) => {
+    const opts = (seed) => ({ seed, speed: 4, maxMs: 80_000 });
+    const hit = await withSeeds('level 45 three fronts + mine', 6, (seed) => playWhile(page, 45, 'threeFrontsMine', opts(seed)), { required: false });
+    if (!hit) await withSeeds('level 45 three fronts', 6, (seed) => playWhile(page, 45, 'threeFronts', opts(seed)));
   },
 
   // level 9 "Stone Walls": mid-battle with the player streaming into the fortress ("keep") past the
@@ -514,15 +532,44 @@ const FRAMES = {
     ctx.result = await playToResult(page, RESULT_LEVEL.id, RESULT_LEVEL.seeds, RESULT_LEVEL.fastUntilMs);
   },
 
-  // shop on the seeded mid-game save (the shop is a full screen, so nothing from the result overlays it)
+  // the WEEKLY tab of the challenge card on the level map, on the seeded late-campaign save (reload →
+  // title → PLAY → level map → tap the WEEKLY tab): the card shows the pinned week's level · twist,
+  // "+100 gold · +20 crystals at 3★", the countdown to Monday and the week-streak pill, over the map
+  // with 32 starred nodes. Driven through the real hit rects (the tab is module state in levelSelect.ts).
+  weekly: async (page, ctx) => {
+    await ensureMidSave(page, ctx);
+    await page.evaluate((wk) => window.__towerclash.setWeekKey(wk), WEEK_KEY);
+    await page.waitForFunction(() => window.__towerclash.getScreen() === 'title');
+    await tapAt(page, centre(TITLE_PLAY));
+    await page.waitForFunction(() => window.__towerclash.getScreen() === 'levelSelect');
+    await page.waitForTimeout(500); // map settled on the current level
+    await tapAt(page, centre(WEEKLY_TAB));
+    await page.waitForFunction(() => window.__towerclash.weekly.tab() === 'weekly', null, { polling: 'raf', timeout: 5000 });
+    const w = await page.evaluate(() => {
+      const g = window.__towerclash.weekly.get();
+      return { weekKey: g.challenge.weekKey, levelId: g.challenge.levelId, twist: g.challenge.twist.id, unlocked: g.unlocked, done: g.done, streak: g.streak };
+    });
+    if (w.weekKey !== WEEK_KEY || !w.unlocked || w.done) throw new Error(`weekly card not in the expected state: ${JSON.stringify(w)}`);
+    console.log(`weekly card: week ${w.weekKey}, level ${w.levelId}, twist ${w.twist}, streak ${w.streak}`);
+    await page.waitForTimeout(500); // pressed state released, card idle
+  },
+
+  // shop on the seeded save (the shop is a full screen, so nothing from the level map overlays it)
   shop: async (page, ctx, shot) => {
-    if (!ctx.shopSeeded) {
-      await seedShopSave(page, ctx.lang);
-      ctx.shopSeeded = true;
-    }
+    await ensureMidSave(page, ctx);
     await openShop(page, shot.shop);
   },
 };
+
+/** Seed `MID_SAVE` once per context (the frames after `result`; the reload boots on the title). */
+async function ensureMidSave(page, ctx) {
+  if (ctx.seeded) return;
+  await seedMidSave(page, ctx.lang);
+  ctx.seeded = true;
+}
+
+/** Centre of a logical rect. */
+const centre = (r) => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
 
 /** Raw frames of `set` with the game in `lang` (one fresh context per language). */
 async function captureRaw(browser, set, lang) {
@@ -530,7 +577,7 @@ async function captureRaw(browser, set, lang) {
   const page = await openGame(browser, set, lang);
   const out = (i) => rawFile(set, lang, i);
   const shots = shotsFor(set);
-  const ctx = { result: null, shopSeeded: false, lang };
+  const ctx = { result: null, seeded: false, lang };
   const tag = `${set.id}/${lang}`;
 
   for (let i = 0; i < shots.length; i++) {
@@ -566,11 +613,11 @@ async function captureRaw(browser, set, lang) {
 }
 
 /**
- * Write `SHOP_SAVE` under the v3 key and reload so the app boots on it (the wallet header reads the
- * live save). The init script re-applies the context's language on the reload.
+ * Write `MID_SAVE` under the v3 key and reload so the app boots on it (the wallet header and the
+ * level map read the live save). The init script re-applies the context's language on the reload.
  */
-async function seedShopSave(page, lang) {
-  await page.evaluate(({ key, save }) => localStorage.setItem(key, JSON.stringify(save)), { key: SAVE_KEY, save: SHOP_SAVE });
+async function seedMidSave(page, lang) {
+  await page.evaluate(({ key, save }) => localStorage.setItem(key, JSON.stringify(save)), { key: SAVE_KEY, save: MID_SAVE });
   await page.reload();
   await page.waitForFunction(() => typeof window.__towerclash?.getScreen === 'function');
   await awaitFonts(page, lang);
@@ -579,8 +626,8 @@ async function seedShopSave(page, lang) {
     const s = window.__towerclash.economy.getSave();
     return { gold: s.gold, crystals: s.crystals, production: s.upgrades.production ?? 0 };
   });
-  if (live.gold !== SHOP_SAVE.gold || live.crystals !== SHOP_SAVE.crystals || live.production !== SHOP_SAVE.upgrades.production) {
-    throw new Error(`shop seed not applied: live save is ${JSON.stringify(live)}`);
+  if (live.gold !== MID_SAVE.gold || live.crystals !== MID_SAVE.crystals || live.production !== MID_SAVE.upgrades.production) {
+    throw new Error(`save seed not applied: live save is ${JSON.stringify(live)}`);
   }
 }
 
