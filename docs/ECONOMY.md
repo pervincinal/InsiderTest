@@ -6,7 +6,7 @@ Owner: Monetization & Economy Designer. Status: **design, not yet implemented** 
 
 ## Qısa xülasə (Azərbaycanca)
 
-- **İki valyuta.** *Qızıl* (gold, oyunda qazanılır: ulduzlar, gündəlik mükafat, reklam izləmə) və *Kristal* (crystals, nadir hallarda qazanılır: 10/20/30/40/50-ci səviyyə mərhələləri (cəmi 210), hər zonada (6 zona, 41–50 daxil) bütün səviyyələri 3 ulduzla keçmək, nailiyyətlər (11, cəmi 95), 7 günlük giriş seriyası; həmçinin pulla alınır). Kristal → qızıl çevrilə bilər (1 kristal = 5 qızıl), qızıl → kristal **heç vaxt**.
+- **İki valyuta.** *Qızıl* (gold, oyunda qazanılır: ulduzlar, gündəlik mükafat, reklam izləmə) və *Kristal* (crystals, nadir hallarda qazanılır: 10/20/30/40/50-ci səviyyə mərhələləri (cəmi 210), hər zonada (6 zona, 41–50 daxil) bütün səviyyələri 3 ulduzla keçmək, nailiyyətlər (11, cəmi 95; §6.3-dəki 3 çağırış nailiyyəti (7 günlük seriya, 30 günlük qələbə, 4 həftəlik seriya — 10 / 20 / 20) çıxanda 14, cəmi 145), 7 günlük giriş seriyası; həmçinin pulla alınır). Kristal → qızıl çevrilə bilər (1 kristal = 5 qızıl), qızıl → kristal **heç vaxt**.
 - **Qızıl nəyə xərclənir:** mövcud gücləndiricilər (Overdrive 30 / Freeze 40 / Airstrike 50) və daimi **Komandir təkmilləşdirmələri** — 5 xətt (istehsal +2 %/pillə, 3 pillə; tutum +5 %/pillə, 5 pillə; başlanğıc qarnizon +1/pillə, 2 pillə; gücləndirici qiyməti −5 %/pillə, 5 pillə; yürüş sürəti +2 %/pillə, 2 pillə; hər xətt cəmi 1 100 qızıl, hamısı 5 500 — qısa xətlərin pillələri daha bahadır, daha güclü deyil). 2026-09-13 avtomatik oyun sınağından sonra yenidən balanslaşdırılıb: köhnə hədlərlə (+20 % / +5 / +15 %) istinad botu 40 səviyyənin yarısından çoxunu 3 ulduzla keçirdi.
 - **Kristal nəyə xərclənir:** görünüş dəstləri (qüllə damları, əsgər dəbilqələri, ada mövzuları — 80–200 kristal), səviyyəni keçmək (30 kristal, yalnız 3 məğlubiyyətdən sonra), məğlubiyyətdən sonra davam etmək (10 kristal və ya pulsuz reklam), gücləndirici sandığı (60 kristal).
 - **Gündəlik çağırış (2026-09-18, GDD §7):** hər UTC günü üçün 9–50 hovuzundan bir səviyyə (2026-09-20-dək 9–40), sabit toxum və "bükülmə" (təkmilləşdirmələr və gücləndiricilər söndürülüb). Günün ilk qələbəsi **30 qızıl + hər ulduza 10 qızıl + 5 kristal** verir; təkrarlar heç nə vermir. Modeldə (2026-09-26, v3 saat hədləri: aktiv günlərin 60 %-də qalib gəlinir, ilk dəfə oynayan üçün orta 1,3 ulduz) bu gündə ≈ 26 qızıl + 3 kristal, 50 səviyyəlik kampaniya (15 gün) ərzində ≈ +335 qızıl / +39 kristal deməkdir. **Sərbəst oyunçu modeli v3 saatlarına görə yenidən hesablanıb (§6):** ilk dəfə oynayan 50 səviyyəni orta 1,4 ulduzla keçir (v2 modelində 2,2), 15 günə ≈ 2 325 qızıl / 428 kristal (əvvəl 3 063 / 481), 30 günlük yumşaq buraxılışda ≈ 4 230 qızıl / 600 kristal; ilk təkmilləşdirmə 1–2-ci səviyyədə (60 qızıl), ilk taktiki pillə 7–8-ci səviyyədə (200), ilk xətt tam 8-ci gündə, bütün ağac ≈ 40-cı gündə (əvvəl ≈ 28). Qiymətlər dəyişmir (§6.1). Təklif: seriya mərhələləri (3 / 7 / 30 gün → 5 / 20 / 100 kristal) və `rv_daily_retry` reklamı (bir dəfə yenidən cəhd + pulsuz Freeze) — yalnız təklif, hələ tətbiq edilməyib.
@@ -49,7 +49,7 @@ Owner: Monetization & Economy Designer. Status: **design, not yet implemented** 
 | Daily reward (7-day streak, loops) | D1 20, D2 30, D3 40, D5 60, D6 80, D7 100 | D4 5, D7 15 | streak resets after a missed calendar day; 330 gold + 20 crystals per full week |
 | Level milestones (levels cleared) | — | 10 → 20, 20 → 30, 30 → 40, 40 → 60, 50 → 60 | 210 total; 50 pays the same as 40 — a second finale, not a bigger one (GDD §3 band 5) |
 | Full band at 3★ (1–8, 9–16, 17–24, 25–32, 33–40, 41–50) | — | 20 per band | 120 total; the long-tail goal. Band 5 is 10 levels for the same 20: the per-level dilution is deliberate — the band bonus is the long-tail goal, not pay per level |
-| Achievements (11, one-time) | — | 5–20 each, 95 total | list in `catalog.ts` `ACHIEVEMENTS`; `grand_campaign` "Clear level 50" = 10 (a *won* match on level 50 — a skip does not count); `stars_40` keeps its id and 20 crystals, its target is the campaign length (50) |
+| Achievements (11, one-time) | — | 5–20 each, 95 total | list in `catalog.ts` `ACHIEVEMENTS`; `grand_campaign` "Clear level 50" = 10 (a *won* match on level 50 — a skip does not count); `stars_40` keeps its id and 20 crystals, its target is the campaign length (50); **+3 challenge achievements specified in §6.3 (ECON-10, 2026-09-27: `challenge_streak_7` 10, `challenge_wins_30` 20, `weekly_streak_4` 20 → 14 achievements, 145 total once the Frontend ships them)** |
 | Daily crystal chest (rewarded ad) | — | 5 | cap 1 / day, 20 h cooldown |
 | **Daily challenge, first win of the UTC day** (GDD §7, `src/daily/challenge.ts` `REWARD`) | 30 + 10 × stars (40 / 50 / 60) | 5 | unlocks after level 8; one deterministic level from the 9–50 pool (9–40 until 2026-09-20, DAILY-4) with a twist, upgrades and boosters off; **replays pay nothing**, a loss pays nothing; the run never writes campaign stars or first-clear gold; `rv_double_gold` is **not** offered on the daily result (see §6.1) |
 
@@ -205,6 +205,7 @@ For scale: one 1.3★ daily win is worth 68 gold-equivalent (43 gold + 5 crystal
 
 - **Rules v3 clocks check (2026-09-26, ECON-9) — no price change.** The free first-time player earns ≈ 30 % less gold (2 325 vs 3 063 at day 15; 4 230 vs ≈ 6 000 at day 30) and ≈ 11 % fewer crystals (428 vs 481; 600 vs ≈ 680) than the v2 model, entirely from first-clear stars (1.4★ vs 2.2★) and the 3★ sources that are now beyond the bot's own line. Sinks in that light: the first tactical tier (200) still lands at level 7–8 and every tactical track is maxable by day 8–9, so **1 100 per track stays**; boosters at 30 / 40 / 50 are 0.2–0.4 of a steady-state day (130 gold), the same ratio the v2 model had against 186–206 with a 2.2★ result screen — **stay**; the skin shop (1 270) moves from ≈ 10 to ≈ 15 weeks after the campaign, which strengthens, not weakens, the cosmetic long tail — **skins stay at 80–200**, and the §6.1(a) trigger (steady-state crystals above ≈ 15 a day) is now further away (≈ 8); continue 10 / skip 30 are 3–10 days of chest + challenge crystals for a player who now *needs* the frustration valves more (27 / 30 / 32 / 37 / 41 hold ≤ 3/5 for the naive line) — **stay**, and the "at most one skip per band" rule is the right cap. The Starter Pack claim becomes "2 000 gold ≈ 13 days of free play" (was ≈ 10) — still a true and better-sounding claim at $2.99. The one thing the model asks of other roles: the Game Designer should decide whether `star2` on 9–16 gets the tutorial's naive-median floor (GDD §3, 2026-09-23 rule) — that alone would add ≈ 80 gold of first clears and ≈ 160 of ×2 ads and pull the first-time tree end from ≈ day 40 to ≈ day 36; it is a clock decision, not a catalog one.
 - **GD-3 decided 2026-09-27 (Game Designer, GDD §3 "first-time line" 10) — `star2` floored at the naive median on 9–16 too; the model stands, no price change.** 9–16 move from 1★ to 2★ for the first-time line (clocks 65 / 70 / 70 / 70 / 85 / 115 / 95 / 75 s, `star3` unchanged), so first-clear stars go 70 → **78 = 1.56★** over 1–50 (band 2: 8 → 16); by the §6 formula that is +80 gold of first clears and ≈ +50 of ×2 ads (the two day-3/4 results doubled at 2★ instead of 1★, ≈ 15.6 a watch over the campaign — ECON-9's +160 was the upper bound), i.e. day 15 ≈ **2 455** gold (was 2 325), day 30 ≈ 4 360, the first-time tree end ≈ day 38–39 (was ≈ 40); the daily pool mean for the first-time line rises from 1.26★ to ≈ 1.45★ (8 of 42 pool levels now score 2★ on a plain day), ≈ +1 gold per active day; the weekly (`WEEKLY_POOL_FROM` 33, `star3` target) and every crystal figure are unchanged. All sinks and the Starter Pack claim (2 000 gold ≈ 12–13 days) stay.
+- **ECON-10 challenge achievements (2026-09-27, §6.3) — no price change.** Three one-off achievements over `save.challenge` / `save.weekly` (10 + 20 + 20 = 50 crystals, catalog ceiling 95 → 145). On the §6 assumptions they add ≈ 1 crystal by day 15, ≈ 2 by day 30 and ≤ 0.1 a day to the steady state (8 → ≈ 8.1), because the 7-day streak lands for ≈ 23 % of first-time players inside the month and the other two land after day 30 (≈ day 53 and ≈ week 5 at the earliest); one-offs do not move the recurring rate that trigger (a) watches. Skins, continue, skip and chest stay.
 - **Band 5 sinks check (2026-09-20) — no price change.** The 10 extra levels add ≈ 700 gold and ≈ 110 crystals over ≈ 3 days at the same per-day rates (≈ 204 gold and ≈ 32 crystals a day over the 15-day campaign, vs 197 / 31 over 12 days): the tree still costs 5 500 (two tracks maxed at day 15 instead of one, full tree ≈ day 27 instead of ≈ 28), the 3 new-band crystals per day are already inside the 12–14 steady-state band, the skin shop (1 270) still takes ≈ 10 weeks after the campaign, and the Starter Pack claim (2 000 gold ≈ 10 days) holds. **Keep 1 100 per track, boosters 30 / 40 / 50, skins 80–200, continue 10, skip 30, chest 60.**
 - **Gold (+18 % over the campaign, +23 % in steady state).** The sinks are the 5 500-gold commander tree (five 1 100-gold tracks) and the repeatable boosters (30 / 40 / 50). The day-12 free player moves from "one track maxed + another to tier 1–2" to "one track maxed + production tier 2 + a cheap track to tier 2" with ≈ 500 gold left for ≈ 12 boosters; the full tree lands at ≈ day 28 instead of ≈ day 34. That is still a month of play for the last tier, and the advantage cap (§3.2) — not the price — is what keeps the tree from trivialising levels, so faster completion is not a balance problem. Boosters are the elastic sink: 3★ hunting at 4–6 attempts a day burns 100–250 gold a day whenever the player chooses to, so the extra 36 gold has somewhere to go on the same day it is earned. **Keep 1 100 per track and the booster prices.**
 - **Crystals (+10 % over the campaign, +39 % in steady state, from a low base).** Continues (10) and skips (30) are frustration valves, not a progression product; two daily wins ≈ one continue, six ≈ one skip — a fair rate for a player who is *winning* daily challenges. Skins at 100–120 move from one per ≈ 12 days to one per ≈ 9 days in steady state; the full shop (1 270) still takes ≈ 10 weeks after the campaign, so cosmetics keep their long-tail role. The Starter Pack claim "400 crystals ≈ 10 days of free earnings" stays true in gold terms (3 063 / 15 ≈ 204 gold a day → 2 000 gold ≈ 10 days; **v3 clocks, 2026-09-26: 2 325 / 15 ≈ 155 a day → ≈ 13 days**). **Keep skins at 80–200, continue at 10, skip at 30, chest at 60.**
@@ -229,6 +230,125 @@ For scale: one 1.3★ daily win is worth 68 gold-equivalent (43 gold + 5 crystal
 | $4.99 crystal pack | 550 crystals | 2 750 gold ≈ half the tree |
 
 **Targets** (research §4 of `monetization-market.md`; v1 is an indie title without paid UA, so aim for the low end of the bands): payer conversion **1–2 % of D7-retained players** (casual 0.5–1 %, strategy ≈ 1.5 %); ARPDAU **$0.05–0.10** (ads-only casual $0.01–0.05, hybrid-casual publishers $0.15–0.50); Remove Ads **0.5–1 % of installs**; D1 retention ≥ 25 % (strategy median 25.4 %). Intended monthly spend curve: median payer $3–4 (Starter or Remove Ads), ~20 % of payers reach $10–15 (Premium + one pack), < 5 % above $50; ARPPU ≈ $8 / month. Revenue mix goal: ≈ 60 % IAP / 40 % ads (Sensor Tower hybrid-casual split), so neither can be cut without a rethink.
+
+### 6.3 Challenge achievements (ECON-10, sized 2026-09-27 — **spec for the Frontend, not yet in `catalog.ts`**)
+
+**Scope.** GDD §7.6 lists "7-day challenge streak" and "30 daily wins"; POST_LAUNCH.md §6.2 adds "4-week weekly streak". Three one-off achievements in the existing `ACHIEVEMENTS` ledger, paid in crystals once, read from `save.challenge` (GDD §7.2) and `save.weekly` (GDD §8.1). No new save field, no schema bump, no new product, no new ad placement; the store compliance section (§7) is unaffected (Publisher informed: nothing purchasable changes).
+
+**Why this is not a data-only change (and so is not in the catalog yet).** `satisfied()` in `src/economy/achievements.ts` knows two shapes — 3★ counts over `save.stars` (`STAR_TARGETS`) and facts about one finished match (`matchSatisfies`) — and `play.ts` never calls `evaluateAchievements` on a daily or weekly result (both challenge branches hand the result screen `{ unlocked: [], crystals: 0 }`; "the daily challenge never reaches the rules"). A challenge achievement needs a third shape (a counter read from the save) plus two call sites, i.e. new condition logic, so the entries are specified here and ship with the code in the next sprint. Adding the catalog rows without the rule would break `tests/economy/achievements.test.ts` ("every catalog achievement can be granted exactly once") and show three never-unlockable rows.
+
+#### Sizing
+
+| id | Condition (SaveData) | Crystals | Tier rationale | Earliest (perfect player) | First-time line (§6: 60 % daily win, 40 % weekly win) | Mastery line (70 % / every weekly) |
+|---|---|---|---|---|---|---|
+| `challenge_streak_7` | `save.challenge.streak >= 7` | **10** | The 10-tier is "a feat that takes real play" (`flawless`, `speedrunner`, `grand_campaign`). The streak itself is already paid by the day-7 milestone (+20 every run, §6.2); the achievement is the one-off ledger entry and toast for the *first* week, so it sits below the milestone, not above it | day 9 (daily from day 3) | P(on day 7 of a run) = 0.4 × 0.6⁷ = 1.1 % a day → expected hits 0.6⁷ + 6 × 0.011 ≈ 0.10 by day 15 (**≈ 9 % → ≈ 1 crystal**), 0.6⁷ + 21 × 0.011 ≈ 0.26 by day 30 (**≈ 23 % → ≈ 2 crystals**) | 0.3 × 0.7⁷ = 2.5 % a day → ≈ 21 % by day 15 (≈ 2), ≈ 45 % by day 30 (≈ 4–5) |
+| `challenge_wins_30` | `Object.keys(save.challenge.best).length >= 30` (distinct UTC days with a win; `best` keeps the 30 newest keys, so the count reaches 30 exactly on the 30th win day and stays there) | **20** | The 20-tier is the long-tail goal (`stars_40`). 30 wins ≈ 7 weeks of play for the modelled player — the "you are a regular" moment; a fraction of the day-30 *streak* bonus (100) because it needs no consecutive days | day 32 | 16.8 expected wins by day 30 → **0 inside the 30-day model**; 30th win ≈ day 53 (20 crystals once, ≈ 0.4 a day amortised over days 16–53, non-recurring) | ≈ day 46 |
+| `weekly_streak_4` | `save.weekly.streak >= 4` | **20** | Four consecutive weekly wins = a month of band-4/5 twisted levels; equals one weekly 3★ target (20) and the day-7 daily milestone, the two "hardest routine thing" prices already in the model. A one-off, not the repeating week-streak milestone GDD §8.1 defers — that item stays open | week 5 ≈ day 36 | 3 week keys by day 30 → **0**; over a year ≈ 0.6 × 46 × 0.4⁴ + 0.4⁴ ≈ 0.73 expected qualifying runs → ≈ 52 % → ≈ 10 crystals a year (≈ 0.03 a day) | week 5 ≈ day 36 |
+
+One-off ceiling **+50** (catalog 95 → **145**; `tests/economy/catalog.test.ts` and the "exactly once" test pin 95 → 145). Order of magnitude against the recurring sources: the daily pays 1 825 crystals a year at 3★, the weekly target 1 040, the login streak ≈ 1 040 — the three achievements are 1.7 % of that yearly ceiling, once.
+
+**§6 lines recomputed with all three paid (first-time line at 1.56★ since GD-3; mastery line in brackets; gold unchanged — achievements pay crystals only).**
+
+| Checkpoint | Gold (GD-3 figures) | Crystals before → after | What lands |
+|---|---|---|---|
+| After 10 levels (day 3) | ≈ 490 (426 + GD-3: levels 9–12 at 2★, ≈ +65 with the ×2 ads) | 53 → **53** [53] | nothing (1 eligible day) |
+| After 20 levels (day 6) | ≈ 965 (837 + 130) | 127 → **127** [127] | nothing (4 eligible days < 7) |
+| After 50 levels (day 15) | ≈ 2 455 | 428 → **≈ 429** [440 → ≈ 442] | `challenge_streak_7` for ≈ 9 % [21 %] |
+| Day 30 | ≈ 4 360 | 600 → **≈ 602** [620 → ≈ 625] | `challenge_streak_7` for ≈ 23 % [45 %]; the other two not yet reachable |
+| Steady state / day (16–30) | ≈ 130 | 8 → **≈ 8.1** [8–9 → 8–9] | ≤ 0.1 a day of first-time streak-7 grants; nothing recurring |
+| Perfect month (daily every day at 3★, every weekly) | — | 150 + 125 milestones + 20 × 3 weekly targets = 335 → **345** | `challenge_streak_7` on day 9; `challenge_wins_30` on day 32 and `weekly_streak_4` on ≈ day 36 (+40) just outside the month |
+
+Against §6.1's trigger (a) — recurring crystals above ≈ 15 a day — the achievements add nothing recurring; after a player holds all three the daily rate is exactly what it was. **No price change**; the Starter Pack and Premium value lines in §6.2 are unchanged (Premium after the campaign ≈ 1 028 → ≈ 1 029 crystals).
+
+**Decisions with numbers.**
+- **30 wins, not 30 participations.** A loss writes nothing to `save.challenge` (`recordChallengeResult` returns before touching the save — GDD §7.2 "a loss writes nothing, not even a defeat counter"), so participation is not measurable without a new `challenge.played` counter, its normalizer and tests — no longer the "cheap" item. It would also be trivially farmable (start, quit, count) and would pay for showing up, which is the login streak's job; §6 keeps the split "the login reward pays for showing up, the challenge pays about the same again for *playing*". Distinct win days are already in the save. The threshold is pinned to `CHALLENGE_BEST_KEEP` (30): a higher target (50, 100) is impossible from `best` and would need the counter — if 1.1 wants a second tier, add `challenge.wins` then.
+- **No fourth "first daily win" achievement.** The daily unlocks after level 8, which the §6 model clears at the end of day 2, so a first-daily-win row cannot touch D1 retention (the metric the Producer asked about); its earliest effect is day 3. The first win already pays 5 crystals + 40–60 gold + the `daily.resultWon` line, so a 5-crystal achievement would double that day's crystals for ≈ 60 % of day-3 players (+3 expected crystals, +0.1 a day over the month, +5 to the ceiling) to say what the result line says. The advertising job on the achievements screen — a visible "0 / 30 · Win 30 daily challenges" bar next to the campaign rows — is done by `challenge_wins_30`. If Phase B telemetry shows fewer than 30 % of players who cleared level 8 tapping the daily card by day 4, the lever is the card (GDD §7.3), not a 5-crystal row.
+- **Streak 7 at 10, not 20.** On the first day-7 result the player already receives 5 (base) + 20 (milestone) = 25 crystals on the result line; the achievement's 10 on the toast makes 35 for that day, the largest single-day crystal figure short of day 30 (105). Paying 20 would make the *first* week worth 45 and every later week 25 — the milestone, which repeats per run, is the retention lever; the achievement is the memory of it.
+- **Weekly 4 at 20, not 10.** Four consecutive weekly wins on 33–50 under a twist for a first-time player is a ≈ 2.6 % per-window event (0.4⁴); the mastery player gets it at week 5 for 20 — the same 20 the weekly already pays per 3★ target, so it reads as "one extra target" to the player it is likeliest to reach.
+- **Retroactive grant on the update day, accepted.** A save whose `challenge.streak` is already ≥ 7 (the daily shipped 2026-09-18; a 9-day run is possible today) unlocks `challenge_streak_7` the first time the rules run — on the next campaign result, the next daily claim or opening the achievements screen, all of which already call `evaluateAchievements(save)` without a match. `best` cannot hold 30 keys before ≈ 2026-10-18, so `challenge_wins_30` cannot fire retroactively at launch.
+- **Trust.** Same as the streak milestones (GDD §7.4): the device clock is trusted; a hand-edited save unlocks the achievement once for 50 crystals — a one-off, and the same edit already fakes a day-30 bonus (100).
+
+#### Spec for the Frontend (`src/economy/catalog.ts`, `src/economy/achievements.ts`, `src/ui/play.ts`, locales, tests)
+
+**Catalog rows** — appended after `grand_campaign`, in this order (the list is themed: firsts, stars, match feats, finale, **challenges**; cheapest first inside the group), so the ledger ids and the eleven existing rows keep their positions:
+
+```ts
+/** ECON-10 (ECONOMY.md §6.3): read from save.challenge / save.weekly, never from a match. Total 95 → 145. */
+{ id: 'challenge_streak_7', label: 'Win the daily challenge 7 days in a row', crystals: 10 },
+{ id: 'challenge_wins_30', label: 'Win 30 daily challenges', crystals: 20 },
+{ id: 'weekly_streak_4', label: 'Win the weekly challenge 4 weeks in a row', crystals: 20 },
+```
+
+**Conditions**, in `SaveData` terms (`src/ui/save.ts`), evaluated by `satisfied(save, id)` without a `MatchSummary`:
+
+| id | `current` (progress bar) | `target` | Unlocked when | Notes |
+|---|---|---|---|---|
+| `challenge_streak_7` | `save.challenge.streak` (raw, uncapped `ChallengeState.streak`; **not** `shownStreak`, which needs a clock — the rules stay pure) | 7 | `current >= 7` | The raw value survives a broken streak until the next first win resets it to 1, so a stale "5 / 7" can show on the achievements screen the day after a break — accepted, the daily pill already shows 0 for the same state. Once ≥ 7 was reached the id is in the ledger, so a later reset never "un-earns" it |
+| `challenge_wins_30` | `Object.keys(save.challenge.best).length` (`ChallengeState.best`, day keys `YYYY-MM-DD` of days won; a loss never writes a key) | `Math.min(30, CHALLENGE_BEST_KEEP)` — import `CHALLENGE_BEST_KEEP` from `src/ui/save.ts`; a test asserts `CHALLENGE_BEST_KEEP >= 30` so pruning can never hide the 30th key | `current >= target` | `pruneChallengeBest` keeps the newest 30, so the count is `min(30, distinct win days)` — monotone, exact at 30 |
+| `weekly_streak_4` | `save.weekly.streak` (raw `WeeklyState.streak`) | 4 | `current >= 4` | as `challenge_streak_7`, with weeks |
+
+Suggested shape (mirrors `STAR_TARGETS`; ≈ 10 lines): `const COUNTERS: Record<string, { target: number; value: (s: SaveData) => number }>`; `satisfied` returns `value(save) >= target` for an id in `COUNTERS`, and `achievementProgress` reports `{ current: Math.min(target, value(save)), target }` for those ids — the binary/star branches are untouched.
+
+**Call sites** — `src/ui/play.ts` result flow: in the `if (this.challenge)` branch, after `recordChallengeResult(...)`, `const achievements = evaluateAchievements(this.app.save)` (no match: a challenge's match facts never count — `first_win`, `flawless` etc. stay campaign-only, as the header comment says) and pass it to `ResultScreen` instead of `{ unlocked: [], crystals: 0 }`; the same in the `if (this.weekly)` branch. `evaluateAchievements` pays the crystals into `save.crystals` and persists, so `DailyOutcome.crystals` / `WeeklyOutcome.crystals` and the `daily.resultWon` / `weekly.resultWon` figures do **not** include the achievement — it rides on the `achievements` grant like the campaign path. Toast: GDD §7.3's rule already says "achievement unlocked on the same result > daily milestone > weekly 3★ target", so on the first day-7 result the toast reads "Achievement unlocked: Win the daily challenge 7 days in a row · +10 crystals" and the result line carries "+25 crystals" (5 + 20 milestone). The daily claim (`withAchievements`), the level skip and the achievements screen already re-evaluate without a match — no change there. Update the header comment in `achievements.ts` ("eleven" → "fourteen") and `save.ts`'s `AchievementState` comment if it counts them.
+
+**Labels** — locale key `achievement.<id>` in `src/ui/locales/{en,az,ru,tr}.ts` (`achievementName` in `src/ui/catalogText.ts` resolves it; `tests/ui/i18n.test.ts` requires the EN text to equal the catalog `label`). Tone follows the shipped rows (imperative, "keç" / "geç" / "пройди") and the challenge vocabulary already in the dictionaries (AZ "Günlük çağırış" / "Həftəlik çağırış" / "seriya"; RU "ежедневный / недельный вызов"; TR "günlük / haftalık meydan okuma"):
+
+| id | EN (= catalog label) | AZ | RU | TR |
+|---|---|---|---|---|
+| `challenge_streak_7` | Win the daily challenge 7 days in a row | Günlük çağırışı ardıcıl 7 gün keç | Пройди ежедневный вызов 7 дней подряд | Günlük meydan okumayı 7 gün üst üste geç |
+| `challenge_wins_30` | Win 30 daily challenges | Günlük çağırışı 30 gün keç | Пройди 30 ежедневных вызовов | Günlük meydan okumayı 30 gün geç |
+| `weekly_streak_4` | Win the weekly challenge 4 weeks in a row | Həftəlik çağırışı ardıcıl 4 həftə keç | Пройди недельный вызов 4 недели подряд | Haftalık meydan okumayı 4 hafta üst üste geç |
+
+**Achievements screen** — rows 12–14 in catalog order; the list already scrolls at 11 rows (`achievementsMaxScroll`), so no layout change. The 30-wins row is the only one with a long bar (0 / 30); the two streak rows show n / 7 and n / 4.
+
+**Unit-test sketch** (`tests/economy/achievements.test.ts`, same fixtures — `defaultSave()`, memory store, `ids()`):
+
+```ts
+describe('challenge achievements (ECON-10)', () => {
+  const dayKeys = (n: number) => Object.fromEntries(Array.from({ length: n }, (_, i) => [`2026-10-${String(i + 1).padStart(2, '0')}`, { stars: 1, timeMs: 60_000 }]));
+
+  it('7-day daily streak: raw streak, once', () => {
+    save.challenge.streak = 6;
+    expect(ids(evaluateAchievements(save))).toEqual([]);
+    save.challenge.streak = 7;
+    expect(evaluateAchievements(save)).toMatchObject({ unlocked: [{ id: 'challenge_streak_7' }], crystals: 10 });
+    save.challenge.streak = 1; // a broken streak never un-earns it, and 7 again never pays twice
+    expect(evaluateAchievements(save).crystals).toBe(0);
+    save.challenge.streak = 14;
+    expect(evaluateAchievements(save).crystals).toBe(0);
+    expect(save.crystals).toBe(10);
+  });
+
+  it('30 daily wins: distinct win days in challenge.best, exact at CHALLENGE_BEST_KEEP', () => {
+    expect(CHALLENGE_BEST_KEEP).toBeGreaterThanOrEqual(30);
+    save.challenge.best = dayKeys(29);
+    expect(ids(evaluateAchievements(save))).toEqual([]);
+    expect(achievementProgress(save).find((a) => a.id === 'challenge_wins_30')).toMatchObject({ current: 29, target: 30, unlocked: false });
+    save.challenge.best = dayKeys(30);
+    expect(evaluateAchievements(save)).toMatchObject({ unlocked: [{ id: 'challenge_wins_30' }], crystals: 20 });
+    // pruning on normalize keeps 30 keys: the ledger, not the count, is the truth
+    const reloaded = normalizeSave({ ...save, challenge: { ...save.challenge, best: dayKeys(31) } });
+    expect(Object.keys(reloaded.challenge.best)).toHaveLength(30);
+    expect(evaluateAchievements(reloaded).crystals).toBe(0);
+  });
+
+  it('4-week weekly streak', () => {
+    save.weekly.streak = 3;
+    expect(ids(evaluateAchievements(save))).toEqual([]);
+    save.weekly.streak = 4;
+    expect(evaluateAchievements(save)).toMatchObject({ unlocked: [{ id: 'weekly_streak_4' }], crystals: 20 });
+  });
+
+  it('a challenge match never satisfies the match-based rules and a loss changes nothing', () => {
+    // play.ts calls evaluateAchievements(save) without a match on a challenge result:
+    expect(ids(evaluateAchievements(save))).toEqual([]); // no first_win from a daily
+    // integration (tests/ui/daily.test.ts): recordChallengeResult(save, challenge, level, 'lost', t) leaves
+    // challenge.best / streak untouched, so evaluateAchievements(save) grants nothing afterwards
+  });
+});
+```
+
+Also: the existing "every catalog achievement can be granted exactly once" test sets `save.challenge.streak = 7`, `save.challenge.best = dayKeys(30)`, `save.weekly.streak = 4` and pins **145**; `tests/economy/catalog.test.ts` pins the sum at **145**; `tests/ui/i18n.test.ts` picks up the three `achievement.*` keys automatically; `tests/ui/daily.test.ts` / `weekly.test.ts` gain one assertion each that the result flow's grant is passed to the result screen (Frontend's files). Acceptance for POST_LAUNCH.md §6.2: unit tests green; the §6 checkpoints above unchanged within ±2 crystals; `npm run check`.
 
 ## 7. Store compliance (hand to Publisher — `docs/publishing/STORE_LISTING.md` must change before Phase B ships)
 
