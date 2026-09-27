@@ -111,7 +111,7 @@ Everything here runs **without a server**: the daily challenge is a pure functio
 | 3 | L+14 … L+20 | Stores open in AZ/TR/KZ/GE with 1.0.1 (or 1.0.0 if 1.0.1 slipped — the country roll-out does not wait for content); first store reviews; 1.1 scope fixed from the week-2 read | 1.0.2 only if needed | Publisher (reviews), Monetization (ARPDAU read) |
 | 4 | L+21 … L+27 | 1.1 content in review (§6.2: skin drop #1, challenge achievements, twist guarantees); D7 first readable for the store cohort on L+21; retro on L+28 | **1.1 tagged on L+27** with whatever passed its gate; anything red slips to 1.2 | Game Designer, Frontend, AI Engineer, Tech Artist |
 
-### 4.3 The daily and weekly challenges for the next four calendar weeks (from the shipped pickers, `src/daily/challenge.ts`, run 2026-09-21 after DAILY-4 / WEEKLY-1)
+### 4.3 The daily and weekly challenges for the next four calendar weeks (from the shipped pickers, `src/daily/challenge.ts`, run 2026-09-21 after DAILY-4 / WEEKLY-1; twist column re-run 2026-09-27 after DAILY-5 — 09-27 and 10-13 moved from Reinforced to Fast feet, the levels are unchanged)
 
 The pickers are keyed by the calendar date, not by L, so this table is valid whatever day L falls on; re-run for a different window. Every row below is inside the 60-day sweep that passed 60/60 days over the 9–50 pool on 2026-09-20 (`docs/BACKLOG.md` WEEKLY-1 / DAILY-4; level 46 hardened in `a34522c`). The first row is the pin in GDD §7.2 (2026-09-21 → 44 / lean).
 
@@ -123,16 +123,16 @@ The pickers are keyed by the calendar date, not by L, so this table is valid wha
 | 09-24 Thu | 36 Three Bridges | Fast feet | | 10-08 Thu | 39 The Long Night | Lean rations |
 | 09-25 Fri | 22 Castle in the Middle | Lean rations | | 10-09 Fri | 47 Scorched Earth | Reinforced |
 | 09-26 Sat | 50 The Crown Reforged | Reinforced | | 10-10 Sat | 38 Ring of Fire | Lean rations |
-| 09-27 Sun | 49 Last Light | Reinforced | | 10-11 Sun | 14 Guns and Walls | Fast feet |
+| 09-27 Sun | 49 Last Light | Fast feet | | 10-11 Sun | 14 Guns and Walls | Fast feet |
 | 09-28 Mon | 16 Last Bastion | Thin walls | | 10-12 Mon | 33 Three Kings | Classic |
-| 09-29 Tue | 9 Stone Walls | Classic | | 10-13 Tue | 15 The Citadel | Reinforced |
+| 09-29 Tue | 9 Stone Walls | Classic | | 10-13 Tue | 15 The Citadel | Fast feet |
 | 09-30 Wed | 20 Roadblock | Fast feet | | 10-14 Wed | 30 Drawbridge | Reinforced |
 | 10-01 Thu | 32 Siege Works | Lean rations | | 10-15 Thu | 11 Starve the Keep | Fast feet |
 | 10-02 Fri | 13 Crossfire | Thin walls | | 10-16 Fri | 41 Twin Rivers | Thin walls |
 | 10-03 Sat | 10 Hold the Line | Lean rations | | 10-17 Sat | 42 Siege Engine | Fast feet |
 | 10-04 Sun | 24 The Gauntlet | Classic | | 10-18 Sun | 45 Three Fronts | Thin walls |
 
-28 distinct levels in 28 days (the per-cycle shuffle of DAILY-4 — the 10-day repeat pattern noted here on 2026-09-20 is gone). Levels 41–50 appear as dailies from day one (09-21 is level 44): a player who has not reached them yet can still play them as the daily without touching campaign progress (GDD §7.2 "Locked levels").
+28 distinct levels in 28 days (the per-cycle shuffle of DAILY-4 — the 10-day repeat pattern noted here on 2026-09-20 is gone) and never the same twist two days running (DAILY-5, GDD §7.2 `twist` row: 09-26 → 09-27 was Reinforced → Reinforced before it). Levels 41–50 appear as dailies from day one (09-21 is level 44): a player who has not reached them yet can still play them as the daily without touching campaign progress (GDD §7.2 "Locked levels").
 
 Weekly Challenge, same window (`weeklyFor`, always a non-plain twist; the first row is the GDD §8.4 pin):
 
@@ -205,7 +205,7 @@ Candidates from GDD §7.6 (daily "v2 ideas") and §8.1 (weekly "revisit" notes);
 |---|---|---|---|
 | **More skins** (skin drop #1) | Two tower roofs or one terrain theme + one helmet, priced in the 100–200 band (ECONOMY.md §3.3); sprites in the lazy skin chunk | Tech Artist, Monetization (price), Frontend (shop) | Readability rules; shop preview; eager bundle ≤ 80 kB |
 | Challenge achievements | "7-day challenge streak", "30 daily wins", "4-week weekly streak" (GDD §7.6) — cheap now that `save.challenge` and `save.weekly` exist | Monetization (sizing), Frontend | unit tests; crystal totals inside ECONOMY.md §6.1's band |
-| Twist guarantees | Never the same twist on consecutive days (GDD §7.6, still open after DAILY-4): a rejection loop over the twist hash; re-maps future days, so it ships on a release day with a report note and new GDD §7.2 pins | Game Designer, Frontend, AI Engineer (fresh 60-day sweep) | Unit test over 2026-10 … 2027-09; sweep green |
+| ~~Twist guarantees~~ | **Shipped 2026-09-27 as DAILY-5, pulled forward** (the game is unreleased, no daily history to protect): never the same twist on consecutive days — `twistForDay` in GDD §7.2 (even days play their raw draw, odd days avoid both neighbours' raw draws), pins re-run in §4.3 above, unit test over 2026-01-01 … 2027-12-31 | Frontend (done), AI Engineer (sweep) | Unit test green; `--daily 2026-09-27 --days 180 --seeds 3` on 2026-09-27: fixed seed 180/180, all seeds 539/540 — the one red day (2026-10-30, level 23 under lean, seed 112548) is an even day, i.e. unchanged by DAILY-5 (identical at the pre-DAILY-5 picker): a level / AI item, not a picker one |
 | Week-streak milestones | GDD §8.1 defers them "with the day-30 data"; decide from reviews and the weekly participation the team can see (none — so only if reviews ask) | Game Designer, Monetization | ECONOMY.md §6.1 band |
 | Yesterday's map | A second entry on the daily card, no reward, for players who missed the day (GDD §7.6) | Game Designer, Frontend | card fits 360 px; e2e |
 | Share card | A screenshot with day / week key, twist and stars, verifiable by anyone with the game (GDD §7.6); Web Share API on the web, Capacitor Share natively — no upload, no network call of our own | Frontend, Tech Artist (layout), Publisher (privacy: nothing leaves the device unless the player shares) | e2e renders the card |

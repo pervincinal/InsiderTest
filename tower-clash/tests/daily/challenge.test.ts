@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { challengeFor, dayKeyOf, dayNumberOf, goldReward, hashDayKey, isMondayKey, POOL_FROM, POOL_TO, TWISTS, WEEKLY_POOL_FROM, weekKeyOf, weeklyFor } from '../../src/daily/challenge';
+import { challengeFor, dayKeyOf, dayKeyOfNumber, dayNumberOf, goldReward, hashDayKey, isMondayKey, POOL_FROM, POOL_TO, rawTwistForDay, TWISTS, twistForDay, WEEKLY_POOL_FROM, weekKeyOf, weeklyFor } from '../../src/daily/challenge';
 
 describe('daily challenge picker (GDD §7)', () => {
   it('is deterministic and stays inside the pool', () => {
@@ -102,10 +102,14 @@ describe('picker pins (GDD §7.2), cycle boundaries and dayNumberOf', () => {
     expect(daily('2026-09-21')).toEqual([44, 44606, 'lean']);
     expect(daily('2026-09-22')).toEqual([31, 711749, 'reinforced']);
     expect(daily('2026-09-23')).toEqual([21, 489368, 'thinWalls']);
-    // the retired v1 pins kept their seed and twist (only the level re-mapped, DAILY-4)
+    // the retired v1 pins kept their seed (only the level re-mapped, DAILY-4); 2026-09-19 (odd day) lost its
+    // raw Fast feet draw to the twist guarantee (DAILY-5): 2026-09-20's raw draw is Fast feet too
     expect(daily('2026-09-18').slice(1)).toEqual([233226, 'plain']);
-    expect(daily('2026-09-19').slice(1)).toEqual([455607, 'fastFeet']);
+    expect(daily('2026-09-19').slice(1)).toEqual([455607, 'lean']);
     expect(daily('2026-09-20').slice(1)).toEqual([266987, 'fastFeet']);
+    // the first shipped re-mapped day (e2e/daily.spec.ts DAY_A): raw Reinforced collides with 2026-09-26's
+    expect(daily('2026-09-26')).toEqual([50, 601273, 'reinforced']);
+    expect(daily('2026-09-27')).toEqual([49, 378892, 'fastFeet']);
     const w = weeklyFor('2026-09-21');
     expect([w.levelId, w.seed, w.twist.id, w.targetMs]).toEqual([33, 743047, 'fastFeet', 35_000]);
     expect(w.weekKey).toBe('2026-09-21');
@@ -163,5 +167,70 @@ describe('picker pins (GDD §7.2), cycle boundaries and dayNumberOf', () => {
     expect(isMondayKey('2026-02-30')).toBe(false);
     expect(isMondayKey('2029-01-01')).toBe(true);
     expect(() => weeklyFor('2026-02-30')).toThrow();
+  });
+});
+
+/* ---------- Twist guarantee (DAILY-5, GDD §7.2): never the same twist on consecutive days ---------- */
+
+describe('twist guarantee (DAILY-5)', () => {
+  const FROM = '2026-01-01';
+  const DAYS = dayNumberOf('2027-12-31') - dayNumberOf(FROM) + 1; // 730
+
+  it('no two consecutive days share a twist from 2026-01-01 to 2027-12-31, and every twist stays within 15–25 %', () => {
+    expect(DAYS).toBe(730);
+    const count = new Map<string, number>();
+    let prev = challengeFor(addDaysLocal(FROM, -1)).twist.id;
+    for (let d = 0; d < DAYS; d++) {
+      const key = addDaysLocal(FROM, d);
+      const id = challengeFor(key).twist.id;
+      expect(id, key).not.toBe(prev);
+      prev = id;
+      count.set(id, (count.get(id) ?? 0) + 1);
+    }
+    expect(count.size).toBe(TWISTS.length);
+    for (const t of TWISTS) {
+      const share = (count.get(t.id) ?? 0) / DAYS;
+      expect(share, t.id).toBeGreaterThanOrEqual(0.15);
+      expect(share, t.id).toBeLessThanOrEqual(0.25);
+    }
+  });
+
+  it('is local and O(1): even days play their raw draw, odd days avoid both neighbours\' raw draws and keep their own draw when free', () => {
+    let kept = 0;
+    let moved = 0;
+    for (let n = dayNumberOf('2025-06-01'); n <= dayNumberOf('2028-06-01'); n++) {
+      const raw = rawTwistForDay(n);
+      const eff = twistForDay(n);
+      expect(challengeFor(dayKeyOfNumber(n)).twist).toBe(eff);
+      if ((n & 1) === 0) {
+        expect(eff, `even day ${n}`).toBe(raw);
+        continue;
+      }
+      const banned = [rawTwistForDay(n - 1), rawTwistForDay(n + 1)];
+      expect(banned, `odd day ${n}`).not.toContain(eff);
+      if (banned.includes(raw)) moved++;
+      else {
+        expect(eff, `odd day ${n} keeps its free draw`).toBe(raw);
+        kept++;
+      }
+    }
+    // a collision on an odd day is a 1 − (4/5)² = 36 % event; over ~550 odd days that is well inside 25–47 %
+    expect(moved / (moved + kept)).toBeGreaterThan(0.25);
+    expect(moved / (moved + kept)).toBeLessThan(0.47);
+    // worked example: 2026-09-27 (n = 269, odd) draws Reinforced, so does 2026-09-26 → Fast feet by the second hash
+    expect(rawTwistForDay(269).id).toBe('reinforced');
+    expect(rawTwistForDay(268).id).toBe('reinforced');
+    expect(twistForDay(269).id).toBe('fastFeet');
+    expect(dayKeyOfNumber(269)).toBe('2026-09-27');
+  });
+
+  it('dayKeyOfNumber inverts dayNumberOf, pre-epoch and leap days included, and never throws', () => {
+    for (const k of ['2026-01-01', '2025-12-31', '2028-02-29', '1970-01-01', '2099-12-31']) expect(dayKeyOfNumber(dayNumberOf(k))).toBe(k);
+    expect(dayKeyOfNumber(-1)).toBe('2025-12-31');
+    expect(() => dayKeyOfNumber(Number.NaN)).not.toThrow();
+    // a negative odd day (two's complement parity) is still an odd day: it avoids its neighbours
+    const n = dayNumberOf('2025-12-30'); // −2, even
+    expect(twistForDay(n)).toBe(rawTwistForDay(n));
+    expect([rawTwistForDay(-2), rawTwistForDay(0)]).not.toContain(twistForDay(-1));
   });
 });

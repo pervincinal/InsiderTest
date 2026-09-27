@@ -86,6 +86,40 @@ export function seededOrder<T>(items: readonly T[], seed: number): T[] {
   return out;
 }
 
+/** The day key of a day number (inverse of `dayNumberOf`); never throws, so hostile keys stay total. */
+export function dayKeyOfNumber(n: number): string {
+  const d = new Date(Date.UTC(2026, 0, 1) + n * 86_400_000);
+  const pad = (v: number, w: number): string => String(v).padStart(w, '0');
+  return `${pad(d.getUTCFullYear(), 4)}-${pad(d.getUTCMonth() + 1, 2)}-${pad(d.getUTCDate(), 2)}`;
+}
+
+/** The raw twist draw of day `n`: `TWISTS[FNV(dayKey + "#twist") mod 5]` — the v1 rule, a second hash so the twist does not correlate with the seed. */
+export function rawTwistForDay(n: number): Twist {
+  return TWISTS[hashDayKey(`${dayKeyOfNumber(n)}#twist`) % TWISTS.length]!;
+}
+
+/**
+ * The twist of day `n` with the guarantee that consecutive days never share a twist (DAILY-5,
+ * GDD §7.2). Even days (n even, anchored on 2026-01-01 = 0) are *free*: they play their raw draw.
+ * An odd day plays its raw draw unless that draw equals the raw draw of either neighbour (n−1 and
+ * n+1, both even and therefore free); then it takes one of the 3–4 twists neither neighbour plays,
+ * picked by a second hash (`#twist2`).
+ *
+ * Proof: any two consecutive days are one even day E and one odd day O. twist(E) = raw(E) and
+ * twist(O) ∉ {raw(O−1), raw(O+1)}, a set that contains raw(E); hence twist(O) ≠ twist(E). The rule
+ * reads only *raw* draws, never another day's effective twist, so it is O(1) (at most four hashes)
+ * and never recurses. Odd days keep a uniform distribution by symmetry: the banned set is a
+ * rotation-invariant draw, and the fallback is uniform over what is left.
+ */
+export function twistForDay(n: number): Twist {
+  const raw = rawTwistForDay(n);
+  if ((n & 1) === 0) return raw;
+  const banned = new Set<Twist>([rawTwistForDay(n - 1), rawTwistForDay(n + 1)]);
+  if (!banned.has(raw)) return raw;
+  const allowed = TWISTS.filter((t) => !banned.has(t));
+  return allowed[hashDayKey(`${dayKeyOfNumber(n)}#twist2`) % allowed.length]!;
+}
+
 function pool(): readonly { id: number; star3: number }[] {
   return LEVEL_META.filter((m) => m.id >= POOL_FROM && m.id <= POOL_TO);
 }
@@ -94,7 +128,8 @@ function pool(): readonly { id: number; star3: number }[] {
  * The challenge for a day key; throws on a malformed key. Deterministic and pure. Levels come
  * from a per-cycle shuffle of the pool (DAILY-4): day n plays position `n mod poolSize` of the
  * permutation seeded by `n div poolSize`, so a level never repeats within one cycle (42 days at
- * pool 9–50) and consecutive days still look random.
+ * pool 9–50) and consecutive days still look random. The twist is `twistForDay(n)` (DAILY-5):
+ * never the same twist on consecutive days.
  */
 export function challengeFor(dayKey: string): DailyChallenge {
   const n = dayNumberOf(dayKey);
@@ -103,10 +138,7 @@ export function challengeFor(dayKey: string): DailyChallenge {
   const pos = ((n % levels.length) + levels.length) % levels.length;
   const level = seededOrder(levels, hashDayKey(`cycle#${cycle}`))[pos]!;
   const h = hashDayKey(dayKey);
-  // a second hash so the twist does not correlate with the seed
-  const h2 = hashDayKey(`${dayKey}#twist`);
-  const twist = TWISTS[h2 % TWISTS.length]!;
-  return { dayKey, levelId: level.id, seed: (h % 1_000_000) + 1, twist };
+  return { dayKey, levelId: level.id, seed: (h % 1_000_000) + 1, twist: twistForDay(n) };
 }
 
 /* ---------- Weekly Challenge (GDD §8, WEEKLY-1) ---------- */
