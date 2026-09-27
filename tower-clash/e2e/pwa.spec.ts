@@ -59,10 +59,12 @@ import type { BrowserContext, Page } from '@playwright/test';
  *    that `caches.delete` works. Note `controllerchange` fires at the start of activation (before
  *    the handler runs), so the test polls `caches.keys()` instead of waiting for that event. Then,
  *    offline right away: the shell and the entry chunk come from the new cache with no second
- *    launch. BUG-19: the runtime entries (level 1, lazy screens, debug surface, sfx recipes) are
- *    deleted with the old cache and the already-claimed page never re-warms them (`preloadLazy` is
- *    a one-shot), so level 1 cannot start offline until one more online launch; the test documents
- *    that with a warm-up launch before the offline level-1 play — once fixed, drop the warm-up.
+ *    launch, and level 1 plays — the runtime entries of the old cache (level 1, lazy screens, debug
+ *    surface) were carried into the new cache by `activate` before the old one was deleted (BUG-19:
+ *    without the carry-over an upgraded install kept only the shell, and since the already-claimed
+ *    page never re-warms (`preloadLazy` is a one-shot) level 1 could not start offline until one
+ *    more online launch). The test asserts the carried-over chunks by cache key right after the
+ *    upgrade, then plays offline without any online launch in between.
  *  - new deploy: with the worker controlling the page, a deploy is faked by re-hashing every chunk:
  *    the routes serve index.html and `./assets/*.js` with each `-<hash>.js` renamed to
  *    `-<hash>QA9.js` (index.html's entry, every `import(...)` inside the chunks, and the static
@@ -254,7 +256,7 @@ test.describe('PWA offline (QA-8)', () => {
     });
   });
 
-  test('upgrade: an installed previous-version worker updates to the current one — old cache deleted on activate, new cache holds the shell + entry chunk, the shell boots offline right after', async ({ page, context }) => {
+  test('upgrade: an installed previous-version worker updates to the current one — old cache deleted on activate, its runtime chunks carried into the new cache, the shell boots and level 1 plays offline right after', async ({ page, context }) => {
     expect(process.env.PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS, 'worker network emulation flag (playwright.config.ts)').toBeTruthy();
     expect(CACHE_VERSION, 'CACHE_VERSION parsed from public/sw.js').toMatch(/^v[2-9]\d*$/);
     expect(SW_SOURCE).toContain(`const CACHE_VERSION = '${CACHE_VERSION}'`);
@@ -274,6 +276,8 @@ test.describe('PWA offline (QA-8)', () => {
     });
 
     let modules: string[] = [];
+    /** Every `./assets/*` entry of the old cache (entry chunk + runtime preloads) — what the upgrade must carry over. */
+    let warm: string[] = [];
     await test.step(`1. a player on ${OLD_VERSION}: the previous worker is installed and its cache is warm`, async () => {
       await navigate(page);
       expect(await swReady(page, 20_000)).toBe(new URL('/', page.url()).href);
@@ -283,6 +287,8 @@ test.describe('PWA offline (QA-8)', () => {
       expect(modules).toEqual(expect.arrayContaining([expect.stringMatching(ENTRY_CHUNK)]));
       expect(Object.keys(await cachedPaths(page))).toEqual([OLD_CACHE_NAME]);
       await waitForWarm(page, OLD_CACHE_NAME);
+      warm = ((await cachedPaths(page))[OLD_CACHE_NAME] ?? []).filter((p) => p.startsWith('/assets/'));
+      expect(warm).toEqual(expect.arrayContaining([expect.stringMatching(LEVEL1_CHUNK), expect.stringMatching(MENU_CHUNK), expect.stringMatching(DEBUG_CHUNK)]));
       expect(pageErrors).toEqual([]);
     });
 
@@ -302,10 +308,13 @@ test.describe('PWA offline (QA-8)', () => {
       const fresh = (await cachedPaths(page))[CACHE_NAME] ?? [];
       for (const p of PRECACHE) expect(fresh, `precached ${p}`).toContain(p);
       for (const p of modules) expect(fresh, `entry chunk / modulepreload ${p} precached at install`).toContain(p);
+      // BUG-19: the runtime entries of the old cache were carried over by `activate` before the delete
+      for (const p of warm) expect(fresh, `runtime chunk ${p} carried over from ${OLD_CACHE_NAME}`).toContain(p);
+      expect(fresh).toEqual(expect.arrayContaining([expect.stringMatching(LEVEL1_CHUNK), expect.stringMatching(MENU_CHUNK), expect.stringMatching(DEBUG_CHUNK)]));
       expect(pageErrors).toEqual([]);
     });
 
-    await test.step('3. offline right after the upgrade, no second launch: the shell and the entry chunk come from the new cache', async () => {
+    await test.step('3. offline right after the upgrade, no second launch: the shell and the entry chunk come from the new cache and level 1 plays', async () => {
       await goOffline(context);
       const fromWorker: string[] = [];
       const failed: string[] = [];
@@ -321,28 +330,15 @@ test.describe('PWA offline (QA-8)', () => {
       expect(failed.filter((p) => modules.includes(p))).toEqual([]);
       expect(await shellModules(page)).toEqual(modules);
       await expect.poll(() => paintedShare(page), { timeout: 15_000 }).toBeGreaterThan(0.9);
-      expect(pageErrors).toEqual([]);
-      /*
-       * BUG-19: only the shell survives the upgrade. The level-1 chunk, the lazy screens, the sfx
-       * recipes and the debug surface were runtime entries of the OLD cache, deleted by the
-       * activate cleanup, and the already-claimed page never re-warms them; `window.__towerclash`
-       * does not exist here and level 1 cannot start. Step 4 warms the new cache with one online
-       * launch before the offline play — once the worker (or the page, on `controllerchange`)
-       * restores the runtime entries, delete the warm-up and move step 4's play up here.
-       */
-    });
-
-    await test.step('4. BUG-19 warm-up: one online launch refills the runtime cache; then level 1 plays offline', async () => {
-      await goOnline(context);
-      await navigate(page);
-      await waitForWarm(page, CACHE_NAME);
-      await goOffline(context);
-      await navigate(page);
-      expect(await onLine(page)).toBe(false);
+      // the carried-over runtime chunks: the debug surface installs (its chunk is a lazy import) and level 1 starts, all from the cache
+      await page.waitForFunction(() => typeof window.__towerclash?.loadLevel === 'function', undefined, { timeout: 10_000 });
+      await expect.poll(() => screen(page)).toBe('title');
       expect(await page.evaluate(() => window.__towerclash.loadLevel(1, 1))).toBe(true);
       await expect.poll(() => screen(page)).toBe('play');
       expect(await levelId(page)).toBe(1);
       await expect.poll(() => simTime(page)).toBeGreaterThan(200);
+      // (level 1's start also preloads level 2, which was never cached — that one may fail; the carried-over set must not)
+      expect(failed.filter((p) => warm.includes(p)), 'no carried-over chunk was requested from the network').toEqual([]);
       expect(pageErrors).toEqual([]);
     });
   });
