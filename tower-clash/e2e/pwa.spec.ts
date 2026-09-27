@@ -45,6 +45,32 @@ import type { BrowserContext, Page } from '@playwright/test';
  *     uncaught error reached `window.onerror`.
  *  3. back online: the same level loads on the next tap through the `?r=` re-fetch (BUG-8 path,
  *     src/lazyChunk.ts) and its chunk is now in the runtime cache.
+ *
+ * QA-9 adds two more tests, each in its own context (fresh registration, fresh Cache Storage):
+ *  - upgrade: the previous worker version is installed first — `context.route` serves public/sw.js
+ *    with `CACHE_VERSION` rewritten to the previous number (`v${n-1}`), so the "old" worker is the
+ *    real file, byte-different from the current one, and fills `towerclash-v${n-1}` with the real
+ *    precache + runtime entries. The route is then removed and `registration.update()` fetches the
+ *    real public/sw.js, exactly what the browser does on the next navigation of an installed PWA:
+ *    the new worker installs (precaches under the new name), `skipWaiting`s, activates — the
+ *    `activate` handler's cleanup deletes the old cache — and claims the open page. This is the
+ *    true upgrade path (old registration → byte-different script → install / activate / claim)
+ *    rather than a hand-seeded cache; the seeded-cache variant (unregister, reload) only shows
+ *    that `caches.delete` works. Note `controllerchange` fires at the start of activation (before
+ *    the handler runs), so the test polls `caches.keys()` instead of waiting for that event. Then,
+ *    offline right away: the shell and the entry chunk come from the new cache with no second
+ *    launch. BUG-19: the runtime entries (level 1, lazy screens, debug surface, sfx recipes) are
+ *    deleted with the old cache and the already-claimed page never re-warms them (`preloadLazy` is
+ *    a one-shot), so level 1 cannot start offline until one more online launch; the test documents
+ *    that with a warm-up launch before the offline level-1 play — once fixed, drop the warm-up.
+ *  - new deploy: with the worker controlling the page, a deploy is faked by re-hashing every chunk:
+ *    the routes serve index.html and `./assets/*.js` with each `-<hash>.js` renamed to
+ *    `-<hash>QA9.js` (index.html's entry, every `import(...)` inside the chunks, and the static
+ *    `from "./index-<hash>.js"` of the lazy chunks — renaming only the entry would make the lazy
+ *    chunks pull the OLD entry too, i.e. two copies of the app). The next launch must boot on the
+ *    new names (navigation is network-first, the worker stores the new index.html and caches the
+ *    new chunks on first use), and an offline launch after that must boot the NEW shell — no
+ *    request for an old-hash chunk.
  */
 
 test.use({ serviceWorkers: 'allow' });
@@ -53,6 +79,8 @@ const SAVE_KEY = 'towerclash.save.v3';
 const ENTRY_CHUNK = /^\/assets\/index-[^/]+\.js$/;
 const LEVEL1_CHUNK = /^\/assets\/001-[^/]+\.js$/;
 const MENU_CHUNK = /^\/assets\/lazyScreens-[^/]+\.js$/;
+/** The Playwright surface itself is a lazy chunk (PERF-6): `window.__towerclash` exists offline only when it is cached. */
+const DEBUG_CHUNK = /^\/assets\/debug-[^/]+\.js$/;
 /** The first level no boot / level-1 start preloads (see the header). */
 const COLD_LEVEL = 3;
 const COLD_CHUNK = /\/assets\/003-[^/?]*\.js(\?.*)?$/;
@@ -60,6 +88,14 @@ const COLD_CHUNK = /\/assets\/003-[^/?]*\.js(\?.*)?$/;
 /** public/sw.js PRECACHE, as cache-key pathnames ('./' → '/', './index.html' → '/index.html'). */
 const SW_SOURCE = readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8');
 const PRECACHE = [...(/const PRECACHE = \[([\s\S]*?)\];/.exec(SW_SOURCE)?.[1] ?? '').matchAll(/'\.\/([^']*)'/g)].map((m) => `/${m[1]}`);
+/** `CACHE_VERSION` of public/sw.js ('v4' → cache `towerclash-v4`) and the version an installed player would still have. */
+const CACHE_VERSION = /const CACHE_VERSION = '(v\d+)'/.exec(SW_SOURCE)?.[1] ?? '';
+const CACHE_NAME = `towerclash-${CACHE_VERSION}`;
+const OLD_VERSION = `v${Number(CACHE_VERSION.slice(1)) - 1}`;
+const OLD_CACHE_NAME = `towerclash-${OLD_VERSION}`;
+/** Fake-deploy marker appended to every chunk hash (`index-D0r4aCZl.js` → `index-D0r4aCZlQA9.js`). */
+const DEPLOY_MARK = 'QA9';
+const isWorkerScript = (url: URL) => url.pathname === '/sw.js';
 
 const screen = (page: Page) => page.evaluate(() => window.__towerclash.getScreen());
 const simTime = (page: Page) => page.evaluate(() => window.__towerclash.getState()?.time ?? -1);
@@ -74,6 +110,46 @@ const cachedPaths = (page: Page) =>
     const out: Record<string, string[]> = {};
     for (const key of await caches.keys()) out[key] = (await (await caches.open(key)).keys()).map((r) => new URL(r.url).pathname);
     return out;
+  });
+/** What the served index.html loads before any game code runs: `<script type="module" src>` + `<link rel="modulepreload">` pathnames. */
+const shellModules = (page: Page) =>
+  page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>('script[type="module"][src], link[rel="modulepreload"][href]')].map(
+      (el) => new URL(el.getAttribute('src') ?? el.getAttribute('href') ?? '', location.href).pathname,
+    ),
+  );
+/** The registration's worker states, for asserting an update has fully settled. */
+const registrationState = (page: Page) =>
+  page.evaluate(async () => {
+    const reg = await navigator.serviceWorker.getRegistration();
+    return { installing: reg?.installing?.state ?? null, waiting: reg?.waiting?.state ?? null, active: reg?.active?.state ?? null };
+  });
+/** The runtime-cached idle preloads of a claimed launch (level 1, lazy screens, debug surface) — the cache is ready for an offline level-1 start. */
+const waitForWarm = (page: Page, cacheName: string) =>
+  expect
+    .poll(async () => (await cachedPaths(page))[cacheName] ?? [], { timeout: 20_000 })
+    .toEqual(expect.arrayContaining([expect.stringMatching(LEVEL1_CHUNK), expect.stringMatching(MENU_CHUNK), expect.stringMatching(DEBUG_CHUNK)]));
+/**
+ * Share of a coarse sample of the game canvas that is painted (opaque and not black). The title
+ * fills the whole canvas, so a booted shell reads well above 0.9; an unbooted one (entry chunk
+ * missing) leaves the canvas at 0. Used where `window.__towerclash` cannot exist (its lazy chunk
+ * is not cached), so the boot is judged by the pixels, not the debug surface.
+ */
+const paintedShare = (page: Page) =>
+  page.evaluate(() => {
+    const canvas = document.getElementById('game');
+    if (!(canvas instanceof HTMLCanvasElement) || canvas.width === 0 || canvas.height === 0) return 0;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return 0;
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    let painted = 0;
+    const n = 16;
+    for (let y = 0; y < n; y++)
+      for (let x = 0; x < n; x++) {
+        const i = 4 * (Math.floor(((y + 0.5) / n) * canvas.height) * canvas.width + Math.floor(((x + 0.5) / n) * canvas.width));
+        if (data[i + 3] === 255 && data[i]! + data[i + 1]! + data[i + 2]! > 0) painted++;
+      }
+    return painted / (n * n);
   });
 /** `navigator.serviceWorker.ready` under an explicit bound (`page.evaluate` has none of its own). */
 const swReady = (page: Page, timeoutMs: number) =>
@@ -123,22 +199,16 @@ test.describe('PWA offline (QA-8)', () => {
       expect(await swReady(page, 20_000)).toBe(new URL('/', page.url()).href);
       await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, { timeout: 20_000 });
       // what the served index.html loads before any game code runs — the worker must have stored it at install
-      const shellModules = await page.evaluate(() =>
-        [...document.querySelectorAll<HTMLElement>('script[type="module"][src], link[rel="modulepreload"][href]')].map(
-          (el) => new URL(el.getAttribute('src') ?? el.getAttribute('href') ?? '', location.href).pathname,
-        ),
-      );
-      expect(shellModules).toEqual(expect.arrayContaining([expect.stringMatching(ENTRY_CHUNK)]));
+      const modules = await shellModules(page);
+      expect(modules).toEqual(expect.arrayContaining([expect.stringMatching(ENTRY_CHUNK)]));
       const caches = await cachedPaths(page);
       expect(Object.keys(caches)).toHaveLength(1);
       cacheName = Object.keys(caches)[0]!;
-      expect(cacheName).toMatch(/^towerclash-v\d+$/);
+      expect(cacheName).toBe(CACHE_NAME);
       for (const p of PRECACHE) expect(caches[cacheName], `precached ${p}`).toContain(p);
-      for (const p of shellModules) expect(caches[cacheName], `entry chunk / modulepreload ${p} precached at install (BUG-18)`).toContain(p);
+      for (const p of modules) expect(caches[cacheName], `entry chunk / modulepreload ${p} precached at install (BUG-18)`).toContain(p);
       // the idle preloads go through the claimed page's worker into the runtime cache
-      await expect
-        .poll(async () => (await cachedPaths(page))[cacheName] ?? [], { timeout: 20_000 })
-        .toEqual(expect.arrayContaining([expect.stringMatching(LEVEL1_CHUNK), expect.stringMatching(MENU_CHUNK)]));
+      await waitForWarm(page, cacheName);
       expect(pageErrors).toEqual([]);
     });
 
@@ -180,6 +250,191 @@ test.describe('PWA offline (QA-8)', () => {
       await expect
         .poll(async () => (await cachedPaths(page))[cacheName] ?? [], { timeout: 15_000 })
         .toEqual(expect.arrayContaining([expect.stringMatching(/^\/assets\/003-[^/]+\.js$/)]));
+      expect(pageErrors).toEqual([]);
+    });
+  });
+
+  test('upgrade: an installed previous-version worker updates to the current one — old cache deleted on activate, new cache holds the shell + entry chunk, the shell boots offline right after', async ({ page, context }) => {
+    expect(process.env.PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS, 'worker network emulation flag (playwright.config.ts)').toBeTruthy();
+    expect(CACHE_VERSION, 'CACHE_VERSION parsed from public/sw.js').toMatch(/^v[2-9]\d*$/);
+    expect(SW_SOURCE).toContain(`const CACHE_VERSION = '${CACHE_VERSION}'`);
+
+    const pageErrors: string[] = [];
+    page.on('pageerror', (err) => pageErrors.push(String(err)));
+    await page.addInitScript(([key, data]) => localStorage.setItem(key, JSON.stringify(data)), [SAVE_KEY, { version: 3 }] as const);
+
+    // the previous worker: the real public/sw.js with CACHE_VERSION set one back, served for the first registration only
+    let oldWorkerServed = 0;
+    await context.route(isWorkerScript, async (route) => {
+      oldWorkerServed++;
+      const real = await route.fetch();
+      const body = (await real.text()).replace(`const CACHE_VERSION = '${CACHE_VERSION}'`, `const CACHE_VERSION = '${OLD_VERSION}'`);
+      expect(body, 'CACHE_VERSION rewritten in the served worker').toContain(`const CACHE_VERSION = '${OLD_VERSION}'`);
+      await route.fulfill({ response: real, body, headers: { ...real.headers(), 'content-type': 'text/javascript' } });
+    });
+
+    let modules: string[] = [];
+    await test.step(`1. a player on ${OLD_VERSION}: the previous worker is installed and its cache is warm`, async () => {
+      await navigate(page);
+      expect(await swReady(page, 20_000)).toBe(new URL('/', page.url()).href);
+      await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, { timeout: 20_000 });
+      expect(oldWorkerServed, 'the registration fetched sw.js through the route').toBe(1);
+      modules = await shellModules(page);
+      expect(modules).toEqual(expect.arrayContaining([expect.stringMatching(ENTRY_CHUNK)]));
+      expect(Object.keys(await cachedPaths(page))).toEqual([OLD_CACHE_NAME]);
+      await waitForWarm(page, OLD_CACHE_NAME);
+      expect(pageErrors).toEqual([]);
+    });
+
+    await test.step(`2. update: the real ${CACHE_VERSION} worker installs, activates (deleting ${OLD_CACHE_NAME}) and claims the page`, async () => {
+      await context.unroute(isWorkerScript);
+      // what the browser does on the next navigation of an installed PWA: re-fetch sw.js, install it when byte-different
+      await page.evaluate(async () => {
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (!reg) throw new Error('no registration');
+        await reg.update();
+      });
+      // `controllerchange` fires before the activate handler runs, so the cleanup is observed through Cache Storage itself
+      await expect.poll(async () => Object.keys(await cachedPaths(page)).sort(), { timeout: 20_000 }).toEqual([CACHE_NAME]);
+      await expect.poll(() => registrationState(page), { timeout: 20_000 }).toEqual({ installing: null, waiting: null, active: 'activated' });
+      expect(await controlled(page)).toBe(true);
+      expect(oldWorkerServed, 'the update fetched the real sw.js, not the routed one').toBe(1);
+      const fresh = (await cachedPaths(page))[CACHE_NAME] ?? [];
+      for (const p of PRECACHE) expect(fresh, `precached ${p}`).toContain(p);
+      for (const p of modules) expect(fresh, `entry chunk / modulepreload ${p} precached at install`).toContain(p);
+      expect(pageErrors).toEqual([]);
+    });
+
+    await test.step('3. offline right after the upgrade, no second launch: the shell and the entry chunk come from the new cache', async () => {
+      await goOffline(context);
+      const fromWorker: string[] = [];
+      const failed: string[] = [];
+      page.on('response', (r) => {
+        if (r.fromServiceWorker() && r.ok()) fromWorker.push(new URL(r.url()).pathname);
+      });
+      page.on('requestfailed', (r) => failed.push(new URL(r.url()).pathname));
+      await page.goto('/', { waitUntil: 'load' });
+      expect(await onLine(page)).toBe(false);
+      expect(await controlled(page)).toBe(true);
+      expect(fromWorker).toContain('/');
+      for (const p of modules) expect(fromWorker, `${p} served by the worker offline`).toContain(p);
+      expect(failed.filter((p) => modules.includes(p))).toEqual([]);
+      expect(await shellModules(page)).toEqual(modules);
+      await expect.poll(() => paintedShare(page), { timeout: 15_000 }).toBeGreaterThan(0.9);
+      expect(pageErrors).toEqual([]);
+      /*
+       * BUG-19: only the shell survives the upgrade. The level-1 chunk, the lazy screens, the sfx
+       * recipes and the debug surface were runtime entries of the OLD cache, deleted by the
+       * activate cleanup, and the already-claimed page never re-warms them; `window.__towerclash`
+       * does not exist here and level 1 cannot start. Step 4 warms the new cache with one online
+       * launch before the offline play — once the worker (or the page, on `controllerchange`)
+       * restores the runtime entries, delete the warm-up and move step 4's play up here.
+       */
+    });
+
+    await test.step('4. BUG-19 warm-up: one online launch refills the runtime cache; then level 1 plays offline', async () => {
+      await goOnline(context);
+      await navigate(page);
+      await waitForWarm(page, CACHE_NAME);
+      await goOffline(context);
+      await navigate(page);
+      expect(await onLine(page)).toBe(false);
+      expect(await page.evaluate(() => window.__towerclash.loadLevel(1, 1))).toBe(true);
+      await expect.poll(() => screen(page)).toBe('play');
+      expect(await levelId(page)).toBe(1);
+      await expect.poll(() => simTime(page)).toBeGreaterThan(200);
+      expect(pageErrors).toEqual([]);
+    });
+  });
+
+  test('new deploy: with the worker controlling the page, a changed index.html (new entry hash) is picked up on the next launch and the offline launch after that boots the NEW shell', async ({ page, context }) => {
+    expect(process.env.PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS, 'worker network emulation flag (playwright.config.ts)').toBeTruthy();
+
+    const pageErrors: string[] = [];
+    page.on('pageerror', (err) => pageErrors.push(String(err)));
+    await page.addInitScript(([key, data]) => localStorage.setItem(key, JSON.stringify(data)), [SAVE_KEY, { version: 3 }] as const);
+
+    const rehash = (text: string) => text.replace(/-([A-Za-z0-9_-]{8})\.js\b/g, `-$1${DEPLOY_MARK}.js`);
+    const isNewChunk = (url: URL) => url.pathname.startsWith('/assets/') && url.pathname.endsWith(`${DEPLOY_MARK}.js`);
+    const isShellDocument = (url: URL) => url.pathname === '/' || url.pathname === '/index.html';
+    const assetRequests = (paths: string[]) => paths.filter((p) => p.startsWith('/assets/'));
+
+    let oldEntry = '';
+    await test.step('1. first launch on the current build', async () => {
+      await navigate(page);
+      expect(await swReady(page, 20_000)).toBe(new URL('/', page.url()).href);
+      await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, { timeout: 20_000 });
+      const modules = await shellModules(page);
+      oldEntry = modules.find((p) => ENTRY_CHUNK.test(p)) ?? '';
+      expect(oldEntry).toMatch(ENTRY_CHUNK);
+      expect((await cachedPaths(page))[CACHE_NAME]).toContain(oldEntry);
+      await waitForWarm(page, CACHE_NAME);
+      expect(pageErrors).toEqual([]);
+    });
+
+    const newEntry = rehash(oldEntry);
+    const served = { index: 0, chunks: [] as string[] };
+    await test.step('2. deploy: every chunk re-hashed, index.html names the new entry; the next launch boots on it (network-first)', async () => {
+      await context.route(isShellDocument, async (route) => {
+        served.index++;
+        const real = await route.fetch();
+        await route.fulfill({ response: real, body: rehash(await real.text()) });
+      });
+      await context.route(isNewChunk, async (route) => {
+        const url = new URL(route.request().url());
+        served.chunks.push(url.pathname);
+        const real = await route.fetch({ url: new URL(url.pathname.replace(`${DEPLOY_MARK}.js`, '.js'), url).href });
+        await route.fulfill({ response: real, body: rehash(await real.text()), headers: { ...real.headers(), 'content-type': 'text/javascript' } });
+      });
+      const requested: string[] = [];
+      page.on('request', (r) => requested.push(new URL(r.url()).pathname));
+      await navigate(page);
+      expect(await controlled(page)).toBe(true);
+      expect(served.index, 'the worker fetched the new index.html from the network (network-first navigation)').toBeGreaterThanOrEqual(1);
+      expect(await shellModules(page)).toEqual([newEntry]);
+      expect(requested).toContain(newEntry);
+      expect(requested).not.toContain(oldEntry);
+      expect(assetRequests(requested).filter((p) => !p.endsWith(`${DEPLOY_MARK}.js`)), 'no old-hash chunk requested on the new build').toEqual([]);
+      expect(served.chunks).toContain(newEntry);
+      // the worker stored the new shell and cached the new chunks (entry + idle preloads) on first use
+      const shell = await page.evaluate(async (name) => (await (await caches.open(name)).match('./index.html'))?.text() ?? '', CACHE_NAME);
+      expect(shell).toContain(newEntry.slice(1));
+      expect(shell).not.toContain(oldEntry.slice(1));
+      await expect
+        .poll(async () => (await cachedPaths(page))[CACHE_NAME] ?? [], { timeout: 20_000 })
+        .toEqual(
+          expect.arrayContaining([
+            newEntry,
+            expect.stringMatching(new RegExp(`^/assets/001-[^/]+${DEPLOY_MARK}\\.js$`)),
+            expect.stringMatching(new RegExp(`^/assets/lazyScreens-[^/]+${DEPLOY_MARK}\\.js$`)),
+            expect.stringMatching(new RegExp(`^/assets/debug-[^/]+${DEPLOY_MARK}\\.js$`)),
+          ]),
+        );
+      expect(Object.keys(await cachedPaths(page))).toEqual([CACHE_NAME]);
+      expect(pageErrors).toEqual([]);
+    });
+
+    await test.step('3. offline: the launch boots the NEW shell from the cache and level 1 plays', async () => {
+      await goOffline(context);
+      const requested: string[] = [];
+      const fromWorker: string[] = [];
+      page.on('request', (r) => requested.push(new URL(r.url()).pathname));
+      page.on('response', (r) => {
+        if (r.fromServiceWorker() && r.ok()) fromWorker.push(new URL(r.url()).pathname);
+      });
+      await navigate(page);
+      expect(await onLine(page)).toBe(false);
+      expect(await controlled(page)).toBe(true);
+      expect(fromWorker).toContain('/');
+      expect(fromWorker).toContain(newEntry);
+      expect(await shellModules(page)).toEqual([newEntry]);
+      expect(requested).toContain(newEntry);
+      expect(requested).not.toContain(oldEntry);
+      expect(assetRequests(requested).filter((p) => !p.endsWith(`${DEPLOY_MARK}.js`)), 'offline boot touched no old-hash chunk').toEqual([]);
+      expect(await page.evaluate(() => window.__towerclash.loadLevel(1, 1))).toBe(true);
+      await expect.poll(() => screen(page)).toBe('play');
+      expect(await levelId(page)).toBe(1);
+      await expect.poll(() => simTime(page)).toBeGreaterThan(200);
       expect(pageErrors).toEqual([]);
     });
   });
