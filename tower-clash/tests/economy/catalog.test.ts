@@ -131,7 +131,9 @@ describe('economy catalog (docs/ECONOMY.md)', () => {
     expect(EARN_RULES.bands.length).toBe(6);
     expect(EARN_RULES.bands.at(-1)).toEqual([41, 50]);
     for (let i = 1; i < EARN_RULES.bands.length; i++) expect(EARN_RULES.bands[i]![0]).toBe(EARN_RULES.bands[i - 1]![1] + 1); // contiguous
-    expect(ACHIEVEMENTS.reduce((s, a) => s + a.crystals, 0)).toBe(95);
+    // ECON-10 (ECONOMY.md §6.3, 2026-09-28): three challenge achievements, 95 → 145.
+    expect(ACHIEVEMENTS.reduce((s, a) => s + a.crystals, 0)).toBe(145);
+    expect(ACHIEVEMENTS).toHaveLength(14);
     expect(ACHIEVEMENTS.find((a) => a.id === 'grand_campaign')).toMatchObject({ label: 'Clear level 50', crystals: 10 });
   });
 

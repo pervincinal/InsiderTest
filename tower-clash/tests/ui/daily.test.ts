@@ -329,6 +329,34 @@ describe('PlayScreen in challenge mode', () => {
     expect(shell.starts).toEqual([{ levelId: 999, seed: ch.seed, opts: { challenge: ch } }]);
   });
 
+  it('day 7 of a streak: the milestone rides on the result line, challenge_streak_7 on the achievement grant and its toast wins (ECONOMY.md §6.3)', () => {
+    save.challenge = { lastWinDay: YESTERDAY, streak: 6, best: {}, milestones: [3] };
+    const shell = fakeApp(save);
+    const level = makeLevel({ star3: 30_000, star2: 60_000 });
+    const ch = challenge();
+    const play = new PlayScreen(shell.app, level, ch.seed, 20, { challenge: ch });
+    shell.app.go(play);
+    winNow(play, { now: 0 });
+    const result = shell.current() as ResultScreen;
+    expect(result).toBeInstanceOf(ResultScreen);
+    expect(result.info.daily).toMatchObject({ firstWin: true, streak: 7, milestone: 20, crystals: REWARD.crystals + 20 });
+    expect(result.info.achievements.unlocked.map((a) => a.id)).toEqual(['challenge_streak_7']);
+    expect(result.info.achievements.crystals).toBe(10);
+    expect(save.crystals).toBe(3 + REWARD.crystals + 20 + 10); // the achievement is paid on top of the result line
+    expect(save.achievements.unlocked).toEqual(['challenge_streak_7']);
+    expect(save.stars['999']).toBeUndefined();
+    result.enter();
+    const now = performance.now();
+    expect(result.toast.opts(now)?.text).toBe(t('achievements.unlocked', { names: t('achievement.challenge_streak_7'), crystals: 10 }));
+    expect(result.toast.opts(now)?.text).not.toBe(t('daily.milestone', { day: 7, crystals: 20 }));
+    // a replay the same day pays nothing and grants nothing again
+    const replay = new PlayScreen(shell.app, level, ch.seed, 20, { challenge: ch });
+    shell.app.go(replay);
+    winNow(replay, { now: 1000 });
+    expect((shell.current() as ResultScreen).info.achievements).toEqual({ unlocked: [], crystals: 0 });
+    expect(save.crystals).toBe(3 + REWARD.crystals + 30);
+  });
+
   it('a lost challenge pays nothing and offers no continue', () => {
     const shell = fakeApp(save);
     // two L1 player towers against an L3 keep (rules v3: three 2/s streams; the garrison no longer decides): the debug "suicide" mode loses it (continue.test.ts)

@@ -405,22 +405,27 @@ export class PlayScreen implements Screen {
     this.match.levelId = this.level.id;
     this.match.timeMs = elapsed;
     if (this.challenge) {
-      // Separate path (GDD §7): no level stars, first-clear gold, milestones or achievements — the
-      // daily reward is paid once per day by `recordChallengeResult`.
+      // Separate path (GDD §7): no level stars, first-clear gold or milestones — the daily reward is
+      // paid once per day by `recordChallengeResult`. Achievements run without the match (ECONOMY.md
+      // §6.3): only the save counters (`challenge_streak_7`, `challenge_wins_30`, …) can fire here, the
+      // match facts (`first_win`, `flawless`, …) stay campaign-only; the grant rides on `achievements`,
+      // not on `daily.crystals`.
       const daily = recordChallengeResult(this.app.save, this.challenge, this.level, outcome, elapsed);
+      const achievements = evaluateAchievements(this.app.save);
       this.earnings = { stars: daily.stars, gold: daily.gold, crystals: daily.crystals, notes: [], replayCapped: false };
       const ui = this.buildUi();
       this.gestures.reset();
-      this.app.go(new ResultScreen(this.app, { state: this.state, level: this.level, ui, earnings: this.earnings, continued: this.continued, achievements: { unlocked: [], crystals: 0 }, challenge: this.challenge, daily }));
+      this.app.go(new ResultScreen(this.app, { state: this.state, level: this.level, ui, earnings: this.earnings, continued: this.continued, achievements, challenge: this.challenge, daily }));
       return;
     }
     if (this.weekly) {
       // Same separate path for the weekly (GDD §8): gold once per week, crystals once at the 3★ target.
       const weeklyOutcome = recordWeeklyResult(this.app.save, this.weekly, this.level, outcome, elapsed);
+      const achievements = evaluateAchievements(this.app.save); // save counters only (`weekly_streak_4`), no match
       this.earnings = { stars: weeklyOutcome.stars, gold: weeklyOutcome.gold, crystals: weeklyOutcome.crystals, notes: [], replayCapped: false };
       const ui = this.buildUi();
       this.gestures.reset();
-      this.app.go(new ResultScreen(this.app, { state: this.state, level: this.level, ui, earnings: this.earnings, continued: this.continued, achievements: { unlocked: [], crystals: 0 }, weekly: this.weekly, weeklyOutcome }));
+      this.app.go(new ResultScreen(this.app, { state: this.state, level: this.level, ui, earnings: this.earnings, continued: this.continued, achievements, weekly: this.weekly, weeklyOutcome }));
       return;
     }
     this.earnings = recordResult(this.app.save, this.level, outcome, elapsed);

@@ -1,14 +1,16 @@
 /**
- * Achievements (ECONOMY.md §2.1, `catalog.ACHIEVEMENTS`): eleven one-time goals paid in crystals.
- * Three count 3★ levels in the save; the rest are facts about a single finished match that the
- * play screen collects into a `MatchSummary` (including which level it was: `grand_campaign`). `evaluateAchievements` grants each id exactly once
+ * Achievements (ECONOMY.md §2.1, `catalog.ACHIEVEMENTS`): fourteen one-time goals paid in crystals.
+ * Three count 3★ levels in the save; three read the challenge counters in the save (`COUNTERS`,
+ * ECONOMY.md §6.3: daily streak, distinct daily win days, weekly streak); the rest are facts about a
+ * single finished match that the play screen collects into a `MatchSummary` (including which level it
+ * was: `grand_campaign`). `evaluateAchievements` grants each id exactly once
  * (the save's `achievements.unlocked` list is the ledger) and persists through `writeSave`.
  * Pure over `SaveData` — no DOM, no clock.
  *
  * Owned by the Frontend Engineer.
  */
 import type { SaveData } from '../ui/save';
-import { writeSave } from '../ui/save';
+import { CHALLENGE_BEST_KEEP, writeSave } from '../ui/save';
 import { LEVEL_META } from '../levels/index';
 import type { AchievementDef } from './catalog';
 import { ACHIEVEMENTS } from './catalog';
@@ -59,6 +61,26 @@ export const GRAND_CAMPAIGN_LEVEL = 50;
  */
 const STAR_TARGETS: Readonly<Record<string, number>> = { stars_10: 10, stars_20: 20, stars_40: LEVEL_META.length };
 
+/** `challenge_wins_30`: distinct UTC days with a daily win (`challenge.best` keeps one key per won day). */
+export const CHALLENGE_WINS_TARGET = 30;
+/** `challenge_streak_7` / `weekly_streak_4`: consecutive daily-win days / weekly-win weeks. */
+export const CHALLENGE_STREAK_TARGET = 7;
+export const WEEKLY_STREAK_TARGET = 4;
+
+/**
+ * Challenge achievements (ECONOMY.md §6.3, ECON-10): id → target and the save counter it reads. Raw
+ * `streak` values (not the clock-aware `shownStreak`, the rules stay pure): a broken streak keeps its
+ * old value until the next first win resets it to 1, so a stale "5 / 7" can show for a day — accepted.
+ * `best` is pruned to the newest `CHALLENGE_BEST_KEEP` keys, so its size is `min(30, win days)` only
+ * while `CHALLENGE_BEST_KEEP >= 30` — asserted below so pruning can never hide the 30th key.
+ */
+const COUNTERS: Readonly<Record<string, { target: number; value: (s: SaveData) => number }>> = {
+  challenge_streak_7: { target: CHALLENGE_STREAK_TARGET, value: (s) => s.challenge.streak },
+  challenge_wins_30: { target: Math.min(CHALLENGE_WINS_TARGET, CHALLENGE_BEST_KEEP), value: (s) => Object.keys(s.challenge.best).length },
+  weekly_streak_4: { target: WEEKLY_STREAK_TARGET, value: (s) => s.weekly.streak },
+};
+if (CHALLENGE_BEST_KEEP < CHALLENGE_WINS_TARGET) throw new Error(`CHALLENGE_BEST_KEEP (${CHALLENGE_BEST_KEEP}) must be >= ${CHALLENGE_WINS_TARGET} for challenge_wins_30`);
+
 export interface AchievementProgress {
   id: string;
   label: string;
@@ -106,6 +128,8 @@ function matchSatisfies(id: string, m: MatchSummary): boolean {
 function satisfied(save: SaveData, id: string, match?: MatchSummary): boolean {
   const target = STAR_TARGETS[id];
   if (target !== undefined) return threeStarLevels(save) >= target;
+  const counter = COUNTERS[id];
+  if (counter !== undefined) return counter.value(save) >= counter.target;
   return match !== undefined && matchSatisfies(id, match);
 }
 
@@ -114,8 +138,9 @@ export function achievementProgress(save: SaveData): AchievementProgress[] {
   const stars = threeStarLevels(save);
   return (ACHIEVEMENTS as readonly AchievementDef[]).map((a) => {
     const unlocked = isUnlocked(save, a.id);
-    const target = STAR_TARGETS[a.id] ?? 1;
-    const current = STAR_TARGETS[a.id] !== undefined ? Math.min(target, stars) : unlocked ? 1 : 0;
+    const counter = COUNTERS[a.id];
+    const target = STAR_TARGETS[a.id] ?? counter?.target ?? 1;
+    const current = STAR_TARGETS[a.id] !== undefined ? Math.min(target, stars) : counter ? Math.min(target, counter.value(save)) : unlocked ? 1 : 0;
     return { id: a.id, label: a.label, crystals: a.crystals, current: unlocked ? target : current, target, unlocked };
   });
 }
@@ -129,7 +154,8 @@ export interface AchievementGrant {
 
 /**
  * Unlock every achievement that is satisfied and not yet unlocked, pay its crystals and persist.
- * Call after each result (with the match), after a level skip and on the daily claim (without).
+ * Call after each campaign result (with the match); after a daily / weekly result, a level skip, the
+ * daily claim and on the achievements screen without one (only the save-based rules can fire then).
  * An id is never granted twice.
  */
 export function evaluateAchievements(save: SaveData, match?: MatchSummary): AchievementGrant {

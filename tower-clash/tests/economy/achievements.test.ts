@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { SaveData } from '../../src/ui/save';
-import { SAVE_KEY, defaultSave, loadSaveFrom, normalizeSave, resetProgress, setSaveStorageForTests } from '../../src/ui/save';
+import { CHALLENGE_BEST_KEEP, SAVE_KEY, defaultSave, loadSaveFrom, normalizeSave, pruneChallengeBest, resetProgress, setSaveStorageForTests } from '../../src/ui/save';
 import type { MatchSummary } from '../../src/economy/achievements';
 import {
+  CHALLENGE_STREAK_TARGET,
+  CHALLENGE_WINS_TARGET,
   GRAND_CAMPAIGN_LEVEL,
   L3_LEVEL,
   SPEEDRUN_MS,
+  WEEKLY_STREAK_TARGET,
   achievementCrystalsEarned,
   achievementProgress,
   achievementToast,
@@ -118,14 +121,112 @@ describe('once-only grants', () => {
     expect(evaluateAchievements(reloaded, win({ lostTower: true }))).toEqual({ unlocked: [], crystals: 0 });
   });
 
-  it('every catalog achievement can be granted exactly once in total (95 crystals)', () => {
+  it('every catalog achievement can be granted exactly once in total (145 crystals)', () => {
     for (const level of LEVEL_META) save.stars[String(level.id)] = 3;
+    save.challenge.streak = 7;
+    save.challenge.best = winDays(30);
+    save.weekly.streak = 4;
     const everything = win({ levelId: GRAND_CAMPAIGN_LEVEL, timeMs: 1000, upgradedToL3: true, capturedFortress: true, capturedTankFactory: true, tripleStream: true });
     const all = evaluateAchievements(save, everything);
     expect(ids(all)).toEqual(ACHIEVEMENTS.map((a) => a.id));
-    expect(all.crystals).toBe(95);
+    expect(all.crystals).toBe(145);
     expect(evaluateAchievements(save, everything).crystals).toBe(0);
-    expect(save.crystals).toBe(95);
+    expect(save.crystals).toBe(145);
+  });
+});
+
+/** `n` distinct won day keys in `challenge.best` shape (2026-01-01 onwards). */
+function winDays(n: number): SaveData['challenge']['best'] {
+  const out: SaveData['challenge']['best'] = {};
+  for (let i = 0; i < n; i++) {
+    const d = new Date(Date.UTC(2026, 0, 1 + i));
+    out[d.toISOString().slice(0, 10)] = { stars: 3, timeMs: 30_000 };
+  }
+  return out;
+}
+
+describe('challenge achievements (ECONOMY.md §6.3, ECON-10): save counters, no match', () => {
+  it('pins the targets and the catalog rows (10 / 20 / 20, after grand_campaign, in that order)', () => {
+    expect([CHALLENGE_STREAK_TARGET, CHALLENGE_WINS_TARGET, WEEKLY_STREAK_TARGET]).toEqual([7, 30, 4]);
+    expect(ACHIEVEMENTS.slice(-4).map((a) => a.id)).toEqual(['grand_campaign', 'challenge_streak_7', 'challenge_wins_30', 'weekly_streak_4']);
+    expect(crystalsOf('challenge_streak_7')).toBe(10);
+    expect(crystalsOf('challenge_wins_30')).toBe(20);
+    expect(crystalsOf('weekly_streak_4')).toBe(20);
+  });
+
+  it('CHALLENGE_BEST_KEEP is at least 30, so pruning best can never hide the 30th win day', () => {
+    expect(CHALLENGE_BEST_KEEP).toBeGreaterThanOrEqual(CHALLENGE_WINS_TARGET);
+    expect(Object.keys(pruneChallengeBest(winDays(45))).length).toBeGreaterThanOrEqual(30);
+  });
+
+  it('challenge_streak_7: streak 6 grants nothing, 7 grants 10 crystals once; a reset to 1 and a later 14 never pay again', () => {
+    save.challenge.streak = 6;
+    expect(ids(evaluateAchievements(save))).toEqual([]);
+    expect(achievementProgress(save).find((a) => a.id === 'challenge_streak_7')).toMatchObject({ current: 6, target: 7, unlocked: false });
+    save.challenge.streak = 7;
+    const r = evaluateAchievements(save);
+    expect(ids(r)).toEqual(['challenge_streak_7']);
+    expect(r.crystals).toBe(10);
+    expect(save.crystals).toBe(10);
+    save.challenge.streak = 1; // broken streak, next first win
+    expect(evaluateAchievements(save)).toEqual({ unlocked: [], crystals: 0 });
+    expect(achievementProgress(save).find((a) => a.id === 'challenge_streak_7')).toMatchObject({ current: 7, target: 7, unlocked: true }); // stays earned
+    save.challenge.streak = 14;
+    expect(evaluateAchievements(save)).toEqual({ unlocked: [], crystals: 0 });
+    expect(save.crystals).toBe(10);
+    expect(save.achievements.unlocked).toEqual(['challenge_streak_7']);
+  });
+
+  it('challenge_wins_30: 29 distinct win days show 29/30 and pay nothing; the 30th pays 20 once; more keys keep 30/30', () => {
+    save.challenge.best = winDays(29);
+    expect(ids(evaluateAchievements(save))).toEqual([]);
+    expect(achievementProgress(save).find((a) => a.id === 'challenge_wins_30')).toMatchObject({ current: 29, target: 30, unlocked: false });
+    save.challenge.best = winDays(30);
+    const r = evaluateAchievements(save);
+    expect(ids(r)).toEqual(['challenge_wins_30']);
+    expect(r.crystals).toBe(20);
+    save.challenge.best = pruneChallengeBest(winDays(40));
+    expect(Object.keys(save.challenge.best)).toHaveLength(CHALLENGE_BEST_KEEP);
+    expect(evaluateAchievements(save)).toEqual({ unlocked: [], crystals: 0 });
+    expect(achievementProgress(save).find((a) => a.id === 'challenge_wins_30')).toMatchObject({ current: 30, target: 30, unlocked: true });
+    expect(save.crystals).toBe(20);
+  });
+
+  it('weekly_streak_4: 3 weeks show 3/4, the 4th pays 20 once', () => {
+    save.weekly.streak = 3;
+    expect(ids(evaluateAchievements(save))).toEqual([]);
+    expect(achievementProgress(save).find((a) => a.id === 'weekly_streak_4')).toMatchObject({ current: 3, target: 4, unlocked: false });
+    save.weekly.streak = 4;
+    expect(ids(evaluateAchievements(save))).toEqual(['weekly_streak_4']);
+    expect(save.crystals).toBe(20);
+    save.weekly.streak = 5;
+    expect(evaluateAchievements(save)).toEqual({ unlocked: [], crystals: 0 });
+    expect(save.crystals).toBe(20);
+  });
+
+  it('a match never satisfies a challenge achievement, and the counters ignore the match facts', () => {
+    const everything = win({ levelId: GRAND_CAMPAIGN_LEVEL, timeMs: 1000, upgradedToL3: true, capturedFortress: true, capturedTankFactory: true, tripleStream: true });
+    const r = evaluateAchievements(save, everything);
+    expect(ids(r)).not.toContain('challenge_streak_7');
+    expect(ids(r)).not.toContain('challenge_wins_30');
+    expect(ids(r)).not.toContain('weekly_streak_4');
+    save.challenge.streak = 7;
+    expect(ids(evaluateAchievements(save, { ...emptyMatch(), outcome: 'lost' }))).toEqual(['challenge_streak_7']); // a lost daily still runs the counter rules
+  });
+
+  it('progress bars: 3/7 for the streak and 12/30 for the wins on a mid-way save, persisted grant survives a reload', () => {
+    save.challenge.streak = 3;
+    save.challenge.best = winDays(12);
+    const p = achievementProgress(save);
+    expect(p.find((a) => a.id === 'challenge_streak_7')).toMatchObject({ current: 3, target: 7, unlocked: false, crystals: 10 });
+    expect(p.find((a) => a.id === 'challenge_wins_30')).toMatchObject({ current: 12, target: 30, unlocked: false, crystals: 20 });
+    expect(p.find((a) => a.id === 'weekly_streak_4')).toMatchObject({ current: 0, target: 4, unlocked: false, crystals: 20 });
+    save.weekly.streak = 4;
+    evaluateAchievements(save);
+    const reloaded = loadSaveFrom(store);
+    expect(reloaded.achievements.unlocked).toEqual(['weekly_streak_4']);
+    expect(reloaded.crystals).toBe(20);
+    expect(evaluateAchievements(reloaded)).toEqual({ unlocked: [], crystals: 0 });
   });
 });
 

@@ -116,6 +116,10 @@ export const ACHIEVEMENTS = [
   { id: 'speedrunner', label: 'Win in under 30 s', crystals: 10 },
   /** Band 5 finale (GDD §3, 2026-09-20): a won match on level 50 — a skip does not count. Total 85 → 95. */
   { id: 'grand_campaign', label: 'Clear level 50', crystals: 10 },
+  /** ECON-10 (ECONOMY.md §6.3): read from save.challenge / save.weekly, never from a match. Total 95 → 145. */
+  { id: 'challenge_streak_7', label: 'Win the daily challenge 7 days in a row', crystals: 10 },
+  { id: 'challenge_wins_30', label: 'Win 30 daily challenges', crystals: 20 },
+  { id: 'weekly_streak_4', label: 'Win the weekly challenge 4 weeks in a row', crystals: 20 },
 ] as const satisfies readonly AchievementDef[];
 
 // ---------------------------------------------------------------------------------------------
