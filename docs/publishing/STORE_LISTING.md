@@ -16,6 +16,8 @@ What must NOT be claimed: leaderboards, multiplayer, cloud save, more than 50 le
 
 **Status 2026-09-27 (build 7, PUB-11).** One claim changed: levels 41–50 got their own biome, the twilight highlands (`e52186a`, ART-8), so "FIVE ISLANDS" became **"SIX ISLANDS"** in §1.1 / §1.2 (EN 3984 / AZ 3955 characters, limit 4000); nothing else in the build-7 changes — the "How to play" card (FE-3), the defeat tip (FE-4), the refuse / stalemate sounds (ART-9), the PWA offline fix (BUG-18), the faster first load (PERF-4 / PERF-6), the level 36 retune (LV-17), the Azerbaijani text pass (L10N-1) — contradicts a listing text; the "What's new" block for build 7 is in `RELEASE_NOTES.md`. Screenshots: the sets were re-rendered on build 6 (`e3117c7`, 2026-09-25); on build 7 the **AZ Google set** (`raw-az/`, `az/`) was re-rendered because L10N-1 changed the tutorial hint, lesson banners and the shop tab that are on those frames, and frame 02's AZ caption follows the new glossary ("Toxun — axın davam edir"); EN / RU / TR and both Apple sets are unchanged. No frame shows a level ≥ 41, so the sixth biome is in no screenshot — a 41+ frame stays PUB-6 (1.0.1).
 
+**Status 2026-09-28 (PUB-12, App Store publish pack — the Apple Developer account is verified).** No claim changed in the build (still 1.0.0 / build 7). Two things changed around the listing: (1) GitHub Pages is on — the `tower-clash-pages` deploy succeeds on every push since 2026-09-28 — so the marketing / support / privacy URLs below are live (confirm once in Safari; the sandbox cannot reach github.io); the "active once Pages is enabled" notes are gone (W3 / W6). (2) **Default for the first App Store submission: 1.0.0 without in-app purchases** (`LAUNCH_CHECKLIST.md` A18, §0b): the build is made without `RC_IOS_KEY`, the purchase SDK is never configured, the shop's Crystals / Bundles tabs show the packs greyed out with "Store unavailable on this platform" (nothing can be bought, Restore Purchases disabled; skins, booster crate and Commander upgrades keep working with earned gold / crystals — `src/ui/shop.ts`, `src/render/menusShop.ts`, `src/economy/store.ts`). The App Store texts that mention purchases therefore have a **variant B** (§2.1) with the purchase phrases removed, and the review notes exist in two variants (§2). Variant A (the texts as written, with IAP) returns in 1.0.1 with the products (MZ3, MZ13). The click order and the paste-ready fields are `LAUNCH_CHECKLIST.md` §0b and `APP_STORE_CONNECT_SHEET.md`.
+
 ---
 
 ## 1. Google Play
@@ -27,7 +29,7 @@ What must NOT be claimed: leaderboards, multiplayer, cloud save, more than 50 le
 | Category | — | Games › Strategy | Oyunlar › Strategiya |
 | Tags | — | Strategy, Casual, Single player, Offline, Stylised | — |
 | Contact e-mail | — | `[developer e-mail]` | — |
-| Privacy policy URL | — | `https://pervincinal.github.io/InsiderTest/privacy.html` (policy v2.1 with the ads/purchases section; the page is `tower-clash/public/privacy.html`, published by the Pages job — resolves once GitHub Pages is enabled, checklist W3) | — |
+| Privacy policy URL | — | `https://pervincinal.github.io/InsiderTest/privacy.html` (policy v2.1 with the ads/purchases section; the page is `tower-clash/public/privacy.html`, published by the Pages job — live since the Pages deploy of 2026-09-28, checklist W3) | — |
 | Website (optional) | — | `https://pervincinal.github.io/InsiderTest/` — support page `https://pervincinal.github.io/InsiderTest/support.html` | — |
 | Store labels (automatic) | — | **Contains ads** (from the Ads declaration) · **In-app purchases** (from the product list) — Google adds both badges; nothing to type | — |
 
@@ -181,19 +183,32 @@ HONEST BY DESIGN
 
 | Field | Limit | EN | AZ (Azerbaijani is not an App Store localisation; use it in the description only if a supported locale such as Turkish is not preferred) |
 |---|---|---|---|
-| Name | 30 | `Tower Clash` (11) | `Tower Clash` (11) |
+| Name | 30 | `Tower Clash` (11) — App Store names are unique; fallbacks if taken, in order: `Tower Clash: Tap & Conquer` (26), `Tower Clash Strategy` (20) | `Tower Clash` (11) |
 | Subtitle | 30 | `Capture every tower` (19) | `Bütün qüllələri tut` (19) |
-| Promotional text | 170 | `Tap, send, conquer. 50 levels of one-thumb real-time strategy: fortresses, artillery, tanks, walls, mines. Plays offline, no account. Ads removable.` (148) | `Toxun, göndər, fəth et. Qalalar, toplar, tanklar, divarlar, minalarla 50 səviyyəlik bir barmaq real vaxt strategiya. Oflayn, hesabsız. Reklamlar silinə bilər.` (158) |
+| Promotional text | 170 | Variant A: `Tap, send, conquer. 50 levels of one-thumb real-time strategy: fortresses, artillery, tanks, walls, mines. Plays offline, no account. Ads removable.` (148) · **Variant B (1.0.0 default):** `Tap, send, conquer. 50 levels of one-thumb real-time strategy: fortresses, artillery, tanks, walls, mines. Plays offline, no account.` (133) | `Toxun, göndər, fəth et. Qalalar, toplar, tanklar, divarlar, minalarla 50 səviyyəlik bir barmaq real vaxt strategiya. Oflayn, hesabsız. Reklamlar silinə bilər.` (158) · B: the same without "Reklamlar silinə bilər." (134) |
 | Keywords | 100 | `tower,war,strategy,rts,capture,conquer,castle,army,offline,tap,casual,defense,attack,soldiers` (93) | `qüllə,strategiya,qala,ordu,oflayn,müharibə,fəth,döyüş,əsgər,tower,war,rts,casual` (80) |
 | Primary category | — | Games | — |
 | Subcategories | — | Strategy, Casual | — |
 | Support URL | — | `https://pervincinal.github.io/InsiderTest/support.html` (`tower-clash/public/support.html`: contact, restore purchases, delete data; the `[developer e-mail]` placeholder must be filled before submission) | — |
-| Marketing URL | — | `https://pervincinal.github.io/InsiderTest/` (active once GitHub Pages is enabled in the repository settings) | — |
-| Privacy policy URL | — | `https://pervincinal.github.io/InsiderTest/privacy.html` (policy v2.1, `tower-clash/public/privacy.html`; active once GitHub Pages is enabled) | — |
-| Copyright | — | `© 2026 [developer name]` | — |
-| In-App Purchases (automatic) | — | App Store shows an "In-App Purchases" line with the products from §6.1 once they are attached to the version; nothing to type in the description | — |
+| Marketing URL | — | `https://pervincinal.github.io/InsiderTest/` (live since the Pages deploy of 2026-09-28) | — |
+| Privacy policy URL | — | `https://pervincinal.github.io/InsiderTest/privacy.html` (policy v2.1, `tower-clash/public/privacy.html`; live since 2026-09-28 — the `[developer e-mail]` placeholder on the page must be replaced before review, G18 / T3) | — |
+| Copyright | — | `© 2026 [developer name]` (stakeholder fills the name) | — |
+| In-App Purchases (automatic) | — | App Store shows an "In-App Purchases" line with the products from §6.1 once they are attached to the version; nothing to type in the description. **1.0.0 default: no products attached (variant B)** | — |
 
-Description (≤ 4000): reuse §1.1 (EN) and §1.2 (AZ) verbatim — they are under the limit and contain no Google-specific wording.
+Description (≤ 4000): variant A reuses §1.1 (EN) and §1.2 (AZ) verbatim — they are under the limit and contain no Google-specific wording. **Variant B (1.0.0 default, no in-app purchases)** applies the four substitutions of §2.1 (EN 3881 / AZ 3847; the full EN block is pasted in `APP_STORE_CONNECT_SHEET.md` §6.3).
+
+### 2.1 Variant B — the same texts without purchase claims (for a build made without `RC_IOS_KEY`)
+
+What the native build shows without a RevenueCat key (`src/economy/store.ts` → `isAvailable()` false; `src/render/menusShop.ts`): the Crystals and Bundles tabs still list the packs with the catalogue's fallback USD prices, but every buy button and the Restore Purchases button are drawn **disabled**, the line under them reads "Store unavailable on this platform", and a tap does nothing (`shop.ts` `buy()` returns before the store call). The crystals → gold converter, the booster crate, the Skins tab (crystals) and the Upgrades tab (gold) work with earned currency. So a variant-B listing may not promise purchases or "Remove Ads", and must keep the ads sentences. Substitutions in §1.1 / §1.2 (everything else verbatim):
+
+| # | §1.1 EN (variant A) → variant B | §1.2 AZ (variant A) → variant B |
+|---|---|---|
+| 1 | `• Crystals come from milestones, achievements, the daily chest and optional purchases; they buy …` → `• Crystals come from milestones, achievements and the daily chest; they buy …` | `• Kristallar mərhələlərdən, nailiyyətlərdən, gündəlik sandıqdan və könüllü alışlardan gəlir; qüllə …` → `• Kristallar mərhələlərdən, nailiyyətlərdən və gündəlik sandıqdan gəlir; qüllə …` |
+| 2 | `• Plays offline: the campaign needs no connection (ads and purchases do).` → `• Plays offline: the campaign needs no connection (ads do).` | `• Oflayn oynanır: kampaniya üçün internet lazım deyil (reklam və alışlar üçün lazımdır).` → `• Oflayn oynanır: kampaniya üçün internet lazım deyil (reklam üçün lazımdır).` |
+| 3 | `• Optional purchases only: crystal packs, a Starter Pack, Remove Ads and a Premium Bundle. No subscriptions, no loot boxes.` → `• Nothing to buy in this version: gold and crystals are earned by playing. No subscriptions, no loot boxes.` | `• Yalnız könüllü alışlar: kristal paketləri, Başlanğıc paketi, Reklamları sil və Premium paket. Abunəlik yoxdur, loot box yoxdur.` → `• Bu versiyada alınası heç nə yoxdur: qızıl və kristal oyunla qazanılır. Abunəlik yoxdur, loot box yoxdur.` |
+| 4 | `… Rewarded videos are always your choice. One purchase removes the between-level ads for good.` → `… Rewarded videos are always your choice.` | `… Mükafatlı videolar həmişə sənin seçimindir. Bir alış səviyyələr arası reklamları həmişəlik silir.` → `… Mükafatlı videolar həmişə sənin seçimindir.` |
+
+Counts after the substitutions (2026-09-28, code points): EN **3881**, AZ **3847**; promotional text B EN 133 / AZ 134. Keywords, subtitle, name and the screenshot set are unchanged (frame 10 shows the Upgrades tab with gold prices, no IAP). Ads stay in the texts because the build serves ads either way — with the real AdMob iOS ids from MZ7 in the review build (without them it would show Google "Test Ad" placeholders, acceptable on TestFlight only). Google Play: the same substitutions apply if the first Play release is also made without `RC_ANDROID_KEY`; §1.4 remains the wording for a build without ads *and* purchases.
 
 What's New (≤ 4000): use the EN block of the relevant version from `RELEASE_NOTES.md`.
 
@@ -206,7 +221,13 @@ App Store screenshots (exact device sizes, rendered by `node store/tools/renderS
 
 Same frames and captions as the Google set (English only — Azerbaijani is not an App Store locale), plus the App-Store-only frames 09 (level 15 artillery citadel, "Silence the guns") and 10 (shop, Upgrades tab, "Boost your commander" — the Google set's former 08), rendered at the exact device sizes by `--apple`; the set was re-rendered for Rules v3 on 2026-09-21 (walls, fords, straight ribbons), on build 6 and with the PUB-6 re-cut on 2026-09-27, and is ready to upload (10 of the 10 allowed). iPad screenshots are not needed if the app is marked iPhone-only in App Store Connect (recommended; the game is portrait phone-first).
 
-Review notes for App Review (paste into "Notes"): *Single-player offline game, no account needed. In-app purchases are one-time products handled by StoreKit through RevenueCat; "Restore Purchases" is in the shop screen. Ads are Google AdMob; the app never requests App Tracking Transparency (no `NSUserTrackingUsageDescription` in Info.plist) and always requests non-personalised ads on iOS, so the IDFA is not used — App Privacy "Tracking" is answered No (see §6.4). Sandbox tester: none required — all content is available without purchase.*
+Review notes for App Review (paste into "Notes"; both variants are in `APP_STORE_CONNECT_SHEET.md` §6.4 as fenced blocks, counted 2026-09-28):
+
+**Variant A — with in-app purchases (878 chars; only when the nine products of §6.1 are attached to the version):** *Single-player offline game, no account or sign-in needed, so no demo account is required — all content is reachable without paying. In-app purchases are one-time products (consumable crystal packs and non-consumable Starter Pack / Remove Ads / Premium Bundle / Premium Upgrade) handled by StoreKit through the RevenueCat SDK; "Restore Purchases" is at the bottom of the shop's Crystals and Bundles tabs (title screen → SHOP). Ads are Google AdMob: an interstitial after some result screens (never during play, never in the first five levels) and rewarded videos only on the player's request. The app never requests App Tracking Transparency (there is no NSUserTrackingUsageDescription in Info.plist) and always requests non-personalised ads on iOS, so the IDFA is not used — App Privacy "Tracking" is answered No. The game runs offline; only ads and purchases need a connection.*
+
+**Variant B — without in-app purchases (1072 chars; the 1.0.0 default, `LAUNCH_CHECKLIST.md` A18):** *Single-player offline game, no account or sign-in needed, so no demo account is required — all content is reachable without paying. This version contains NO in-app purchases: no products are attached to it and the purchase SDK is never configured. The shop (title screen → SHOP) has tabs for Crystals and Bundles that list future packs greyed out with the line "Store unavailable on this platform"; they cannot be tapped or bought, and the Restore Purchases button below them is disabled for the same reason. Everything else in the shop (skins, the booster crate, Commander upgrades) is paid with gold and crystals earned by playing. Ads are Google AdMob: an interstitial after some result screens (never during play, never in the first five levels) and rewarded videos only on the player's request. The app never requests App Tracking Transparency (there is no NSUserTrackingUsageDescription in Info.plist) and always requests non-personalised ads on iOS, so the IDFA is not used — App Privacy "Tracking" is answered No. The game runs offline; only ads need a connection.*
+
+Sandbox tester: none required in either variant — all content is available without purchase; "Sign-in required" is No.
 
 ---
 
