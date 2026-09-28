@@ -6,7 +6,7 @@ Tower Clash artıq üç formada telefonda oynanıla bilər:
 
 1. **PWA (ən asan, indi işləyir):** oyunun veb ünvanını Safari (iPhone) və ya Chrome (Android) ilə açın və "Ana ekrana əlavə et" / "Tətbiqi quraşdır" seçin. Heç bir mağaza, hesab və ya ödəniş lazım deyil.
 2. **Android APK (test üçün):** hər push-dan sonra GitHub Actions avtomatik `app-debug.apk` faylı hazırlayır. Onu yükləyib telefona quraşdırmaq olar (aşağıda addım-addım izah var).
-3. **iOS tətbiqi:** Capacitor layihəsi hazırdır (`tower-clash/ios/`), amma real iPhone-a yükləmək üçün Apple Developer hesabı (ildə 99 USD) lazımdır. Hələlik CI yalnız simulyator üçün imzasız build edir.
+3. **iOS tətbiqi:** Capacitor layihəsi hazırdır (`tower-clash/ios/`) və Apple Developer hesabı təsdiqlənib; `tower-clash-ios-release` iş axını Mac olmadan, yalnız App Store Connect API açarı ilə (4 secret: `APP_STORE_CONNECT_API_KEY_ID`, `APP_STORE_CONNECT_API_ISSUER_ID`, `APP_STORE_CONNECT_API_KEY_P8`, `APPLE_TEAM_ID` — §3-də brauzerdən necə alınacağı yazılıb) imzalayıb TestFlight-a / App Store-a yükləyir; sertifikat və profili ilk işə salınmada Apple özü yaradır.
 
 Mağazalara (App Store / Google Play) çıxarmaq üçün nə lazımdır: Apple Developer hesabı (99 USD/il), Google Play Console hesabı (25 USD, bir dəfə), imza açarları, skrinşotlar və məxfilik siyasəti səhifəsi (oyun heç bir məlumat toplamır, şəbəkəyə çıxmır — siyasət bir cümlədən ibarət ola bilər). Ətraflı ingiliscə izah aşağıdadır.
 
@@ -44,7 +44,28 @@ Alternative with a USB cable and the Android SDK installed: `adb install -r app-
 
 ## 3. iOS builds
 
-The **tower-clash-ios** workflow (manual, or automatic when `tower-clash/ios/**` changes) runs on a macOS runner and builds the app **for the iOS Simulator, unsigned**. The artifact **tower-clash-ios-simulator** contains `App.app`; it runs in Xcode's Simulator on a Mac (`xcrun simctl install booted App.app`) but **cannot be installed on a real iPhone**. Installing on a physical device requires an Apple Developer account and code signing (see section 5).
+The **tower-clash-ios** workflow (manual, or automatic when `tower-clash/ios/**` changes) runs on a macOS runner and builds the app **for the iOS Simulator, unsigned**. The artifact **tower-clash-ios-simulator** contains `App.app`; it runs in Xcode's Simulator on a Mac (`xcrun simctl install booted App.app`) but **cannot be installed on a real iPhone**. Installing on a physical device requires an Apple Developer account and code signing (see section 5). It has run successfully on `macos-latest` (commit `16d720b`, 2026-09-27), so the AdMob and RevenueCat Swift packages resolve on the runner.
+
+### Signed TestFlight / App Store build from CI — no Mac needed
+
+The **tower-clash-ios-release** workflow (`.github/workflows/tower-clash-ios-release.yml`) archives the app for real iPhones, signs it and uploads it to App Store Connect. Everything happens on the GitHub macOS runner; the stakeholder never needs a Mac or Xcode. Signing uses an **App Store Connect API key** and Xcode's *cloud-managed* Apple Distribution certificate — Apple keeps the private key, there is nothing to export or back up.
+
+**Secrets to create (GitHub → repository → Settings → Secrets and variables → Actions → New repository secret), exact names:**
+
+| Secret | Value | Where to get it (browser only) |
+|---|---|---|
+| `APPLE_TEAM_ID` | 10 characters, e.g. `A1B2C3D4E5` | <https://developer.apple.com/account> → sign in → **Membership details** (left menu or the card on the overview) → **Team ID** |
+| `APP_STORE_CONNECT_API_KEY_ID` | 10 characters, e.g. `2X9R4HXF34` | <https://appstoreconnect.apple.com> → **Users and Access** → tab **Integrations** → **App Store Connect API** → **Team Keys**. The very first time, press **Request Access** (the Account Holder must accept the terms; it is instant). Then **"+"** (Generate API Key): Name `GitHub CI`, **Access: Admin** → **Generate**. The **Key ID** appears in the new row |
+| `APP_STORE_CONNECT_API_ISSUER_ID` | UUID like `69a6de7e-…` | Same page, top: **Issuer ID** → Copy |
+| `APP_STORE_CONNECT_API_KEY_P8` | the whole text of `AuthKey_<KEY ID>.p8` (begins with `-----BEGIN PRIVATE KEY-----`) | Same row → **Download API Key**. Apple lets you download it **only once**; open the file with a text editor (on iPhone: Files app → tap it), copy all of it, paste as the secret value. Keep the file somewhere safe too. If it is lost, revoke the key and generate a new one (a new Key ID) |
+
+Why **Admin** and not App Manager: creating the cloud-managed *Apple Distribution* certificate for the team is allowed only for Admin / Account Holder. After the first successful run the certificate exists and a key with the App Manager role (which has "Access to Cloud Managed Distribution Certificate") is enough — the Admin key can then be revoked and replaced if you prefer. Also make sure the **Paid Apps agreement** is *Active* (App Store Connect → Business / Agreements; `docs/publishing/ACCOUNTS.md` §5.2) — uploads work without it, but TestFlight builds with in-app purchases will not show products.
+
+**How to run it:** GitHub → **Actions** → **tower-clash-ios-release** → **Run workflow** → lane `testflight` (default) → Run. About 20–30 minutes later the build shows up in App Store Connect → **TestFlight** as "Processing", then "Ready to Test"; add yourself under *Internal Testing* and install the **TestFlight** app on the iPhone. The `appstore` lane does the same upload but must run on the release tag `tower-clash-v<version>` (choose the tag under *Use workflow from*, or push the tag — a `tower-clash-v*` tag push starts the job with lane `appstore` automatically); attaching that build to the store version and *Submit for Review* stay browser steps (`LAUNCH_CHECKLIST.md` A18).
+
+**What the first run does by itself (with the API key):** registers the App ID `com.pervincinal.towerclash` in *Certificates, Identifiers & Profiles* if it does not exist yet (In-App Purchase is enabled on every App ID by default; the game needs no other capability, so there is no entitlements file); creates an *Apple Development* certificate for the runner and a development profile for the archive step; creates the cloud-managed *Apple Distribution* certificate and an *App Store* provisioning profile at export time; signs the `.ipa`; validates and uploads it with `xcrun altool --upload-app` (fallback: `xcodebuild -exportArchive` with `destination = upload`, the Xcode Organizer's own uploader). What it **cannot** do: create the app record in App Store Connect (A9 — do that first, same bundle id), fill the listing, screenshots, App Privacy answers or the export-compliance question, accept agreements, or press Submit. The job fails in its first step with the list of missing secrets if any of the four is absent, and `npm run version:check` stops it when `package.json` and the Xcode project disagree. App Store Connect refuses a build number it has seen before: bump `config.buildNumber` in `package.json` + `npm run version:sync` for every upload (§4).
+
+**Known limits:** (1) every run on a fresh runner creates a new *Apple Development* certificate — if Apple ever answers "maximum number of certificates", delete the old `GitHub` development certificates at developer.apple.com → Certificates and re-run (they are worthless outside that runner). (2) `xcrun altool` is Apple's older uploader (its *notarization* use was retired in 2023; app upload still ships with Xcode 16/26); when it disappears the fallback step uploads through `xcodebuild` instead. (3) The manual-signing fallback (secrets `APPLE_CERTIFICATE_P12_BASE64`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_PROVISIONING_PROFILE_BASE64`, §6) exists only for the case that someone with a Mac exported a certificate by hand; it is not needed and not recommended. (4) The privacy manifest `ios/App/App/PrivacyInfo.xcprivacy` (tracking: no; Device ID, purchases, advertising data, product interaction, crash/performance data, coarse location — all not linked, not for tracking; required-reason APIs UserDefaults `CA92.1`, file timestamp `C617.1`, system boot time `35F9.1`) is part of the App target and must match the App Privacy answers (`LAUNCH_CHECKLIST.md` A14); Apple's ITMS-91053 e-mail after an upload means a required-reason API is missing from it.
 
 ## 4. Build locally
 
@@ -109,9 +130,9 @@ The game has no accounts and sends no saves anywhere. Since the monetization wor
 | Item | Apple App Store | Google Play |
 |---|---|---|
 | Developer account | Apple Developer Program, **USD 99 / year** (needs an Apple ID with 2FA; DUNS number only for company accounts) | Google Play Console, **USD 25 one-time**; new personal accounts must run a 14-day closed test with 12+ testers before production access |
-| Signing | Distribution certificate + App Store provisioning profile (created in Xcode or at developer.apple.com) | Upload keystore (`.jks`) that **must never be lost**; enrol in Play App Signing |
+| Signing | Distribution certificate + App Store provisioning profile — created **automatically by the release workflow** from an App Store Connect API key (§3, cloud-managed; no Mac) | Upload keystore (`.jks`) that **must never be lost**; enrol in Play App Signing |
 | App identifier | Bundle ID `com.pervincinal.towerclash` registered in the developer portal | Package name `com.pervincinal.towerclash` (fixed forever after first upload) |
-| Build format | `.ipa` archived with Xcode (Product → Archive → Distribute) | `.aab` (`./gradlew bundleRelease`), not `.apk` |
+| Build format | `.ipa` archived, signed and uploaded by the `tower-clash-ios-release` workflow (§3) | `.aab` (`./gradlew bundleRelease`), not `.apk` |
 | Store listing | Name, subtitle, description, keywords, category (Games / Strategy), age rating questionnaire, support URL | Title, short/full description, category, content rating questionnaire (IARC), Data safety form ("no data collected") |
 | Screenshots | 6.7" and 6.5" iPhone (and 12.9" iPad if iPad is supported) | Phone screenshots (min 2), 512×512 icon, 1024×500 feature graphic |
 | Privacy policy | Public URL required even for no-data apps | Public URL required |
@@ -153,18 +174,26 @@ None of these exist yet; the current workflows build unsigned. The names below a
 ```
 When any of the four variables is missing (local builds, forks, pull requests from outside) the release build type silently falls back to the **debug** key, prints `Tower Clash: ANDROID_KEYSTORE_* not set …` in the Gradle log, and still produces an installable but not store-uploadable `app-release.aab` / `app-release.apk`. Output: `android/app/build/outputs/bundle/release/app-release.aab`.
 
-**iOS (device / TestFlight / App Store builds):**
+**iOS (device / TestFlight / App Store builds) — `tower-clash-ios-release.yml`:**
+
+Primary path (required, browser only — step-by-step in §3):
+
+| Secret | What it is | How to create it |
+|---|---|---|
+| `APPLE_TEAM_ID` | the 10-character Apple Developer Team ID | developer.apple.com → Account → Membership details → Team ID |
+| `APP_STORE_CONNECT_API_KEY_ID` | Key ID of an App Store Connect API key (**Admin** role for the first run — it creates the cloud-managed distribution certificate; App Manager is enough afterwards) | App Store Connect → Users and Access → Integrations → App Store Connect API → Team Keys → "+" |
+| `APP_STORE_CONNECT_API_ISSUER_ID` | Issuer ID shown at the top of the same page | — |
+| `APP_STORE_CONNECT_API_KEY_P8` | contents of the downloaded `AuthKey_<ID>.p8` (raw text or base64; can be downloaded only once) | — |
+
+Optional manual-signing fallback (all three or none; only if a Mac exported them — the job then imports the certificate into a temporary keychain, installs the profile and archives with manual signing instead of the cloud certificate; the API key is still required for the upload):
 
 | Secret | What it is | How to create it |
 |---|---|---|
 | `APPLE_CERTIFICATE_P12_BASE64` | Apple Distribution certificate + private key exported as `.p12`, base64 | Xcode → Settings → Accounts → Manage Certificates → "+" → Apple Distribution; then in Keychain Access right-click the certificate → Export → `.p12` with a password; `base64 -i cert.p12` |
 | `APPLE_CERTIFICATE_PASSWORD` | the password chosen while exporting the `.p12` | — |
 | `APPLE_PROVISIONING_PROFILE_BASE64` | App Store provisioning profile for `com.pervincinal.towerclash`, base64 | developer.apple.com → Profiles → "+" → App Store → select the bundle id and the certificate → download `.mobileprovision`; `base64 -i profile.mobileprovision` |
-| `APP_STORE_CONNECT_API_KEY_ID` | Key ID of an App Store Connect API key (role: App Manager) | App Store Connect → Users and Access → Integrations → App Store Connect API → "+" |
-| `APP_STORE_CONNECT_API_ISSUER_ID` | Issuer ID shown on the same page | — |
-| `APP_STORE_CONNECT_API_KEY_P8` | contents of the downloaded `AuthKey_<ID>.p8` (can be downloaded only once) | — |
 
-The iOS release job (not written yet) will import the certificate and profile into a temporary keychain, run `xcodebuild archive` + `-exportArchive`, and upload with `xcrun altool` / `notarytool` using the API key. The Xcode project itself needs no changes for that: signing is chosen at archive time with `-allowProvisioningUpdates` or an `ExportOptions.plist`.
+What the job does (`.github/workflows/tower-clash-ios-release.yml`): secrets check → `npm ci` → `npm run version:check` → `.env.production` + `GADApplicationIdentifier` from the `RC_IOS_KEY` / `ADMOB_IOS_*` secrets (§8.3, same as the simulator job) → `npm run build` → `npx cap sync ios` → `xcodebuild archive` (Release, `generic/platform=iOS`, `-allowProvisioningUpdates` + `-authenticationKeyPath/ID/IssuerID`, `DEVELOPMENT_TEAM`, `CODE_SIGN_STYLE=Automatic`) → `ExportOptions.plist` written in the job (`method app-store-connect` on Xcode ≥ 15.4, `signingStyle automatic`, `teamID`, `uploadSymbols true`, `manageAppVersionAndBuildNumber false`, `destination export`) → `-exportArchive` → `xcrun altool --validate-app` / `--upload-app -t ios --apiKey … --apiIssuer …` (the `.p8` is copied to `~/private_keys/` for altool) → fallback `-exportArchive` with `destination upload` → artifacts `tower-clash-ios-<version>-<build>-ipa` and `…-dSYMs` (90 days) → keys and keychain removed. The Xcode project itself needs no signing changes (`CODE_SIGN_STYLE = Automatic`, no `DEVELOPMENT_TEAM` committed).
 
 ## 8. In-app purchases and ads (RevenueCat + AdMob)
 
@@ -262,7 +291,8 @@ Locally: create `tower-clash/.env.local` with the same `VITE_*` lines (`VITE_RC_
 
 - **Android** `AndroidManifest.xml`: `com.google.android.gms.ads.APPLICATION_ID` meta-data → `@string/admob_app_id`. The `com.android.vending.BILLING` (Play Billing) and `com.google.android.gms.permission.AD_ID` (Android 13+) permissions are merged in automatically from the RevenueCat / AdMob libraries. The AdMob plugin is Kotlin and targets Java 21, so builds need **JDK 21** (the workflow already uses it).
 - **iOS** `Info.plist`: `GADApplicationIdentifier` and `SKAdNetworkItems` with Google's published list (100 entries, `cstr6suwn9.skadnetwork` first). Refresh the list from <https://developers.google.com/admob/ios/ios14> when the AdMob SDK is bumped. There is deliberately **no** `NSUserTrackingUsageDescription` (§8.7): without it iOS cannot even show the tracking prompt, which is the technical proof for the "no tracking" App Privacy answer.
-- **iOS capability (manual, in Xcode):** open `ios/App/App.xcodeproj` → target *App* → *Signing & Capabilities* → "+ Capability" → **In-App Purchase**. This only needs to be done once and requires the Apple Developer account; without it StoreKit returns no products.
+- **iOS In-App Purchase capability:** nothing to do — StoreKit needs no entitlement, Xcode's "In-App Purchase" capability only adds the framework link, and every App ID has In-App Purchase enabled by default (the release job registers the App ID, §3). Products appear only once they exist in App Store Connect and the Paid Apps agreement is active (§8.2 step 1, `ACCOUNTS.md` §5.2).
+- **iOS privacy manifest** `ios/App/App/PrivacyInfo.xcprivacy` (App target resource): tracking no, the A14 data types (Device ID, Purchase History, Advertising Data, Product Interaction, Crash/Performance Data, Coarse Location — not linked, not for tracking) and the required-reason APIs UserDefaults `CA92.1`, file timestamp `C617.1`, system boot time `35F9.1`. The AdMob and RevenueCat SDKs ship their own manifests; Xcode merges all of them into the privacy report.
 - **Xcode SPM**: `npx cap sync` added `CapacitorCommunityAdmob` (pulls Google Mobile Ads 13.6.0 + UMP) and `RevenuecatPurchasesCapacitor` (purchases-hybrid-common 18.36.1) to `ios/App/CapApp-SPM/Package.swift`; the first macOS build resolves them from GitHub.
 
 ### 8.5 How test purchases and test ads work
@@ -307,8 +337,8 @@ Reverting to option B (personalised ads on iOS) would need: the ATT call back in
 ## 7. Open items
 
 - Keep `public/icons/*` (PWA) and `resources/icon.svg` (native) visually in sync when the mark changes; `npm run icons:generate` only regenerates the native assets.
-- The iOS workflow has not yet run on a macOS runner (no Xcode in the development sandbox); the first `workflow_dispatch` run validates the SPM project build.
-- Signed builds: create the accounts and secrets above, then add the `bundleRelease` job (snippet in section 6) and the iOS archive job to the workflows. The Gradle side is already in place.
+- Signed builds: **iOS** — `tower-clash-ios-release.yml` is in place (§3) and has never run: the first run with the four `APP_STORE_CONNECT_*` / `APPLE_TEAM_ID` secrets is the test (watch for the Admin-role certificate creation and for `xcrun altool` on the current Xcode; the fallback uploader is wired). **Android** — the `bundleRelease` job (snippet in section 6) is still to be added; the Gradle side is already in place.
+- The privacy manifest `ios/App/App/PrivacyInfo.xcprivacy` was added by hand to the Xcode project (`project.pbxproj`, Resources phase) without Xcode; the first release run also validates that edit (a broken pbxproj fails at `xcodebuild archive`). Keep it in sync with `LAUNCH_CHECKLIST.md` A14 whenever an SDK is added.
 - `npm run version:check` should run in the CI workflow so a forgotten `version:sync` fails the build.
 - Monetization (§8): create the RevenueCat / AdMob accounts and the products; add the In-App Purchase capability in Xcode; rewrite the privacy policy; the Android workflow has not yet been run with the AdMob (Kotlin) and RevenueCat modules — the next push validates the Gradle build on CI (no Android SDK in the development sandbox).
 - ECON-2 UI side: the Settings "Privacy options" entry and the About "Support ID" row still have to be wired by the Frontend Engineer against the three methods in §8.1; the provider side is done.

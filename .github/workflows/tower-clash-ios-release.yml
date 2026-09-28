@@ -1,0 +1,454 @@
+name: tower-clash-ios-release
+
+# Signed App Store / TestFlight build of the Capacitor iOS shell, uploaded to App Store Connect
+# from a GitHub-hosted macOS runner. No Mac and no Xcode on a desktop are needed: signing uses an
+# App Store Connect API key and Xcode's cloud-managed "Apple Distribution" certificate
+# (docs/MOBILE.md §3 "Signed TestFlight / App Store build from CI", §6).
+#
+# Signing paths
+#   primary  — API key only (secrets APP_STORE_CONNECT_API_KEY_ID / _ISSUER_ID / _KEY_P8 +
+#              APPLE_TEAM_ID). `xcodebuild -allowProvisioningUpdates` with `-authenticationKey*`
+#              lets Xcode talk to the developer portal itself. What it does automatically:
+#                * registers the App ID (bundle id com.pervincinal.towerclash) if it does not exist
+#                  and enables the capabilities the project uses (In-App Purchase is on for every
+#                  App ID by default);
+#                * creates an "Apple Development" certificate for the runner (archive step) and
+#                  a development profile;
+#                * at export time creates a cloud-managed "Apple Distribution" certificate (the
+#                  private key stays with Apple, nothing to download) and an App Store
+#                  provisioning profile, then signs the .ipa with them.
+#              Role needed by the API key: creating the cloud-managed Apple Distribution
+#              certificate needs ADMIN (or the Account Holder). Once that certificate exists,
+#              an APP MANAGER key can reuse it ("Access to Cloud Managed Distribution
+#              Certificate"). We ask the stakeholder for an Admin key from the start so the first
+#              run works. What it cannot do: create the App Store Connect app record (A9), fill
+#              the listing / App Privacy answers, accept the Paid Apps agreement, or submit for
+#              review — those stay browser steps in docs/publishing/LAUNCH_CHECKLIST.md.
+#   fallback — manual signing when APPLE_CERTIFICATE_P12_BASE64 (+ APPLE_CERTIFICATE_PASSWORD)
+#              and APPLE_PROVISIONING_PROFILE_BASE64 are ALSO set: the .p12 is imported into a
+#              temporary keychain, the profile installed, and the archive/export use them. Only
+#              useful when somebody with a Mac exported a certificate by hand; the API key is
+#              still required for the upload.
+#
+# Upload: `xcrun altool --upload-app` with the API key (Apple deprecated altool for *notarization*
+# in 2023 — that part moved to notarytool, which is not for App Store uploads — but the
+# --validate-app / --upload-app commands still ship with Xcode 16/26 on macos-latest and take
+# the API key directly). If altool fails, the job retries the upload through Xcode itself:
+# `xcodebuild -exportArchive` with `destination = upload` in ExportOptions.plist, which is the
+# same uploader the Xcode Organizer uses and is not deprecated. A third option (not wired) is
+# `xcrun iTMSTransporter -m upload -assetFile App.ipa -apiKey … -apiIssuer …`.
+#
+# Lanes: `testflight` (default) uploads the build; it appears under TestFlight in App Store
+# Connect after processing (10–30 min). `appstore` does the same upload but insists that the
+# job runs on the git tag `tower-clash-v<package.json version>` so the App Store submission is
+# reproducible; a tag push selects `appstore` automatically. Attaching the build to the store
+# version and pressing "Submit for Review" remain manual steps in App Store Connect.
+on:
+  workflow_dispatch:
+    inputs:
+      lane:
+        description: 'testflight = upload for TestFlight testers; appstore = same upload, must run on the tower-clash-v<version> tag'
+        type: choice
+        options:
+          - testflight
+          - appstore
+        default: testflight
+  push:
+    tags:
+      - 'tower-clash-v*'
+
+# Never cancel a run that may be in the middle of an upload.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: signed archive + App Store Connect upload
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      CI: true
+      LANE: ${{ github.event.inputs.lane || 'appstore' }}
+      BUNDLE_ID: com.pervincinal.towerclash
+    defaults:
+      run:
+        working-directory: tower-clash
+    steps:
+      # Fail fast with the exact list of missing secrets before anything is checked out.
+      - name: Check required secrets
+        working-directory: ${{ runner.temp }}
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          missing=""
+          for name in APP_STORE_CONNECT_API_KEY_ID APP_STORE_CONNECT_API_ISSUER_ID APP_STORE_CONNECT_API_KEY_P8 APPLE_TEAM_ID; do
+            if [ -z "${!name}" ]; then missing="$missing $name"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing"
+            echo "Add them under Settings -> Secrets and variables -> Actions. Where each value comes from: docs/MOBILE.md section 3 and section 6 (iOS table)."
+            exit 1
+          fi
+          case "$APPLE_TEAM_ID" in
+            [A-Z0-9][A-Z0-9][A-Z0-9][A-Z0-9][A-Z0-9][A-Z0-9][A-Z0-9][A-Z0-9][A-Z0-9][A-Z0-9]) ;;
+            *) echo "::error::APPLE_TEAM_ID must be the 10-character Team ID from developer.apple.com -> Membership details (got ${#APPLE_TEAM_ID} characters)"; exit 1 ;;
+          esac
+          if [ -n "$APPLE_CERTIFICATE_P12_BASE64" ] || [ -n "$APPLE_PROVISIONING_PROFILE_BASE64" ]; then
+            for name in APPLE_CERTIFICATE_P12_BASE64 APPLE_CERTIFICATE_PASSWORD APPLE_PROVISIONING_PROFILE_BASE64; do
+              if [ -z "${!name}" ]; then missing="$missing $name"; fi
+            done
+            if [ -n "$missing" ]; then
+              echo "::error::Manual signing was requested (a certificate/profile secret exists) but these are missing:$missing. Either add them or delete APPLE_CERTIFICATE_* / APPLE_PROVISIONING_PROFILE_BASE64 to use the API-key path."
+              exit 1
+            fi
+            echo "SIGNING_MODE=manual" >> "$GITHUB_ENV"
+            echo "Signing: manual (certificate + profile from secrets); API key used for the upload"
+          else
+            echo "SIGNING_MODE=automatic" >> "$GITHUB_ENV"
+            echo "Signing: automatic (App Store Connect API key + cloud-managed Apple Distribution certificate)"
+          fi
+          echo "Lane: $LANE"
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tower-clash/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # package.json version / buildNumber must already be copied into the Xcode project
+      # (`npm run version:sync`); App Store Connect rejects a build number it has seen before.
+      - name: Native version numbers match package.json
+        run: npm run version:check
+
+      - name: Read version and check the lane
+        id: version
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          BUILD="$(node -p "require('./package.json').config.buildNumber")"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "build=$BUILD" >> "$GITHUB_OUTPUT"
+          echo "Building Tower Clash $VERSION ($BUILD), lane $LANE, ref $GITHUB_REF"
+          if [ "$LANE" = "appstore" ] && [ "$GITHUB_REF" != "refs/tags/tower-clash-v$VERSION" ]; then
+            echo "::error::Lane 'appstore' must run on the tag tower-clash-v$VERSION (current ref: $GITHUB_REF). Create the tag on the release commit (LAUNCH_CHECKLIST.md V3) and choose it under 'Use workflow from', or use lane 'testflight'."
+            exit 1
+          fi
+
+      # Monetization ids (docs/MOBILE.md §8.3): identical to the simulator workflow. Missing
+      # secrets fall back to "store unavailable" + Google's TEST ad units — fine for TestFlight,
+      # not for the App Store lane, hence the warning.
+      - name: Write .env.production from repository secrets
+        env:
+          VITE_RC_IOS_KEY: ${{ secrets.RC_IOS_KEY }}
+          VITE_ADMOB_IOS_INTERSTITIAL: ${{ secrets.ADMOB_IOS_INTERSTITIAL }}
+          VITE_ADMOB_IOS_REWARDED: ${{ secrets.ADMOB_IOS_REWARDED }}
+        run: |
+          : > .env.production
+          for name in VITE_RC_IOS_KEY VITE_ADMOB_IOS_INTERSTITIAL VITE_ADMOB_IOS_REWARDED; do
+            value="${!name}"
+            if [ -n "$value" ]; then
+              printf '%s=%s\n' "$name" "$value" >> .env.production
+              echo "$name: set"
+            else
+              echo "$name: not configured (safe default)"
+              if [ "$LANE" = "appstore" ]; then echo "::warning::$name is not configured — the App Store build will ship without it (store unavailable / test ads)"; fi
+            fi
+          done
+
+      # GADApplicationIdentifier in Info.plist must be the AdMob APP id (ca-app-pub-…~…); a wrong
+      # value crashes at startup, so only replace it when the secret is set.
+      - name: Set AdMob app id (iOS)
+        env:
+          ADMOB_IOS_APP_ID: ${{ secrets.ADMOB_IOS_APP_ID }}
+        run: |
+          if [ -z "$ADMOB_IOS_APP_ID" ]; then
+            echo "ADMOB_IOS_APP_ID not configured — keeping the AdMob TEST app id"
+            if [ "$LANE" = "appstore" ]; then echo "::warning::ADMOB_IOS_APP_ID is not configured — the App Store build will use Google's TEST AdMob app id"; fi
+            exit 0
+          fi
+          case "$ADMOB_IOS_APP_ID" in
+            ca-app-pub-*~*) ;;
+            *) echo "ADMOB_IOS_APP_ID must look like ca-app-pub-XXXX~YYYY (an APP id, not an ad unit)"; exit 1 ;;
+          esac
+          plutil -replace GADApplicationIdentifier -string "$ADMOB_IOS_APP_ID" ios/App/App/Info.plist
+          plutil -extract GADApplicationIdentifier raw ios/App/App/Info.plist | grep -q "$ADMOB_IOS_APP_ID"
+
+      - name: Build web app
+        run: npm run build
+
+      - name: Sync web build into the iOS project
+        run: npx cap sync ios
+
+      # Capacitor 8 generates a Swift Package Manager project (ios/App/CapApp-SPM); the Podfile
+      # branch only matters if a CocoaPods-only plugin is ever added.
+      - name: pod install (only if a Podfile exists)
+        run: |
+          cd ios/App
+          if [ -f Podfile ]; then pod install; else echo "No Podfile - SPM project, skipping pod install"; fi
+
+      - name: Xcode version
+        run: |
+          xcodebuild -version
+          # Export method names changed in Xcode 15.4 (app-store -> app-store-connect).
+          XCODE_VERSION="$(xcodebuild -version | awk '/Xcode/ {print $2}')"
+          if awk -v v="$XCODE_VERSION" 'BEGIN { split(v, a, "."); exit !(a[1] > 15 || (a[1] == 15 && a[2] >= 4)) }'; then
+            echo "EXPORT_METHOD=app-store-connect" >> "$GITHUB_ENV"
+          else
+            echo "EXPORT_METHOD=app-store" >> "$GITHUB_ENV"
+          fi
+
+      # The .p8 is written where xcodebuild (-authenticationKeyPath) and altool / iTMSTransporter
+      # (search ./private_keys, ~/private_keys, ~/.private_keys, ~/.appstoreconnect/private_keys)
+      # look for it. Accepts the raw file contents or a base64 line.
+      - name: Install App Store Connect API key
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+        run: |
+          KEY_PATH="$RUNNER_TEMP/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
+          case "$APP_STORE_CONNECT_API_KEY_P8" in
+            *"-----BEGIN PRIVATE KEY-----"*) printf '%s\n' "$APP_STORE_CONNECT_API_KEY_P8" > "$KEY_PATH" ;;
+            *) printf '%s' "$APP_STORE_CONNECT_API_KEY_P8" | base64 --decode > "$KEY_PATH" ;;
+          esac
+          if ! grep -q "BEGIN PRIVATE KEY" "$KEY_PATH"; then
+            echo "::error::APP_STORE_CONNECT_API_KEY_P8 does not look like an AuthKey_<ID>.p8 file (raw contents or base64 of it)"
+            exit 1
+          fi
+          chmod 600 "$KEY_PATH"
+          for dir in "$HOME/private_keys" "$HOME/.private_keys" "$HOME/.appstoreconnect/private_keys"; do
+            mkdir -p "$dir" && cp "$KEY_PATH" "$dir/"
+          done
+          echo "API_KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
+          echo "API key installed as AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
+
+      # Optional manual-signing path: temporary keychain with the distribution certificate,
+      # profile copied where both Xcode 15 and Xcode 16+ look for it.
+      - name: Import certificate and profile (manual signing only)
+        if: env.SIGNING_MODE == 'manual'
+        env:
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          printf '%s' "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+          rm -f "$RUNNER_TEMP/certificate.p12"
+          security find-identity -v -p codesigning "$KEYCHAIN"
+
+          PROFILE="$RUNNER_TEMP/profile.mobileprovision"
+          printf '%s' "$APPLE_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$PROFILE"
+          security cms -D -i "$PROFILE" > "$RUNNER_TEMP/profile.plist"
+          PROFILE_UUID="$(plutil -extract UUID raw "$RUNNER_TEMP/profile.plist")"
+          PROFILE_NAME="$(plutil -extract Name raw "$RUNNER_TEMP/profile.plist")"
+          PROFILE_APP_ID="$(plutil -extract Entitlements.application-identifier raw "$RUNNER_TEMP/profile.plist")"
+          case "$PROFILE_APP_ID" in
+            *".$BUNDLE_ID") ;;
+            *) echo "::error::The provisioning profile is for '$PROFILE_APP_ID', not for $BUNDLE_ID"; exit 1 ;;
+          esac
+          for dir in "$HOME/Library/MobileDevice/Provisioning Profiles" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
+            mkdir -p "$dir" && cp "$PROFILE" "$dir/$PROFILE_UUID.mobileprovision"
+          done
+          {
+            echo "SIGNING_KEYCHAIN=$KEYCHAIN"
+            echo "PROFILE_NAME=$PROFILE_NAME"
+          } >> "$GITHUB_ENV"
+          echo "Installed profile '$PROFILE_NAME' ($PROFILE_UUID) for $PROFILE_APP_ID"
+
+      - name: Archive (Release, generic iOS device)
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+        run: |
+          cd ios/App
+          if [ -d App.xcworkspace ]; then CONTAINER="-workspace App.xcworkspace"; else CONTAINER="-project App.xcodeproj"; fi
+          set -x
+          if [ "$SIGNING_MODE" = "manual" ]; then
+            xcodebuild $CONTAINER \
+              -scheme App \
+              -configuration Release \
+              -destination 'generic/platform=iOS' \
+              -archivePath build/App.xcarchive \
+              -derivedDataPath build/DerivedData \
+              archive \
+              DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+              CODE_SIGN_STYLE=Manual \
+              CODE_SIGN_IDENTITY="Apple Distribution" \
+              PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" \
+              OTHER_CODE_SIGN_FLAGS="--keychain $SIGNING_KEYCHAIN"
+          else
+            xcodebuild $CONTAINER \
+              -scheme App \
+              -configuration Release \
+              -destination 'generic/platform=iOS' \
+              -archivePath build/App.xcarchive \
+              -derivedDataPath build/DerivedData \
+              archive \
+              -allowProvisioningUpdates \
+              -allowProvisioningDeviceRegistration \
+              -authenticationKeyPath "$API_KEY_PATH" \
+              -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" \
+              -authenticationKeyIssuerID "$APP_STORE_CONNECT_API_ISSUER_ID" \
+              DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+              CODE_SIGN_STYLE=Automatic
+          fi
+          set +x
+          test -d build/App.xcarchive/Products/Applications/App.app
+
+      # manageAppVersionAndBuildNumber = false keeps package.json (via version:sync) the only
+      # source of the build number. uploadSymbols sends the dSYMs with the build for crash logs.
+      - name: Write ExportOptions.plist
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          cd ios/App
+          if [ "$SIGNING_MODE" = "manual" ]; then
+            SIGNING_BLOCK="  <key>signingStyle</key><string>manual</string>
+            <key>signingCertificate</key><string>Apple Distribution</string>
+            <key>provisioningProfiles</key><dict><key>$BUNDLE_ID</key><string>$PROFILE_NAME</string></dict>"
+          else
+            SIGNING_BLOCK="  <key>signingStyle</key><string>automatic</string>"
+          fi
+          cat > build/ExportOptions.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>$EXPORT_METHOD</string>
+            <key>destination</key><string>export</string>
+            <key>teamID</key><string>$APPLE_TEAM_ID</string>
+          $SIGNING_BLOCK
+            <key>uploadSymbols</key><true/>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+            <key>testFlightInternalTestingOnly</key><false/>
+          </dict>
+          </plist>
+          EOF
+          plutil -lint build/ExportOptions.plist
+          cat build/ExportOptions.plist
+
+      - name: Export signed .ipa
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+        run: |
+          cd ios/App
+          xcodebuild -exportArchive \
+            -archivePath build/App.xcarchive \
+            -exportOptionsPlist build/ExportOptions.plist \
+            -exportPath build/export \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$API_KEY_PATH" \
+            -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" \
+            -authenticationKeyIssuerID "$APP_STORE_CONNECT_API_ISSUER_ID"
+          ls -la build/export
+          IPA="$(ls build/export/*.ipa | head -n1)"
+          test -f "$IPA"
+          echo "IPA_PATH=$PWD/$IPA" >> "$GITHUB_ENV"
+
+      - name: Validate with altool
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+        run: |
+          xcrun altool --validate-app -f "$IPA_PATH" -t ios \
+            --apiKey "$APP_STORE_CONNECT_API_KEY_ID" --apiIssuer "$APP_STORE_CONNECT_API_ISSUER_ID"
+
+      - name: Upload to App Store Connect (altool)
+        id: altool
+        continue-on-error: true
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+        run: |
+          xcrun altool --upload-app -f "$IPA_PATH" -t ios \
+            --apiKey "$APP_STORE_CONNECT_API_KEY_ID" --apiIssuer "$APP_STORE_CONNECT_API_ISSUER_ID"
+
+      # Fallback uploader: Xcode's own (the Organizer "Upload" path), driven by ExportOptions
+      # destination = upload. Runs only when altool failed (e.g. removed from a future Xcode).
+      # A duplicate build number fails here as well — bump config.buildNumber and re-run.
+      - name: Upload to App Store Connect (xcodebuild fallback)
+        if: steps.altool.outcome == 'failure'
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+        run: |
+          echo "::warning::altool upload failed — retrying with xcodebuild -exportArchive destination=upload"
+          cd ios/App
+          plutil -replace destination -string upload build/ExportOptions.plist
+          xcodebuild -exportArchive \
+            -archivePath build/App.xcarchive \
+            -exportOptionsPlist build/ExportOptions.plist \
+            -exportPath build/upload \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$API_KEY_PATH" \
+            -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" \
+            -authenticationKeyIssuerID "$APP_STORE_CONNECT_API_ISSUER_ID"
+
+      - name: Package dSYMs
+        run: |
+          cd ios/App/build
+          if [ -d App.xcarchive/dSYMs ]; then
+            ditto -c -k --keepParent App.xcarchive/dSYMs "App-${{ steps.version.outputs.version }}-${{ steps.version.outputs.build }}-dSYMs.zip"
+          else
+            echo "No dSYMs folder in the archive"; exit 1
+          fi
+
+      - name: Upload .ipa artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tower-clash-ios-${{ steps.version.outputs.version }}-${{ steps.version.outputs.build }}-ipa
+          path: |
+            tower-clash/ios/App/build/export/*.ipa
+            tower-clash/ios/App/build/ExportOptions.plist
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Upload dSYMs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tower-clash-ios-${{ steps.version.outputs.version }}-${{ steps.version.outputs.build }}-dSYMs
+          path: tower-clash/ios/App/build/*-dSYMs.zip
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Summary
+        run: |
+          {
+            echo "## Tower Clash iOS ${{ steps.version.outputs.version }} (build ${{ steps.version.outputs.build }}) uploaded — lane $LANE"
+            echo
+            echo "Signing: $SIGNING_MODE. Uploader: $([ '${{ steps.altool.outcome }}' = 'success' ] && echo altool || echo 'xcodebuild (fallback)')."
+            echo
+            echo "Next (App Store Connect, in the browser, 10–30 min after this run finishes):"
+            echo "1. My Apps -> Tower Clash -> TestFlight: the build shows 'Processing' then 'Ready to Test'. Answer the export-compliance question once if asked (No — the app uses only standard HTTPS)."
+            echo "2. TestFlight lane: add yourself under Internal Testing, install the TestFlight app on the iPhone, open the invitation."
+            echo "3. App Store lane: App Store -> 1.0 Prepare for Submission -> Build -> select build ${{ steps.version.outputs.build }} -> Add for Review -> Submit (LAUNCH_CHECKLIST.md A18)."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove keys and temporary keychain
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP"/AuthKey_*.p8 "$RUNNER_TEMP"/profile.mobileprovision "$RUNNER_TEMP"/profile.plist
+          rm -rf "$HOME/private_keys" "$HOME/.private_keys" "$HOME/.appstoreconnect/private_keys"
+          if [ -n "${SIGNING_KEYCHAIN:-}" ] && [ -f "$SIGNING_KEYCHAIN" ]; then
+            security list-keychains -d user -s login.keychain-db
+            security delete-keychain "$SIGNING_KEYCHAIN"
+          fi
