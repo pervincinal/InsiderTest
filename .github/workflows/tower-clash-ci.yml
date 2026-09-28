@@ -51,9 +51,9 @@ jobs:
 
       # Daily Challenge gate (GDD §7.5): the reference player on today's and the next 29 days' challenges
       # (`challengeFor`: level 9–50, fixed seed, twist, no upgrades) over 3 seeds each. Every day's fixed
-      # seed must be won and wins/K >= 90 %. Exit 1 on any failed day. Measured 2.5 s locally (2026-09-21).
-      - name: Daily challenge gate (30 days x 3 seeds)
-        run: npm run playtest -- --daily $(date -u +%F) --days 30 --seeds 3
+      # seed must be won and wins/K >= 90 %. Exit 1 on any failed day. Measured 2.5 s at 30 days (2026-09-21); widened to 90 days on 2026-09-28 (QA-11, ≈ 10 s) after the 180-day sweep found a day-33 loss (LV-18).
+      - name: Daily challenge gate (90 days x 3 seeds)
+        run: npm run playtest -- --daily $(date -u +%F) --days 90 --seeds 3
 
       # Weekly Challenge gate (GDD §8): the reference player on this week's and the next 25 weeks'
       # challenges (`weeklyFor`: level 33–50, fixed seed, non-plain twist, no upgrades) over 5 seeds
