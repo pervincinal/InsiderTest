@@ -159,6 +159,15 @@ describe('economy catalog (docs/ECONOMY.md)', () => {
       expect(s.costCrystals, s.id).toBeGreaterThanOrEqual(80);
       expect(s.costCrystals, s.id).toBeLessThanOrEqual(200);
     }
+    // skin drop #1 (ART-10, 2026-09-28): two new roofs after the four launch roofs, 120 / 150 in the band (Monetization to confirm)
+    expect(SKINS.filter((s) => s.category === 'towerRoof').map((s) => [s.id, s.costCrystals])).toEqual([
+      ['roof_slate', 80],
+      ['roof_pagoda', 120],
+      ['roof_onion', 150],
+      ['roof_gold', 0],
+      ['roof_thatch', 120],
+      ['roof_glass', 150],
+    ]);
     expect(SKINS.filter((s) => s.category === 'towerShape').map((s) => [s.id, s.costCrystals])).toEqual([
       ['tower_keep', 150],
       ['tower_watchtower', 200],

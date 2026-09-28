@@ -99,6 +99,8 @@ Two lessons. (1) The tactical tracks are **super-additive**: production +10 % an
 | Tower roof | Pagoda | 120 | shop |
 | Tower roof | Onion dome | 150 | shop |
 | Tower roof | Gold | — | Premium exclusive |
+| Tower roof | Thatched roof | 120 | shop — skin drop #1 (2026-09-28, ART-10); price proposed by the Tech Artist, Monetization Designer to confirm |
+| Tower roof | Observatory dome | 150 | shop — skin drop #1 (2026-09-28, ART-10); price proposed by the Tech Artist, Monetization Designer to confirm |
 | Unit helmet | Bronze | — | Starter Pack exclusive |
 | Unit helmet | Viking | 100 | shop |
 | Unit helmet | Knight | 120 | shop |

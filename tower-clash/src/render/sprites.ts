@@ -44,7 +44,8 @@ export interface TowerDrawOptions {
 /**
  * Equipped cosmetics as the renderer wants them (`ROOF_SKINS`, `HELMET_SKINS`, `THEME_IDS`).
  * Catalog → sprite: roof_slate → roof.slate, roof_pagoda → roof.pagoda, roof_onion → roof.onion,
- * roof_gold → roof.gold; helmet_bronze / viking / knight / samurai / royal → helmet.<same>;
+ * roof_gold → roof.gold, roof_thatch → roof.thatch, roof_glass → roof.glass (skin drop #1, ART-10);
+ * helmet_bronze / viking / knight / samurai / royal → helmet.<same>;
  * theme_dusk → theme.dusk, theme_winter_night → theme.winter_night, theme_neon → theme.neon.
  * Unknown / missing ids draw the default look.
  */
@@ -56,14 +57,14 @@ export interface TowerSkin {
 }
 
 /** Values of `TowerSkin.roof`: roof materials, plus the tower silhouettes (`tower.*`, M3-2) that replace the whole building. */
-export const ROOF_SKINS = ['roof.default', 'roof.gold', 'roof.iron', 'roof.slate', 'roof.tent', 'roof.pagoda', 'roof.onion', 'tower.keep', 'tower.watchtower'] as const;
+export const ROOF_SKINS = ['roof.default', 'roof.gold', 'roof.iron', 'roof.slate', 'roof.tent', 'roof.pagoda', 'roof.onion', 'roof.thatch', 'roof.glass', 'tower.keep', 'tower.watchtower'] as const;
 /** Values of `TowerSkin.helmet`: helmets, plus the unit silhouettes (`unit.*`, M3-2) that reshape soldiers and tanks. */
 export const HELMET_SKINS = ['helmet.default', 'helmet.plume', 'helmet.bronze', 'helmet.viking', 'helmet.knight', 'helmet.samurai', 'helmet.royal', 'unit.shieldwall', 'unit.robots'] as const;
 export { THEME_IDS } from './palette';
 
 /*
  * Silhouette skins (`tower.*` / `unit.*`), the cosmetic roof materials (gold / iron / slate / tent /
- * pagoda / onion) and the helmet skins are drawn by src/render/skinShapes.ts, a lazy chunk (the
+ * pagoda / onion / thatch / glass) and the helmet skins are drawn by src/render/skinShapes.ts, a lazy chunk (the
  * eager bundle sits on its 80 kB budget). The first draw that needs one kicks off the import and
  * falls back to the default look until it lands — a frame or two on first use; the shop preview
  * and `loadShapeSkins()` warm it earlier.
@@ -71,28 +72,47 @@ export { THEME_IDS } from './palette';
 export interface ShapeSkinDrawers {
   tower: (ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, kind: TowerKind, x: number, y: number, level: number, o: TowerDrawOptions, skinId: string) => void;
   unit: (ctx: CanvasRenderingContext2D, pal: Palette, st: UnitStyle, x: number, y: number, kind: UnitKind, dx: number, dy: number, id: number, nowMs: number, motion: boolean, scale: number, skinId: string) => void;
-  /** Cosmetic roof materials (`LAZY_ROOFS`): how a skin changes the roof, then its parts — owner band, tent stripes, tiered pagoda, onion bulb, the factory's hip roof, slate courses, iron rivets. */
+  /** Cosmetic roof materials (`LAZY_MATERIALS`): how a skin changes the roof, then its parts — owner band, tent stripes, the shaped roofs, the factory's hip roof / bulb, slate courses, iron rivets. */
   roofStyle: (pal: Palette, owner: Tones, id: string) => RoofStyle;
   ownerBand: (ctx: CanvasRenderingContext2D, tones: Tones, x: number, y: number, rx: number, ry: number) => void;
   coneStripes: (ctx: CanvasRenderingContext2D, x: number, base: number, apex: number, rx: number, ry: number, stripes: Tones) => void;
   domeStripes: (ctx: CanvasRenderingContext2D, x: number, base: number, rx: number, ry: number, stripes: Tones) => void;
-  pagoda: (ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, base: number, height: number, rx: number, ry: number, tiers?: number) => void;
-  onion: (ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, base: number, height: number, rx: number, ry: number) => void;
-  factoryPagoda: (ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, top: number, pulse: number, hw?: number) => void;
-  factoryOnion: (ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, top: number, pulse: number, hw: number) => void;
+  /**
+   * Every non-cone roof shape (gold dome, pagoda, onion, thatch, glass) on a building: the main roof over an eave
+   * ellipse (rx, ry) rising `height`, the L3 keep's lower skirt cone, or the artillery dome on its bunker
+   * (`height` = the dome's rise). The chunk keeps the pixels of the shipped looks; the eager side only dispatches.
+   */
+  roofPart: (ctx: CanvasRenderingContext2D, pal: Palette, style: RoofStyle, part: RoofPart, x: number, base: number, height: number, rx: number, ry: number) => void;
+  /** Pagoda / onion on a factory deck instead of its saw teeth. */
+  factoryRoof: (ctx: CanvasRenderingContext2D, pal: Palette, style: RoofStyle, x: number, top: number, pulse: number, hw: number) => void;
   factoryRivets: (ctx: CanvasRenderingContext2D, tones: Tones, x: number, top: number, hw: number) => void;
-  domeRoof: (ctx: CanvasRenderingContext2D, tones: Tones, x: number, base: number, height: number, rx: number, ry: number, stripes?: Tones) => void;
   sawTeeth: (ctx: CanvasRenderingContext2D, style: RoofStyle, x: number, top: number, hw: number, n: number, h: number, dim?: boolean) => void;
   shingles: (ctx: CanvasRenderingContext2D, tones: Tones, x: number, base: number, height: number, rx: number, ry: number) => void;
   rivets: (ctx: CanvasRenderingContext2D, tones: Tones, x: number, y: number, rx: number, ry: number) => void;
-  /** Helmet skins (`LAZY_HELMETS`); unknown ids draw the default cap. */
+  /** Helmet skins (`LAZY_MATERIALS`); unknown ids draw the default cap. */
   helmet: (ctx: CanvasRenderingContext2D, pal: Palette, st: UnitStyle, id: string, hx: number, hy: number, s: number, dx: number) => void;
 }
 
-/** Roof ids whose parts (owner band, stripes, rivets, shingles, pagoda, onion) live in the lazy chunk. */
-const LAZY_ROOFS: ReadonlySet<string> = new Set(['roof.gold', 'roof.iron', 'roof.slate', 'roof.tent', 'roof.pagoda', 'roof.onion']);
-/** Helmet ids drawn by the lazy chunk (the default cap is eager). */
-const LAZY_HELMETS: ReadonlySet<string> = new Set(['helmet.plume', 'helmet.bronze', 'helmet.viking', 'helmet.knight', 'helmet.samurai', 'helmet.royal']);
+/**
+ * Roof materials (owner band, stripes, rivets, shingles, the shaped roofs) and helmets drawn by the
+ * lazy chunk; the default cone / cap are eager. One set: a roof id is never a helmet id.
+ */
+const LAZY_MATERIALS: ReadonlySet<string> = new Set([
+  'roof.gold',
+  'roof.iron',
+  'roof.slate',
+  'roof.tent',
+  'roof.pagoda',
+  'roof.onion',
+  'roof.thatch',
+  'roof.glass',
+  'helmet.plume',
+  'helmet.bronze',
+  'helmet.viking',
+  'helmet.knight',
+  'helmet.samurai',
+  'helmet.royal',
+]);
 
 const SKIN_CHUNK = 'skinShapes';
 let shapeSkins: ShapeSkinDrawers | null = null;
@@ -105,7 +125,7 @@ export function isShapeSkin(id: string | undefined): id is string {
 
 /** True when drawing `skin` needs the lazy chunk: a cosmetic roof / helmet material or a silhouette (PERF-5 preload). */
 export function needsShapeSkins(skin: TowerSkin | undefined): boolean {
-  const lazy = (id: string | undefined): boolean => id !== undefined && (LAZY_ROOFS.has(id) || LAZY_HELMETS.has(id) || isShapeSkin(id));
+  const lazy = (id: string | undefined): boolean => id !== undefined && (LAZY_MATERIALS.has(id) || isShapeSkin(id));
   return skin !== undefined && (lazy(skin.roof) || lazy(skin.helmet));
 }
 
@@ -146,20 +166,20 @@ function parts(): ShapeSkinDrawers {
 export const RIM = 'rgba(255, 250, 240, 0.55)';
 export const INK_LINE = 'rgba(30, 42, 68, 0.18)';
 export const TAU = Math.PI * 2;
-/** Cream canvas stripes of the tent skin (paper, and paper in shadow). */
-export const STRIPE: Tones = { lit: '#fffaf0', mid: '#fff3dc', shade: '#e2d3b8' };
 
 /**
  * How a skin changes the owner-coloured roof. Every non-default material keeps an owner-coloured
  * band at the roof base (and the flag) so ownership still reads at a glance in both palettes.
  */
-export type RoofShape = 'cone' | 'dome' | 'pagoda' | 'onion';
+export type RoofShape = 'cone' | 'dome' | 'pagoda' | 'onion' | 'thatch' | 'glass';
+/** Where a shaped roof goes (`ShapeSkinDrawers.roofPart`). */
+export type RoofPart = 'roof' | 'skirt' | 'artillery';
 
 export interface RoofStyle {
   tones: Tones;
   /** Alternate facets in these tones (tent). */
   stripes?: Tones;
-  /** Silhouette: cone (default / iron / slate / tent), half-dome (gold), tiered eaves, onion bulb. */
+  /** Silhouette: cone (default / iron / slate / tent), half-dome (gold), tiered eaves, onion bulb, thatched cone (skin drop #1), glass observatory dome (skin drop #1). */
   shape: RoofShape;
   /** Rivet dots along the eave (iron). */
   rivets: boolean;
@@ -171,7 +191,7 @@ export interface RoofStyle {
 
 function roofStyle(pal: Palette, owner: Tones, skin?: TowerSkin): RoofStyle {
   const id = skin?.roof;
-  if (id !== undefined && LAZY_ROOFS.has(id)) {
+  if (id !== undefined && LAZY_MATERIALS.has(id)) {
     // material in the lazy chunk: the default cone until it lands (the call starts the download)
     const drawers = shapeSkinsNow();
     if (drawers) return drawers.roofStyle(pal, owner, id);
@@ -365,22 +385,13 @@ export function dome(ctx: CanvasRenderingContext2D, tones: Tones, x: number, bas
   ctx.stroke();
 }
 
-/** Cone, dome, pagoda or onion roof per skin, with its owner band / rivets / shingles. */
+/** Cone roof, or the skin's shaped roof (dome / pagoda / onion / thatch / glass, lazy chunk), with its owner band / rivets / shingles. */
 function roof(ctx: CanvasRenderingContext2D, pal: Palette, owner: Tones, style: RoofStyle, x: number, base: number, height: number, rx: number, ry: number): void {
   if (style.band) parts().ownerBand(ctx, owner, x, base + 2, rx + 4, ry + 2);
-  switch (style.shape) {
-    case 'dome':
-      parts().domeRoof(ctx, style.tones, x, base, height, rx, ry, style.stripes);
-      break;
-    case 'pagoda':
-      parts().pagoda(ctx, pal, style.tones, x, base, height, rx, ry);
-      break;
-    case 'onion':
-      parts().onion(ctx, pal, style.tones, x, base, height, rx, ry);
-      break;
-    default:
-      cone(ctx, style.tones, x, base, base - height, rx, ry, style.stripes);
-      if (style.shingles) parts().shingles(ctx, style.tones, x, base, height, rx, ry);
+  if (style.shape !== 'cone') parts().roofPart(ctx, pal, style, 'roof', x, base, height, rx, ry);
+  else {
+    cone(ctx, style.tones, x, base, base - height, rx, ry, style.stripes);
+    if (style.shingles) parts().shingles(ctx, style.tones, x, base, height, rx, ry);
   }
   if (style.rivets) parts().rivets(ctx, style.tones, x, base, rx, ry);
 }
@@ -595,11 +606,13 @@ export function crenelsHalf(ctx: CanvasRenderingContext2D, pal: Palette, x: numb
 
 /**
  * Lower skirt roof of the L3 double roof: a shallow cone in the roof material that the turret
- * stands through. Tent stripes carry over; band skins get the owner band under it.
+ * stands through (thatch / glass texture it through the chunk). Tent stripes carry over; band
+ * skins get the owner band under it.
  */
-function skirtRoof(ctx: CanvasRenderingContext2D, owner: Tones, style: RoofStyle, x: number, base: number, rx: number, ry: number, height: number): void {
+function skirtRoof(ctx: CanvasRenderingContext2D, pal: Palette, owner: Tones, style: RoofStyle, x: number, base: number, rx: number, ry: number, height: number): void {
   if (style.band) parts().ownerBand(ctx, owner, x, base + 2, rx + 3, ry + 1.5);
-  cone(ctx, style.tones, x, base, base - height, rx, ry, style.stripes);
+  if (style.shape !== 'cone') parts().roofPart(ctx, pal, style, 'skirt', x, base, height, rx, ry);
+  else cone(ctx, style.tones, x, base, base - height, rx, ry, style.stripes);
   if (style.shingles) parts().shingles(ctx, style.tones, x, base, height, rx, ry);
   if (style.rivets) parts().rivets(ctx, style.tones, x, base, rx, ry);
 }
@@ -655,7 +668,7 @@ function drawBarracks(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones,
         door(ctx, pal, x, y - 10, 7, 17);
         awning(ctx, tones, x - 8, y, 1.05);
         crenelsHalf(ctx, pal, x, y - 50, 32, 11, 7, true);
-        skirtRoof(ctx, tones, style, x, y - 52, 26 * pulse, 8.5 * pulse, 16 * pulse);
+        skirtRoof(ctx, pal, tones, style, x, y - 52, 26 * pulse, 8.5 * pulse, 16 * pulse);
         cylinder(ctx, st, x, y - 86, y - 60, 18, 6.5, 2);
         crenelsHalf(ctx, pal, x, y - 50, 32, 11, 7, false);
         roof(ctx, pal, tones, style, x, y - 88, 44 * pulse, 24 * pulse, 7.5 * pulse);
@@ -739,7 +752,7 @@ function drawFortress(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones,
         cylinder(ctx, st, x, y - 54, y - 4, 32, 11, 3);
         door(ctx, pal, x, y - 4, 6, 14);
         crenelsHalf(ctx, pal, x, y - 54, 32, 11, 7, true);
-        skirtRoof(ctx, tones, style, x, y - 56, 26 * pulse, 8.5 * pulse, 16 * pulse);
+        skirtRoof(ctx, pal, tones, style, x, y - 56, 26 * pulse, 8.5 * pulse, 16 * pulse);
         cylinder(ctx, st, x, y - 88, y - 64, 18, 6.5, 2);
         crenelsHalf(ctx, pal, x, y - 54, 32, 11, 7, false);
         roof(ctx, pal, tones, style, x, y - 90, 40 * pulse, 22 * pulse, 7 * pulse);
@@ -795,8 +808,7 @@ function drawArtillery(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones
   const style = roofStyle(pal, tones, o.skin);
   p.fixed(() => {
     if (style.band) parts().ownerBand(ctx, tones, x, dy, rx + 2, 6);
-    if (style.shape === 'pagoda') parts().pagoda(ctx, pal, style.tones, x, dy, ry * 1.3, rx, 7, 2);
-    else if (style.shape === 'onion') parts().onion(ctx, pal, style.tones, x, dy, ry * 1.5, rx, 7);
+    if (style.shape !== 'cone' && style.shape !== 'dome') parts().roofPart(ctx, pal, style, 'artillery', x, dy, ry, rx, 7);
     else {
       dome(ctx, style.tones, x, dy, rx, ry, style.stripes);
       if (style.shingles) parts().shingles(ctx, style.tones, x, dy, ry, rx, rx * 0.5);
@@ -872,12 +884,7 @@ function sawTeeth(ctx: CanvasRenderingContext2D, style: RoofStyle, x: number, to
   }
 }
 
-/** Chimney stack (fixed) with a drifting smoke puff (live; cool grey reads on cream, sand, snow and dark rock alike). */
-export function chimney(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, top: number, bottom: number, w: number, nowMs: number, motion: boolean, phase = 0): void {
-  chimneyStack(ctx, pal, tones, x, top, bottom, w);
-  chimneySmoke(ctx, x, top, w, nowMs, motion, phase);
-}
-
+/** Chimney stack (fixed); the drifting smoke puff (`chimneySmoke`, live) is cool grey so it reads on cream, sand, snow and dark rock alike. */
 export function chimneyStack(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, top: number, bottom: number, w: number): void {
   const st = pal.stoneTones;
   ctx.fillStyle = st.shade;
@@ -951,12 +958,12 @@ function drawFactory(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, 
     ctx.fillRect(x - hw + 6, wy, 4, 3);
     ctx.fillRect(x + dh / 2 + 4, wy, 4, 3);
     // saw-tooth roof in owner colour (or the skin material over an owner strip); pagoda and onion
-    // skins swap the teeth for a tiered hip roof / a bulb on a flat deck
+    // skins swap the teeth for a tiered hip roof / a bulb on a flat deck (thatch / glass keep the
+    // teeth: straw saw-teeth, glass skylights)
     const rt = style.tones;
     const teeth = style.shape === 'pagoda' || style.shape === 'onion' ? 0 : [3, 3, 4][k]!;
     const th = [13, 16, 18][k]! * pulse;
-    if (style.shape === 'pagoda') parts().factoryPagoda(ctx, pal, rt, x, top, pulse, hw);
-    else if (style.shape === 'onion') parts().factoryOnion(ctx, pal, rt, x, top, pulse, hw);
+    if (!teeth) parts().factoryRoof(ctx, pal, style, x, top, pulse, hw);
     if (teeth) {
       if (k === 2) {
         // L3 double roof: a second row of teeth stepped back and up, peaks showing between the front ones
@@ -1317,11 +1324,11 @@ export function helmetCap(ctx: CanvasRenderingContext2D, color: string, hx: numb
 }
 
 /**
- * Helmet: the owner-coloured cap by default; the equipped skin (`LAZY_HELMETS`) once the
+ * Helmet: the owner-coloured cap by default; the equipped skin (`LAZY_MATERIALS`) once the
  * skinShapes chunk is loaded (the first draw starts the download and draws the cap meanwhile).
  */
 function drawHelmet(ctx: CanvasRenderingContext2D, pal: Palette, st: UnitStyle, id: string | undefined, hx: number, hy: number, s: number, dx: number): void {
-  if (id !== undefined && LAZY_HELMETS.has(id)) {
+  if (id !== undefined && LAZY_MATERIALS.has(id)) {
     const drawers = shapeSkinsNow();
     if (drawers) {
       drawers.helmet(ctx, pal, st, id, hx, hy, s, dx);

@@ -15,10 +15,19 @@ import type { Palette, Tones } from './palette';
 import { shade } from './palette';
 import { TANK_RADIUS } from './layout';
 import { roundRect } from './widgets';
-import type { RoofStyle, ShapeSkinDrawers, TowerDrawOptions, UnitStyle } from './sprites';
-import { INK_LINE, RIM, STRIPE, TAU, awning, banner, barrel, capsule, chimney, cone, crenelsHalf, cylinder, dome, door, flag, gems, helmetCap, ledge, plinth, tier, wallRing } from './sprites';
+import type { RoofPart, RoofStyle, ShapeSkinDrawers, TowerDrawOptions, UnitStyle } from './sprites';
+import { INK_LINE, RIM, TAU, awning, banner, barrel, capsule, chimneySmoke, chimneyStack, cone, crenelsHalf, cylinder, dome, door, flag, gems, helmetCap, ledge, plinth, tier, wallRing } from './sprites';
 
 type T3 = readonly [number, number, number];
+
+/** Cream canvas stripes of the tent skin (paper, and paper in shadow); also the horns / plumes of the helmet skins. */
+export const STRIPE: Tones = { lit: '#fffaf0', mid: '#fff3dc', shade: '#e2d3b8' };
+
+/** Chimney stack (fixed) with a drifting smoke puff (live) — the silhouette skins draw both in one go. */
+function chimney(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, top: number, bottom: number, w: number, nowMs: number, motion: boolean, phase = 0): void {
+  chimneyStack(ctx, pal, tones, x, top, bottom, w);
+  chimneySmoke(ctx, x, top, w, nowMs, motion, phase);
+}
 
 /* ---------- shared clay parts ---------- */
 
@@ -677,7 +686,15 @@ function domeStripes(ctx: CanvasRenderingContext2D, x: number, base: number, rx:
 }
 
 /** Blue-grey slate tiles (lighter and bluer than the gun-metal iron roof). */
-const SLATE: Tones = { lit: '#b3bede', mid: '#7481ad', shade: '#4d5578' };
+export const SLATE: Tones = { lit: '#b3bede', mid: '#7481ad', shade: '#4d5578' };
+/**
+ * Straw of the thatched cottage roof (skin drop #1, ART-10): warm ochre, browner and duller than
+ * the gold dome so the two materials never read alike, and ≥ 30 ΔE from every owner mid tone of
+ * both palettes (tests/render/roofSkins.test.ts pins the distances).
+ */
+export const STRAW: Tones = { lit: '#e6cb78', mid: '#c19a48', shade: '#7f5f27' };
+/** Glass of the observatory dome (skin drop #1): pale cool cyan, ribbed in BRONZE brass; same distance rules as STRAW. */
+export const GLASS: Tones = { lit: '#d6f3ff', mid: '#86cdf0', shade: '#3579a6' };
 
 /** How a roof material changes the owner-coloured roof (`sprites.ts roofStyle` for the default look). */
 function roofStyle(pal: Palette, owner: Tones, id: string): RoofStyle {
@@ -694,9 +711,237 @@ function roofStyle(pal: Palette, owner: Tones, id: string): RoofStyle {
       return { tones: owner, shape: 'pagoda', rivets: false, shingles: false, band: false };
     case 'roof.onion':
       return { tones: owner, shape: 'onion', rivets: false, shingles: false, band: false };
+    case 'roof.thatch':
+      return { tones: STRAW, shape: 'thatch', rivets: false, shingles: false, band: true };
+    case 'roof.glass':
+      return { tones: GLASS, shape: 'glass', rivets: false, shingles: false, band: true };
     default:
       return { tones: owner, shape: 'cone', rivets: false, shingles: false, band: false };
   }
+}
+
+/**
+ * The shaped roofs behind `sprites.ts roof / skirtRoof / drawArtillery`: the main roof of a
+ * building, the L3 keep's lower skirt (a plain cone in the material for the shipped shapes,
+ * textured for thatch / glass) or the artillery dome (`height` = its rise, `ry` = the bunker
+ * rim's ellipse). The pagoda / onion / gold branches keep their pre-ART-10 geometry exactly.
+ */
+function roofPart(ctx: CanvasRenderingContext2D, pal: Palette, style: RoofStyle, part: RoofPart, x: number, base: number, height: number, rx: number, ry: number): void {
+  const t = style.tones;
+  switch (style.shape) {
+    case 'pagoda':
+      if (part === 'artillery') pagoda(ctx, pal, t, x, base, height * 1.3, rx, ry, 2);
+      else if (part === 'skirt') cone(ctx, t, x, base, base - height, rx, ry, style.stripes);
+      else pagoda(ctx, pal, t, x, base, height, rx, ry);
+      break;
+    case 'onion':
+      if (part === 'skirt') cone(ctx, t, x, base, base - height, rx, ry, style.stripes);
+      else onion(ctx, pal, t, x, base, part === 'artillery' ? height * 1.5 : height, rx, ry);
+      break;
+    case 'thatch':
+      thatch(ctx, pal, t, x, base, height, rx, ry, part);
+      break;
+    case 'glass':
+      observatory(ctx, pal, t, x, base, height, rx, ry, part);
+      break;
+    default:
+      // gold: the eager side draws the artillery dome itself, so only the roof and skirt arrive here
+      if (part === 'skirt') cone(ctx, t, x, base, base - height, rx, ry, style.stripes);
+      else domeRoof(ctx, t, x, base, height, rx, ry, style.stripes);
+  }
+}
+
+/** Pagoda / onion across a factory deck instead of its saw teeth (the other shapes keep the teeth). */
+function factoryRoof(ctx: CanvasRenderingContext2D, pal: Palette, style: RoofStyle, x: number, top: number, pulse: number, hw: number): void {
+  if (style.shape === 'pagoda') factoryPagoda(ctx, pal, style.tones, x, top, pulse, hw);
+  else if (style.shape === 'onion') factoryOnion(ctx, pal, style.tones, x, top, pulse, hw);
+}
+
+/* ---------- skin drop #1 (ART-10, 2026-09-28): thatched cottage roof, glass observatory dome ---------- */
+
+/**
+ * Thatched cottage roof: the straw cone (or, on an artillery bunker, a straw dome) with combed
+ * strands fanning from the crown, a thick trimmed eave lip, a rope binding two-thirds of the way
+ * up (dark cord with cream twist ticks) and a straw knot on the crown. Reads at 360 px by its
+ * silhouette (the fat eave + knot) and warm ochre; ownership stays on the owner band under the
+ * eave, the awning and the flag. Height envelope: crown knot ≤ 3 px above the cone apex.
+ */
+function thatch(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, base: number, height: number, rx: number, ry: number, part: RoofPart): void {
+  const domed = part === 'artillery';
+  const apex = base - height;
+  if (domed) dome(ctx, tones, x, base, rx, height);
+  else cone(ctx, tones, x, base, apex, rx, ry);
+  // combed strands from just under the crown to the eave, front half
+  const n = Math.max(5, Math.round(rx / 5));
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = INK_LINE;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  for (let i = 1; i < n; i++) {
+    const a = Math.PI - (i / n) * Math.PI;
+    const ex = x + Math.cos(a) * rx * 0.96;
+    const ey = base + Math.sin(a) * ry * 0.96;
+    if (domed) {
+      ctx.moveTo(x + Math.cos(a) * rx * 0.1, apex + height * 0.06);
+      ctx.quadraticCurveTo(x + Math.cos(a) * rx * 0.8, base - height * 0.7, ex, ey);
+    } else {
+      ctx.moveTo(x + Math.cos(a) * rx * 0.1, apex + height * 0.1);
+      ctx.lineTo(ex, ey);
+    }
+  }
+  ctx.stroke();
+  // thick trimmed eave: a straw lip over the cone's underside (shade under mid)
+  ctx.strokeStyle = tones.shade;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.ellipse(x, base + 1, rx + 1, ry + 0.5, 0, 0.1, Math.PI - 0.1);
+  ctx.stroke();
+  ctx.strokeStyle = tones.mid;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.ellipse(x, base - 0.5, rx + 1, ry + 0.5, 0, 0.1, Math.PI - 0.1);
+  ctx.stroke();
+  // rope binding: dark cord around the roof with cream twist ticks
+  const f = domed ? 0.5 : 0.62;
+  const k = domed ? Math.sqrt(1 - f * f) : 1 - f;
+  const by = base - height * f;
+  const brx = rx * k;
+  const bry = Math.max(1.5, ry * k);
+  ctx.strokeStyle = pal.woodTones.shade;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.ellipse(x, by, brx, bry, 0, 0.05, Math.PI - 0.05);
+  ctx.stroke();
+  ctx.strokeStyle = pal.rope;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const a = 0.25 + (i / 5) * (Math.PI - 0.5);
+    const px = x + Math.cos(a) * brx;
+    const py = by + Math.sin(a) * bry;
+    ctx.moveTo(px - 1, py + 1.2);
+    ctx.lineTo(px + 1, py - 1.2);
+  }
+  ctx.stroke();
+  // straw knot on the crown (not on the skirt: the turret stands through it)
+  if (part === 'roof') {
+    const r = Math.max(2.2, rx * 0.1);
+    ctx.fillStyle = tones.shade;
+    ctx.beginPath();
+    ctx.arc(x + 0.6, apex + 0.6, r, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = tones.mid;
+    ctx.beginPath();
+    ctx.arc(x, apex - 0.6, r, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = tones.lit;
+    ctx.beginPath();
+    ctx.arc(x - r * 0.3, apex - 0.6 - r * 0.3, r * 0.42, 0, TAU);
+    ctx.fill();
+  }
+}
+
+/** Brass eave ring under a glass roof: shade ellipse with a mid ellipse a px higher (the front lip shows under the glass). */
+function brassRing(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number, ry: number): void {
+  ctx.fillStyle = BRONZE.shade;
+  ctx.beginPath();
+  ctx.ellipse(x, y, rx + 3, ry + 1.5, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = BRONZE.mid;
+  ctx.beginPath();
+  ctx.ellipse(x, y - 1, rx + 2.5, ry + 1, 0, 0, TAU);
+  ctx.fill();
+}
+
+/**
+ * Glass observatory dome: a brass eave ring, the pale cyan half-dome, a dark shutter slit down
+ * the front (right of centre, brass-edged), three brass meridian ribs and a brass hoop, a cream
+ * reflection patch upper-left and a brass finial. The L3 skirt is a glass cone with two ribs
+ * (a greenhouse ring around the turret). Reads at 360 px by the cool cyan against the warm stone
+ * and the dark slit; ownership stays on the owner band, awning and flag. Finial ≤ 4 px above the
+ * dome's crown, inside the badge envelope.
+ */
+function observatory(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, base: number, height: number, rx: number, ry: number, part: RoofPart): void {
+  ctx.lineCap = 'round';
+  if (part === 'skirt') {
+    brassRing(ctx, x, base, rx, ry);
+    cone(ctx, tones, x, base, base - height, rx, ry);
+    ctx.strokeStyle = BRONZE.shade;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (const a of [Math.PI * 0.8, Math.PI * 0.25]) {
+      ctx.moveTo(x, base - height + 2);
+      ctx.lineTo(x + Math.cos(a) * rx * 0.97, base + Math.sin(a) * ry * 0.97);
+    }
+    ctx.stroke();
+    return;
+  }
+  const domed = part === 'artillery';
+  const drx = domed ? rx : rx * 0.9;
+  const h = domed ? height : height * 0.95;
+  const apex = base - h;
+  brassRing(ctx, x, base, drx, ry);
+  dome(ctx, tones, x, base, drx, h);
+  // shutter slit: dark interior wedge from the crown to the eave, right of centre, brass-edged
+  const sw = Math.max(2, drx * 0.14);
+  const sx = x + drx * 0.12;
+  ctx.fillStyle = shade(tones.shade, -0.45);
+  ctx.beginPath();
+  ctx.moveTo(x + 1, apex + 2);
+  ctx.lineTo(sx + sw, base - 1);
+  ctx.lineTo(sx - sw * 0.2, base - 1);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = BRONZE.mid;
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(x + 1, apex + 2);
+  ctx.lineTo(sx - sw * 0.2, base - 1);
+  ctx.stroke();
+  // brass meridian ribs (crown → eave, bulging with the glass) and a hoop at 42 % height
+  const ribs = [Math.PI * 0.85, Math.PI * 0.62, Math.PI * 0.18];
+  const rib = (a: number): void => {
+    ctx.moveTo(x, apex + 1);
+    ctx.quadraticCurveTo(x + Math.cos(a) * drx * 0.95, base - h * 0.45, x + Math.cos(a) * drx * 0.98, base + Math.sin(a) * ry * 0.98);
+  };
+  ctx.strokeStyle = BRONZE.shade;
+  ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  for (const a of ribs) rib(a);
+  ctx.stroke();
+  const hf = 0.42;
+  const hk = Math.sqrt(1 - hf * hf);
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.ellipse(x, base - h * hf, drx * hk, Math.max(1.5, ry * hk), 0, 0.03, Math.PI - 0.03);
+  ctx.stroke();
+  // key light on the left rib and the left of the hoop
+  ctx.strokeStyle = BRONZE.lit;
+  ctx.lineWidth = 0.9;
+  ctx.beginPath();
+  rib(ribs[0]!);
+  ctx.ellipse(x, base - h * hf - 0.8, drx * hk, Math.max(1.5, ry * hk), 0, Math.PI * 0.55, Math.PI * 0.97);
+  ctx.stroke();
+  // reflection on the glass, upper-left
+  ctx.fillStyle = 'rgba(255, 250, 240, 0.35)';
+  ctx.beginPath();
+  ctx.ellipse(x - drx * 0.42, base - h * 0.6, drx * 0.15, h * 0.2, -0.6, 0, TAU);
+  ctx.fill();
+  // brass finial
+  const fr = Math.max(2, drx * 0.09);
+  const fy = apex - fr * 0.6;
+  ctx.fillStyle = BRONZE.shade;
+  ctx.beginPath();
+  ctx.arc(x + fr * 0.2, fy + fr * 0.2, fr, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = BRONZE.mid;
+  ctx.beginPath();
+  ctx.arc(x, fy, fr, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = BRONZE.lit;
+  ctx.beginPath();
+  ctx.arc(x - fr * 0.3, fy - fr * 0.3, fr * 0.36, 0, TAU);
+  ctx.fill();
 }
 
 /** Gold skin on a tower: eave in the roof material, then the half-dome, then a finial ball. */
@@ -1105,12 +1350,9 @@ export const SHAPE_SKINS: ShapeSkinDrawers = {
   ownerBand,
   coneStripes,
   domeStripes,
-  pagoda,
-  onion,
-  factoryPagoda,
-  factoryOnion,
+  roofPart,
+  factoryRoof,
   factoryRivets,
-  domeRoof,
   sawTeeth,
   shingles,
   rivets,

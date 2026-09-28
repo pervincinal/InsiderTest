@@ -48,7 +48,7 @@ function shopSkinRect(top: number, i: number): { x: number; y: number; w: number
   return { x: 34 + (i % 3) * (208 + 14), y: top + 46 + Math.floor(i / 3) * (236 + 16), w: 208, h: 236 };
 }
 const SKIN_ROOFS_TOP = 194; // SHOP.row.y0 - 6
-// roofs (4 → 2 rows) then helmets (5 → 2 rows) then terrain themes (3), each section 22 px under the previous one
+// roofs (6 since skin drop #1, 2026-09-28 → still 2 rows) then helmets (5 → 2 rows) then terrain themes (3), each section 22 px under the previous one
 const SKIN_HELMETS_TOP = SKIN_ROOFS_TOP + 46 + 2 * (236 + 16) - 16 + 22;
 const SKIN_THEMES_TOP = SKIN_HELMETS_TOP + 46 + 2 * (236 + 16) - 16 + 22;
 // src/render/layout.ts — RESULT

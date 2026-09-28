@@ -203,6 +203,9 @@ export const SKINS = [
   { id: 'roof_pagoda', label: 'Pagoda roof', category: 'towerRoof', costCrystals: 120, source: 'shop' },
   { id: 'roof_onion', label: 'Onion dome', category: 'towerRoof', costCrystals: 150, source: 'shop' },
   { id: 'roof_gold', label: 'Gold roof', category: 'towerRoof', costCrystals: 0, source: 'premium' },
+  /** Skin drop #1 (ART-10, 2026-09-28): prices proposed by the Tech Artist inside the §3.3 band; the Monetization Designer confirms (ECONOMY.md §3.3). */
+  { id: 'roof_thatch', label: 'Thatched roof', category: 'towerRoof', costCrystals: 120, source: 'shop' },
+  { id: 'roof_glass', label: 'Observatory dome', category: 'towerRoof', costCrystals: 150, source: 'shop' },
   { id: 'helmet_bronze', label: 'Bronze helmet', category: 'unitHelmet', costCrystals: 0, source: 'starter' },
   { id: 'helmet_viking', label: 'Viking helmet', category: 'unitHelmet', costCrystals: 100, source: 'shop' },
   { id: 'helmet_knight', label: 'Knight helmet', category: 'unitHelmet', costCrystals: 120, source: 'shop' },
