@@ -77,7 +77,7 @@ export interface TowerClashDebug {
   /** Text of the current screen's toast while it is on screen, or null. */
   getToast(): string | null;
   /** Result screen numbers, or null when not on the result screen. */
-  getResult(): { outcome: string; stars: number; coinsEarned: number; coinsTotal: number; crystalsEarned: number; achievements: string[]; tip: string | null; howto: boolean } | null;
+  getResult(): { outcome: string; stars: number; coinsEarned: number; coinsTotal: number; crystalsEarned: number; achievements: string[]; tip: string | null; howto: boolean; practice: boolean } | null;
   /** Level-select lock state for a level id (undefined id → false). */
   isLevelUnlocked(id: number): boolean;
   /** Level-select path map scroll (logical px); setting is a no-op on other screens. */
@@ -98,6 +98,8 @@ export interface TowerClashDebug {
     get(dayKey?: string): DailyDebugInfo;
     /** Start the challenge for `dayKey` (default: today / the override); resolves like `loadLevel`. */
     start(dayKey?: string): Promise<boolean>;
+    /** Start yesterday's challenge of `dayKey` (default: today / the override) as practice (DAILY-6). */
+    startYesterday(dayKey?: string): Promise<boolean>;
   };
   /** Override "this week" (a Monday UTC `YYYY-MM-DD`; any day is mapped to its Monday) for the Weekly Challenge; null returns to the real clock. */
   setWeekKey(key: string | null): void;
@@ -146,6 +148,8 @@ export interface DailyDebugInfo {
   streak: number;
   lastWinDay: string | null;
   best: { stars: number; timeMs: number } | null;
+  /** Yesterday's challenge when the "Yesterday's map" row is offered for `dayKey` (DAILY-6), else null. */
+  yesterday: DailyChallenge | null;
 }
 
 export interface WeeklyDebugInfo {

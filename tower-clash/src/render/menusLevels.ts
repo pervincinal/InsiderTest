@@ -55,6 +55,8 @@ export interface DailyCardOpts extends ChallengeCardFace {
   /** Which face is showing (the tab is remembered per session by the screen). */
   tab: 'daily' | 'weekly';
   weekly: WeeklyCardOpts;
+  /** "Yesterday's map" row (DAILY-6): yesterday's level name and translated twist, or null when not offered. */
+  yesterday: { levelName: string; twist: string } | null;
 }
 
 /** Weekly Challenge face (GDD §8.2). */
@@ -208,6 +210,60 @@ function drawDailyCard(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, o: 
     ctx.font = font(16, '500');
     ctx.fillText(d.countdown, left, r.y + 84, r.w - (left - r.x) - 24);
   }
+  ctx.restore();
+}
+
+/**
+ * "Yesterday's map" row (DAILY-6, GDD §7.3): a slim paper card under the daily card — a rewind
+ * badge, the label over "<level> · <twist>", and a "Practice" pill instead of a reward (ECONOMY.md
+ * §6.1: it pays nothing). Fonts shrink to fit, so it holds at 360 CSS px.
+ */
+function drawYesterdayRow(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, y: { levelName: string; twist: string }, pressed: boolean): void {
+  ctx.save();
+  if (pressed) ctx.translate(0, 2);
+  drawCard(ctx, pal, r, { radius: 18, edge: 4, fill: shade(pal.paper, -0.03) });
+  const cy = r.y + (r.h - 4) / 2;
+  // rewind badge: a disc with a counter-clockwise arrow
+  const bx = r.x + 30;
+  ctx.beginPath();
+  ctx.arc(bx, cy, 18, 0, Math.PI * 2);
+  ctx.fillStyle = shade(pal.owners.player, 0.15);
+  ctx.fill();
+  ctx.strokeStyle = pal.paper;
+  ctx.lineWidth = 3.5;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.arc(bx, cy, 9, -Math.PI * 0.15, Math.PI * 1.35);
+  ctx.stroke();
+  const ax = bx + 9 * Math.cos(-Math.PI * 0.15);
+  const ay = cy + 9 * Math.sin(-Math.PI * 0.15);
+  ctx.beginPath();
+  ctx.moveTo(ax - 6, ay - 3);
+  ctx.lineTo(ax + 1, ay + 1);
+  ctx.lineTo(ax + 4, ay - 7);
+  ctx.stroke();
+  // practice pill (right)
+  const label = t('daily.practice');
+  const pw = 136;
+  const pill: Rect = { x: r.x + r.w - pw - 12, y: cy - 15, w: pw, h: 30 };
+  drawPill(ctx, pill, pal.paper, undefined, 2);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = pal.textDim;
+  ctx.font = font(fitFontPx(ctx, label, 16, pw - 16, '500'), '500');
+  ctx.fillText(label, pill.x + pill.w / 2, pill.y + pill.h / 2 + 1, pw - 16);
+  // label over level · twist
+  const left = r.x + 60;
+  const textW = pill.x - left - 12;
+  ctx.textAlign = 'left';
+  const title = t('daily.yesterday');
+  ctx.fillStyle = pal.textDim;
+  ctx.font = font(fitFontPx(ctx, title, 15, textW));
+  ctx.fillText(title, left, r.y + 16, textW);
+  const line = `${y.levelName} · ${y.twist}`;
+  ctx.fillStyle = pal.ink;
+  ctx.font = font(fitFontPx(ctx, line, 18, textW, '500'), '500');
+  ctx.fillText(line, left, r.y + 37, textW);
   ctx.restore();
 }
 
@@ -459,6 +515,7 @@ export function drawLevelSelect(view: View, pal: Palette, o: LevelSelectOpts): v
   drawWallet(ctx, pal, o.walletRect, o.gold, o.crystals, { pressed: o.pressed === o.walletRect });
   // daily challenge card, sticky under the header (tap → start)
   drawDailyCard(ctx, pal, LEVEL_MAP.daily, o.daily, o.pressed ?? null);
+  if (o.daily.tab === 'daily' && o.daily.yesterday) drawYesterdayRow(ctx, pal, LEVEL_MAP.yesterday, o.daily.yesterday, o.pressed === LEVEL_MAP.yesterday);
   // commander summary chip (tap → upgrades)
   const cr = o.commanderRect;
   drawButton(ctx, pal, cr, '', { fontPx: 18, pressed: o.pressed === cr, flat: true });

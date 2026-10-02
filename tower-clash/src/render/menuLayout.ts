@@ -56,6 +56,11 @@ export const LEVEL_MAP = Object.freeze({
   /** DAILY / WEEKLY tabs in the card's title row (GDD §8.2): 44 px tap targets over a 36 px segmented pill. */
   dailyTabDaily: { x: 126, y: 118, w: 118, h: 44 } as Rect,
   dailyTabWeekly: { x: 244, y: 118, w: 118, h: 44 } as Rect,
+  /**
+   * "Yesterday's map" row (DAILY-6, GDD §7.3): a slimmer secondary card docked under the daily card,
+   * sticky like it, on the DAILY tab only while yesterday's challenge is unwon. ≥ 44 px tap target.
+   */
+  yesterday: { x: 54, y: 222, w: 612, h: 56 } as Rect,
   /** Node radius (hit rect is the 2r square). */
   nodeR: 46,
   /** Content-space y of the first node and the vertical step between nodes. */
@@ -88,6 +93,16 @@ export function levelNodeRect(index: number, scroll: number): Rect {
 export function levelMapMaxScroll(count: number, viewH = 1280): number {
   const contentBottom = LEVEL_MAP.top + Math.max(0, count - 1) * LEVEL_MAP.step + LEVEL_MAP.tail;
   return Math.max(0, contentBottom - viewH);
+}
+
+/**
+ * Smallest scroll offset: 0, or negative while the "Yesterday's map" row is up, so the map can be
+ * pulled down by the row's height and level 1 clears the taller sticky block (DAILY-6).
+ */
+export function levelMapMinScroll(yesterdayRow: boolean): number {
+  const d = LEVEL_MAP.daily;
+  const y = LEVEL_MAP.yesterday;
+  return yesterdayRow ? d.y + d.h - (y.y + y.h) : 0;
 }
 
 /* ---------- shop tabs ---------- */

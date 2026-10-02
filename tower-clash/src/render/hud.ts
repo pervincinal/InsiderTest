@@ -104,6 +104,8 @@ export interface ResultExtras {
     crystals: number;
     streak: number;
     best: { stars: number; timeMs: number } | null;
+    /** Yesterday's map (DAILY-6): the line reads "Yesterday's map — no reward". */
+    practice?: boolean;
   };
   /** Weekly Challenge result (GDD §8): the gold line (first win of the week) or the week's best. */
   weekly?: {

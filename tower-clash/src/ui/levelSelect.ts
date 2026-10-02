@@ -7,7 +7,7 @@ import { C } from '../sim/constants';
 import { LEVEL_META, getLevelMeta } from '../levels/index';
 import { levelName, t } from './i18n';
 import type { View } from '../render/view';
-import { LEVEL_MAP, levelMapMaxScroll, levelNodeCentre, levelNodeRect } from '../render/menuLayout';
+import { LEVEL_MAP, levelMapMaxScroll, levelMapMinScroll, levelNodeCentre, levelNodeRect } from '../render/menuLayout';
 import type { Rect } from '../render/widgets';
 import { formatTime, inRect } from '../render/widgets';
 import type { DailyCardOpts, WeeklyCardOpts } from '../render/menusLevels';
@@ -19,7 +19,7 @@ import { Toast } from './screens';
 import { commanderSummary } from './upgrades';
 import type { DailyChallenge, WeeklyChallenge } from '../daily/challenge';
 import { REWARD, STREAK_MILESTONES, UNLOCK_AFTER_LEVEL, WEEKLY_REWARD, WEEKLY_UNLOCK_AFTER_LEVEL, challengeFor, goldReward, weeklyFor } from '../daily/challenge';
-import { challengeDone, challengeUnlocked, msToUtcMidnight, shownStreak } from './daily';
+import { challengeDone, challengeUnlocked, msToUtcMidnight, previousDayKey, shownStreak, yesterdayOffered } from './daily';
 import { msToNextMonday, shownWeekStreak, weeklyDone, weeklyTargetDone, weeklyUnlocked } from './weekly';
 import type { SaveData } from './save';
 
@@ -58,6 +58,8 @@ export class LevelSelectScreen implements Screen {
   private challenge: DailyChallenge | null = null;
   /** This week's challenge, recomputed only when the week key changes (Monday 00:00 UTC, debug override). */
   private weekly: WeeklyChallenge | null = null;
+  /** Yesterday's challenge (DAILY-6), recomputed only when the day key changes. */
+  private yesterdayCh: DailyChallenge | null = null;
 
   constructor(private readonly app: App) {
     this.current = currentLevelIndex(app.save, LEVEL_META);
@@ -70,7 +72,7 @@ export class LevelSelectScreen implements Screen {
   }
 
   setScroll(y: number): void {
-    this.scroll = Math.max(0, Math.min(this.maxScroll(), y));
+    this.scroll = Math.max(levelMapMinScroll(this.yesterday() !== null), Math.min(this.maxScroll(), y));
   }
 
   getScroll(): number {
@@ -91,6 +93,18 @@ export class LevelSelectScreen implements Screen {
     return this.weekly;
   }
 
+  /**
+   * Yesterday's challenge when its "Yesterday's map" row is up (DAILY-6, GDD §7.3): DAILY tab, the
+   * daily unlocked and yesterday's key unwon (`yesterdayOffered`); else null.
+   */
+  yesterday(): DailyChallenge | null {
+    const dayKey = this.app.dayKey();
+    if (cardTab !== 'daily' || !yesterdayOffered(this.app.save, dayKey)) return null;
+    const key = previousDayKey(dayKey);
+    if (!this.yesterdayCh || this.yesterdayCh.dayKey !== key) this.yesterdayCh = challengeFor(key);
+    return this.yesterdayCh;
+  }
+
   getCardTab(): CardTab {
     return cardTab;
   }
@@ -103,6 +117,8 @@ export class LevelSelectScreen implements Screen {
     const now = Date.now();
     const remaining = msToUtcMidnight(now);
     const countdown = remaining >= HOUR_MS ? t('daily.newIn', { h: Math.ceil(remaining / HOUR_MS) }) : t('daily.newInTime', { time: formatTime(remaining) });
+    const y = this.yesterday();
+    const yMeta = y ? getLevelMeta(y.levelId) : undefined;
     return {
       unlocked: challengeUnlocked(save),
       unlockLevel: UNLOCK_AFTER_LEVEL,
@@ -117,6 +133,7 @@ export class LevelSelectScreen implements Screen {
       countdown,
       tab: cardTab,
       weekly: this.weeklyCard(now),
+      yesterday: y ? { levelName: yMeta ? levelName(yMeta) : String(y.levelId), twist: t(`daily.twist.${y.twist.id}`) } : null,
     };
   }
 
@@ -168,8 +185,14 @@ export class LevelSelectScreen implements Screen {
     void this.app.startLevel(ch.levelId, ch.seed, { challenge: ch });
   }
 
+  /** Tap on the "Yesterday's map" row: yesterday's level, seed and twist as practice (DAILY-6). */
+  private tapYesterday(y: DailyChallenge): void {
+    void this.app.startLevel(y.levelId, y.seed, { challenge: y, practice: true });
+  }
+
   draw(view: View, nowMs: number): void {
     this.nowMs = nowMs;
+    this.setScroll(this.scroll); // the "Yesterday's map" row may have gone (rollover, a win): re-clamp
     drawLevelSelect(view, this.app.palette(), {
       nodes: LEVEL_META.map((level, i) => ({
         id: level.id,
@@ -197,7 +220,9 @@ export class LevelSelectScreen implements Screen {
     this.downY = p.y;
     this.scrollAtDown = this.scroll;
     this.dragging = false;
-    this.pressed = [BACK, LEVEL_MAP.wallet, LEVEL_MAP.commander, LEVEL_MAP.dailyTabDaily, LEVEL_MAP.dailyTabWeekly, LEVEL_MAP.daily].find((r) => inRect(r, p.x, p.y)) ?? null;
+    const rects = [BACK, LEVEL_MAP.wallet, LEVEL_MAP.commander, LEVEL_MAP.dailyTabDaily, LEVEL_MAP.dailyTabWeekly, LEVEL_MAP.daily];
+    if (this.yesterday()) rects.push(LEVEL_MAP.yesterday);
+    this.pressed = rects.find((r) => inRect(r, p.x, p.y)) ?? null;
   }
 
   move(p: PointerPoint): void {
@@ -229,10 +254,16 @@ export class LevelSelectScreen implements Screen {
     }
     if (inRect(LEVEL_MAP.dailyTabDaily, p.x, p.y) || inRect(LEVEL_MAP.dailyTabWeekly, p.x, p.y)) {
       cardTab = inRect(LEVEL_MAP.dailyTabWeekly, p.x, p.y) ? 'weekly' : 'daily';
+      this.setScroll(this.scroll); // the row comes and goes with the tab: re-clamp
       return;
     }
     if (inRect(LEVEL_MAP.daily, p.x, p.y)) {
       this.tapDaily();
+      return;
+    }
+    const y = this.yesterday();
+    if (y && inRect(LEVEL_MAP.yesterday, p.x, p.y)) {
+      this.tapYesterday(y);
       return;
     }
     if (p.y < LEVEL_MAP.headerH || p.y >= LEVEL_MAP.commander.y - 10) return;

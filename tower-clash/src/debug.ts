@@ -11,7 +11,7 @@ import { currentLanguage, t } from './ui/i18n';
 import { configureFakeStore } from './economy/providers/fakeStore';
 import { grantProduct } from './economy/wallet';
 import { challengeFor, weekKeyOf, weeklyFor } from './daily/challenge';
-import { challengeDone, challengeUnlocked, shownStreak } from './ui/daily';
+import { challengeDone, challengeUnlocked, previousDayKey, shownStreak, yesterdayOffered } from './ui/daily';
 import { shownWeekStreak, weeklyDone, weeklyTargetDone, weeklyUnlocked } from './ui/weekly';
 
 /*
@@ -38,8 +38,9 @@ export function installDebug(app: TowerClashApp): TowerClashDebug {
       if (!(app.current instanceof ResultScreen)) return null;
       const { outcome, stars, coinsEarned, coinsTotal } = app.current.info.ui;
       const { earnings, achievements } = app.current.info;
-      const { tip, howto } = app.current.extras();
-      return { outcome, stars, coinsEarned, coinsTotal, crystalsEarned: earnings.crystals, achievements: achievements.unlocked.map((a) => a.id), tip, howto };
+      const { tip, howto, daily } = app.current.extras();
+      // practice: the result line reads "Yesterday's map — no reward" (DAILY-6)
+      return { outcome, stars, coinsEarned, coinsTotal, crystalsEarned: earnings.crystals, achievements: achievements.unlocked.map((a) => a.id), tip, howto, practice: daily?.practice === true };
     },
     isLevelUnlocked: (id) => isLevelUnlocked(app.save, LEVEL_META, levelIndex(id)),
     setLevelSelectScroll: (y) => {
@@ -61,9 +62,14 @@ export function installDebug(app: TowerClashApp): TowerClashDebug {
       get: (dayKey = app.dayKey()) => {
         const challenge = challengeFor(dayKey);
         const c = app.save.challenge;
-        return { challenge, unlocked: challengeUnlocked(app.save), done: challengeDone(app.save, dayKey), streak: shownStreak(app.save, dayKey), lastWinDay: c.lastWinDay, best: c.best[dayKey] ?? null };
+        const yesterday = yesterdayOffered(app.save, dayKey) ? challengeFor(previousDayKey(dayKey)) : null;
+        return { challenge, unlocked: challengeUnlocked(app.save), done: challengeDone(app.save, dayKey), streak: shownStreak(app.save, dayKey), lastWinDay: c.lastWinDay, best: c.best[dayKey] ?? null, yesterday };
       },
       start: (dayKey) => app.startChallenge(dayKey),
+      startYesterday: (dayKey = app.dayKey()) => {
+        const y = challengeFor(previousDayKey(dayKey));
+        return app.startLevel(y.levelId, y.seed, { challenge: y, practice: true });
+      },
     },
     setWeekKey: (key) => {
       app.weekKeyOverride = key === null ? null : weekKeyOf(new Date(`${key}T12:00:00Z`));

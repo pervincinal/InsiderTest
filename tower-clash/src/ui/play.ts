@@ -36,7 +36,7 @@ import type { MatchSummary } from '../economy/achievements';
 import { L3_LEVEL, emptyMatch, evaluateAchievements } from '../economy/achievements';
 import { CRYSTAL_SERVICES } from '../economy/catalog';
 import type { DailyChallenge, WeeklyChallenge } from '../daily/challenge';
-import { recordChallengeResult, restartLevel } from './daily';
+import { practiceResult, recordChallengeResult, restartLevel } from './daily';
 import { recordWeeklyResult } from './weekly';
 import { isMuted, onSimEvents, onSimFrame, playSfx, resetAudioLevel, toggleMuted } from '../audio/index';
 import { hapticCapture } from '../native/index';
@@ -163,6 +163,8 @@ export class PlayScreen implements Screen {
   readonly challenge: DailyChallenge | null;
   /** Weekly Challenge match (GDD §8): the same fixed-match rules as `challenge`, booked per week. */
   readonly weekly: WeeklyChallenge | null;
+  /** Yesterday's map (DAILY-6): `challenge` is yesterday's and the result writes nothing. */
+  readonly practice: boolean;
 
   constructor(
     private readonly app: App,
@@ -173,6 +175,8 @@ export class PlayScreen implements Screen {
   ) {
     this.challenge = opts.challenge ?? null;
     this.weekly = opts.weekly ?? null;
+    this.practice = opts.practice === true && this.challenge !== null;
+    if (this.practice) this.toast.show(t('daily.yesterdayNoReward'), 'ok', performance.now(), 3200);
     this.continued = opts.reinforcements === true && !this.fixed;
     this.loop = new GameLoop({
       beforeTick: (s) => this.runAi(s),
@@ -404,6 +408,16 @@ export class PlayScreen implements Screen {
     this.match.outcome = outcome;
     this.match.levelId = this.level.id;
     this.match.timeMs = elapsed;
+    if (this.challenge && this.practice) {
+      // Yesterday's map (DAILY-6, ECONOMY.md §6.1): practice — no reward, streak, best, milestone or
+      // achievement; nothing is written, so the save stays byte-identical.
+      const daily = practiceResult(this.challenge, this.level, outcome, elapsed);
+      this.earnings = { stars: daily.stars, gold: 0, crystals: 0, notes: [], replayCapped: false };
+      const ui = this.buildUi();
+      this.gestures.reset();
+      this.app.go(new ResultScreen(this.app, { state: this.state, level: this.level, ui, earnings: this.earnings, continued: this.continued, achievements: { unlocked: [], crystals: 0 }, challenge: this.challenge, daily }));
+      return;
+    }
     if (this.challenge) {
       // Separate path (GDD §7): no level stars, first-clear gold or milestones — the daily reward is
       // paid once per day by `recordChallengeResult`. Achievements run without the match (ECONOMY.md
@@ -447,7 +461,7 @@ export class PlayScreen implements Screen {
 
   /** Restart this level; a challenge keeps its seed and twist. */
   restart(): void {
-    restartLevel(this.app, this.level.id, this.challenge, this.weekly);
+    restartLevel(this.app, this.level.id, this.challenge, this.weekly, this.practice);
   }
 
   draw(view: View, nowMs: number): void {

@@ -63,6 +63,11 @@ export interface StartOptions {
    * `App.startLevel` is called with the challenge's own seed.
    */
   challenge?: DailyChallenge;
+  /**
+   * Yesterday's map (DAILY-6): with `challenge` (yesterday's), a practice run — same fixed-match
+   * rules, but the result writes nothing (`practiceResult`: no reward, streak, best or milestone).
+   */
+  practice?: boolean;
   /** Weekly Challenge (GDD §8): as `challenge`, booked by `recordWeeklyResult` against its Monday key. */
   weekly?: WeeklyChallenge;
 }
@@ -400,7 +405,7 @@ export class ResultScreen implements Screen {
     const d = this.info.daily;
     const w = this.info.weeklyOutcome;
     return {
-      daily: d ? { won: d.won, firstWin: d.firstWin, gold: d.gold, crystals: d.crystals, streak: d.streak, best: d.best } : undefined,
+      daily: d ? { won: d.won, firstWin: d.firstWin, gold: d.gold, crystals: d.crystals, streak: d.streak, best: d.best, practice: d.practice } : undefined,
       weekly: w ? { firstWin: w.firstWin, gold: w.gold, streak: w.streak, best: w.best } : undefined,
       crystalsEarned: e.crystals,
       notes: e.notes.map(translateNote),
@@ -469,7 +474,7 @@ export class ResultScreen implements Screen {
 
   /** Same level again; a challenge keeps its seed and twist (unless its UTC day / week has passed — `restartLevel`). */
   private retry(): void {
-    restartLevel(this.app, this.info.level.id, this.info.challenge, this.info.weekly);
+    restartLevel(this.app, this.info.level.id, this.info.challenge, this.info.weekly, this.info.daily?.practice);
   }
 
   up(p: PointerPoint): void {

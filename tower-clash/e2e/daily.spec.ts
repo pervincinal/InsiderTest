@@ -19,6 +19,8 @@ const SAVE_KEY = 'towerclash.save.v3';
 const TITLE_PLAY = { x: 180, y: 640, w: 360, h: 96 };
 const LEVEL_MAP_DAILY = { x: 30, y: 112, w: 660, h: 104 };
 const RESULT_NEXT = { x: 84, y: 780, w: 170, h: 72 };
+/** "Yesterday's map" row under the card (src/render/menuLayout.ts LEVEL_MAP.yesterday, DAILY-6). */
+const LEVEL_MAP_YESTERDAY = { x: 54, y: 222, w: 612, h: 56 };
 const REWARD = { gold: 30, goldPerStar: 10, crystals: 5 };
 const UNLOCK_AFTER_LEVEL = 8;
 /** Day-3 streak milestone (src/daily/challenge.ts STREAK_MILESTONES). */
@@ -27,6 +29,8 @@ const MILESTONE_DAY3 = 5;
 const DAY_A = '2026-09-27';
 const DAY_B = '2026-09-28';
 const DAY_C = '2026-09-29';
+/** The day before DAY_A: level 50, Reinforced (GDD §7.2 pins); the reference player wins it at the fixed seed. */
+const YESTERDAY_A = '2026-09-26';
 
 const SHOTS = fileURLToPath(new URL('./__screenshots__/', import.meta.url));
 const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}${name}.png`, scale: 'css' });
@@ -45,7 +49,8 @@ interface SaveShape {
 }
 const screen = (page: Page) => page.evaluate(() => window.__towerclash.getScreen());
 const save = (page: Page) => page.evaluate(() => JSON.parse(JSON.stringify(window.__towerclash.economy.getSave())) as SaveShape);
-const daily = (page: Page) => page.evaluate(() => JSON.parse(JSON.stringify(window.__towerclash.daily.get())) as ReturnType<typeof window.__towerclash.daily.get>);
+const daily = (page: Page, dayKey?: string) =>
+  page.evaluate((key) => JSON.parse(JSON.stringify(window.__towerclash.daily.get(key))) as ReturnType<typeof window.__towerclash.daily.get>, dayKey);
 
 async function boot(page: Page, seeded: Record<string, unknown>, dayKey: string): Promise<string[]> {
   const errors: string[] = [];
@@ -223,6 +228,55 @@ test.describe('daily challenge', () => {
     expect((await save(page)).challenge.milestones).toEqual([3]);
     expect(errors).toEqual([]);
   });
+  test("yesterday's map (DAILY-6): the row offers yesterday's challenge as practice — no gold, no streak, no ledger write", async ({ page }) => {
+    const stars: Record<string, number> = {};
+    for (let id = 1; id <= UNLOCK_AFTER_LEVEL; id++) stars[String(id)] = 1;
+    const errors = await boot(page, { version: 3, stars, gold: 100, crystals: 3 }, DAY_A);
+    await tapRect(page, TITLE_PLAY);
+    await expect.poll(() => screen(page)).toBe('levelSelect');
+    const info = await daily(page);
+    const yesterday = (await daily(page, YESTERDAY_A)).challenge;
+    expect(yesterday.dayKey).toBe(YESTERDAY_A);
+    expect(info.yesterday).toEqual(yesterday);
+    expect(yesterday.levelId).not.toBe(info.challenge.levelId);
+    await page.waitForTimeout(400); // header settles
+    await shot(page, 'look3-daily-yesterday');
+    const before = await save(page);
+
+    // tap the row → yesterday's level, seed and twist; the no-reward toast is up
+    await tapRect(page, LEVEL_MAP_YESTERDAY);
+    await expect.poll(() => screen(page)).toBe('play');
+    const state = await page.evaluate(() => {
+      const s = window.__towerclash.getState()!;
+      return { levelId: s.levelId, seed: s.seed, modifiers: s.modifiers };
+    });
+    expect(state.levelId).toBe(yesterday.levelId);
+    expect(state.seed).toBe(yesterday.seed);
+    expect(state.modifiers).toEqual(yesterday.twist.modifiers);
+    const noReward = await page.evaluate(() => window.__towerclash.getText('daily.yesterdayNoReward'));
+    expect(await page.evaluate(() => window.__towerclash.getToast())).toBe(noReward);
+
+    await winRunningChallenge(page);
+    const result = (await page.evaluate(() => window.__towerclash.getResult()))!;
+    expect(result.practice).toBe(true);
+    expect(result.coinsEarned).toBe(0);
+    expect(result.crystalsEarned).toBe(0);
+    expect(result.achievements).toEqual([]);
+    const after = await save(page);
+    expect(after.gold).toBe(before.gold);
+    expect(after.crystals).toBe(before.crystals);
+    expect(after.challenge).toEqual(before.challenge);
+    expect(after.stars).toEqual(before.stars);
+    await page.waitForTimeout(2200); // card slide + count-up
+    await shot(page, 'look3-daily-yesterday-result');
+
+    // NEXT → the map; nothing was booked, so the row is still offered
+    await tapRect(page, RESULT_NEXT);
+    await expect.poll(() => screen(page)).toBe('levelSelect');
+    expect((await daily(page)).yesterday).toEqual(yesterday);
+    expect(errors).toEqual([]);
+  });
+
   test('RETRY / restart after the UTC rollover does not replay the stale day: the map opens with the "new challenge" toast (BUG-9)', async ({ page }) => {
     const stars: Record<string, number> = {};
     for (let id = 1; id <= UNLOCK_AFTER_LEVEL; id++) stars[String(id)] = 1;

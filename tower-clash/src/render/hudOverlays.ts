@@ -151,7 +151,9 @@ function drawResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: Pla
     const daily = ex?.daily;
     const weekly = ex?.weekly;
     const note = daily
-      ? daily.firstWin
+      ? daily.practice
+        ? t('daily.yesterdayNoReward')
+        : daily.firstWin
         ? t('daily.resultWon', { gold: daily.gold, crystals: daily.crystals, streak: daily.streak })
         : t('daily.resultBest', { stars: daily.best?.stars ?? ui.stars, time: formatTime(daily.best?.timeMs ?? hudClockOf(ui, state)) })
       : weekly

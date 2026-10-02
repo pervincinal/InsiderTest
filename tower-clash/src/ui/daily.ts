@@ -23,10 +23,11 @@ import { t } from './i18n';
  * RETRY (result screen) / restart (pause menu): the same level and seed again. A Daily Challenge
  * whose UTC day has passed is not replayed (its win would book against yesterday, BUG-9): the
  * level map opens with a notice and the player starts today's from the card. A Weekly Challenge
- * (GDD §8) does the same after the Monday 00:00 UTC rollover.
+ * (GDD §8) does the same after the Monday 00:00 UTC rollover. Yesterday's map (`practice`, DAILY-6)
+ * replays while its day is still yesterday; one more rollover sends it to the map the same way.
  */
-export function restartLevel(app: App, levelId: number, challenge: DailyChallenge | null | undefined, weekly?: WeeklyChallenge | null): void {
-  if (challenge && challenge.dayKey !== app.dayKey()) {
+export function restartLevel(app: App, levelId: number, challenge: DailyChallenge | null | undefined, weekly?: WeeklyChallenge | null, practice = false): void {
+  if (challenge && challenge.dayKey !== (practice ? previousDayKey(app.dayKey()) : app.dayKey())) {
     app.goLevels(t('daily.newReady'));
     return;
   }
@@ -34,7 +35,7 @@ export function restartLevel(app: App, levelId: number, challenge: DailyChalleng
     app.goLevels(t('weekly.newReady'));
     return;
   }
-  void app.startLevel(levelId, challenge?.seed ?? weekly?.seed, challenge ? { challenge } : weekly ? { weekly } : undefined);
+  void app.startLevel(levelId, challenge?.seed ?? weekly?.seed, challenge ? (practice ? { challenge, practice } : { challenge }) : weekly ? { weekly } : undefined);
 }
 
 /** Streak shown on the card / result is capped here (the save keeps the real count). */
@@ -64,6 +65,14 @@ export function challengeDone(save: SaveData, dayKey: string): boolean {
   return save.challenge.lastWinDay === dayKey || dayKey in save.challenge.best;
 }
 
+/**
+ * Yesterday's map (DAILY-6, GDD §7.3): the second card row is offered while the daily is unlocked
+ * and yesterday's key has no win. It replays `challengeFor(previousDayKey(today))` as practice.
+ */
+export function yesterdayOffered(save: SaveData, dayKey: string): boolean {
+  return challengeUnlocked(save) && !challengeDone(save, previousDayKey(dayKey));
+}
+
 /** Streak as shown (capped), or 0 when the streak is broken (the last win is older than yesterday). */
 export function shownStreak(save: SaveData, dayKey: string): number {
   const last = save.challenge.lastWinDay;
@@ -87,6 +96,18 @@ export interface DailyOutcome {
   streak: number;
   /** Best result of the day after this result, or null (never won today). */
   best: ChallengeBest | null;
+  /** Yesterday's map (DAILY-6): a practice run that wrote nothing (`practiceResult`). */
+  practice?: true;
+}
+
+/**
+ * Result of a Yesterday's-map run (DAILY-6, ECONOMY.md §6.1): no gold, no crystals, no streak, no
+ * milestone, no `best` write — the save is not touched at all. Stars / time are this attempt's.
+ */
+export function practiceResult(challenge: DailyChallenge, level: Pick<LevelDef, 'star3' | 'star2'>, outcome: 'won' | 'lost', timeMs: number): DailyOutcome {
+  const won = outcome === 'won';
+  const stars = won ? starsFor(level, timeMs) : 0;
+  return { dayKey: challenge.dayKey, won, stars, firstWin: false, gold: 0, crystals: 0, milestone: 0, streak: 0, best: won ? { stars, timeMs } : null, practice: true };
 }
 
 /** `a` beats `b` when it has more stars, or the same stars in less time. */
