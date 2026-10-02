@@ -5,7 +5,7 @@
 Tower Clash artıq üç formada telefonda oynanıla bilər:
 
 1. **PWA (ən asan, indi işləyir):** oyunun veb ünvanını Safari (iPhone) və ya Chrome (Android) ilə açın və "Ana ekrana əlavə et" / "Tətbiqi quraşdır" seçin. Heç bir mağaza, hesab və ya ödəniş lazım deyil.
-2. **Android APK (test üçün):** hər push-dan sonra GitHub Actions avtomatik `app-debug.apk` faylı hazırlayır. Onu yükləyib telefona quraşdırmaq olar (aşağıda addım-addım izah var).
+2. **Android APK (test üçün):** hər push-dan sonra GitHub Actions avtomatik `app-debug.apk` faylı hazırlayır. Onu yükləyib telefona quraşdırmaq olar (aşağıda addım-addım izah var). **Google Play üçün imzalı build:** `tower-clash-android-release` iş axını imzalı `.aab` (Play Console üçün) və `.apk` hazırlayır; kompüter lazım deyil — əvvəlcə `ANDROID_KEYSTORE_PASSWORD` secret-ini yarat (ən azı 12 simvol, parolu parol menecerində saxla), sonra `tower-clash-android-keystore` iş axını yükləmə açarını (upload key) özü yaradır: onun faylındakı mətni iPhone-da kopyalayıb `ANDROID_KEYSTORE_BASE64` secret-i kimi yapışdırırsan, faylın surətini iCloud Drive-da / parol menecerində saxlayırsan (fayl GitHub-da 1 gündən sonra silinir). Addım-addım: §6.
 3. **iOS tətbiqi:** Capacitor layihəsi hazırdır (`tower-clash/ios/`) və Apple Developer hesabı təsdiqlənib; `tower-clash-ios-release` iş axını Mac olmadan, yalnız App Store Connect API açarı ilə (4 secret: `APP_STORE_CONNECT_API_KEY_ID`, `APP_STORE_CONNECT_API_ISSUER_ID`, `APP_STORE_CONNECT_API_KEY_P8`, `APPLE_TEAM_ID` — §3-də brauzerdən necə alınacağı yazılıb) imzalayıb TestFlight-a / App Store-a yükləyir; sertifikat və profili ilk işə salınmada Apple özü yaradır.
 
 Mağazalara (App Store / Google Play) çıxarmaq üçün nə lazımdır: Apple Developer hesabı (99 USD/il), Google Play Console hesabı (25 USD, bir dəfə), imza açarları, skrinşotlar və məxfilik siyasəti səhifəsi (oyun heç bir məlumat toplamır, şəbəkəyə çıxmır — siyasət bir cümlədən ibarət ola bilər). Ətraflı ingiliscə izah aşağıdadır.
@@ -41,6 +41,8 @@ Every push that touches `tower-clash/` (except iOS-only changes) runs the **towe
 You can also trigger the workflow manually: **Actions → tower-clash-android → Run workflow**.
 
 Alternative with a USB cable and the Android SDK installed: `adb install -r app-debug.apk`.
+
+**Signed release build (Google Play).** The debug APK is signed with a throw-away debug key and can never go to Google Play. The **tower-clash-android-release** workflow (`.github/workflows/tower-clash-android-release.yml`, §6) builds the same app in release mode and signs it with the Play *upload key*; its run page has two artifacts: **tower-clash-android-`<version>`-`<code>`-aab** (the file Play Console wants) and **…-apk** (installs on a phone exactly like steps 4–6 above). Android refuses to update an app signed with a different key ("App not installed"), so uninstall the debug build (or a copy installed from Play, which Google re-signs) before installing the release APK, and vice versa.
 
 ## 3. iOS builds
 
@@ -130,9 +132,9 @@ The game has no accounts and sends no saves anywhere. Since the monetization wor
 | Item | Apple App Store | Google Play |
 |---|---|---|
 | Developer account | Apple Developer Program, **USD 99 / year** (needs an Apple ID with 2FA; DUNS number only for company accounts) | Google Play Console, **USD 25 one-time**; new personal accounts must run a 14-day closed test with 12+ testers before production access |
-| Signing | Distribution certificate + App Store provisioning profile — created **automatically by the release workflow** from an App Store Connect API key (§3, cloud-managed; no Mac) | Upload keystore (`.jks`) that **must never be lost**; enrol in Play App Signing |
+| Signing | Distribution certificate + App Store provisioning profile — created **automatically by the release workflow** from an App Store Connect API key (§3, cloud-managed; no Mac) | Upload keystore — generated **on a GitHub runner** by `tower-clash-android-keystore.yml` (no computer; §6) or with `keytool`; keep a copy in iCloud Drive / a password manager. Play App Signing (default for new apps) keeps the real app signing key at Google, so a lost upload key is reset through Play support instead of losing the app |
 | App identifier | Bundle ID `com.pervincinal.towerclash` registered in the developer portal | Package name `com.pervincinal.towerclash` (fixed forever after first upload) |
-| Build format | `.ipa` archived, signed and uploaded by the `tower-clash-ios-release` workflow (§3) | `.aab` (`./gradlew bundleRelease`), not `.apk` |
+| Build format | `.ipa` archived, signed and uploaded by the `tower-clash-ios-release` workflow (§3) | `.aab`, built and signed by the `tower-clash-android-release` workflow (`./gradlew bundleRelease`, §6), not `.apk` |
 | Store listing | Name, subtitle, description, keywords, category (Games / Strategy), age rating questionnaire, support URL | Title, short/full description, category, content rating questionnaire (IARC), Data safety form ("no data collected") |
 | Screenshots | 6.7" and 6.5" iPhone (and 12.9" iPad if iPad is supported) | Phone screenshots (min 2), 512×512 icon, 1024×500 feature graphic |
 | Privacy policy | Public URL required even for no-data apps | Public URL required |
@@ -145,34 +147,48 @@ Versioning: edit `version` / `config.buildNumber` in `package.json` and run `npm
 
 ## 6. CI secrets for signed builds (names only)
 
-None of these exist yet; the current workflows build unsigned. The names below are the **authoritative** ones from `docs/publishing/LAUNCH_CHECKLIST.md` §5 — use them exactly when adding secrets under *Settings → Secrets and variables → Actions*.
+None of these exist yet (2026-10-02); the release workflows stop in their first step with the list of missing names. The names below are the **authoritative** ones from `docs/publishing/LAUNCH_CHECKLIST.md` §5. Add secrets under *Settings → Secrets and variables → Actions* (direct link: <https://github.com/pervincinal/InsiderTest/settings/secrets/actions/new>; on the iPhone, if GitHub shows the mobile page without *Settings*, tap **aA** in Safari's address bar → **Request Desktop Website**). GitHub never shows a secret's value again after saving it.
 
-**Android (release AAB/APK, Google Play):**
+**Android (release AAB/APK, Google Play) — `tower-clash-android-release.yml`; the upload key can come from `tower-clash-android-keystore.yml`:**
 
-| Secret | What it is | How to create it |
-|---|---|---|
-| `ANDROID_KEYSTORE_BASE64` | the upload keystore (`.jks`) as one line of base64 | `keytool -genkeypair -v -keystore release.jks -alias towerclash -keyalg RSA -keysize 2048 -validity 10000` then `base64 -w0 release.jks` (macOS: `base64 -i release.jks`). Keep `release.jks` offline in two places; losing it means the app can never be updated. |
-| `ANDROID_KEYSTORE_PASSWORD` | the keystore password typed into `keytool` | — |
-| `ANDROID_KEY_ALIAS` | the alias given to `keytool` (`towerclash` above) | — |
-| `ANDROID_KEY_PASSWORD` | the key password (`keytool` lets it equal the keystore password) | — |
+| Secret | Needed | Value | Where it comes from |
+|---|---|---|---|
+| `ANDROID_KEYSTORE_PASSWORD` | **yes** | a password of **at least 12 characters** that you choose | you — save it in your password manager *before* creating the secret |
+| `ANDROID_KEYSTORE_BASE64` | **yes** | the upload keystore as one line of text (base64), about 3 500 characters | path A step 4 (the `android-upload-keystore` artifact), or path B |
+| `ANDROID_KEY_ALIAS` | no — default `towerclash` | the key's alias | only if a keystore made by hand (path B) used another alias |
+| `ANDROID_KEY_PASSWORD` | no — default = `ANDROID_KEYSTORE_PASSWORD` | the key password | only for an old-style JKS keystore with a separate key password (keytool's PKCS12 stores have one password) |
+| `PLAY_SERVICE_ACCOUNT_JSON` | no | Google Cloud service-account key (JSON) with release rights in Play Console | optional automatic **draft** upload, see "Optional: automatic upload" below |
 
-`android/app/build.gradle` already contains the release signing config. It reads **environment variables**, so a CI job only has to do this before `./gradlew bundleRelease`:
+*Path A — no computer (recommended; iPhone + Safari, about 10 minutes):*
+1. **Pick the password.** At least 12 characters (e.g. the iPhone's *Strong Password* suggestion, or four random words and a number). Save it first: iPhone **Settings → Passwords** (or the *Passwords* app) → **+** → title `Tower Clash upload key` → password → Save.
+2. **Create the secret** `ANDROID_KEYSTORE_PASSWORD`: open <https://github.com/pervincinal/InsiderTest/settings/secrets/actions/new> → *Name* `ANDROID_KEYSTORE_PASSWORD` → *Secret*: the password → **Add secret**.
+3. **Start the keystore workflow.** Open <https://github.com/pervincinal/InsiderTest/actions/workflows/tower-clash-android-keystore.yml> → **Run workflow** → branch `claude/tower-war-game-plan-weqwpb` → **Run workflow**. *If there is no Run workflow button* (GitHub shows it only for workflows that also exist on the default branch `main`, and `main` has no workflows today): tap the newest run in the list — the workflow ran once by itself when the team pushed it and failed at "Check secrets" because the password did not exist yet — then **Re-run all jobs** (top right; on the mobile layout it may sit under **…**). A re-run uses the secrets as they are now. If the list is empty, write "run the Android keystore workflow" in the report thread.
+4. **Copy the key text.** After about a minute the run is green. On its page scroll to **Artifacts** → tap **android-upload-keystore** (Safari downloads a .zip) → **Files** app → *Downloads* → tap the .zip (it unpacks into a folder) → tap **release.jks.base64.txt** → press and hold on the text → **Select All** → **Copy**.
+5. **Create the secret** `ANDROID_KEYSTORE_BASE64`: same link as step 2 → *Name* `ANDROID_KEYSTORE_BASE64` → *Secret*: paste → **Add secret**.
+6. **Back up** (do not skip — GitHub will never show the secret again): in Files long-press `release.jks.base64.txt` → **Move** → **iCloud Drive**; and paste the same text into the *Notes* field of the password entry from step 1. The text plus the password are the whole key. Move `upload_certificate.pem` (same folder; public, not a secret) to iCloud Drive too — it is only needed for an upload-key reset.
+7. **Delete the artifact** on the run page (trash icon next to it). It is deleted automatically after 1 day anyway.
 
-```yaml
-- name: Decode keystore
-  run: echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
-  env:
-    ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-- name: Build signed AAB
-  working-directory: tower-clash/android
-  run: ./gradlew bundleRelease
-  env:
-    ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/release.jks
-    ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-    ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-    ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+The job prints only public facts (alias, the certificate's SHA-256 fingerprint, validity), never the password or the key. It refuses to make a second key once `ANDROID_KEYSTORE_BASE64` exists, unless you tick *replace_existing* — after the first Play upload a new key would also need the upload-key reset below.
+
+*Path B — with a computer and a JDK:*
+```bash
+keytool -genkeypair -v -keystore release.jks -storetype PKCS12 -alias towerclash -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Tower Clash, O=pervincinal"
+base64 -w0 release.jks > release.jks.base64.txt     # macOS: base64 -i release.jks -o release.jks.base64.txt
 ```
-When any of the four variables is missing (local builds, forks, pull requests from outside) the release build type silently falls back to the **debug** key, prints `Tower Clash: ANDROID_KEYSTORE_* not set …` in the Gradle log, and still produces an installable but not store-uploadable `app-release.aab` / `app-release.apk`. Output: `android/app/build/outputs/bundle/release/app-release.aab`.
+Use the same password for the store and the key, then create the same two secrets (and `ANDROID_KEY_ALIAS` only if you chose another alias). Keep `release.jks` and the password in two places.
+
+*Why a CI-generated key is acceptable:* with **Play App Signing** (the default for every new app; Play Console asks at the first release and "Use Google-generated key" is preselected) the key that signs the app on users' phones stays with Google. Ours is only the **upload key** that proves an upload comes from us. If it is lost or leaks, the account owner asks for a reset: Play Console → Tower Clash → *Test and release* → *App integrity* (older layout: *Release* → *Setup* → *App integrity*) → *Play app signing* → **Request upload key reset**, attaching the new key's `upload_certificate.pem` (run path A again with *replace_existing*; the artifact contains that file). Updates continue after Google confirms (usually a few days). Artifacts of a public repository can be downloaded by any signed-in GitHub user during that one day; the keystore inside is encrypted with your password, which is why the workflow insists on 12+ characters.
+
+**How to run the release build.** Three ways, pick whichever GitHub offers:
+- **Tag (the normal release path):** create the tag `tower-clash-v<version>` on the release commit from the GitHub *Releases* page (`LAUNCH_CHECKLIST.md` V3). That starts this workflow (track *internal*) **and** `tower-clash-ios-release` (lane *appstore*).
+- **Run workflow:** <https://github.com/pervincinal/InsiderTest/actions/workflows/tower-clash-android-release.yml> → **Run workflow** → branch `claude/tower-war-game-plan-weqwpb`, *track* `internal` / `closed` / `production` → **Run workflow** (only if the button is shown, see path A step 3).
+- **Re-run:** the workflow also runs whenever the team changes its file; **Re-run all jobs** on such a run rebuilds *that* commit (it may be older than the branch head — prefer the tag for anything that goes to Play).
+
+About 15–20 minutes later the run page shows the artifacts **tower-clash-android-`<version>`-`<code>`-aab** and **…-apk** (kept 90 days) and a summary with the Play Console steps. **First upload (always by hand):** download the `-aab` artifact on the iPhone (Files → unzip → `tower-clash-<version>-<code>.aab`) → <https://play.google.com/console> → Tower Clash → *Test and release* → *Testing* → **Internal testing** → **Create new release** → at the first release keep *Play App Signing* with the Google-generated key → **Upload** → pick the `.aab` from Files → *Release name* `1.0.0 (7)` → release notes from `RELEASE_NOTES.md` → **Next** → **Save and publish**. Closed testing (G19) and production (G20) are the same screen under their own track. Every upload needs a higher `versionCode`: bump `config.buildNumber` in `package.json` + `npm run version:sync` (§4).
+
+*Optional: automatic upload (`PLAY_SERVICE_ACCOUNT_JSON`).* Only after the first manual upload (Google's API cannot create an app's first release). In <https://console.cloud.google.com>: create or pick a project → *APIs & Services* → *Library* → enable **Google Play Android Developer API** → *IAM & Admin* → *Service Accounts* → **Create service account** (name `github-play-upload`, no roles) → open it → *Keys* → **Add key** → *Create new key* → **JSON** (downloads a file; on the iPhone it lands in Files). In Play Console → *Users and permissions* → **Invite new users** → the service account's e-mail (`…@….iam.gserviceaccount.com`) → *App permissions* → Tower Clash → tick *Release apps to testing tracks* (and *Release to production…* if wanted) → **Invite user**. Then create the secret `PLAY_SERVICE_ACCOUNT_JSON` with the whole JSON text. From then on, tag runs and *Run workflow* runs upload the `.aab` as a **draft** release on the chosen track (`closed` = Play's `alpha` track); you still press *Review release* → *Start rollout* in Play Console. Runs started by a branch push never upload. The JSON key is a real secret: delete the downloaded file after pasting.
+
+**What the job does** (`.github/workflows/tower-clash-android-release.yml`, ubuntu runner): secrets check (fails listing `ANDROID_KEYSTORE_BASE64` / `ANDROID_KEYSTORE_PASSWORD` if absent; reports the alias / key-password defaults) → Node 22 + `npm ci` → `npm run version:check` → tag must equal `tower-clash-v<package.json version>` when started by a tag → `.env.production` from `RC_ANDROID_KEY` / `ADMOB_ANDROID_INTERSTITIAL` / `ADMOB_ANDROID_REWARDED` and the `strings.xml` AdMob app id from `ADMOB_ANDROID_APP_ID` (exactly as the debug workflow, §8.3; warnings on track `production` when missing) → `npm run build` → `npx cap sync android` → JDK **21** (the AdMob / RevenueCat Kotlin modules need it — same as the debug job; JDK 17 does not build them) + Android SDK 36 / build-tools 36.0.0 + Gradle cache → keystore decoded to `$RUNNER_TEMP/release.jks` and opened with `keytool` (wrong password / alias fails here, in seconds) → `./gradlew bundleRelease assembleRelease` with `ANDROID_KEYSTORE_FILE` / `ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEY_ALIAS` (default `towerclash`) / `ANDROID_KEY_PASSWORD` (default = keystore password); the build fails if Gradle printed the debug-key fallback → **signature check**: `.aab` with `jarsigner -verify` + `keytool -printcert -jarfile` (bundles are JAR-signed; `apksigner` does not read `.aab`), `.apk` with `apksigner verify --print-certs` from the newest build-tools (minSdk 24 → v2/v3 signatures only, which `jarsigner` cannot see; if `apksigner` were missing the APK check is skipped with a warning); both certificates' SHA-256 must equal the keystore's → artifacts `tower-clash-android-<version>-<code>-aab` / `-apk` (files `tower-clash-<version>-<code>.aab` / `.apk`, 90 days) → optional Play draft upload (`r0adkll/upload-google-play@v1`) → summary → keystore deleted. The defaults live in the workflow; `android/app/build.gradle` is unchanged and still falls back to the **debug** key when a variable is missing (local builds, forks), printing `Tower Clash: ANDROID_KEYSTORE_* not set …` — such an `.aab` installs but Play rejects it.
 
 **iOS (device / TestFlight / App Store builds) — `tower-clash-ios-release.yml`:**
 
@@ -337,7 +353,8 @@ Reverting to option B (personalised ads on iOS) would need: the ATT call back in
 ## 7. Open items
 
 - Keep `public/icons/*` (PWA) and `resources/icon.svg` (native) visually in sync when the mark changes; `npm run icons:generate` only regenerates the native assets.
-- Signed builds: **iOS** — `tower-clash-ios-release.yml` is in place (§3) and has never run: the first run with the four `APP_STORE_CONNECT_*` / `APPLE_TEAM_ID` secrets is the test (watch for the Admin-role certificate creation and for `xcrun altool` on the current Xcode; the fallback uploader is wired). **Android** — the `bundleRelease` job (snippet in section 6) is still to be added; the Gradle side is already in place.
+- Signed builds: **iOS** — `tower-clash-ios-release.yml` is in place (§3) and has never run: the first run with the four `APP_STORE_CONNECT_*` / `APPLE_TEAM_ID` secrets is the test (watch for the Admin-role certificate creation and for `xcrun altool` on the current Xcode; the fallback uploader is wired). **Android** — `tower-clash-android-release.yml` (signed `.aab` + `.apk`, signature check, optional Play draft upload) and `tower-clash-android-keystore.yml` (upload key without a computer) are in place (§6, 2026-10-02, MM-6) and have never run with real secrets: Gradle could not run in the development sandbox (no Android SDK), so the first run validates `bundleRelease` / `assembleRelease` (incl. `lintVitalRelease`) with the AdMob and RevenueCat modules. The first `.aab` must be uploaded by hand in Play Console; `PLAY_SERVICE_ACCOUNT_JSON` is optional after that.
+- `workflow_dispatch` needs the workflow file on the default branch `main`, which has no workflows today, so GitHub shows no **Run workflow** button for any Tower Clash workflow (iOS release included). Workarounds in place: tag pushes, and the Android keystore / release workflows also run when their own file is pushed to the working branch (the stakeholder re-runs that run). Lasting fix (Producer / stakeholder decision): get the `.github/workflows/tower-clash-*.yml` files onto `main`.
 - The privacy manifest `ios/App/App/PrivacyInfo.xcprivacy` was added by hand to the Xcode project (`project.pbxproj`, Resources phase) without Xcode; the first release run also validates that edit (a broken pbxproj fails at `xcodebuild archive`). Keep it in sync with `LAUNCH_CHECKLIST.md` A14 whenever an SDK is added.
 - `npm run version:check` should run in the CI workflow so a forgotten `version:sync` fails the build.
 - Monetization (§8): create the RevenueCat / AdMob accounts and the products; add the In-App Purchase capability in Xcode; rewrite the privacy policy; the Android workflow has not yet been run with the AdMob (Kotlin) and RevenueCat modules — the next push validates the Gradle build on CI (no Android SDK in the development sandbox).
