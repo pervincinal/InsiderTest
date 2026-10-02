@@ -365,4 +365,5 @@ jobs:
 
       - name: Remove the keystore
         if: always()
+        working-directory: ${{ github.workspace }}
         run: rm -f "$RUNNER_TEMP/release.jks" "$RUNNER_TEMP/gradle.log"

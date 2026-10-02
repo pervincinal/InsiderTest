@@ -452,6 +452,7 @@ jobs:
 
       - name: Remove keys and temporary keychain
         if: always()
+        working-directory: ${{ github.workspace }}
         run: |
           rm -f "$RUNNER_TEMP"/AuthKey_*.p8 "$RUNNER_TEMP"/profile.mobileprovision "$RUNNER_TEMP"/profile.plist
           rm -rf "$HOME/private_keys" "$HOME/.private_keys" "$HOME/.appstoreconnect/private_keys"
