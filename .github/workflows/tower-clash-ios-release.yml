@@ -56,6 +56,13 @@ on:
   push:
     tags:
       - 'tower-clash-v*'
+    # A push of this file on the working branch runs the lane once (it fails fast at the secrets
+    # check while the secrets are missing); the stakeholder can then use "Re-run all jobs" from a
+    # phone, since GitHub's "Run workflow" button only exists for workflows on the default branch.
+    branches:
+      - claude/tower-war-game-plan-weqwpb
+    paths:
+      - '.github/workflows/tower-clash-ios-release.yml'
 
 # Never cancel a run that may be in the middle of an upload.
 concurrency:
@@ -69,7 +76,7 @@ jobs:
     timeout-minutes: 60
     env:
       CI: true
-      LANE: ${{ github.event.inputs.lane || 'appstore' }}
+      LANE: ${{ github.event.inputs.lane || (github.ref_type == 'tag' && 'appstore' || 'testflight') }}
       BUNDLE_ID: com.pervincinal.towerclash
     defaults:
       run:
