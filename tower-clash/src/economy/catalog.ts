@@ -257,6 +257,12 @@ export interface IapProductDef {
   readonly kind: ProductKind;
   /** Store-facing display name (store providers read `title`). */
   readonly title: string;
+  /**
+   * Store description (App Store Connect / Play Console, ≤ 45 characters — Apple's limit), the twin
+   * of `docs/publishing/STORE_LISTING.md` §6.1. It must not claim more than `grants` delivers: a
+   * `removeAds` grant disables interstitials only, rewarded ads stay (ECONOMY.md §5.2, ECON-12).
+   */
+  readonly description: string;
   readonly priceUsd: (typeof STORE_PRICE_POINTS_USD)[number];
   /** Apple legacy tier number (Tier 1 = $0.99 … Tier 50 = $49.99); Google has no ladder. */
   readonly tier: number;
@@ -264,31 +270,46 @@ export interface IapProductDef {
   /** For crystal packs: bonus over the $0.99 base rate, as a fraction (0.1 = +10 %). */
   readonly bonusPct?: number;
   readonly availability: 'always' | 'once' | 'liveops';
+  /** Listed only once the player has cleared this level id (ECONOMY.md §4: Starter Pack after level 5); owners always see it. */
+  readonly minClearedLevel?: number;
   /** Shown only when the listed product is owned (e.g. premium_upgrade replaces premium_bundle). */
   readonly requiresOwned?: string;
   readonly hiddenWhenOwned?: readonly string[];
 }
 
 export const IAP_PRODUCTS = [
-  { id: 'crystals_100', kind: 'consumable', title: 'Handful of crystals', priceUsd: 0.99, tier: 1, grants: { crystals: 100 }, bonusPct: 0, availability: 'always' },
-  { id: 'crystals_550', kind: 'consumable', title: 'Pouch of crystals', priceUsd: 4.99, tier: 5, grants: { crystals: 550 }, bonusPct: 0.1, availability: 'always' },
-  { id: 'crystals_1200', kind: 'consumable', title: 'Chest of crystals', priceUsd: 9.99, tier: 10, grants: { crystals: 1200 }, bonusPct: 0.2, availability: 'always' },
-  { id: 'crystals_2600', kind: 'consumable', title: 'Crate of crystals', priceUsd: 19.99, tier: 20, grants: { crystals: 2600 }, bonusPct: 0.3, availability: 'always' },
-  { id: 'crystals_7000', kind: 'consumable', title: 'Vault of crystals', priceUsd: 49.99, tier: 50, grants: { crystals: 7000 }, bonusPct: 0.4, availability: 'always' },
+  { id: 'crystals_100', kind: 'consumable', title: 'Handful of crystals', description: '100 crystals', priceUsd: 0.99, tier: 1, grants: { crystals: 100 }, bonusPct: 0, availability: 'always' },
+  { id: 'crystals_550', kind: 'consumable', title: 'Pouch of crystals', description: '550 crystals (10% bonus)', priceUsd: 4.99, tier: 5, grants: { crystals: 550 }, bonusPct: 0.1, availability: 'always' },
+  { id: 'crystals_1200', kind: 'consumable', title: 'Chest of crystals', description: '1,200 crystals (20% bonus)', priceUsd: 9.99, tier: 10, grants: { crystals: 1200 }, bonusPct: 0.2, availability: 'always' },
+  { id: 'crystals_2600', kind: 'consumable', title: 'Crate of crystals', description: '2,600 crystals (30% bonus)', priceUsd: 19.99, tier: 20, grants: { crystals: 2600 }, bonusPct: 0.3, availability: 'always' },
+  { id: 'crystals_7000', kind: 'consumable', title: 'Vault of crystals', description: '7,000 crystals (40% bonus)', priceUsd: 49.99, tier: 50, grants: { crystals: 7000 }, bonusPct: 0.4, availability: 'always' },
   {
     id: 'starter_pack',
     kind: 'nonConsumable',
     title: 'Starter Pack',
+    description: '400 crystals, 400 gold and the Bronze helmet',
     priceUsd: 2.99,
     tier: 3,
     grants: { crystals: 400, gold: 400, skins: ['helmet_bronze'] },
     availability: 'once',
+    minClearedLevel: 5,
   },
-  { id: 'remove_ads', kind: 'nonConsumable', title: 'Remove Ads', priceUsd: 3.99, tier: 4, grants: { removeAds: true, crystals: 50 }, availability: 'once', hiddenWhenOwned: ['premium_bundle'] },
+  {
+    id: 'remove_ads',
+    kind: 'nonConsumable',
+    title: 'Remove Ads',
+    description: 'No more interstitial ads, plus 50 crystals',
+    priceUsd: 3.99,
+    tier: 4,
+    grants: { removeAds: true, crystals: 50 },
+    availability: 'once',
+    hiddenWhenOwned: ['premium_bundle'],
+  },
   {
     id: 'premium_bundle',
     kind: 'nonConsumable',
     title: 'Premium Bundle',
+    description: 'No interstitials, 600 crystals, 2 skins, -10%',
     priceUsd: 9.99,
     tier: 10,
     grants: { removeAds: true, crystals: 600, skins: ['roof_gold', 'helmet_royal'], boosterDiscount: 0.1 },
@@ -299,6 +320,7 @@ export const IAP_PRODUCTS = [
     id: 'premium_upgrade',
     kind: 'nonConsumable',
     title: 'Premium Upgrade',
+    description: '550 crystals, 2 skins, -10% booster cost',
     priceUsd: 4.99,
     tier: 5,
     grants: { crystals: 550, skins: ['roof_gold', 'helmet_royal'], boosterDiscount: 0.1 },
@@ -306,7 +328,7 @@ export const IAP_PRODUCTS = [
     requiresOwned: 'remove_ads',
     hiddenWhenOwned: ['premium_bundle'],
   },
-  { id: 'weekend_pack', kind: 'consumable', title: 'Weekend Pack', priceUsd: 1.99, tier: 2, grants: { crystals: 250, gold: 250 }, availability: 'liveops' },
+  { id: 'weekend_pack', kind: 'consumable', title: 'Weekend Pack', description: '250 crystals and 250 gold, once per weekend', priceUsd: 1.99, tier: 2, grants: { crystals: 250, gold: 250 }, availability: 'liveops' },
 ] as const satisfies readonly IapProductDef[];
 
 /** Phase C LiveOps offers that are not products themselves. */

@@ -2,6 +2,7 @@
  * Shop screen (ECONOMY.md §4, Phase A): Crystals (IAP packs) · Bundles (starter / remove ads /
  * premium) · Skins (crystals, equip) · Upgrades (commander tracks, gold). Purchases go through
  * `getStore()` and are granted only on `{ ok: true }`, once per transaction id (wallet.grantProduct).
+ * Without an available store the Crystals and Bundles tabs are hidden (PUB-14, `shopTabsFor`).
  * Input produces wallet / save mutations only; the sim is never touched here.
  */
 import type { View } from '../render/view';
@@ -9,7 +10,7 @@ import type { Rect } from '../render/widgets';
 import { inRect } from '../render/widgets';
 import { segmentAt } from '../render/menuWidgets';
 import type { ShopTab } from '../render/menuLayout';
-import { SHOP, SHOP_TABS, shopBuyRect, shopConvertSegRect, shopPackRect, shopRowRect, shopSkinRect } from '../render/menuLayout';
+import { SHOP, shopBuyRect, shopConvertSegRect, shopPackRect, shopRowRect, shopSkinRect, shopTabsFor } from '../render/menuLayout';
 import type { ShopBundleCard, ShopConvertCard, ShopCrateCard, ShopPackCard, ShopSkinCard, ShopUpgradeCard } from '../render/menusShop';
 import { drawShop } from '../render/menusShop';
 import { ParticleSystem } from '../render/particles';
@@ -94,7 +95,28 @@ export class ShopScreen implements Screen {
     this.tab = tab;
   }
 
+  /**
+   * Tabs in the segmented row right now (PUB-14): Crystals and Bundles only while the store is
+   * available. Re-read on every frame / tap — a native store finishes `init()` asynchronously.
+   */
+  get tabs(): readonly ShopTab[] {
+    return shopTabsFor(getStore().isAvailable());
+  }
+
+  /** The active tab, moved to the first visible one when its tab is hidden (store unavailable). */
+  private activeTab(): ShopTab {
+    const tabs = this.tabs;
+    if (!tabs.includes(this.tab) && tabs[0]) {
+      this.tab = tabs[0];
+      this.scroll = 0;
+      this.pressed = null;
+      this.confirmConvert = null;
+    }
+    return this.tab;
+  }
+
   enter(): void {
+    this.activeTab();
     const ids = visibleProducts(this.app.save).map((p) => p.id);
     void getStore()
       .getProducts(ids)
@@ -105,10 +127,12 @@ export class ShopScreen implements Screen {
   }
 
   get currentTab(): ShopTab {
-    return this.tab;
+    return this.activeTab();
   }
 
+  /** Switch tabs; a hidden tab (store unavailable) is ignored. */
   setTab(tab: ShopTab): void {
+    if (!this.tabs.includes(tab)) return;
     this.tab = tab;
     this.scroll = 0;
     this.pressed = null;
@@ -127,6 +151,7 @@ export class ShopScreen implements Screen {
   /** Cards + hit regions of the active tab, in content space (scroll is applied at draw / hit time). */
   private layout(): Layout {
     const save = this.app.save;
+    this.activeTab();
     const out: Layout = { packs: [], convert: null, crate: null, bundles: [], skinHeaders: [], skins: [], upgrades: [], restoreRect: null, hits: [], contentHeight: 0 };
     let bottom: number = SHOP.contentTop;
     if (this.tab === 'crystals') {
@@ -247,6 +272,7 @@ export class ShopScreen implements Screen {
     this.setScroll(this.scroll);
     drawShop(view, this.app.palette(), {
       tab: this.tab,
+      tabs: this.tabs,
       tabsRect: SHOP.tabs,
       backRect: SHOP.back,
       walletRect: SHOP.wallet,
@@ -328,8 +354,9 @@ export class ShopScreen implements Screen {
       return;
     }
     if (inRect(SHOP.tabs, p.x, p.y)) {
-      const tab = SHOP_TABS[segmentAt(SHOP.tabs, SHOP_TABS.length, p.x, p.y)];
-      if (tab && tab !== this.tab) {
+      const tabs = this.tabs;
+      const tab = tabs[segmentAt(SHOP.tabs, tabs.length, p.x, p.y)];
+      if (tab && tab !== this.activeTab()) {
         playSfx('button');
         this.setTab(tab);
       }
@@ -359,8 +386,9 @@ export class ShopScreen implements Screen {
     else if (e.key === 'ArrowDown') this.setScroll(this.scroll + 120);
     else if (e.key === 'ArrowUp') this.setScroll(this.scroll - 120);
     else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
-      const i = SHOP_TABS.indexOf(this.tab) + (e.key === 'ArrowRight' ? 1 : -1);
-      const tab = SHOP_TABS[(i + SHOP_TABS.length) % SHOP_TABS.length];
+      const tabs = this.tabs;
+      const i = tabs.indexOf(this.activeTab()) + (e.key === 'ArrowRight' ? 1 : -1);
+      const tab = tabs[(i + tabs.length) % tabs.length];
       if (tab) this.setTab(tab);
     }
   }

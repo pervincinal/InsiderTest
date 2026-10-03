@@ -84,6 +84,25 @@ describe('economy catalog (docs/ECONOMY.md)', () => {
     expect(INTERSTITIAL_RULES.disabledByProducts).toEqual(['remove_ads', 'premium_bundle']);
   });
 
+  it('store descriptions fit Apple\'s 45 characters and never promise "no ads" (rewarded ads stay, ECON-12 (1))', () => {
+    for (const p of IAP_PRODUCTS) {
+      expect(p.description.length, `${p.id}: "${p.description}"`).toBeGreaterThan(0);
+      expect([...p.description].length, `${p.id}: "${p.description}"`).toBeLessThanOrEqual(45);
+      expect(p.title.length, p.id).toBeLessThanOrEqual(30);
+      // removeAds disables interstitials only (ECONOMY.md §5.2): say "interstitial", never a bare "no ads"
+      expect(p.description, p.id).not.toMatch(/\bno ads\b/i);
+      if (p.grants.removeAds) expect(p.description, p.id).toMatch(/interstitial/i);
+    }
+    const premium = IAP_PRODUCTS.find((p) => p.id === 'premium_bundle')!;
+    expect(premium.description).toBe('No interstitials, 600 crystals, 2 skins, -10%');
+    expect(premium.description).toHaveLength(45);
+    // every number in a description is one the product grants
+    for (const p of IAP_PRODUCTS) {
+      const granted = new Set([p.grants.crystals, p.grants.gold, p.grants.skins?.length, Math.round((p.grants.boosterDiscount ?? 0) * 100), Math.round((p.bonusPct ?? 0) * 100)].filter((n) => n !== undefined).map(String));
+      for (const n of p.description.replace(/,(\d{3})/g, '$1').match(/\d+/g) ?? []) expect(granted.has(n), `${p.id}: ${n}`).toBe(true);
+    }
+  });
+
   it('commander upgrades stay within the GDD advantage limit', () => {
     for (const u of COMMANDER_UPGRADES) {
       expect(u.costGoldByTier.length).toBe(u.maxTier);

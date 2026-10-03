@@ -23,16 +23,31 @@ export function interstitialsDisabled(save: SaveData): boolean {
   return save.entitlements.noAds || INTERSTITIAL_RULES.disabledByProducts.some((id) => ownsProduct(save, id));
 }
 
+/** Highest level id with at least one star (0 when none) — the "after level N" gate of ECONOMY.md §4. */
+export function highestClearedLevel(save: SaveData): number {
+  let best = 0;
+  for (const [key, stars] of Object.entries(save.stars)) {
+    const id = Number(key);
+    if (stars >= 1 && Number.isInteger(id) && id > best) best = id;
+  }
+  return best;
+}
+
 /**
  * Products to list in the shop: `always` and unowned `once` products, minus the ones hidden by an
- * owned product, plus the ones whose `requiresOwned` is satisfied. LiveOps products wait for Phase C.
+ * owned product, plus the ones whose `requiresOwned` is satisfied, minus the ones gated behind a
+ * cleared level the player has not reached (`minClearedLevel`: the Starter Pack after level 5 —
+ * an owner, e.g. after a restore on a fresh save, still sees it as OWNED). LiveOps products wait
+ * for Phase C.
  */
 export function visibleProducts(save: SaveData): IapProductDef[] {
   const all: readonly IapProductDef[] = IAP_PRODUCTS;
+  const cleared = highestClearedLevel(save);
   return all.filter((p) => {
     if (p.availability === 'liveops') return false;
     if (p.requiresOwned && !ownsProduct(save, p.requiresOwned)) return false;
     if (p.hiddenWhenOwned?.some((id) => ownsProduct(save, id))) return false;
+    if (p.minClearedLevel !== undefined && cleared < p.minClearedLevel && !ownsProduct(save, p.id)) return false;
     return true;
   });
 }

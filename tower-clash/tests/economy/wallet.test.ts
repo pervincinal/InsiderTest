@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { SaveData } from '../../src/ui/save';
-import { SAVE_KEY, SAVE_KEY_V2, defaultSave, loadSaveFrom, setSaveStorageForTests } from '../../src/ui/save';
+import { SAVE_KEY, SAVE_KEY_V2, defaultSave, loadSaveFrom, resetProgress, setSaveStorageForTests } from '../../src/ui/save';
 import {
   CONVERSION_PACKS,
   buyBoosterCrate,
@@ -18,7 +18,7 @@ import {
   spendCrystals,
   spendGold,
 } from '../../src/economy/wallet';
-import { boosterDiscount, boosterPrice, equippedSkin, interstitialsDisabled, ownsProduct, shopSkins, skinFamily, spriteSkinId, visibleProducts } from '../../src/economy/entitlements';
+import { boosterDiscount, boosterPrice, equippedSkin, highestClearedLevel, interstitialsDisabled, ownsProduct, shopSkins, skinFamily, spriteSkinId, visibleProducts } from '../../src/economy/entitlements';
 import { HELMET_SKINS, ROOF_SKINS, THEME_IDS } from '../../src/render/sprites';
 import { commanderSummary, modifiersFromSave, upgradeTier } from '../../src/ui/upgrades';
 import { buyUpgrade, upgradeCost } from '../../src/ui/shopUpgrades';
@@ -137,6 +137,7 @@ describe('grantProduct', () => {
 
   it('visibleProducts keeps owned packs (shown as OWNED), swaps premium bundle for the upgrade, hides LiveOps', () => {
     const ids = () => visibleProducts(save).map((p) => p.id);
+    for (let lv = 1; lv <= 5; lv++) save.stars[String(lv)] = 1; // past the Starter Pack gate
     expect(ids()).toEqual(['crystals_100', 'crystals_550', 'crystals_1200', 'crystals_2600', 'crystals_7000', 'starter_pack', 'remove_ads', 'premium_bundle']);
     grantProduct(save, 'remove_ads', 'tx-r');
     expect(ids()).toContain('premium_upgrade'); // nobody pays for no-ads twice
@@ -146,6 +147,27 @@ describe('grantProduct', () => {
     expect(ids()).toEqual(['crystals_100', 'crystals_550', 'crystals_1200', 'crystals_2600', 'crystals_7000', 'starter_pack', 'remove_ads', 'premium_upgrade']);
     expect(IAP_PRODUCTS.some((p) => p.availability === 'liveops')).toBe(true); // Phase C products are never listed
     expect(ids()).not.toContain('weekend_pack');
+  });
+
+  it('the Starter Pack is listed only after level 5 is cleared (ECONOMY.md §4, ECON-12 (3)); an owner always sees it', () => {
+    const listed = () => visibleProducts(save).some((p) => p.id === 'starter_pack');
+    expect(IAP_PRODUCTS.find((p) => p.id === 'starter_pack')?.minClearedLevel).toBe(5);
+    expect(highestClearedLevel(save)).toBe(0);
+    expect(listed()).toBe(false);
+    for (let lv = 1; lv <= 4; lv++) save.stars[String(lv)] = 3;
+    expect(highestClearedLevel(save)).toBe(4);
+    expect(listed()).toBe(false);
+    save.stars['5'] = 0; // played, never won: not cleared
+    expect(listed()).toBe(false);
+    save.stars['5'] = 1;
+    expect(highestClearedLevel(save)).toBe(5);
+    expect(listed()).toBe(true);
+    // the other bundles never had a gate
+    const fresh = defaultSave();
+    expect(visibleProducts(fresh).map((p) => p.id)).toEqual(['crystals_100', 'crystals_550', 'crystals_1200', 'crystals_2600', 'crystals_7000', 'remove_ads', 'premium_bundle']);
+    // restored on a fresh install before level 5: shown as OWNED, not hidden
+    grantProduct(fresh, 'starter_pack');
+    expect(visibleProducts(fresh).some((p) => p.id === 'starter_pack')).toBe(true);
   });
 
   it('restorePurchases grants owned non-consumables idempotently and ignores consumables', async () => {
@@ -162,6 +184,69 @@ describe('grantProduct', () => {
     expect(save.crystals).toBe(50); // remove_ads grants 50; the crystal pack is not restored
     expect(await restorePurchases(save, fake)).toEqual([]);
     expect(save.crystals).toBe(50);
+  });
+
+  /** A store that reports `owned` from restore() (RevenueCat after a reinstall / on a second device). */
+  const restoringStore = (owned: string[]): StoreProvider => ({
+    init: async () => undefined,
+    getProducts: async () => [],
+    purchase: async (id) => ({ ok: true, productId: id, transactionId: `tx-${id}-again` }),
+    restore: async () => owned,
+    isAvailable: () => true,
+    getSupportId: async () => null,
+  });
+  const ONE_TIME = ['starter_pack', 'remove_ads', 'premium_upgrade'];
+
+  it('ECON-12 (2) grant once per purchase: a fresh save restores the currency once, every later restore adds nothing', async () => {
+    // bought on device A: currency once
+    const deviceA = defaultSave();
+    for (const id of ONE_TIME) expect(grantProduct(deviceA, id, `tx-${id}`)).not.toBeNull();
+    expect({ gold: deviceA.gold, crystals: deviceA.crystals }).toEqual({ gold: 400, crystals: 400 + 50 + 550 });
+    // the store reports them again on device A (restore button, launch-time restore): nothing moves
+    expect(await restorePurchases(deviceA, restoringStore(ONE_TIME))).toEqual([]);
+    expect({ gold: deviceA.gold, crystals: deviceA.crystals }).toEqual({ gold: 400, crystals: 1000 });
+    // reinstall (fresh save): the first restore grants once — the player paid — and the second does not
+    for (const owned of [ONE_TIME, ['premium_bundle']]) {
+      const fresh = defaultSave();
+      const first = await restorePurchases(fresh, restoringStore(owned));
+      expect(first).toEqual(owned);
+      const afterFirst = { gold: fresh.gold, crystals: fresh.crystals, skins: [...fresh.skins.owned], purchases: [...fresh.purchases] };
+      expect(afterFirst.purchases).toEqual(owned.map((id) => `owned:${id}`));
+      for (let i = 0; i < 3; i++) expect(await restorePurchases(fresh, restoringStore(owned))).toEqual([]);
+      // a store re-purchase of an owned non-consumable (StoreKit answers ok) does not pay again either
+      for (const id of owned) expect(grantProduct(fresh, id, `tx-${id}-again`)).toBeNull();
+      expect({ gold: fresh.gold, crystals: fresh.crystals, skins: fresh.skins.owned, purchases: fresh.purchases }).toEqual(afterFirst);
+    }
+  });
+
+  it('a reset keeps the ownership marks, so a restore after "reset progress" does not re-pay the currency', async () => {
+    grantProduct(save, 'premium_bundle', 'tx-p');
+    save.crystals = 0;
+    resetProgress(save);
+    expect(save.purchases).toEqual(['tx-p', 'owned:premium_bundle']);
+    expect(await restorePurchases(save, restoringStore(['premium_bundle']))).toEqual([]);
+    expect(save.crystals).toBe(0);
+    expect(save.skins.owned).toEqual(['roof_gold', 'helmet_royal']);
+  });
+
+  it('an owned product whose entitlement went missing is re-ensured (skins, flags) without paying currency again', async () => {
+    grantProduct(save, 'premium_bundle', 'tx-p');
+    grantProduct(save, 'starter_pack', 'tx-s');
+    const balances = { gold: save.gold, crystals: save.crystals };
+    // a hand-edited / partially restored save: the marks are there, the goods are not
+    save.skins.owned = ['roof_slate'];
+    save.entitlements = { noAds: false, premium: false, starterPack: false };
+    store.removeItem(SAVE_KEY);
+    expect(await restorePurchases(save, restoringStore(['premium_bundle', 'starter_pack']))).toEqual([]);
+    expect(save.skins.owned).toEqual(['roof_slate', 'roof_gold', 'helmet_royal', 'helmet_bronze']);
+    expect(save.entitlements).toEqual({ noAds: true, premium: true, starterPack: true });
+    expect(interstitialsDisabled(save)).toBe(true);
+    expect({ gold: save.gold, crystals: save.crystals }).toEqual(balances);
+    expect(JSON.parse(store.getItem(SAVE_KEY) ?? 'null')?.entitlements).toEqual({ noAds: true, premium: true, starterPack: true }); // persisted
+    // already whole: nothing to write
+    store.removeItem(SAVE_KEY);
+    expect(grantProduct(save, 'premium_bundle')).toBeNull();
+    expect(store.getItem(SAVE_KEY)).toBeNull();
   });
 });
 

@@ -122,16 +122,46 @@ export interface GrantResult {
 }
 
 /**
+ * The non-currency side of a product (skins, no-ads / premium / starter flags). Idempotent; returns
+ * the skins that were newly added.
+ */
+function applyEntitlements(save: SaveData, product: IapProductDef): string[] {
+  const g = product.grants;
+  const added: string[] = [];
+  for (const skin of g.skins ?? []) {
+    if (!save.skins.owned.includes(skin)) {
+      save.skins.owned.push(skin);
+      added.push(skin);
+    }
+  }
+  if (g.removeAds === true) save.entitlements.noAds = true;
+  if ((g.boosterDiscount ?? 0) > 0) save.entitlements.premium = true;
+  if (product.id === 'starter_pack') save.entitlements.starterPack = true;
+  return added;
+}
+
+/**
  * Apply a product's catalog grants exactly once. `transactionId` (from the store) is the dedupe
- * key; without one, non-consumables dedupe on `owned:<productId>` (a restore may report an id
- * many times) and consumables are granted unconditionally (the fake store always sends an id).
- * Returns null when the product is unknown or the transaction was already granted.
+ * key; without one, consumables are granted unconditionally (the fake store always sends an id).
+ *
+ * Non-consumables are granted once per save (ECON-12 (2), "grant once per purchase"): the first
+ * grant writes `owned:<productId>` into `save.purchases`; from then on a purchase retry, a second
+ * transaction or any number of `restore()`s add no currency again — they only re-ensure the
+ * entitlement (skins, no-ads / premium / starter flags) in case the save lost it, and return null.
+ * A restore on a fresh save (reinstall, second device: no marker yet) grants once, because the
+ * player paid; `resetProgress` keeps `purchases`, so a reset never re-opens the grant.
+ * Returns null when the product is unknown or was already granted.
  */
 export function grantProduct(save: SaveData, productId: string, transactionId?: string): GrantResult | null {
   const product = productById(productId);
   if (!product) return null;
   const marker = product.kind === 'nonConsumable' ? `owned:${productId}` : null;
-  if (marker && save.purchases.includes(marker)) return null;
+  if (marker && save.purchases.includes(marker)) {
+    const flags = JSON.stringify(save.entitlements);
+    const added = applyEntitlements(save, product);
+    if (added.length > 0 || JSON.stringify(save.entitlements) !== flags) writeSave(save);
+    return null;
+  }
   if (transactionId && save.purchases.includes(transactionId)) return null;
   const g = product.grants;
   const result: GrantResult = {
@@ -144,15 +174,7 @@ export function grantProduct(save: SaveData, productId: string, transactionId?: 
   };
   save.gold += result.gold;
   save.crystals += result.crystals;
-  for (const skin of g.skins ?? []) {
-    if (!save.skins.owned.includes(skin)) {
-      save.skins.owned.push(skin);
-      result.skins.push(skin);
-    }
-  }
-  if (result.noAds) save.entitlements.noAds = true;
-  if (result.premium) save.entitlements.premium = true;
-  if (productId === 'starter_pack') save.entitlements.starterPack = true;
+  result.skins = applyEntitlements(save, product);
   if (transactionId) save.purchases.push(transactionId);
   if (marker) save.purchases.push(marker);
   writeSave(save);

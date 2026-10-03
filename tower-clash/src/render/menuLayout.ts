@@ -110,6 +110,19 @@ export function levelMapMinScroll(yesterdayRow: boolean): number {
 export const SHOP_TABS = ['crystals', 'bundles', 'skins', 'upgrades'] as const;
 export type ShopTab = (typeof SHOP_TABS)[number];
 
+/** Tabs that sell store products (IAP packs, bundles) — with their converter / crate and RESTORE. */
+const STORE_TABS: readonly ShopTab[] = ['crystals', 'bundles'];
+
+/**
+ * Tabs shown in the shop's segmented row (PUB-14): all four when the store is available (web fake
+ * store, configured RevenueCat); without a store the Crystals and Bundles tabs are not drawn and
+ * not hit-tested — no greyed fallback prices for App Review to read as an unfinished feature —
+ * and Skins / Upgrades re-flow over the full row.
+ */
+export function shopTabsFor(storeAvailable: boolean): readonly ShopTab[] {
+  return storeAvailable ? SHOP_TABS : SHOP_TABS.filter((tab) => !STORE_TABS.includes(tab));
+}
+
 /* ---------- settings: About card ---------- */
 
 export interface SettingsAboutLayout {

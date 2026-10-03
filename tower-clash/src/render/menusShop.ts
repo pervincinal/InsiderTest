@@ -111,6 +111,8 @@ export interface ShopConvertCard {
 
 export interface ShopOpts {
   tab: ShopTab;
+  /** Tabs in the segmented row, in order (`shopTabsFor`); defaults to all of SHOP_TABS. */
+  tabs?: readonly ShopTab[];
   tabsRect: Rect;
   backRect: Rect;
   walletRect: Rect;
@@ -489,7 +491,8 @@ export function drawShop(view: View, pal: Palette, o: ShopOpts): void {
   const title = t('shop.title');
   drawExtrudedText(ctx, title, 280, 50, fitFontPx(ctx, title, 40, 220), { face: pal.paper, side: shade(pal.owners.player, -0.25), outline: pal.ink, depth: 4 });
   drawWallet(ctx, pal, o.walletRect, o.gold, o.crystals);
-  drawSegmented(ctx, pal, o.tabsRect, SHOP_TABS.map((tab) => ({ label: t(TAB_KEYS[tab]), value: tab })), SHOP_TABS.indexOf(o.tab), 19);
+  const tabs = o.tabs ?? SHOP_TABS;
+  drawSegmented(ctx, pal, o.tabsRect, tabs.map((tab) => ({ label: t(TAB_KEYS[tab]), value: tab })), tabs.indexOf(o.tab), 19);
   if (o.confirmConvert) drawConvertConfirm(ctx, pal, o.confirmConvert, o);
   if (o.toast) drawToast(ctx, pal, { ...o.toast, y: o.toast.y ?? 1210 });
   ctx.restore();
