@@ -1,15 +1,15 @@
-# Tower Clash — App Store Connect paste sheet (1.0.0, build 7)
+# Tower Clash — App Store Connect paste sheet (1.0.0 — build 7 for TestFlight, build 8 for App Review)
 
 Owner: Publisher. Written 2026-09-28 (PUB-12) for the stakeholder's first App Store submission, done from a browser and an iPhone — no Mac. Every field below is in the order App Store Connect shows it, with the final text ready to copy. English is the App Store language; the Azerbaijani words in parentheses are the field labels so the screens can be matched without reading the English (Azərbaycanca: mötərizədəki söz sahənin adıdır; mətnin özü ingiliscə yapışdırılır). The click order around this sheet is `LAUNCH_CHECKLIST.md` §0b; the source texts are `STORE_LISTING.md` §2 (name, subtitle, promo, keywords, URLs), §1.1 (description), §4 / §6.4 (age rating, privacy), `RELEASE_NOTES.md` v1.0.0 ("What's New"). Character counts were produced by a script on 2026-09-28 (§9) — do not edit a text without re-counting.
 
 **Which variant to paste — default B.** Two variants exist for the fields that mention purchases:
 
 - **Variant A — with in-app purchases** (RevenueCat key `RC_IOS_KEY` in the GitHub secrets, the nine products of `STORE_LISTING.md` §6.1 created and attached to the version, Paid Applications agreement Active — checklist MZ2, MZ3, MZ13).
-- **Variant B — without in-app purchases (default for 1.0.0).** The build is made without `RC_IOS_KEY`; the purchase SDK is never configured, so the shop's Crystals and Bundles tabs show the packs greyed out with the line "Store unavailable on this platform", nothing can be bought, Restore Purchases is disabled; skins, the booster crate and Commander upgrades still work with gold / crystals earned in play. No product is created in App Store Connect, no Paid Applications agreement is needed. IAP arrives in 1.0.1 (build 8) once MZ13 is done, with variant A texts and the products submitted with that version.
+- **Variant B — without in-app purchases (default for 1.0.0).** The build is made without `RC_IOS_KEY`; the purchase SDK is never configured, so the shop hides its Crystals and Bundles tabs (PUB-14, 2026-10-03) and shows cosmetic skins and gold upgrades only — no price, product or Restore Purchases button is reachable; skins and Commander upgrades work with crystals / gold earned in play. No product is created in App Store Connect, no Paid Applications agreement is needed. IAP arrives in 1.0.1 (build 9) once MZ13 is done, with variant A texts and the products submitted with that version.
 
 Fields marked **stakeholder fills** are personal values the team must not invent (`[developer …]` placeholders; no e-mail address or phone number is written anywhere in the repository).
 
-Ads in both variants: the review build must carry the real AdMob iOS ids (`ADMOB_IOS_APP_ID`, `ADMOB_IOS_INTERSTITIAL`, `ADMOB_IOS_REWARDED` — checklist MZ7, §5). Without them the build serves Google's **test** ad units ("Test Ad" placeholders) — fine for TestFlight, not for a public App Store build. Nothing on this sheet changes with the AdMob ids; only what the reviewer sees does.
+Ads in both variants: the review build must carry the real AdMob iOS ids (`ADMOB_IOS_APP_ID`, `ADMOB_IOS_INTERSTITIAL`, `ADMOB_IOS_REWARDED` — checklist MZ7, §5). Without them the build serves Google's **test** ad units ("Test Ad" placeholders) — fine for TestFlight, not for a public App Store build. Nothing on this sheet changes with the AdMob ids except the build picked in §6.2 — **1.0.0 (8)**, the first build with the real ids. Build numbers (Producer, 2026-10-03): **7** = the release candidate with Google test ads, TestFlight only; **8** = 1.0.0 with the real AdMob ids, the App Review build; **9** = 1.0.1 with in-app purchases (`LAUNCH_CHECKLIST.md` §0c step 9, `RELEASE_NOTES.md` v1.0.0).
 
 ---
 
@@ -122,7 +122,7 @@ App Previews (videos): none. "Use the same screenshots for all sizes" is not nee
 |---|---|---|---|
 | Promotional Text (Tanıtım mətni) | 170 | **Variant B (default):** `Tap, send, conquer. 50 levels of one-thumb real-time strategy: fortresses, artillery, tanks, walls, mines. Plays offline, no account.` | 133 |
 | ″ | 170 | Variant A: `Tap, send, conquer. 50 levels of one-thumb real-time strategy: fortresses, artillery, tanks, walls, mines. Plays offline, no account. Ads removable.` | 148 |
-| Description (Təsvir) | 4000 | **Variant B (default):** the block in §6.3 below | 3881 |
+| Description (Təsvir) | 4000 | **Variant B (default):** the block in §6.3 below | 3863 |
 | ″ | 4000 | Variant A: `STORE_LISTING.md` §1.1 verbatim | 3984 |
 | Keywords (Açar sözlər) | 100 | `tower,war,strategy,rts,capture,conquer,castle,army,offline,tap,casual,defense,attack,soldiers` — commas, no spaces | 93 |
 | Support URL (Dəstək URL) | — | `https://pervincinal.github.io/InsiderTest/support.html` | live since 2026-09-28; the `[developer e-mail]` on the page must be replaced before submission (G18 / T3) |
@@ -132,10 +132,10 @@ App Previews (videos): none. "Use the same screenshots for all sizes" is not nee
 | Routing App Coverage File | — | none | — |
 | Game Center (Oyun mərkəzi) | — | **not enabled** | no leaderboards in 1.0 |
 | App Clip, iMessage | — | none | — |
-| Build (Build) → "+" | — | **1.0.0 (7)** — appears ≈ 15–30 min after the workflow uploads it (TestFlight → "processing" first) | one build per version; a new upload = build 8 = 1.0.1 (`npm run version:sync`) |
+| Build (Build) → "+" | — | **1.0.0 (8)** — the first build with the real AdMob ids (`LAUNCH_CHECKLIST.md` §0c step 9); appears ≈ 15–30 min after the workflow uploads it (TestFlight → "processing" first). Build 7 serves Google test ads and stays on TestFlight | build numbers: 7 = RC with test ads (TestFlight only), 8 = 1.0.0 with real AdMob ids (this field), 9 = 1.0.1 with IAP; the Producer bumps with `npm run version:sync` |
 | What's New in This Version (Bu versiyada yeniliklər) | 4000 | Not shown for the very first version. From 1.0.1 on: the EN block of the version in `RELEASE_NOTES.md` | (v1.0.0 EN block = 495 chars, ready if the field appears) |
 
-### 6.3 Description — variant B (without in-app purchases), 3881 characters
+### 6.3 Description — variant B (without in-app purchases), 3863 characters
 
 Identical to `STORE_LISTING.md` §1.1 except four purchase phrases (listed in `STORE_LISTING.md` §2.1). Paste as is:
 
@@ -163,7 +163,7 @@ HOW IT PLAYS
 
 GOLD, CRYSTALS AND UPGRADES
 • Gold is earned by playing — stars, replays and daily rewards — and buys Overdrive (×3 production for 10 s), Freeze (enemies stop producing for 5 s), Airstrike (−10 soldiers on one enemy tower) and permanent Commander upgrades (production, capacity, starting garrison, march speed, cheaper boosters).
-• Crystals come from milestones, achievements and the daily chest; they buy tower, helmet and island skins, a booster crate, or a second chance after a defeat.
+• Crystals come from milestones, achievements and the daily chest; they buy tower, helmet and island skins or a second chance after a defeat.
 • Every level is winnable without spending anything — upgrades are a shortcut, never a requirement.
 
 SIX ISLANDS
@@ -193,13 +193,13 @@ Menus, hints, the tutorial, level names and lessons are in English, Azerbaijani,
 | Contact Information → Last Name (Soyad) | **stakeholder fills** |
 | Contact Information → Phone Number (Telefon) | **stakeholder fills** — with the country code, e.g. +994 … |
 | Contact Information → Email (E-poçt) | **stakeholder fills** — a mailbox that is read daily during review (Apple writes there when something is rejected) |
-| Notes (Qeydlər) | **Variant B (default), 1072 chars:** the block below. Variant A (with IAP), 878 chars: the second block |
+| Notes (Qeydlər) | **Variant B (default), 943 chars (rewritten 2026-10-03, PUB-14):** the block below. Variant A (with IAP), 878 chars: the second block |
 | Attachment (Əlavə fayl) | none |
 
 Notes — variant B (default, no purchases in this version):
 
 ```
-Single-player offline game, no account or sign-in needed, so no demo account is required — all content is reachable without paying. This version contains NO in-app purchases: no products are attached to it and the purchase SDK is never configured. The shop (title screen → SHOP) has tabs for Crystals and Bundles that list future packs greyed out with the line "Store unavailable on this platform"; they cannot be tapped or bought, and the Restore Purchases button below them is disabled for the same reason. Everything else in the shop (skins, the booster crate, Commander upgrades) is paid with gold and crystals earned by playing. Ads are Google AdMob: an interstitial after some result screens (never during play, never in the first five levels) and rewarded videos only on the player's request. The app never requests App Tracking Transparency (there is no NSUserTrackingUsageDescription in Info.plist) and always requests non-personalised ads on iOS, so the IDFA is not used — App Privacy "Tracking" is answered No. The game runs offline; only ads need a connection.
+Single-player offline game, no account or sign-in needed, so no demo account is required — all content is reachable without paying. This version contains NO in-app purchases: no products are attached to it and the purchase SDK is never configured. The shop (title screen → SHOP) shows cosmetic skins and gold upgrades only; no purchase UI is reachable — no prices, no product list, no buy or Restore Purchases button. Skins are paid with crystals and Commander upgrades with gold, both earned by playing. Ads are Google AdMob: an interstitial after some result screens (never during play, never in the first five levels) and rewarded videos only on the player's request. The app never requests App Tracking Transparency (there is no NSUserTrackingUsageDescription in Info.plist) and always requests non-personalised ads on iOS, so the IDFA is not used — App Privacy "Tracking" is answered No. The game runs offline; only ads need a connection.
 ```
 
 Notes — variant A (with in-app purchases; use only when the nine products are attached to the version):
@@ -230,13 +230,13 @@ Single-player offline game, no account or sign-in needed, so no demo account is 
 | Test Information → Feedback Email (Rəy e-poçtu) | **stakeholder fills** |
 | Test Information → Privacy Policy URL | `https://pervincinal.github.io/InsiderTest/privacy.html` |
 | Beta App Review Information | needed only for **External** testing (public link / outside testers): same contact as §6.4; the build then passes a short TestFlight review (usually < 1 day) |
-| What to Test (Nəyi test etməli) — per build | `Fresh install: tutorial levels 1–3, one Daily Challenge, Settings → About shows 1.0.0 (7). Shop: Crystals tab shows "Store unavailable on this platform" (expected in this build).` |
+| What to Test (Nəyi test etməli) — per build | `Fresh install: tutorial levels 1–3, one Daily Challenge, Settings → About shows 1.0.0 (7). Shop: only the Skins and Upgrades tabs, no Crystals / Bundles tabs and no prices (expected in this build).` |
 
 ## 8. After approval (Təsdiqdən sonra)
 
-App Store → 1.0.0 shows **Pending Developer Release** → *Release This Version*. The store page appears within a few hours in the four countries of §3. Widening the country list (Pricing and Availability) needs no new review; a new build does (1.0.1 / build 8).
+App Store → 1.0.0 shows **Pending Developer Release** → *Release This Version*. The store page appears within a few hours in the four countries of §3. Widening the country list (Pricing and Availability) needs no new review; a new build does (1.0.1 / build 9).
 
-## 9. Character counts (2026-09-28, `[...s].length` code points; script in the Publisher's scratch, texts taken from this sheet / `STORE_LISTING.md`)
+## 9. Character counts (2026-09-28; description B, review notes B and the `premium_bundle` texts re-run 2026-10-03; `[...s].length` code points; script in the Publisher's scratch, texts taken from this sheet / `STORE_LISTING.md`)
 
 ```
    11 name                              (limit 30)
@@ -247,12 +247,14 @@ App Store → 1.0.0 shows **Pending Developer Release** → *Release This Versio
   133 promo B                           (limit 170)
    93 keywords                          (limit 100; no space after a comma)
  3984 description A (EN, §1.1 verbatim) (limit 4000)
- 3881 description B (EN)                (limit 4000)
+ 3863 description B (EN)                (limit 4000)
  3955 description A (AZ, §1.2 verbatim) (limit 4000 — Play only)
- 3847 description B (AZ)                (limit 4000 — Play only)
+ 3825 description B (AZ)                (limit 4000 — Play only)
    23 copyright (with the placeholder)
    10 SKU
   878 review notes A                    (limit 4000)
- 1072 review notes B                    (limit 4000)
+  943 review notes B                    (limit 4000)
   495 what's new EN (RELEASE_NOTES v1.0.0) (limit 4000)
+   45 premium_bundle description EN      (limit 45; 1.0.1)
+   45 premium_bundle description AZ      (limit 45; Play translation only)
 ```

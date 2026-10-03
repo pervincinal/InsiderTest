@@ -153,14 +153,13 @@ Günlük cədvəl (tarix UTC-dir: Bakıda həmin gün **04:00**-dan növbəti g�
 | 2026-10-08 | 39 | Uzun Gecə · Az ərzaq | | | |
 
 #### TF-15 · Mağaza "mağaza əlçatan deyil" halında (2 dəq)
-- **Toxun:** başlıq ekranı → **MAĞAZA**. Tablar: **KRİSTAL / DƏSTLƏR / GÖRÜNÜŞ / TƏLİM**.
-  1. **KRİSTAL**: qiymət düymələrinə bax ($0.99 …), birinə toxun. Aşağı sürüşdür, **ALIŞLARI BƏRPA ET**-ə toxun. Kristalın ≥ 20-dirsə: **ÇEVİR** → təsdiq et.
-  2. **DƏSTLƏR**: bir dəstin qiymətinə toxun; **Gücləndirici sandığı**-na toxun.
-  3. **GÖRÜNÜŞ**: **Şifer** (80 kristal) və "YALNIZ DƏSTDƏ" yazılan bir görünüşə toxun.
-  4. **TƏLİM**: qızılın çatırsa bir təkmilləşdirmə al.
-- **Gözlənilən:** 1 — qiymət düymələri **boz**dur, ən aşağıda **"Mağaza bu platformada mümkün deyil."** yazılıb; toxunanda qırmızı yazı **"Mağaza bu platformada mümkün deyil"**; **Apple ödəniş pəncərəsi, Apple ID parolu sorğusu çıxmır**; ÇEVİR → "… kristal … qızıla çevrildi". 2 — eyni; sandıq: 60 kristalın yoxdursa "Sandıq üçün 60 kristal lazımdır". 3 — 30 dəqiqəlik oyunla kristal azdır, ona görə **"Kristal çatmır"** düzgün nəticədir, kristal sayı dəyişmir (≥ 80-dirsə: "Şifer dam açıldı və taxıldı"); "YALNIZ DƏSTDƏ" → "Başlanğıc dəsti ilə gəlir" və ya "Premium dəsti ilə gəlir". 4 — "<ad> pillə 1: …" yazısı, qızıl azalır.
-- **Alınmasa yaz:** `TF-15 FAIL: Apple ödəniş pəncərəsi açıldı / düymələr boz deyil / <tab> çökdü / mətn: …`.
-- **Bağlayır:** MM-1, QA-2 · **Ciddilik:** S1 — Apple ödəniş pəncərəsi və ya pul tələbi; S2 — çökmə, düymələr aktiv görünür, yazı yoxdur; S3 — mətn / tərcümə.
+- **Toxun:** başlıq ekranı → **MAĞAZA**. Bu build-də yalnız iki tab olmalıdır: **GÖRÜNÜŞ / TƏLİM** (PUB-14: alış olmayan build-də KRİSTAL və DƏSTLƏR tabları gizlidir).
+  1. Tab sırasına bax, sonra hər iki tabda yuxarı-aşağı sürüşdür.
+  2. **GÖRÜNÜŞ**: **Şifer** (80 kristal) görünüşünə toxun; "YALNIZ DƏSTDƏ" yazılan görünüş varsa, ona da toxun.
+  3. **TƏLİM**: qızılın çatırsa bir təkmilləşdirmə al.
+- **Gözlənilən:** 1 — mağaza yalnız **GÖRÜNÜŞ** və **TƏLİM** tabları ilə açılır; **KRİSTAL** və **DƏSTLƏR** tabları **yoxdur** (boz da deyil — ümumiyyətlə görünmür); heç yerdə $ qiyməti ($0.99 …), kristal paketi, dəst, "Mağaza bu platformada mümkün deyil" yazısı və ya **ALIŞLARI BƏRPA ET** düyməsi yoxdur; **Apple ödəniş pəncərəsi, Apple ID parolu sorğusu heç vaxt çıxmır**. 2 — 30 dəqiqəlik oyunla kristal azdır, ona görə **"Kristal çatmır"** düzgün nəticədir, kristal sayı dəyişmir (≥ 80-dirsə: "Şifer dam açıldı və taxıldı"); "YALNIZ DƏSTDƏ" → yalnız yazı ("Başlanğıc dəsti ilə gəlir" və ya "Premium dəsti ilə gəlir"), qiymət və ödəniş pəncərəsi yoxdur. 3 — "<ad> pillə 1: …" yazısı, qızıl azalır.
+- **Alınmasa yaz:** `TF-15 FAIL: KRİSTAL/DƏSTLƏR tabı görünür / qiymət və ya bərpa düyməsi görünür / Apple ödəniş pəncərəsi açıldı / <tab> çökdü / mətn: …`.
+- **Bağlayır:** MM-1, QA-2 · **Ciddilik:** S1 — Apple ödəniş pəncərəsi və ya pul tələbi; S2 — çökmə, KRİSTAL / DƏSTLƏR tabı (boz da olsa), qiymət və ya bərpa düyməsi görünür; S3 — mətn / tərcümə.
 
 #### TF-16 · Ayarlar (3 dəq)
 - **Toxun:** başlıq ekranı → **Ayarlar**. **İRƏLİLƏYİŞİ SIFIRLA**-ya **toxunma**.
@@ -353,14 +352,13 @@ Daily table (the date is UTC: in Baku from **04:00** that day to **03:59** the n
 | 2026-10-08 | 39 | Uzun Gecə · Az ərzaq (The Long Night · Lean rations) | | | |
 
 #### TF-15 · Shop with the store unavailable (2 min)
-- **Tap:** title screen → **MAĞAZA** (SHOP). Tabs: **KRİSTAL / DƏSTLƏR / GÖRÜNÜŞ / TƏLİM** (CRYSTALS / BUNDLES / SKINS / UPGRADES).
-  1. **KRİSTAL**: look at the price buttons ($0.99 …), tap one. Scroll down, tap **ALIŞLARI BƏRPA ET** (RESTORE PURCHASES). If you have ≥ 20 crystals: **ÇEVİR** (CONVERT) → confirm.
-  2. **DƏSTLƏR**: tap a bundle's price; tap the **Gücləndirici sandığı** (Booster Crate).
-  3. **GÖRÜNÜŞ**: tap **Şifer** (Slate, 80 crystals) and one skin marked "YALNIZ DƏSTDƏ" (PACK ONLY).
-  4. **TƏLİM**: buy one upgrade if you have enough gold.
-- **Expected:** 1 — the price buttons are **greyed out**, at the bottom **"Mağaza bu platformada mümkün deyil."** (Store unavailable on this platform.); a tap shows the red line **"Mağaza bu platformada mümkün deyil"**; **no Apple payment sheet, no Apple ID password prompt**; CONVERT → "… kristal … qızıla çevrildi". 2 — the same; the crate without 60 crystals → "Sandıq üçün 60 kristal lazımdır". 3 — after 30 minutes of play there are few crystals, so **"Kristal çatmır"** (Not enough crystals) is the correct result and the crystal count does not change (with ≥ 80: "Şifer dam açıldı və taxıldı"); PACK ONLY → "Başlanğıc dəsti ilə gəlir" or "Premium dəsti ilə gəlir". 4 — a "<name> pillə 1: …" line (tier 1), the gold goes down.
-- **If it fails, write:** `TF-15 FAIL: Apple payment sheet opened / buttons not grey / <tab> crashed / wording: …`.
-- **Closes:** MM-1, QA-2 · **Severity:** S1 — an Apple payment sheet or any request for money; S2 — crash, buttons look active, the line is missing; S3 — wording / translation.
+- **Tap:** title screen → **MAĞAZA** (SHOP). This build must show two tabs only: **GÖRÜNÜŞ / TƏLİM** (SKINS / UPGRADES) — PUB-14: without in-app purchases the KRİSTAL and DƏSTLƏR (CRYSTALS / BUNDLES) tabs are hidden.
+  1. Look at the tab row, then scroll up and down on both tabs.
+  2. **GÖRÜNÜŞ**: tap **Şifer** (Slate, 80 crystals); if a skin is marked "YALNIZ DƏSTDƏ" (PACK ONLY), tap it too.
+  3. **TƏLİM**: buy one upgrade if you have enough gold.
+- **Expected:** 1 — the shop opens with **GÖRÜNÜŞ** and **TƏLİM** only; the **KRİSTAL** and **DƏSTLƏR** tabs are **absent** (not greyed — not shown at all); nowhere a $ price ($0.99 …), a crystal pack, a bundle, the line "Mağaza bu platformada mümkün deyil" (Store unavailable on this platform) or the **ALIŞLARI BƏRPA ET** (RESTORE PURCHASES) button; **no Apple payment sheet, no Apple ID password prompt, ever**. 2 — after 30 minutes of play there are few crystals, so **"Kristal çatmır"** (Not enough crystals) is the correct result and the crystal count does not change (with ≥ 80: "Şifer dam açıldı və taxıldı"); PACK ONLY → a text line only ("Başlanğıc dəsti ilə gəlir" or "Premium dəsti ilə gəlir"), no price, no payment sheet. 3 — a "<name> pillə 1: …" line (tier 1), the gold goes down.
+- **If it fails, write:** `TF-15 FAIL: CRYSTALS/BUNDLES tab shown / a price or the restore button shown / Apple payment sheet opened / <tab> crashed / wording: …`.
+- **Closes:** MM-1, QA-2 · **Severity:** S1 — an Apple payment sheet or any request for money; S2 — crash, a CRYSTALS / BUNDLES tab (even greyed), a price or the restore button is shown; S3 — wording / translation.
 
 #### TF-16 · Settings (3 min)
 - **Tap:** title screen → **Ayarlar** (Settings). Do **not** tap **İRƏLİLƏYİŞİ SIFIRLA** (RESET PROGRESS).
