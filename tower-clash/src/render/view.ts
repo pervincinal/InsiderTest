@@ -141,6 +141,42 @@ export function resize(view: View): void {
   if (view.layers) resizeLayers(view.layers, view.canvas);
 }
 
+function sameInsets(a: SafeInsets, b: SafeInsets): boolean {
+  return a.top === b.top && a.right === b.right && a.bottom === b.bottom && a.left === b.left;
+}
+
+/**
+ * Re-read the safe-area insets and, only if they changed, run the same relayout as `resize` (MM-7).
+ * WKWebView can deliver `env(safe-area-inset-*)` (Dynamic Island / home indicator) after the first
+ * layout without firing a resize event; one getComputedStyle read per call. Returns true on relayout.
+ */
+export function refreshSafeInsets(view: View): boolean {
+  if (sameInsets(readSafeInsets(view.canvas.parentElement), view.insets)) return false;
+  resize(view);
+  return true;
+}
+
+/** Frames after boot during which `insetProbe` re-reads the insets every frame. */
+export const INSET_PROBE_FRAMES = 10;
+
+/**
+ * Per-frame hook for the first `frames` frames after boot: calls `refreshSafeInsets` each frame,
+ * then becomes a no-op. `rearm()` restarts the window (e.g. when the page becomes visible again).
+ */
+export function insetProbe(view: View, frames: number = INSET_PROBE_FRAMES): { tick(): boolean; rearm(): void } {
+  let left = frames;
+  return {
+    tick(): boolean {
+      if (left <= 0) return false;
+      left--;
+      return refreshSafeInsets(view);
+    },
+    rearm(): void {
+      left = frames;
+    },
+  };
+}
+
 /** Client (CSS px, relative to viewport) → logical map coordinates. May fall outside 0..720/0..1280. */
 export function toLogical(view: View, clientX: number, clientY: number): { x: number; y: number } {
   const rect = view.canvas.getBoundingClientRect();

@@ -6,6 +6,16 @@
 	<string>$(CAPACITOR_DEBUG)</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
+	<key>CFBundleLocalizations</key>
+	<!-- The game's four UI languages (src/ui/i18n.ts LANGUAGE_CODES). WKWebView only reports the
+	     phone's languages that the app declares here in navigator.language(s); without this list an
+	     Azerbaijani phone reports en-US and the first launch is English (MM-7, docs/MOBILE.md §3.1). -->
+	<array>
+		<string>en</string>
+		<string>az</string>
+		<string>ru</string>
+		<string>tr</string>
+	</array>
 	<key>CFBundleDisplayName</key>
         <string>Tower Clash</string>
 	<key>CFBundleExecutable</key>

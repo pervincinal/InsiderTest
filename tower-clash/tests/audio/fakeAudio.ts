@@ -103,6 +103,12 @@ export class FakeAudioContext implements AudioContextLike {
     this.state = 'running';
     return Promise.resolve();
   }
+  suspendCalls = 0;
+  suspend(): Promise<void> {
+    this.suspendCalls++;
+    this.state = 'suspended';
+    return Promise.resolve();
+  }
   createGain(): FakeGain {
     const g = new FakeGain();
     this.gains.push(g);

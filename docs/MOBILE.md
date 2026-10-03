@@ -69,6 +69,13 @@ Why **Admin** and not App Manager: creating the cloud-managed *Apple Distributio
 
 **Known limits:** (1) every run on a fresh runner creates a new *Apple Development* certificate — if Apple ever answers "maximum number of certificates", delete the old `GitHub` development certificates at developer.apple.com → Certificates and re-run (they are worthless outside that runner). (2) `xcrun altool` is Apple's older uploader (its *notarization* use was retired in 2023; app upload still ships with Xcode 16/26); when it disappears the fallback step uploads through `xcodebuild` instead. (3) The manual-signing fallback (secrets `APPLE_CERTIFICATE_P12_BASE64`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_PROVISIONING_PROFILE_BASE64`, §6) exists only for the case that someone with a Mac exported a certificate by hand; it is not needed and not recommended. (4) The privacy manifest `ios/App/App/PrivacyInfo.xcprivacy` (tracking: no; Device ID, purchases, advertising data, product interaction, crash/performance data, coarse location — all not linked, not for tracking; required-reason APIs UserDefaults `CA92.1`, file timestamp `C617.1`, system boot time `35F9.1`) is part of the App target and must match the App Privacy answers (`LAUNCH_CHECKLIST.md` A14); Apple's ITMS-91053 e-mail after an upload means a required-reason API is missing from it.
 
+### 3.1 First-launch language and screen edges on iPhone (MM-7)
+
+- **Language.** On the very first launch the game picks its language from the phone (`navigator.languages`; later launches use the saved choice). Inside an iOS app, the web view only reports the phone languages that the app itself declares as supported. Until 2026-10 the app declared only English, so an Azerbaijani, Russian or Turkish iPhone opened the game in English. `ios/App/App/Info.plist` now lists `CFBundleLocalizations` = `en`, `az`, `ru`, `tr` (the four game languages; `CFBundleDevelopmentRegion` stays `en`), and the Xcode project's `knownRegions` lists the same codes. No `.lproj` folders are needed for this: the key alone makes iOS treat the languages as supported. Side effect: the App Store page will list English, Azerbaijani, Russian and Turkish as the app's languages, which is correct. **When a fifth game language is added** (`src/ui/i18n.ts` `LANGUAGE_CODES`), add its code to that list too. Optional, needs a Mac: to translate the home-screen name per language, in Xcode select the project → *Info* → *Localizations* → `+` for each language, then create `InfoPlist.strings` with `"CFBundleDisplayName" = "Tower Clash";` — not needed while the name is the same everywhere. **Android** needs nothing: `android/app/build.gradle` has no `resConfigs` / `localeFilters`, so the WebView reports the phone's languages unchanged.
+- **Check (TestFlight plan TF-02):** set the iPhone to Azərbaycanca (Settings → General → Language & Region), delete the app, install the TestFlight build, open it: the title screen must be in Azerbaijani. Same for Russian / Turkish. An already installed app keeps its saved language — delete and reinstall to repeat the test.
+- **Notch / Dynamic Island.** The game re-reads the screen's safe edges on its first 10 frames and every time it comes back from the background, not only when the window is resized, so the HUD cannot stay under the Dynamic Island if iOS reports the edge a moment late.
+- **Sound in the background (TF-10).** When the app goes to the background the game suspends its sound engine itself (and resumes it on return; if iOS refuses, the first tap resumes it), instead of relying on iOS to mute the hidden web view.
+
 ## 4. Build locally
 
 Prerequisites: Node 22, and the repo cloned. All commands run inside `tower-clash/`.
@@ -78,7 +85,7 @@ npm ci                 # install dependencies (includes Capacitor)
 npm run cap:sync       # build the web app into dist/ and copy it into android/ and ios/
 ```
 
-**Android (Android Studio, or just the SDK + JDK 17):**
+**Android (Android Studio, or just the SDK + JDK 21 — the AdMob / RevenueCat Kotlin modules do not build with JDK 17, §8.4):**
 ```bash
 npm run android:build  # = cap:sync + ./gradlew assembleDebug
 # APK: android/app/build/outputs/apk/debug/app-debug.apk

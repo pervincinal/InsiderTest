@@ -53,6 +53,8 @@ export interface AudioContextLike {
   readonly state: 'suspended' | 'running' | 'closed' | 'interrupted';
   readonly destination: AudioNodeLike;
   resume(): Promise<void>;
+  /** Optional so minimal fakes compile; every real AudioContext has it. */
+  suspend?(): Promise<void>;
   createGain(): GainNodeLike;
   createOscillator(): OscillatorNodeLike;
   createBiquadFilter(): BiquadFilterNodeLike;
@@ -93,6 +95,8 @@ export class Synth {
   /** One second of white noise, made by the recipes chunk on its first noise burst. */
   noise: AudioBufferLike | null = null;
   private mutedFlag = false;
+  /** True while the context is suspended by `setBackground(true)`. */
+  private pausedByPage = false;
 
   constructor(private readonly factory: AudioContextFactory) {}
 
@@ -149,6 +153,24 @@ export class Synth {
       });
     }
     return true;
+  }
+
+  /**
+   * Page hidden → suspend the context (MM-7: do not rely on WebKit muting a background web view);
+   * page visible → resume it if this call suspended it. iOS may refuse a resume outside a user
+   * gesture; `unlock()` on the next pointerdown/keydown retries because the state is not 'running'.
+   */
+  setBackground(hidden: boolean): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    if (hidden) {
+      if (ctx.state !== 'running' || !ctx.suspend) return;
+      this.pausedByPage = true;
+      ctx.suspend().catch(() => undefined);
+    } else if (this.pausedByPage) {
+      this.pausedByPage = false;
+      ctx.resume().catch(() => undefined);
+    }
   }
 
   /** Context + master when a sound would actually be produced right now, else null (the voices in src/audio/recipes.ts). */

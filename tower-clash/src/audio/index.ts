@@ -68,6 +68,11 @@ export function unlockAudio(): boolean {
   return ok;
 }
 
+/** Page visibility hook: suspend the AudioContext while hidden, resume when visible again (MM-7). */
+export function setAudioBackground(hidden: boolean): void {
+  mod.synth.setBackground(hidden);
+}
+
 /** True once an AudioContext exists. */
 export function isAudioUnlocked(): boolean {
   return mod.synth.context !== null;

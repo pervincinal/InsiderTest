@@ -4,7 +4,7 @@ import { chunkFailures, chunkRecoverable, loadChunk, reloadOnce } from './lazyCh
 import type { Palette } from './render/palette';
 import { getPalette } from './render/palette';
 import type { View } from './render/view';
-import { createView, resize } from './render/view';
+import { createView, insetProbe, refreshSafeInsets, resize } from './render/view';
 import { blankLayer, createLayers } from './render/layers';
 import { preloadCosmetics, warmCosmetics } from './render/cosmetics';
 import { warmHudOverlays } from './render/hud';
@@ -20,7 +20,7 @@ import { applyMotionPref } from './ui/motion';
 import type { Language } from './ui/i18n';
 import { browserLanguages, detectLanguage, onLanguageChange, setLanguage, t } from './ui/i18n';
 import { drawSpinner } from './render/economyWidgets';
-import { initAudio, toggleMuted, unlockAudio } from './audio/index';
+import { initAudio, setAudioBackground, toggleMuted, unlockAudio } from './audio/index';
 import { initNative } from './native/index';
 import type { ShopTab } from './render/menuLayout';
 import type { AdSession, FakeAdsProvider } from './economy/adsFlow';
@@ -208,6 +208,8 @@ export class TowerClashApp implements App {
   readonly ads: AdSession = createAdSession();
   current: Screen;
   private lastFrame = 0;
+  /** Re-reads the safe-area insets on the first frames / after un-hiding (MM-7). */
+  private readonly insets: ReturnType<typeof insetProbe>;
   speed = 1;
   play: PlayScreen | null = null;
   fakeAds: FakeAdsProvider | null = null;
@@ -225,6 +227,7 @@ export class TowerClashApp implements App {
 
   constructor(canvas: HTMLCanvasElement, save: SaveData) {
     this.view = createView(canvas);
+    this.insets = insetProbe(this.view);
     this.view.layers = createLayers(canvas);
     resize(this.view);
     this.save = save;
@@ -269,10 +272,17 @@ export class TowerClashApp implements App {
     window.addEventListener('resize', onResize);
     window.addEventListener('orientationchange', onResize);
     window.visualViewport?.addEventListener('resize', onResize);
-    // Background/tab switch: freeze the sim so the player never returns to a lost game.
+    // Background/tab switch: freeze the sim so the player never returns to a lost game, and
+    // silence audio ourselves instead of trusting the WebView to mute a hidden page (MM-7).
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden) this.play?.pause();
-      else this.lastFrame = 0; // drop the hidden interval instead of feeding it to the loop
+      setAudioBackground(document.hidden);
+      if (document.hidden) {
+        this.play?.pause();
+        return;
+      }
+      this.lastFrame = 0; // drop the hidden interval instead of feeding it to the loop
+      refreshSafeInsets(this.view); // insets may have changed while hidden without a resize event
+      this.insets.rearm();
     });
 
     requestAnimationFrame((t) => this.frame(t));
@@ -550,6 +560,7 @@ export class TowerClashApp implements App {
   private frame(now: number): void {
     const dt = this.lastFrame ? now - this.lastFrame : 0;
     this.lastFrame = now;
+    this.insets.tick(); // no-op after the first INSET_PROBE_FRAMES frames
     this.current.update?.(dt, now);
     if (this.current.name !== 'play') {
       // menus paint their own background; nothing may paint over them, and a stale ground (old level /
