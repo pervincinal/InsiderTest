@@ -90,6 +90,8 @@ export interface TowerClashDebug {
   /** Open the shop (default tab: crystals) from the current screen; resolves once it is on screen (perf/e2e hook). */
   openShop(tab?: ShopTab): Promise<void>;
   aiAvailable: boolean;
+  /** `getStore().isAvailable()` right now (false on the web with `?store=off`, FE-6). */
+  readonly storeAvailable: boolean;
   /** Override "today" (UTC `YYYY-MM-DD`) for the Daily Challenge; null returns to the real clock. */
   setDayKey(key: string | null): void;
   /** Daily Challenge (GDD §7) test surface. */

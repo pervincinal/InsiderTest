@@ -9,6 +9,7 @@ import { ResultScreen } from './ui/screens';
 import type { TranslationKey } from './ui/i18n';
 import { currentLanguage, t } from './ui/i18n';
 import { configureFakeStore } from './economy/providers/fakeStore';
+import { getStore } from './economy/store';
 import { grantProduct } from './economy/wallet';
 import { challengeFor, weekKeyOf, weeklyFor } from './daily/challenge';
 import { challengeDone, challengeUnlocked, previousDayKey, shownStreak, yesterdayOffered } from './ui/daily';
@@ -55,6 +56,9 @@ export function installDebug(app: TowerClashApp): TowerClashDebug {
     back: () => app.onBack(),
     openShop: (tab = 'crystals') => app.openShop(tab, app.backFromShop()),
     aiAvailable: true,
+    get storeAvailable() {
+      return getStore().isAvailable();
+    },
     setDayKey: (key) => {
       app.dayKeyOverride = key;
     },

@@ -433,4 +433,5 @@ upscales 1.5×); the web cap (2.5, 1.2× upscale) is practically identical to un
 
 Overrides for testing: `?dprcap=N` in the page URL (1..3) or `setDprCap(N)` from
 `src/render/view.ts` followed by `resize(view)` (console / tests).
+Other web-only URL switches: `?spritecache=0` (draw buildings direct, PERF-4), `?store=off` (the store reports unavailable for the session — the no-IAP shop with two tabs and no pack-only skins, FE-6; `window.__towerclash.storeAvailable`; ignored natively).
 

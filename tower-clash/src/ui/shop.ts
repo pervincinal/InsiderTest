@@ -2,7 +2,8 @@
  * Shop screen (ECONOMY.md §4, Phase A): Crystals (IAP packs) · Bundles (starter / remove ads /
  * premium) · Skins (crystals, equip) · Upgrades (commander tracks, gold). Purchases go through
  * `getStore()` and are granted only on `{ ok: true }`, once per transaction id (wallet.grantProduct).
- * Without an available store the Crystals and Bundles tabs are hidden (PUB-14, `shopTabsFor`).
+ * Without an available store the Crystals and Bundles tabs are hidden (PUB-14, `shopTabsFor`) and
+ * pack-only skins the player does not own are not listed (FE-6, `skinListed`).
  * Input produces wallet / save mutations only; the sim is never touched here.
  */
 import type { View } from '../render/view';
@@ -65,6 +66,15 @@ function bundleLines(p: IapProductDef): string[] {
   if (g.skins?.length) lines.push(g.skins.length === 1 ? t('shop.line.bronze') : t('shop.line.royal'));
   if (g.boosterDiscount) lines.push(t('shop.line.discount', { n: Math.round(g.boosterDiscount * 100) }));
   return lines;
+}
+
+/**
+ * Whether a skin card is listed on the Skins tab (FE-6). Without an available store a skin that
+ * only comes with a pack (`source: 'starter' | 'premium'`) is left out — no "PACK ONLY" card that
+ * points at a product the player cannot buy — unless it is owned (a restored owner still equips it).
+ */
+export function skinListed(skin: Pick<SkinDef, 'id' | 'source'>, owned: readonly string[], storeAvailable: boolean): boolean {
+  return storeAvailable || skin.source === 'shop' || owned.includes(skin.id);
 }
 
 export class ShopScreen implements Screen {
@@ -199,6 +209,7 @@ export class ShopScreen implements Screen {
       });
     } else if (this.tab === 'skins') {
       let top = SHOP.row.y0 - 6;
+      const storeOn = getStore().isAvailable();
       for (const [category, key] of [
         ['towerRoof', 'shop.roofs'],
         ['unitHelmet', 'shop.helmets'],
@@ -206,7 +217,7 @@ export class ShopScreen implements Screen {
         ['towerShape', 'shop.towers'],
         ['unitShape', 'shop.units'],
       ] as const) {
-        const list = shopSkins().filter((s) => s.category === category);
+        const list = shopSkins().filter((s) => s.category === category && skinListed(s, save.skins.owned, storeOn));
         out.skinHeaders.push({ label: t(key), y: top });
         list.forEach((s, i) => {
           const rect = shopSkinRect(top, i);

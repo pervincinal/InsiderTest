@@ -119,11 +119,32 @@ const lazyRevenueCat: StoreProvider = {
 };
 
 /**
+ * The web build with the store switched off (`?store=off`, FE-6): answers like an unconfigured
+ * native store so the no-IAP shop (two tabs, no pack-only skins) can be seen and e2e-tested.
+ */
+const storeOff: StoreProvider = {
+  init: () => Promise.resolve(),
+  isAvailable: () => false,
+  getProducts: () => Promise.resolve([]),
+  purchase: (id) => Promise.resolve({ ok: false, productId: id, error: 'unavailable' }),
+  restore: () => Promise.resolve([]),
+  getSupportId: () => Promise.resolve(null),
+};
+
+/**
+ * `?store=off` in the page URL (web only, read once per session by `getStore()`): the store
+ * reports unavailable. Ignored inside a native shell.
+ */
+export function storeOffByUrl(native: boolean = isNative()): boolean {
+  return !native && typeof location !== 'undefined' && /[?&]store=off(&|$)/.test(location.search);
+}
+
+/**
  * The store for this runtime: RevenueCat inside a native shell (loaded lazily by `init()`), the
- * fake everywhere else.
+ * fake everywhere else (or an unavailable store on the web with `?store=off`).
  */
 export function getStore(): StoreProvider {
-  if (!store) store = isNative() ? lazyRevenueCat : fakeStore;
+  if (!store) store = isNative() ? lazyRevenueCat : storeOffByUrl(false) ? storeOff : fakeStore;
   return store;
 }
 

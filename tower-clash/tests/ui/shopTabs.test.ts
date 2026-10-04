@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { View } from '../../src/render/view';
 import { getPalette } from '../../src/render/palette';
 import type { Rect } from '../../src/render/widgets';
-import { SHOP, SHOP_TABS, shopTabsFor } from '../../src/render/menuLayout';
+import { SHOP, SHOP_TABS, shopSkinRect, shopTabsFor } from '../../src/render/menuLayout';
 import type { ShopTab } from '../../src/render/menuLayout';
 import type { ShopOpts } from '../../src/render/menusShop';
 import { createAdSession } from '../../src/economy/adsFlow';
@@ -10,7 +10,8 @@ import { getStore } from '../../src/economy/store';
 import type { SaveData } from '../../src/ui/save';
 import { defaultSave, setSaveStorageForTests } from '../../src/ui/save';
 import type { App } from '../../src/ui/screens';
-import { ShopScreen } from '../../src/ui/shop';
+import { ShopScreen, skinListed } from '../../src/ui/shop';
+import { shopSkins } from '../../src/economy/entitlements';
 
 /*
  * PUB-14: without an available store (native 1.0.0 shipped with no IAP, RevenueCat unconfigured or
@@ -169,5 +170,93 @@ describe('shop screen with the store available (web fake store) is unchanged', (
       tap(shop, tabPoint(i, 4));
       expect(shop.currentTab).toBe(tab);
     });
+  });
+});
+
+/*
+ * FE-6: without a store the Skins tab does not list skins that only come with a pack (Starter Pack /
+ * Premium) — no disabled "PACK ONLY" card pointing at a product that cannot be bought — unless the
+ * player owns them (after a restore they must still see and equip them).
+ */
+const PACK_ONLY = shopSkins()
+  .filter((s) => s.source !== 'shop')
+  .map((s) => s.id);
+
+/** Max scroll of the open tab (setScroll clamps to it). */
+function maxScroll(shop: ShopScreen): number {
+  shop.setScroll(1e6);
+  const y = shop.scrollY;
+  shop.setScroll(0);
+  return y;
+}
+
+describe('pack-only skins (FE-6)', () => {
+  it('the catalog has pack-only skins for this test to mean anything', () => {
+    expect(PACK_ONLY).toEqual(['roof_gold', 'helmet_bronze', 'helmet_royal']);
+  });
+
+  it('skinListed: everything with a store; without one only shop skins and owned pack skins', () => {
+    for (const s of shopSkins()) {
+      expect(skinListed(s, [], true)).toBe(true);
+      expect(skinListed(s, [], false)).toBe(s.source === 'shop');
+      expect(skinListed(s, [s.id], false)).toBe(true);
+    }
+  });
+
+  it('store unavailable: no pack-only cards, no PACK ONLY label, the grid re-flows and the scroll shrinks', () => {
+    available = true;
+    const withStore = new ShopScreen(fakeApp(save), 'skins');
+    const full = lastDraw(withStore);
+    const fullMax = maxScroll(withStore);
+    available = false;
+    const shop = new ShopScreen(fakeApp(save), 'skins');
+    const o = lastDraw(shop);
+    const ids = o.skins.map((c) => c.id);
+    expect(ids).toEqual(
+      shopSkins()
+        .filter((s) => s.source === 'shop')
+        .map((s) => s.id),
+    );
+    for (const id of PACK_ONLY) expect(ids).not.toContain(id);
+    // `locked` is what draws the disabled "PACK ONLY" button
+    expect(o.skins.filter((c) => c.locked)).toEqual([]);
+    expect(o.skinHeaders).toHaveLength(full.skinHeaders.length); // every category still has cards
+    // re-flow: each category's cards fill consecutive grid slots under its header
+    for (const h of o.skinHeaders) {
+      const next = o.skinHeaders.find((x) => x.y > h.y)?.y ?? Infinity;
+      const cards = o.skins.filter((c) => c.rect.y > h.y && c.rect.y < next);
+      cards.forEach((c, i) => expect(c.rect).toEqual(shopSkinRect(h.y, i)));
+    }
+    // roof_thatch moves into the slot roof_gold had with the store
+    expect(o.skins.find((c) => c.id === 'roof_thatch')?.rect).toEqual(full.skins.find((c) => c.id === 'roof_gold')?.rect);
+    // helmets: 5 cards (two rows) → 3 (one row), so the content and the max scroll lose one row
+    const row = SHOP.skin.h + SHOP.skin.gapY;
+    expect(maxScroll(shop)).toBe(fullMax - row);
+    // tapping the old roof_gold slot hits roof_thatch (an unaffordable crystal skin → toast, no PACK ONLY toast)
+    const r = full.skins.find((c) => c.id === 'roof_gold')!.rect;
+    const p = { x: r.x + r.w / 2, y: r.y + r.h / 2, id: 1, type: 'mouse' as const, timeMs: 0 };
+    tap(shop, p);
+    const text = shop.toast.opts(0)?.text;
+    expect(text).toBeTruthy();
+    expect(text).not.toMatch(/Starter Pack|Premium/);
+  });
+
+  it('store unavailable: an owned pack skin is still listed as OWNED and can be equipped', () => {
+    save.skins.owned.push('helmet_royal');
+    const shop = new ShopScreen(fakeApp(save), 'skins');
+    const o = lastDraw(shop);
+    const royal = o.skins.find((c) => c.id === 'helmet_royal');
+    expect(royal).toMatchObject({ owned: true, equipped: false, locked: false });
+    expect(o.skins.map((c) => c.id)).not.toContain('helmet_bronze');
+    expect(o.skins.map((c) => c.id)).not.toContain('roof_gold');
+    shop.equipSkin('helmet_royal', 'helmet');
+    expect(lastDraw(shop).skins.find((c) => c.id === 'helmet_royal')).toMatchObject({ owned: true, equipped: true });
+  });
+
+  it('store available (web): the full catalog list, pack-only skins shown with PACK ONLY as before', () => {
+    available = true;
+    const o = lastDraw(new ShopScreen(fakeApp(save), 'skins'));
+    expect(o.skins.map((c) => c.id)).toEqual(shopSkins().map((s) => s.id));
+    expect(o.skins.filter((c) => c.locked).map((c) => c.id)).toEqual(PACK_ONLY);
   });
 });

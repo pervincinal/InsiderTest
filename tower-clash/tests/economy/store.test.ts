@@ -7,7 +7,7 @@ vi.mock('../../src/native/index', () => ({
   getPlatform: () => (native.isNative ? native.platform : 'web'),
 }));
 
-import { getStore, resetStoreForTests } from '../../src/economy/store';
+import { getStore, resetStoreForTests, storeOffByUrl } from '../../src/economy/store';
 import { configureFakeStore, fakeStore, resetFakeStore, FAKE_PURCHASE_DELAY_MS } from '../../src/economy/providers/fakeStore';
 import { revenueCatStore, mapRevenueCatError, resetRevenueCatForTests } from '../../src/economy/providers/revenueCat';
 
@@ -44,6 +44,42 @@ describe('getStore selection', () => {
     expect(getStore()).toBe(first);
     resetStoreForTests();
     expect(getStore()).not.toBe(fakeStore);
+  });
+});
+
+describe('?store=off (FE-6 debug switch)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('on the web the URL switch picks an unavailable store for the session', async () => {
+    vi.stubGlobal('location', { search: '?lang=en&store=off' });
+    expect(storeOffByUrl(false)).toBe(true);
+    const store = getStore();
+    expect(store).not.toBe(fakeStore);
+    await store.init();
+    expect(store.isAvailable()).toBe(false);
+    expect(await store.getProducts(['crystals_small'])).toEqual([]);
+    expect(await store.purchase('crystals_small')).toEqual({ ok: false, productId: 'crystals_small', error: 'unavailable' });
+    expect(await store.restore()).toEqual([]);
+    expect(await store.getSupportId()).toBeNull();
+  });
+
+  it('is ignored natively, for other values and without a location', () => {
+    vi.stubGlobal('location', { search: '?store=off' });
+    expect(storeOffByUrl(true)).toBe(false);
+    native.isNative = true;
+    expect(getStore()).not.toBe(fakeStore);
+    expect(getStore().isAvailable()).toBe(false); // the RevenueCat wrapper, not the switch
+    vi.stubGlobal('location', { search: '?store=offline' });
+    expect(storeOffByUrl(false)).toBe(false);
+    vi.stubGlobal('location', { search: '?xstore=off' });
+    expect(storeOffByUrl(false)).toBe(false);
+    vi.unstubAllGlobals();
+    expect(storeOffByUrl(false)).toBe(false);
+    native.isNative = false;
+    resetStoreForTests();
+    expect(getStore()).toBe(fakeStore);
   });
 });
 
