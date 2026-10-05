@@ -76,6 +76,11 @@ export interface TowerClashDebug {
   getText(key: string): string;
   /** Text of the current screen's toast while it is on screen, or null. */
   getToast(): string | null;
+  /**
+   * What the last result-screen SHARE tap did (SHARE-1), or null before the first: the outcome of
+   * the fallback chain, the share text, and the PNG's name, MIME type, byte size and pixel size.
+   */
+  readonly lastShare: { result: 'shared' | 'saved' | 'unavailable' | 'cancelled'; text: string; name: string; type: string; bytes: number; width: number; height: number } | null;
   /** Result screen numbers, or null when not on the result screen. */
   getResult(): { outcome: string; stars: number; coinsEarned: number; coinsTotal: number; crystalsEarned: number; achievements: string[]; tip: string | null; howto: boolean; practice: boolean } | null;
   /** Level-select lock state for a level id (undefined id → false). */

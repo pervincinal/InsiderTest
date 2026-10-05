@@ -39,6 +39,8 @@ export interface TowerDrawOptions {
   aim?: number;
   /** Cosmetic skin ids (shop). Unknown / missing ids draw the default look. */
   skin?: TowerSkin;
+  /** Bypass the sprite cache (offscreen exports such as the share card draw at their own scale). */
+  direct?: boolean;
 }
 
 /**
@@ -1051,7 +1053,7 @@ export function paletteId(pal: Palette): number {
  */
 export function towerSpriteKey(pal: Palette, t: TowerLook, o: TowerDrawOptions): string | null {
   const wipe = o.wipe;
-  if ((o.squash ?? 1) !== 1 || (wipe && wipe.t < 1) || (o.pulse ?? 0) !== 0) return null;
+  if (o.direct || (o.squash ?? 1) !== 1 || (wipe && wipe.t < 1) || (o.pulse ?? 0) !== 0) return null;
   const roof = o.skin?.roof;
   if (isShapeSkin(roof) || (needsShapeSkins(o.skin) && !shapeSkinsLoaded())) return null;
   return `${paletteId(pal)}|${t.kind}|${tier(t.level)}|${t.owner}|${roof ?? ''}`;

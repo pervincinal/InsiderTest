@@ -96,6 +96,10 @@ export interface ResultExtras {
   tip: string | null;
   /** "HOW TO PLAY" link under the tip (second consecutive defeat of the same level in this session). */
   howto: boolean;
+  /** SHARE row (SHARE-1): every result but a Yesterday's-map practice run; the card grows to `RESULT.cardShare`. */
+  share?: boolean;
+  /** The share image is being drawn / the share sheet is open: the SHARE button shows a spinner. */
+  sharing?: boolean;
   /** Daily Challenge result (GDD §7): the reward line (first win) or the day's best (replay). */
   daily?: {
     won: boolean;
@@ -125,6 +129,17 @@ export type HudPlayUi = PlayUi & {
    */
   clockMs?: number;
 };
+
+/**
+ * Result card rect and SHARE rect (SHARE-1): SHARE takes the ×2 gold / skip slot when nothing else
+ * is there (the "Gold doubled" note counts as something), else a row of its own under it on the
+ * taller card. `share` is null when the button is not offered (practice run).
+ */
+export function resultShareLayout(ex: Pick<ResultExtras, 'share' | 'doubleGold' | 'doubled' | 'skipCrystals'> | undefined, won: boolean): { card: Rect; share: Rect | null } {
+  if (!ex?.share) return { card: RESULT.card, share: null };
+  const slotUsed = won ? ex.doubled || ex.doubleGold !== null : ex.skipCrystals !== null;
+  return slotUsed ? { card: RESULT.cardShare, share: RESULT.share } : { card: RESULT.card, share: RESULT.shareInline };
+}
 
 function extrasOf(ui: PlayUi): HudExtras | undefined {
   return (ui as HudPlayUi).hud;
@@ -551,7 +566,8 @@ function drawPlainPauseCard(ctx: CanvasRenderingContext2D, state: GameState, ui:
 function drawPlainResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: PlayUi): void {
   const pal = ui.palette;
   const won = ui.outcome === 'won';
-  const card = RESULT.card;
+  const layout = resultShareLayout(extrasOf(ui)?.result, won);
+  const card = layout.card;
   const pressed = extrasOf(ui)?.pressed ?? null;
   drawCard(ctx, pal, card);
   ctx.textAlign = 'center';
@@ -577,6 +593,7 @@ function drawPlainResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui
   if (won && ex.doubleGold !== null && !ex.doubled) offers.push([RESULT.extra, `${t('result.doubleGold', { n: ex.doubleGold })} · ${t('common.watch')}`]);
   else if (!won && ex.skipCrystals !== null) offers.push([RESULT.extra, `${t('result.skipLevel')} · ${ex.skipCrystals}`]);
   if (ex.howto) offers.push([RESULT.howto, t('result.howto')]);
+  if (layout.share) offers.push([layout.share, t('result.share')]);
   for (const [r, label] of offers) drawButton(ctx, pal, r, label, { fontPx: 18, flat: true, pressed: pressed === r });
 }
 

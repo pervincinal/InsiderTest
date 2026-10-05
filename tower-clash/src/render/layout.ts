@@ -42,6 +42,14 @@ export const BOOSTERS = Object.freeze({
  */
 export const RESULT = Object.freeze({
   card: { x: 60, y: 330, w: 600, h: 640 } as Rect,
+  /**
+   * SHARE (SHARE-1, every result but a Yesterday's-map practice run): in the ×2 gold / skip slot
+   * when that slot is free (`shareInline`, the card keeps its height), else on a row of its own under
+   * it (`share`) inside the 80 px taller `cardShare` — `resultShareLayout` in hud.ts picks.
+   */
+  shareInline: { x: 230, y: 874, w: 260, h: 62 } as Rect,
+  share: { x: 230, y: 958, w: 260, h: 62 } as Rect,
+  cardShare: { x: 60, y: 330, w: 600, h: 720 } as Rect,
   next: { x: 84, y: 780, w: 170, h: 72 } as Rect,
   retry: { x: 275, y: 780, w: 170, h: 72 } as Rect,
   menu: { x: 466, y: 780, w: 170, h: 72 } as Rect,

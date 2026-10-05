@@ -13,6 +13,7 @@ import type { ToastOpts } from '../render/economyWidgets';
 import type { PointerPoint } from '../input/pointer';
 import { drawGame } from '../render/draw';
 import type { HudPlayUi, ResultExtras } from '../render/hud';
+import { resultShareLayout } from '../render/hud';
 import type { SaveData } from './save';
 import { writeSave } from './save';
 import { isMuted, playSfx, toggleMuted } from '../audio/index';
@@ -31,6 +32,8 @@ import type { DailyChallenge, WeeklyChallenge } from '../daily/challenge';
 import type { DailyOutcome } from './daily';
 import { restartLevel } from './daily';
 import type { WeeklyOutcome } from './weekly';
+import type { PreparedShare, ShareRecord } from './share';
+import { loadChunk } from '../lazyChunk';
 
 /** A screen owns drawing and input while it is current. */
 export interface Screen {
@@ -344,6 +347,26 @@ export function translateNote(note: string): string {
 }
 const CONTINUE_AD = AD_PLACEMENTS.find((p) => p.id === 'rv_continue')!;
 
+/* ---------- Share card (SHARE-1): the flow and the drawing are a lazy chunk (src/ui/share.ts) ---------- */
+
+type ShareChunk = typeof import('./share');
+let shareChunk: Promise<ShareChunk> | null = null;
+let lastShare: ShareRecord | null = null;
+
+/** Load the share chunk (idempotent; a failed download is forgotten so the next tap retries). */
+function loadShareChunk(): Promise<ShareChunk> {
+  shareChunk ??= loadChunk('share', () => import('./share')).catch((err: unknown) => {
+    shareChunk = null;
+    throw err;
+  });
+  return shareChunk;
+}
+
+/** What the last SHARE tap did (debug surface `lastShare`, e2e), or null. */
+export function lastShareRecord(): ShareRecord | null {
+  return lastShare;
+}
+
 /**
  * Shows the frozen final frame under the win/lose overlay (drawn by drawGame) with the economy
  * offers: ×2 gold (rewarded), Reinforcements (crystals or rewarded), level skip (crystals) and the
@@ -357,6 +380,10 @@ export class ResultScreen implements Screen {
   private leaving = false;
   private nowMs = 0;
   readonly toast = new Toast();
+  /** A SHARE tap is being served (card drawing / share sheet open): further taps are ignored. */
+  private sharing = false;
+  /** The card for this result, drawn once (started on the SHARE press). */
+  private sharePrep: Promise<PreparedShare | null> | null = null;
   /** Consecutive defeats of this level in the session, this one included (0 on a win). */
   private readonly defeatCount: number;
 
@@ -377,6 +404,51 @@ export class ResultScreen implements Screen {
       achievementToastText(this.info.achievements) ??
       (d?.milestone ? t('daily.milestone', { day: d.streak, crystals: d.milestone }) : w?.targetHit ? t('weekly.resultTarget', { crystals: w.crystals }) : null);
     if (text) this.toast.show(text, 'ok', performance.now(), 3500);
+    if (this.shareOffered()) void loadShareChunk().catch(() => undefined); // warm: the tap's activation must not wait on the network
+  }
+
+  /** SHARE (SHARE-1) is on every result except Yesterday's map — a practice run has no reward and nothing to prove. */
+  shareOffered(): boolean {
+    return this.info.daily?.practice !== true;
+  }
+
+  private prepareShare(): Promise<PreparedShare | null> {
+    if (!this.sharePrep) {
+      const p = loadShareChunk().then((m) => m.prepareShare(this.info, this.app.palette(), appVersion()));
+      this.sharePrep = p;
+      p.catch(() => {
+        if (this.sharePrep === p) this.sharePrep = null; // retried on the next tap
+      });
+    }
+    return this.sharePrep;
+  }
+
+  /**
+   * Draw the share card and hand it to the platform (native sheet → Web Share with the PNG → Web
+   * Share text-only → PNG download); toast "Shared" / "Saved" / "Sharing not available".
+   * Resolves the record (null when not offered or already running). Never rejects.
+   */
+  share(): Promise<ShareRecord | null> {
+    if (!this.shareOffered() || this.sharing) return Promise.resolve(null);
+    this.sharing = true;
+    playSfx('button');
+    return this.prepareShare()
+      .then(async (prep) => {
+        if (!prep) return null;
+        const m = await loadShareChunk();
+        const rec = await m.sendShare(prep);
+        lastShare = rec;
+        const text = m.shareToastText(rec.result);
+        if (text) this.toast.show(text, rec.result === 'unavailable' ? 'error' : 'ok', this.nowMs);
+        return rec;
+      })
+      .catch(() => {
+        this.toast.show(t('share.unavailable'), 'error', this.nowMs);
+        return null;
+      })
+      .finally(() => {
+        this.sharing = false;
+      });
   }
 
   private get won(): boolean {
@@ -418,6 +490,8 @@ export class ResultScreen implements Screen {
       pending: this.pending,
       tip: this.won ? null : levelLesson(this.info.level),
       howto: !this.won && this.defeatCount >= 2,
+      share: this.shareOffered(),
+      sharing: this.sharing,
     };
   }
 
@@ -444,11 +518,15 @@ export class ResultScreen implements Screen {
     if (ex.continueCrystals !== null) list.push(both ? RESULT.continueCrystals : RESULT.continueSolo);
     if (ex.continueAd) list.push(both ? RESULT.continueAd : RESULT.continueSolo);
     if (ex.howto) list.push(RESULT.howto);
+    const share = resultShareLayout(ex, this.won).share;
+    if (share) list.push(share);
     return list;
   }
 
   down(p: PointerPoint): void {
     this.pressed = this.rects().find((r) => inRect(r, p.x, p.y)) ?? null;
+    // draw the card while the finger is down, so the share sheet opens inside the tap's user activation
+    if (this.pressed !== null && this.pressed === resultShareLayout(this.extras(), this.won).share && !this.sharing) void this.prepareShare().catch(() => undefined);
   }
 
   move(p: PointerPoint): void {
@@ -486,6 +564,7 @@ export class ResultScreen implements Screen {
     else if (hit === RESULT.menu || hit === HUD.menu) this.leave(() => this.app.goLevels());
     else if (hit === RESULT.next && ui.outcome === 'won' && ui.hasNext) this.leave(() => this.nextLevel());
     else if (hit === HUD.wallet) this.app.goShop('crystals', () => this.app.go(this));
+    else if (hit === RESULT.share || hit === RESULT.shareInline) void this.share();
     else if (hit === RESULT.howto) {
       playSfx('button');
       this.app.openHowTo(this); // the card's CLOSE / BACK / ESC return to this result screen

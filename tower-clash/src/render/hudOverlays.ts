@@ -8,7 +8,7 @@ import { drawButton, drawCard, drawExtrudedText, drawGearGlyph, drawSpeakerGlyph
 import type { PlayUi } from './draw';
 import { drawCrystal, drawGoldCoin, drawVideoGlyph } from './sprites';
 import { drawSpinner } from './economyWidgets';
-import { hudClockOf, hudExtrasOf } from './hud';
+import { hudClockOf, hudExtrasOf, resultShareLayout } from './hud';
 import { levelLesson, t } from '../ui/i18n';
 
 /*
@@ -63,7 +63,8 @@ function drawPauseCard(ctx: CanvasRenderingContext2D, state: GameState, ui: Play
 function drawResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: PlayUi, since: number): void {
   const pal = ui.palette;
   const won = ui.outcome === 'won';
-  const card = RESULT.card;
+  const layout = resultShareLayout(hudExtrasOf(ui)?.result, won);
+  const card = layout.card;
   // slide up with a bounce
   const slide = (1 - easeOutBack(Math.min(1, since / 460))) * (C.MAP_H - card.y + 40);
   ctx.save();
@@ -202,6 +203,52 @@ function drawResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: Pla
     } else if (!won && ex.skipCrystals !== null) {
       drawOfferButton(ctx, pal, RESULT.extra, t('result.skipLevel'), String(ex.skipCrystals), 'crystal', { pressed: pressed === RESULT.extra, pending: ex.pending, nowMs: since, outline: true });
     }
+    if (layout.share) drawShareButton(ctx, pal, layout.share, pressed === layout.share, ex.sharing === true, since);
+  }
+  ctx.restore();
+}
+
+/** SHARE (SHARE-1): paper button, share glyph + label; a spinner while the image is drawn / the sheet is open. */
+function drawShareButton(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, pressed: boolean, busy: boolean, nowMs: number): void {
+  drawButton(ctx, pal, r, '', { pressed, flat: true });
+  const cy = r.y + (r.h - 4) / 2 + (pressed ? 3 : 0);
+  ctx.textBaseline = 'middle';
+  if (busy) {
+    drawSpinner(ctx, pal.ink, r.x + r.w / 2, cy, 11, nowMs);
+    ctx.textAlign = 'center';
+    return;
+  }
+  const label = t('result.share');
+  const px = fitFontPx(ctx, label, 22, r.w - 74);
+  ctx.font = font(px);
+  const w = ctx.measureText(label).width;
+  const x0 = r.x + (r.w - (w + 34)) / 2;
+  drawShareGlyph(ctx, pal.ink, x0 + 11, cy, 11);
+  ctx.fillStyle = pal.ink;
+  ctx.textAlign = 'left';
+  ctx.fillText(label, x0 + 34, cy + 1);
+  ctx.textAlign = 'center';
+}
+
+/** Share glyph: three nodes joined by two links (the common "share" mark); `s` is the half height. */
+export function drawShareGlyph(ctx: CanvasRenderingContext2D, color: string, cx: number, cy: number, s: number): void {
+  const a = { x: cx + s * 0.6, y: cy - s * 0.7 };
+  const b = { x: cx - s * 0.6, y: cy };
+  const c = { x: cx + s * 0.6, y: cy + s * 0.7 };
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = Math.max(2, s * 0.2);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(a.x, a.y);
+  ctx.lineTo(b.x, b.y);
+  ctx.lineTo(c.x, c.y);
+  ctx.stroke();
+  for (const p of [a, b, c]) {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, s * 0.32, 0, Math.PI * 2);
+    ctx.fill();
   }
   ctx.restore();
 }

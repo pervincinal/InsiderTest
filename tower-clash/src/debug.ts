@@ -5,7 +5,7 @@ import type { TowerClashApp, TowerClashDebug } from './main';
 import { LEVEL_META, levelIndex } from './levels/index';
 import { toClient } from './render/view';
 import { isLevelUnlocked } from './ui/save';
-import { ResultScreen } from './ui/screens';
+import { ResultScreen, lastShareRecord } from './ui/screens';
 import type { TranslationKey } from './ui/i18n';
 import { currentLanguage, t } from './ui/i18n';
 import { configureFakeStore } from './economy/providers/fakeStore';
@@ -35,6 +35,9 @@ export function installDebug(app: TowerClashApp): TowerClashDebug {
     getLanguage: () => currentLanguage(),
     getText: (key) => t(key as TranslationKey),
     getToast: () => app.current.toast?.opts(performance.now())?.text ?? null,
+    get lastShare() {
+      return lastShareRecord();
+    },
     getResult: () => {
       if (!(app.current instanceof ResultScreen)) return null;
       const { outcome, stars, coinsEarned, coinsTotal } = app.current.info.ui;
