@@ -27,6 +27,7 @@ This page is hosted publicly (planned address: `https://pervincinal.github.io/In
 - It has no accounts, sign-in, chat, friends lists or leaderboards.
 - It has no real-money purchases. Nothing in the web version asks for payment.
 - It does not use cookies or tracking identifiers.
+- The share image (SHARE on the result card) is created on the device and leaves it only through the system share sheet or a download when the player chooses; nothing is uploaded by the game.
 
 ### Part B — Mobile app versions (Google Play, App Store)
 
@@ -136,6 +137,7 @@ Bu səhifə açıq şəkildə yerləşdirilir (planlaşdırılan ünvan: `https:
 - Hesab, giriş, çat, dost siyahısı və ya liderlər cədvəli yoxdur.
 - Real pulla alış yoxdur. Veb versiyasında heç nə ödəniş istəmir.
 - Kuki və ya izləmə identifikatorları istifadə etmir.
+- Paylaşma şəkli (nəticə kartındakı PAYLAŞ) cihazda yaradılır və yalnız oyunçu seçəndə sistemin paylaşma pəncərəsi və ya yükləmə ilə cihazdan çıxır; oyun özü heç nə yükləmir.
 
 ### B hissəsi — Mobil tətbiq versiyaları (Google Play, App Store)
 
