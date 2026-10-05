@@ -46,6 +46,7 @@ Rəng adları: **sənin qüllələrin göy**, düşmən **qırmızı**, neytral 
 | TF-17 | Tətbiqi tam bağla, yenidən aç — irəliləyiş qalır | 1 | QA-2 | S1 |
 | TF-18 | Təyyarə rejimi: oyun və GÜNLÜK kart işləyir | 2 | QA-2 | S1 açılmır · S2 kart |
 | TF-19 | 04:00 (Bakı) günlük dəyişmə (istəyə bağlı) | 3 | QA-2 | S2 |
+| TF-20 | PAYLAŞ: nəticə kartı → paylaşma pəncərəsi (WhatsApp / Telegram) | 2 | MM-8 | S2 · S3 şəkil |
 
 Ciddilik (POST_LAUNCH §5.1): **S1** — çökmə, keçilməyən / açılmayan səviyyə, irəliləyişin itməsi, döyüş zamanı və ya 1–5-ci səviyyələrdə reklam → eyni gün düzəliş. **S2** — funksiya bəzi istifadəçilərdə işləmir (dil, cihaz, mağaza) → 2 sessiya ərzində. **S3** — kosmetik, mətn, bir cihaza aid xırda şey → növbəti buraxılış.
 
@@ -191,6 +192,12 @@ Günlük cədvəl (tarix UTC-dir: Bakıda həmin gün **04:00**-dan növbəti g�
 - **Alınmasa yaz:** `TF-19 FAIL: 04:00-da kart dəyişmədi / başqa saatda dəyişdi (HH:MM)`.
 - **Bağlayır:** QA-2 · **Ciddilik:** S2.
 
+#### TF-20 · PAYLAŞ — nəticə kartından paylaşma pəncərəsi (2 dəq)
+- **Toxun:** istənilən səviyyəni bitir (qalib və ya məğlub) → nəticə kartında **PAYLAŞ** → iPhone-un paylaşma pəncərəsi açılır → **WhatsApp** və ya **Telegram** seç → özünə göndər. Sonra bir də **PAYLAŞ** → pəncərəni yuxarıdan aşağı çəkib **bağla**.
+- **Gözlənilən:** pəncərə dərhal açılır (≤ 2 s); göndərilən şəkil dik kartdır (1080×1350): biomun adası, qala, "QƏLƏBƏ"/"MƏĞLUBİYYƏT", səviyyənin adı və nömrəsi, ulduzlar, vaxt, aşağıda versiya; mətn sətri oyunun linki ilə gəlir. Bağlayanda oyun nəticə kartında qalır, heç bir xəta yazısı yoxdur. **GÜNLÜK** və **HƏFTƏLİK** nəticəsində kartda gün/həftə açarı və fənd də görünür; dünənki xəritənin (məşq) kartında **PAYLAŞ yoxdur** — bu xəta deyil.
+- **Alınmasa yaz:** `TF-20 FAIL: pəncərə açılmadı / şəkil boş-qara / mətn yanlış [skrinşot]`.
+- **Bağlayır:** MM-8 (cihaz təsdiqi) · **Ciddilik:** S2 — pəncərə açılmır və ya şəkil gəlmir; S3 — şəkildə kəsik mətn.
+
 ### Necə hesabat vermək
 
 1. Bütün nəticələri **bir mesajla** çata yaz. Hər uğursuz yoxlama üçün **bir sətir**: yoxlamanın id-si + nə oldu, altında skrinşot (və ya ekran yazısı). Uğurlu yoxlamaları sadəcə siyahı ilə yaz — sətirlərin bağlanması üçün bu da lazımdır.
@@ -245,6 +252,7 @@ Colours: **your towers are blue**, the enemy's **red**, neutral **grey**. "Notch
 | TF-17 | Kill and relaunch — progress kept | 1 | QA-2 | S1 |
 | TF-18 | Airplane mode: game and DAILY card work | 2 | QA-2 | S1 no start · S2 card |
 | TF-19 | 04:00 Baku daily rollover (optional) | 3 | QA-2 | S2 |
+| TF-20 | PAYLAŞ: result card → share sheet (WhatsApp / Telegram) | 2 | MM-8 | S2 · S3 image |
 
 Severity (POST_LAUNCH §5.1): **S1** — crash, a level that cannot be won or loaded, progress lost, an ad during a battle or in levels 1–5 → fixed the same day. **S2** — a feature blocked for some users (a language, a device, the shop) → within 2 sessions. **S3** — cosmetic, wording, a single-device quirk → next release.
 
@@ -390,6 +398,12 @@ Daily table (the date is UTC: in Baku from **04:00** that day to **03:59** the n
 - **If it fails, write:** `TF-19 FAIL: card did not change at 04:00 / changed at another time (HH:MM)`.
 - **Closes:** QA-2 · **Severity:** S2.
 
+#### TF-20 · PAYLAŞ — share sheet from the result card (2 min)
+- **Tap:** finish any level (win or loss) → **PAYLAŞ** on the result card → the iPhone share sheet opens → pick **WhatsApp** or **Telegram** → send it to yourself. Then **PAYLAŞ** once more → swipe the sheet down to **dismiss** it.
+- **Expected:** the sheet opens at once (≤ 2 s); the sent image is a portrait card (1080×1350): the biome's island, the tower, "QƏLƏBƏ"/"MƏĞLUBİYYƏT", level name and number, stars, time, the version at the bottom; a text line with the game link comes along. After dismissing, the game stays on the result card with no error text. A **DAILY** / **WEEKLY** result also shows the day/week key and the twist on the card; yesterday's map (practice) has **no PAYLAŞ** — that is not a bug.
+- **If it fails, write:** `TF-20 FAIL: sheet did not open / image blank or black / wrong text [screenshot]`.
+- **Closes:** MM-8 (device confirmation) · **Severity:** S2 — the sheet does not open or no image arrives; S3 — clipped text on the image.
+
 ### How to report
 
 1. Send all results **in one message** in the chat. For each failed check **one line**: the check id + what happened, with the screenshot (or screen recording) under it. List the passed checks as well — the backlog rows can only be closed with them.
@@ -408,5 +422,6 @@ Daily table (the date is UTC: in Baku from **04:00** that day to **03:59** the n
 
 - **MM-1 (iOS half):** TF-02, 03, 04, 06, 07, 10, 15 pass → the WebView items of MM-1 (safe areas, audio unlock, background pause, portrait, store-unavailable state) are confirmed on iOS; the Android back-button half stays with the APK pass.
 - **QA-2 (iOS half):** TF-01, 05, 08, 09, 12, 14, 16, 17, 18 pass (TF-11, TF-19 optional).
+- **MM-8 (share card on device):** TF-20 pass → the native share branch (`@capacitor/share` + `@capacitor/filesystem`) is confirmed; a sheet that never opens → the Web Share fallback path in `src/native/share.ts`.
 - **MM-4:** TF-12 without a reload to the title + TF-13 sharpness answer "crisp" → the DPR cap (`DPR_CAP.native` 2, `src/render/view.ts`) is confirmed; a reload or stutter → the two-layer fallback of docs/MOBILE.md §9.3 step 4.
 - **M3-5:** TF-13 smoothness ≥ 4/5 at ×1 on the stakeholder's phone; ≤ 3/5 → a screen recording, then the levers listed under M3-5 in the backlog.

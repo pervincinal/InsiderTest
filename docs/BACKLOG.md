@@ -7,7 +7,7 @@ Priority = order within a section. Producer moves items; anyone may add to Bugs 
 
 ## Next (ECON — Phase B/C after accounts exist)
 - [ ] ECON-1 Phase B: real RevenueCat + AdMob keys (secrets `RC_*`, `ADMOB_*`), sandbox purchase test on a device, App Store Connect / Play products created with catalog ids — mobile-engineer + publisher (needs stakeholder accounts)
-- [ ] QA-2 Real-device pass (Android APK, iPhone via TestFlight later) — needs stakeholder's phone. iOS half (2026-10-02, QA-12): TestFlight plan `docs/publishing/TESTFLIGHT_TEST_PLAN.md` ready, 19 checks TF-01…TF-19 (AZ + EN, ≈ 30 min) for build 1.0.0 (7); closes on the stakeholder's report with TF-01/05/08/09/12/14/16/17/18 OK, each FAIL filed as a BUG; the Android half still waits for the APK pass.
+- [ ] QA-2 Real-device pass (Android APK, iPhone via TestFlight later) — needs stakeholder's phone. iOS half (2026-10-02, QA-12): TestFlight plan `docs/publishing/TESTFLIGHT_TEST_PLAN.md` ready, 20 checks TF-01…TF-20 (AZ + EN, ≈ 32 min; TF-20 share sheet added 2026-10-05) for build 1.0.0 (7); closes on the stakeholder's report with TF-01/05/08/09/12/14/16/17/18 OK, each FAIL filed as a BUG; the Android half still waits for the APK pass.
 - [ ] ECON-8 `app-ads.txt` hosting needs a domain root (user-site repo or custom domain) — needs stakeholder decision
 
 ## Next
@@ -130,6 +130,7 @@ Priority = order within a section. Producer moves items; anyone may add to Bugs 
 - Local 2-player on one screen
 
 ## Done
+- 2026-10-05 Day 20 (cd0ccbd, 1f83ef3, afcf031, 2eb5cfc, 68499f7): LV-19 naive 17–50 re-sweep (no regression; level 27 named the only sub-band-3 lean loss); GD-4 level 27 ruled a learning level (lesson ×4 rewritten, layout unchanged); MM-8 Capacitor Share + Filesystem; SHARE-1 share card (result-card SHARE → PNG → share sheet / download) + privacy sentence EN/AZ; roadmap row shipped.
 - 2026-10-04 Day 19 (3e87562, 8d80ace, 98179c6): FE-6 no-store shop lists no pack-only skins + web `?store=off` switch; PUB-15 release notes build-8 paragraph, 1.0.1 = IAP (build 9), roadmap rows marked shipped, PLAN.md day 19, README counts; QA-13 e2e for the no-store shop.
 - 2026-10-03 Day 18 (bdb71fc, a599a46, 9942251): MM-7 iOS localisations en/az/ru/tr + safe insets on the first frames + background audio suspend; ECON-12 (grant-once restore, Starter Pack gate, product descriptions) and PUB-14 (two-tab shop without a store) with the matching listing / review-notes / TF-15 / build-number policy docs; FE-6 filed.
 - 2026-10-02 Day 17 (e237f06, 6ec4832, 5ce0eac, a5518c5, 82e3e97, aee9b0e; the 2026-09-29 sprint was cut short by a model usage limit and 09-30 / 10-01 had no sprint): ECON-11 skin prices confirmed + shop total 2 160; PUB-13 AdMob (§0c) and RevenueCat/IAP (§0d) click paths, ECON-12 filed; MM-6 Android signed release lane + CI keystore workflow; release lanes triggerable without the Run workflow button (tag, API, re-run); DAILY-6 yesterday's map (practice, no reward); QA-12 TestFlight test plan.
