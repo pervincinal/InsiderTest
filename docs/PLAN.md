@@ -4,7 +4,7 @@ Owner: the autonomous team (see `docs/TEAM.md`). The human stakeholder reads `re
 
 ## Milestones
 
-| # | Milestone | Target | Definition of done | Status (2026-10-05, day 20) |
+| # | Milestone | Target | Definition of done | Status (2026-10-06, day 21) |
 |---|---|---|---|---|
 | M0 | Foundations | Day 1 (2026-09-13) | Project scaffolded, deterministic sim with generation/send/capture/upgrade, canvas renderer, 5 levels, unit tests green, playable in browser | **Done** 2026-09-13 |
 | M1 | Vertical slice | Day 5 | Enemy AI with 3 personalities, fortress + artillery, win/lose/stars, level select + save, 15 levels, Playwright smoke test, CI workflow | **Done** 2026-09-13 (day 1) |
