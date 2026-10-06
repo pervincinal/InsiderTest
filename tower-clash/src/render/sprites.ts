@@ -47,7 +47,8 @@ export interface TowerDrawOptions {
  * Equipped cosmetics as the renderer wants them (`ROOF_SKINS`, `HELMET_SKINS`, `THEME_IDS`).
  * Catalog → sprite: roof_slate → roof.slate, roof_pagoda → roof.pagoda, roof_onion → roof.onion,
  * roof_gold → roof.gold, roof_thatch → roof.thatch, roof_glass → roof.glass (skin drop #1, ART-10);
- * helmet_bronze / viking / knight / samurai / royal → helmet.<same>;
+ * helmet_bronze / viking / knight / samurai / royal → helmet.<same>, helmet_crusader → helmet.crusader,
+ * helmet_spartan → helmet.spartan (skin drop #2, ART-11);
  * theme_dusk → theme.dusk, theme_winter_night → theme.winter_night, theme_neon → theme.neon.
  * Unknown / missing ids draw the default look.
  */
@@ -61,7 +62,7 @@ export interface TowerSkin {
 /** Values of `TowerSkin.roof`: roof materials, plus the tower silhouettes (`tower.*`, M3-2) that replace the whole building. */
 export const ROOF_SKINS = ['roof.default', 'roof.gold', 'roof.iron', 'roof.slate', 'roof.tent', 'roof.pagoda', 'roof.onion', 'roof.thatch', 'roof.glass', 'tower.keep', 'tower.watchtower'] as const;
 /** Values of `TowerSkin.helmet`: helmets, plus the unit silhouettes (`unit.*`, M3-2) that reshape soldiers and tanks. */
-export const HELMET_SKINS = ['helmet.default', 'helmet.plume', 'helmet.bronze', 'helmet.viking', 'helmet.knight', 'helmet.samurai', 'helmet.royal', 'unit.shieldwall', 'unit.robots'] as const;
+export const HELMET_SKINS = ['helmet.default', 'helmet.plume', 'helmet.bronze', 'helmet.viking', 'helmet.knight', 'helmet.samurai', 'helmet.royal', 'helmet.crusader', 'helmet.spartan', 'unit.shieldwall', 'unit.robots'] as const;
 export { THEME_IDS } from './palette';
 
 /*
@@ -114,6 +115,8 @@ const LAZY_MATERIALS: ReadonlySet<string> = new Set([
   'helmet.knight',
   'helmet.samurai',
   'helmet.royal',
+  'helmet.crusader',
+  'helmet.spartan',
 ]);
 
 const SKIN_CHUNK = 'skinShapes';

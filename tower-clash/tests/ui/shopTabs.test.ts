@@ -229,7 +229,7 @@ describe('pack-only skins (FE-6)', () => {
     }
     // roof_thatch moves into the slot roof_gold had with the store
     expect(o.skins.find((c) => c.id === 'roof_thatch')?.rect).toEqual(full.skins.find((c) => c.id === 'roof_gold')?.rect);
-    // helmets: 5 cards (two rows) → 3 (one row), so the content and the max scroll lose one row
+    // helmets: 7 cards (three rows, skin drop #2) → 5 (two rows), so the content and the max scroll lose one row
     const row = SHOP.skin.h + SHOP.skin.gapY;
     expect(maxScroll(shop)).toBe(fullMax - row);
     // tapping the old roof_gold slot hits roof_thatch (an unaffordable crystal skin → toast, no PACK ONLY toast)
@@ -251,6 +251,19 @@ describe('pack-only skins (FE-6)', () => {
     expect(o.skins.map((c) => c.id)).not.toContain('roof_gold');
     shop.equipSkin('helmet_royal', 'helmet');
     expect(lastDraw(shop).skins.find((c) => c.id === 'helmet_royal')).toMatchObject({ owned: true, equipped: true });
+  });
+
+  it('skin drop #2 (ART-11): the crusader and spartan helmets are crystal skins listed with and without a store, after the launch helmets', () => {
+    for (const storeOn of [true, false]) {
+      available = storeOn;
+      const o = lastDraw(new ShopScreen(fakeApp(save), 'skins'));
+      const helmets = o.skins.filter((c) => c.id.startsWith('helmet_')).map((c) => c.id);
+      expect(helmets.slice(-2), `store ${storeOn}`).toEqual(['helmet_crusader', 'helmet_spartan']);
+      expect(o.skins.find((c) => c.id === 'helmet_crusader'), `store ${storeOn}`).toMatchObject({ spriteId: 'helmet.crusader', cost: 120, owned: false, locked: false });
+      expect(o.skins.find((c) => c.id === 'helmet_spartan'), `store ${storeOn}`).toMatchObject({ spriteId: 'helmet.spartan', cost: 150, owned: false, locked: false });
+    }
+    expect(PACK_ONLY).not.toContain('helmet_crusader');
+    expect(PACK_ONLY).not.toContain('helmet_spartan');
   });
 
   it('store available (web): the full catalog list, pack-only skins shown with PACK ONLY as before', () => {

@@ -187,6 +187,16 @@ describe('economy catalog (docs/ECONOMY.md)', () => {
       ['roof_thatch', 120],
       ['roof_glass', 150],
     ]);
+    // skin drop #2 (ART-11, 2026-10-06): two new helmets after the five launch helmets, on the 100 / 120 / 150 ladder (Monetization to confirm)
+    expect(SKINS.filter((s) => s.category === 'unitHelmet').map((s) => [s.id, s.costCrystals, s.source])).toEqual([
+      ['helmet_bronze', 0, 'starter'],
+      ['helmet_viking', 100, 'shop'],
+      ['helmet_knight', 120, 'shop'],
+      ['helmet_samurai', 150, 'shop'],
+      ['helmet_royal', 0, 'premium'],
+      ['helmet_crusader', 120, 'shop'],
+      ['helmet_spartan', 150, 'shop'],
+    ]);
     expect(SKINS.filter((s) => s.category === 'towerShape').map((s) => [s.id, s.costCrystals])).toEqual([
       ['tower_keep', 150],
       ['tower_watchtower', 200],

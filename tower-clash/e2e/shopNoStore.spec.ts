@@ -34,7 +34,7 @@ function shopSkinRect(top: number, i: number): R {
 const SKIN_BUTTON_BELOW_LABEL = 51;
 // src/economy/catalog.ts — SKINS (catalog order = card order) and the Slate price
 const SLATE_COST = 80;
-const SHOP_SKINS = ['roof_slate', 'roof_pagoda', 'roof_onion', 'roof_thatch', 'roof_glass', 'helmet_viking', 'helmet_knight', 'helmet_samurai'] as const;
+const SHOP_SKINS = ['roof_slate', 'roof_pagoda', 'roof_onion', 'roof_thatch', 'roof_glass', 'helmet_viking', 'helmet_knight', 'helmet_samurai', 'helmet_crusader', 'helmet_spartan'] as const;
 const PACK_SKINS = ['roof_gold', 'helmet_bronze', 'helmet_royal'] as const;
 const SEEDED_CRYSTALS = 200;
 const SAVE_KEY = 'towerclash.save.v3';

@@ -211,6 +211,9 @@ export const SKINS = [
   { id: 'helmet_knight', label: 'Knight helmet', category: 'unitHelmet', costCrystals: 120, source: 'shop' },
   { id: 'helmet_samurai', label: 'Samurai helmet', category: 'unitHelmet', costCrystals: 150, source: 'shop' },
   { id: 'helmet_royal', label: 'Royal helmet', category: 'unitHelmet', costCrystals: 0, source: 'premium' },
+  /** Skin drop #2 (ART-11, 2026-10-06): prices proposed by the Tech Artist on the helmet ladder (100 / 120 / 150); the Monetization Designer confirms (ECONOMY.md §3.3). */
+  { id: 'helmet_crusader', label: 'Crusader helmet', category: 'unitHelmet', costCrystals: 120, source: 'shop' },
+  { id: 'helmet_spartan', label: 'Spartan helmet', category: 'unitHelmet', costCrystals: 150, source: 'shop' },
   { id: 'theme_dusk', label: 'Dusk', category: 'terrainTheme', costCrystals: 150, source: 'shop' },
   { id: 'theme_winter_night', label: 'Winter night', category: 'terrainTheme', costCrystals: 200, source: 'shop' },
   { id: 'theme_neon', label: 'Neon', category: 'terrainTheme', costCrystals: 200, source: 'shop' },

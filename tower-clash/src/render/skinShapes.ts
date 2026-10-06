@@ -1011,7 +1011,14 @@ function sawTeeth(ctx: CanvasRenderingContext2D, style: RoofStyle, x: number, to
 }
 
 /** Bronze helmet clay. */
-const BRONZE: Tones = { lit: '#f0c070', mid: '#c98a3e', shade: '#8a5a24' };
+export const BRONZE: Tones = { lit: '#f0c070', mid: '#c98a3e', shade: '#8a5a24' };
+/**
+ * Skin drop #2 (ART-11, 2026-10-06). Crusader great helm: white enamel, not the knight's dark steel
+ * (mid ≥ 30 ΔE from every owner clay of both palettes — 32 vs neutral grey, the closest).
+ */
+export const ENAMEL: Tones = { lit: '#ffffff', mid: '#f8edc6', shade: '#cfb984' };
+/** Spartan (Corinthian) helm: dark hoplite bronze, a step deeper than the Bronze helmet's clay. */
+export const HOPLITE: Tones = { lit: '#e0a458', mid: '#a45f22', shade: '#62360f' };
 
 /** Rivet dots along an eave (iron skin). */
 function rivets(ctx: CanvasRenderingContext2D, tones: Tones, x: number, y: number, rx: number, ry: number): void {
@@ -1238,7 +1245,9 @@ function plume(ctx: CanvasRenderingContext2D, outline: string, px: number, py: n
  * Helmet skins at soldier scale (`s` = 1 is a 20 px soldier, ≈ 10 px on a 360 px phone), so each
  * one is a colour plus a single silhouette feature: bronze = bronze cap + nose guard, viking =
  * cream horns, knight = steel great helm with a visor slit, samurai = wide brim + gold crest,
- * royal = gold rim + plume. Bodies stay owner-coloured so ownership never depends on the helmet.
+ * royal = gold rim + plume; skin drop #2 (ART-11): crusader = flat-topped white box with a dark
+ * cross slit and an owner-coloured lid, spartan = round bronze helm with a T opening under a tall
+ * owner-coloured crest. Bodies stay owner-coloured so ownership never depends on the helmet.
  */
 function drawHelmet(ctx: CanvasRenderingContext2D, pal: Palette, st: UnitStyle, id: string, hx: number, hy: number, s: number, dx: number): void {
   const capY = hy - 0.8 * s;
@@ -1340,6 +1349,77 @@ function drawHelmet(ctx: CanvasRenderingContext2D, pal: Palette, st: UnitStyle, 
       ctx.stroke();
       plume(ctx, pal.goldShade, hx, hy - 5.2 * s, -dx * 7 * s, s, 1.2);
       break;
+    case 'helmet.crusader': {
+      // flat-topped great helm in white enamel over the whole head: a square silhouette (the knight
+      // is a round dark ball), shade offset away from the light, lit edge on the left
+      const w = 9.4 * s;
+      const h = 10.2 * s;
+      const left = hx - w / 2;
+      const top = hy - 5.8 * s;
+      ctx.fillStyle = ENAMEL.shade;
+      roundRect(ctx, { x: left + 0.9 * s, y: top + 0.6 * s, w, h }, 1.4 * s);
+      ctx.fill();
+      ctx.fillStyle = ENAMEL.mid;
+      roundRect(ctx, { x: left, y: top, w, h }, 1.4 * s);
+      ctx.fill();
+      ctx.fillStyle = ENAMEL.lit;
+      ctx.fillRect(left + 0.9 * s, top + 2.6 * s, 1.4 * s, h - 4.4 * s);
+      // owner-coloured lid band squares off the flat top
+      ctx.fillStyle = st.shade;
+      ctx.fillRect(left, top + 1.2 * s, w, 1 * s);
+      ctx.fillStyle = st.mid;
+      ctx.fillRect(left, top, w, 1.6 * s);
+      // dark cross slit: eye slit across, breath slit down to the chin (a long-footed cross, not a plus sign)
+      ctx.fillStyle = pal.metal.shade;
+      ctx.fillRect(hx - 3.7 * s, hy - 1.9 * s, 7.4 * s, 1.6 * s);
+      ctx.fillRect(hx - 0.75 * s, hy - 3.5 * s, 1.5 * s, 7.4 * s);
+      break;
+    }
+    case 'helmet.spartan': {
+      // tall transverse crest in the owner's clay (behind the bowl): shade outline, mid fan, lit bristles
+      const cx = hx - dx * 0.6 * s;
+      const cy = hy - 3.4 * s;
+      ctx.fillStyle = st.shade;
+      ctx.beginPath();
+      ctx.ellipse(cx + 0.5 * s, cy, 4.8 * s, 7.6 * s, 0, Math.PI, TAU);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = st.mid;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, 4.2 * s, 7 * s, 0, Math.PI, TAU);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = st.lit;
+      ctx.lineWidth = 0.8 * s;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      for (const a of [-0.9, -0.3, 0.3]) {
+        ctx.moveTo(cx + Math.sin(a) * 1.6 * s, cy - Math.cos(a) * 2.6 * s);
+        ctx.lineTo(cx + Math.sin(a) * 3.4 * s, cy - Math.cos(a) * 6 * s);
+      }
+      ctx.stroke();
+      // Corinthian bowl over the whole head, cheek guards down to the chin
+      ctx.fillStyle = HOPLITE.shade;
+      ctx.beginPath();
+      ctx.arc(hx + 0.7 * s, hy - 0.1 * s, 4.8 * s, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = HOPLITE.mid;
+      ctx.beginPath();
+      ctx.arc(hx, hy - 0.4 * s, 4.8 * s, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = HOPLITE.lit;
+      ctx.lineWidth = 1.3 * s;
+      ctx.beginPath();
+      ctx.arc(hx, hy - 0.4 * s, 3.7 * s, Math.PI * 1.02, Math.PI * 1.6);
+      ctx.stroke();
+      // dark T opening (eye bar + mouth slot), split by the nose guard
+      ctx.fillStyle = pal.metal.shade;
+      ctx.fillRect(hx - 3.5 * s, hy - 1.7 * s, 7 * s, 1.6 * s);
+      ctx.fillRect(hx - 0.8 * s, hy - 1.7 * s, 1.6 * s, 5.5 * s);
+      ctx.fillStyle = HOPLITE.mid;
+      ctx.fillRect(hx - 0.45 * s, hy - 2.1 * s, 0.9 * s, 2.4 * s);
+      break;
+    }
     default:
       cap(st.helmet);
   }
