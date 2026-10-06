@@ -350,7 +350,7 @@ describe('PlayScreen in weekly mode', () => {
     expect(shell.starts).toEqual([{ levelId: 999, seed: w.seed, opts: { weekly: w } }]);
   });
 
-  it('week 4 of a streak: weekly_streak_4 is granted on the result screen, its toast beats the 3★ target toast (ECONOMY.md §6.3)', () => {
+  it('week 4 of a streak: weekly_streak_4 is granted on the result screen, its toast beats the week-streak and 3★ target toasts (ECONOMY.md §6.3)', () => {
     save.weekly = { lastWinWeek: LAST_WEEK, streak: 3, best: {} };
     const shell = fakeApp(save);
     const w = weekly();
@@ -359,10 +359,11 @@ describe('PlayScreen in weekly mode', () => {
     winNow(play, { now: 0 });
     const result = shell.current() as ResultScreen;
     expect(result).toBeInstanceOf(ResultScreen);
-    expect(result.info.weeklyOutcome).toMatchObject({ firstWin: true, streak: 4, targetHit: true, gold: WEEKLY_REWARD.gold, crystals: WEEKLY_REWARD.crystals });
+    // WK-1: the week-4 milestone (15) rides in `crystals` beside the target; the achievement stacks on top
+    expect(result.info.weeklyOutcome).toMatchObject({ firstWin: true, streak: 4, targetHit: true, gold: WEEKLY_REWARD.gold, milestone: 15, crystals: WEEKLY_REWARD.crystals + 15 });
     expect(result.info.achievements.unlocked.map((a) => a.id)).toEqual(['weekly_streak_4']);
     expect(result.info.achievements.crystals).toBe(20);
-    expect(save.crystals).toBe(3 + WEEKLY_REWARD.crystals + 20);
+    expect(save.crystals).toBe(3 + WEEKLY_REWARD.crystals + 15 + 20);
     expect(save.achievements.unlocked).toEqual(['weekly_streak_4']);
     result.enter();
     const now = performance.now();
@@ -372,7 +373,7 @@ describe('PlayScreen in weekly mode', () => {
     shell.app.go(replay);
     winNow(replay, { now: 1000 });
     expect((shell.current() as ResultScreen).info.achievements).toEqual({ unlocked: [], crystals: 0 });
-    expect(save.crystals).toBe(3 + WEEKLY_REWARD.crystals + 20);
+    expect(save.crystals).toBe(3 + WEEKLY_REWARD.crystals + 15 + 20);
   });
 
   it('a lost weekly pays nothing and offers no continue', () => {

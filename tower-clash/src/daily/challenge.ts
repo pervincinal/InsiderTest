@@ -37,6 +37,17 @@ export const STREAK_MILESTONES = [
   [30, 100],
 ] as const;
 
+/**
+ * Week-streak milestones (WK-1, GDD §8.1): `[weeks, crystals]`, paid once by `recordWeeklyResult` when
+ * the first win of a week brings `save.weekly.streak` to exactly `weeks`. No ledger: the streak passes
+ * each value once per run, so a broken and rebuilt run pays again.
+ */
+export const WEEKLY_STREAK_MILESTONES = [
+  [4, 15],
+  [8, 30],
+  [12, 60],
+] as const;
+
 export interface DailyChallenge {
   dayKey: string; // YYYY-MM-DD (UTC)
   levelId: number;

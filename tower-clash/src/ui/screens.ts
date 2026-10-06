@@ -399,10 +399,17 @@ export class ResultScreen implements Screen {
     const d = this.info.daily;
     const w = this.info.weeklyOutcome;
     // the daily result line (hud.ts) carries the crystal total; the milestone itself is named by a toast
-    // (the weekly's 3★ target bonus takes the same slot, GDD §8.2)
+    // (the weekly's week-streak bonus (WK-1) and 3★ target bonus take the same slot, GDD §8.2) —
+    // priority: achievement > daily milestone > week-streak milestone > 3★ target
     const text =
       achievementToastText(this.info.achievements) ??
-      (d?.milestone ? t('daily.milestone', { day: d.streak, crystals: d.milestone }) : w?.targetHit ? t('weekly.resultTarget', { crystals: w.crystals }) : null);
+      (d?.milestone
+        ? t('daily.milestone', { day: d.streak, crystals: d.milestone })
+        : w?.milestone
+          ? t('weekly.resultMilestone', { n: w.streak, crystals: w.milestone })
+          : w?.targetHit
+            ? t('weekly.resultTarget', { crystals: w.crystals - w.milestone })
+            : null);
     if (text) this.toast.show(text, 'ok', performance.now(), 3500);
     if (this.shareOffered()) void loadShareChunk().catch(() => undefined); // warm: the tap's activation must not wait on the network
   }

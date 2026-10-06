@@ -104,7 +104,7 @@ function info(over: Partial<ResultInfo> & { outcome?: 'won' | 'lost'; stars?: nu
 const daily: DailyChallenge = { dayKey: DAY, levelId: 12, seed: 4242, twist: lean };
 const weekly: WeeklyChallenge = { weekKey: WEEK, levelId: 12, seed: 99, twist: thin, targetMs: 30_000 };
 const dailyOutcome = (practice: boolean): DailyOutcome => ({ dayKey: DAY, won: true, stars: 3, firstWin: !practice, gold: 0, crystals: 0, milestone: 0, streak: 1, best: null, ...(practice ? { practice: true as const } : {}) });
-const weeklyOutcome: WeeklyOutcome = { weekKey: WEEK, won: true, stars: 2, firstWin: true, gold: 50, targetHit: false, crystals: 0, streak: 1, best: null, targetMs: 30_000 };
+const weeklyOutcome: WeeklyOutcome = { weekKey: WEEK, won: true, stars: 2, firstWin: true, gold: 50, targetHit: false, crystals: 0, milestone: 0, streak: 1, best: null, targetMs: 30_000 };
 
 afterEach(async () => {
   await setLanguage('en');

@@ -7,11 +7,14 @@
  * Like the daily (src/ui/daily.ts) this is a separate ledger from the campaign: a weekly win never
  * awards level stars, first-clear gold, milestones or achievements. Two rewards, each once per week
  * key: `WEEKLY_REWARD.gold` on the first win (any stars) and `WEEKLY_REWARD.crystals` the first time
- * an attempt's clock is at or under the level's 3★ target (`targetMs`) — first or later attempt.
+ * an attempt's clock is at or under the level's 3★ target (`targetMs`) — first or later attempt. Plus
+ * a one-time week-streak bonus (`WEEKLY_STREAK_MILESTONES`, WK-1) when the first win of a week brings
+ * the streak to exactly 4 / 8 / 12 — derived from the streak value alone (no save field, as the
+ * streak passes each value once per run), so a broken and rebuilt streak earns it again.
  */
 import type { LevelDef } from '../sim/types';
 import type { WeeklyChallenge } from '../daily/challenge';
-import { WEEKLY_BEST_KEEP, WEEKLY_REWARD, WEEKLY_UNLOCK_AFTER_LEVEL } from '../daily/challenge';
+import { WEEKLY_BEST_KEEP, WEEKLY_REWARD, WEEKLY_STREAK_MILESTONES, WEEKLY_UNLOCK_AFTER_LEVEL } from '../daily/challenge';
 import { earnCrystals, earnGold } from '../economy/wallet';
 import type { SaveData, WeeklyBest } from './save';
 import { pruneChallengeBest, starsFor, writeSave } from './save';
@@ -62,9 +65,12 @@ export interface WeeklyOutcome {
   /** First win of the week: `gold` below was paid. */
   firstWin: boolean;
   gold: number;
-  /** This attempt reached the 3★ target for the first time this week: `crystals` below was paid. */
+  /** This attempt reached the 3★ target for the first time this week: `WEEKLY_REWARD.crystals` was paid (in `crystals`). */
   targetHit: boolean;
+  /** Crystals paid: the 3★-target crystals (when `targetHit`) + `milestone`. */
   crystals: number;
+  /** Week-streak bonus included in `crystals` (0 unless this first win brought the streak to 4 / 8 / 12). */
+  milestone: number;
   /** Week streak after this result (0 on a loss when no streak is live). */
   streak: number;
   /** Best result of the week after this result, or null (never won this week). */
@@ -75,12 +81,13 @@ export interface WeeklyOutcome {
 /**
  * Record a finished weekly match. A loss changes nothing. A win updates the week's best (more stars,
  * then less time); the first win of the week advances the streak (+1 when last week was won, else 1)
- * and pays the gold once; the first attempt at or under the target pays the crystals once.
+ * and pays the gold once, plus the week-streak bonus when the new streak is a `WEEKLY_STREAK_MILESTONES`
+ * value; the first attempt at or under the target pays the crystals once. One `earnCrystals` with the sum.
  */
 export function recordWeeklyResult(save: SaveData, challenge: WeeklyChallenge, level: Pick<LevelDef, 'star3' | 'star2'>, outcome: 'won' | 'lost', timeMs: number): WeeklyOutcome {
   const { weekKey, targetMs } = challenge;
   const w = save.weekly;
-  const out: WeeklyOutcome = { weekKey, won: outcome === 'won', stars: 0, firstWin: false, gold: 0, targetHit: false, crystals: 0, streak: shownWeekStreak(save, weekKey), best: w.best[weekKey] ?? null, targetMs };
+  const out: WeeklyOutcome = { weekKey, won: outcome === 'won', stars: 0, firstWin: false, gold: 0, targetHit: false, crystals: 0, milestone: 0, streak: shownWeekStreak(save, weekKey), best: w.best[weekKey] ?? null, targetMs };
   if (outcome !== 'won') return out;
   const stars = starsFor(level, timeMs);
   out.stars = stars;
@@ -91,7 +98,6 @@ export function recordWeeklyResult(save: SaveData, challenge: WeeklyChallenge, l
     best.target = true;
     out.targetHit = true;
     out.crystals = WEEKLY_REWARD.crystals;
-    earnCrystals(save, out.crystals);
   }
   w.best[weekKey] = best;
   w.best = pruneChallengeBest(w.best, WEEKLY_BEST_KEEP);
@@ -100,9 +106,13 @@ export function recordWeeklyResult(save: SaveData, challenge: WeeklyChallenge, l
     out.firstWin = true;
     w.streak = w.lastWinWeek === previousWeekKey(weekKey) ? w.streak + 1 : 1;
     w.lastWinWeek = weekKey;
+    const m = WEEKLY_STREAK_MILESTONES.find(([weeks]) => weeks === w.streak);
+    if (m) out.milestone = m[1];
+    out.crystals += out.milestone;
     out.gold = WEEKLY_REWARD.gold;
     earnGold(save, out.gold);
   }
+  if (out.crystals > 0) earnCrystals(save, out.crystals);
   out.streak = Math.min(STREAK_SHOWN_MAX, w.streak);
   writeSave(save);
   return out;
