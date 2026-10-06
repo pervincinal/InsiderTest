@@ -186,8 +186,8 @@ function drawInfoCard(ctx: CanvasRenderingContext2D, pal: Palette, spec: ShareCa
   ctx.restore();
   const title = spec.won ? t('result.victory') : t('result.defeat');
   const titlePx = fitFontPx(ctx, title, 88, card.w - 80);
-  if (spec.won) drawExtrudedText(ctx, title, SHARE_W / 2, card.y + 60, titlePx, { face: pal.gold, side: pal.goldShade, outline: pal.ink, depth: 8 });
-  else drawExtrudedText(ctx, title, SHARE_W / 2, card.y + 60, titlePx, { face: pal.paper, side: shade(pal.owners.enemy1, -0.45), outline: pal.ink, depth: 8 });
+  if (spec.won) drawExtrudedText(ctx, title, SHARE_W / 2, card.y + 66, titlePx, { face: pal.gold, side: pal.goldShade, outline: pal.ink, depth: 8 });
+  else drawExtrudedText(ctx, title, SHARE_W / 2, card.y + 66, titlePx, { face: pal.paper, side: shade(pal.owners.enemy1, -0.45), outline: pal.ink, depth: 8 });
 
   // rows under the banner, centred in the remaining space
   const challenge = challengeLine(spec);
