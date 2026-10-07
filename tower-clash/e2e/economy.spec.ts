@@ -51,6 +51,16 @@ const SKIN_ROOFS_TOP = 194; // SHOP.row.y0 - 6
 // roofs (6 since skin drop #1, 2026-09-28 → still 2 rows) then helmets (7 since skin drop #2, 2026-10-06 → 3 rows) then terrain themes (3), each section 22 px under the previous one
 const SKIN_HELMETS_TOP = SKIN_ROOFS_TOP + 46 + 2 * (236 + 16) - 16 + 22;
 const SKIN_THEMES_TOP = SKIN_HELMETS_TOP + 46 + 3 * (236 + 16) - 16 + 22;
+// QA-15 helmets (skin drop #2, ART-11): src/economy/catalog.ts SKINS (Crusader 120, Spartan 150; Crusader is helmet card #5 of 7),
+// src/render/skinShapes.ts ENAMEL.mid (the Crusader helm's face colour, used by nothing else), src/render/menusShop.ts drawSkinCard
+const CRUSADER_COST = 120;
+const SPARTAN_COST = 150;
+const CRUSADER_INDEX = 5;
+const CRUSADER_ENAMEL = '#f8edc6';
+const SKIN_BUTTON_BELOW_LABEL = 51;
+const HELMET_SEED_CRYSTALS = 200;
+const HELMET_SCROLL = 400; // brings helmet rows 2–3 (Crusader, Spartan) into the 1280 px view
+type HelmetRecWindow = Window & { __qaTexts: { t: string; dx: number; dy: number }[] | null; __qaFills: Set<string> | null };
 // src/render/layout.ts — RESULT
 const RESULT = { next: { x: 84, y: 780, w: 170, h: 72 }, menu: { x: 466, y: 780, w: 170, h: 72 }, continueAd: { x: 368, y: 700, w: 268, h: 62 }, howto: { x: 250, y: 638, w: 220, h: 34 } };
 // src/render/menuLayout.ts — HOWTO.close
@@ -303,6 +313,140 @@ test.describe('economy', () => {
     await tapTab(page, 'crystals');
     await tapRect(page, SHOP.back);
     await expect.poll(() => screen(page)).toBe('title');
+    expect(errors).toEqual([]);
+  });
+
+  test('helmets (skin drop #2): SKINS lists Crusader 120 / Spartan 150; buying Crusader equips it and the player soldiers wear it in level 1', async ({ page }) => {
+    // QA-15. The shop is canvas-drawn and the debug surface has no card list, so (as e2e/shopNoStore.spec.ts) an init
+    // script records the strings drawn on #game; the in-game look is read the same way from the fill colours: the
+    // Crusader helm is the only thing in the game painted in its white enamel (src/render/skinShapes.ts ENAMEL), and
+    // soldiers are drawn every frame (no sprite cache), so the colour shows up exactly while a player soldier wearing
+    // it is on screen. Control first: the same level with no helmet equipped never paints it.
+    await page.addInitScript(() => {
+      const w = window as unknown as HelmetRecWindow;
+      w.__qaTexts = null;
+      w.__qaFills = null;
+      const proto = CanvasRenderingContext2D.prototype;
+      const origText = proto.fillText;
+      proto.fillText = function (s: string, x: number, y: number, maxWidth?: number): void {
+        const rec = w.__qaTexts;
+        if (rec && this.canvas.id === 'game') {
+          const m = this.getTransform();
+          rec.push({ t: String(s), dx: m.a * x + m.c * y + m.e, dy: m.b * x + m.d * y + m.f });
+        }
+        if (maxWidth === undefined) origText.call(this, s, x, y);
+        else origText.call(this, s, x, y, maxWidth);
+      };
+      const origFill = proto.fill;
+      proto.fill = function (this: CanvasRenderingContext2D, ...args: unknown[]): void {
+        if (w.__qaFills && typeof this.fillStyle === 'string') w.__qaFills.add(this.fillStyle);
+        (origFill as (...a: unknown[]) => void).apply(this, args);
+      };
+      const origRect = proto.fillRect;
+      proto.fillRect = function (x: number, y: number, rw: number, rh: number): void {
+        if (w.__qaFills && typeof this.fillStyle === 'string') w.__qaFills.add(this.fillStyle);
+        origRect.call(this, x, y, rw, rh);
+      };
+    });
+    const errors = await boot(page, { version: 3, gold: 0, crystals: HELMET_SEED_CRYSTALS, stars: { '1': 3 }, settings: { language: 'en' } });
+    const text = (key: string) => page.evaluate((k) => window.__towerclash.getText(k), key);
+    /** Fill colours used while level 1 runs with a player soldier on the map (≥ 6 frames after the first soldier). */
+    const playLevelOneFills = async (): Promise<string[]> => {
+      await page.evaluate(() => {
+        window.__towerclash.loadLevel(1, 1);
+        window.__towerclash.autoplay();
+      });
+      await expect.poll(() => screen(page)).toBe('play');
+      await expect.poll(() => page.evaluate(() => window.__towerclash.getState()?.units.filter((u) => u.owner === 'player').length ?? 0), { timeout: 20_000 }).toBeGreaterThan(0);
+      return page.evaluate(async () => {
+        const w = window as unknown as HelmetRecWindow;
+        w.__qaFills = new Set();
+        for (let i = 0; i < 6; i++) await new Promise((r) => requestAnimationFrame(r));
+        const out = [...w.__qaFills];
+        w.__qaFills = null;
+        return out;
+      });
+    };
+    /** Strings drawn on #game over three frames, in logical (720×1280) coordinates. */
+    const drawnTexts = () =>
+      page.evaluate(async () => {
+        const w = window as unknown as HelmetRecWindow;
+        w.__qaTexts = [];
+        for (let i = 0; i < 3; i++) await new Promise((r) => requestAnimationFrame(r));
+        const rec = w.__qaTexts ?? [];
+        w.__qaTexts = null;
+        const c = document.getElementById('game') as HTMLCanvasElement;
+        const b = c.getBoundingClientRect();
+        const o = window.__towerclash.toClient(0, 0);
+        const e = window.__towerclash.toClient(720, 1280);
+        return rec.map(({ t, dx, dy }) => {
+          const cx = b.left + (dx * b.width) / c.width;
+          const cy = b.top + (dy * b.height) / c.height;
+          return { t, x: ((cx - o.x) * 720) / (e.x - o.x), y: ((cy - o.y) * 1280) / (e.y - o.y) };
+        });
+      });
+    type Drawn = Awaited<ReturnType<typeof drawnTexts>>[number];
+    /** The buy / state button under the card label `label` (drawSkinCard: label at card.y + 142, button 51 px lower). */
+    const buttonOf = (texts: Drawn[], label: string): string | null => {
+      const name = texts.find((d) => d.t === label);
+      if (!name) return null;
+      return texts.find((d) => d !== name && Math.abs(d.y - (name.y + SKIN_BUTTON_BELOW_LABEL)) <= 14 && Math.abs(d.x - name.x) <= 100)?.t ?? null;
+    };
+
+    // control: no helmet equipped → no enamel on the battlefield
+    const plain = await playLevelOneFills();
+    expect(plain.length).toBeGreaterThan(3);
+    expect(plain).not.toContain(CRUSADER_ENAMEL);
+
+    await page.evaluate(() => window.__towerclash.economy.openShop('skins'));
+    await expect.poll(() => screen(page)).toBe('shop');
+    const scroll = await page.evaluate((y) => window.__towerclash.economy.shopScroll(y), HELMET_SCROLL);
+    expect(scroll).toBe(HELMET_SCROLL);
+    const crusader = await text('skin.helmet_crusader.short');
+    const spartan = await text('skin.helmet_spartan.short');
+    let texts = await drawnTexts();
+    expect(texts.map((d) => d.t)).toContain(await text('shop.helmets'));
+    expect(buttonOf(texts, crusader)).toBe(String(CRUSADER_COST));
+    expect(buttonOf(texts, spartan)).toBe(String(SPARTAN_COST));
+    // the cards sit where the layout puts helmets #5 and #6 (catalog order: bronze, viking, knight, samurai, royal, crusader, spartan)
+    const helmetCard = (i: number) => {
+      const r = shopSkinRect(SKIN_HELMETS_TOP, i);
+      return { ...r, y: r.y - scroll };
+    };
+    const at = (label: string) => texts.find((d) => d.t === label)!;
+    for (const [label, i] of [
+      [crusader, CRUSADER_INDEX],
+      [spartan, CRUSADER_INDEX + 1],
+    ] as const) {
+      const card = helmetCard(i);
+      expect(at(label).x, label).toBeGreaterThanOrEqual(card.x);
+      expect(at(label).x, label).toBeLessThanOrEqual(card.x + card.w);
+      expect(Math.abs(at(label).y - (card.y + 142)), label).toBeLessThanOrEqual(8);
+    }
+
+    // buy Crusader: crystals −120, owned and equipped in the helmet slot; the card says EQUIPPED
+    await tapRect(page, helmetCard(CRUSADER_INDEX));
+    await expect.poll(async () => (await save(page)).skins.equipped.helmet).toBe('helmet_crusader');
+    let s = await save(page);
+    expect(s.crystals).toBe(HELMET_SEED_CRYSTALS - CRUSADER_COST);
+    expect(s.skins.owned).toEqual(['helmet_crusader']);
+    expect(s.skins.equipped.roof).toBeNull();
+    texts = await drawnTexts();
+    expect(buttonOf(texts, crusader)).toBe(await text('shop.equipped'));
+    // Spartan (150) is now out of reach with 80 crystals: a tap changes nothing
+    await tapRect(page, helmetCard(CRUSADER_INDEX + 1));
+    await page.waitForTimeout(150);
+    s = await save(page);
+    expect(s.crystals).toBe(HELMET_SEED_CRYSTALS - CRUSADER_COST);
+    expect(s.skins.owned).toEqual(['helmet_crusader']);
+    expect(s.skins.equipped.helmet).toBe('helmet_crusader');
+    // persisted, not only in memory
+    const stored = await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? '{}') as { skins?: { equipped?: { helmet?: string | null } } }, SAVE_KEY);
+    expect(stored.skins?.equipped?.helmet).toBe('helmet_crusader');
+
+    // in game: the player's soldiers wear the white enamel helm
+    const worn = await playLevelOneFills();
+    expect(worn).toContain(CRUSADER_ENAMEL);
     expect(errors).toEqual([]);
   });
 
