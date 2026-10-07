@@ -32,7 +32,7 @@ const budgetArg = args.indexOf('--budget');
  */
 const DEFAULT_GZIP_BUDGET = 80 * 1024;
 /** Package name fragments that must never appear in the eagerly loaded chunks. */
-const FORBIDDEN_STRINGS = ['purchases-capacitor', 'capacitor-community/admob'];
+const FORBIDDEN_STRINGS = ['purchases-capacitor', 'capacitor-community/admob', 'capacitor-community/in-app-review'];
 
 const budget = budgetArg >= 0 ? Number(args[budgetArg + 1]) : DEFAULT_GZIP_BUDGET;
 if (!Number.isInteger(budget) || budget <= 0) {

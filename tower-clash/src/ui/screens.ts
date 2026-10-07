@@ -34,6 +34,7 @@ import { restartLevel } from './daily';
 import type { WeeklyOutcome } from './weekly';
 import type { PreparedShare, ShareRecord } from './share';
 import { loadChunk } from '../lazyChunk';
+import { maybeAskForReview } from '../native/review';
 
 /** A screen owns drawing and input while it is current. */
 export interface Screen {
@@ -412,6 +413,7 @@ export class ResultScreen implements Screen {
             : null);
     if (text) this.toast.show(text, 'ok', performance.now(), 3500);
     if (this.shareOffered()) void loadShareChunk().catch(() => undefined); // warm: the tap's activation must not wait on the network
+    void maybeAskForReview(this.info, this.app.save); // MM-9 rating prompt: off by default, never rejects
   }
 
   /** SHARE (SHARE-1) is on every result except Yesterday's map — a practice run has no reward and nothing to prove. */

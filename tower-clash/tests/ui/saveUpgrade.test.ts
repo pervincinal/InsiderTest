@@ -50,6 +50,7 @@ const KNOWN_KEYS = [
   'defeats',
   'skips',
   'achievements',
+  'reviewAsked', // MM-9 (2026-10-07): build 7 never asked → false
   'settings',
 ] as const;
 

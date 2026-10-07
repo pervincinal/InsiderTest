@@ -138,6 +138,11 @@ export interface SaveData {
   skips: number[];
   /** Unlocked achievement ids (crystals are granted once, at unlock). Added without a schema bump. */
   achievements: AchievementState;
+  /**
+   * The rating prompt (MM-9, `src/native/review.ts`) already asked the OS once on this install.
+   * Added without a schema bump: missing = never asked. Survives `resetProgress`.
+   */
+  reviewAsked: boolean;
   settings: Settings;
 }
 
@@ -161,6 +166,7 @@ export function defaultSave(): SaveData {
     defeats: {},
     skips: [],
     achievements: { unlocked: [] },
+    reviewAsked: false,
     settings: { colorBlind: false, sound: true, reducedMotion: 'auto' },
   };
 }
@@ -299,6 +305,7 @@ export function normalizeSave(raw: unknown): SaveData {
   out.defeats = countMap(raw.defeats);
   out.skips = intList(raw.skips);
   if (isRecord(raw.achievements)) out.achievements = { unlocked: stringList(raw.achievements.unlocked) };
+  out.reviewAsked = raw.reviewAsked === true;
   if (isRecord(raw.settings)) {
     const s = raw.settings;
     if (typeof s.colorBlind === 'boolean') out.settings.colorBlind = s.colorBlind;
@@ -375,6 +382,7 @@ export function resetProgress(data: SaveData): void {
   fresh.settings = data.settings;
   fresh.purchases = data.purchases;
   fresh.entitlements = data.entitlements;
+  fresh.reviewAsked = data.reviewAsked; // "once per install", not once per progress
   // pack-exclusive skins come from store purchases (not progress) and stay owned; crystal skins are wiped
   fresh.skins.owned = data.skins.owned.filter(isExclusiveSkin);
   Object.assign(data, fresh);

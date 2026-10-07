@@ -190,6 +190,7 @@
       "grand_campaign"
     ]
   },
+  "reviewAsked": false,
   "settings": {
     "colorBlind": true,
     "sound": false,
