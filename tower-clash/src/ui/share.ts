@@ -1,6 +1,6 @@
 import type { Palette } from '../render/palette';
 import type { ShareCardSpec } from '../render/shareCard';
-import { SHARE_H, SHARE_W, challengeLine, drawShareCard } from '../render/shareCard';
+import { SHARE_H, SHARE_W, challengeLine, drawShareCard, loadShareFonts } from '../render/shareCard';
 import { formatTime } from '../render/widgets';
 import type { NativeShareResult } from '../native/share';
 import { shareImage } from '../native/share';
@@ -181,8 +181,9 @@ export function browserShareEnv(): ShareEnv {
   };
 }
 
-/** Draw the card on an offscreen canvas and encode it as a PNG file. */
+/** Draw the card on an offscreen canvas (after its faces are loaded) and encode it as a PNG file. */
 export async function renderShareFile(spec: ShareCardSpec, pal: Palette): Promise<File> {
+  await loadShareFonts(spec);
   const canvas = document.createElement('canvas');
   canvas.width = SHARE_W;
   canvas.height = SHARE_H;

@@ -25,16 +25,17 @@ function weightOf(weight: FontWeight): 500 | 700 {
   return weight === 'normal' || weight === '500' ? 500 : 700;
 }
 
-export function font(px: number, weight: FontWeight = 'bold'): string {
-  return `${weightOf(weight)} ${px}px ${FONT}`;
+/** CSS font shorthand; `family` defaults to the game stack (the share card passes its Cyrillic stack). */
+export function font(px: number, weight: FontWeight = 'bold', family: string = FONT): string {
+  return `${weightOf(weight)} ${px}px ${family}`;
 }
 
 /**
  * Largest size ≤ `px` at which `text` fits `maxWidth` (translated headings vary a lot in length,
  * e.g. "LEVELS" → "SƏVİYYƏLƏR"). Measures once at `px` and scales linearly; leaves `ctx.font` set.
  */
-export function fitFontPx(ctx: CanvasRenderingContext2D, text: string, px: number, maxWidth: number, weight: FontWeight = '700'): number {
-  ctx.font = font(px, weight);
+export function fitFontPx(ctx: CanvasRenderingContext2D, text: string, px: number, maxWidth: number, weight: FontWeight = '700', family: string = FONT): number {
+  ctx.font = font(px, weight, family);
   const w = ctx.measureText(text).width;
   if (w <= maxWidth || w <= 0) return px;
   return Math.max(8, Math.floor((px * maxWidth) / w));
@@ -281,6 +282,8 @@ export interface ExtrudeStyle {
   outline?: string;
   /** Extrusion depth in px (default 6). */
   depth?: number;
+  /** Font family stack (default the game's `FONT`). */
+  family?: string;
   /** Extrusion direction (default lower-right, matching the key light). */
   dx?: number;
   dy?: number;
@@ -299,7 +302,7 @@ export function drawExtrudedText(ctx: CanvasRenderingContext2D, text: string, x:
   const dy = s.dy ?? 1;
   const outline = s.outline ?? '#1e2a44';
   ctx.save();
-  ctx.font = font(px, s.weight ?? '700');
+  ctx.font = font(px, s.weight ?? '700', s.family);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.lineJoin = 'round';

@@ -6,7 +6,8 @@ import { resultShareLayout } from '../../src/render/hud';
 import { RESULT } from '../../src/render/layout';
 import { HUD_OVERLAYS } from '../../src/render/hudOverlays';
 import type { ShareCardSpec } from '../../src/render/shareCard';
-import { SHARE_H, SHARE_W, drawShareCard } from '../../src/render/shareCard';
+import { SHARE_CYRILLIC_FACE, SHARE_H, SHARE_ROW_H, SHARE_W, drawShareCard, loadShareFonts, shareCardTexts, shareFontFamily, shareInfoRows } from '../../src/render/shareCard';
+import { FONT } from '../../src/render/widgets';
 import { createAdSession } from '../../src/economy/adsFlow';
 import { createState } from '../../src/sim/create';
 import type { DailyChallenge, WeeklyChallenge } from '../../src/daily/challenge';
@@ -38,6 +39,8 @@ const thin = TWISTS.find((tw) => tw.id === 'thinWalls')!;
 interface Recording extends CanvasRenderingContext2D {
   texts: string[];
   stops: string[];
+  /** `ctx.font` at every fillText, keyed by the text (the last draw wins). */
+  fonts: Map<string, string>;
 }
 
 /** Canvas stand-in that records drawn text and gradient colours; every other call is a no-op. */
@@ -45,12 +48,18 @@ function recordingCtx(): Recording {
   const store: Record<string | symbol, unknown> = {};
   const texts: string[] = [];
   const stops: string[] = [];
+  const fonts = new Map<string, string>();
   return new Proxy({} as Recording, {
     get(_t, key) {
       if (key === 'texts') return texts;
       if (key === 'stops') return stops;
+      if (key === 'fonts') return fonts;
       if (key === 'measureText') return (s: string) => ({ width: s.length * 10 });
-      if (key === 'fillText') return (s: string) => void texts.push(s);
+      if (key === 'fillText')
+        return (s: string) => {
+          texts.push(s);
+          fonts.set(s, String(store['font']));
+        };
       if (key === 'createLinearGradient' || key === 'createRadialGradient') return () => ({ addColorStop: (_o: number, c: string) => void stops.push(c) });
       if (key in store) return store[key];
       return () => undefined;
@@ -440,5 +449,154 @@ describe('share card drawing (1080 × 1350)', () => {
     drawShareCard(ctx, DEFAULT_PALETTE, spec());
     expect(ctx.texts).toContain(t('result.victory'));
     expect(ctx.texts).toContain('Səviyyə 12 · Crossfire');
+  });
+});
+
+describe('share card ART-12: defeat rows and one family per line', () => {
+  const spec = (over: Partial<ShareCardSpec> = {}): ShareCardSpec => ({ levelId: 3, levelName: 'Free Real Estate', won: false, stars: 0, timeMs: 54_000, challenge: null, version: appVersion(), ...over });
+  const count = (xs: string[], x: string) => xs.filter((y) => y === x).length;
+  const familyOf = (cssFont: string) => cssFont.replace(/^\S+ \d+(?:\.\d+)?px /, '');
+
+  it('a defeat shows level, three empty star slots and the clock — the campaign-win rhythm, not two rows in an empty card', () => {
+    expect(shareInfoRows(spec())).toEqual(['level', 'stars', 'time']);
+    expect(shareInfoRows(spec({ won: true, stars: 2 }))).toEqual(['level', 'stars', 'time']);
+    expect(shareInfoRows(spec({ challenge: { kind: 'daily', key: DAY, twist: 'Lean rations' } }))).toEqual(['level', 'challenge', 'stars', 'time']);
+    // 74 + 140 + 70 = 284 of the 368 px under the banner (500 − 8 − 124): 42 px above and below
+    const h = shareInfoRows(spec()).reduce((a, r) => a + SHARE_ROW_H[r], 0);
+    expect(h).toBe(284);
+    expect((500 - 8 - 124 - h) / 2).toBe(42);
+  });
+
+  it('the defeat stars are drawn, all three off (palette starOff); a 2★ win has one off, a 3★ win none', () => {
+    const lost = recordingCtx();
+    drawShareCard(lost, DEFAULT_PALETTE, spec());
+    expect(count(lost.stops, DEFAULT_PALETTE.starOff)).toBe(3);
+    // a defeat never lights a star, whatever the spec says (pal.star = pal.gold is also the header / title face, so
+    // the off-star colour is the one counted)
+    const odd = recordingCtx();
+    drawShareCard(odd, DEFAULT_PALETTE, spec({ stars: 3 }));
+    expect(count(odd.stops, DEFAULT_PALETTE.starOff)).toBe(3);
+    const won = recordingCtx();
+    drawShareCard(won, DEFAULT_PALETTE, spec({ won: true, stars: 2 }));
+    expect(count(won.stops, DEFAULT_PALETTE.starOff)).toBe(1);
+    const won3 = recordingCtx();
+    drawShareCard(won3, COLOR_BLIND_PALETTE, spec({ won: true, stars: 3 }));
+    expect(count(won3.stops, COLOR_BLIND_PALETTE.starOff)).toBe(0);
+    // the defeat card still draws exactly its text rows: no new string, so no new locale key
+    expect(lost.texts.filter((s, i, a) => a.indexOf(s) === i)).toEqual(['TOWER CLASH', 'DEFEAT', 'Level 3 · Free Real Estate', 'Time 00:54', `towerclash · v${appVersion()}`]);
+  });
+
+  it('font rule: a line with Cyrillic → Nunito (the share face first), any other line → Fredoka (the game stack)', () => {
+    expect(shareFontFamily('Уровень 3 · Ничейная земля')).toBe(`'Nunito Share', 'Nunito', ${FONT}`);
+    expect(shareFontFamily('Время 00:54')).toMatch(/^'Nunito Share', 'Nunito', 'Fredoka'/);
+    for (const latin of ['TOWER CLASH', 'Level 3 · Free Real Estate', 'Səviyyə 3 · Sahibsiz Torpaq', 'YENİLGİ', 'MƏĞLUBİYYƏT', 'Time 00:54', 'towerclash · v1.0.0 (build 7)']) {
+      expect(shareFontFamily(latin), latin).toBe(FONT);
+      expect(FONT.startsWith("'Fredoka'")).toBe(true);
+    }
+    // the share face: the bundled Cyrillic file, at wght 900 (matches Fredoka 700's stroke), Cyrillic only
+    expect(SHARE_CYRILLIC_FACE).toEqual({ family: 'Nunito Share', url: './fonts/nunito-cyrillic.woff2', unicodeRange: 'U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116', weight: '900' });
+  });
+
+  it('Russian card: every Cyrillic line is set in the Nunito stack at weight 700, the Latin header / footer in Fredoka', async () => {
+    await setLanguage('ru');
+    const ctx = recordingCtx();
+    const s = spec({ levelName: 'Ничейная земля', challenge: { kind: 'daily', key: DAY, twist: 'Быстрые ноги' } });
+    drawShareCard(ctx, DEFAULT_PALETTE, s);
+    const texts = shareCardTexts(s);
+    expect(texts).toEqual(['TOWER CLASH', t('result.defeat'), 'Уровень 3 · Ничейная земля', `Ежедневный ${DAY} · Быстрые ноги`, 'Время 00:54', `towerclash · v${appVersion()}`]);
+    for (const text of texts) {
+      const f = ctx.fonts.get(text);
+      expect(f, text).toBeDefined();
+      expect(familyOf(f!), text).toBe(/[А-Яа-яЁё]/.test(text) ? `'Nunito Share', 'Nunito', ${FONT}` : FONT);
+      // the weight stays one of Fredoka's two bundled faces (the digits in a Russian line come from Fredoka 700)
+      expect(f!.split(' ')[0], text).toBe(text.startsWith('towerclash') ? '500' : '700');
+    }
+  });
+
+  it('English / Azerbaijani cards draw no line in the Nunito stack', async () => {
+    for (const lang of ['en', 'az'] as const) {
+      await setLanguage(lang);
+      const ctx = recordingCtx();
+      drawShareCard(ctx, DEFAULT_PALETTE, spec({ challenge: { kind: 'weekly', key: WEEK, twist: 'Thin walls' } }));
+      expect([...ctx.fonts.values()].every((f) => familyOf(f) === FONT), lang).toBe(true);
+    }
+  });
+
+  describe('loadShareFonts (faces loaded before the card is drawn)', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    function fakeFonts(loadImpl: () => Promise<unknown> = () => Promise.resolve([])) {
+      const loads: { font: string; text: string }[] = [];
+      const added: { family: string; source: string; desc: FontFaceDescriptors; loaded: boolean }[] = [];
+      class FakeFace {
+        loaded = false;
+        constructor(
+          public family: string,
+          public source: string,
+          public desc: FontFaceDescriptors
+        ) {}
+        load() {
+          this.loaded = true;
+          return Promise.resolve(this);
+        }
+      }
+      vi.stubGlobal('FontFace', FakeFace);
+      vi.stubGlobal('document', {
+        baseURI: 'https://example.test/game/index.html',
+        fonts: {
+          load: (font: string, text: string) => {
+            loads.push({ font, text });
+            return loadImpl();
+          },
+          add: (f: FakeFace) => void added.push(f),
+        },
+      });
+      return { loads, added };
+    }
+
+    it('Latin card: loads each line in its Fredoka face (500 for the footer), registers no extra face', async () => {
+      const { loads, added } = fakeFonts();
+      const s = spec();
+      await loadShareFonts(s);
+      expect(added).toEqual([]);
+      expect(loads.map((l) => l.text)).toEqual([...shareCardTexts(s), `towerclash · v${appVersion()}`]);
+      expect(loads.every((l) => familyOf(l.font) === FONT)).toBe(true);
+      expect(loads.filter((l) => l.font.startsWith('500 ')).map((l) => l.text)).toEqual([`towerclash · v${appVersion()}`]);
+    });
+
+    it('Russian card: registers the share face once (absolute URL, wght 900, Cyrillic range) and loads it before drawing', async () => {
+      await setLanguage('ru');
+      const { loads, added } = fakeFonts();
+      const s = spec({ levelName: 'Ничейная земля' });
+      await loadShareFonts(s);
+      await loadShareFonts(s);
+      expect(added).toHaveLength(1);
+      expect(added[0]!.family).toBe('Nunito Share');
+      expect(added[0]!.source).toBe("url('https://example.test/game/fonts/nunito-cyrillic.woff2') format('woff2')");
+      expect(added[0]!.desc).toMatchObject({ weight: '900', unicodeRange: SHARE_CYRILLIC_FACE.unicodeRange, display: 'block' });
+      expect(added[0]!.loaded).toBe(true);
+      expect(loads.filter((l) => l.text === 'Уровень 3 · Ничейная земля').map((l) => familyOf(l.font))).toEqual([`'Nunito Share', 'Nunito', ${FONT}`, `'Nunito Share', 'Nunito', ${FONT}`]);
+    });
+
+    it('a font that never loads does not block the share (bounded wait); no Font Loading API → no-op', async () => {
+      fakeFonts(() => new Promise(() => undefined));
+      vi.useFakeTimers();
+      try {
+        const done = loadShareFonts(spec(), 2000);
+        let settled = false;
+        void done.then(() => (settled = true));
+        await vi.advanceTimersByTimeAsync(1999);
+        expect(settled).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(settled).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
+      vi.unstubAllGlobals();
+      vi.stubGlobal('document', {});
+      await expect(loadShareFonts(spec())).resolves.toBeUndefined();
+    });
   });
 });

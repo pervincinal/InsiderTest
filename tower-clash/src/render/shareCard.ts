@@ -1,6 +1,6 @@
 import type { Palette } from './palette';
 import { biomeFor, shade, withAlpha } from './palette';
-import { drawCard, drawExtrudedText, drawStar, fitFontPx, font, formatTime, innerHighlight, roundRect } from './widgets';
+import { FONT, drawCard, drawExtrudedText, drawStar, fitFontPx, font, formatTime, innerHighlight, roundRect } from './widgets';
 import { drawTowerShadow, drawTowerSprite } from './sprites';
 import { drawBush, makeRng } from './terrain';
 import { t } from '../ui/i18n';
@@ -17,11 +17,28 @@ import { t } from '../ui/i18n';
  *   300–720   an island in the level's biome colours (grass, cliff, path, bushes, dots) carrying one
  *             big L3 tower — the player's colour on a win, the first enemy's on a defeat
  *   740–1240  paper card: a coloured banner with VICTORY / DEFEAT, then "Level N · name", the
- *             daily / weekly key + twist (the line that makes the card verifiable), the stars (win)
- *             and the clear time — the rows are centred in the space under the banner
+ *             daily / weekly key + twist (the line that makes the card verifiable), the stars and
+ *             the clock — the rows are centred in the space under the banner. A defeat shows the
+ *             three star slots empty (ART-12): the same three rows as a campaign win, so the card
+ *             reads as "0 of 3 — your turn" instead of two lines floating in an empty card
  *   ~1298     footer "towerclash · v<version>"
  * The palette passed in is the player's (default or colour-blind); nothing animates, so reduced
  * motion has nothing to stop.
+ *
+ * Fonts (ART-12): one family per line. A line with Cyrillic in it (Russian UI) is set in Nunito,
+ * every other line in Fredoka (`shareFontFamily`). The bundled Nunito file is Google's Cyrillic
+ * subset (U+0400–045F, U+0490–0491, U+04B0–04B1, U+0301, U+2116 + space / NBSP — checked against
+ * its cmap 2026-10-07): it has **no Latin digits, no ':' and no '·'**, so those still come from
+ * Fredoka 700 in a Russian line ("Уровень 3 · …", "Время 00:54"). Fallback chosen instead of a new
+ * font file: the Cyrillic is drawn heavier, from the same bundled variable file (wght axis
+ * 200–1000) registered once more as the share-only face `Nunito Share` at wght 900, which matches
+ * Fredoka 700's stroke — at Nunito 700 the Fredoka digits looked a weight heavier than the
+ * letters (QA-14). The line's font weight stays 700 (Fredoka's face for the digits); the face's
+ * `weight: '900'` descriptor makes the browser clamp the variable axis to 900 (CSS Fonts 4).
+ * `loadShareFonts` loads every face a card needs before it is drawn; plain Nunito follows in the
+ * stack, so a share face that failed to load falls back to the game's Nunito 700, never to a
+ * system face. A one-family Russian line would need a Nunito Latin subset file (≈ 20 kB, not
+ * bundled; ART-12 report, 2026-10-07).
  */
 
 export const SHARE_W = 1080;
@@ -53,11 +70,102 @@ export const SHARE_LAYOUT = Object.freeze({
   footerY: 1298,
 });
 
+/** Cyrillic letters (Russian UI text). */
+const CYRILLIC = /[\u0400-\u04FF]/;
+
+/** Share-only face: the bundled Nunito Cyrillic file at wght 900 (see the header). */
+export const SHARE_CYRILLIC_FACE = Object.freeze({
+  family: 'Nunito Share',
+  url: './fonts/nunito-cyrillic.woff2',
+  /** Same range as index.html's Nunito face. */
+  unicodeRange: 'U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116',
+  weight: '900',
+});
+
+/** True when `text` contains Cyrillic. */
+export function hasCyrillic(text: string): boolean {
+  return CYRILLIC.test(text);
+}
+
+/**
+ * Font family stack for one share-card line: a line with Cyrillic → Nunito (the share face, then
+ * the game's Nunito 700 as its loading fallback, then the game stack for the digits / punctuation
+ * the Cyrillic subset lacks); anything else → the game stack, i.e. Fredoka.
+ */
+export function shareFontFamily(text: string): string {
+  return hasCyrillic(text) ? `'${SHARE_CYRILLIC_FACE.family}', 'Nunito', ${FONT}` : FONT;
+}
+
 /** The challenge line of the card and of the share text ("Daily 2026-10-05 · Lean rations"), or null. */
 export function challengeLine(spec: ShareCardSpec): string | null {
   const c = spec.challenge;
   if (!c) return null;
   return t(c.kind === 'weekly' ? 'share.weekly' : 'share.daily', { key: c.key, twist: c.twist });
+}
+
+/** The rows of the info card under the banner, top to bottom. */
+export type ShareRow = 'level' | 'challenge' | 'stars' | 'time';
+
+/** Row heights (px of the 1080 × 1350 image). */
+export const SHARE_ROW_H: Readonly<Record<ShareRow, number>> = Object.freeze({ level: 74, challenge: 58, stars: 140, time: 70 });
+
+/** Rows of the info card: level, the challenge line (daily / weekly), the stars (empty on a defeat), the clock. */
+export function shareInfoRows(spec: ShareCardSpec): ShareRow[] {
+  return ['level', ...(spec.challenge ? (['challenge'] as const) : []), 'stars', 'time'];
+}
+
+function titleText(spec: ShareCardSpec): string {
+  return spec.won ? t('result.victory') : t('result.defeat');
+}
+function levelLine(spec: ShareCardSpec): string {
+  return t('share.level', { n: spec.levelId, name: spec.levelName });
+}
+function timeLine(spec: ShareCardSpec): string {
+  return t('result.time', { time: formatTime(spec.timeMs) });
+}
+function footerText(spec: ShareCardSpec): string {
+  return `towerclash · v${spec.version}`;
+}
+
+/** Every line of text the card draws, in drawing order (font loading, tests). */
+export function shareCardTexts(spec: ShareCardSpec): string[] {
+  const challenge = challengeLine(spec);
+  return ['TOWER CLASH', titleText(spec), levelLine(spec), ...(challenge ? [challenge] : []), timeLine(spec), footerText(spec)];
+}
+
+let cyrillicFace: FontFace | null = null;
+
+/**
+ * Load every face the card for `spec` draws with (Fredoka 500 / 700 for the subsets its text uses;
+ * for Cyrillic text the share face and the game's Nunito) before `drawShareCard`, so the PNG is
+ * never painted in a fallback face. The boot already waits for Fredoka (and Nunito in Russian),
+ * so this normally resolves at once. Bounded: a missing font never blocks the share. No-op without
+ * the CSS Font Loading API (unit tests).
+ */
+export async function loadShareFonts(spec: ShareCardSpec, timeoutMs = 2000): Promise<void> {
+  const fonts = typeof document === 'undefined' ? undefined : (document as { fonts?: FontFaceSet }).fonts;
+  if (!fonts || typeof fonts.load !== 'function') return;
+  const loads: Promise<unknown>[] = [];
+  const texts = shareCardTexts(spec);
+  if (texts.some(hasCyrillic) && typeof FontFace === 'function') {
+    if (!cyrillicFace) {
+      const f = SHARE_CYRILLIC_FACE;
+      const url = typeof document.baseURI === 'string' ? new URL(f.url, document.baseURI).href : f.url;
+      cyrillicFace = new FontFace(f.family, `url('${url}') format('woff2')`, { weight: f.weight, unicodeRange: f.unicodeRange, display: 'block' });
+      fonts.add(cyrillicFace);
+    }
+    loads.push(cyrillicFace.load());
+  }
+  for (const text of texts) {
+    const family = shareFontFamily(text);
+    loads.push(fonts.load(font(32, '700', family), text));
+    if (text.startsWith('towerclash')) loads.push(fonts.load(font(32, '500', family), text));
+  }
+  const all = Promise.all(loads).then(() => undefined);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<void>((resolve) => (timer = setTimeout(resolve, timeoutMs)));
+  await Promise.race([all, timeout]).catch(() => undefined);
+  if (timer !== undefined) clearTimeout(timer);
 }
 
 /** Draw the whole card into `ctx`, whose user space is the 1080 × 1350 image. */
@@ -70,9 +178,10 @@ export function drawShareCard(ctx: CanvasRenderingContext2D, pal: Palette, spec:
   drawInfoCard(ctx, pal, spec);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = font(30, '500');
+  const footer = footerText(spec);
+  ctx.font = font(30, '500', shareFontFamily(footer));
   ctx.fillStyle = withAlpha(pal.ink, 0.72);
-  ctx.fillText(`towerclash · v${spec.version}`, SHARE_W / 2, SHARE_LAYOUT.footerY, SHARE_W - 120);
+  ctx.fillText(footer, SHARE_W / 2, SHARE_LAYOUT.footerY, SHARE_W - 120);
   ctx.restore();
 }
 
@@ -184,59 +293,42 @@ function drawInfoCard(ctx: CanvasRenderingContext2D, pal: Palette, spec: ShareCa
   ctx.fillStyle = shade(bannerColor, -0.3);
   ctx.fillRect(card.x, card.y + bannerH - 6, card.w, 6);
   ctx.restore();
-  const title = spec.won ? t('result.victory') : t('result.defeat');
-  const titlePx = fitFontPx(ctx, title, 88, card.w - 80);
-  if (spec.won) drawExtrudedText(ctx, title, SHARE_W / 2, card.y + 66, titlePx, { face: pal.gold, side: pal.goldShade, outline: pal.ink, depth: 8 });
-  else drawExtrudedText(ctx, title, SHARE_W / 2, card.y + 66, titlePx, { face: pal.paper, side: shade(pal.owners.enemy1, -0.45), outline: pal.ink, depth: 8 });
+  const title = titleText(spec);
+  const titleFamily = shareFontFamily(title);
+  const titlePx = fitFontPx(ctx, title, 88, card.w - 80, '700', titleFamily);
+  // BUG-20: the title's centre stays at card.y + 66 (AZ / TR dotted capitals clear the card top)
+  if (spec.won) drawExtrudedText(ctx, title, SHARE_W / 2, card.y + 66, titlePx, { face: pal.gold, side: pal.goldShade, outline: pal.ink, depth: 8, family: titleFamily });
+  else drawExtrudedText(ctx, title, SHARE_W / 2, card.y + 66, titlePx, { face: pal.paper, side: shade(pal.owners.enemy1, -0.45), outline: pal.ink, depth: 8, family: titleFamily });
 
-  // rows under the banner, centred in the remaining space
+  // rows under the banner, centred in the remaining space (heights: SHARE_ROW_H)
   const challenge = challengeLine(spec);
-  const rows: { h: number; draw: (cy: number) => void }[] = [];
   const maxW = card.w - 80;
-  const levelText = t('share.level', { n: spec.levelId, name: spec.levelName });
-  rows.push({
-    h: 74,
-    draw: (cy) => {
-      ctx.fillStyle = pal.ink;
-      ctx.font = font(fitFontPx(ctx, levelText, 54, maxW));
-      ctx.fillText(levelText, SHARE_W / 2, cy);
+  const levelText = levelLine(spec);
+  const timeText = timeLine(spec);
+  const textRow = (text: string, px: number, color: string) => (cy: number) => {
+    const family = shareFontFamily(text);
+    ctx.fillStyle = color;
+    ctx.font = font(fitFontPx(ctx, text, px, maxW, '700', family), '700', family);
+    ctx.fillText(text, SHARE_W / 2, cy);
+  };
+  const draws: Record<ShareRow, (cy: number) => void> = {
+    level: textRow(levelText, 54, pal.ink),
+    challenge: challenge ? textRow(challenge, 38, pal.accent) : () => undefined,
+    // a defeat keeps the three slots, all empty: the same rhythm as a win, and the stake is visible
+    stars: (cy) => {
+      for (let i = 0; i < 3; i++) drawStar(ctx, pal, SHARE_W / 2 + (i - 1) * 160, cy, 58, spec.won && i < spec.stars);
     },
-  });
-  if (challenge) {
-    rows.push({
-      h: 58,
-      draw: (cy) => {
-        ctx.fillStyle = pal.accent;
-        ctx.font = font(fitFontPx(ctx, challenge, 38, maxW));
-        ctx.fillText(challenge, SHARE_W / 2, cy);
-      },
-    });
-  }
-  if (spec.won) {
-    rows.push({
-      h: 140,
-      draw: (cy) => {
-        for (let i = 0; i < 3; i++) drawStar(ctx, pal, SHARE_W / 2 + (i - 1) * 160, cy, 58, i < spec.stars);
-      },
-    });
-  }
-  const timeText = t('result.time', { time: formatTime(spec.timeMs) });
-  rows.push({
-    h: 70,
-    draw: (cy) => {
-      ctx.fillStyle = spec.won ? pal.ink : pal.textDim;
-      ctx.font = font(fitFontPx(ctx, timeText, 46, maxW));
-      ctx.fillText(timeText, SHARE_W / 2, cy);
-    },
-  });
+    time: textRow(timeText, 46, spec.won ? pal.ink : pal.textDim),
+  };
+  const rows = shareInfoRows(spec);
   const top = card.y + bannerH;
   const space = card.h - 8 - bannerH;
-  const total = rows.reduce((a, r) => a + r.h, 0);
+  const total = rows.reduce((a, r) => a + SHARE_ROW_H[r], 0);
   let y = top + (space - total) / 2;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   for (const row of rows) {
-    row.draw(y + row.h / 2);
-    y += row.h;
+    draws[row](y + SHARE_ROW_H[row] / 2);
+    y += SHARE_ROW_H[row];
   }
 }
