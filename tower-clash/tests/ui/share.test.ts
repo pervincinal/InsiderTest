@@ -6,8 +6,9 @@ import { resultShareLayout } from '../../src/render/hud';
 import { RESULT } from '../../src/render/layout';
 import { HUD_OVERLAYS } from '../../src/render/hudOverlays';
 import type { ShareCardSpec } from '../../src/render/shareCard';
-import { SHARE_CYRILLIC_FACE, SHARE_H, SHARE_ROW_H, SHARE_W, drawShareCard, loadShareFonts, shareCardTexts, shareFontFamily, shareInfoRows } from '../../src/render/shareCard';
-import { FONT } from '../../src/render/widgets';
+import { SHARE_H, SHARE_ROW_H, SHARE_W, drawShareCard, loadShareFonts, shareCardTexts, shareFontFamily, shareInfoRows } from '../../src/render/shareCard';
+import { FONT, FONT_RU, font, uiFont } from '../../src/render/widgets';
+import { resetRussianFacesForTests } from '../../src/render/fonts';
 import { createAdSession } from '../../src/economy/adsFlow';
 import { createState } from '../../src/sim/create';
 import type { DailyChallenge, WeeklyChallenge } from '../../src/daily/challenge';
@@ -486,40 +487,66 @@ describe('share card ART-12: defeat rows and one family per line', () => {
     expect(lost.texts.filter((s, i, a) => a.indexOf(s) === i)).toEqual(['TOWER CLASH', 'DEFEAT', 'Level 3 · Free Real Estate', 'Time 00:54', `towerclash · v${appVersion()}`]);
   });
 
-  it('font rule: a line with Cyrillic → Nunito (the share face first), any other line → Fredoka (the game stack)', () => {
-    expect(shareFontFamily('Уровень 3 · Ничейная земля')).toBe(`'Nunito Share', 'Nunito', ${FONT}`);
-    expect(shareFontFamily('Время 00:54')).toMatch(/^'Nunito Share', 'Nunito', 'Fredoka'/);
+  it('font rule (ART-13): a line with Cyrillic → the Nunito-first stack, any other line → Fredoka (the game stack)', () => {
+    expect(FONT_RU.startsWith("'Nunito', 'Fredoka',")).toBe(true);
+    expect(FONT.startsWith("'Fredoka'")).toBe(true);
+    expect(shareFontFamily('Уровень 3 · Ничейная земля')).toBe(FONT_RU);
+    expect(shareFontFamily('Время 00:54')).toBe(FONT_RU);
     for (const latin of ['TOWER CLASH', 'Level 3 · Free Real Estate', 'Səviyyə 3 · Sahibsiz Torpaq', 'YENİLGİ', 'MƏĞLUBİYYƏT', 'Time 00:54', 'towerclash · v1.0.0 (build 7)']) {
       expect(shareFontFamily(latin), latin).toBe(FONT);
-      expect(FONT.startsWith("'Fredoka'")).toBe(true);
     }
-    // the share face: the bundled Cyrillic file, at wght 900 (matches Fredoka 700's stroke), Cyrillic only
-    expect(SHARE_CYRILLIC_FACE).toEqual({ family: 'Nunito Share', url: './fonts/nunito-cyrillic.woff2', unicodeRange: 'U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116', weight: '900' });
+    // the ART-12 share-only face (Nunito at wght 900) is gone: one family per Russian line needs no weight matching
+    expect([FONT, FONT_RU].some((f) => f.includes('Nunito Share'))).toBe(false);
   });
 
-  it('Russian card: every Cyrillic line is set in the Nunito stack at weight 700, the Latin header / footer in Fredoka', async () => {
+  it('Russian card: every Russian line is wholly Nunito (digits included) at the design weight 700; header / footer Fredoka', async () => {
     await setLanguage('ru');
     const ctx = recordingCtx();
     const s = spec({ levelName: 'Ничейная земля', challenge: { kind: 'daily', key: DAY, twist: 'Быстрые ноги' } });
     drawShareCard(ctx, DEFAULT_PALETTE, s);
     const texts = shareCardTexts(s);
     expect(texts).toEqual(['TOWER CLASH', t('result.defeat'), 'Уровень 3 · Ничейная земля', `Ежедневный ${DAY} · Быстрые ноги`, 'Время 00:54', `towerclash · v${appVersion()}`]);
-    for (const text of texts) {
+    const russian = texts.filter((text) => /[А-Яа-яЁё]/.test(text));
+    expect(russian).toHaveLength(4); // title, level, challenge, time
+    for (const text of russian) {
       const f = ctx.fonts.get(text);
       expect(f, text).toBeDefined();
-      expect(familyOf(f!), text).toBe(/[А-Яа-яЁё]/.test(text) ? `'Nunito Share', 'Nunito', ${FONT}` : FONT);
-      // the weight stays one of Fredoka's two bundled faces (the digits in a Russian line come from Fredoka 700)
-      expect(f!.split(' ')[0], text).toBe(text.startsWith('towerclash') ? '500' : '700');
+      // Nunito is the first family of the line: its Latin face (index.html) carries the digits, ':' and '·'
+      expect(familyOf(f!), text).toBe(FONT_RU);
+      expect(familyOf(f!).split(',')[0], text).toBe("'Nunito'");
+      expect(f!.split(' ')[0], text).toBe('700');
+    }
+    // the brand lines are the same picture in every language — Fredoka, even though the UI stack is Nunito-first now
+    expect(uiFont()).toBe(FONT_RU);
+    expect(ctx.fonts.get('TOWER CLASH')!.split(' ')[0]).toBe('700');
+    expect(familyOf(ctx.fonts.get('TOWER CLASH')!)).toBe(FONT);
+    expect(ctx.fonts.get(`towerclash · v${appVersion()}`)).toBe(`500 30px ${FONT}`);
+  });
+
+  it('English / Azerbaijani / Turkish cards never draw a line in the Nunito stack', async () => {
+    for (const lang of ['en', 'az', 'tr'] as const) {
+      await setLanguage(lang);
+      const ctx = recordingCtx();
+      const s = spec({ won: true, stars: 2, challenge: { kind: 'weekly', key: WEEK, twist: t('daily.twist.thinWalls') } });
+      drawShareCard(ctx, DEFAULT_PALETTE, s);
+      expect(ctx.fonts.size, lang).toBe(shareCardTexts(s).length);
+      for (const [text, f] of ctx.fonts) {
+        expect(familyOf(f), `${lang} "${text}"`).toBe(FONT);
+        expect(familyOf(f).split(',')[0], `${lang} "${text}"`).toBe("'Fredoka'");
+      }
     }
   });
 
-  it('English / Azerbaijani cards draw no line in the Nunito stack', async () => {
-    for (const lang of ['en', 'az'] as const) {
+  it('the game UI stack follows the language: Nunito-first only in Russian, EN / AZ / TR keep the Fredoka stack', async () => {
+    for (const lang of ['en', 'az', 'tr'] as const) {
       await setLanguage(lang);
-      const ctx = recordingCtx();
-      drawShareCard(ctx, DEFAULT_PALETTE, spec({ challenge: { kind: 'weekly', key: WEEK, twist: 'Thin walls' } }));
-      expect([...ctx.fonts.values()].every((f) => familyOf(f) === FONT), lang).toBe(true);
+      expect(uiFont(), lang).toBe(FONT);
+      expect(font(26, '900'), lang).toBe(`700 26px ${FONT}`);
     }
+    await setLanguage('ru');
+    expect(uiFont()).toBe(FONT_RU);
+    expect(font(17, '500')).toBe(`500 17px ${FONT_RU}`);
+    expect(font(17, '500', FONT)).toBe(`500 17px ${FONT}`); // an explicit family (the logo) wins
   });
 
   describe('loadShareFonts (faces loaded before the card is drawn)', () => {
@@ -557,6 +584,7 @@ describe('share card ART-12: defeat rows and one family per line', () => {
     }
 
     it('Latin card: loads each line in its Fredoka face (500 for the footer), registers no extra face', async () => {
+      resetRussianFacesForTests();
       const { loads, added } = fakeFonts();
       const s = spec();
       await loadShareFonts(s);
@@ -566,18 +594,21 @@ describe('share card ART-12: defeat rows and one family per line', () => {
       expect(loads.filter((l) => l.font.startsWith('500 ')).map((l) => l.text)).toEqual([`towerclash · v${appVersion()}`]);
     });
 
-    it('Russian card: registers the share face once (absolute URL, wght 900, Cyrillic range) and loads it before drawing', async () => {
+    it('Russian card: the Latin Nunito face is registered (once), every Russian line is loaded in the Nunito stack before drawing', async () => {
       await setLanguage('ru');
+      resetRussianFacesForTests();
       const { loads, added } = fakeFonts();
       const s = spec({ levelName: 'Ничейная земля' });
       await loadShareFonts(s);
       await loadShareFonts(s);
-      expect(added).toHaveLength(1);
-      expect(added[0]!.family).toBe('Nunito Share');
-      expect(added[0]!.source).toBe("url('https://example.test/game/fonts/nunito-cyrillic.woff2') format('woff2')");
-      expect(added[0]!.desc).toMatchObject({ weight: '900', unicodeRange: SHARE_CYRILLIC_FACE.unicodeRange, display: 'block' });
-      expect(added[0]!.loaded).toBe(true);
-      expect(loads.filter((l) => l.text === 'Уровень 3 · Ничейная земля').map((l) => familyOf(l.font))).toEqual([`'Nunito Share', 'Nunito', ${FONT}`, `'Nunito Share', 'Nunito', ${FONT}`]);
+      expect(added.map((f) => [f.family, f.source])).toEqual([['Nunito', "url('https://example.test/game/fonts/nunito-latin.woff2') format('woff2')"]]);
+      expect(added[0]!.desc).toMatchObject({ weight: '500 700', display: 'block' });
+      expect(loads.slice(0, shareCardTexts(s).length + 1).map((l) => l.text)).toEqual([...shareCardTexts(s), `towerclash · v${appVersion()}`]);
+      // the text passed to fonts.load holds the digits / '·' as well, so the Latin Nunito face loads with the Cyrillic one
+      expect(loads.filter((l) => l.text === 'Уровень 3 · Ничейная земля').map((l) => l.font)).toEqual([`700 32px ${FONT_RU}`, `700 32px ${FONT_RU}`]);
+      expect(loads.filter((l) => /[А-Яа-яЁё]/.test(l.text)).every((l) => l.font === `700 32px ${FONT_RU}`)).toBe(true);
+      expect(loads.filter((l) => !/[А-Яа-яЁё]/.test(l.text)).every((l) => familyOf(l.font) === FONT)).toBe(true);
+      resetRussianFacesForTests();
     });
 
     it('a font that never loads does not block the share (bounded wait); no Font Loading API → no-op', async () => {

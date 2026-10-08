@@ -19,11 +19,16 @@ import type { Page } from '@playwright/test';
  *   - the advance width fits the box `fitFontPx` was asked for (card rows: card.w − 80 = 820) and a
  *     `maxWidth` passed to `fillText` is never exceeded (that would squeeze the glyphs horizontally);
  *   - the font size is at least 75 % of the row's design size (no "fit by shrinking to unreadable");
- *   - every code point was drawn in a bundled face (Fredoka latin / latin-ext, Nunito Cyrillic) of
- *     the right weight that was loaded at draw time — no system fallback face on the card.
+ *   - one family per line (ART-13): every code point of a line was drawn in a bundled face of the
+ *     line's *first* family (Fredoka latin / latin-ext; Nunito Cyrillic + Latin for a Russian line)
+ *     of the right weight that was loaded at draw time — no per-glyph fallback to another family
+ *     and no system face on the card;
+ *   - the bundled Nunito Latin face (public/fonts/nunito-latin.woff2) is fetched in Russian only:
+ *     an EN / AZ / TR session never requests it.
  * A string sweep then fits every level name (50 × the locale) and every challenge line (daily +
- * weekly × 5 twists) with the same font and the same rule, so the longest string of each language
- * is covered, not just the levels the bot played.
+ * weekly × 5 twists) with the card's own rule — the font of each string is `shareFontFamily(text)`
+ * (Cyrillic → the Russian stack, else Fredoka), taken from the stacks the card itself drew — so the
+ * longest string of each language is covered, not just the levels the bot played.
  *
  * The PNGs (download path: no Web Share in headless Chromium; the anchor click is recorded and the
  * blob read back) are written as `share-<locale>-<won|lost|daily>.png` into the run's output dir
@@ -214,6 +219,8 @@ interface Line {
   text: string;
   px: number;
   weight: number;
+  /** The font-family list of `ctx.font`, as Chromium serialises it (after the size). */
+  family: string;
   width: number;
   inkL: number;
   inkR: number;
@@ -224,6 +231,10 @@ interface Line {
 }
 
 const pxOf = (font: string) => Number(/(\d+(?:\.\d+)?)px/.exec(font)?.[1] ?? NaN);
+const familyOf = (font: string) => font.replace(/^.*?\d+(?:\.\d+)?px\s+/, '');
+/** First family of a font-family list, unquoted. */
+const primaryFamily = (family: string) => family.split(',')[0]!.trim().replace(/^['"]|['"]$/g, '');
+const CYRILLIC = /[\u0400-\u04FF]/;
 /** `ctx.font` serialises weight 700 as "bold" in Chromium, 500 stays numeric. */
 const weightOf = (font: string) => {
   const w = /(?:^|\s)(bold|[1-9]00)\s.*?px/.exec(font)?.[1];
@@ -243,7 +254,7 @@ function linesOf(draws: Draw[], roleOf: (text: string) => Role | null): Line[] {
     const inkB = d.y + d.descent + half;
     const prev = byText.get(d.text);
     const squeezed = d.maxWidth !== null && d.width > d.maxWidth + 0.5;
-    if (!prev) byText.set(d.text, { role: role!, text: d.text, px: pxOf(d.font), weight: weightOf(d.font), width: d.width, inkL, inkR, inkT, inkB, fontsReady: d.fontsReady, squeezed });
+    if (!prev) byText.set(d.text, { role: role!, text: d.text, px: pxOf(d.font), weight: weightOf(d.font), family: familyOf(d.font), width: d.width, inkL, inkR, inkT, inkB, fontsReady: d.fontsReady, squeezed });
     else {
       prev.inkL = Math.min(prev.inkL, inkL);
       prev.inkR = Math.max(prev.inkR, inkR);
@@ -252,6 +263,7 @@ function linesOf(draws: Draw[], roleOf: (text: string) => Role | null): Line[] {
       prev.fontsReady &&= d.fontsReady;
       prev.squeezed ||= squeezed;
       expect(pxOf(d.font), `"${d.text}" drawn at two sizes`).toBe(prev.px);
+      expect(familyOf(d.font), `"${d.text}" drawn in two font stacks`).toBe(prev.family);
     }
   }
   return [...byText.values()];
@@ -290,32 +302,48 @@ function checkLines(lines: Line[], label: string): string[] {
   return report;
 }
 
-/** Every code point of every line is covered by a *loaded* bundled face (Fredoka / Nunito) of the line's weight. */
+/** The bundled families the card draws with (index.html @font-face): Fredoka, and Nunito for Russian lines. */
+const CARD_FAMILIES = ['Fredoka', 'Nunito'] as const;
+
+/**
+ * One family per line: every code point of every line is covered by a *loaded* bundled face of the
+ * line's first family (Nunito for a line with Cyrillic, Fredoka for any other — ART-13), at the line's
+ * weight. A glyph that only a later family of the stack has would be per-glyph fallback (the ART-12
+ * "Nunito letters, Fredoka digits" mix) and fails here.
+ */
 async function checkFaces(page: Page, lines: Line[], label: string): Promise<void> {
-  const uncovered = await page.evaluate((ls) => {
-    const parseRange = (r: string): [number, number][] =>
-      r.split(',').map((part) => {
-        const [a, b] = part.trim().replace(/^U\+/i, '').split('-');
-        const lo = parseInt(a!, 16);
-        return [lo, b === undefined ? lo : parseInt(b, 16)];
-      });
-    const faces = [...document.fonts]
-      .filter((f) => f.status === 'loaded' && /^['"]?(Fredoka|Nunito)['"]?$/.test(f.family))
-      .map((f) => {
-        const [wLo, wHi] = f.weight.split(/\s+/).map(Number);
-        return { family: f.family, wLo: wLo!, wHi: wHi ?? wLo!, ranges: parseRange(f.unicodeRange) };
-      });
-    const out: string[] = [];
-    for (const ln of ls) {
-      for (const ch of new Set(Array.from(ln.text))) {
-        const cp = ch.codePointAt(0)!;
-        const ok = faces.some((f) => ln.weight >= f.wLo && ln.weight <= f.wHi && f.ranges.some(([lo, hi]) => cp >= lo && cp <= hi));
-        if (!ok) out.push(`"${ch}" U+${cp.toString(16).toUpperCase().padStart(4, '0')} (weight ${ln.weight}) in "${ln.text}"`);
+  for (const ln of lines) {
+    expect(primaryFamily(ln.family), `${label} "${ln.text}": first family of "${ln.family}"`).toBe(CYRILLIC.test(ln.text) ? 'Nunito' : 'Fredoka');
+  }
+  const uncovered = await page.evaluate(
+    ([ls, families]) => {
+      const parseRange = (r: string): [number, number][] =>
+        r.split(',').map((part) => {
+          const [a, b] = part.trim().replace(/^U\+/i, '').split('-');
+          const lo = parseInt(a!, 16);
+          return [lo, b === undefined ? lo : parseInt(b, 16)];
+        });
+      const unquote = (f: string) => f.trim().replace(/^['"]|['"]$/g, '');
+      const faces = [...document.fonts]
+        .filter((f) => f.status === 'loaded' && families.includes(unquote(f.family)))
+        .map((f) => {
+          const [wLo, wHi] = f.weight.split(/\s+/).map(Number);
+          return { family: unquote(f.family), wLo: wLo!, wHi: wHi ?? wLo!, ranges: parseRange(f.unicodeRange) };
+        });
+      const out: string[] = [];
+      for (const ln of ls) {
+        const first = unquote(ln.family.split(',')[0]!);
+        for (const ch of new Set(Array.from(ln.text))) {
+          const cp = ch.codePointAt(0)!;
+          const ok = faces.some((f) => f.family === first && ln.weight >= f.wLo && ln.weight <= f.wHi && f.ranges.some(([lo, hi]) => cp >= lo && cp <= hi));
+          if (!ok) out.push(`"${ch}" U+${cp.toString(16).toUpperCase().padStart(4, '0')} (${first} ${ln.weight}) in "${ln.text}"`);
+        }
       }
-    }
-    return out;
-  }, lines);
-  expect(uncovered, `${label}: characters drawn without a loaded bundled face (system fallback)`).toEqual([]);
+      return out;
+    },
+    [lines, [...CARD_FAMILIES] as string[]] as const
+  );
+  expect(uncovered, `${label}: characters not drawn in a loaded bundled face of the line's own family (fallback glyphs)`).toEqual([]);
 }
 
 /**
@@ -323,14 +351,15 @@ async function checkFaces(page: Page, lines: Line[], label: string): Promise<voi
  * the design size, scale linearly, floor) and font, after loading the faces it needs. Returns the
  * smallest size per row kind with its string.
  */
-async function sweep(page: Page, fontFamily: string, strings: { role: 'level' | 'challenge' | 'title'; text: string }[]) {
+async function sweep(page: Page, shareFontFamily: (text: string) => string, strings: { role: 'level' | 'challenge' | 'title'; text: string }[]) {
+  const list = strings.map((s) => ({ ...s, family: shareFontFamily(s.text) }));
   return page.evaluate(
-    async ([fam, list, base, maxW]) => {
+    async ([list, base, maxW]) => {
       const ctx = document.createElement('canvas').getContext('2d')!;
       const out: { role: string; text: string; px: number; width: number }[] = [];
       for (const s of list) {
         const px0 = base[s.role]!;
-        const f = `700 ${px0}px ${fam}`;
+        const f = `700 ${px0}px ${s.family}`;
         await document.fonts.load(f, s.text);
         ctx.font = f;
         const w = ctx.measureText(s.text).width;
@@ -339,7 +368,7 @@ async function sweep(page: Page, fontFamily: string, strings: { role: 'level' | 
       }
       return out;
     },
-    [fontFamily, strings, BASE_PX as Record<string, number>, ROW_MAX_W] as const
+    [list, BASE_PX as Record<string, number>, ROW_MAX_W] as const
   );
 }
 
@@ -348,6 +377,13 @@ test.describe('share card in every language (QA-14)', () => {
     test(`${lang}: campaign win, campaign defeat and daily cards fit their boxes in bundled faces`, async ({ page }, info) => {
       test.setTimeout(60_000);
       await instrument(page);
+      // every font file the browser context requests (public/sw.js does not precache nunito-latin.woff2 —
+      // tests/render/fonts.test.ts — so a page request is the only way it is fetched)
+      const fontRequests: string[] = [];
+      page.context().on('request', (req) => {
+        const m = /\/fonts\/([^/?#]+\.woff2)/.exec(req.url());
+        if (m) fontRequests.push(m[1]!);
+      });
       const errors = await boot(page, lang);
       const S = {
         victory: await text(page, 'result.victory'),
@@ -361,7 +397,9 @@ test.describe('share card in every language (QA-14)', () => {
       const out = info.project.outputDir;
       mkdirSync(out, { recursive: true });
       const report: string[] = [];
-      let fontFamily = '';
+      // the card's own font rule as drawn (src/render/shareCard.ts shareFontFamily): one stack for lines with
+      // Cyrillic, one for every other line — the exact `ctx.font` family lists, for the string sweep
+      const stacks: { cyrillic?: string; other?: string } = {};
 
       const runCard = async (kind: 'won' | 'lost' | 'daily', levelText: string, challenge: string | null, fileName: string) => {
         const card = await shareCard(page, fileName);
@@ -382,7 +420,11 @@ test.describe('share card in every language (QA-14)', () => {
         expect(lines.find((l) => l.role === 'title')!.text).toBe(kind === 'lost' ? S.defeat : S.victory);
         report.push(...checkLines(lines, `${lang}-${kind}`));
         await checkFaces(page, lines, `${lang}-${kind}`);
-        fontFamily ||= card.draws[0]!.font.replace(/^.*?\d+(?:\.\d+)?px\s+/, '');
+        for (const ln of lines) {
+          const k = CYRILLIC.test(ln.text) ? 'cyrillic' : 'other';
+          stacks[k] ??= ln.family;
+          expect(ln.family, `${lang}-${kind} "${ln.text}": every ${k} line shares one font stack`).toBe(stacks[k]);
+        }
       };
 
       // 1. campaign win: level 1, seed 1, reference player at ×10
@@ -431,7 +473,14 @@ test.describe('share card in every language (QA-14)', () => {
       await runCard('daily', fill(S.level, { n: ch.levelId, name: levelName(levelById(ch.levelId), lang) }), dailyLine, `towerclash-daily-${DAY_KEY}.png`);
 
       // 4. string sweep: every level name, every daily / weekly twist line, both titles
-      expect(fontFamily).toMatch(/Fredoka/);
+      expect(primaryFamily(stacks.other!)).toBe('Fredoka');
+      if (lang === 'ru') expect(primaryFamily(stacks.cyrillic!)).toBe('Nunito');
+      else expect(stacks.cyrillic, `${lang}: no Cyrillic line on the card`).toBeUndefined();
+      const shareFontFamily = (s: string): string => {
+        const fam = CYRILLIC.test(s) ? stacks.cyrillic : stacks.other;
+        expect(fam, `no font stack observed on the card for "${s}"`).toBeDefined();
+        return fam!;
+      };
       const twists = await Promise.all(TWISTS.map((id) => text(page, `daily.twist.${id}`)));
       const strings = [
         ...LEVELS.map((l) => ({ role: 'level' as const, text: fill(S.level, { n: l.id, name: levelName(l, lang) }) })),
@@ -439,7 +488,7 @@ test.describe('share card in every language (QA-14)', () => {
         { role: 'title' as const, text: S.victory },
         { role: 'title' as const, text: S.defeat },
       ];
-      const fitted = await sweep(page, fontFamily, strings);
+      const fitted = await sweep(page, shareFontFamily, strings);
       for (const role of ['title', 'level', 'challenge'] as const) {
         // the tightest string: the smallest fitted size, then the widest at that size
         const worst = fitted.filter((f) => f.role === role).reduce((a, b) => (b.px < a.px || (b.px === a.px && b.width > a.width) ? b : a));
@@ -450,6 +499,13 @@ test.describe('share card in every language (QA-14)', () => {
         );
         expect(worst.px, `${lang}: "${worst.text}" would be fitted to ${worst.px}px (< ${MIN_SCALE * 100}% of ${BASE_PX[role]}px)`).toBeGreaterThanOrEqual(Math.ceil(BASE_PX[role] * MIN_SCALE));
       }
+
+      // 5. the Nunito Latin file (ART-13) is a Russian-only download: unicode-range keeps it off the wire unless a
+      //    line's stack reaches Nunito for a Latin character, which only the Russian stack does
+      const nunitoLatin = fontRequests.filter((f) => f === 'nunito-latin.woff2');
+      if (lang === 'ru') expect(nunitoLatin.length, `ru: nunito-latin.woff2 fetched (requests: ${fontRequests.join(', ')})`).toBeGreaterThan(0);
+      else expect(nunitoLatin, `${lang}: nunito-latin.woff2 must never be requested (requests: ${fontRequests.join(', ')})`).toEqual([]);
+      report.push(`${`${lang}-fonts`.padEnd(12)} fetched: ${[...new Set(fontRequests)].sort().join(', ')}`);
 
       await info.attach(`share-${lang}-fit.txt`, { body: report.join('\n'), contentType: 'text/plain' });
       console.log(report.join('\n'));

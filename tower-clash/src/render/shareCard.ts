@@ -1,7 +1,8 @@
 import type { Palette } from './palette';
 import { biomeFor, shade, withAlpha } from './palette';
-import { FONT, drawCard, drawExtrudedText, drawStar, fitFontPx, font, formatTime, innerHighlight, roundRect } from './widgets';
+import { FONT, FONT_RU, drawCard, drawExtrudedText, drawStar, fitFontPx, font, formatTime, innerHighlight, roundRect } from './widgets';
 import { drawTowerShadow, drawTowerSprite } from './sprites';
+import { setRussianFaces } from './fonts';
 import { drawBush, makeRng } from './terrain';
 import { t } from '../ui/i18n';
 
@@ -25,20 +26,16 @@ import { t } from '../ui/i18n';
  * The palette passed in is the player's (default or colour-blind); nothing animates, so reduced
  * motion has nothing to stop.
  *
- * Fonts (ART-12): one family per line. A line with Cyrillic in it (Russian UI) is set in Nunito,
- * every other line in Fredoka (`shareFontFamily`). The bundled Nunito file is Google's Cyrillic
- * subset (U+0400–045F, U+0490–0491, U+04B0–04B1, U+0301, U+2116 + space / NBSP — checked against
- * its cmap 2026-10-07): it has **no Latin digits, no ':' and no '·'**, so those still come from
- * Fredoka 700 in a Russian line ("Уровень 3 · …", "Время 00:54"). Fallback chosen instead of a new
- * font file: the Cyrillic is drawn heavier, from the same bundled variable file (wght axis
- * 200–1000) registered once more as the share-only face `Nunito Share` at wght 900, which matches
- * Fredoka 700's stroke — at Nunito 700 the Fredoka digits looked a weight heavier than the
- * letters (QA-14). The line's font weight stays 700 (Fredoka's face for the digits); the face's
- * `weight: '900'` descriptor makes the browser clamp the variable axis to 900 (CSS Fonts 4).
- * `loadShareFonts` loads every face a card needs before it is drawn; plain Nunito follows in the
- * stack, so a share face that failed to load falls back to the game's Nunito 700, never to a
- * system face. A one-family Russian line would need a Nunito Latin subset file (≈ 20 kB, not
- * bundled; ART-12 report, 2026-10-07).
+ * Fonts (ART-12, ART-13): one family per line. A line with Cyrillic in it (Russian UI) is set
+ * wholly in Nunito — letters, digits, ':' and '·' — at the design weights (700 rows, 500 footer):
+ * one 'Nunito' family composed from Google's Cyrillic and Latin subsets
+ * (public/fonts/nunito-{cyrillic,latin}.woff2, same v32 variable build; the Latin face is added in
+ * Russian only, render/fonts.ts). Every other line, the
+ * brand header and footer included, is Fredoka in every language (`shareFontFamily`). ART-12's
+ * share-only `Nunito Share` face at wght 900 is gone: it only existed to match the Fredoka 700
+ * digits that the Cyrillic-only file forced into Russian lines; with no Fredoka glyph left in a
+ * Russian line there is nothing to match, and 700 is the weight the Russian game UI uses.
+ * `loadShareFonts` loads every face a card needs before it is drawn.
  */
 
 export const SHARE_W = 1080;
@@ -73,27 +70,18 @@ export const SHARE_LAYOUT = Object.freeze({
 /** Cyrillic letters (Russian UI text). */
 const CYRILLIC = /[\u0400-\u04FF]/;
 
-/** Share-only face: the bundled Nunito Cyrillic file at wght 900 (see the header). */
-export const SHARE_CYRILLIC_FACE = Object.freeze({
-  family: 'Nunito Share',
-  url: './fonts/nunito-cyrillic.woff2',
-  /** Same range as index.html's Nunito face. */
-  unicodeRange: 'U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116',
-  weight: '900',
-});
-
 /** True when `text` contains Cyrillic. */
 export function hasCyrillic(text: string): boolean {
   return CYRILLIC.test(text);
 }
 
 /**
- * Font family stack for one share-card line: a line with Cyrillic → Nunito (the share face, then
- * the game's Nunito 700 as its loading fallback, then the game stack for the digits / punctuation
- * the Cyrillic subset lacks); anything else → the game stack, i.e. Fredoka.
+ * Font family stack for one share-card line: a line with Cyrillic → the Russian stack (Nunito
+ * first, so its digits and punctuation are Nunito too); anything else → the game stack, Fredoka.
+ * Independent of the current UI language, so the brand header and footer are Fredoka on every card.
  */
 export function shareFontFamily(text: string): string {
-  return hasCyrillic(text) ? `'${SHARE_CYRILLIC_FACE.family}', 'Nunito', ${FONT}` : FONT;
+  return hasCyrillic(text) ? FONT_RU : FONT;
 }
 
 /** The challenge line of the card and of the share text ("Daily 2026-10-05 · Lean rations"), or null. */
@@ -133,29 +121,19 @@ export function shareCardTexts(spec: ShareCardSpec): string[] {
   return ['TOWER CLASH', titleText(spec), levelLine(spec), ...(challenge ? [challenge] : []), timeLine(spec), footerText(spec)];
 }
 
-let cyrillicFace: FontFace | null = null;
-
 /**
  * Load every face the card for `spec` draws with (Fredoka 500 / 700 for the subsets its text uses;
- * for Cyrillic text the share face and the game's Nunito) before `drawShareCard`, so the PNG is
- * never painted in a fallback face. The boot already waits for Fredoka (and Nunito in Russian),
- * so this normally resolves at once. Bounded: a missing font never blocks the share. No-op without
- * the CSS Font Loading API (unit tests).
+ * Nunito's Cyrillic and Latin faces for a Russian line) before `drawShareCard`, so the PNG is never
+ * painted in a fallback face. The boot already waits for Fredoka (and Nunito in Russian), so this
+ * normally resolves at once. Bounded: a missing font never blocks the share. No-op without the CSS
+ * Font Loading API (unit tests).
  */
 export async function loadShareFonts(spec: ShareCardSpec, timeoutMs = 2000): Promise<void> {
   const fonts = typeof document === 'undefined' ? undefined : (document as { fonts?: FontFaceSet }).fonts;
   if (!fonts || typeof fonts.load !== 'function') return;
   const loads: Promise<unknown>[] = [];
   const texts = shareCardTexts(spec);
-  if (texts.some(hasCyrillic) && typeof FontFace === 'function') {
-    if (!cyrillicFace) {
-      const f = SHARE_CYRILLIC_FACE;
-      const url = typeof document.baseURI === 'string' ? new URL(f.url, document.baseURI).href : f.url;
-      cyrillicFace = new FontFace(f.family, `url('${url}') format('woff2')`, { weight: f.weight, unicodeRange: f.unicodeRange, display: 'block' });
-      fonts.add(cyrillicFace);
-    }
-    loads.push(cyrillicFace.load());
-  }
+  if (texts.some(hasCyrillic)) setRussianFaces(true); // registered at boot in Russian already; idempotent
   for (const text of texts) {
     const family = shareFontFamily(text);
     loads.push(fonts.load(font(32, '700', family), text));
@@ -173,7 +151,9 @@ export function drawShareCard(ctx: CanvasRenderingContext2D, pal: Palette, spec:
   ctx.save();
   ctx.lineCap = 'round';
   drawWater(ctx, pal, spec.levelId);
-  drawExtrudedText(ctx, 'TOWER CLASH', SHARE_W / 2, 128, fitFontPx(ctx, 'TOWER CLASH', 118, 940), { face: pal.gold, side: pal.goldShade, outline: pal.ink, depth: 9 });
+  const header = 'TOWER CLASH';
+  const headerFamily = shareFontFamily(header); // Fredoka on every card, whatever the UI language
+  drawExtrudedText(ctx, header, SHARE_W / 2, 128, fitFontPx(ctx, header, 118, 940, '700', headerFamily), { face: pal.gold, side: pal.goldShade, outline: pal.ink, depth: 9, family: headerFamily });
   drawIsland(ctx, pal, spec);
   drawInfoCard(ctx, pal, spec);
   ctx.textAlign = 'center';

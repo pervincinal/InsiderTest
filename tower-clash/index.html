@@ -51,9 +51,14 @@
         src: url('./fonts/fredoka-700-latin.woff2') format('woff2');
         unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
       }
-      /* Cyrillic (Russian UI): Fredoka has no Cyrillic glyphs, so the canvas font stack falls through to
-         Nunito (OFL, rounded, public/fonts/nunito-cyrillic.woff2 — one variable file for 500–700). The
-         unicode-range keeps it off the wire until Cyrillic text is actually drawn. */
+      /* Russian UI: Fredoka has no Cyrillic glyphs, so Russian is set in Nunito (OFL, rounded) — whole
+         lines, digits and punctuation included (ART-13): while the UI language is Russian the canvas
+         stack is 'Nunito', 'Fredoka', … (src/render/widgets.ts uiFont()). One 'Nunito' family from two
+         variable files (500–700) of the same Google build: the Cyrillic subset below, and the Latin
+         subset public/fonts/nunito-latin.woff2, which src/render/fonts.ts adds to document.fonts in
+         Russian only — declared here, Chromium would fetch it for every EN / AZ / TR player, because it
+         downloads each face of each family in the stack whose unicode-range meets the drawn text.
+         The Cyrillic face stays here: its range keeps it off the wire until Cyrillic is drawn. */
       @font-face {
         font-family: 'Nunito';
         font-style: normal;

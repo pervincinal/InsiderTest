@@ -5,7 +5,7 @@ import { shade, themeFor } from './palette';
 import type { View } from './view';
 import { applyDeviceTransform, applyTransform, clipToMap } from './view';
 import type { Rect } from './widgets';
-import { drawButton, drawExtrudedText, drawGearGlyph, drawPill, drawRoundButton, drawSpeakerGlyph, drawTrophyGlyph, font, withShadow } from './widgets';
+import { FONT, drawButton, drawExtrudedText, drawGearGlyph, drawPill, drawRoundButton, drawSpeakerGlyph, drawTrophyGlyph, font, withShadow } from './widgets';
 import type { TerrainSpec } from './terrain';
 import { drawTerrain } from './terrain';
 import type { ToastOpts } from './economyWidgets';
@@ -211,8 +211,9 @@ export function drawTitle(view: View, pal: Palette, o: TitleOpts): void {
   withShadow(
     ctx,
     () => {
-      drawExtrudedText(ctx, 'TOWER', 360, 372 + bob, 112, { face: pal.paper, side: shade(blue, -0.25), outline: pal.ink, depth: 8 });
-      drawExtrudedText(ctx, 'CLASH', 360, 474 + bob2, 112, { face: blue, side: shade(blue, -0.45), outline: pal.ink, depth: 8 });
+      // the wordmark is the brand: Fredoka in every UI language (FONT), like the share card's header
+      drawExtrudedText(ctx, 'TOWER', 360, 372 + bob, 112, { face: pal.paper, side: shade(blue, -0.25), outline: pal.ink, depth: 8, family: FONT });
+      drawExtrudedText(ctx, 'CLASH', 360, 474 + bob2, 112, { face: blue, side: shade(blue, -0.45), outline: pal.ink, depth: 8, family: FONT });
     },
     14,
     18,

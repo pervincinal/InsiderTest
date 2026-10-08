@@ -1,10 +1,12 @@
 import type { Palette } from './palette';
 import { shade } from './palette';
+import { currentLanguage } from '../ui/i18n';
 
 /*
  * Claymorphic UI primitives (ART_DIRECTION §4): paper faces with an inner top highlight, a soft
  * blue-ink drop shadow to the lower right (key light upper-left) and a coloured bottom edge.
- * Everything is canvas primitives; the only text face is Fredoka (index.html @font-face).
+ * Everything is canvas primitives; text is Fredoka (index.html @font-face), or Nunito while the UI
+ * is Russian (`uiFont()`).
  */
 
 /** Axis-aligned rectangle in logical units. Shared between drawing and hit-testing. */
@@ -18,6 +20,19 @@ export interface Rect {
 /** Fredoka (latin, latin-ext) first; Nunito covers Cyrillic (index.html @font-face, unicode-range) since Fredoka has none. */
 export const FONT = "'Fredoka', 'Nunito', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 
+/**
+ * Russian UI stack (ART-13): Nunito first, so a Russian line is one family — its Cyrillic letters
+ * and its digits / punctuation (Nunito's Latin subset) alike. With Fredoka first, per-glyph
+ * fallback would set "Уровень 3" in Nunito letters and a Fredoka "3". Fredoka stays behind it for
+ * anything Nunito lacks.
+ */
+export const FONT_RU = "'Nunito', 'Fredoka', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+
+/** The game's text stack for the current UI language: `FONT_RU` in Russian, `FONT` (Fredoka) otherwise. */
+export function uiFont(): string {
+  return currentLanguage() === 'ru' ? FONT_RU : FONT;
+}
+
 export type FontWeight = 'normal' | 'bold' | '900' | '500' | '700';
 
 /** Fredoka ships as 500 (labels) and 700 (numerals, headings); legacy names map onto those two. */
@@ -25,8 +40,8 @@ function weightOf(weight: FontWeight): 500 | 700 {
   return weight === 'normal' || weight === '500' ? 500 : 700;
 }
 
-/** CSS font shorthand; `family` defaults to the game stack (the share card passes its Cyrillic stack). */
-export function font(px: number, weight: FontWeight = 'bold', family: string = FONT): string {
+/** CSS font shorthand; `family` defaults to the UI language's stack (`uiFont()`; the share card and the logo pass theirs). */
+export function font(px: number, weight: FontWeight = 'bold', family: string = uiFont()): string {
   return `${weightOf(weight)} ${px}px ${family}`;
 }
 
@@ -34,7 +49,7 @@ export function font(px: number, weight: FontWeight = 'bold', family: string = F
  * Largest size ≤ `px` at which `text` fits `maxWidth` (translated headings vary a lot in length,
  * e.g. "LEVELS" → "SƏVİYYƏLƏR"). Measures once at `px` and scales linearly; leaves `ctx.font` set.
  */
-export function fitFontPx(ctx: CanvasRenderingContext2D, text: string, px: number, maxWidth: number, weight: FontWeight = '700', family: string = FONT): number {
+export function fitFontPx(ctx: CanvasRenderingContext2D, text: string, px: number, maxWidth: number, weight: FontWeight = '700', family: string = uiFont()): number {
   ctx.font = font(px, weight, family);
   const w = ctx.measureText(text).width;
   if (w <= maxWidth || w <= 0) return px;
@@ -282,7 +297,7 @@ export interface ExtrudeStyle {
   outline?: string;
   /** Extrusion depth in px (default 6). */
   depth?: number;
-  /** Font family stack (default the game's `FONT`). */
+  /** Font family stack (default the UI language's, `uiFont()`). */
   family?: string;
   /** Extrusion direction (default lower-right, matching the key light). */
   dx?: number;

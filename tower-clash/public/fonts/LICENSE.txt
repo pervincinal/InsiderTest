@@ -4,5 +4,12 @@ Subset files (latin, latin-ext; weights 500 and 700) fetched from Google Fonts.
 
 Nunito — Copyright 2014 The Nunito Project Authors (https://github.com/googlefonts/nunito).
 Licensed under the SIL Open Font License, Version 1.1 (https://openfontlicense.org).
-Cyrillic subset (variable, weights 500–700) fetched from Google Fonts; used for Russian UI text
-because Fredoka ships no Cyrillic glyphs.
+Two unmodified subset files of the Google Fonts variable build (Nunito v32, font version 3.602,
+wght axis 200–1000), used only for the Russian UI because Fredoka ships no Cyrillic glyphs:
+  nunito-cyrillic.woff2  https://fonts.gstatic.com/s/nunito/v32/XRXV3I6Li01BKofIMeaBXso.woff2
+                         (Google's "cyrillic" unicode-range: U+0301, U+0400-045F, U+0490-0491,
+                         U+04B0-04B1, U+2116)
+  nunito-latin.woff2     https://fonts.gstatic.com/s/nunito/v32/XRXV3I6Li01BKofINeaB.woff2
+                         (Google's "latin" unicode-range: digits, basic Latin, Latin-1, general
+                         punctuation; fetched 2026-10-08 for ART-13 so whole Russian lines are one family)
+Both listed by https://fonts.googleapis.com/css2?family=Nunito:wght@200..1000 (modern-Chrome User-Agent).

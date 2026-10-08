@@ -6,6 +6,7 @@ import { getPalette } from './render/palette';
 import type { View } from './render/view';
 import { createView, insetProbe, refreshSafeInsets, resize } from './render/view';
 import { blankLayer, createLayers } from './render/layers';
+import { setRussianFaces } from './render/fonts';
 import { preloadCosmetics, warmCosmetics } from './render/cosmetics';
 import { warmHudOverlays } from './render/hud';
 import { equippedSkin } from './economy/entitlements';
@@ -598,15 +599,21 @@ function registerServiceWorker(): void {
 
 /**
  * Wait for the bundled faces (index.html @font-face) so the first canvas frame is not painted in
- * the fallback face: Fredoka 500/700, plus the Nunito Cyrillic face when the UI is Russian
- * (Fredoka ships no Cyrillic; `unicode-range` only fetches Nunito when Cyrillic text is drawn).
+ * the fallback face: Fredoka 500/700, plus both Nunito faces (Cyrillic + Latin, ART-13) when the UI
+ * is Russian — Russian lines are set wholly in Nunito, digits included (render/widgets.ts uiFont()).
+ * The Latin Nunito face is registered in Russian only (render/fonts.ts) and the Cyrillic one's
+ * `unicode-range` keeps it off the wire until Cyrillic is drawn, so EN / AZ / TR fetch neither.
  * Bounded by a timeout: a missing/slow font must never block the game.
  */
 async function waitForFonts(language: Language, timeoutMs = 1500): Promise<void> {
   const fonts = (document as { fonts?: FontFaceSet }).fonts;
   if (!fonts || typeof fonts.load !== 'function') return;
+  // the Latin Nunito face exists only while the UI is Russian (render/fonts.ts: never fetched in EN / AZ / TR)
+  setRussianFaces(language === 'ru');
   const loads = [fonts.load('700 32px Fredoka'), fonts.load('500 32px Fredoka')];
-  if (language === 'ru') loads.push(fonts.load('700 32px Nunito', 'Пауза'), fonts.load('500 32px Nunito', 'Пауза'));
+  if (language === 'ru') {
+    for (const weight of [700, 500]) loads.push(fonts.load(`${weight} 32px Nunito`, 'Пауза'), fonts.load(`${weight} 32px Nunito`, '0123456789:·'));
+  }
   const load = Promise.all(loads).then(() => undefined);
   const timeout = new Promise<void>((resolve) => setTimeout(resolve, timeoutMs));
   await Promise.race([load, timeout]).catch(() => undefined);
@@ -634,7 +641,7 @@ async function boot(): Promise<void> {
   const save = loadSave();
   const language = await bootLanguage(save);
   await waitForFonts(language);
-  onLanguageChange((code) => void waitForFonts(code, 800)); // warm the Cyrillic face when switching to Russian
+  onLanguageChange((code) => void waitForFonts(code, 800)); // warm the Nunito faces when switching to Russian
   const app = new TowerClashApp(canvas, save);
   registerServiceWorker();
   // the Playwright surface is a lazy chunk (PERF-6): installed after the first paint, off the eager bundle
