@@ -67,6 +67,8 @@ First question, "Do you or your third-party partners collect data from this app?
 
 Last screen, "Tracking" (İzləmə): **"No, we do not use data for tracking purposes."** Reason: the app never shows the App Tracking Transparency prompt and requests non-personalised ads on iOS (`STORE_LISTING.md` §6.4 option A, checklist MZ9). Result shown on the store page: "Data Not Linked to You" only. Press **Publish** on the App Privacy page — it is separate from the version submission.
 
+**Share card and rating API — nothing new to tick (PUB-16, 2026-10-08).** The result card's SHARE button (PAYLAŞ) draws the image on the device, writes it to the app's private cache folder and hands it to the iOS share sheet; the app itself transmits nothing and receives nothing back, and Apple counts a data type as "collected" only when it leaves the device to the developer or a partner — so no row changes (`docs/MOBILE.md` §8.4, `PRIVACY_POLICY.md` Part A). The StoreKit review API (MM-9) is disabled in build 8 (the `RATING_PROMPT` variable is unset); when it is switched on in a later version, the rating still goes from Apple's own sheet to Apple and the app learns nothing — no data type either way. (Bu iki funksiya heç bir yeni məlumat növü əlavə etmir; yuxarıdakı cavablar dəyişmir.)
+
 ## 5. Age Rating (Yaş reytinqi) — App Information → Age Rating → Edit
 
 Answer row by row; if the questionnaire shows a row that is not listed here, answer **None / No** unless it names advertising or in-app purchases (answer honestly: ads Yes, purchases — A: Yes, B: No). Expected result **9+**.
@@ -133,7 +135,7 @@ App Previews (videos): none. "Use the same screenshots for all sizes" is not nee
 | Game Center (Oyun mərkəzi) | — | **not enabled** | no leaderboards in 1.0 |
 | App Clip, iMessage | — | none | — |
 | Build (Build) → "+" | — | **1.0.0 (8)** — the first build with the real AdMob ids (`LAUNCH_CHECKLIST.md` §0c step 9); appears ≈ 15–30 min after the workflow uploads it (TestFlight → "processing" first). Build 7 serves Google test ads and stays on TestFlight | build numbers: 7 = RC with test ads (TestFlight only), 8 = 1.0.0 with real AdMob ids (this field), 9 = 1.0.1 with IAP; the Producer bumps with `npm run version:sync` |
-| What's New in This Version (Bu versiyada yeniliklər) | 4000 | Not shown for the very first version. From 1.0.1 on: the EN block of the version in `RELEASE_NOTES.md` | (v1.0.0 EN block = 495 chars, ready if the field appears) |
+| What's New in This Version (Bu versiyada yeniliklər) | 4000 | Not shown for the very first version. From 1.0.1 on: the EN block of the version in `RELEASE_NOTES.md` | (v1.0.0 EN block = 496 chars since 2026-10-06, re-counted 2026-10-08; ready if the field appears) |
 
 ### 6.3 Description — variant B (without in-app purchases), 3863 characters
 
@@ -193,19 +195,19 @@ Menus, hints, the tutorial, level names and lessons are in English, Azerbaijani,
 | Contact Information → Last Name (Soyad) | **stakeholder fills** |
 | Contact Information → Phone Number (Telefon) | **stakeholder fills** — with the country code, e.g. +994 … |
 | Contact Information → Email (E-poçt) | **stakeholder fills** — a mailbox that is read daily during review (Apple writes there when something is rejected) |
-| Notes (Qeydlər) | **Variant B (default), 943 chars (rewritten 2026-10-03, PUB-14):** the block below. Variant A (with IAP), 878 chars: the second block |
+| Notes (Qeydlər) | **Variant B (default), 1202 chars (2026-10-08, PUB-16: the share-sheet and rating sentences added; rewritten 2026-10-03, PUB-14):** the block below. Variant A (with IAP), 1025 chars: the second block (share-sheet sentence added 2026-10-08; whether 1.0.1 asks for a rating is decided with the `RATING_PROMPT` variable — if it stays unset, add variant B's rating sentence to A as well) |
 | Attachment (Əlavə fayl) | none |
 
 Notes — variant B (default, no purchases in this version):
 
 ```
-Single-player offline game, no account or sign-in needed, so no demo account is required — all content is reachable without paying. This version contains NO in-app purchases: no products are attached to it and the purchase SDK is never configured. The shop (title screen → SHOP) shows cosmetic skins and gold upgrades only; no purchase UI is reachable — no prices, no product list, no buy or Restore Purchases button. Skins are paid with crystals and Commander upgrades with gold, both earned by playing. Ads are Google AdMob: an interstitial after some result screens (never during play, never in the first five levels) and rewarded videos only on the player's request. The app never requests App Tracking Transparency (there is no NSUserTrackingUsageDescription in Info.plist) and always requests non-personalised ads on iOS, so the IDFA is not used — App Privacy "Tracking" is answered No. The game runs offline; only ads need a connection.
+Single-player offline game, no account or sign-in needed, so no demo account is required — all content is reachable without paying. This version contains NO in-app purchases: no products are attached to it and the purchase SDK is never configured. The shop (title screen → SHOP) shows cosmetic skins and gold upgrades only; no purchase UI is reachable — no prices, no product list, no buy or Restore Purchases button. Skins are paid with crystals and Commander upgrades with gold, both earned by playing. The SHARE button on the result card (PAYLAŞ in Azerbaijani) opens the system share sheet with an image created on the device; nothing is uploaded. The app never requests a rating in this version: the StoreKit review API is present in the binary but disabled. Ads are Google AdMob: an interstitial after some result screens (never during play, never in the first five levels) and rewarded videos only on the player's request. The app never requests App Tracking Transparency (there is no NSUserTrackingUsageDescription in Info.plist) and always requests non-personalised ads on iOS, so the IDFA is not used — App Privacy "Tracking" is answered No. The game runs offline; only ads need a connection.
 ```
 
 Notes — variant A (with in-app purchases; use only when the nine products are attached to the version):
 
 ```
-Single-player offline game, no account or sign-in needed, so no demo account is required — all content is reachable without paying. In-app purchases are one-time products (consumable crystal packs and non-consumable Starter Pack / Remove Ads / Premium Bundle / Premium Upgrade) handled by StoreKit through the RevenueCat SDK; "Restore Purchases" is at the bottom of the shop's Crystals and Bundles tabs (title screen → SHOP). Ads are Google AdMob: an interstitial after some result screens (never during play, never in the first five levels) and rewarded videos only on the player's request. The app never requests App Tracking Transparency (there is no NSUserTrackingUsageDescription in Info.plist) and always requests non-personalised ads on iOS, so the IDFA is not used — App Privacy "Tracking" is answered No. The game runs offline; only ads and purchases need a connection.
+Single-player offline game, no account or sign-in needed, so no demo account is required — all content is reachable without paying. In-app purchases are one-time products (consumable crystal packs and non-consumable Starter Pack / Remove Ads / Premium Bundle / Premium Upgrade) handled by StoreKit through the RevenueCat SDK; "Restore Purchases" is at the bottom of the shop's Crystals and Bundles tabs (title screen → SHOP). The SHARE button on the result card (PAYLAŞ in Azerbaijani) opens the system share sheet with an image created on the device; nothing is uploaded. Ads are Google AdMob: an interstitial after some result screens (never during play, never in the first five levels) and rewarded videos only on the player's request. The app never requests App Tracking Transparency (there is no NSUserTrackingUsageDescription in Info.plist) and always requests non-personalised ads on iOS, so the IDFA is not used — App Privacy "Tracking" is answered No. The game runs offline; only ads and purchases need a connection.
 ```
 
 ### 6.5 Version Release (Versiyanın buraxılması)
@@ -236,7 +238,7 @@ Single-player offline game, no account or sign-in needed, so no demo account is 
 
 App Store → 1.0.0 shows **Pending Developer Release** → *Release This Version*. The store page appears within a few hours in the four countries of §3. Widening the country list (Pricing and Availability) needs no new review; a new build does (1.0.1 / build 9).
 
-## 9. Character counts (2026-09-28; description B, review notes B and the `premium_bundle` texts re-run 2026-10-03; `[...s].length` code points; script in the Publisher's scratch, texts taken from this sheet / `STORE_LISTING.md`)
+## 9. Character counts (2026-09-28; description B, review notes B and the `premium_bundle` texts re-run 2026-10-03; review notes A / B re-run 2026-10-08, PUB-16; `[...s].length` code points; script in the Publisher's scratch, texts taken from this sheet / `STORE_LISTING.md`)
 
 ```
    11 name                              (limit 30)
@@ -252,9 +254,9 @@ App Store → 1.0.0 shows **Pending Developer Release** → *Release This Versio
  3825 description B (AZ)                (limit 4000 — Play only)
    23 copyright (with the placeholder)
    10 SKU
-  878 review notes A                    (limit 4000)
-  943 review notes B                    (limit 4000)
-  495 what's new EN (RELEASE_NOTES v1.0.0) (limit 4000)
+ 1025 review notes A                    (limit 4000; 878 before PUB-16)
+ 1202 review notes B                    (limit 4000; 943 before PUB-16)
+  496 what's new EN (RELEASE_NOTES v1.0.0) (limit 4000; "eight new skins", 2026-10-06)
    45 premium_bundle description EN      (limit 45; 1.0.1)
    45 premium_bundle description AZ      (limit 45; Play translation only)
 ```

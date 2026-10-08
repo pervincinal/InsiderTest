@@ -2,6 +2,7 @@
 
 Owner: QA Engineer · written 2026-10-02 against branch head `e237f06` · first real-device pass for **QA-2** (iOS half) and **MM-1 for iOS**, plus the on-device halves of **MM-4** (memory / DPR cap) and **M3-5** (performance).
 Build: **1.0.0 (7)** from the `tower-clash-ios-release` workflow, lane **testflight**, made **without** `RC_IOS_KEY` (store unavailable, LAUNCH_CHECKLIST §0b variant B) and **without** real AdMob ids (Google "Test Ad" placeholders).
+Checks: **21** (TF-01 … TF-21; TF-20 share sheet added 2026-10-05, TF-21 rating prompt off added 2026-10-08, PUB-16). TF-20 and TF-21 need a build made from the branch at `2eb5cfc` / `9ea6d55` or later — the build-7 tag target `85154af` has neither the share card nor the rating plugin; on such a build write "not in this build" for them.
 Install path: LAUNCH_CHECKLIST.md §0b step 6. Severities: POST_LAUNCH.md §5.1. Day boundary: GDD §7.4 (00:00 UTC = **04:00 Baku**).
 
 The Azerbaijani part comes first; the English mirror (same ids, same order) follows it.
@@ -47,6 +48,7 @@ Rəng adları: **sənin qüllələrin göy**, düşmən **qırmızı**, neytral 
 | TF-18 | Təyyarə rejimi: oyun və GÜNLÜK kart işləyir | 2 | QA-2 | S1 açılmır · S2 kart |
 | TF-19 | 04:00 (Bakı) günlük dəyişmə (istəyə bağlı) | 3 | QA-2 | S2 |
 | TF-20 | PAYLAŞ: nəticə kartı → paylaşma pəncərəsi (WhatsApp / Telegram) | 2 | MM-8 | S2 · S3 şəkil |
+| TF-21 | 10+ səviyyədə 3★ qələbədən sonra qiymət (reytinq) pəncərəsi çıxmır | 2 | MM-9 | S3 |
 
 Ciddilik (POST_LAUNCH §5.1): **S1** — çökmə, keçilməyən / açılmayan səviyyə, irəliləyişin itməsi, döyüş zamanı və ya 1–5-ci səviyyələrdə reklam → eyni gün düzəliş. **S2** — funksiya bəzi istifadəçilərdə işləmir (dil, cihaz, mağaza) → 2 sessiya ərzində. **S3** — kosmetik, mətn, bir cihaza aid xırda şey → növbəti buraxılış.
 
@@ -198,6 +200,12 @@ Günlük cədvəl (tarix UTC-dir: Bakıda həmin gün **04:00**-dan növbəti g�
 - **Alınmasa yaz:** `TF-20 FAIL: pəncərə açılmadı / şəkil boş-qara / mətn yanlış [skrinşot]`.
 - **Bağlayır:** MM-8 (cihaz təsdiqi) · **Ciddilik:** S2 — pəncərə açılmır və ya şəkil gəlmir; S3 — şəkildə kəsik mətn.
 
+#### TF-21 · 10+ səviyyədə 3★ qələbədən sonra qiymət pəncərəsi çıxmır (2 dəq)
+- **Toxun:** TF-13-dən sonra **10, 11 və ya 12-ci** səviyyəni **3 ulduzla** keç (gücləndiricilərdən istifadə etmək olar). Nəticə kartında 5 saniyə gözlə, sonra xəritəyə qayıt və başqa bir səviyyə aç. Sonra brauzerdə (1 dəq): github.com/pervincinal/InsiderTest → *Settings* → *Secrets and variables* → *Actions* → **Variables** tabı — `RATING_PROMPT` adlı dəyişənə bax.
+- **Gözlənilən:** heç bir "Enjoying Tower Clash?" / ulduzlu qiymət pəncərəsi çıxmır — nə nəticə kartında, nə xəritədə; nəticə kartı adi qaydada işləyir (düymələr, PAYLAŞ), çökmə və donma yoxdur. GitHub-da `RATING_PROMPT` dəyişəni **yoxdur** (və ya dəyəri `on` deyil). *Qeyd: TestFlight build-lərində Apple bu pəncərəni ümumiyyətlə göstərmir, ona görə build 8 üçün əsas sübut dəyişənin olmamasıdır; telefondakı hissə 3★ qələbədən sonra heç nəyin pozulmadığını yoxlayır.* İki cəhddə 3★ alınmasa, `TF-21 çatmadı` yaz — xəta deyil.
+- **Alınmasa yaz:** `TF-21 FAIL: 3★-dan sonra qiymət pəncərəsi çıxdı / nəticə kartı dondu / RATING_PROMPT = on [skrinşot]`.
+- **Bağlayır:** MM-9 (cihaz təsdiqi; MM-10 build dəyişəni) · **Ciddilik:** S3 — build 8 yığılmazdan əvvəl dəyişən silinir, çünki rəy qeydi (APP_STORE_CONNECT_SHEET §6.4) "bu versiya qiymət istəmir" deyir.
+
 ### Necə hesabat vermək
 
 1. Bütün nəticələri **bir mesajla** çata yaz. Hər uğursuz yoxlama üçün **bir sətir**: yoxlamanın id-si + nə oldu, altında skrinşot (və ya ekran yazısı). Uğurlu yoxlamaları sadəcə siyahı ilə yaz — sətirlərin bağlanması üçün bu da lazımdır.
@@ -253,6 +261,7 @@ Colours: **your towers are blue**, the enemy's **red**, neutral **grey**. "Notch
 | TF-18 | Airplane mode: game and DAILY card work | 2 | QA-2 | S1 no start · S2 card |
 | TF-19 | 04:00 Baku daily rollover (optional) | 3 | QA-2 | S2 |
 | TF-20 | PAYLAŞ: result card → share sheet (WhatsApp / Telegram) | 2 | MM-8 | S2 · S3 image |
+| TF-21 | No rating sheet after a 3★ win on level 10+ | 2 | MM-9 | S3 |
 
 Severity (POST_LAUNCH §5.1): **S1** — crash, a level that cannot be won or loaded, progress lost, an ad during a battle or in levels 1–5 → fixed the same day. **S2** — a feature blocked for some users (a language, a device, the shop) → within 2 sessions. **S3** — cosmetic, wording, a single-device quirk → next release.
 
@@ -404,6 +413,12 @@ Daily table (the date is UTC: in Baku from **04:00** that day to **03:59** the n
 - **If it fails, write:** `TF-20 FAIL: sheet did not open / image blank or black / wrong text [screenshot]`.
 - **Closes:** MM-8 (device confirmation) · **Severity:** S2 — the sheet does not open or no image arrives; S3 — clipped text on the image.
 
+#### TF-21 · No rating sheet after a 3★ win on level 10+ (2 min)
+- **Tap:** after TF-13, win level **10, 11 or 12** with **3 stars** (boosters are fine). Wait 5 seconds on the result card, then go back to the map and open another level. Then in a browser (1 min): github.com/pervincinal/InsiderTest → *Settings* → *Secrets and variables* → *Actions* → **Variables** tab — look for a variable named `RATING_PROMPT`.
+- **Expected:** no "Enjoying Tower Clash?" / star-rating sheet appears — neither on the result card nor on the map; the result card works as usual (buttons, PAYLAŞ), no crash, no freeze. GitHub has **no** `RATING_PROMPT` variable (or its value is not `on`). *Note: Apple never shows this sheet in TestFlight builds, so for build 8 the real proof is the missing variable; the phone half checks that nothing breaks after a 3★ win.* If two tries give no 3★, write `TF-21 not reached` — not a bug.
+- **If it fails, write:** `TF-21 FAIL: rating sheet after 3★ / result card froze / RATING_PROMPT = on [screenshot]`.
+- **Closes:** MM-9 (device confirmation; MM-10 build variable) · **Severity:** S3 — the variable is removed before build 8 is made, because the review notes (APP_STORE_CONNECT_SHEET §6.4) say this version never asks for a rating.
+
 ### How to report
 
 1. Send all results **in one message** in the chat. For each failed check **one line**: the check id + what happened, with the screenshot (or screen recording) under it. List the passed checks as well — the backlog rows can only be closed with them.
@@ -423,5 +438,6 @@ Daily table (the date is UTC: in Baku from **04:00** that day to **03:59** the n
 - **MM-1 (iOS half):** TF-02, 03, 04, 06, 07, 10, 15 pass → the WebView items of MM-1 (safe areas, audio unlock, background pause, portrait, store-unavailable state) are confirmed on iOS; the Android back-button half stays with the APK pass.
 - **QA-2 (iOS half):** TF-01, 05, 08, 09, 12, 14, 16, 17, 18 pass (TF-11, TF-19 optional).
 - **MM-8 (share card on device):** TF-20 pass → the native share branch (`@capacitor/share` + `@capacitor/filesystem`) is confirmed; a sheet that never opens → the Web Share fallback path in `src/native/share.ts`.
+- **MM-9 / MM-10 (rating prompt off):** TF-21 pass and no `RATING_PROMPT` variable → the review-notes sentence "never requests a rating in this version" holds for build 8; the variable set to `on` → delete it before build 8 is made (or rewrite the review notes).
 - **MM-4:** TF-12 without a reload to the title + TF-13 sharpness answer "crisp" → the DPR cap (`DPR_CAP.native` 2, `src/render/view.ts`) is confirmed; a reload or stutter → the two-layer fallback of docs/MOBILE.md §9.3 step 4.
 - **M3-5:** TF-13 smoothness ≥ 4/5 at ×1 on the stakeholder's phone; ≤ 3/5 → a screen recording, then the levers listed under M3-5 in the backlog.
