@@ -82,6 +82,8 @@ export interface TowerClashDebug {
    * the fallback chain, the share text, and the PNG's name, MIME type, byte size and pixel size.
    */
   readonly lastShare: { result: 'shared' | 'saved' | 'unavailable' | 'cancelled'; text: string; name: string; type: string; bytes: number; width: number; height: number } | null;
+  /** What the rating-prompt hook returned on the last result screen (MM-9); null before any result. */
+  readonly lastReview: 'requested' | 'unavailable' | 'disabled' | 'skipped' | null;
   /** Result screen numbers, or null when not on the result screen. */
   getResult(): { outcome: string; stars: number; coinsEarned: number; coinsTotal: number; crystalsEarned: number; achievements: string[]; tip: string | null; howto: boolean; practice: boolean } | null;
   /** Level-select lock state for a level id (undefined id → false). */

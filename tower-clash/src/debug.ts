@@ -6,6 +6,7 @@ import { LEVEL_META, levelIndex } from './levels/index';
 import { toClient } from './render/view';
 import { isLevelUnlocked } from './ui/save';
 import { ResultScreen, lastShareRecord } from './ui/screens';
+import { lastReviewResult } from './native/review';
 import type { TranslationKey } from './ui/i18n';
 import { currentLanguage, t } from './ui/i18n';
 import { configureFakeStore } from './economy/providers/fakeStore';
@@ -37,6 +38,9 @@ export function installDebug(app: TowerClashApp): TowerClashDebug {
     getToast: () => app.current.toast?.opts(performance.now())?.text ?? null,
     get lastShare() {
       return lastShareRecord();
+    },
+    get lastReview() {
+      return lastReviewResult();
     },
     getResult: () => {
       if (!(app.current instanceof ResultScreen)) return null;

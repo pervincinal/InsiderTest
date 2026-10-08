@@ -101,7 +101,20 @@ let inFlight = false;
  * (web, plugin missing) leaves the save as it was, so a later build/device can still ask once.
  * Never rejects.
  */
+let lastHook: ReviewHookResult | null = null;
+
+/** What the last `maybeAskForReview` call returned (QA surface `window.__towerclash.lastReview`). */
+export function lastReviewResult(): ReviewHookResult | null {
+  return lastHook;
+}
+
 export async function maybeAskForReview(info: ReviewTrigger, save: SaveData): Promise<ReviewHookResult> {
+  const result = await maybeAskForReviewInner(info, save);
+  lastHook = result;
+  return result;
+}
+
+async function maybeAskForReviewInner(info: ReviewTrigger, save: SaveData): Promise<ReviewHookResult> {
   if (!ratingPromptEnabled()) return 'disabled';
   if (save.reviewAsked || inFlight || !qualifiesForReview(info)) return 'skipped';
   inFlight = true;

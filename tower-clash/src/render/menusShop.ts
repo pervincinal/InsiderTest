@@ -161,19 +161,23 @@ function drawBuyButton(
     drawSpinner(ctx, text, r.x + r.w / 2, cy, Math.min(12, r.h * 0.25), o.nowMs ?? 0);
     return;
   }
-  ctx.font = font(o.fontPx ?? 22);
+  const glyphR = o.glyph ? Math.min(11, r.h * 0.2) : 0;
+  const glyphW = o.glyph ? glyphR * 2 + 8 : 0;
+  // BUG-21: a long label (RU "ТОЛЬКО В НАБОРЕ") used to be squeezed by fillText's maxWidth; size the
+  // font to the room left beside the glyph instead, so the glyphs keep their proportions.
+  const px = fitFontPx(ctx, label, o.fontPx ?? 22, r.w - 16 - glyphW);
+  ctx.font = font(px);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const tw = ctx.measureText(label).width;
-  const glyphR = o.glyph ? Math.min(11, r.h * 0.2) : 0;
-  const total = tw + (o.glyph ? glyphR * 2 + 8 : 0);
+  const total = tw + glyphW;
   const x0 = r.x + r.w / 2 - total / 2;
   if (o.glyph === 'gold') drawGoldCoin(ctx, pal, x0 + glyphR, cy, glyphR);
   else if (o.glyph === 'crystal') drawCrystal(ctx, pal, x0 + glyphR, cy, glyphR * 1.05);
   ctx.fillStyle = text;
-  ctx.font = font(o.fontPx ?? 22);
+  ctx.font = font(px);
   ctx.textAlign = 'left';
-  ctx.fillText(label, x0 + (o.glyph ? glyphR * 2 + 8 : 0), cy + 1, r.w - 16);
+  ctx.fillText(label, x0 + glyphW, cy + 1, r.w - 16);
 }
 
 function drawPackCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopPackCard, o: ShopOpts): void {
