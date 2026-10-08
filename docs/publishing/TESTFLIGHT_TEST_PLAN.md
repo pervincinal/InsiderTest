@@ -195,9 +195,9 @@ Günlük cədvəl (tarix UTC-dir: Bakıda həmin gün **04:00**-dan növbəti g�
 - **Bağlayır:** QA-2 · **Ciddilik:** S2.
 
 #### TF-20 · PAYLAŞ — nəticə kartından paylaşma pəncərəsi (2 dəq)
-- **Toxun:** istənilən səviyyəni bitir (qalib və ya məğlub) → nəticə kartında **PAYLAŞ** → iPhone-un paylaşma pəncərəsi açılır → **WhatsApp** və ya **Telegram** seç → özünə göndər. Sonra bir də **PAYLAŞ** → pəncərəni yuxarıdan aşağı çəkib **bağla**.
+- **Toxun:** istənilən səviyyəni bitir (qalib və ya məğlub) → nəticə kartında **PAYLAŞ** → iPhone-un paylaşma pəncərəsi açılır → **WhatsApp** və ya **Telegram** seç → özünə göndər. Sonra bir də **PAYLAŞ** → **Şəkli saxla** (Save Image) seç → Foto-lara icazə sorğusuna **İcazə ver** → şəkil Foto-larda görünür. Üçüncü dəfə **PAYLAŞ** → pəncərəni yuxarıdan aşağı çəkib **bağla**.
 - **Gözlənilən:** pəncərə dərhal açılır (≤ 2 s); göndərilən şəkil dik kartdır (1080×1350): biomun adası, qala, "QƏLƏBƏ"/"MƏĞLUBİYYƏT", səviyyənin adı və nömrəsi, ulduzlar, vaxt, aşağıda versiya; mətn sətri oyunun linki ilə gəlir. Bağlayanda oyun nəticə kartında qalır, heç bir xəta yazısı yoxdur. **GÜNLÜK** və **HƏFTƏLİK** nəticəsində kartda gün/həftə açarı və fənd də görünür; dünənki xəritənin (məşq) kartında **PAYLAŞ yoxdur** — bu xəta deyil.
-- **Alınmasa yaz:** `TF-20 FAIL: pəncərə açılmadı / şəkil boş-qara / mətn yanlış [skrinşot]`.
+- **Alınmasa yaz:** `TF-20 FAIL: pəncərə açılmadı / şəkil boş-qara / mətn yanlış / Şəkli saxla-da tətbiq bağlandı [skrinşot]`.
 - **Bağlayır:** MM-8 (cihaz təsdiqi) · **Ciddilik:** S2 — pəncərə açılmır və ya şəkil gəlmir; S3 — şəkildə kəsik mətn.
 
 #### TF-21 · 10+ səviyyədə 3★ qələbədən sonra qiymət pəncərəsi çıxmır (2 dəq)
@@ -408,9 +408,9 @@ Daily table (the date is UTC: in Baku from **04:00** that day to **03:59** the n
 - **Closes:** QA-2 · **Severity:** S2.
 
 #### TF-20 · PAYLAŞ — share sheet from the result card (2 min)
-- **Tap:** finish any level (win or loss) → **PAYLAŞ** on the result card → the iPhone share sheet opens → pick **WhatsApp** or **Telegram** → send it to yourself. Then **PAYLAŞ** once more → swipe the sheet down to **dismiss** it.
+- **Tap:** finish any level (win or loss) → **PAYLAŞ** on the result card → the iPhone share sheet opens → pick **WhatsApp** or **Telegram** → send it to yourself. Then **PAYLAŞ** once more → pick **Save Image** → **Allow** the Photos permission prompt → the card appears in Photos. A third **PAYLAŞ** → swipe the sheet down to **dismiss** it.
 - **Expected:** the sheet opens at once (≤ 2 s); the sent image is a portrait card (1080×1350): the biome's island, the tower, "QƏLƏBƏ"/"MƏĞLUBİYYƏT", level name and number, stars, time, the version at the bottom; a text line with the game link comes along. After dismissing, the game stays on the result card with no error text. A **DAILY** / **WEEKLY** result also shows the day/week key and the twist on the card; yesterday's map (practice) has **no PAYLAŞ** — that is not a bug.
-- **If it fails, write:** `TF-20 FAIL: sheet did not open / image blank or black / wrong text [screenshot]`.
+- **If it fails, write:** `TF-20 FAIL: sheet did not open / image blank or black / wrong text / app closed on Save Image [screenshot]`.
 - **Closes:** MM-8 (device confirmation) · **Severity:** S2 — the sheet does not open or no image arrives; S3 — clipped text on the image.
 
 #### TF-21 · No rating sheet after a 3★ win on level 10+ (2 min)

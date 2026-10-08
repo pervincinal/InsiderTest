@@ -31,7 +31,7 @@ This page is hosted publicly (planned address: `https://pervincinal.github.io/In
 
 ### Part B — Mobile app versions (Google Play, App Store)
 
-**The short version.** The mobile apps store your progress on your device, exactly like the web version. In addition they can show advertisements (Google AdMob) and sell optional in-app purchases (processed by Google Play or the App Store, with RevenueCat keeping track of what you own). For this, two things leave your device: an **advertising identifier** for ads, and **purchase receipts** for purchases. The game itself never asks for your name, e-mail, phone number or any account.
+**The short version.** The mobile apps store your progress on your device, exactly like the web version. The share image (SHARE on the result card) is created on the device and leaves it only through the system share sheet, or into your Photos if you pick "Save Image" there; the app never reads your photo library. In addition they can show advertisements (Google AdMob) and sell optional in-app purchases (processed by Google Play or the App Store, with RevenueCat keeping track of what you own). For this, two things leave your device: an **advertising identifier** for ads, and **purchase receipts** for purchases. The game itself never asks for your name, e-mail, phone number or any account.
 
 #### B.1 Progress on your device
 
@@ -141,7 +141,7 @@ Bu səhifə açıq şəkildə yerləşdirilir (planlaşdırılan ünvan: `https:
 
 ### B hissəsi — Mobil tətbiq versiyaları (Google Play, App Store)
 
-**Qısa versiya.** Mobil tətbiqlər irəliləyişinizi veb versiyası kimi cihazınızda saxlayır. Əlavə olaraq reklam göstərə bilər (Google AdMob) və könüllü tətbiqdaxili alışlar təklif edir (ödənişi Google Play və ya App Store aparır, RevenueCat isə nəyə sahib olduğunuzu yadda saxlayır). Bunun üçün cihazınızdan iki şey çıxır: reklamlar üçün **reklam identifikatoru** və alışlar üçün **alış qəbzləri**. Oyun özü heç vaxt adınızı, e-poçtunuzu, telefon nömrənizi və ya hesab istəmir.
+**Qısa versiya.** Mobil tətbiqlər irəliləyişinizi veb versiyası kimi cihazınızda saxlayır. Paylaşma şəkli (nəticə kartındakı PAYLAŞ) cihazda yaradılır və cihazdan yalnız sistemin paylaşma pəncərəsi ilə, ya da orada "Şəkli saxla" seçsəniz Foto-lara çıxır; tətbiq foto kitabxananızı heç vaxt oxumur. Əlavə olaraq reklam göstərə bilər (Google AdMob) və könüllü tətbiqdaxili alışlar təklif edir (ödənişi Google Play və ya App Store aparır, RevenueCat isə nəyə sahib olduğunuzu yadda saxlayır). Bunun üçün cihazınızdan iki şey çıxır: reklamlar üçün **reklam identifikatoru** və alışlar üçün **alış qəbzləri**. Oyun özü heç vaxt adınızı, e-poçtunuzu, telefon nömrənizi və ya hesab istəmir.
 
 #### B.1 Cihazınızdakı irəliləyiş
 

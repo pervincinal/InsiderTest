@@ -38,6 +38,10 @@
 	<string>ca-app-pub-3940256099942544~1458002511</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!-- Share card (MM-8, docs/MOBILE.md §8.4): the system share sheet offers "Save Image"; without this
+	     key iOS terminates the app when the player picks it. The app itself never reads the library. -->
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Lets you save your Tower Clash result card to Photos when you choose Save Image in the share sheet.</string>
 	<!-- No NSUserTrackingUsageDescription on purpose: the app never calls App Tracking
 	     Transparency and serves non-personalised ads (no tracking; docs/MOBILE.md §8.7,
 	     docs/publishing/STORE_LISTING.md §6.4 option A). Do not add it back without changing
