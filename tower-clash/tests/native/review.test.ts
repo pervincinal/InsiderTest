@@ -6,6 +6,10 @@
  *
  * The plugin module is mocked with a factory that counts evaluations and calls, so the tests can
  * assert the lazy import; `isNative()` is mocked per test.
+ *
+ * MM-10: the flag is the build-time variable `VITE_RATING_PROMPT` (exactly 'on' = enabled). It is
+ * read when the module is evaluated, so every test stubs it with `vi.stubEnv` BEFORE `fresh()`;
+ * `beforeEach` pins it to unset so a developer's `.env.local` cannot leak into the suite.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -77,12 +81,14 @@ function campaign(levelId: number, stars: number, outcome = 'won'): Trigger {
 beforeEach(() => {
   Object.assign(ctl, { isNative: true, imports: 0, calls: 0, failImport: false, failRequest: null, gate: null });
   store = memStore();
+  vi.stubEnv('VITE_RATING_PROMPT', undefined);
   vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   vi.doUnmock('@capacitor-community/in-app-review');
 });
 
@@ -124,11 +130,62 @@ describe('requestReview — native', () => {
   });
 });
 
-describe('flag', () => {
-  it('ships off', async () => {
+describe('flag (VITE_RATING_PROMPT)', () => {
+  it('ships off: unset → disabled', async () => {
     const { review } = await fresh();
+    expect(import.meta.env.VITE_RATING_PROMPT).toBeUndefined();
     expect(review.RATING_PROMPT_ENABLED).toBe(false);
     expect(review.ratingPromptEnabled()).toBe(false);
+  });
+
+  it("'off' → disabled", async () => {
+    vi.stubEnv('VITE_RATING_PROMPT', 'off');
+    const { review, saveMod } = await fresh();
+    expect(review.RATING_PROMPT_ENABLED).toBe(false);
+    await expect(review.maybeAskForReview(campaign(10, 3), saveMod.defaultSave())).resolves.toBe('disabled');
+    expect(ctl.imports).toBe(0);
+  });
+
+  it("'ON', ' on', 'true', '1' and '' → disabled (exact match only)", async () => {
+    for (const value of ['ON', 'On', ' on', 'on ', 'true', '1', '']) {
+      vi.stubEnv('VITE_RATING_PROMPT', value);
+      const { review } = await fresh();
+      expect(review.RATING_PROMPT_ENABLED, JSON.stringify(value)).toBe(false);
+      expect(review.ratingPromptEnabled(), JSON.stringify(value)).toBe(false);
+    }
+  });
+
+  it("'on' → enabled: a qualifying native win asks the OS once and persists", async () => {
+    vi.stubEnv('VITE_RATING_PROMPT', 'on');
+    const { review, saveMod } = await fresh();
+    expect(review.RATING_PROMPT_ENABLED).toBe(true);
+    expect(review.ratingPromptEnabled()).toBe(true);
+    const save = saveMod.defaultSave();
+    await expect(review.maybeAskForReview(campaign(9, 3), save)).resolves.toBe('skipped');
+    await expect(review.maybeAskForReview(campaign(10, 3), save)).resolves.toBe('requested');
+    expect(ctl.calls).toBe(1);
+    expect(save.reviewAsked).toBe(true);
+    expect(store.writes).toEqual([saveMod.SAVE_KEY]);
+  });
+
+  it("'on' in a browser build: the hook runs and resolves 'unavailable' without loading the plugin", async () => {
+    vi.stubEnv('VITE_RATING_PROMPT', 'on');
+    ctl.isNative = false;
+    const { review, saveMod } = await fresh();
+    expect(review.ratingPromptEnabled()).toBe(true);
+    const save = saveMod.defaultSave();
+    await expect(review.maybeAskForReview(campaign(10, 3), save)).resolves.toBe('unavailable');
+    expect(save.reviewAsked).toBe(false);
+    expect(ctl.imports).toBe(0);
+  });
+
+  it('the test override still wins over the variable in both directions', async () => {
+    vi.stubEnv('VITE_RATING_PROMPT', 'on');
+    const { review } = await fresh();
+    review.setRatingPromptForTests(false);
+    expect(review.ratingPromptEnabled()).toBe(false);
+    review.setRatingPromptForTests(undefined);
+    expect(review.ratingPromptEnabled()).toBe(true);
   });
 
   it('flag off → "disabled" for a qualifying result, without touching the save or the plugin', async () => {

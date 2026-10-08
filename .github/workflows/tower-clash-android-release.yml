@@ -159,6 +159,9 @@ jobs:
           VITE_RC_ANDROID_KEY: ${{ secrets.RC_ANDROID_KEY }}
           VITE_ADMOB_ANDROID_INTERSTITIAL: ${{ secrets.ADMOB_ANDROID_INTERSTITIAL }}
           VITE_ADMOB_ANDROID_REWARDED: ${{ secrets.ADMOB_ANDROID_REWARDED }}
+          # MM-10 rating prompt (docs/MOBILE.md §8.8): a repository VARIABLE, not a secret (not
+          # sensitive). Exactly `on` enables it; unset/anything else = off. Release workflows only.
+          VITE_RATING_PROMPT: ${{ vars.RATING_PROMPT }}
         run: |
           : > .env.production
           for name in VITE_RC_ANDROID_KEY VITE_ADMOB_ANDROID_INTERSTITIAL VITE_ADMOB_ANDROID_REWARDED; do
@@ -171,6 +174,12 @@ jobs:
               if [ "$TRACK" = "production" ]; then echo "::warning::$name is not configured — the production build will ship without it (store unavailable / test ads)"; fi
             fi
           done
+          if [ "$VITE_RATING_PROMPT" = "on" ]; then
+            printf 'VITE_RATING_PROMPT=on\n' >> .env.production
+            echo "VITE_RATING_PROMPT: on (rating prompt enabled in this build)"
+          else
+            echo "VITE_RATING_PROMPT: off (repository variable RATING_PROMPT is '${VITE_RATING_PROMPT}', not 'on')"
+          fi
 
       # The AdMob APP id (ca-app-pub-…~…, not an ad unit) lives in strings.xml; a wrong value
       # crashes the app at startup, so only replace it when the secret is set.

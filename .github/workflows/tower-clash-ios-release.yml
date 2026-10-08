@@ -160,6 +160,9 @@ jobs:
           VITE_RC_IOS_KEY: ${{ secrets.RC_IOS_KEY }}
           VITE_ADMOB_IOS_INTERSTITIAL: ${{ secrets.ADMOB_IOS_INTERSTITIAL }}
           VITE_ADMOB_IOS_REWARDED: ${{ secrets.ADMOB_IOS_REWARDED }}
+          # MM-10 rating prompt (docs/MOBILE.md §8.8): a repository VARIABLE, not a secret (not
+          # sensitive). Exactly `on` enables it; unset/anything else = off. Release workflows only.
+          VITE_RATING_PROMPT: ${{ vars.RATING_PROMPT }}
         run: |
           : > .env.production
           for name in VITE_RC_IOS_KEY VITE_ADMOB_IOS_INTERSTITIAL VITE_ADMOB_IOS_REWARDED; do
@@ -172,6 +175,12 @@ jobs:
               if [ "$LANE" = "appstore" ]; then echo "::warning::$name is not configured — the App Store build will ship without it (store unavailable / test ads)"; fi
             fi
           done
+          if [ "$VITE_RATING_PROMPT" = "on" ]; then
+            printf 'VITE_RATING_PROMPT=on\n' >> .env.production
+            echo "VITE_RATING_PROMPT: on (rating prompt enabled in this build)"
+          else
+            echo "VITE_RATING_PROMPT: off (repository variable RATING_PROMPT is '${VITE_RATING_PROMPT}', not 'on')"
+          fi
 
       # GADApplicationIdentifier in Info.plist must be the AdMob APP id (ca-app-pub-…~…); a wrong
       # value crashes at startup, so only replace it when the secret is set.

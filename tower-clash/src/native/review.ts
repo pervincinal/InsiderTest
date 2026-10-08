@@ -11,18 +11,21 @@ import { writeSave } from '../ui/save';
  * most 3 times in 365 days per app; Google: an undisclosed quota) and never tells the app whether the
  * player rated, so the result only says whether we *asked*.
  *
- * Shipped OFF (Producer, 2026-10-07): flip `RATING_PROMPT_ENABLED` to `true` for the build that
- * should ask (planned: 1.0.1, once the organic store rating is ≥ 4.3). Nothing else changes.
+ * Shipped OFF (Producer, 2026-10-07). Switched on WITHOUT a code edit (MM-10): the release
+ * workflows bake the GitHub Actions repository variable `RATING_PROMPT` into the build as
+ * `VITE_RATING_PROMPT`; exactly `on` turns the prompt on for that build (planned: 1.0.1, once the
+ * organic store rating is ≥ 4.3). Unset or any other value → off. Debug/CI builds never set it.
  *
  * Owned by the Mobile Engineer. The plugin is loaded with dynamic `import()` only inside a native
  * shell, so the web/PWA bundle never contains it. No network call of our own.
  */
 
 /**
- * Build-time switch for the rating prompt. `false` = `maybeAskForReview` returns `'disabled'` at
- * once and never touches the save or the plugin.
+ * Build-time switch for the rating prompt: `VITE_RATING_PROMPT === 'on'` (exact, case-sensitive),
+ * replaced by Vite at `vite build` time. `false` = `maybeAskForReview` returns `'disabled'` at once
+ * and never touches the save or the plugin.
  */
-export const RATING_PROMPT_ENABLED = false;
+export const RATING_PROMPT_ENABLED: boolean = import.meta.env.VITE_RATING_PROMPT === 'on';
 
 /** Campaign level from which a 3★ win may ask for a rating (POST_LAUNCH.md §6: "level ≥ 10"). */
 export const RATING_PROMPT_MIN_LEVEL = 10;
@@ -36,7 +39,7 @@ export type ReviewHookResult = ReviewResult | 'skipped';
 /**
  * `?review=on` in the page URL (web only, same style as `?store=off`): turns the prompt on so the
  * call path can be exercised in a browser, where `requestReview()` resolves `'unavailable'`.
- * Ignored inside a native shell — a store build follows `RATING_PROMPT_ENABLED` only.
+ * Ignored inside a native shell — a store build follows `RATING_PROMPT_ENABLED` (`VITE_RATING_PROMPT`) only.
  */
 export function reviewOnByUrl(native: boolean = isNative()): boolean {
   return !native && typeof location !== 'undefined' && /[?&]review=on(&|$)/.test(location.search);

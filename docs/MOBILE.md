@@ -218,6 +218,14 @@ Optional manual-signing fallback (all three or none; only if a Mac exported them
 
 What the job does (`.github/workflows/tower-clash-ios-release.yml`): secrets check → `npm ci` → `npm run version:check` → `.env.production` + `GADApplicationIdentifier` from the `RC_IOS_KEY` / `ADMOB_IOS_*` secrets (§8.3, same as the simulator job) → `npm run build` → `npx cap sync ios` → `xcodebuild archive` (Release, `generic/platform=iOS`, `-allowProvisioningUpdates` + `-authenticationKeyPath/ID/IssuerID`, `DEVELOPMENT_TEAM`, `CODE_SIGN_STYLE=Automatic`) → `ExportOptions.plist` written in the job (`method app-store-connect` on Xcode ≥ 15.4, `signingStyle automatic`, `teamID`, `uploadSymbols true`, `manageAppVersionAndBuildNumber false`, `destination export`) → `-exportArchive` → `xcrun altool --validate-app` / `--upload-app -t ios --apiKey … --apiIssuer …` (the `.p8` is copied to `~/private_keys/` for altool) → fallback `-exportArchive` with `destination upload` → artifacts `tower-clash-ios-<version>-<build>-ipa` and `…-dSYMs` (90 days) → keys and keychain removed. The Xcode project itself needs no signing changes (`CODE_SIGN_STYLE = Automatic`, no `DEVELOPMENT_TEAM` committed).
 
+**Repository variables (not secrets) — both release workflows:**
+
+A *variable* is a plain setting that GitHub shows openly (unlike a secret it can be read and changed later). Add it under *Settings → Secrets and variables → Actions* → tab **Variables** → **New repository variable** (direct link: <https://github.com/pervincinal/InsiderTest/settings/variables/actions/new>). The debug/CI workflows (`tower-clash-ci.yml`, `tower-clash-android.yml`, `tower-clash-ios.yml`, Pages) ignore it.
+
+| Variable | Needed | Value | What it does |
+|---|---|---|---|
+| `RATING_PROMPT` | no — default off | `on` (exactly, lower case) | turns the rating prompt on in the **release** builds (`tower-clash-ios-release.yml`, `tower-clash-android-release.yml`, baked in as `VITE_RATING_PROMPT`); unset or any other value = off. Set it for 1.0.1 only when the organic store rating is ≥ 4.3 — see §8.8 |
+
 ## 8. In-app purchases and ads (RevenueCat + AdMob)
 
 ### 8.1 What is built
@@ -359,16 +367,17 @@ What this means for the paperwork (non-developer steps):
 
 Reverting to option B (personalised ads on iOS) would need: the ATT call back in `admob.ts`, `npa` off on iOS, `NSUserTrackingUsageDescription` back in `Info.plist`, the "no tracking" unit test removed, App Privacy *Tracking* = Yes, and privacy policy 2.x re-worded. Do not do it piecemeal.
 
-### 8.8 Rating prompt (MM-9) — built, switched off
+### 8.8 Rating prompt (MM-9, switch MM-10) — built, switched off
 
 **What it does.** After a **campaign** win with **3 stars** on **level 10 or later** the app asks the phone's own rating sheet to appear (Android: Google Play *In-App Review*; iOS: Apple's `SKStoreReviewController` / `AppStore.requestReview`). It asks **once per install** — the save remembers it (`reviewAsked`, kept even by "Reset progress"). Daily, weekly and Yesterday's-map results never ask; neither does a loss or a 1–2★ win. There is no "Do you like the game?" pre-question (both stores forbid steering players towards good ratings). Plugin: `@capacitor-community/in-app-review` **8.0.0** (exact pin), loaded only inside the native app, so the web/PWA download is unchanged; no permission, no Info.plist key, no network call of ours. Code: `tower-clash/src/native/review.ts`, one call in `ResultScreen.enter`.
 
-**The switch.** `RATING_PROMPT_ENABLED` in `tower-clash/src/native/review.ts` — `false` in 1.0.x (Producer decision, 2026-10-07: turn on only once the organic store rating is **≥ 4.3**). While it is `false` nothing happens and the save is not touched. Browser check for the team: open the game with `?review=on` (e.g. `…/index.html?review=on`); a qualifying win then runs the whole path and ends in "unavailable" (browsers have no rating sheet). `?review=on` is ignored inside the apps.
+**The switch (MM-10, no code edit).** The GitHub repository **variable** `RATING_PROMPT` (§6). The release workflows copy it into the build as `VITE_RATING_PROMPT`; the code (`RATING_PROMPT_ENABLED` in `tower-clash/src/native/review.ts`) is on only when it is exactly `on`. It is not set in 1.0.x (Producer decision, 2026-10-07: turn on only once the organic store rating is **≥ 4.3**). While it is off nothing happens and the save is not touched. The value is fixed when a build is made: changing the variable affects the **next** release build, never an app already in the store. The run log of the release job shows `VITE_RATING_PROMPT: on` or `…: off` in the step *Write .env.production from repository secrets*. Browser check for the team: open the game with `?review=on` (e.g. `…/index.html?review=on`); a qualifying win then runs the whole path and ends in "unavailable" (browsers have no rating sheet). `?review=on` is ignored inside the apps.
 
 **How to turn it on for 1.0.1 (no programming needed):**
 1. Check the rating: Play Console → Tower Clash → *Ratings and reviews*, and App Store Connect → Tower Clash → *Ratings and Reviews*. Go on only if it is 4.3 or higher.
-2. On GitHub open `tower-clash/src/native/review.ts`, click the pencil, change `export const RATING_PROMPT_ENABLED = false;` to `true`, commit to the working branch.
-3. Bump the version/build number (§4) and run the release builds as usual (§3, §6). Nothing else changes; no store paperwork changes (the rating sheet collects no data for us).
+2. On GitHub: <https://github.com/pervincinal/InsiderTest> → **Settings** → **Secrets and variables** → **Actions** → tab **Variables** → **New repository variable** → *Name* `RATING_PROMPT` → *Value* `on` (lower case, nothing else) → **Add variable**. (On the iPhone, if *Settings* is missing, tap **aA** in Safari's address bar → **Request Desktop Website**.)
+3. The team bumps the version/build number (§4); then run the release builds as usual (tag `tower-clash-v<version>` or *Run workflow*, §3, §6). In each run's log, the step *Write .env.production from repository secrets* must say `VITE_RATING_PROMPT: on`. Nothing else changes; no store paperwork changes (the rating sheet collects no data for us).
+4. To turn it off again for a later version: same page → `RATING_PROMPT` → pencil → change the value to `off` (or delete the variable), then build that version. A version already in the store keeps what it was built with.
 
 **What the stores do with it (and why a player may never see it):**
 - **Apple:** the system shows the sheet **at most 3 times in 365 days** per app and may decide not to show it at all; the app is not told. Players can switch all such prompts off (Settings → App Store → *In-App Ratings & Reviews*). In **TestFlight builds the sheet never appears**; in builds run from Xcode it always appears but cannot be submitted.
