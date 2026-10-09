@@ -86,9 +86,11 @@ export function drawToast(ctx: CanvasRenderingContext2D, pal: Palette, o: ToastO
   const w = Math.min(660, ctx.measureText(o.text).width + 56);
   const y = (o.y ?? 1090) - (1 - fadeIn) * 12;
   const pill: Rect = { x: 360 - w / 2, y: y - 24, w, h: 48 };
-  const fill = o.kind === 'ok' ? pal.owners.player : pal.owners.enemy1;
-  drawPill(ctx, pill, fill, shade(fill, -0.35));
-  ctx.fillStyle = pal.paper;
+  // ART-15: info / success toasts on the active-choice blue (paper 7.1:1; the owner mid blue was
+  // 4.35:1), errors on the alarm red with ink text (4.7:1; paper on it was 2.9:1)
+  const ink = o.kind === 'ok' ? pal.shopBuy : pal.toastError;
+  drawPill(ctx, pill, ink.face, shade(ink.face, -0.35));
+  ctx.fillStyle = ink.text;
   ctx.fillText(o.text, 360, y + 1, w - 24);
   ctx.restore();
 }

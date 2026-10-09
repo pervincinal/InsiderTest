@@ -12,7 +12,9 @@ import { t } from '../ui/i18n';
 
 /**
  * Segmented control on a clay button face: `active` segment is a raised blue pill with paper
- * text, the rest are dim labels. Segments split `r` evenly; hit-test with `segmentAt`.
+ * text, the rest are dim labels. Segments split `r` evenly; hit-test with `segmentAt`. The active
+ * pill is the palette's active-choice pair `shopBuy` (ART-15: paper 7.1:1 on the face, ≥ 5.0:1 even
+ * at a lit top; the owner mid blue it replaces was 4.35:1 / 3.37:1).
  */
 export function drawSegmented(
   ctx: CanvasRenderingContext2D,
@@ -21,8 +23,8 @@ export function drawSegmented(
   segments: readonly Segment[],
   active: number,
   fontPx = 22,
-  /** Active segment face + label (the shop converter's pack sizes use `pal.shopBuy`, BUG-22); default owner blue on paper. */
-  activeInk: ButtonInk = { face: pal.owners.player, text: pal.paper },
+  /** Active segment face + label; default the active-choice pair `pal.shopBuy` (BUG-22, ART-15). */
+  activeInk: ButtonInk = pal.shopBuy,
 ): void {
   drawButton(ctx, pal, r, '');
   const segW = (r.w - 8) / segments.length;
@@ -59,10 +61,12 @@ export function segmentAt(r: Rect, count: number, x: number, y: number): number 
   return Math.max(0, Math.min(count - 1, Math.floor(((x - r.x - 4) / (r.w - 8)) * count)));
 }
 
-/** ON/OFF toggle: clay track (blue when on) with a paper knob that slides right when on. */
+/**
+ * ON/OFF toggle: clay track (the active-choice blue `shopBuy` when on, ART-15) with a paper knob that
+ * slides right when on. The ON label is the pair's text (≥ 5.0:1 on the gradient), OFF is dim on paper.
+ */
 export function drawToggle(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, on: boolean, pressed = false): void {
-  const track = on ? pal.owners.player : shade(pal.panel, -0.12);
-  drawButton(ctx, pal, r, '', { fill: on ? track : undefined, pressed });
+  drawButton(ctx, pal, r, '', { fill: on ? pal.shopBuy.face : undefined, pressed });
   const faceH = r.h - BUTTON_EDGE;
   const knobR = faceH / 2 - 8;
   const kx = on ? r.x + r.w - 8 - knobR : r.x + 8 + knobR;
@@ -80,7 +84,7 @@ export function drawToggle(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect,
   ctx.beginPath();
   ctx.ellipse(kx - knobR * 0.25, ky - knobR * 0.4, knobR * 0.35, knobR * 0.18, -0.6, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = on ? pal.paper : pal.textDim;
+  ctx.fillStyle = on ? pal.shopBuy.text : pal.textDim;
   ctx.font = font(20);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';

@@ -151,6 +151,55 @@ const TAB_KEYS: Record<ShopTab, TranslationKey> = { crystals: 'shop.tab.crystals
  */
 const SHOP_NUMERAL_PX = 24;
 
+/** A number inside a translated line: "+10 %", "−20 %", "+3", "2.5k" (pct() puts a space before %). */
+const NUMERAL_RUN = /[+\-−]?\d[\d.,]*(?:\s?%)?k?/g;
+
+/**
+ * One left-aligned line (alphabetic baseline at `y`) whose numerals are drawn bold at
+ * SHOP_NUMERAL_PX and the words at `wordPx` (ART-15: numerals ≥ 24 px where a number is read, the
+ * translated words stay their size). A line too wide for `maxW` shrinks its words first (≥ 12 px)
+ * and its numerals only as a last resort, so `fillText` never squeezes the glyphs (BUG-21).
+ */
+function drawNumeralLine(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxW: number, colour: string, wordPx: number): void {
+  ctx.save();
+  const runs: { s: string; num: boolean }[] = [];
+  let at = 0;
+  for (const m of text.matchAll(NUMERAL_RUN)) {
+    if (m.index > at) runs.push({ s: text.slice(at, m.index), num: false });
+    runs.push({ s: m[0], num: true });
+    at = m.index + m[0].length;
+  }
+  if (at < text.length) runs.push({ s: text.slice(at), num: false });
+  const widthOf = (num: boolean, px: number): number =>
+    runs.reduce((sum, r) => {
+      if (r.num !== num) return sum;
+      ctx.font = font(px, num ? '700' : '500');
+      return sum + ctx.measureText(r.s).width;
+    }, 0);
+  let numPx = SHOP_NUMERAL_PX;
+  const numW = widthOf(true, numPx);
+  let wordW = widthOf(false, wordPx);
+  if (numW + wordW > maxW && wordW > 0) {
+    wordPx = Math.max(12, Math.floor((wordPx * Math.max(0, maxW - numW)) / wordW));
+    wordW = widthOf(false, wordPx);
+  }
+  if (numW + wordW > maxW) {
+    const k = maxW / (numW + wordW);
+    numPx = Math.max(8, Math.floor(numPx * k));
+    wordPx = Math.max(8, Math.floor(wordPx * k));
+  }
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = colour;
+  let cx = x;
+  for (const r of runs) {
+    ctx.font = font(r.num ? numPx : wordPx, r.num ? '700' : '500');
+    ctx.fillText(r.s, cx, y);
+    cx += ctx.measureText(r.s).width;
+  }
+  ctx.restore();
+}
+
 /**
  * Price / action button: label with an optional currency glyph; spinner when pending. `ink` is a
  * coloured face with its label colour (`pal.shopBuy` / `pal.shopOwned`, ≥ 4.5:1, BUG-22); without
@@ -357,9 +406,9 @@ function drawConvertCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopCon
     SHOP_NUMERAL_PX,
     pal.shopBuy,
   );
-  // result line: "→ 100 gold" with a coin
+  // result line: "→ 100 gold" with a coin; the number the player converts to, so ≥ 24 px (ART-15)
   ctx.fillStyle = pal.ink;
-  ctx.font = font(22);
+  ctx.font = font(SHOP_NUMERAL_PX);
   const label = t('shop.convertResult', { n: formatAmount(c.gold) });
   const w = ctx.measureText(label).width;
   ctx.fillText(label, cx + 10, r.y + 170);
@@ -438,9 +487,15 @@ function drawUpgradeCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopUpg
   ctx.fillStyle = pal.ink;
   ctx.font = font(18, '500');
   ctx.fillText(c.tier > 0 ? t('shop.now', { effect: c.effectNow }) : t('shop.notTrained'), textX, r.y + 104, textW);
-  ctx.fillStyle = c.cost === null ? pal.textDim : shade(pal.owners.enemy2, -0.25);
-  ctx.font = font(17, '500');
-  ctx.fillText(c.cost === null ? t('shop.fullyTrained') : t('shop.next', { effect: c.effectNext }), textX, r.y + 132, textW);
+  if (c.cost === null) {
+    ctx.fillStyle = pal.textDim;
+    ctx.font = font(17, '500');
+    ctx.fillText(t('shop.fullyTrained'), textX, r.y + 132, textW);
+  } else {
+    // ART-15: the next tier's gain in the palette's gain colour (≥ 4.5:1 on the card; the owner-2
+    // green it replaces was 3.8:1), its numbers at ≥ 24 px; same visual centre as the 17 px line
+    drawNumeralLine(ctx, t('shop.next', { effect: c.effectNext }), textX, r.y + 138, textW, pal.gainText, 17);
+  }
   const buy = shopRowBuyRect(r);
   const pressed = rectEq(o.pressed, buy) || rectEq(o.pressed, r);
   if (c.cost === null) drawBuyButton(ctx, pal, buy, t('shop.max'), { ink: pal.shopOwned, fontPx: 22 });

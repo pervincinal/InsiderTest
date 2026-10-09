@@ -138,9 +138,26 @@ export interface Palette {
    * blue than `owners.player`, paper numerals ≥ 5:1 on every face pixel), `shopOwned` = EQUIPPED /
    * OWNED / MAX and the pack bonus ribbon (the bright owner-2 colour kept, ink text) — light vs dark
    * so "owned" never reads as "buy" in either palette.
+   * ART-15: `shopBuy` is also the "active choice" blue of every control with text on it — the
+   * selected segment of `drawSegmented` (shop tabs, settings motion / language, converter sizes),
+   * the selected DAILY / WEEKLY card tab, a toggle's ON track and the info / success toast. One
+   * blue for every active state: the lightest player blue that clears 4.5:1 at the gradient top is
+   * #2252cb, a step from #1f4bc0, so a separate `segment` pair would be a near-duplicate token.
    */
   shopBuy: ButtonInk;
   shopOwned: ButtonInk;
+  /**
+   * Error toast (ART-15): the alarm owner-1 face (red; colour-blind orange) with ink text. Paper on
+   * that red is 2.9:1 and on its shade tone still 3.8:1 at a lit top; ink is ≥ 4.6:1 on every face
+   * pixel, and an error pill is dark text on a light face where the info pill (`shopBuy`) is light
+   * text on a dark face, so the two kinds differ in polarity, not only in hue.
+   */
+  toastError: ButtonInk;
+  /**
+   * Text of a gain on a paper card (ART-15: the upgrades "Next …" line): the owner-2 shade tone,
+   * darkened only as far as 4.5:1 on paper needs (default green 5.7:1, colour-blind purple 6.7:1).
+   */
+  gainText: string;
 }
 
 const BIOMES: Record<Biome, BiomeColors> = Object.freeze({
@@ -294,6 +311,10 @@ export const DEFAULT_PALETTE: Palette = Object.freeze({
   /** The player blue's own shade tone: paper numerals 7.1:1 on the flat face, 5.0:1 at the gradient's lit top. */
   shopBuy: { face: OWNER_TONES.player.shade, text: '#fffaf0' },
   shopOwned: { face: '#2ec27e', text: '#1e2a44' },
+  /** Ink on the owner-1 red: 4.7:1 flat, 5.5:1 at a lit top (paper was 2.9:1). */
+  toastError: { face: OWNER_TONES.enemy1.mid, text: '#1e2a44' },
+  /** `shade(ownerTones.enemy2.shade, -0.2)`: 5.7:1 on paper (the green text it replaces was 3.8:1). */
+  gainText: '#19724a',
 });
 
 export const COLOR_BLIND_PALETTE: Palette = Object.freeze({
@@ -302,6 +323,10 @@ export const COLOR_BLIND_PALETTE: Palette = Object.freeze({
   ownerTones: OWNER_TONES_CB,
   /** The colour-blind owner-2 purple is too dark for ink and too light for paper: its lit tone takes ink. */
   shopOwned: { face: OWNER_TONES_CB.enemy2.lit, text: '#1e2a44' },
+  /** Ink on the colour-blind orange: 5.1:1 flat, 5.9:1 at a lit top (paper was 2.7:1). */
+  toastError: { face: OWNER_TONES_CB.enemy1.mid, text: '#1e2a44' },
+  /** The colour-blind owner-2 shade tone as it is: 6.7:1 on paper. */
+  gainText: OWNER_TONES_CB.enemy2.shade,
 });
 
 export function getPalette(colorBlind: boolean): Palette {

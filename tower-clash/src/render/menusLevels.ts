@@ -102,9 +102,11 @@ function drawCardTabs(ctx: CanvasRenderingContext2D, pal: Palette, active: 'dail
   for (const [id, hit] of tabs) {
     const on = id === active;
     const seg: Rect = { x: hit.x + 3, y: frame.y + 3, w: hit.w - 6, h: frame.h - 6 };
-    if (on) drawPill(ctx, seg, pressed === hit ? shade(pal.owners.player, -0.15) : pal.owners.player, shade(pal.owners.player, -0.35), 2);
+    // ART-15: the selected tab is the active-choice pair (paper 7.1:1; the owner mid blue was 4.35:1)
+    const face = pal.shopBuy.face;
+    if (on) drawPill(ctx, seg, pressed === hit ? shade(face, -0.15) : face, shade(face, -0.35), 2);
     const label = t(id === 'daily' ? 'daily.title' : 'weekly.title');
-    ctx.fillStyle = on ? pal.paper : dim ? pal.textDim : pal.ink;
+    ctx.fillStyle = on ? pal.shopBuy.text : dim ? pal.textDim : pal.ink;
     ctx.font = font(fitFontPx(ctx, label, 17, seg.w - 14));
     ctx.fillText(label, seg.x + seg.w / 2, seg.y + seg.h / 2 + 1, seg.w - 14);
   }
