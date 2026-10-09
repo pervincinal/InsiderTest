@@ -8,7 +8,7 @@ Play in the browser: **https://pervincinal.github.io/InsiderTest/** (live on Git
   <img src="store/screenshots/en/02.png" width="30%" alt="Level 1 with the tutorial hint: Tap, and the stream flows">
   <img src="store/screenshots/en/04.png" width="30%" alt="Level 24 with two rival armies, mines and boulders: Mines, rocks, two rivals">
   <img src="store/screenshots/en/06.png" width="30%" alt="Level 45 on the twilight highlands with three enemies and a wall gap: Three enemies, one crown">
-  <img src="store/screenshots/en/07.png" width="30%" alt="Result screen with three stars: Three-star every level">
+  <img src="store/screenshots/en/07.png" width="30%" alt="Result screen with three stars and the SHARE button: Three-star every level">
 </p>
 
 ## How to play
