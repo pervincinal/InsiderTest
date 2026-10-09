@@ -1,0 +1,33 @@
+# Tower Clash — Android Play build request (MM-13, docs/MOBILE.md §6 "Android").
+#
+# Pushing a change of this file to the branch claude/tower-war-game-plan-weqwpb starts
+# .github/workflows/tower-clash-android-release.yml once: signed .aab + .apk on an ubuntu runner,
+# then (with the secret PLAY_SERVICE_ACCOUNT_JSON) the upload to Google Play. Pushes to any other
+# branch start nothing. Without ANDROID_KEYSTORE_BASE64 + ANDROID_KEYSTORE_PASSWORD the run stops
+# in its first step, "Check required secrets".
+#
+# Keys (one key=value per line; lines starting with # are ignored; unknown keys are an error):
+#   track      internal (default) — Play "Internal testing"; without PLAY_SERVICE_ACCOUNT_JSON the
+#                                    build is made and the run summary names the .aab artifact
+#                                    the stakeholder uploads by hand
+#              closed              — Play "Closed testing" (API track alpha)
+#              production          — Play "Production"
+#              closed / production need PLAY_SERVICE_ACCOUNT_JSON: without it the run stops right
+#              after reading this file, before anything is built
+#   status     draft (default) — the release waits in Play Console for "Review release" ->
+#                                "Start rollout"
+#              completed       — Play rolls it out by itself (testers get it at once; production
+#                                goes to Google's review and then to every user). production +
+#                                completed only after the stakeholder's written go-ahead, named in
+#                                note=. A brand-new app accepts only draft until its first release
+#                                was rolled out in Play Console.
+#   note       free text for the log, at most 200 characters (why this build)
+#   requested  UTC time of the request, e.g. 2026-10-09T15:30:00Z — change it every time so the
+#              commit is a real diff (GitHub only starts the run when this file changes)
+#
+# The versionCode is config.buildNumber in tower-clash/package.json (npm run version:sync);
+# Google Play accepts every versionCode only once.
+track=internal
+status=draft
+note=MM-13 first request: expected to stop at the secrets check until the stakeholder adds the Android keystore secrets
+requested=2026-10-09T18:00:00Z

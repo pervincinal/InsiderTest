@@ -28,18 +28,37 @@ name: tower-clash-android-release
 #           jarsigner cannot see, so if apksigner were missing the APK check is skipped with a
 #           warning rather than failing on a false "unsigned".
 #
-# Track input (internal | closed | production, default internal; a push uses internal): only
-# chooses the Play track for the optional upload step and the wording of the summary. Play API
-# track names: internal, alpha (= closed testing), production. The upload step runs only when
-# the secret PLAY_SERVICE_ACCOUNT_JSON exists and always creates a DRAFT release -- nothing
-# reaches users until someone presses "Review release" -> "Start rollout" in Play Console. The
-# very first .aab of a new app must be uploaded by hand in Play Console (the API cannot create
-# the first release), see docs/MOBILE.md §6.
+# Triggers (MM-13, docs/MOBILE.md §6 "Android"): the agent team cannot call workflow_dispatch
+# or push tags (its GitHub proxy blocks both) and the stakeholder cannot push tags from an
+# iPhone, so a build is requested by a commit: a push to the working branch that changes
+# tower-clash/release/android-release.request runs the job once with the `track` / `status`
+# written in that file (scripts/releaseRequest.mjs). Pushes to other branches never build.
+# workflow_dispatch (track input) and the `tower-clash-v*` tag (track internal) still work. The
+# former "push of this workflow file" trigger was removed with MM-13 (as MM-12 did for iOS):
+# once the secrets exist, editing the workflow must never start a real Play upload — only a
+# request does.
+#
+# Track (internal | closed | production, default internal) and Play status (draft | completed,
+# default draft; dispatch and tag runs always use draft). Play API track names: internal, alpha
+# (= closed testing), production. The upload step (r0adkll/upload-google-play) runs only when the
+# secret PLAY_SERVICE_ACCOUNT_JSON exists:
+#   internal           without the secret: build + sign only; the summary says the upload was
+#                      SKIPPED and names the .aab artifact to upload by hand in Play Console
+#   closed/production  a REQUEST without the secret stops right after reading the request file,
+#                      before anything is built (nobody would upload that build by hand on
+#                      time); a manual "Run workflow" still builds and leaves the upload to a
+#                      person
+#   status draft       the release waits in Play Console for "Review release" -> "Start rollout"
+#   status completed   Play rolls the release out by itself (production: after Google's review).
+#                      Google refuses anything but draft while the app has never been rolled out
+#                      ("Only releases with status draft may be created on draft app").
+# The very first .aab of a new app must be uploaded by hand in Play Console (the API cannot
+# create the first release), see docs/MOBILE.md §6.
 on:
   workflow_dispatch:
     inputs:
       track:
-        description: 'Play track: internal (default) / closed / production — used for the optional Play upload and the summary'
+        description: 'Play track: internal (default) / closed / production — used for the optional Play upload (always a draft) and the summary'
         type: choice
         options:
           - internal
@@ -49,14 +68,14 @@ on:
   push:
     tags:
       - 'tower-clash-v*'
-    # GitHub offers "Run workflow" only for workflows on the default branch (main has none), so
-    # a push of THIS file to the working branch also builds — the stakeholder can press
-    # "Re-run all jobs" on that run from Safari once the secrets exist. Branch pushes never
-    # upload to Play (see the check step).
+    # Commit-triggered builds (MM-13): only a change of the request file on the working branch
+    # starts a run (paths filters do not apply to the tag pushes above). Track and status are
+    # read from the file after the checkout. Without the secrets the run stops at "Check
+    # required secrets".
     branches:
       - claude/tower-war-game-plan-weqwpb
     paths:
-      - '.github/workflows/tower-clash-android-release.yml'
+      - 'tower-clash/release/android-release.request'
 
 # Never cancel a run that may be in the middle of an upload.
 concurrency:
@@ -73,7 +92,9 @@ jobs:
     timeout-minutes: 45
     env:
       CI: true
-      TRACK: ${{ github.event.inputs.track || 'internal' }}
+      # Track of a manual run / tag run; a request run replaces it with the file's `track`
+      # (step "Read the request file and choose the Play track" writes TRACK to $GITHUB_ENV).
+      DISPATCH_TRACK: ${{ github.event.inputs.track || 'internal' }}
       PACKAGE_NAME: com.pervincinal.towerclash
     defaults:
       run:
@@ -100,22 +121,24 @@ jobs:
           fi
           if [ -n "$ANDROID_KEY_ALIAS" ]; then echo "ANDROID_KEY_ALIAS: set"; else echo "ANDROID_KEY_ALIAS: not set -> using the default 'towerclash'"; fi
           if [ -n "$ANDROID_KEY_PASSWORD" ]; then echo "ANDROID_KEY_PASSWORD: set"; else echo "ANDROID_KEY_PASSWORD: not set -> using ANDROID_KEYSTORE_PASSWORD"; fi
-          case "$TRACK" in
-            internal) PLAY_TRACK=internal ;;
-            closed) PLAY_TRACK=alpha ;;
-            production) PLAY_TRACK=production ;;
-            *) echo "::error::Unknown track '$TRACK'"; exit 1 ;;
-          esac
-          if [ -n "$PLAY_SERVICE_ACCOUNT_JSON" ]; then HAS_PLAY_SA=true; else HAS_PLAY_SA=false; fi
-          if [ "$HAS_PLAY_SA" = true ] && [ "$GITHUB_EVENT_NAME" = push ] && [ "${GITHUB_REF#refs/tags/}" = "$GITHUB_REF" ]; then
-            echo "Branch push (workflow file changed): building and signing only, no Play upload."
-            HAS_PLAY_SA=false
+          # Only "set" / "not set" is printed; a pasted file that is not the JSON key fails here
+          # instead of at the end of a 20-minute build.
+          if [ -n "$PLAY_SERVICE_ACCOUNT_JSON" ]; then
+            if [[ "$PLAY_SERVICE_ACCOUNT_JSON" != *'"client_email"'* || "$PLAY_SERVICE_ACCOUNT_JSON" != *'"private_key"'* ]]; then
+              echo "::error::PLAY_SERVICE_ACCOUNT_JSON does not look like a Google Cloud service-account JSON key (no client_email / private_key). Paste the whole text of the downloaded .json file (docs/publishing/LAUNCH_CHECKLIST.md G4b)."
+              exit 1
+            fi
+            echo "PLAY_SERVICE_ACCOUNT_JSON: set"
+            echo "HAS_PLAY_SA=true" >> "$GITHUB_ENV"
+          else
+            echo "PLAY_SERVICE_ACCOUNT_JSON: not set -> no automatic Play upload"
+            echo "HAS_PLAY_SA=false" >> "$GITHUB_ENV"
           fi
-          {
-            echo "PLAY_TRACK=$PLAY_TRACK"
-            echo "HAS_PLAY_SA=$HAS_PLAY_SA"
-          } >> "$GITHUB_ENV"
-          echo "Track: $TRACK (Play API track '$PLAY_TRACK'). Automatic Play upload: $([ "$HAS_PLAY_SA" = true ] && echo 'yes (draft)' || echo 'no — upload the .aab by hand in Play Console')"
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF_TYPE" = "branch" ]; then
+            echo "Track: read from tower-clash/release/android-release.request after the checkout"
+          else
+            echo "Track: $DISPATCH_TRACK"
+          fi
 
       - uses: actions/checkout@v4
 
@@ -124,6 +147,46 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: tower-clash/package-lock.json
+
+      # Request runs (a push of release/android-release.request): track + status from the file.
+      # Manual / tag runs: the input track (tag: internal), always draft. A closed / production
+      # REQUEST without PLAY_SERVICE_ACCOUNT_JSON stops here, before anything is built.
+      - name: Read the request file and choose the Play track
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF_TYPE" = "branch" ]; then
+            node scripts/releaseRequest.mjs android-release release/android-release.request --env > "$RUNNER_TEMP/request.env"
+            TRACK="$(sed -n 's/^TRACK=//p' "$RUNNER_TEMP/request.env")"
+            PLAY_STATUS="$(sed -n 's/^PLAY_STATUS=//p' "$RUNNER_TEMP/request.env")"
+            REQUEST_RUN=true
+          else
+            TRACK="$DISPATCH_TRACK"
+            PLAY_STATUS=draft
+            REQUEST_RUN=false
+          fi
+          case "$TRACK" in
+            internal) PLAY_TRACK=internal ;;
+            closed) PLAY_TRACK=alpha ;;
+            production) PLAY_TRACK=production ;;
+            *) echo "::error::Unknown track '$TRACK'"; exit 1 ;;
+          esac
+          if [ "$REQUEST_RUN" = true ] && [ "$TRACK" != internal ] && [ "$HAS_PLAY_SA" != true ]; then
+            MSG="track=$TRACK needs the repository secret PLAY_SERVICE_ACCOUNT_JSON (automatic Play upload), which does not exist. Nothing was built. Either the stakeholder adds it (docs/publishing/LAUNCH_CHECKLIST.md G4b) and the team commits the request again with a new requested=, or request track=internal and upload the .aab by hand."
+            echo "::error::$MSG"
+            {
+              echo "## Tower Clash Android request refused: track=$TRACK"
+              echo
+              echo "$MSG"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          {
+            echo "TRACK=$TRACK"
+            echo "PLAY_TRACK=$PLAY_TRACK"
+            echo "PLAY_STATUS=$PLAY_STATUS"
+            echo "REQUEST_RUN=$REQUEST_RUN"
+          } >> "$GITHUB_ENV"
+          if [ "$HAS_PLAY_SA" = true ]; then UPLOAD="yes, status $PLAY_STATUS"; else UPLOAD="no - the .aab is uploaded by hand in Play Console"; fi
+          echo "Track: $TRACK (Play API track '$PLAY_TRACK'). Automatic Play upload: $UPLOAD"
 
       - name: Install dependencies
         run: npm ci
@@ -148,7 +211,8 @@ jobs:
                 exit 1
               fi ;;
             *)
-              if [ "$TRACK" = "production" ]; then echo "::warning::Track 'production' built from $GITHUB_REF, not from the tag tower-clash-v$VERSION — fine for a test, but tag the release commit for the real store build (LAUNCH_CHECKLIST.md V3)."; fi ;;
+              # A request commit pins the source as well as a tag does (its sha is in the run).
+              if [ "$TRACK" = "production" ] && [ "$REQUEST_RUN" != "true" ]; then echo "::warning::Track 'production' built from $GITHUB_REF, not from the tag tower-clash-v$VERSION or a request commit — fine for a test, but use a request (release/android-release.request) or the tag for the real store build (LAUNCH_CHECKLIST.md V3)."; fi ;;
           esac
 
       # Monetization ids (docs/MOBILE.md §8.3): identical to tower-clash-android.yml. Missing
@@ -326,11 +390,12 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-      # Optional: only when the secret PLAY_SERVICE_ACCOUNT_JSON exists (docs/MOBILE.md §6). Always
-      # a DRAFT release on the chosen track; fails for a brand-new app until the first .aab was
-      # uploaded by hand in Play Console. Third-party action: pin it to a commit SHA if the repo
-      # ever gets stricter supply-chain rules.
-      - name: Upload to Google Play (draft, optional)
+      # Optional: only when the secret PLAY_SERVICE_ACCOUNT_JSON exists (docs/MOBILE.md §6). Status
+      # draft (default; manual and tag runs always) or completed (request status=completed: Play
+      # rolls it out by itself). inAppUpdatePriority is deliberately not set. Fails for a
+      # brand-new app until the first .aab was uploaded by hand in Play Console. Third-party
+      # action: pin it to a commit SHA if the repo ever gets stricter supply-chain rules.
+      - name: Upload to Google Play (optional)
         if: env.HAS_PLAY_SA == 'true'
         uses: r0adkll/upload-google-play@v1
         with:
@@ -339,7 +404,7 @@ jobs:
           releaseFiles: ${{ env.RELEASE_OUT }}/*.aab
           releaseName: ${{ steps.version.outputs.version }} (${{ steps.version.outputs.code }})
           track: ${{ env.PLAY_TRACK }}
-          status: draft
+          status: ${{ env.PLAY_STATUS }}
 
       - name: Summary
         run: |
@@ -352,18 +417,27 @@ jobs:
           {
             echo "## Tower Clash Android $V (versionCode $C) — signed, track $TRACK"
             echo
+            if [ "$REQUEST_RUN" = "true" ]; then echo "Started by a change of tower-clash/release/android-release.request (commit $GITHUB_SHA)."; else echo "Started by $GITHUB_EVENT_NAME on $GITHUB_REF."; fi
+            echo
             echo "Upload key certificate SHA-256: \`$UPLOAD_CERT_SHA256\`"
             echo
             echo "Artifacts (90 days): **tower-clash-android-$V-$C-aab** (for Google Play) and **tower-clash-android-$V-$C-apk** (installs directly on an Android phone)."
             echo
+            AAB_ARTIFACT="tower-clash-android-$V-$C-aab"
             if [ "$HAS_PLAY_SA" = "true" ]; then
-              echo "The .aab was uploaded to Play as a **draft** release on track \`$PLAY_TRACK\`."
-              echo
-              echo "Next (Play Console, in the browser):"
-              echo "1. https://play.google.com/console -> Tower Clash -> $TRACK_PATH -> the draft release $V ($C) -> **Next** -> fix any warnings -> **Save and publish** / **Start rollout**."
+              if [ "$PLAY_STATUS" = "completed" ]; then
+                echo "**Play upload: done, status completed** on track \`$PLAY_TRACK\` — Play rolls the release out by itself (testers get it within minutes; production goes to Google's review first, then to every user)."
+                echo
+                echo "Check: https://play.google.com/console -> Tower Clash -> $TRACK_PATH -> release $V ($C) and *Publishing overview*."
+              else
+                echo "**Play upload: done, status draft** on track \`$PLAY_TRACK\`. Nothing reaches users yet."
+                echo
+                echo "Next (Play Console, in the browser):"
+                echo "1. https://play.google.com/console -> Tower Clash -> $TRACK_PATH -> the draft release $V ($C) -> **Next** -> fix any warnings -> **Save and publish** / **Start rollout**."
+              fi
             else
-              echo "No automatic upload (secret PLAY_SERVICE_ACCOUNT_JSON not set, or a build started by a branch push). Next (Play Console, in the browser — works in Safari on the iPhone):"
-              echo "1. Download the artifact **tower-clash-android-$V-$C-aab** from this page (Safari saves a .zip; Files app -> tap it to unzip -> \`tower-clash-$V-$C.aab\`)."
+              echo "**Play upload: SKIPPED** — the repository secret PLAY_SERVICE_ACCOUNT_JSON is not set (LAUNCH_CHECKLIST.md G4b). The stakeholder uploads **$AAB_ARTIFACT** by hand (Play Console, in the browser — works in Safari on the iPhone):"
+              echo "1. Download the artifact **$AAB_ARTIFACT** from this page (Safari saves a .zip; Files app -> tap it to unzip -> \`tower-clash-$V-$C.aab\`)."
               echo "2. https://play.google.com/console -> Tower Clash -> $TRACK_PATH -> **Create new release**."
               echo "3. First release only: under *App integrity* / *Play App Signing* keep **Use Google-generated key** (Play App Signing; our key becomes the upload key) -> Continue."
               echo "4. **Upload** -> choose the .aab from Files -> release name \`$V ($C)\` -> release notes from docs/publishing/RELEASE_NOTES.md -> **Next** -> **Save and publish** (internal / closed) or **Send for review** (production)."
@@ -371,6 +445,11 @@ jobs:
             echo
             echo "Internal testing: add testers' Gmail addresses under the track's *Testers* tab and share the opt-in link. Closed testing on a new personal account: 12+ testers for 14 days before production access (LAUNCH_CHECKLIST.md G19). Every new upload needs a higher versionCode: bump \`config.buildNumber\` in package.json + \`npm run version:sync\`."
           } >> "$GITHUB_STEP_SUMMARY"
+          # Annotation as well: the team reads annotations through the check-runs API, not the
+          # summary page.
+          if [ "$HAS_PLAY_SA" != "true" ]; then
+            echo "::notice::Play upload SKIPPED (no PLAY_SERVICE_ACCOUNT_JSON). Upload the artifact $AAB_ARTIFACT by hand: Play Console -> Tower Clash -> $TRACK_PATH -> Create new release."
+          fi
 
       - name: Remove the keystore
         if: always()
