@@ -15,5 +15,5 @@
 # The build number is config.buildNumber in tower-clash/package.json (npm run version:sync);
 # App Store Connect accepts every build number only once.
 lane=testflight
-note=build 8 (1.0.0) retry 2 with xcodebuild errors surfaced as annotations (MM-14); TestFlight only
-requested=2026-10-09T21:50:00Z
+note=build 8 (1.0.0) retry 3: archive with the Apple Distribution identity (no development profile, no device needed); TestFlight only
+requested=2026-10-09T22:00:00Z

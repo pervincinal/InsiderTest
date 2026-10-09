@@ -360,7 +360,14 @@ jobs:
               PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" \
               OTHER_CODE_SIGN_FLAGS="--keychain $SIGNING_KEYCHAIN"
           else
-            surface archive xcodebuild $CONTAINER \
+            # MM-14 (2026-10-09, first real run): with plain automatic signing xcodebuild archives
+            # with an iOS App *Development* profile, and Apple refuses to generate one for a team
+            # that has no registered device ("Your team has no devices from which to generate a
+            # provisioning profile"). The store upload never needs a development profile, so the
+            # archive asks for the Apple Distribution identity (cloud-managed App Store profile,
+            # no device needed). If Xcode still insists on a development profile, the archive is
+            # made unsigned and the export step signs it with the distribution profile.
+            if ! surface archive xcodebuild $CONTAINER \
               -scheme App \
               -configuration Release \
               -destination 'generic/platform=iOS' \
@@ -368,12 +375,26 @@ jobs:
               -derivedDataPath build/DerivedData \
               archive \
               -allowProvisioningUpdates \
-              -allowProvisioningDeviceRegistration \
               -authenticationKeyPath "$API_KEY_PATH" \
               -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID" \
               -authenticationKeyIssuerID "$APP_STORE_CONNECT_API_ISSUER_ID" \
               DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
-              CODE_SIGN_STYLE=Automatic
+              CODE_SIGN_STYLE=Automatic \
+              CODE_SIGN_IDENTITY="Apple Distribution"; then
+              echo "::warning::archive with the Apple Distribution identity failed — retrying unsigned; the export step signs the app with the App Store profile"
+              rm -rf build/App.xcarchive
+              surface archive-unsigned xcodebuild $CONTAINER \
+                -scheme App \
+                -configuration Release \
+                -destination 'generic/platform=iOS' \
+                -archivePath build/App.xcarchive \
+                -derivedDataPath build/DerivedData \
+                archive \
+                DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+                CODE_SIGNING_ALLOWED=NO \
+                CODE_SIGNING_REQUIRED=NO \
+                CODE_SIGN_IDENTITY=""
+            fi
           fi
           set +x
           test -d build/App.xcarchive/Products/Applications/App.app
