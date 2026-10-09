@@ -140,3 +140,38 @@ describe('tower-clash/playwright.config.ts (QA-17)', () => {
     expect(pwNumber('retries')).toBe(0);
   });
 });
+
+/*
+ * Regression test for BUG-26: the `deploy to GitHub Pages` job failed on every push from
+ * 2026-09-28 to 2026-10-09 (first "Ensure GitHub Pages has been enabled", then "Branch … is not
+ * allowed to deploy to github-pages due to environment protection rules") while the workflow
+ * stayed green behind job-level `continue-on-error`. The job may stay continue-on-error (the
+ * fix is a stakeholder setting), but its failure must be visible in the run: a separate job — the
+ * environment rejection ends `deploy` before any of its steps run — that always runs after a good
+ * build, detects "no deployment" from the deploy job's `page_url` output, and writes a
+ * `::warning::` annotation plus a step-summary line naming the setting and the privacy URL.
+ */
+describe('.github/workflows/tower-clash-pages.yml (BUG-26)', () => {
+  const PAGES = readFileSync(new URL('../../../.github/workflows/tower-clash-pages.yml', import.meta.url), 'utf8');
+  const job = (id: string): string => new RegExp(`\\n  ${id}:\\n([\\s\\S]*?)(?=\\n  [a-z][\\w-]*:\\n|$)`).exec(PAGES)?.[1] ?? '';
+
+  it('the deploy job exposes page_url so a later job can tell whether it deployed', () => {
+    const deploy = job('deploy');
+    expect(deploy).toContain('name: deploy to GitHub Pages');
+    expect(deploy).toMatch(/\n    outputs:\n      page_url: \$\{\{ steps\.deployment\.outputs\.page_url \}\}/);
+  });
+
+  it('a status job always runs after the build and flags a failed deploy as a warning and in the summary', () => {
+    const status = job('pages-status');
+    expect(status).toMatch(/needs: \[build, deploy\]/);
+    expect(status).toMatch(/if: \$\{\{ always\(\) && needs\.build\.result == 'success' \}\}/);
+    expect(status).not.toContain('continue-on-error');
+    expect(status).toContain('PAGE_URL: ${{ needs.deploy.outputs.page_url }}');
+    expect(status).toContain('echo "::warning title=GitHub Pages deploy failed (BUG-26)::$msg"');
+    expect(status).toContain('echo "$msg" >> "$GITHUB_STEP_SUMMARY"');
+    expect(status).toContain(
+      'GitHub Pages is NOT enabled — enable it at Settings → Pages (Source: GitHub Actions); the privacy policy URL required by Apple and Google is not live',
+    );
+    expect(status).toContain('Settings → Environments → github-pages → Deployment branches');
+  });
+});

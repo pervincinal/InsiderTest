@@ -52,8 +52,12 @@ jobs:
   deploy:
     name: deploy to GitHub Pages
     needs: build
-    # Pages must be enabled once in repo Settings → Pages → Source: GitHub Actions; until then the
-    # deployment API returns 404. Don't paint the whole run red for that stakeholder-gated step.
+    # Pages must be enabled once in repo Settings → Pages → Source: GitHub Actions, and the
+    # `github-pages` environment must allow this branch; until then the deploy fails. It stays
+    # continue-on-error so the branch is not permanently red over a stakeholder-gated step, but the
+    # failure must not hide (BUG-26: it failed on every push for 11 days behind a green workflow):
+    # the `Pages deploy status` job below annotates it and writes it to the run summary, and
+    # `node tower-clash/scripts/ciStatus.mjs` reports this job's own conclusion in the daily report.
     continue-on-error: true
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -63,7 +67,45 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
+
+  # A separate job, not a last step of `deploy`: when the github-pages environment rejects the
+  # branch, the deploy job ends before any of its steps run. Empty `page_url` = no deployment.
+  pages-status:
+    name: Pages deploy status
+    needs: [build, deploy]
+    if: ${{ always() && needs.build.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pages: read
+    steps:
+      - name: Report the Pages deploy result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PAGE_URL: ${{ needs.deploy.outputs.page_url }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          if [ -n "$PAGE_URL" ]; then
+            echo "GitHub Pages deployed: $PAGE_URL" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if out=$(gh api "repos/$GITHUB_REPOSITORY/pages" 2>&1); then pages=enabled
+          else
+            out=${out%%$'\n'*}
+            case "$out" in *"HTTP 404"*) pages=disabled ;; *) pages=unknown ;; esac
+          fi
+          if [ "$pages" = disabled ]; then
+            msg="GitHub Pages is NOT enabled — enable it at Settings → Pages (Source: GitHub Actions); the privacy policy URL required by Apple and Google is not live"
+          elif [ "$pages" = enabled ]; then
+            msg="GitHub Pages deploy FAILED although Pages is enabled — most likely Settings → Environments → github-pages → Deployment branches does not allow '$BRANCH'; the privacy policy URL required by Apple and Google is not live"
+          else
+            msg="GitHub Pages deploy FAILED (Pages state unreadable: $out) — check Settings → Pages (Source: GitHub Actions) and Settings → Environments → github-pages; the privacy policy URL required by Apple and Google is not live"
+          fi
+          echo "::warning title=GitHub Pages deploy failed (BUG-26)::$msg"
+          echo "$msg" >> "$GITHUB_STEP_SUMMARY"

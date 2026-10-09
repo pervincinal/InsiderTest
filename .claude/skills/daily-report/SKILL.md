@@ -11,7 +11,7 @@ Template:
 # Gündəlik hesabat — YYYY-MM-DD (Gün N)
 
 **Mərhələ:** M? — <ad> (<x>% hazırdır)
-**Branch:** claude/tower-war-game-plan-weqwpb · **Yoxlamalar:** ✅/❌ `npm run check`, `npm run playtest`
+**Branch:** claude/tower-war-game-plan-weqwpb · **Yoxlamalar:** ✅/❌ `npm run check`, `npm run playtest` · ✅/❌ CI: <n> job(s) green, expected-red: <release lanes or none>[; RED: <job> (BUG-N)]
 
 ## Bu gün nə edildi
 - <rol>: <nəticə, bir cümlə> (commit `abc1234`)
@@ -36,4 +36,5 @@ Template:
 | Unit test | | |
 | Playtest keçən səviyyə | | |
 ```
+The CI part is the last line of `node scripts/ciStatus.mjs --wait 900 --allow '<release lanes>'` run after the push (daily-sprint §4.4), copied as printed — never a workflow conclusion. ❌ whenever it shows `RED:` or `still running:`; every RED job gets a bug id and a line in "Problemlər / bloklar" until it is green.
 Keep to one screen. Include screenshot paths from `tower-clash/e2e/__screenshots__/` when UI changed.

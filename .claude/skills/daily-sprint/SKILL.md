@@ -36,4 +36,9 @@ Fix regressions (or revert the offending change). QA runs `npm run e2e` when UI 
 1. Update `docs/BACKLOG.md`: move done items to "Done (with date)", add bugs and icebox ideas.
 2. Write `reports/YYYY-MM-DD.md` using the `daily-report` skill.
 3. `git add -A && git commit -m "<area>: <summary of the day>"` then `git push -u origin claude/tower-war-game-plan-weqwpb` (retry with backoff on network errors).
-4. Never end with uncommitted work or a red check.
+4. **Mandatory — read CI per job, never per workflow** (BUG-26: the Pages deploy failed on every push for 11 days behind a green workflow conclusion). After the push:
+   ```bash
+   cd tower-clash && node scripts/ciStatus.mjs --wait 900 --allow 'signed archive|signed AAB|App Store Connect metadata|generate upload keystore'
+   ```
+   The `--allow` regex lists the release lanes that are expected red while their secrets do not exist; drop a lane from it as soon as its secrets are set. Paste the script's last line into the report's **Yoxlamalar** line as `CI: <n> job(s) green, expected-red: …` (plus `RED: …` / `still running: …` when present). Exit 1 = a job that is not expected is red: the report is blocked until it is fixed, or filed in `docs/BACKLOG.md` "Bugs" with the job name and the annotation the script printed, and the report names it (e.g. `RED: deploy to GitHub Pages (BUG-26)`). Exit 2 after 900 s = still running: write `still running: <jobs>` and re-run the script at the start of the next sprint. Exit 3 = `gh` missing or API error: fix that, don't skip the step. A docs-only push triggers fewer workflows (path filters); report the jobs that did run.
+5. Never end with uncommitted work or a red check.
