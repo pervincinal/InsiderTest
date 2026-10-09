@@ -310,17 +310,44 @@ jobs:
           } >> "$GITHUB_ENV"
           echo "Installed profile '$PROFILE_NAME' ($PROFILE_UUID) for $PROFILE_APP_ID"
 
+      # MM-14: the team's environment cannot read job logs (the GitHub proxy blocks /actions/*),
+      # only check-run annotations. `surface` runs a command, keeps its full log and, on failure,
+      # turns the error lines into ::error:: annotations and the log tail into a ::notice::.
+      - name: Define the log-surfacing helper
+        run: |
+          cat > "$RUNNER_TEMP/surface.sh" <<'SH'
+          surface() {
+            local name="$1"; shift
+            local log="$RUNNER_TEMP/$name.log"
+            set +e
+            "$@" 2>&1 | tee "$log"
+            local rc=${PIPESTATUS[0]}
+            set -e
+            if [ "$rc" -ne 0 ]; then
+              grep -E "error:|Error Domain|fatal error|\*\* .* FAILED \*\*|No signing certificate|No profiles|doesn't support|not allowed|Provisioning profile|Cloud signing" "$log" \
+                | grep -v "^warning" | sort -u | head -n 20 \
+                | while IFS= read -r line; do printf '::error title=%s::%s\n' "$name" "${line:0:700}"; done
+              tail -n 40 "$log" | tr '\n' ' ' | cut -c1-2000 | sed 's/^/::notice title='"$name"' (log tail)::/'
+              echo
+              echo "::error::$name failed with exit code $rc — full log in the artifact ios-build-logs"
+            fi
+            return "$rc"
+          }
+          SH
+          echo "surface helper written"
+
       - name: Archive (Release, generic iOS device)
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
         run: |
+          source "$RUNNER_TEMP/surface.sh"
           cd ios/App
           if [ -d App.xcworkspace ]; then CONTAINER="-workspace App.xcworkspace"; else CONTAINER="-project App.xcodeproj"; fi
           set -x
           if [ "$SIGNING_MODE" = "manual" ]; then
-            xcodebuild $CONTAINER \
+            surface archive xcodebuild $CONTAINER \
               -scheme App \
               -configuration Release \
               -destination 'generic/platform=iOS' \
@@ -333,7 +360,7 @@ jobs:
               PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" \
               OTHER_CODE_SIGN_FLAGS="--keychain $SIGNING_KEYCHAIN"
           else
-            xcodebuild $CONTAINER \
+            surface archive xcodebuild $CONTAINER \
               -scheme App \
               -configuration Release \
               -destination 'generic/platform=iOS' \
@@ -388,8 +415,9 @@ jobs:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
         run: |
+          source "$RUNNER_TEMP/surface.sh"
           cd ios/App
-          xcodebuild -exportArchive \
+          surface export xcodebuild -exportArchive \
             -archivePath build/App.xcarchive \
             -exportOptionsPlist build/ExportOptions.plist \
             -exportPath build/export \
@@ -407,7 +435,8 @@ jobs:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
         run: |
-          xcrun altool --validate-app -f "$IPA_PATH" -t ios \
+          source "$RUNNER_TEMP/surface.sh"
+          surface validate xcrun altool --validate-app -f "$IPA_PATH" -t ios \
             --apiKey "$APP_STORE_CONNECT_API_KEY_ID" --apiIssuer "$APP_STORE_CONNECT_API_ISSUER_ID"
 
       - name: Upload to App Store Connect (altool)
@@ -417,7 +446,8 @@ jobs:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
         run: |
-          xcrun altool --upload-app -f "$IPA_PATH" -t ios \
+          source "$RUNNER_TEMP/surface.sh"
+          surface upload xcrun altool --upload-app -f "$IPA_PATH" -t ios \
             --apiKey "$APP_STORE_CONNECT_API_KEY_ID" --apiIssuer "$APP_STORE_CONNECT_API_ISSUER_ID"
 
       # Fallback uploader: Xcode's own (the Organizer "Upload" path), driven by ExportOptions
@@ -480,6 +510,15 @@ jobs:
             echo "2. TestFlight lane: add yourself under Internal Testing, install the TestFlight app on the iPhone, open the invitation."
             echo "3. App Store lane: when the build shows 'Ready to Submit' (TestFlight tab), the team commits tower-clash/release/ios-store.request with action=submit and build=${{ steps.version.outputs.build }} (tower-clash-ios-store.yml attaches it and submits for review; docs/MOBILE.md section 3.2)."
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload build logs artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-logs
+          path: ${{ runner.temp }}/*.log
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Remove keys and temporary keychain
         if: always()
