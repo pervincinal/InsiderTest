@@ -18,7 +18,7 @@ Ads in both variants: the review build must carry the real AdMob iOS ids (`ADMOB
 | Field (AZ) | Value | Notes |
 |---|---|---|
 | Platforms (Platformalar) | **iOS** | tick only iOS |
-| Name (Ad) | `Tower Clash` (11 / 30) | App Store names are unique world-wide. If "Tower Clash" is refused as taken, use in this order: `Tower Clash: Tap & Conquer` (26) or `Tower Clash Strategy` (20). The name can be changed later at App Information; the bundle id stays |
+| Name (Ad) | `Tower Clash: Tap & Conquer` (26 / 30) — **the accepted name** | **2026-10-09: the app record was created with this name because `Tower Clash` (11) was already taken** (App Store names are unique world-wide; next fallback would have been `Tower Clash Strategy`). The home-screen label under the icon stays `Tower Clash` (`CFBundleDisplayName`). The name can be changed later at App Information; the bundle id stays |
 | Primary Language (Əsas dil) | **English (U.S.)** | Azerbaijani is not an App Store locale |
 | Bundle ID (Paket ID) | `com.pervincinal.towerclash` — pick "Tower Clash - com.pervincinal.towerclash" from the list | appears only after §0b step 2 (Identifiers) |
 | SKU | `towerclash` (10) | internal, never shown |
@@ -126,7 +126,7 @@ App Previews (videos): none. "Use the same screenshots for all sizes" is not nee
 | ″ | 170 | Variant A: `Tap, send, conquer. 50 levels of one-thumb real-time strategy: fortresses, artillery, tanks, walls, mines. Plays offline, no account. Ads removable.` | 148 |
 | Description (Təsvir) | 4000 | **Variant B (default):** the block in §6.3 below | 3863 |
 | ″ | 4000 | Variant A: `STORE_LISTING.md` §1.1 verbatim | 3984 |
-| Keywords (Açar sözlər) | 100 | `tower,war,strategy,rts,capture,conquer,castle,army,offline,tap,casual,defense,attack,soldiers` — commas, no spaces | 93 |
+| Keywords (Açar sözlər) | 100 | `war,strategy,rts,capture,castle,army,offline,casual,defense,attack,soldiers,siege,kingdom,battle` — commas, no spaces; 2026-10-09: `tower`, `tap`, `conquer` dropped because the accepted name "Tower Clash: Tap & Conquer" already indexes them, replaced by `siege`, `kingdom`, `battle` | 96 |
 | Support URL (Dəstək URL) | — | `https://pervincinal.github.io/InsiderTest/support.html` | live since 2026-09-28; the `[developer e-mail]` on the page must be replaced before submission (G18 / T3) |
 | Marketing URL (Marketinq URL) | — | `https://pervincinal.github.io/InsiderTest/` | optional; live |
 | Version (Versiya) | — | `1.0.0` | must equal `MARKETING_VERSION` of the uploaded build (it does: 1.0.0 / build 7) |

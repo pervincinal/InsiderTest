@@ -106,10 +106,10 @@ describe('fastlane/metadata = APP_STORE_CONNECT_SHEET.md variant B', () => {
   });
 
   it('matches the character counts the sheet publishes (§9)', () => {
-    expect(codePoints(SHEET_B.name)).toBe(11);
+    expect(codePoints(SHEET_B.name)).toBe(26); // accepted 2026-10-09, 'Tower Clash' was taken
     expect(codePoints(SHEET_B.subtitle)).toBe(19);
     expect(codePoints(SHEET_B.promotional)).toBe(133);
-    expect(codePoints(SHEET_B.keywords)).toBe(93);
+    expect(codePoints(SHEET_B.keywords)).toBe(96);
     expect(codePoints(SHEET_B.description)).toBe(3863);
     expect(codePoints(SHEET_B.reviewNotes)).toBe(1202);
     expect(codePoints(SHEET_B.copyright)).toBe(23);
@@ -126,6 +126,9 @@ describe('fastlane/metadata = APP_STORE_CONNECT_SHEET.md variant B', () => {
     const words = meta('en-US/keywords.txt').split(',');
     expect(words.every((w) => w === w.trim() && w.length > 0)).toBe(true);
     expect(new Set(words).size).toBe(words.length);
+    // Apple already indexes the words of the app name; repeating them wastes keyword bytes.
+    const nameWords = meta('en-US/name.txt').toLowerCase().split(/[^a-z]+/).filter(Boolean);
+    expect(words.filter((w) => nameWords.includes(w.toLowerCase()))).toEqual([]);
   });
 
   it('is variant B: no purchase wording, no placeholders except the copyright holder', () => {

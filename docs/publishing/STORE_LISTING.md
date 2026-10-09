@@ -190,7 +190,7 @@ HONEST BY DESIGN
 | Name | 30 | `Tower Clash` (11) — App Store names are unique; fallbacks if taken, in order: `Tower Clash: Tap & Conquer` (26), `Tower Clash Strategy` (20) | `Tower Clash` (11) |
 | Subtitle | 30 | `Capture every tower` (19) | `Bütün qüllələri tut` (19) |
 | Promotional text | 170 | Variant A: `Tap, send, conquer. 50 levels of one-thumb real-time strategy: fortresses, artillery, tanks, walls, mines. Plays offline, no account. Ads removable.` (148) · **Variant B (1.0.0 default):** `Tap, send, conquer. 50 levels of one-thumb real-time strategy: fortresses, artillery, tanks, walls, mines. Plays offline, no account.` (133) | `Toxun, göndər, fəth et. Qalalar, toplar, tanklar, divarlar, minalarla 50 səviyyəlik bir barmaq real vaxt strategiya. Oflayn, hesabsız. Reklamlar silinə bilər.` (158) · B: the same without "Reklamlar silinə bilər." (134) |
-| Keywords | 100 | `tower,war,strategy,rts,capture,conquer,castle,army,offline,tap,casual,defense,attack,soldiers` (93) | `qüllə,strategiya,qala,ordu,oflayn,müharibə,fəth,döyüş,əsgər,tower,war,rts,casual` (80) |
+| Keywords | 100 | `war,strategy,rts,capture,castle,army,offline,casual,defense,attack,soldiers,siege,kingdom,battle` (96; App Store keywords re-cut 2026-10-09 for the accepted name, see APP_STORE_CONNECT_SHEET §6.2) | `qüllə,strategiya,qala,ordu,oflayn,müharibə,fəth,döyüş,əsgər,tower,war,rts,casual` (80) |
 | Primary category | — | Games | — |
 | Subcategories | — | Strategy, Casual | — |
 | Support URL | — | `https://pervincinal.github.io/InsiderTest/support.html` (`tower-clash/public/support.html`: contact, restore purchases, delete data; the `[developer e-mail]` placeholder must be filled before submission) | — |
