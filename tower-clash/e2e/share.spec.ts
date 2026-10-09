@@ -57,8 +57,28 @@ declare global {
     __shareCaptured?: Captured | null;
     __shareCalls?: number;
     __downloads?: { download: string; href: string }[];
+    __toastsSeen?: string[];
   }
 }
+
+/**
+ * BUG-25: the toast lives 2.4 s of page wall clock (`Toast.show`, src/ui/screens.ts), so reading
+ * `getToast()` once, several Playwright round-trips after the share resolved, raced the expiry
+ * under load (2026-10-09, load 9.7: `getToast()` → null 1.5–2.5 s after "Shared" went up). The
+ * page records every toast text it shows from its own 16 ms timer, so the assertion no longer
+ * depends on protocol latency; a 2.4 s main-thread stall would be needed to miss one.
+ */
+function recordToasts(page: Page): Promise<void> {
+  return page.addInitScript(() => {
+    window.__toastsSeen = [];
+    setInterval(() => {
+      const t = window.__towerclash?.getToast?.() ?? null;
+      const seen = window.__toastsSeen!;
+      if (t !== null && seen[seen.length - 1] !== t) seen.push(t);
+    }, 16);
+  });
+}
+const toastsSeen = (page: Page) => page.evaluate(() => window.__toastsSeen ?? []);
 
 /** Web Share stubs: canShare accepts files, share() records the payload (and decodes the PNG). */
 function stubWebShare(page: Page): Promise<void> {
@@ -107,6 +127,7 @@ async function boot(page: Page, seeded: Record<string, unknown>): Promise<string
     if (msg.type() === 'error') errors.push(msg.text());
   });
   await page.addInitScript(([key, data]) => localStorage.setItem(key, JSON.stringify(data)), [SAVE_KEY, seeded] as const);
+  await recordToasts(page);
   await page.goto('/');
   await page.waitForFunction(() => typeof window.__towerclash?.loadLevel === 'function');
   return errors;
@@ -131,7 +152,7 @@ test.describe('share card (SHARE-1)', () => {
     await winLevel1(page);
     await page.screenshot({ path: test.info().outputPath('result-share-button.png'), scale: 'css' });
     await tapRect(page, RESULT_SHARE);
-    await expect.poll(() => page.evaluate(() => window.__shareCaptured ?? null), { timeout: 15_000 }).not.toBeNull();
+    await expect.poll(() => page.evaluate(() => window.__shareCaptured != null), { timeout: 15_000 }).toBe(true);
     const cap = (await page.evaluate(() => window.__shareCaptured))!;
     expect(cap.files).toBe(1);
     expect(cap.type).toBe('image/png');
@@ -146,7 +167,7 @@ test.describe('share card (SHARE-1)', () => {
     const last = await page.evaluate(() => window.__towerclash.lastShare);
     expect(last).toMatchObject({ result: 'shared', text: cap.text, name: 'towerclash-level-01.png', type: 'image/png', width: 1080, height: 1350 });
     expect(last!.bytes).toBeGreaterThan(20_000);
-    expect(await page.evaluate(() => window.__towerclash.getToast())).toBe('Shared');
+    await expect.poll(() => toastsSeen(page), { message: 'the "Shared" toast went up (BUG-25)' }).toContain('Shared');
     writeFileSync(`${SHOTS}look3-share-card.png`, Buffer.from(cap.base64!, 'base64'));
     expect(await screen(page)).toBe('result'); // sharing never navigates
     expect(errors).toEqual([]);
@@ -165,7 +186,7 @@ test.describe('share card (SHARE-1)', () => {
     const last = await page.evaluate(() => window.__towerclash.lastShare);
     expect(last).toMatchObject({ result: 'saved', name: 'towerclash-level-01.png', type: 'image/png', width: 1080, height: 1350 });
     expect(last!.text).toContain(levelName(1));
-    expect(await page.evaluate(() => window.__towerclash.getToast())).toBe('Saved');
+    await expect.poll(() => toastsSeen(page), { message: 'the "Saved" toast went up (BUG-25)' }).toContain('Saved');
     expect(errors).toEqual([]);
   });
 
@@ -187,7 +208,7 @@ test.describe('share card (SHARE-1)', () => {
     expect((await page.evaluate(() => window.__towerclash.getResult()))?.outcome).toBe('won');
     await page.waitForTimeout(900);
     await tapRect(page, RESULT_SHARE);
-    await expect.poll(() => page.evaluate(() => window.__shareCaptured ?? null), { timeout: 15_000 }).not.toBeNull();
+    await expect.poll(() => page.evaluate(() => window.__shareCaptured != null), { timeout: 15_000 }).toBe(true);
     const cap = (await page.evaluate(() => window.__shareCaptured))!;
     expect(cap.name).toBe(`towerclash-daily-${DAY_A}.png`);
     expect(cap.dims).toEqual({ w: 1080, h: 1350 });

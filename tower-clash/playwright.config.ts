@@ -78,7 +78,21 @@ export default defineConfig({
    */
   expect: { timeout: 15_000 },
   retries: 0,
-  workers: 1,
+  /**
+   * QA-17: two workers, file-level parallelism only. The chromium run had grown to 595 s in CI
+   * (468 → 520 → 551 → 595 s over 2026-10-05..08) against the step's 15-minute timeout. Each
+   * worker takes the next whole spec file, so a file's tests still run in order in one browser
+   * (`fullyParallel: false`), and every test has its own context (localStorage, save, clock).
+   * Both workers share the one preview server. Measured 2026-10-09 on 4 cores: 693 s with 1 worker
+   * (load ≈ 3) vs 376 / 373 / 377 s with 2 (load ≈ 5), 113/113 passed in all three runs, perf
+   * medians unchanged (≤ 33 ms vs the 50 ms budget). Only cross-file collisions would be hazards: no two specs write the same
+   * e2e/__screenshots__ name (smoke-*, content-*, look3-<feature>-*), and per-test artefacts go to
+   * PW_OUTPUT. Kept at 2 for the 4-vCPU GitHub runner and the frame-time budget in perf.spec.ts.
+   * Sharding was rejected: `--shard` balances by test count in file order, so content.spec.ts's
+   * 53 short tests would give one shard content + daily (27 % of the serial time) and the other
+   * the remaining 15 files (73 %).
+   */
+  workers: 2,
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   use: {

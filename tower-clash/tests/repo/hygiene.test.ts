@@ -104,3 +104,39 @@ describe('tower-clash/playwright.config.ts (BUG-16)', () => {
     expect(expectTimeout).toBeLessThanOrEqual(20_000);
   });
 });
+
+/*
+ * Regression test for BUG-25: the share toasts ("Shared" / "Saved") live 2.4 s of page wall clock,
+ * and a one-shot `getToast()` read several protocol round-trips after the share resolved (each
+ * carrying the ~1 MB base64 PNG) found the toast already gone under load. share.spec.ts must keep
+ * recording toasts page-side and poll only a boolean for the captured payload.
+ */
+describe('tower-clash/e2e/share.spec.ts (BUG-25)', () => {
+  const SHARE_SPEC = readFileSync(new URL('share.spec.ts', E2E_DIR), 'utf8');
+
+  it('asserts the share toasts from the page-side recorder, never a one-shot getToast() read', () => {
+    expect(SHARE_SPEC).toMatch(/await recordToasts\(page\);\n\s*await page\.goto\('\/'\)/);
+    expect(SHARE_SPEC).not.toMatch(/expect\(await page\.evaluate\(\(\) => window\.__towerclash\.getToast\(\)\)\)/);
+    for (const text of ['Shared', 'Saved']) expect(SHARE_SPEC).toContain(`expect.poll(() => toastsSeen(page), { message: 'the "${text}" toast went up (BUG-25)' }).toContain('${text}')`);
+  });
+
+  it('polls a boolean for the captured share payload, not the PNG itself', () => {
+    expect(SHARE_SPEC).not.toMatch(/expect\.poll\(\(\) => page\.evaluate\(\(\) => window\.__shareCaptured \?\? null\)/);
+  });
+});
+
+/*
+ * QA-17: the chromium e2e step runs on two Playwright workers to stay well inside its 15-minute CI
+ * timeout. Parallelism stays at the file level (`fullyParallel: false`: a spec's tests run in
+ * order in one worker), with at most 2 workers for the 4-vCPU runner and perf.spec.ts's frame
+ * budget, and no retries, so a flaky test fails instead of being hidden.
+ */
+describe('tower-clash/playwright.config.ts (QA-17)', () => {
+  it('parallelises whole spec files on at most two workers, never retrying chromium', () => {
+    expect(PW_CONFIG).toMatch(/\n  fullyParallel: false,\n/);
+    const workers = pwNumber('workers');
+    expect(workers).toBeGreaterThanOrEqual(1);
+    expect(workers).toBeLessThanOrEqual(2);
+    expect(pwNumber('retries')).toBe(0);
+  });
+});

@@ -105,6 +105,12 @@ jobs:
       # rock screenshots), tutorial, stalemate hint (FE-1/FE-2: level 2 counter-stream fires it once
       # at 8 s of sim time, never on level 1), daily / weekly, economy, lazy chunks, layers and perf
       # (frame-time budget on the top level).
+      # QA-17: two Playwright workers (playwright.config.ts `workers: 2`, `fullyParallel: false`, so
+      # whole spec files run in parallel and each file's tests stay in order). Single-worker step
+      # times: 468 / 520 / 551 / 595 s (2026-10-05..08), growing toward the 15-minute timeout.
+      # Locally on 4 cores, 693 s with 1 worker vs 373–377 s with 2 (3 runs). Expected here: about 5–6 min.
+      # A two-shard matrix was rejected: `--shard` balances by test count, which puts content.spec.ts
+      # (53 short tests) + daily in one shard (27 % of the time) and everything else in the other (73 %).
       - name: Browser e2e (smoke + content + economy + perf)
         timeout-minutes: 15
         run: npm run e2e
