@@ -1,0 +1,325 @@
+# Tower Clash — App Store Connect listing and App Review submission (MM-12, docs/MOBILE.md §3.2).
+#
+# Run ONLY by .github/workflows/tower-clash-ios-store.yml (ubuntu runner) after its secrets check,
+# started by a push that changes tower-clash/release/ios-store.request. Everything comes in through
+# environment variables set by that workflow:
+#   ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8       App Store Connect API key (secrets
+#                                               APP_STORE_CONNECT_API_KEY_ID / _ISSUER_ID / _KEY_P8)
+#   ASC_REVIEW_FIRST_NAME, ASC_REVIEW_LAST_NAME,
+#   ASC_REVIEW_PHONE, ASC_REVIEW_EMAIL          App Review contact (secrets; never committed)
+#   APP_VERSION                                 package.json "version" (the App Store version)
+#   STORE_BUILD                                 build number to submit (store_submit only)
+#   METADATA_PATH, SCREENSHOTS_PATH,
+#   AGE_RATING_PATH                             absolute paths (texts, prepared screenshots, JSON)
+#
+# Lanes
+#   store_metadata  texts (fastlane/metadata = APP_STORE_CONNECT_SHEET.md variant B), screenshots
+#                   (overwrite), age rating (fastlane/age_rating.json = sheet §5), categories,
+#                   price Free + soft-launch countries (only when nothing is set yet), TestFlight
+#                   internal group "Team". Never submits.
+#   store_submit    the same, then selects build STORE_BUILD of APP_VERSION, export compliance
+#                   "no non-exempt encryption" (sheet §6.6), content rights "no third-party
+#                   content" (sheet §2) and submits for App Review.
+# Neither lane releases anything: automatic_release false = "Manually release this version"
+# (sheet §6.5); the public release stays the stakeholder's "Release This Version" click.
+#
+# Raw App Store Connect API calls (price schedule, availability, TestFlight group) are written
+# against Apple's App Store Connect OpenAPI specification 4.5.1 because fastlane 2.240.1 only knows
+# the retired price tiers (and would make the app available in every country).
+
+require 'fileutils'
+require 'json'
+require 'net/http'
+require 'tmpdir'
+require 'uri'
+
+default_platform(:ios)
+
+BUNDLE_ID = 'com.pervincinal.towerclash'.freeze
+ASC_HOST = 'https://api.appstoreconnect.apple.com'.freeze
+# POST_LAUNCH.md §2.2 / sheet §3: soft launch in Azerbaijan, Türkiye, Kazakhstan, Georgia.
+SOFT_LAUNCH_TERRITORIES = %w[AZE TUR KAZ GEO].freeze
+PRICE_BASE_TERRITORY = 'USA'.freeze
+TESTFLIGHT_GROUP = 'Team'.freeze
+REVIEW_CONTACT_ENV = {
+  first_name: 'ASC_REVIEW_FIRST_NAME',
+  last_name: 'ASC_REVIEW_LAST_NAME',
+  phone_number: 'ASC_REVIEW_PHONE',
+  email_address: 'ASC_REVIEW_EMAIL'
+}.freeze
+COPYRIGHT_PLACEHOLDER = '[developer name]'.freeze
+
+platform :ios do
+  desc 'Upload listing texts, screenshots, age rating, categories, price/availability (if unset) and the TestFlight group. Never submits.'
+  lane :store_metadata do
+    store_upload(submit: false)
+  end
+
+  desc 'store_metadata, then select build STORE_BUILD of APP_VERSION and submit it for App Review (manual release).'
+  lane :store_submit do
+    store_upload(submit: true)
+  end
+end
+
+def required_env(name)
+  value = ENV.fetch(name, '').strip
+  UI.user_error!("#{name} is not set - run this lane through .github/workflows/tower-clash-ios-store.yml") if value.empty?
+  value
+end
+
+def store_upload(submit:)
+  version = required_env('APP_VERSION')
+  build = ENV.fetch('STORE_BUILD', '').strip
+  UI.user_error!("store_submit needs STORE_BUILD (build=<number> in tower-clash/release/ios-store.request), got '#{build}'") if submit && build !~ /\A[1-9]\d*\z/
+
+  contact = REVIEW_CONTACT_ENV.transform_values { |env_name| ENV.fetch(env_name, '').strip }
+  missing_contact = REVIEW_CONTACT_ENV.select { |key, _| contact[key].empty? }.values
+  if submit && !missing_contact.empty?
+    UI.user_error!("App Review needs a contact: repository secrets missing: #{missing_contact.join(', ')} (docs/publishing/LAUNCH_CHECKLIST.md §0b)")
+  end
+  UI.important("Review contact not configured (#{missing_contact.join(', ')}) - uploading the review notes only") unless missing_contact.empty?
+
+  key_content = required_env('ASC_KEY_P8')
+  api_key = app_store_connect_api_key(
+    key_id: required_env('ASC_KEY_ID'),
+    issuer_id: required_env('ASC_ISSUER_ID'),
+    key_content: key_content,
+    is_key_content_base64: !key_content.include?('BEGIN PRIVATE KEY'),
+    in_house: false
+  )
+
+  app = Spaceship::ConnectAPI::App.find(BUNDLE_ID)
+  unless app
+    UI.user_error!("App Store Connect has no app record for #{BUNDLE_ID}. The stakeholder creates it once in the browser (LAUNCH_CHECKLIST.md §0b step 5); the API cannot.")
+  end
+  UI.message("App record: #{app.name} (Apple ID #{app.id})")
+
+  ensure_testflight_group(app)
+
+  begin
+    ensure_price_and_availability(app)
+  rescue StandardError => e
+    message = "Price / availability could not be set by the API: #{e.message}. Manual fallback: App Store Connect -> Pricing and Availability -> Free; Azerbaijan, Türkiye, Kazakhstan, Georgia (APP_STORE_CONNECT_SHEET.md §3)."
+    UI.user_error!(message) if submit
+    UI.important(message)
+  end
+
+  metadata_path = prepared_metadata(required_env('METADATA_PATH'), contact)
+  review_information = REVIEW_CONTACT_ENV.keys.each_with_object({}) do |key, info|
+    info[key] = contact[key] unless contact[key].empty?
+  end
+
+  deliver(
+    api_key: api_key,
+    app_identifier: BUNDLE_ID,
+    platform: 'ios',
+    app_version: version,
+    metadata_path: metadata_path,
+    screenshots_path: required_env('SCREENSHOTS_PATH'),
+    app_rating_config_path: required_env('AGE_RATING_PATH'),
+    app_review_information: review_information,
+    skip_binary_upload: true,
+    overwrite_screenshots: true,
+    automatic_release: false,
+    phased_release: false,
+    reset_ratings: false,
+    force: true,
+    run_precheck_before_submit: false,
+    precheck_include_in_app_purchases: false,
+    submit_for_review: submit,
+    build_number: submit ? build : nil,
+    submission_information: submit ? { export_compliance_uses_encryption: false, content_rights_contains_third_party_content: false } : nil
+  )
+
+  return unless submit
+
+  submission = app.get_in_progress_review_submission(platform: Spaceship::ConnectAPI::Platform::IOS)
+  UI.user_error!('deliver finished but App Store Connect shows no review submission in progress - check the version page') unless submission
+  UI.success("Tower Clash #{version} (#{build}) is submitted for App Review (submission state: #{submission.state}). Release stays manual.")
+end
+
+# Copy of fastlane/metadata with the copyright holder filled in. The sheet keeps the placeholder
+# "© 2026 [developer name]"; the holder is the developer account owner, i.e. the App Review contact
+# (first + last name secret). Without those secrets the copyright file is left out so the
+# placeholder is never uploaded.
+def prepared_metadata(source, contact)
+  target = File.join(Dir.mktmpdir('tower-clash-metadata'), 'metadata')
+  FileUtils.cp_r(source, target)
+  copyright_file = File.join(target, 'copyright.txt')
+  copyright = File.read(copyright_file).strip
+  if copyright.include?(COPYRIGHT_PLACEHOLDER)
+    holder = [contact[:first_name], contact[:last_name]].reject(&:empty?).join(' ')
+    if holder.empty?
+      File.delete(copyright_file)
+      UI.important('Copyright not uploaded: the holder name comes from ASC_REVIEW_FIRST_NAME / ASC_REVIEW_LAST_NAME')
+    else
+      File.write(copyright_file, "#{copyright.sub(COPYRIGHT_PLACEHOLDER, holder)}\n")
+      UI.message('Copyright holder filled in from the review contact name')
+    end
+  end
+  target
+end
+
+# --- App Store Connect API (JSON:API) helpers --------------------------------------------------
+
+def asc_request(method, path, body = nil)
+  token = Spaceship::ConnectAPI.token
+  UI.user_error!('No App Store Connect API token') unless token
+  token.refresh! if token.expired?
+  uri = URI.parse(path.start_with?('http') ? path : "#{ASC_HOST}#{path}")
+  request = { get: Net::HTTP::Get, post: Net::HTTP::Post, patch: Net::HTTP::Patch }.fetch(method).new(uri)
+  request['Authorization'] = "Bearer #{token.text}"
+  request['Accept'] = 'application/json'
+  if body
+    request['Content-Type'] = 'application/json'
+    request.body = JSON.generate(body)
+  end
+  response = Net::HTTP.start(uri.host, uri.port, use_ssl: true, open_timeout: 30, read_timeout: 120) { |http| http.request(request) }
+  data = begin
+    response.body.to_s.empty? ? {} : JSON.parse(response.body)
+  rescue JSON::ParserError
+    { 'raw' => response.body.to_s[0, 300] }
+  end
+  [response.code.to_i, data]
+end
+
+def asc_error_text(code, data)
+  details = Array(data['errors']).map { |e| [e['code'], e['title'], e['detail']].compact.join(': ') }
+  "HTTP #{code} #{details.join(' | ')}".strip
+end
+
+# GET every page of a collection (links.next), returning data + included.
+def asc_get_all(path)
+  items = []
+  included = []
+  url = path
+  while url
+    code, data = asc_request(:get, url)
+    raise asc_error_text(code, data) unless code == 200
+    items.concat(Array(data['data']))
+    included.concat(Array(data['included']))
+    url = data.dig('links', 'next')
+  end
+  [items, included]
+end
+
+# TestFlight internal group "Team" with access to every build (= "automatic distribution" in the
+# web UI, sheet §7). Testers are App Store Connect users and are added in the web UI; a failure
+# here never stops the lane.
+def ensure_testflight_group(app)
+  groups, = asc_get_all("/v1/apps/#{app.id}/betaGroups?limit=200")
+  if groups.any? { |g| g.dig('attributes', 'name') == TESTFLIGHT_GROUP }
+    UI.message("TestFlight group '#{TESTFLIGHT_GROUP}' exists")
+    return
+  end
+  body = {
+    data: {
+      type: 'betaGroups',
+      attributes: { name: TESTFLIGHT_GROUP, isInternalGroup: true, hasAccessToAllBuilds: true },
+      relationships: { app: { data: { type: 'apps', id: app.id } } }
+    }
+  }
+  code, data = asc_request(:post, '/v1/betaGroups', body)
+  raise asc_error_text(code, data) unless code == 201
+  UI.success("TestFlight internal group '#{TESTFLIGHT_GROUP}' created (access to all builds)")
+rescue StandardError => e
+  UI.important("TestFlight group '#{TESTFLIGHT_GROUP}' not created (#{e.message}) - create it in TestFlight -> Internal Testing if wanted (sheet §7)")
+end
+
+# Price "Free" and the four soft-launch countries — only when App Store Connect has none yet, so
+# a choice the stakeholder made in the browser (e.g. "all countries" at week 4) is never undone.
+def ensure_price_and_availability(app)
+  ensure_free_price(app)
+  ensure_availability(app)
+end
+
+def ensure_free_price(app)
+  code, data = asc_request(:get, "/v1/apps/#{app.id}/appPriceSchedule?include=manualPrices&limit%5BmanualPrices%5D=1")
+  if code == 200 && !Array(data.dig('data', 'relationships', 'manualPrices', 'data')).empty?
+    UI.message('Price schedule exists - left unchanged')
+    return
+  end
+  raise asc_error_text(code, data) unless [200, 404].include?(code)
+
+  points, = asc_get_all("/v1/apps/#{app.id}/appPricePoints?filter%5Bterritory%5D=#{PRICE_BASE_TERRITORY}&limit=200")
+  free = points.find { |p| Float(p.dig('attributes', 'customerPrice').to_s, exception: false)&.zero? }
+  raise "no free price point for #{PRICE_BASE_TERRITORY} among #{points.size} price points" unless free
+
+  body = {
+    data: {
+      type: 'appPriceSchedules',
+      relationships: {
+        app: { data: { type: 'apps', id: app.id } },
+        baseTerritory: { data: { type: 'territories', id: PRICE_BASE_TERRITORY } },
+        manualPrices: { data: [{ type: 'appPrices', id: '${price1}' }] }
+      }
+    },
+    included: [{
+      type: 'appPrices',
+      id: '${price1}',
+      attributes: { startDate: nil },
+      relationships: { appPricePoint: { data: { type: 'appPricePoints', id: free['id'] } } }
+    }]
+  }
+  code, data = asc_request(:post, '/v1/appPriceSchedules', body)
+  raise asc_error_text(code, data) unless code == 201
+  UI.success("Price set to Free (base territory #{PRICE_BASE_TERRITORY})")
+end
+
+def ensure_availability(app)
+  code, data = asc_request(:get, "/v1/apps/#{app.id}/appAvailabilityV2")
+  if code == 404
+    create_availability(app)
+    return
+  end
+  raise asc_error_text(code, data) unless code == 200
+
+  availability_id = data.dig('data', 'id')
+  territories, = asc_get_all("/v2/appAvailabilities/#{availability_id}/territoryAvailabilities?include=territory&limit=200")
+  available = territories.select { |t| t.dig('attributes', 'available') }
+  unless available.empty?
+    names = available.map { |t| t.dig('relationships', 'territory', 'data', 'id') }.compact.sort
+    UI.message("Availability exists (#{names.size} countries: #{names.first(10).join(', ')}#{names.size > 10 ? ', ...' : ''}) - left unchanged")
+    return
+  end
+  # An availability record without any available country: switch on the four soft-launch ones.
+  territories.each do |t|
+    next unless SOFT_LAUNCH_TERRITORIES.include?(t.dig('relationships', 'territory', 'data', 'id'))
+    body = { data: { type: 'territoryAvailabilities', id: t['id'], attributes: { available: true } } }
+    patch_code, patch_data = asc_request(:patch, "/v1/territoryAvailabilities/#{t['id']}", body)
+    raise asc_error_text(patch_code, patch_data) unless patch_code == 200
+  end
+  UI.success("Availability switched on for #{SOFT_LAUNCH_TERRITORIES.join(', ')}")
+end
+
+# Every territory is listed explicitly (the four soft-launch ones available, all others not), so
+# the result does not depend on how App Store Connect treats a territory that is left out.
+def create_availability(app)
+  all_territories, = asc_get_all('/v1/territories?limit=200')
+  ids = all_territories.map { |t| t['id'] }
+  missing = SOFT_LAUNCH_TERRITORIES - ids
+  raise "territories not offered by App Store Connect: #{missing.join(', ')}" unless missing.empty?
+
+  included = ids.each_with_index.map do |territory_id, index|
+    {
+      type: 'territoryAvailabilities',
+      id: "${territory#{index}}",
+      attributes: { available: SOFT_LAUNCH_TERRITORIES.include?(territory_id) },
+      relationships: { territory: { data: { type: 'territories', id: territory_id } } }
+    }
+  end
+  body = {
+    data: {
+      type: 'appAvailabilities',
+      attributes: { availableInNewTerritories: false },
+      relationships: {
+        app: { data: { type: 'apps', id: app.id } },
+        territoryAvailabilities: { data: included.map { |i| { type: i[:type], id: i[:id] } } }
+      }
+    },
+    included: included
+  }
+  code, data = asc_request(:post, '/v2/appAvailabilities', body)
+  raise asc_error_text(code, data) unless code == 201
+  UI.success("Availability set: #{SOFT_LAUNCH_TERRITORIES.join(', ')} (#{ids.size - SOFT_LAUNCH_TERRITORIES.size} other countries off, new countries off)")
+end

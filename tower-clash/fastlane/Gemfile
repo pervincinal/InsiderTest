@@ -1,0 +1,6 @@
+# fastlane for the App Store listing / review lane (MM-12): .github/workflows/tower-clash-ios-store.yml
+# runs `bundle exec fastlane ios store_metadata|store_submit` with BUNDLE_GEMFILE pointing here.
+# Pinned exactly; Gemfile.lock was resolved for Ruby 3.3 on x86_64-linux (the ubuntu runner).
+source "https://rubygems.org"
+
+gem "fastlane", "2.240.1"

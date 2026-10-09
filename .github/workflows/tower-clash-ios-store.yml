@@ -1,0 +1,218 @@
+name: tower-clash-ios-store
+
+# App Store listing upload and App Review submission for Tower Clash (MM-12, docs/MOBILE.md §3.2),
+# with fastlane deliver and the App Store Connect API key — no Mac, no browser session.
+#
+# Started ONLY by a push to the working branch that changes tower-clash/release/ios-store.request
+# (the GitHub proxy of the agent team cannot call workflow_dispatch, so a commit is the trigger).
+# The request file says what to do:
+#   action=metadata  texts (tower-clash/fastlane/metadata = APP_STORE_CONNECT_SHEET.md variant B),
+#                    iPhone screenshots (overwrite), age rating (fastlane/age_rating.json = sheet
+#                    §5, 9+), categories Games > Strategy / Casual, price Free + Azerbaijan,
+#                    Türkiye, Kazakhstan, Georgia (only when App Store Connect has none yet),
+#                    TestFlight internal group "Team". Never submits.
+#   action=submit    the same, then build <build> of the package.json version is attached,
+#                    export compliance and content rights answered, and the version submitted
+#                    for App Review with "Manually release this version".
+# Nothing is released to the public by this workflow: after approval the version waits at
+# "Pending Developer Release" for the stakeholder's "Release This Version" click.
+#
+# Secrets: the same four as tower-clash-ios-release.yml (APPLE_TEAM_ID, APP_STORE_CONNECT_API_KEY_ID,
+# APP_STORE_CONNECT_API_ISSUER_ID, APP_STORE_CONNECT_API_KEY_P8) — checked in the first step, before
+# the checkout, so nothing can be uploaded without them — plus the App Review contact
+# ASC_REVIEW_FIRST_NAME, ASC_REVIEW_LAST_NAME, ASC_REVIEW_PHONE, ASC_REVIEW_EMAIL (required for
+# submit; metadata runs without them and uploads the review notes only).
+#
+# What stays in the browser (the API does not offer it): creating the app record, the App Privacy
+# questionnaire, adding TestFlight testers, "Release This Version".
+on:
+  push:
+    branches:
+      - claude/tower-war-game-plan-weqwpb
+    paths:
+      - 'tower-clash/release/ios-store.request'
+
+# One store run at a time; never cancel a run in the middle of an upload or a submission.
+concurrency:
+  group: tower-clash-ios-store
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  store:
+    name: App Store Connect metadata / review submission
+    # deliver talks to the App Store Connect REST API only (no binary upload, no Xcode), so Linux
+    # is enough.
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CI: true
+      LC_ALL: en_US.UTF-8
+      LANG: en_US.UTF-8
+      FASTLANE_SKIP_UPDATE_CHECK: '1'
+      FASTLANE_HIDE_CHANGELOG: '1'
+      FASTLANE_OPT_OUT_USAGE: '1'
+      BUNDLE_GEMFILE: ${{ github.workspace }}/tower-clash/fastlane/Gemfile
+    defaults:
+      run:
+        working-directory: tower-clash
+    steps:
+      # Identical rule to tower-clash-ios-release.yml: fail fast with the exact list of missing
+      # secrets before anything is checked out. No value is ever printed.
+      - name: Check required secrets
+        working-directory: ${{ runner.temp }}
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          missing=""
+          for name in APP_STORE_CONNECT_API_KEY_ID APP_STORE_CONNECT_API_ISSUER_ID APP_STORE_CONNECT_API_KEY_P8 APPLE_TEAM_ID; do
+            if [ -z "${!name}" ]; then missing="$missing $name"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing"
+            echo "Add them under Settings -> Secrets and variables -> Actions. Where each value comes from: docs/MOBILE.md section 3 and section 6 (iOS table)."
+            exit 1
+          fi
+          case "$APPLE_TEAM_ID" in
+            [A-Z0-9][A-Z0-9][A-Z0-9][A-Z0-9][A-Z0-9][A-Z0-9][A-Z0-9][A-Z0-9][A-Z0-9][A-Z0-9]) ;;
+            *) echo "::error::APPLE_TEAM_ID must be the 10-character Team ID from developer.apple.com -> Membership details (got ${#APPLE_TEAM_ID} characters)"; exit 1 ;;
+          esac
+          case "$APP_STORE_CONNECT_API_KEY_P8" in
+            *"-----BEGIN PRIVATE KEY-----"*) ;;
+            *)
+              if ! printf '%s' "$APP_STORE_CONNECT_API_KEY_P8" | base64 --decode 2>/dev/null | grep -q "BEGIN PRIVATE KEY"; then
+                echo "::error::APP_STORE_CONNECT_API_KEY_P8 does not look like an AuthKey_<ID>.p8 file (raw contents or base64 of it)"
+                exit 1
+              fi ;;
+          esac
+          echo "App Store Connect API key secrets: present"
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Read the request file
+        run: |
+          node scripts/releaseRequest.mjs ios-store release/ios-store.request --env >> "$GITHUB_ENV"
+          echo "APP_VERSION=$(node -p "require('./package.json').version")" >> "$GITHUB_ENV"
+          echo "PACKAGE_BUILD=$(node -p "require('./package.json').config.buildNumber")" >> "$GITHUB_ENV"
+
+      - name: Check the request against package.json
+        run: |
+          echo "Request: action=$STORE_ACTION build=${STORE_BUILD:-none} iphone65=$STORE_IPHONE65; App Store version $APP_VERSION (package.json build $PACKAGE_BUILD)"
+          if [ "$STORE_ACTION" = "submit" ] && [ "$STORE_BUILD" -gt "$PACKAGE_BUILD" ]; then
+            echo "::error::build=$STORE_BUILD is higher than config.buildNumber $PACKAGE_BUILD in package.json - that build has not been made yet. Bump the number (npm run version:sync), run the release lane (release/ios-release.request), wait until App Store Connect shows the build, then request submit."
+            exit 1
+          fi
+
+      # App Review contact: required for submit, optional for metadata. Only "set" / "missing"
+      # is printed.
+      - name: Check App Review contact secrets
+        env:
+          ASC_REVIEW_FIRST_NAME: ${{ secrets.ASC_REVIEW_FIRST_NAME }}
+          ASC_REVIEW_LAST_NAME: ${{ secrets.ASC_REVIEW_LAST_NAME }}
+          ASC_REVIEW_PHONE: ${{ secrets.ASC_REVIEW_PHONE }}
+          ASC_REVIEW_EMAIL: ${{ secrets.ASC_REVIEW_EMAIL }}
+        run: |
+          missing=""
+          for name in ASC_REVIEW_FIRST_NAME ASC_REVIEW_LAST_NAME ASC_REVIEW_PHONE ASC_REVIEW_EMAIL; do
+            if [ -z "${!name}" ]; then missing="$missing $name"; echo "$name: missing"; else echo "$name: set"; fi
+          done
+          if [ -n "$ASC_REVIEW_PHONE" ]; then
+            case "$ASC_REVIEW_PHONE" in
+              +[0-9]*) ;;
+              *) echo "::error::ASC_REVIEW_PHONE must start with + and the country code, e.g. +994 50 123 45 67"; exit 1 ;;
+            esac
+          fi
+          if [ -n "$ASC_REVIEW_EMAIL" ]; then
+            case "$ASC_REVIEW_EMAIL" in
+              *@*.*) ;;
+              *) echo "::error::ASC_REVIEW_EMAIL does not look like an e-mail address"; exit 1 ;;
+            esac
+          fi
+          if [ -n "$missing" ]; then
+            if [ "$STORE_ACTION" = "submit" ]; then
+              echo "::error::action=submit needs the App Review contact. Missing repository secrets:$missing (docs/publishing/LAUNCH_CHECKLIST.md section 0b)."
+              exit 1
+            fi
+            echo "::notice::Review contact secrets missing:$missing - metadata continues without them (review notes only, no copyright line)."
+          fi
+
+      # Apple rejects a listing whose privacy policy / support page has no working contact; the
+      # pages still carry "[developer ...]" until the stakeholder sends the contact in the chat.
+      - name: Check the public privacy and support pages
+        run: |
+          if grep -n "\[developer" public/privacy.html public/support.html; then
+            if [ "$STORE_ACTION" = "submit" ]; then
+              echo "::error::public/privacy.html or public/support.html still contains a [developer ...] placeholder. The Publisher fills in the contact first (LAUNCH_CHECKLIST.md section 0 step 3)."
+              exit 1
+            fi
+            echo "::warning::privacy/support pages still contain [developer ...] placeholders - fine for metadata, blocks submit."
+          else
+            echo "No placeholders on the privacy and support pages"
+          fi
+
+      # deliver wants <screenshots>/<locale>/*.png. The committed sets keep their own folder names
+      # (store/screenshots/apple-6.7/en = 1290x2796 = deliver's APP_IPHONE_67, App Store Connect's
+      # 6.9" slot; apple-6.5/en = 1284x2778 = APP_IPHONE_65), so they are copied into en-US here.
+      # File names sort into the upload order 01..10.
+      - name: Prepare screenshots
+        run: |
+          SHOTS="$RUNNER_TEMP/screenshots/en-US"
+          mkdir -p "$SHOTS"
+          for f in store/screenshots/apple-6.7/en/*.png; do cp "$f" "$SHOTS/iphone67-$(basename "$f")"; done
+          if [ "$STORE_IPHONE65" = "yes" ]; then
+            for f in store/screenshots/apple-6.5/en/*.png; do cp "$f" "$SHOTS/iphone65-$(basename "$f")"; done
+          fi
+          ls -la "$SHOTS"
+          echo "SCREENSHOTS_PATH=$RUNNER_TEMP/screenshots" >> "$GITHUB_ENV"
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+          working-directory: tower-clash/fastlane
+
+      - name: fastlane version
+        run: bundle exec fastlane --version
+
+      - name: Upload to App Store Connect (fastlane deliver)
+        env:
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          ASC_REVIEW_FIRST_NAME: ${{ secrets.ASC_REVIEW_FIRST_NAME }}
+          ASC_REVIEW_LAST_NAME: ${{ secrets.ASC_REVIEW_LAST_NAME }}
+          ASC_REVIEW_PHONE: ${{ secrets.ASC_REVIEW_PHONE }}
+          ASC_REVIEW_EMAIL: ${{ secrets.ASC_REVIEW_EMAIL }}
+          METADATA_PATH: ${{ github.workspace }}/tower-clash/fastlane/metadata
+          AGE_RATING_PATH: ${{ github.workspace }}/tower-clash/fastlane/age_rating.json
+        run: |
+          if [ "$STORE_ACTION" = "submit" ]; then LANE_NAME=store_submit; else LANE_NAME=store_metadata; fi
+          bundle exec fastlane ios "$LANE_NAME"
+
+      # Only once the request was read (a run stopped by the secrets check has nothing to report).
+      - name: Summary
+        if: always() && env.STORE_ACTION != ''
+        working-directory: ${{ runner.temp }}
+        run: |
+          {
+            echo "## Tower Clash iOS store request: action=${STORE_ACTION:-?} build=${STORE_BUILD:-none} (version ${APP_VERSION:-?})"
+            echo
+            echo "Result: ${{ job.status }}."
+            echo
+            if [ "$STORE_ACTION" = "submit" ]; then
+              echo "On success the version is **Waiting for Review**. Apple writes to the review contact e-mail. After approval the status becomes **Pending Developer Release** and nothing happens until the stakeholder presses *Release This Version* (App Store Connect -> Tower Clash -> App Store)."
+            else
+              echo "Metadata only: nothing was submitted. Check the version page in App Store Connect; request action=submit with build=<number> when the review build is processed."
+            fi
+            echo
+            echo "Still in the browser: App Privacy (sheet section 4) must be published before the first submission."
+          } >> "$GITHUB_STEP_SUMMARY"

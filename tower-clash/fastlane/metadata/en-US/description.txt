@@ -1,0 +1,41 @@
+Tower Clash is a one-thumb real-time strategy game: tap one of your towers, tap a target, and a stream of soldiers starts marching — and keeps marching until you stop it. Reinforce friendly towers, overwhelm hostile ones, and when a garrison hits zero the tower is yours. Capture every enemy tower to win.
+
+HOW IT PLAYS
+• Tap a blue tower, then tap any tower it can see in a straight line: a stream of soldiers starts flowing there — and keeps flowing until you tap the target again. Walls, water and rocks block the line. Drag from tower to tower works too.
+• Towers upgrade themselves: let one fill to 25 soldiers and it becomes level 2, at 50 level 3 (100 max). Bigger towers recruit faster and run more streams — one at level 1, two at level 2, three at level 3.
+• Sending never empties a tower — it only stops growing while it streams, and bigger towers stream faster. Close the stream to let it level up.
+• A tower under attack stops recruiting — answer every enemy stream, or the tower falls.
+• Enemy streams are drawn as straight ribbons in their colour, so you always see where the next attack comes from — and where to answer it.
+
+50 HAND-MADE LEVELS
+• Levels 1–3 teach the basics with a short built-in tutorial; every later level opens with a one-line lesson.
+• Fortresses (from level 9) shrug off half of every attack — bring more than you think.
+• Artillery (from level 12) shoots down soldiers that walk into its range — approach from the right side.
+• Two enemies at once from level 17, three from level 33 — and they fight each other too.
+• Walls, rivers and rocks that block the line of attack, and mines that take out the first soldiers to pass over them.
+• Tank factories (from level 25): a tank weighs five soldiers but crawls — send it first and let the infantry catch up.
+• Levels 41–50, the Grand Campaign: three enemies, walls and mines on every map, the toughest islands — no new rules, all of them at once.
+• Beat every level for three stars: the faster you win, the more stars you earn. Stars unlock the next level and pay gold.
+• Daily Challenge: one fixed level, seed and twist per day, the same for everyone — free retries, gold and crystals for the first win, bonus crystals for a 3-, 7- and 30-day win streak.
+• Weekly Challenge: every Monday one twisted level from the late campaign, the same for everyone — 100 gold for the first win, 20 crystals for beating its three-star clock.
+
+GOLD, CRYSTALS AND UPGRADES
+• Gold is earned by playing — stars, replays and daily rewards — and buys Overdrive (×3 production for 10 s), Freeze (enemies stop producing for 5 s), Airstrike (−10 soldiers on one enemy tower) and permanent Commander upgrades (production, capacity, starting garrison, march speed, cheaper boosters).
+• Crystals come from milestones, achievements and the daily chest; they buy tower, helmet and island skins or a second chance after a defeat.
+• Every level is winnable without spending anything — upgrades are a shortcut, never a requirement.
+
+SIX ISLANDS
+• Grass, autumn, sand, snow, volcanic and twilight islands, drawn in a soft clay style with sunlit shadows.
+
+BUILT FOR PHONES
+• Portrait, one hand, every level under three minutes.
+• Pause menu with a ×2 speed switch for when you are already winning.
+• Settings: sound, colour-blind palette, reduced motion, language; mute button right in the HUD.
+• Plays offline: the campaign needs no connection (ads do).
+
+HONEST BY DESIGN
+• No account, no sign-in — your progress is stored only on your device.
+• Nothing to buy in this version: gold and crystals are earned by playing. No subscriptions, no loot boxes.
+• A short ad between levels at most every third level, never during a battle, and never in the first five levels. Rewarded videos are always your choice.
+
+Menus, hints, the tutorial, level names and lessons are in English, Azerbaijani, Russian and Turkish.

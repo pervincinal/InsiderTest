@@ -1,0 +1,19 @@
+# Tower Clash — iOS build request (MM-12, docs/MOBILE.md §3.2).
+#
+# Pushing a change of this file to the branch claude/tower-war-game-plan-weqwpb starts
+# .github/workflows/tower-clash-ios-release.yml once: signed archive on a macOS runner, upload to
+# App Store Connect (it then appears under TestFlight). Pushes to any other branch start nothing.
+# Without the four Apple secrets the run stops in its first step, "Check required secrets".
+#
+# Keys (one key=value per line; lines starting with # are ignored; unknown keys are an error):
+#   lane       testflight (default) or appstore — the same upload; appstore is the build meant
+#              for App Review and warns when the AdMob ids are missing
+#   note       free text for the log, at most 200 characters (why this build)
+#   requested  UTC time of the request, e.g. 2026-10-09T15:30:00Z — change it every time so the
+#              commit is a real diff (GitHub only starts the run when this file changes)
+#
+# The build number is config.buildNumber in tower-clash/package.json (npm run version:sync);
+# App Store Connect accepts every build number only once.
+lane=testflight
+note=MM-12 first request: expected to stop at the secrets check until the stakeholder adds the Apple secrets
+requested=2026-10-09T16:00:00Z

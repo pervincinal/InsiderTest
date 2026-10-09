@@ -21,9 +21,9 @@ name: tower-clash-ios-release
 #              certificate needs ADMIN (or the Account Holder). Once that certificate exists,
 #              an APP MANAGER key can reuse it ("Access to Cloud Managed Distribution
 #              Certificate"). We ask the stakeholder for an Admin key from the start so the first
-#              run works. What it cannot do: create the App Store Connect app record (A9), fill
-#              the listing / App Privacy answers, accept the Paid Apps agreement, or submit for
-#              review — those stay browser steps in docs/publishing/LAUNCH_CHECKLIST.md.
+#              run works. What this job does not do: create the App Store Connect app record
+#              (A9) or answer App Privacy (browser only, LAUNCH_CHECKLIST.md §0b); the listing,
+#              screenshots, age rating and the review submission are tower-clash-ios-store.yml.
 #   fallback — manual signing when APPLE_CERTIFICATE_P12_BASE64 (+ APPLE_CERTIFICATE_PASSWORD)
 #              and APPLE_PROVISIONING_PROFILE_BASE64 are ALSO set: the .p12 is imported into a
 #              temporary keychain, the profile installed, and the archive/export use them. Only
@@ -39,10 +39,19 @@ name: tower-clash-ios-release
 # `xcrun iTMSTransporter -m upload -assetFile App.ipa -apiKey … -apiIssuer …`.
 #
 # Lanes: `testflight` (default) uploads the build; it appears under TestFlight in App Store
-# Connect after processing (10–30 min). `appstore` does the same upload but insists that the
-# job runs on the git tag `tower-clash-v<package.json version>` so the App Store submission is
-# reproducible; a tag push selects `appstore` automatically. Attaching the build to the store
-# version and pressing "Submit for Review" remain manual steps in App Store Connect.
+# Connect after processing (10–30 min). `appstore` does the same upload for the build meant for
+# App Review (warnings when the AdMob ids are missing); it must run either on the git tag
+# `tower-clash-v<package.json version>` (a tag push selects `appstore` automatically) or from a
+# request-file commit, whose sha pins the source just as well. Attaching the build to the store
+# version and submitting it for review is tower-clash-ios-store.yml (request file
+# tower-clash/release/ios-store.request, action=submit); the public release stays a browser click.
+#
+# Triggers (MM-12, docs/MOBILE.md §3.2): the agent team cannot call workflow_dispatch or push tags
+# (its GitHub proxy blocks both), so a build is requested by a commit: a push to the working
+# branch that changes tower-clash/release/ios-release.request runs the job once with the `lane`
+# written in that file (default testflight). Pushes to other branches never build. The former
+# "push of this workflow file" trigger was removed with MM-12: once the secrets exist, editing the
+# workflow must not start a real upload by accident — only a request does.
 on:
   workflow_dispatch:
     inputs:
@@ -56,13 +65,13 @@ on:
   push:
     tags:
       - 'tower-clash-v*'
-    # A push of this file on the working branch runs the lane once (it fails fast at the secrets
-    # check while the secrets are missing); the stakeholder can then use "Re-run all jobs" from a
-    # phone, since GitHub's "Run workflow" button only exists for workflows on the default branch.
+    # Commit-triggered builds (MM-12): only a change of the request file on the working branch
+    # starts a run (paths filters do not apply to the tag pushes above). The lane is read from
+    # the file after the checkout. Without the secrets the run stops at "Check required secrets".
     branches:
       - claude/tower-war-game-plan-weqwpb
     paths:
-      - '.github/workflows/tower-clash-ios-release.yml'
+      - 'tower-clash/release/ios-release.request'
 
 # Never cancel a run that may be in the middle of an upload.
 concurrency:
@@ -121,7 +130,11 @@ jobs:
             echo "SIGNING_MODE=automatic" >> "$GITHUB_ENV"
             echo "Signing: automatic (App Store Connect API key + cloud-managed Apple Distribution certificate)"
           fi
-          echo "Lane: $LANE"
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF_TYPE" = "branch" ]; then
+            echo "Lane: read from tower-clash/release/ios-release.request after the checkout"
+          else
+            echo "Lane: $LANE"
+          fi
 
       - uses: actions/checkout@v4
 
@@ -130,6 +143,15 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: tower-clash/package-lock.json
+
+      # MM-12: a branch push can only come from tower-clash/release/ios-release.request (see `on:`);
+      # its `lane` overrides the default. An invalid file stops the run here.
+      - name: Read lane from the request file (commit-triggered run)
+        if: github.event_name == 'push' && github.ref_type == 'branch'
+        run: |
+          node scripts/releaseRequest.mjs ios-release release/ios-release.request --env >> "$GITHUB_ENV"
+          echo "REQUEST_RUN=true" >> "$GITHUB_ENV"
+          grep '^LANE=' "$GITHUB_ENV" | tail -n1
 
       - name: Install dependencies
         run: npm ci
@@ -146,9 +168,9 @@ jobs:
           BUILD="$(node -p "require('./package.json').config.buildNumber")"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "build=$BUILD" >> "$GITHUB_OUTPUT"
-          echo "Building Tower Clash $VERSION ($BUILD), lane $LANE, ref $GITHUB_REF"
-          if [ "$LANE" = "appstore" ] && [ "$GITHUB_REF" != "refs/tags/tower-clash-v$VERSION" ]; then
-            echo "::error::Lane 'appstore' must run on the tag tower-clash-v$VERSION (current ref: $GITHUB_REF). Create the tag on the release commit (LAUNCH_CHECKLIST.md V3) and choose it under 'Use workflow from', or use lane 'testflight'."
+          echo "Building Tower Clash $VERSION ($BUILD), lane $LANE, ref $GITHUB_REF, commit $GITHUB_SHA"
+          if [ "$LANE" = "appstore" ] && [ "$GITHUB_REF" != "refs/tags/tower-clash-v$VERSION" ] && [ "${REQUEST_RUN:-}" != "true" ]; then
+            echo "::error::Lane 'appstore' must run on the tag tower-clash-v$VERSION or from a change of tower-clash/release/ios-release.request (current ref: $GITHUB_REF). Use one of those, or lane 'testflight'."
             exit 1
           fi
 
@@ -456,7 +478,7 @@ jobs:
             echo "Next (App Store Connect, in the browser, 10–30 min after this run finishes):"
             echo "1. My Apps -> Tower Clash -> TestFlight: the build shows 'Processing' then 'Ready to Test'. Answer the export-compliance question once if asked (No — the app uses only standard HTTPS)."
             echo "2. TestFlight lane: add yourself under Internal Testing, install the TestFlight app on the iPhone, open the invitation."
-            echo "3. App Store lane: App Store -> 1.0 Prepare for Submission -> Build -> select build ${{ steps.version.outputs.build }} -> Add for Review -> Submit (LAUNCH_CHECKLIST.md A18)."
+            echo "3. App Store lane: when the build shows 'Ready to Submit' (TestFlight tab), the team commits tower-clash/release/ios-store.request with action=submit and build=${{ steps.version.outputs.build }} (tower-clash-ios-store.yml attaches it and submits for review; docs/MOBILE.md section 3.2)."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Remove keys and temporary keychain

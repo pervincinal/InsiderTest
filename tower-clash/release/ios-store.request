@@ -1,0 +1,27 @@
+# Tower Clash — App Store listing / review request (MM-12, docs/MOBILE.md §3.2).
+#
+# Pushing a change of this file to the branch claude/tower-war-game-plan-weqwpb starts
+# .github/workflows/tower-clash-ios-store.yml once (fastlane deliver with the App Store Connect
+# API key). Pushes to any other branch start nothing. Without the four Apple secrets the run stops
+# in its first step, "Check required secrets". Nothing is ever released to the public by this
+# file: the version is set to "Manually release this version" and waits for the stakeholder's
+# "Release This Version" click after approval.
+#
+# Keys (one key=value per line; lines starting with # are ignored; unknown keys are an error):
+#   action     metadata — upload texts (fastlane/metadata), screenshots, age rating, categories,
+#                         price Free + the four soft-launch countries (only if not set yet) and the
+#                         TestFlight group "Team"; never submits
+#              submit   — the same, then selects build <build> of the package.json version,
+#                         answers export compliance (no non-exempt encryption) and content rights
+#                         (no third-party content) and submits the version for App Review; needs
+#                         the four ASC_REVIEW_* secrets and the contact e-mail on the privacy page
+#   build      the build number to submit, e.g. 8 (required for submit; ignored by metadata)
+#   iphone65   yes = also upload the 6.5" set (store/screenshots/apple-6.5/en); default no, the
+#              6.9" set (apple-6.7/en, 1290x2796) is the only one App Store Connect requires
+#   note       free text for the log, at most 200 characters
+#   requested  UTC time of the request, e.g. 2026-10-09T15:30:00Z — change it every time
+action=metadata
+build=
+iphone65=no
+note=MM-12 first request: expected to stop at the secrets check until the stakeholder adds the Apple secrets
+requested=2026-10-09T16:00:00Z
