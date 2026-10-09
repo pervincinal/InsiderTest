@@ -14,7 +14,8 @@ import type { Page } from '@playwright/test';
  *   3. at that scroll its name and its button label (price / EQUIP / EQUIPPED / PACK ONLY) are drawn
  *      inside the card / the button, unsqueezed (`fillText` maxWidth not reached), and the EQUIPPED and
  *      price buttons are really painted there in the palette's colour (pixel probe on #game) — the
- *      colour-blind palette swaps the EQUIPPED fill (owners.enemy2) only;
+ *      colour-blind palette swaps the EQUIPPED fill (shopOwned) only; BUG-22: the label is ≥ 4.5:1
+ *      against the probed face and a price is drawn at ≥ 24 logical px (ART_DIRECTION §6);
  *   4. one more pass at 360×640 checks every skin card's name and button label in en / az / ru / tr.
  *
  * Canvas-drawn, so (like e2e/shopNoStore.spec.ts) an init script wraps `fillText` and records each
@@ -46,8 +47,11 @@ const HELMETS = ['helmet_bronze', 'helmet_viking', 'helmet_knight', 'helmet_samu
 const PACK_ONLY_HELMETS = new Set<string>(['helmet_bronze', 'helmet_royal']);
 const OWNED = 'helmet_knight'; // owned, not equipped → EQUIP
 const EQUIPPED = 'helmet_viking'; // owned and equipped → EQUIPPED
-// src/render/palette.ts — owners.player (price buttons, both palettes), owners.enemy2 (EQUIPPED: green / colour-blind purple)
-const FILL = { price: '#2f6df6', equipped: '#2ec27e', equippedCB: '#a855f7' };
+// src/render/palette.ts — shopBuy.face (price buttons, both palettes), shopOwned.face (EQUIPPED: green / colour-blind light purple), BUG-22
+const FILL = { price: '#1f4bc0', equipped: '#2ec27e', equippedCB: '#c58bff' };
+// ART_DIRECTION §6 readability line (BUG-22): WCAG contrast of a button label, size of a price numeral (logical px)
+const MIN_CONTRAST = 4.5;
+const MIN_NUMERAL_PX = 24;
 const SAFE = { top: 44, bottom: 34 };
 const VIEWPORTS = [
   { width: 360, height: 640 },
@@ -68,8 +72,10 @@ interface Drawn {
   width: number;
   maxWidth: number | null;
   fill: string;
+  /** Font size in logical px. */
+  px: number;
 }
-type RawText = { t: string; dx: number; dy: number; align: string; width: number; maxWidth: number | null; fill: string; sx: number };
+type RawText = { t: string; dx: number; dy: number; align: string; width: number; maxWidth: number | null; fill: string; sx: number; px: number };
 type RecWindow = Window & { __qaTexts: RawText[] | null };
 
 function seededSave(colorBlind: boolean, language = 'en'): Record<string, unknown> {
@@ -121,6 +127,7 @@ async function boot(page: Page, url: string, save: Record<string, unknown>): Pro
           maxWidth: maxWidth ?? null,
           fill: typeof this.fillStyle === 'string' ? this.fillStyle : 'gradient',
           sx: m.a,
+          px: Number(/(\d+(?:\.\d+)?)px/.exec(this.font)?.[1] ?? NaN),
         });
       }
       if (maxWidth === undefined) orig.call(this, text, x, y);
@@ -150,14 +157,14 @@ async function drawnTexts(page: Page): Promise<Drawn[]> {
       const cy = b.top + (r.dy * b.height) / c.height;
       // measureText / maxWidth are in the context's user space: × the matrix scale → device px → logical
       const toLogical = r.sx * kx;
-      return { ...r, x: ((cx - o.x) * 720) / (e.x - o.x), y: ((cy - o.y) * 1280) / (e.y - o.y), width: r.width * toLogical, maxWidth: r.maxWidth === null ? null : r.maxWidth * toLogical };
+      return { ...r, x: ((cx - o.x) * 720) / (e.x - o.x), y: ((cy - o.y) * 1280) / (e.y - o.y), width: r.width * toLogical, maxWidth: r.maxWidth === null ? null : r.maxWidth * toLogical, px: r.px * toLogical };
     });
   });
   const seen = new Map<string, Drawn>();
   for (const r of list) {
     const shown = r.maxWidth === null ? r.width : Math.min(r.width, r.maxWidth);
     const left = r.align === 'center' ? r.x - shown / 2 : r.align === 'right' || r.align === 'end' ? r.x - shown : r.x;
-    seen.set(`${r.t}@${Math.round(r.x)},${Math.round(r.y)}`, { t: r.t, x: r.x, y: r.y, left, right: left + shown, width: r.width, maxWidth: r.maxWidth, fill: r.fill });
+    seen.set(`${r.t}@${Math.round(r.x)},${Math.round(r.y)}`, { t: r.t, x: r.x, y: r.y, left, right: left + shown, width: r.width, maxWidth: r.maxWidth, fill: r.fill, px: r.px });
   }
   return [...seen.values()];
 }
@@ -211,6 +218,8 @@ interface CardFinding {
   button: string;
   scroll: number;
   contrast: number | null;
+  /** Label font size, logical px. */
+  px: number;
 }
 
 /** QA-16 B checks 1–3 for one viewport / store mode / palette. Returns per-card details for the annotation. */
@@ -294,9 +303,13 @@ async function checkHelmets(page: Page, opts: { store: boolean; colorBlind: bool
       const fill = id === EQUIPPED ? (opts.colorBlind ? FILL.equippedCB : FILL.equipped) : FILL.price;
       const px = await pixelAt(page, { x: buy.x + 22, y: buy.y + 40 });
       expect(dist(px, hex(fill)), `${where}: button face ${px.map(Math.round).join(',')} vs ${fill}`).toBeLessThanOrEqual(45);
-      ratio = btn!.fill.startsWith('#') ? Math.round(contrast(hex(btn!.fill), px) * 100) / 100 : null;
+      expect(btn!.fill, `${where}: "${btn!.t}" drawn in a flat colour`).toMatch(/^#[0-9a-f]{6}$/i);
+      ratio = Math.round(contrast(hex(btn!.fill), px) * 100) / 100;
+      // BUG-22: the label reads on its face, and a price numeral is at least 24 logical px
+      expect(ratio, `${where}: "${btn!.t}" ${btn!.fill} on ${px.map(Math.round).join(',')}`).toBeGreaterThanOrEqual(MIN_CONTRAST);
+      if (id !== EQUIPPED) expect(btn!.px, `${where}: price "${btn!.t}" size`).toBeGreaterThanOrEqual(MIN_NUMERAL_PX - 0.5);
     }
-    findings.push({ id, label: name!.t, button: btn!.t, scroll: s, contrast: ratio });
+    findings.push({ id, label: name!.t, button: btn!.t, scroll: s, contrast: ratio, px: Math.round(btn!.px * 10) / 10 });
   }
   return findings;
 }
@@ -323,7 +336,7 @@ for (const vp of VIEWPORTS) {
           await p.evaluate(() => window.__towerclash.economy.shopScroll(560));
           await p.waitForTimeout(150);
           await p.screenshot({ path: info.outputPath(`shop-${label(vp)}-${store ? 'store' : 'nostore'}-${colorBlind ? 'cb' : 'default'}.png`), scale: 'css' });
-          notes.push(`${tag}: ${findings.map((f) => `${f.label}=${f.button}${f.contrast === null ? '' : ` (${f.contrast}:1)`}`).join(', ')}`);
+          notes.push(`${tag}: ${findings.map((f) => `${f.label}=${f.button}${f.contrast === null ? '' : ` (${f.contrast}:1, ${f.px}px)`}`).join(', ')}`);
           expect(errors, tag).toEqual([]);
           if (colorBlind) await p.context().close();
         }

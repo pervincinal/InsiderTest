@@ -1,4 +1,4 @@
-import type { Palette } from './palette';
+import type { ButtonInk, Palette } from './palette';
 import { shade } from './palette';
 import type { Rect, Segment } from './widgets';
 import { BUTTON_EDGE, PRESS_DROP, SHADOW_INK, drawButton, drawRoundButton, font, inRect, innerHighlight, roundRect } from './widgets';
@@ -14,7 +14,16 @@ import { t } from '../ui/i18n';
  * Segmented control on a clay button face: `active` segment is a raised blue pill with paper
  * text, the rest are dim labels. Segments split `r` evenly; hit-test with `segmentAt`.
  */
-export function drawSegmented(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, segments: readonly Segment[], active: number, fontPx = 22): void {
+export function drawSegmented(
+  ctx: CanvasRenderingContext2D,
+  pal: Palette,
+  r: Rect,
+  segments: readonly Segment[],
+  active: number,
+  fontPx = 22,
+  /** Active segment face + label (the shop converter's pack sizes use `pal.shopBuy`, BUG-22); default owner blue on paper. */
+  activeInk: ButtonInk = { face: pal.owners.player, text: pal.paper },
+): void {
   drawButton(ctx, pal, r, '');
   const segW = (r.w - 8) / segments.length;
   ctx.save();
@@ -30,14 +39,14 @@ export function drawSegmented(ctx: CanvasRenderingContext2D, pal: Palette, r: Re
     const on = i === active;
     if (on) {
       roundRect(ctx, { x: sr.x, y: sr.y + 2, w: sr.w, h: sr.h }, 12);
-      ctx.fillStyle = shade(pal.owners.player, -0.4);
+      ctx.fillStyle = shade(activeInk.face, -0.4);
       ctx.fill();
       roundRect(ctx, sr, 12);
-      ctx.fillStyle = pal.owners.player;
+      ctx.fillStyle = activeInk.face;
       ctx.fill();
       innerHighlight(ctx, sr, 12, 0.45);
     }
-    ctx.fillStyle = on ? pal.paper : pal.textDim;
+    ctx.fillStyle = on ? activeInk.text : pal.textDim;
     ctx.font = font(fontPx);
     ctx.fillText(seg.label, sr.x + sr.w / 2, sr.y + sr.h / 2 + 1, sr.w - 6);
   });

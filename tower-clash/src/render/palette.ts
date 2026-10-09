@@ -15,6 +15,16 @@ export interface Tones {
   shade: string;
 }
 
+/**
+ * Face and label colour of a shop button (BUG-22). The pair is pinned at ≥ 4.5:1 against every
+ * pixel of the face, i.e. the flat `face` and the lit top of drawButton's gradient
+ * (`shade(face, +0.16)`) — tests/render/contrast.test.ts.
+ */
+export interface ButtonInk {
+  face: string;
+  text: string;
+}
+
 /** Level bands (§3): 1–8 grass, 9–16 autumn, 17–24 sand, 25–32 snow, 33–40 volcanic, 41+ twilight (ART-8 "twilight highlands": heather at dusk). */
 export type Biome = 'grass' | 'autumn' | 'sand' | 'snow' | 'volcanic' | 'twilight';
 
@@ -123,6 +133,14 @@ export interface Palette {
   crystalInk: string;
   /** Prohibition red of the no-ads badge (shared with `mine`; kept separate so it can retune). */
   forbid: string;
+  /**
+   * Shop buttons (BUG-22, ART_DIRECTION §6): `shopBuy` = every price / buy / convert face (a deeper
+   * blue than `owners.player`, paper numerals ≥ 5:1 on every face pixel), `shopOwned` = EQUIPPED /
+   * OWNED / MAX and the pack bonus ribbon (the bright owner-2 colour kept, ink text) — light vs dark
+   * so "owned" never reads as "buy" in either palette.
+   */
+  shopBuy: ButtonInk;
+  shopOwned: ButtonInk;
 }
 
 const BIOMES: Record<Biome, BiomeColors> = Object.freeze({
@@ -273,12 +291,17 @@ export const DEFAULT_PALETTE: Palette = Object.freeze({
   crystal: { lit: '#c9f7ff', mid: '#4fd1f0', shade: '#7b5cf0' },
   crystalInk: '#4a2fb0',
   forbid: '#ff5a5f',
+  /** The player blue's own shade tone: paper numerals 7.1:1 on the flat face, 5.0:1 at the gradient's lit top. */
+  shopBuy: { face: OWNER_TONES.player.shade, text: '#fffaf0' },
+  shopOwned: { face: '#2ec27e', text: '#1e2a44' },
 });
 
 export const COLOR_BLIND_PALETTE: Palette = Object.freeze({
   ...DEFAULT_PALETTE,
   owners: mids(OWNER_TONES_CB),
   ownerTones: OWNER_TONES_CB,
+  /** The colour-blind owner-2 purple is too dark for ink and too light for paper: its lit tone takes ink. */
+  shopOwned: { face: OWNER_TONES_CB.enemy2.lit, text: '#1e2a44' },
 });
 
 export function getPalette(colorBlind: boolean): Palette {

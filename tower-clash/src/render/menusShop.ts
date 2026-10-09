@@ -1,5 +1,5 @@
 import { C } from '../sim/constants';
-import type { Palette } from './palette';
+import type { ButtonInk, Palette } from './palette';
 import { shade } from './palette';
 import type { View } from './view';
 import type { Rect } from './widgets';
@@ -145,18 +145,27 @@ export interface ShopOpts {
 
 const TAB_KEYS: Record<ShopTab, TranslationKey> = { crystals: 'shop.tab.crystals', bundles: 'shop.tab.bundles', skins: 'shop.tab.skins', upgrades: 'shop.tab.upgrades' };
 
-/** Price / action button: label with an optional currency glyph; spinner when pending. */
+/**
+ * Shop numerals (prices, pack sizes) are drawn at this size or larger (ART_DIRECTION §6, BUG-22);
+ * only `fitFontPx` may shrink a label that would not fit beside its glyph (long translations).
+ */
+const SHOP_NUMERAL_PX = 24;
+
+/**
+ * Price / action button: label with an optional currency glyph; spinner when pending. `ink` is a
+ * coloured face with its label colour (`pal.shopBuy` / `pal.shopOwned`, ≥ 4.5:1, BUG-22); without
+ * it the button is a paper face with ink text.
+ */
 function drawBuyButton(
   ctx: CanvasRenderingContext2D,
   pal: Palette,
   r: Rect,
   label: string,
-  o: { glyph?: 'gold' | 'crystal'; fill?: string; disabled?: boolean; pressed?: boolean; pending?: boolean; fontPx?: number; nowMs?: number },
+  o: { glyph?: 'gold' | 'crystal'; ink?: ButtonInk; disabled?: boolean; pressed?: boolean; pending?: boolean; fontPx?: number; nowMs?: number },
 ): void {
-  drawButton(ctx, pal, r, '', { fill: o.fill, disabled: o.disabled, pressed: o.pressed, fontPx: o.fontPx, flat: true });
+  drawButton(ctx, pal, r, '', { fill: o.ink?.face, disabled: o.disabled, pressed: o.pressed, fontPx: o.fontPx, flat: true });
   const cy = r.y + (r.h - 4) / 2 + (o.pressed ? 3 : 0);
-  const onColour = o.fill !== undefined && !o.disabled;
-  const text = o.disabled ? pal.textDim : onColour ? pal.paper : pal.ink;
+  const text = o.disabled ? pal.textDim : (o.ink?.text ?? pal.ink);
   if (o.pending) {
     drawSpinner(ctx, text, r.x + r.w / 2, cy, Math.min(12, r.h * 0.25), o.nowMs ?? 0);
     return;
@@ -165,7 +174,7 @@ function drawBuyButton(
   const glyphW = o.glyph ? glyphR * 2 + 8 : 0;
   // BUG-21: a long label (RU "ТОЛЬКО В НАБОРЕ") used to be squeezed by fillText's maxWidth; size the
   // font to the room left beside the glyph instead, so the glyphs keep their proportions.
-  const px = fitFontPx(ctx, label, o.fontPx ?? 22, r.w - 16 - glyphW);
+  const px = fitFontPx(ctx, label, o.fontPx ?? SHOP_NUMERAL_PX, r.w - 16 - glyphW);
   ctx.font = font(px);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -191,22 +200,22 @@ function drawPackCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopPackCa
   ctx.fillText(formatAmount(c.crystals), r.x + r.w / 2 + 10, r.y + 154);
   drawCrystal(ctx, pal, r.x + r.w / 2 - ctx.measureText(formatAmount(c.crystals)).width / 2 - 10, r.y + 154, 13);
   if (c.bonusPct > 0) {
-    // bonus ribbon, top-right corner
+    // bonus ribbon, top-right corner: a numeral, so the shop's owned ink pair at ≥ 24 px (BUG-22)
     const label = `+${Math.round(c.bonusPct * 100)}%`;
-    ctx.font = font(16);
+    ctx.font = font(SHOP_NUMERAL_PX);
     const w = ctx.measureText(label).width + 22;
-    const tag: Rect = { x: r.x + r.w - w - 12, y: r.y + 12, w, h: 30 };
-    drawPill(ctx, tag, pal.owners.enemy2, shade(pal.owners.enemy2, -0.35), 2);
-    ctx.fillStyle = pal.paper;
+    const tag: Rect = { x: r.x + r.w - w - 12, y: r.y + 12, w, h: 36 };
+    drawPill(ctx, tag, pal.shopOwned.face, shade(pal.shopOwned.face, -0.35), 2);
+    ctx.fillStyle = pal.shopOwned.text;
     ctx.fillText(label, tag.x + tag.w / 2, tag.y + tag.h / 2 + 1);
   }
   const buy = shopBuyRect(r);
   drawBuyButton(ctx, pal, buy, c.price, {
-    fill: pal.owners.player,
+    ink: pal.shopBuy,
     disabled: !o.storeAvailable,
     pressed: rectEq(o.pressed, buy) || rectEq(o.pressed, r),
     pending: o.pending === c.id,
-    fontPx: 24,
+    fontPx: SHOP_NUMERAL_PX,
     nowMs: o.nowMs,
   });
 }
@@ -238,14 +247,14 @@ function drawBundleCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopBund
   c.lines.slice(0, 4).forEach((line, i) => ctx.fillText(line, textX, r.y + 72 + i * 24, textW));
   const buy = shopRowBuyRect(r);
   if (c.owned) {
-    drawBuyButton(ctx, pal, buy, t('shop.owned'), { fill: pal.owners.enemy2, fontPx: 22 });
+    drawBuyButton(ctx, pal, buy, t('shop.owned'), { ink: pal.shopOwned, fontPx: 22 });
   } else {
     drawBuyButton(ctx, pal, buy, c.price, {
-      fill: pal.owners.player,
+      ink: pal.shopBuy,
       disabled: !o.storeAvailable,
       pressed: rectEq(o.pressed, buy) || rectEq(o.pressed, r),
       pending: o.pending === c.id,
-      fontPx: 24,
+      fontPx: SHOP_NUMERAL_PX,
       nowMs: o.nowMs,
     });
   }
@@ -274,12 +283,12 @@ function drawSkinCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopSkinCa
   ctx.fillText(c.label, r.x + r.w / 2, r.y + 142, r.w - 20);
   const buy = shopBuyRect(r, r.w - 36, 54);
   const pressed = rectEq(o.pressed, buy) || rectEq(o.pressed, r);
-  if (c.equipped) drawBuyButton(ctx, pal, buy, t('shop.equipped'), { fill: pal.owners.enemy2, pressed, fontPx: 18 });
+  if (c.equipped) drawBuyButton(ctx, pal, buy, t('shop.equipped'), { ink: pal.shopOwned, pressed, fontPx: 20 });
   else if (c.owned) drawBuyButton(ctx, pal, buy, t('shop.equip'), { pressed, fontPx: 20 });
   else if (c.locked) {
     drawBuyButton(ctx, pal, buy, t('shop.packOnly'), { disabled: true, fontPx: 17 });
   } else {
-    drawBuyButton(ctx, pal, buy, String(c.cost), { glyph: 'crystal', fill: pal.owners.player, disabled: o.crystals < c.cost, pressed, fontPx: 22 });
+    drawBuyButton(ctx, pal, buy, String(c.cost), { glyph: 'crystal', ink: pal.shopBuy, disabled: o.crystals < c.cost, pressed, fontPx: SHOP_NUMERAL_PX });
   }
 }
 
@@ -318,10 +327,10 @@ function drawCrateCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopCrate
   const buy = shopRowBuyRect(r);
   drawBuyButton(ctx, pal, buy, String(c.cost), {
     glyph: 'crystal',
-    fill: pal.owners.player,
+    ink: pal.shopBuy,
     disabled: !c.affordable,
     pressed: rectEq(o.pressed, buy) || rectEq(o.pressed, r),
-    fontPx: 24,
+    fontPx: SHOP_NUMERAL_PX,
   });
 }
 
@@ -345,7 +354,8 @@ function drawConvertCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopCon
     c.segRect,
     c.packs.map((n) => ({ label: String(n) })),
     c.selected,
-    20,
+    SHOP_NUMERAL_PX,
+    pal.shopBuy,
   );
   // result line: "→ 100 gold" with a coin
   ctx.fillStyle = pal.ink;
@@ -355,7 +365,7 @@ function drawConvertCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopCon
   ctx.fillText(label, cx + 10, r.y + 170);
   drawGoldCoin(ctx, pal, cx + 10 - w / 2 - 16, r.y + 170, 11);
   drawBuyButton(ctx, pal, c.buyRect, t('shop.convert'), {
-    fill: pal.owners.player,
+    ink: pal.shopBuy,
     disabled: !c.affordable,
     pressed: rectEq(o.pressed, c.buyRect),
     fontPx: 22,
@@ -384,7 +394,7 @@ function drawConvertConfirm(ctx: CanvasRenderingContext2D, pal: Palette, q: { cr
   ctx.fillStyle = pal.textDim;
   ctx.font = font(19, '500');
   ctx.fillText(t('shop.convertWarn'), 360, c.card.y + 168, c.card.w - 40);
-  drawButton(ctx, pal, c.yes, t('shop.convert'), { fill: pal.owners.player, fontPx: 26, pressed: o.pressed === c.yes });
+  drawButton(ctx, pal, c.yes, t('shop.convert'), { fill: pal.shopBuy.face, text: pal.shopBuy.text, fontPx: 26, pressed: o.pressed === c.yes });
   drawButton(ctx, pal, c.no, t('common.cancel'), { fontPx: 26, pressed: o.pressed === c.no });
 }
 
@@ -433,8 +443,8 @@ function drawUpgradeCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopUpg
   ctx.fillText(c.cost === null ? t('shop.fullyTrained') : t('shop.next', { effect: c.effectNext }), textX, r.y + 132, textW);
   const buy = shopRowBuyRect(r);
   const pressed = rectEq(o.pressed, buy) || rectEq(o.pressed, r);
-  if (c.cost === null) drawBuyButton(ctx, pal, buy, t('shop.max'), { fill: pal.owners.enemy2, fontPx: 22 });
-  else drawBuyButton(ctx, pal, buy, String(c.cost), { glyph: 'gold', fill: pal.owners.player, disabled: !c.affordable, pressed, fontPx: 24 });
+  if (c.cost === null) drawBuyButton(ctx, pal, buy, t('shop.max'), { ink: pal.shopOwned, fontPx: 22 });
+  else drawBuyButton(ctx, pal, buy, String(c.cost), { glyph: 'gold', ink: pal.shopBuy, disabled: !c.affordable, pressed, fontPx: SHOP_NUMERAL_PX });
 }
 
 export function drawShop(view: View, pal: Palette, o: ShopOpts): void {
