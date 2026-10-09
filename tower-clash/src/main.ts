@@ -1,6 +1,7 @@
 import type { GameState, LevelDef } from './sim/types';
 import { LEVEL_META, getLoadedLevel, levelChunkKey, levelIndex, loadLevel } from './levels/index';
 import { chunkFailures, chunkRecoverable, loadChunk, reloadOnce } from './lazyChunk';
+import { warmWorkerCache } from './swWarm';
 import type { Palette } from './render/palette';
 import { getPalette } from './render/palette';
 import type { View } from './render/view';
@@ -589,14 +590,23 @@ function insideCapacitor(): boolean {
   return Boolean((window as { Capacitor?: unknown }).Capacitor);
 }
 
-/** Offline shell for the PWA build; native apps ship their own bundle and skip it. */
+/**
+ * Offline shell for the PWA build; native apps ship their own bundle and skip it. Registered after
+ * the window's `load` — or at once when `load` has already fired: `boot` calls this after awaiting
+ * the fonts, and a Russian boot (Nunito faces) routinely outlasts `load`, which left Russian players
+ * with no worker at all (found with FE-8, measured 2026-10-09: `load` at ~80 ms, never registered).
+ */
 function registerServiceWorker(): void {
   if (!('serviceWorker' in navigator) || insideCapacitor()) return;
-  window.addEventListener('load', () => {
+  // FE-8: on the first claim, route the files loaded before it (dictionary, SFX, RU font) through the worker's cache
+  navigator.serviceWorker.addEventListener('controllerchange', warmWorkerCache);
+  const register = () => {
     navigator.serviceWorker.register('./sw.js').catch(() => {
       /* e.g. insecure context or file:// — the game runs fine without it */
     });
-  });
+  };
+  if (document.readyState === 'complete') register();
+  else window.addEventListener('load', register, { once: true });
 }
 
 /**

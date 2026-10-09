@@ -12,6 +12,13 @@
  * added to `document.fonts` only while the UI is Russian and removed again on a switch away, which
  * also keeps the other languages' 'Nunito' (Cyrillic only, for "Русский" in the language picker)
  * exactly what it was.
+ *
+ * Offline (FE-8): public/sw.js caches ./fonts/*.woff2 files outside its PRECACHE on first use, so a
+ * Russian install keeps the face offline while EN / AZ / TR installs never download it (src/swWarm.ts
+ * routes a first launch's pre-claim request through the worker). When the
+ * face cannot load (Russian chosen offline before it was ever cached), its `loaded` rejection is
+ * swallowed with one console.warn per session and Russian digits fall back to Fredoka — the next
+ * stack family, i.e. the pre-ART-13 look; the next switch to Russian (or the next boot) retries.
  */
 
 /** The Latin 'Nunito' face: same descriptors as index.html's Cyrillic face, Google's `latin` range. */
@@ -25,26 +32,55 @@ export const NUNITO_LATIN_FACE = Object.freeze({
 
 let latinFace: FontFace | null = null;
 let added = false;
+let warned = false;
+
+/** Absolute URL of the Latin face file (FontFace sources resolve against the document). */
+function latinFaceUrl(): string {
+  const f = NUNITO_LATIN_FACE;
+  return typeof document !== 'undefined' && typeof document.baseURI === 'string' ? new URL(f.url, document.baseURI).href : f.url;
+}
+
+/** Swallow the face's load failure (offline, never cached): one warning per session, never an unhandled rejection. */
+function watchLoad(face: FontFace): void {
+  const loaded = (face as { loaded?: Promise<FontFace> }).loaded;
+  if (!loaded || typeof loaded.then !== 'function') return;
+  loaded.then(undefined, () => {
+    if (warned) return;
+    warned = true;
+    console.warn('[fonts] Nunito Latin face unavailable (offline?); Russian digits use Fredoka until the next switch or launch');
+  });
+}
 
 /**
  * Add (`on`) or remove the Latin 'Nunito' face from `document.fonts`. Idempotent; returns whether the
- * face is registered afterwards. No-op without the CSS Font Loading API (unit tests, old browsers:
- * Russian digits then fall back to Fredoka, as before ART-13).
+ * face is registered afterwards. A face whose load failed (status 'error') is replaced by a fresh one
+ * on the next `on`, so a switch to Russian once back online fetches the file again. No-op without
+ * the CSS Font Loading API (unit tests, old browsers: Russian digits then fall back to Fredoka, as
+ * before ART-13). Never throws, never waits.
  */
 export function setRussianFaces(on: boolean): boolean {
   const fonts = typeof document === 'undefined' ? undefined : (document as { fonts?: FontFaceSet }).fonts;
   if (!fonts || typeof fonts.add !== 'function' || typeof FontFace !== 'function') return false;
-  if (on && !added) {
-    if (!latinFace) {
-      const f = NUNITO_LATIN_FACE;
-      const url = typeof document.baseURI === 'string' ? new URL(f.url, document.baseURI).href : f.url;
-      latinFace = new FontFace(f.family, `url('${url}') format('woff2')`, { weight: f.weight, unicodeRange: f.unicodeRange, display: 'block' });
+  try {
+    if (on && latinFace?.status === 'error') {
+      if (added) fonts.delete(latinFace);
+      latinFace = null;
+      added = false;
     }
-    fonts.add(latinFace);
-    added = true;
-  } else if (!on && added && latinFace) {
-    fonts.delete(latinFace);
-    added = false;
+    if (on && !added) {
+      if (!latinFace) {
+        const f = NUNITO_LATIN_FACE;
+        latinFace = new FontFace(f.family, `url('${latinFaceUrl()}') format('woff2')`, { weight: f.weight, unicodeRange: f.unicodeRange, display: 'block' });
+        watchLoad(latinFace);
+      }
+      fonts.add(latinFace);
+      added = true;
+    } else if (!on && added && latinFace) {
+      fonts.delete(latinFace);
+      added = false;
+    }
+  } catch {
+    /* a FontFaceSet that refuses the face: Russian digits stay in Fredoka */
   }
   return added;
 }
@@ -53,4 +89,5 @@ export function setRussianFaces(on: boolean): boolean {
 export function resetRussianFacesForTests(): void {
   latinFace = null;
   added = false;
+  warned = false;
 }

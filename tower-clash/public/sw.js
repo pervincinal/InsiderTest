@@ -9,11 +9,19 @@
  * - Cache-first for same-origin static files (./assets/* are content-hashed by Vite, so a cached
  *   copy is always correct); the response is stored on first use. This also covers the lazy
  *   chunks (shop / achievements / settings screens, az / ru / tr dictionaries) once opened.
+ * - Cache-first, stored on first use, for the ./fonts/*.woff2 files PRECACHE does not list (FE-8):
+ *   today the Latin 'Nunito' face, which the page registers only while the UI is Russian
+ *   (src/render/fonts.ts, ART-13). EN / AZ / TR installs never request it, so they never download
+ *   it; a Russian session caches it on its first request (src/swWarm.ts re-requests it once the
+ *   worker claims the first launch, which loaded the face before the worker existed). Font files
+ *   are never edited in place: new bytes ship under a new file name, like the hashed ./assets/*.
  * - Navigations go network-first with the cached shell as offline fallback, so a new deploy is
  *   picked up on the next launch while the game still opens with no connection.
  * Bump CACHE_VERSION when the shell files change shape; old caches are deleted on activate, after
- *   their ./assets/* entries (content-hashed, so still valid) are carried into the new cache (BUG-19:
- *   without this an upgraded install kept only the shell and level 1 could not start offline).
+ *   their ./assets/* entries (content-hashed, so still valid) and runtime fonts (see above) are
+ *   carried into the new cache (BUG-19: without this an upgraded install kept only the shell and
+ *   level 1 could not start offline; FE-8: likewise a Russian install lost its Latin digits face).
+ *   A new runtime rule alone is not a shape change: the byte-different sw.js already installs.
  */
 const CACHE_VERSION = 'v4';
 const CACHE_NAME = `towerclash-${CACHE_VERSION}`;
@@ -80,17 +88,36 @@ function isRuntimeAsset(url) {
   return isSameOrigin(url) && url.pathname.startsWith(new URL('./assets/', scopeUrl).pathname);
 }
 
+function isPrecached(url) {
+  return PRECACHE.some((p) => new URL(p, scopeUrl).pathname === url.pathname);
+}
+
+/** A ./fonts/*.woff2 file outside PRECACHE (FE-8: the Latin 'Nunito' face, requested in Russian only). */
+function isRuntimeFont(url) {
+  return (
+    isSameOrigin(url) &&
+    url.pathname.startsWith(new URL('./fonts/', scopeUrl).pathname) &&
+    url.pathname.endsWith('.woff2') &&
+    !isPrecached(url)
+  );
+}
+
+/** What the runtime cache stores on first use, and what an upgrade carries into the new cache. */
+function isRuntimeCached(url) {
+  return isRuntimeAsset(url) || isRuntimeFont(url);
+}
+
 /**
- * Copy the runtime-cached ./assets/* entries of an old cache into the new one (BUG-19). Only the
- * assets prefix qualifies: Vite content-hashes those files, so a cached copy is always the right
- * bytes, while the shell files (index, manifest, icons, fonts) come from the new worker's PRECACHE
- * and must never be carried over. Entries the new cache already holds (the entry chunk precached at
+ * Copy the runtime-cached entries of an old cache into the new one: ./assets/* (BUG-19) and the
+ * runtime fonts (FE-8). Only those qualify: Vite content-hashes the assets and font files keep their
+ * bytes under their name, so a cached copy is always the right bytes, while the shell files (index,
+ * manifest, icons, precached fonts) come from the new worker's PRECACHE and must never be carried over. Entries the new cache already holds (the entry chunk precached at
  * install) are left alone. Failure-tolerant: a copy that throws is skipped, never blocks activation.
  */
 async function carryOverAssets(oldName, cache) {
   try {
     const old = await caches.open(oldName);
-    const requests = (await old.keys()).filter((r) => isRuntimeAsset(new URL(r.url)));
+    const requests = (await old.keys()).filter((r) => isRuntimeCached(new URL(r.url)));
     await Promise.all(
       requests.map(async (request) => {
         try {
@@ -149,6 +176,5 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(networkFirstShell(request));
     return;
   }
-  const precached = PRECACHE.some((p) => new URL(p, scopeUrl).pathname === url.pathname);
-  if (precached || isRuntimeAsset(url)) event.respondWith(cacheFirst(request));
+  if (isPrecached(url) || isRuntimeCached(url)) event.respondWith(cacheFirst(request));
 });

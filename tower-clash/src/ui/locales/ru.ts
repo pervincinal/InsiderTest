@@ -1,6 +1,6 @@
 import type { Dictionary } from './en';
 
-/** Русский. Cyrillic glyphs come from the Nunito face registered in index.html (Fredoka has none). */
+/** Русский. Set wholly in Nunito (ART-13): Cyrillic face in index.html, Latin/digits face added from render/fonts.ts in RU only. */
 export const ru: Dictionary = {
   'common.back': 'НАЗАД',
   'common.menu': 'МЕНЮ',

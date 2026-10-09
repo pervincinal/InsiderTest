@@ -73,6 +73,14 @@ import type { BrowserContext, Page } from '@playwright/test';
  *    new names (navigation is network-first, the worker stores the new index.html and caches the
  *    new chunks on first use), and an offline launch after that must boot the NEW shell — no
  *    request for an old-hash chunk.
+ *
+ * FE-8 adds a fourth, again in its own context: the Russian-only Latin 'Nunito' face
+ * (public/fonts/nunito-latin.woff2, registered from src/render/fonts.ts while the UI is Russian and
+ * deliberately not precached) is runtime-cached by the worker on a Russian first launch — the face
+ * loads before the worker exists, so src/swWarm.ts re-requests it on the claim, together with the
+ * other pre-claim files (the ru dictionary chunk, the SFX recipes chunk) — and an offline Russian
+ * relaunch loads it from Cache Storage: no network attempt for the file, the face is 'loaded',
+ * digits render in Nunito, the strings are still Russian, and the console stays clean.
  */
 
 test.use({ serviceWorkers: 'allow' });
@@ -95,6 +103,8 @@ const CACHE_VERSION = /const CACHE_VERSION = '(v\d+)'/.exec(SW_SOURCE)?.[1] ?? '
 const CACHE_NAME = `towerclash-${CACHE_VERSION}`;
 const OLD_VERSION = `v${Number(CACHE_VERSION.slice(1)) - 1}`;
 const OLD_CACHE_NAME = `towerclash-${OLD_VERSION}`;
+/** The Russian-only Latin Nunito face file (FE-8): runtime-cached, never precached. */
+const NUNITO_LATIN = '/fonts/nunito-latin.woff2';
 /** Fake-deploy marker appended to every chunk hash (`index-D0r4aCZl.js` → `index-D0r4aCZlQA9.js`). */
 const DEPLOY_MARK = 'QA9';
 const isWorkerScript = (url: URL) => url.pathname === '/sw.js';
@@ -175,6 +185,14 @@ async function goOnline(context: BrowserContext): Promise<void> {
   await context.unroute('**/*');
 }
 
+/** Every registered 'Nunito' face (the index.html Cyrillic one and, in Russian, the Latin one from render/fonts.ts) with its load status. */
+const nunitoFaces = (page: Page) =>
+  page.evaluate(() =>
+    [...(document.fonts as unknown as Iterable<FontFace>)]
+      .filter((f) => f.family.replace(/["']/g, '') === 'Nunito')
+      .map((f) => ({ status: f.status, latin: /^U\+0+-0*FF\b/i.test(f.unicodeRange.trim()) })),
+  );
+
 /** Navigate to the title. `page.goto` is bounded by the config's navigationTimeout; the surface poll by its own 10 s. */
 async function navigate(page: Page): Promise<void> {
   await page.goto('/', { waitUntil: 'commit' });
@@ -211,6 +229,9 @@ test.describe('PWA offline (QA-8)', () => {
       for (const p of modules) expect(caches[cacheName], `entry chunk / modulepreload ${p} precached at install (BUG-18)`).toContain(p);
       // the idle preloads go through the claimed page's worker into the runtime cache
       await waitForWarm(page, cacheName);
+      // FE-8: an English install never downloads the Russian-only Latin Nunito face (nor does the claim warm-up)
+      expect(await page.evaluate(() => document.documentElement.lang)).toBe('en');
+      expect((await cachedPaths(page))[cacheName]).not.toContain(NUNITO_LATIN);
       expect(pageErrors).toEqual([]);
     });
 
@@ -432,6 +453,63 @@ test.describe('PWA offline (QA-8)', () => {
       expect(await levelId(page)).toBe(1);
       await expect.poll(() => simTime(page)).toBeGreaterThan(200);
       expect(pageErrors).toEqual([]);
+    });
+  });
+  test('FE-8: a Russian launch runtime-caches the Latin Nunito face; an offline Russian relaunch loads it from the cache — no network request, digits in Nunito, clean console', async ({ page, context }) => {
+    expect(process.env.PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS, 'worker network emulation flag (playwright.config.ts)').toBeTruthy();
+    expect(PRECACHE, 'the Latin face is not precached (an EN / AZ / TR install never downloads it)').not.toContain(NUNITO_LATIN);
+
+    const pageErrors: string[] = [];
+    const consoleErrors: string[] = [];
+    page.on('pageerror', (err) => pageErrors.push(String(err)));
+    page.on('console', (m) => {
+      if (m.type() === 'error' || (m.type() === 'warning' && m.text().startsWith('[fonts]'))) consoleErrors.push(`${m.type()}: ${m.text()} (${m.location().url})`);
+    });
+    await page.addInitScript(([key, data]) => localStorage.setItem(key, JSON.stringify(data)), [SAVE_KEY, { version: 3, settings: { language: 'ru' } }] as const);
+    /** Requests for the Latin face: `worker` true when the service worker itself went to the network for it. */
+    const fontRequests: { worker: boolean }[] = [];
+    const fontFailures: string[] = [];
+    context.on('request', (r) => {
+      if (new URL(r.url()).pathname === NUNITO_LATIN) fontRequests.push({ worker: r.serviceWorker() !== null });
+    });
+    context.on('requestfailed', (r) => {
+      if (new URL(r.url()).pathname === NUNITO_LATIN) fontFailures.push(r.failure()?.errorText ?? 'unknown');
+    });
+
+    await test.step('1. first launch in Russian: the face loads, and the worker caches the file once it claims the page', async () => {
+      await navigate(page);
+      expect(await page.evaluate(() => document.documentElement.lang)).toBe('ru');
+      expect(await swReady(page, 20_000)).toBe(new URL('/', page.url()).href);
+      await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, { timeout: 20_000 });
+      expect(fontRequests.length, 'the Latin face was requested').toBeGreaterThanOrEqual(1);
+      await expect.poll(async () => (await cachedPaths(page))[CACHE_NAME] ?? [], { timeout: 15_000 }).toContain(NUNITO_LATIN);
+      expect(Object.keys(await cachedPaths(page)), 'one cache: the runtime font rule writes into the versioned cache').toEqual([CACHE_NAME]);
+      await waitForWarm(page, CACHE_NAME);
+      await expect.poll(() => nunitoFaces(page)).toContainEqual({ status: 'loaded', latin: true });
+      expect(pageErrors).toEqual([]);
+      expect(consoleErrors).toEqual([]);
+    });
+
+    await test.step('2. offline relaunch in Russian: the face comes from Cache Storage, no network attempt, digits in Nunito', async () => {
+      await goOffline(context);
+      fontRequests.length = 0;
+      const fromWorker: string[] = [];
+      page.on('response', (r) => {
+        if (r.fromServiceWorker() && r.ok()) fromWorker.push(new URL(r.url()).pathname);
+      });
+      await navigate(page);
+      expect(await onLine(page)).toBe(false);
+      expect(await controlled(page)).toBe(true);
+      expect(await page.evaluate(() => document.documentElement.lang)).toBe('ru');
+      expect(await text(page, 'common.back'), 'the ru dictionary chunk came from the cache').toBe('НАЗАД');
+      await expect.poll(() => nunitoFaces(page)).toContainEqual({ status: 'loaded', latin: true });
+      expect(await page.evaluate(() => document.fonts.check('700 32px Nunito', '0123456789'))).toBe(true);
+      expect(await page.evaluate(() => document.fonts.check('500 32px Nunito', '0123456789:·'))).toBe(true);
+      expect(fromWorker, 'the page got the file from the worker').toContain(NUNITO_LATIN);
+      expect(fontRequests.filter((r) => r.worker), 'the worker did not go to the network for the file').toEqual([]);
+      expect(fontFailures).toEqual([]);
+      expect(pageErrors).toEqual([]);
+      expect(consoleErrors).toEqual([]);
     });
   });
 });
