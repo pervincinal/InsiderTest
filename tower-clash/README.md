@@ -2,7 +2,7 @@
 
 **Capture every tower.** A one-thumb, capture-the-towers real-time strategy game for phones and browsers. Tap one of your towers, tap a target, and a stream of soldiers marches until you stop it; towers upgrade themselves as they fill; when an enemy garrison hits zero the tower is yours. 50 hand-made levels on six islands (grass, autumn, sand, snow, volcanic, twilight highlands), fortresses, artillery, tanks, walls, mines, up to three enemies at once, three-star timers; boosters, Commander upgrades, skins (6 tower roofs, 7 soldier helmets, 3 terrain themes, 4 silhouettes), achievements, a daily reward, a Daily and a Weekly Challenge and a 20-second rewind after a defeat — plays offline, no account. The web version has no ads and nothing to pay for: its shop runs on a demo "Test store" where no money changes hands. The Google Play / App Store apps (in preparation) will offer optional in-app purchases and ads that a one-time purchase removes — see [`../docs/publishing/PRIVACY_POLICY.md`](../docs/publishing/PRIVACY_POLICY.md).
 
-Play in the browser: **https://pervincinal.github.io/InsiderTest/** (live on GitHub Pages since 2026-09-28 — see [`../docs/DEPLOY.md`](../docs/DEPLOY.md))
+Play in the browser: **https://pervincinal.github.io/InsiderTest/** (not live yet: GitHub Pages still has to be enabled in the repository settings, BUG-26 — see [`../docs/DEPLOY.md`](../docs/DEPLOY.md))
 
 <p align="center">
   <img src="store/screenshots/en/02.png" width="30%" alt="Level 1 with the tutorial hint: Tap, and the stream flows">
@@ -88,7 +88,7 @@ License: All rights reserved (placeholder).
 
 **Bütün qüllələri tut.** Telefon və brauzer üçün bir barmaqla oynanan qüllə tutma real vaxt strategiya oyunu. Öz qüllənə toxun, hədəfə toxun — əsgər axını sən dayandırana qədər yeriyir; qüllələr dolduqca özləri təkmilləşir; düşmən qarnizonu sıfıra düşəndə qüllə sənindir. altı adada (çəmən, payız, qum, qar, vulkan, alaqaranlıq yaylası) 50 əl ilə hazırlanmış səviyyə, qalalar, toplar, tanklar, divarlar, minalar, eyni anda üçə qədər rəqib, üç ulduzlu vaxt limiti; gücləndiricilər, Komandir təkmilləşdirmələri, görünüşlər (6 qüllə damı, 7 əsgər dəbilqəsi, 3 relyef mövzusu, 4 siluet), nailiyyətlər, gündəlik mükafat, Günlük və Həftəlik Çağırış və məğlubiyyətdən sonra 20 saniyəlik geri sarma — oflayn oynanır, hesabsız. Veb versiyada reklam yoxdur və ödəniləsi heç nə yoxdur: mağazası demo "Test store" üzərində işləyir, pul dəyişmir. Hazırlanan Google Play / App Store tətbiqlərində könüllü tətbiqdaxili alışlar və bir alışla silinən reklamlar olacaq — bax [`../docs/publishing/PRIVACY_POLICY.md`](../docs/publishing/PRIVACY_POLICY.md).
 
-Brauzerdə oyna: **https://pervincinal.github.io/InsiderTest/** (2026-09-28-dən GitHub Pages-də canlıdır — bax [`../docs/DEPLOY.md`](../docs/DEPLOY.md))
+Brauzerdə oyna: **https://pervincinal.github.io/InsiderTest/** (hələ canlı deyil: repozitoriya ayarlarında GitHub Pages açılmalıdır, BUG-26 — bax [`../docs/DEPLOY.md`](../docs/DEPLOY.md))
 
 ## Necə oynanır
 

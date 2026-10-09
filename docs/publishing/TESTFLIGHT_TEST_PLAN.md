@@ -3,7 +3,7 @@
 Owner: QA Engineer · written 2026-10-02 against branch head `e237f06` · first real-device pass for **QA-2** (iOS half) and **MM-1 for iOS**, plus the on-device halves of **MM-4** (memory / DPR cap) and **M3-5** (performance).
 Build: **1.0.0 (7)** from the `tower-clash-ios-release` workflow, lane **testflight**, made **without** `RC_IOS_KEY` (store unavailable, LAUNCH_CHECKLIST §0b variant B) and **without** real AdMob ids (Google "Test Ad" placeholders).
 Checks: **21** (TF-01 … TF-21; TF-20 share sheet added 2026-10-05, TF-21 rating prompt off added 2026-10-08, PUB-16). TF-20 and TF-21 need a build made from the branch at `2eb5cfc` / `9ea6d55` or later — the build-7 tag target `85154af` has neither the share card nor the rating plugin; on such a build write "not in this build" for them.
-Install path: LAUNCH_CHECKLIST.md §0b step 6. Severities: POST_LAUNCH.md §5.1. Day boundary: GDD §7.4 (00:00 UTC = **04:00 Baku**).
+Install path: LAUNCH_CHECKLIST.md §0b, the optional TestFlight note at its end (the team uploads the build by committing `tower-clash/release/ios-release.request`, MM-12). Severities: POST_LAUNCH.md §5.1. Day boundary: GDD §7.4 (00:00 UTC = **04:00 Baku**).
 
 The Azerbaijani part comes first; the English mirror (same ids, same order) follows it.
 
@@ -55,7 +55,7 @@ Ciddilik (POST_LAUNCH §5.1): **S1** — çökmə, keçilməyən / açılmayan s
 ### Yoxlamalar
 
 #### TF-01 · Quraşdırma və ilk açılış vaxtı (2 dəq)
-- **Toxun:** TestFlight tətbiqi → **Tower Clash** → **Install** (Quraşdır). Bitəndə **Open** (Aç) düyməsinə toxun və saniyəni saymağa başla — böyük **PLAY / OYNA** düyməli başlıq ekranı görünənə qədər.
+- **Toxun:** TestFlight tətbiqi → **Tower Clash: Tap & Conquer** (App Store adı; ana ekranda ikonun altında Tower Clash yazılır) → **Install** (Quraşdır). Bitəndə **Open** (Aç) düyməsinə toxun və saniyəni saymağa başla — böyük **PLAY / OYNA** düyməli başlıq ekranı görünənə qədər.
 - **Gözlənilən:** ana ekranda "Tower Clash" ikonu; qısa tünd-göy açılış ekranı, sonra ≤ 5 saniyədə başlıq ekranı. **Heç bir sorğu çıxmır**: nə "Tower Clash-ə fəaliyyətinizi izləməyə icazə verilsin?", nə bildiriş icazəsi, nə Google reklam razılığı forması (bu forma yalnız AB / Böyük Britaniyada çıxır).
 - **Alınmasa yaz:** `TF-01 FAIL: açılış N s / çökdü / "izləmə" sorğusu çıxdı`. Uğurlu olsa da saniyəni yaz: `TF-01 OK 3 s`.
 - **Bağlayır:** QA-2 · **Ciddilik:** S1 — açılmır və ya çökür; S2 — 10 saniyədən uzun və ya izləmə sorğusu çıxır.
@@ -268,7 +268,7 @@ Severity (POST_LAUNCH §5.1): **S1** — crash, a level that cannot be won or lo
 ### Checks
 
 #### TF-01 · Install and first launch time (2 min)
-- **Tap:** TestFlight app → **Tower Clash** → **Install**. When done, tap **Open** and start counting seconds until the title screen with the big **PLAY / OYNA** button is visible.
+- **Tap:** TestFlight app → **Tower Clash: Tap & Conquer** (the App Store name; the home-screen icon says Tower Clash) → **Install**. When done, tap **Open** and start counting seconds until the title screen with the big **PLAY / OYNA** button is visible.
 - **Expected:** a "Tower Clash" icon on the home screen; a short dark-blue launch screen, then the title in ≤ 5 s. **No prompt at all**: no "Allow Tower Clash to track your activity…", no notification permission, no Google ad-consent form (that form appears only in the EU / UK).
 - **If it fails, write:** `TF-01 FAIL: launch N s / crashed / tracking prompt shown`. Write the seconds on success too: `TF-01 OK 3 s`.
 - **Closes:** QA-2 · **Severity:** S1 — does not start or crashes; S2 — longer than 10 s or a tracking prompt.

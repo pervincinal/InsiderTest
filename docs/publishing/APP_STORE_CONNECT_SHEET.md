@@ -1,6 +1,6 @@
 # Tower Clash — App Store Connect paste sheet (1.0.0 — build 7 for TestFlight, build 8 for App Review)
 
-Owner: Publisher. Written 2026-09-28 (PUB-12) for the stakeholder's first App Store submission, done from a browser and an iPhone — no Mac. Every field below is in the order App Store Connect shows it, with the final text ready to copy. English is the App Store language; the Azerbaijani words in parentheses are the field labels so the screens can be matched without reading the English (Azərbaycanca: mötərizədəki söz sahənin adıdır; mətnin özü ingiliscə yapışdırılır). The click order around this sheet is `LAUNCH_CHECKLIST.md` §0b; the source texts are `STORE_LISTING.md` §2 (name, subtitle, promo, keywords, URLs), §1.1 (description), §4 / §6.4 (age rating, privacy), `RELEASE_NOTES.md` v1.0.0 ("What's New"). Character counts were produced by a script on 2026-09-28 (§9) — do not edit a text without re-counting.
+Owner: Publisher. Written 2026-09-28 (PUB-12) for the stakeholder's first App Store submission, done from a browser and an iPhone — no Mac. Every field below is in the order App Store Connect shows it, with the final text ready to copy. English is the App Store language; the Azerbaijani words in parentheses are the field labels so the screens can be matched without reading the English (Azərbaycanca: mötərizədəki söz sahənin adıdır; mətnin özü ingiliscə yapışdırılır). The stakeholder's own steps around this sheet are `LAUNCH_CHECKLIST.md` §0b — since MM-12 (2026-10-09) only §1 (New App, done 2026-10-09), §4 (App Privacy, §0b step 8) and the review contact / copyright name as `ASC_REVIEW_*` secrets (§0b step 7); everything else here is uploaded by the team from `tower-clash/fastlane/` through `tower-clash/release/ios-store.request` (`docs/MOBILE.md` §3.2), so this sheet is the source those files copy (`tests/release/storeMetadata.test.ts`) and the by-hand fallback if the API refuses a field; the source texts are `STORE_LISTING.md` §2 (name, subtitle, promo, keywords, URLs), §1.1 (description), §4 / §6.4 (age rating, privacy), `RELEASE_NOTES.md` v1.0.0 ("What's New"). Character counts were produced by a script on 2026-09-28 (§9) — do not edit a text without re-counting.
 
 **Which variant to paste — default B.** Two variants exist for the fields that mention purchases:
 
@@ -28,7 +28,7 @@ Ads in both variants: the review build must carry the real AdMob iOS ids (`ADMOB
 
 | Field (AZ) | Value | Notes |
 |---|---|---|
-| Name (Ad) | `Tower Clash` | from §1 |
+| Name (Ad) | `Tower Clash: Tap & Conquer` (26 / 30) | from §1 — the accepted name of 2026-10-09 (`Tower Clash` was taken); the home-screen label stays `Tower Clash` |
 | Subtitle (Alt başlıq) | `Capture every tower` (19 / 30) | — |
 | Bundle ID / SKU / Apple ID | as created | read-only after the first build |
 | Primary Category (Əsas kateqoriya) | **Games** → subcategories **Strategy**, **Casual** | Games asks for two subcategories |
@@ -36,7 +36,7 @@ Ads in both variants: the review build must carry the real AdMob iOS ids (`ADMOB
 | Content Rights (Məzmun hüquqları) → "Does your app contain, show, or access third-party content?" | **No** — "This app does not contain, show, or access third-party content" | all art, sounds and text are the team's own |
 | Age Rating (Yaş reytinqi) → Edit | answers in §5 | expected result **9+** |
 | License Agreement (Lisenziya müqaviləsi) | Apple's Standard EULA (default) | do not upload a custom one |
-| Privacy Policy URL (Məxfilik siyasəti URL) — under "Privacy Policy" for English (U.S.) | `https://pervincinal.github.io/InsiderTest/privacy.html` | live since the Pages deploy of 2026-09-28; open it once in Safari before saving (the `[developer e-mail]` placeholder on that page must be replaced first — checklist G18 / T3) |
+| Privacy Policy URL (Məxfilik siyasəti URL) — under "Privacy Policy" for English (U.S.) | `https://pervincinal.github.io/InsiderTest/privacy.html` | **not live yet** — GitHub Pages was never enabled (BUG-26, corrected 2026-10-09; `LAUNCH_CHECKLIST.md` §0b step 0); open it once in Safari when it is, before saving (the `[developer e-mail]` placeholder on that page must be replaced first — checklist G18 / T3) |
 | User Privacy Choices URL (Məxfilik seçimləri URL) | leave empty | — |
 | Localizable Information — Name / Subtitle / Privacy Policy URL for other languages | none | English (U.S.) only in 1.0.0 |
 
@@ -114,7 +114,7 @@ Upload order = file order; drag to reorder if the browser uploads out of sequenc
 | 9 | ″ | `apple-6.7/en/09.png` | Level 15 citadel — "Silence the guns" |
 | 10 | ″ | `apple-6.7/en/10.png` | Shop, Upgrades tab (gold prices only, no IAP visible) — "Boost your commander" |
 | 1–10 | iPhone 6.5" display (1284×2778) — only if App Store Connect shows this tab as required; newer accounts see one iPhone tab and scale the rest | `apple-6.5/en/01.png` … `10.png` | same ten frames |
-| — | iPad 13" (2064×2752 / 2048×2732) | **none rendered** | Required while the Xcode target has `TARGETED_DEVICE_FAMILY = "1,2"` (iPhone + iPad). Default: the Mobile Engineer sets the target to iPhone only (`TARGETED_DEVICE_FAMILY = 1`) before the review build — `STORE_LISTING.md` §2 already says "iPhone-only, recommended"; fallback: the Publisher renders an iPad set with `renderStoreShots.mjs`. Prerequisite 3 in `LAUNCH_CHECKLIST.md` §0b |
+| — | iPad 13" (2064×2752 / 2048×2732) | **none rendered** | Required while the Xcode target has `TARGETED_DEVICE_FAMILY = "1,2"` (iPhone + iPad). Default: the Mobile Engineer sets the target to iPhone only (`TARGETED_DEVICE_FAMILY = 1`) before the review build — `STORE_LISTING.md` §2 already says "iPhone-only, recommended"; fallback: the Publisher renders an iPad set with `renderStoreShots.mjs`. **Done 2026-09-28 (Producer): `TARGETED_DEVICE_FAMILY = 1` in both build configurations**, so App Store Connect shows no iPad slot (this was "prerequisite 3" of `LAUNCH_CHECKLIST.md` §0b before MM-12) |
 
 App Previews (videos): none. "Use the same screenshots for all sizes" is not needed when only the required tab is filled.
 
@@ -127,8 +127,8 @@ App Previews (videos): none. "Use the same screenshots for all sizes" is not nee
 | Description (Təsvir) | 4000 | **Variant B (default):** the block in §6.3 below | 3863 |
 | ″ | 4000 | Variant A: `STORE_LISTING.md` §1.1 verbatim | 3984 |
 | Keywords (Açar sözlər) | 100 | `war,strategy,rts,capture,castle,army,offline,casual,defense,attack,soldiers,siege,kingdom,battle` — commas, no spaces; 2026-10-09: `tower`, `tap`, `conquer` dropped because the accepted name "Tower Clash: Tap & Conquer" already indexes them, replaced by `siege`, `kingdom`, `battle` | 96 |
-| Support URL (Dəstək URL) | — | `https://pervincinal.github.io/InsiderTest/support.html` | live since 2026-09-28; the `[developer e-mail]` on the page must be replaced before submission (G18 / T3) |
-| Marketing URL (Marketinq URL) | — | `https://pervincinal.github.io/InsiderTest/` | optional; live |
+| Support URL (Dəstək URL) | — | `https://pervincinal.github.io/InsiderTest/support.html` | not live yet (BUG-26 — `LAUNCH_CHECKLIST.md` §0b step 0); the `[developer e-mail]` on the page must be replaced before submission (G18 / T3, §0b step 9) |
+| Marketing URL (Marketinq URL) | — | `https://pervincinal.github.io/InsiderTest/` | optional; not live yet (BUG-26) |
 | Version (Versiya) | — | `1.0.0` | must equal `MARKETING_VERSION` of the uploaded build (it does: 1.0.0 / build 7) |
 | Copyright (Müəllif hüququ) | — | `© 2026 [developer name]` — **stakeholder fills** the name (the person or company that owns the app; the same name as the developer account) | 23 with the placeholder |
 | Routing App Coverage File | — | none | — |
@@ -212,7 +212,7 @@ Single-player offline game, no account or sign-in needed, so no demo account is 
 
 ### 6.5 Version Release (Versiyanın buraxılması)
 
-**"Manually release this version"** (Bu versiyanı əl ilə burax) — after approval the version waits at "Pending Developer Release" until the stakeholder presses *Release This Version* (`LAUNCH_CHECKLIST.md` §0b step 8; `POST_LAUNCH.md` §1 day L+14). Not "Automatically", not "Automatically after a date".
+**"Manually release this version"** (Bu versiyanı əl ilə burax) — after approval the version waits at "Pending Developer Release" until the stakeholder presses *Release This Version* (`LAUNCH_CHECKLIST.md` §0b step 10; `POST_LAUNCH.md` §1 day L+14). Not "Automatically", not "Automatically after a date".
 
 ### 6.6 Export compliance (İxrac uyğunluğu) — asked at build selection or in TestFlight "Manage" next to the build
 
@@ -238,16 +238,16 @@ Single-player offline game, no account or sign-in needed, so no demo account is 
 
 App Store → 1.0.0 shows **Pending Developer Release** → *Release This Version*. The store page appears within a few hours in the four countries of §3. Widening the country list (Pricing and Availability) needs no new review; a new build does (1.0.1 / build 9).
 
-## 9. Character counts (2026-09-28; description B, review notes B and the `premium_bundle` texts re-run 2026-10-03; review notes A / B re-run 2026-10-08, PUB-16; `[...s].length` code points; script in the Publisher's scratch, texts taken from this sheet / `STORE_LISTING.md`)
+## 9. Character counts (2026-09-28; description B, review notes B and the `premium_bundle` texts re-run 2026-10-03; review notes A / B re-run 2026-10-08, PUB-16; name and keywords re-run 2026-10-09, PUB-18; `[...s].length` code points; script in the Publisher's scratch, texts taken from this sheet / `STORE_LISTING.md`)
 
 ```
-   11 name                              (limit 30)
-   26 name fallback 1                   (limit 30)
-   20 name fallback 2                   (limit 30)
+   26 name (accepted 2026-10-09)        (limit 30)
+   11 name "Tower Clash" (taken)        (limit 30)
+   20 name fallback 2 (not used)        (limit 30)
    19 subtitle                          (limit 30)
   148 promo A                           (limit 170)
   133 promo B                           (limit 170)
-   93 keywords                          (limit 100; no space after a comma)
+   96 keywords                          (limit 100; no space after a comma; re-cut 2026-10-09)
  3984 description A (EN, §1.1 verbatim) (limit 4000)
  3863 description B (EN)                (limit 4000)
  3955 description A (AZ, §1.2 verbatim) (limit 4000 — Play only)
