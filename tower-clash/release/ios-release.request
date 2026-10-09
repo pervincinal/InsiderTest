@@ -15,5 +15,5 @@
 # The build number is config.buildNumber in tower-clash/package.json (npm run version:sync);
 # App Store Connect accepts every build number only once.
 lane=testflight
-note=MM-12 first request: expected to stop at the secrets check until the stakeholder adds the Apple secrets
-requested=2026-10-09T16:00:00Z
+note=build 8 (1.0.0): first real build with the Apple secrets and the real AdMob ids; TestFlight only, store submission follows on the Pages fix
+requested=2026-10-09T21:22:00Z
