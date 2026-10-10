@@ -8,6 +8,7 @@ import {
   drawButton,
   drawCard,
   drawCrosshairGlyph,
+  drawNumeralLine,
   drawExtrudedText,
   drawGlassBand,
   drawPill,
@@ -15,6 +16,7 @@ import {
   drawSnowflakeGlyph,
   fitFontPx,
   font,
+  NUMERAL_PX,
   roundRect,
 } from './widgets';
 import { drawSegmented } from './menuWidgets';
@@ -149,56 +151,7 @@ const TAB_KEYS: Record<ShopTab, TranslationKey> = { crystals: 'shop.tab.crystals
  * Shop numerals (prices, pack sizes) are drawn at this size or larger (ART_DIRECTION §6, BUG-22);
  * only `fitFontPx` may shrink a label that would not fit beside its glyph (long translations).
  */
-const SHOP_NUMERAL_PX = 24;
-
-/** A number inside a translated line: "+10 %", "−20 %", "+3", "2.5k" (pct() puts a space before %). */
-const NUMERAL_RUN = /[+\-−]?\d[\d.,]*(?:\s?%)?k?/g;
-
-/**
- * One left-aligned line (alphabetic baseline at `y`) whose numerals are drawn bold at
- * SHOP_NUMERAL_PX and the words at `wordPx` (ART-15: numerals ≥ 24 px where a number is read, the
- * translated words stay their size). A line too wide for `maxW` shrinks its words first (≥ 12 px)
- * and its numerals only as a last resort, so `fillText` never squeezes the glyphs (BUG-21).
- */
-function drawNumeralLine(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxW: number, colour: string, wordPx: number): void {
-  ctx.save();
-  const runs: { s: string; num: boolean }[] = [];
-  let at = 0;
-  for (const m of text.matchAll(NUMERAL_RUN)) {
-    if (m.index > at) runs.push({ s: text.slice(at, m.index), num: false });
-    runs.push({ s: m[0], num: true });
-    at = m.index + m[0].length;
-  }
-  if (at < text.length) runs.push({ s: text.slice(at), num: false });
-  const widthOf = (num: boolean, px: number): number =>
-    runs.reduce((sum, r) => {
-      if (r.num !== num) return sum;
-      ctx.font = font(px, num ? '700' : '500');
-      return sum + ctx.measureText(r.s).width;
-    }, 0);
-  let numPx = SHOP_NUMERAL_PX;
-  const numW = widthOf(true, numPx);
-  let wordW = widthOf(false, wordPx);
-  if (numW + wordW > maxW && wordW > 0) {
-    wordPx = Math.max(12, Math.floor((wordPx * Math.max(0, maxW - numW)) / wordW));
-    wordW = widthOf(false, wordPx);
-  }
-  if (numW + wordW > maxW) {
-    const k = maxW / (numW + wordW);
-    numPx = Math.max(8, Math.floor(numPx * k));
-    wordPx = Math.max(8, Math.floor(wordPx * k));
-  }
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'alphabetic';
-  ctx.fillStyle = colour;
-  let cx = x;
-  for (const r of runs) {
-    ctx.font = font(r.num ? numPx : wordPx, r.num ? '700' : '500');
-    ctx.fillText(r.s, cx, y);
-    cx += ctx.measureText(r.s).width;
-  }
-  ctx.restore();
-}
+const SHOP_NUMERAL_PX = NUMERAL_PX;
 
 /**
  * Price / action button: label with an optional currency glyph; spinner when pending. `ink` is a
@@ -484,9 +437,9 @@ function drawUpgradeCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopUpg
   ctx.fillStyle = pal.textDim;
   ctx.font = font(16, '500');
   ctx.fillText(t('shop.tier', { tier: c.tier, max: c.maxTier }), textX + c.maxTier * 24 + 8, r.y + 70, 110);
-  ctx.fillStyle = pal.ink;
-  ctx.font = font(18, '500');
-  ctx.fillText(c.tier > 0 ? t('shop.now', { effect: c.effectNow }) : t('shop.notTrained'), textX, r.y + 104, textW);
+  // ART-16: the current tier's numbers at ≥ 24 px like the "Next" line below (same helper), the
+  // words still 18 px ink; baseline 6 px under the old 18 px middle line keeps its visual centre
+  drawNumeralLine(ctx, c.tier > 0 ? t('shop.now', { effect: c.effectNow }) : t('shop.notTrained'), textX, r.y + 110, textW, pal.ink, 18);
   if (c.cost === null) {
     ctx.fillStyle = pal.textDim;
     ctx.font = font(17, '500');

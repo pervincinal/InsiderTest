@@ -140,7 +140,8 @@ export interface Palette {
    * so "owned" never reads as "buy" in either palette.
    * ART-15: `shopBuy` is also the "active choice" blue of every control with text on it — the
    * selected segment of `drawSegmented` (shop tabs, settings motion / language, converter sizes),
-   * the selected DAILY / WEEKLY card tab, a toggle's ON track and the info / success toast. One
+   * the selected DAILY / WEEKLY card tab, a toggle's ON track and the info / success toast; ART-16
+   * adds the live streak pill of the challenge card (paper 7.1:1; the owner mid blue was 4.35:1). One
    * blue for every active state: the lightest player blue that clears 4.5:1 at the gradient top is
    * #2252cb, a step from #1f4bc0, so a separate `segment` pair would be a near-duplicate token.
    */
@@ -158,6 +159,13 @@ export interface Palette {
    * darkened only as far as 4.5:1 on paper needs (default green 5.7:1, colour-blind purple 6.7:1).
    */
   gainText: string;
+  /**
+   * Dim text on the tinted tab frame (`shade(paper, -0.08)`, ART-16: the locked challenge card's
+   * inactive DAILY / WEEKLY label). `textDim` there was 4.35:1; this is `shade(textDim, -0.1)`: 5.1:1
+   * on the frame and 6.4:1 even on its white top highlight, still well short of ink (12.6:1) so the
+   * locked card keeps its dim look.
+   */
+  textDimFrame: string;
 }
 
 const BIOMES: Record<Biome, BiomeColors> = Object.freeze({
@@ -315,6 +323,7 @@ export const DEFAULT_PALETTE: Palette = Object.freeze({
   toastError: { face: OWNER_TONES.enemy1.mid, text: '#1e2a44' },
   /** `shade(ownerTones.enemy2.shade, -0.2)`: 5.7:1 on paper (the green text it replaces was 3.8:1). */
   gainText: '#19724a',
+  textDimFrame: '#526078',
 });
 
 export const COLOR_BLIND_PALETTE: Palette = Object.freeze({

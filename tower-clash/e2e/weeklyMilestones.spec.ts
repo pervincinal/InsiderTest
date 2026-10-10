@@ -110,7 +110,7 @@ async function drawnTexts(page: Page): Promise<string[]> {
     for (let i = 0; i < 3; i++) await new Promise((r) => requestAnimationFrame(r));
     const out = w.__qaTexts ?? [];
     w.__qaTexts = null;
-    return [...new Set(out)];
+    return out; // in draw order, duplicates kept: the compact() checks below need every run in place (ART-16 toasts draw numbers as separate runs)
   });
 }
 
@@ -151,6 +151,13 @@ async function readWin(page: Page): Promise<Won> {
   return { result, after, target: after.weekly.best[WEEK]?.target === true, toast: t, drawn };
 }
 
+/**
+ * ART-16 (2026-10-10): a toast is no longer one fillText call — the words and the 24 px numerals are
+ * separate runs and long toasts wrap — so a toast string is looked for in the concatenation of every
+ * drawn run with all whitespace removed.
+ */
+const compact = (s: string | readonly string[]): string => (Array.isArray(s) ? s.join(' ') : String(s)).replace(/\s+/g, '');
+
 test.describe('weekly week-streak milestones (QA-15, GDD §8.1)', () => {
   test('streak 3 → 4 through the card (AZ), first run: 15 milestone + 20 weekly_streak_4 = +35 crystals, the achievement takes the toast slot', async ({ page }) => {
     const errors = await boot(page, seededSave(3, 'az', []), 'az');
@@ -181,10 +188,10 @@ test.describe('weekly week-streak milestones (QA-15, GDD §8.1)', () => {
     const milestoneToast = fill(await text(page, 'weekly.resultMilestone'), { n: 4, streak: 4, crystals: milestone });
     expect(milestoneToast).toBe('Həftə seriyası 4 · +15 kristal');
     expect(w.toast).toBe(achievementToast);
-    expect(w.drawn).toContain(achievementToast);
-    expect(w.drawn).not.toContain(milestoneToast);
+    expect(compact(w.drawn)).toContain(compact(achievementToast));
+    expect(compact(w.drawn)).not.toContain(compact(milestoneToast));
     // the line under the stars stays weekly.resultWon with the new streak
-    expect(w.drawn).toContain(fill(await text(page, 'weekly.resultWon'), { gold: WEEKLY_REWARD.gold, streak: 4 }));
+    expect(compact(w.drawn)).toContain(compact(fill(await text(page, 'weekly.resultWon'), { gold: WEEKLY_REWARD.gold, streak: 4 })));
     expect(errors).toEqual([]);
   });
 
@@ -205,8 +212,8 @@ test.describe('weekly week-streak milestones (QA-15, GDD §8.1)', () => {
     expect(expected).toBe('Həftə seriyası 4 · +15 kristal');
     // the milestone outranks the 3★ target (whose 20 is credited, not named)
     expect(w.toast).toBe(expected);
-    expect(w.drawn).toContain(expected);
-    expect(w.drawn).toContain(fill(await text(page, 'weekly.resultWon'), { gold: WEEKLY_REWARD.gold, streak: 4 }));
+    expect(compact(w.drawn)).toContain(compact(expected));
+    expect(compact(w.drawn)).toContain(compact(fill(await text(page, 'weekly.resultWon'), { gold: WEEKLY_REWARD.gold, streak: 4 })));
     expect(Object.keys(w.after.weekly).sort()).toEqual(['best', 'lastWinWeek', 'streak']); // no new save field
     expect(errors).toEqual([]);
   });
@@ -229,7 +236,7 @@ test.describe('weekly week-streak milestones (QA-15, GDD §8.1)', () => {
     // the 3★ target toast when the bot hit it, else no toast at all — never a week-streak line
     expect(w.toast).toBe(w.target ? await text(page, 'weekly.resultTarget', { crystals: WEEKLY_REWARD.crystals }) : null);
     expect(w.drawn.filter((s) => s.startsWith(milestonePrefix))).toEqual([]);
-    expect(w.drawn).toContain(fill(await text(page, 'weekly.resultWon'), { gold: WEEKLY_REWARD.gold, streak: 5 }));
+    expect(compact(w.drawn)).toContain(compact(fill(await text(page, 'weekly.resultWon'), { gold: WEEKLY_REWARD.gold, streak: 5 })));
     expect(errors).toEqual([]);
   });
 
@@ -246,7 +253,7 @@ test.describe('weekly week-streak milestones (QA-15, GDD §8.1)', () => {
     expect(w.result.crystalsEarned).toBe(milestone + targetPart);
     expect(w.after.crystals - SEED_CRYSTALS).toBe(milestone + targetPart);
     expect(w.toast).toBe('Week streak 12 · +60 crystals');
-    expect(w.drawn).toContain('Week streak 12 · +60 crystals');
+    expect(compact(w.drawn)).toContain(compact('Week streak 12 · +60 crystals'));
     expect(errors).toEqual([]);
   });
 });

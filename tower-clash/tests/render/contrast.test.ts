@@ -9,7 +9,14 @@ import type { SettingsOpts } from '../../src/render/menusSettings';
 import { drawSettings } from '../../src/render/menusSettings';
 import type { DailyCardOpts, LevelSelectOpts } from '../../src/render/menusLevels';
 import { drawLevelSelect } from '../../src/render/menusLevels';
-import { drawToast } from '../../src/render/economyWidgets';
+import { TOAST, drawToast } from '../../src/render/economyWidgets';
+import { wrapNumeralText } from '../../src/render/widgets';
+import { registerDictionary, setLanguage, t } from '../../src/ui/i18n';
+import { az } from '../../src/ui/locales/az';
+import { ru } from '../../src/ui/locales/ru';
+import { tr } from '../../src/ui/locales/tr';
+import { ACHIEVEMENTS } from '../../src/economy/catalog';
+import { achievementName } from '../../src/ui/catalogText';
 
 /*
  * BUG-22 (ART_DIRECTION §6: numerals ≥ 24 px logical, contrast ≥ 4.5:1). The rule covers every shop
@@ -96,6 +103,10 @@ interface Drawn {
   px: number;
   x: number;
   y: number;
+  /** CSS weight of the font (500 words, 700 numerals / headings). */
+  weight: number;
+  /** fillText's maxWidth argument (undefined: the glyphs can never be squeezed). */
+  maxW?: number;
 }
 
 /**
@@ -120,8 +131,16 @@ function recordingCtx(out: Drawn[], faces: Set<string>, fills?: Set<string>): Ca
       const s = stack.pop();
       if (s) Object.assign(store, s);
     },
-    fillText: (text: string, x: number, y: number) =>
-      void out.push({ text: String(text), fill: store.fillStyle, px: Number(/(\d+(?:\.\d+)?)px/.exec(String(store.font))?.[1]), x, y }),
+    fillText: (text: string, x: number, y: number, maxW?: number) =>
+      void out.push({
+        text: String(text),
+        fill: store.fillStyle,
+        px: Number(/(\d+(?:\.\d+)?)px/.exec(String(store.font))?.[1]),
+        weight: Number(/^(\d+)/.exec(String(store.font))?.[1]),
+        x,
+        y,
+        maxW,
+      }),
   };
   return new Proxy({} as CanvasRenderingContext2D, {
     get(_t, key) {
@@ -446,4 +465,207 @@ describe('active-state controls through a recording canvas (ART-15)', () => {
       expect(line!.px).toBeGreaterThanOrEqual(24);
     });
   }
+});
+
+/* ---------- ART-16: streak pill, locked card tab, upgrades "Now", toast amounts ---------- */
+
+const NUMERAL = /^[+\-−]?\d[\d.,]*(?:\s?%)?k?$/;
+/** The locked card's tab frame: `shade(paper, -0.08)` with drawPill's white top highlight. */
+const tabFrame = (pal: Palette): string => shade(pal.paper, -0.08);
+/** The streak pill rect of the card at LEVEL_MAP.daily (menusLevels.ts drawDailyCard), `wide` when it names the next bonus. */
+const streakPill = (wide: boolean) => {
+  const r = LEVEL_MAP.daily;
+  const w = 176 + (wide ? 70 : 0);
+  return { x: r.x + r.w - 176 - 14 - (wide ? 70 : 0), y: r.y + 66, w, h: 30 };
+};
+
+describe('ART-16 colour pairs', () => {
+  it('the colours ART-16 replaced were below the line', () => {
+    // live streak pill: paper on the owner mid blue
+    expect(contrast(DEFAULT_PALETTE.paper, DEFAULT_PALETTE.owners.player)).toBeCloseTo(4.35, 2);
+    // locked card, inactive tab: textDim on the tab frame
+    expect(contrast(DEFAULT_PALETTE.textDim, tabFrame(DEFAULT_PALETTE))).toBeCloseTo(4.35, 2);
+  });
+
+  for (const [name, pal] of PALETTES) {
+    it(`${name}: live streak pill = the active-choice pair, ≥ 4.5:1 flat and at the gradient top`, () => {
+      expect(contrast(pal.shopBuy.text, pal.shopBuy.face)).toBeCloseTo(7.14, 2);
+      expect(contrast(pal.shopBuy.text, shade(pal.shopBuy.face, 0.16))).toBeCloseTo(4.96, 2);
+      expect(worstOnFace(pal.shopBuy)).toBeGreaterThanOrEqual(MIN_TEXT);
+      // the idle pill (streak 0, next bonus on offer) stays dim text on paper
+      expect(contrast(pal.textDim, pal.paper)).toBeGreaterThanOrEqual(MIN_TEXT);
+      expect(contrast(pal.textDim, '#ffffff')).toBeGreaterThanOrEqual(MIN_TEXT);
+    });
+
+    it(`${name}: locked card inactive tab label ≥ 4.5:1 on the frame and its white top, still dimmer than ink`, () => {
+      const frame = tabFrame(pal);
+      expect(pal.textDimFrame).toBe('#526078');
+      expect(pal.textDimFrame).toBe(shade(pal.textDim, -0.1));
+      expect(contrast(pal.textDimFrame, frame)).toBeCloseTo(5.11, 2);
+      expect(contrast(pal.textDimFrame, shade(frame, 0.16))).toBeGreaterThanOrEqual(MIN_TEXT);
+      expect(contrast(pal.textDimFrame, '#ffffff')).toBeCloseTo(6.36, 2);
+      // "locked" stays a dim label: well under ink's ratio on the same frame
+      expect(contrast(pal.ink, frame)).toBeGreaterThan(contrast(pal.textDimFrame, frame) * 2);
+    });
+  }
+});
+
+describe('ART-16 through a recording canvas', () => {
+  for (const [name, pal] of PALETTES) {
+    it(`${name}: the streak pill's numbers are 24 px bold in the pair's text colour, its words 16 px`, () => {
+      const cases: [DailyCardOpts, string, boolean, string][] = [
+        [dailyOpts('daily'), 'Streak 3 · +10 at day 7', true, pal.shopBuy.text],
+        [{ ...dailyOpts('daily'), nextBonus: null }, 'Streak 3', false, pal.shopBuy.text],
+        [{ ...dailyOpts('daily'), streak: 0 }, 'Streak 0 · +10 at day 7', true, pal.textDim],
+        [dailyOpts('weekly'), 'Week streak 3', false, pal.shopBuy.text],
+      ];
+      for (const [daily, label, wide, colour] of cases) {
+        const out: Drawn[] = [];
+        const fills = new Set<string>();
+        drawLevelSelect(recordingView(recordingCtx(out, new Set<string>(), fills)), pal, levelSelectOpts(daily));
+        const sp = streakPill(wide);
+        const runs = out.filter((d) => inside(d, sp));
+        expect(runs.map((d) => d.text).join(''), label).toBe(label);
+        const numbers = runs.filter((d) => NUMERAL.test(d.text));
+        expect(numbers.length, label).toBeGreaterThan(0);
+        for (const d of runs) expect(d.fill, `"${d.text}" colour`).toBe(colour);
+        for (const d of numbers) {
+          expect(d.px, `"${d.text}" size`).toBeGreaterThanOrEqual(24);
+          expect(d.weight, `"${d.text}" weight`).toBe(700);
+        }
+        // words 16 px; only a fit pass shrinks them (the recorder's 0.6 em glyphs are wider than Fredoka's)
+        for (const d of runs.filter((r) => !numbers.includes(r))) {
+          expect(d.px, `"${d.text}"`).toBeLessThanOrEqual(16);
+          expect(d.px, `"${d.text}"`).toBeGreaterThanOrEqual(12);
+          expect(d.weight).toBe(500);
+        }
+        // one baseline, runs left to right, centred in the pill, never squeezed
+        expect(new Set(runs.map((d) => d.y)).size).toBe(1);
+        expect(runs.every((d) => d.maxW === undefined)).toBe(true);
+        expect(runs[0]!.x).toBeGreaterThan(sp.x + 8);
+        if (colour === pal.shopBuy.text) {
+          expect(fills).toContain(pal.shopBuy.face);
+          expect(fills).not.toContain(pal.owners.player);
+        }
+      }
+    });
+
+    it(`${name}: the locked card's inactive tab label is textDimFrame, the active one the pair`, () => {
+      for (const tab of ['daily', 'weekly'] as const) {
+        const out: Drawn[] = [];
+        drawLevelSelect(recordingView(recordingCtx(out, new Set<string>())), pal, levelSelectOpts(dailyOpts(tab, false)));
+        const daily = out.filter((d) => inside(d, LEVEL_MAP.dailyTabDaily));
+        const weekly = out.filter((d) => inside(d, LEVEL_MAP.dailyTabWeekly));
+        expect(daily).toHaveLength(1);
+        expect(weekly).toHaveLength(1);
+        expect((tab === 'daily' ? daily : weekly)[0]!.fill).toBe(pal.shopBuy.text);
+        expect((tab === 'daily' ? weekly : daily)[0]!.fill).toBe(pal.textDimFrame);
+        expect(contrast(pal.textDimFrame, tabFrame(pal))).toBeGreaterThanOrEqual(MIN_TEXT);
+      }
+    });
+
+    it(`${name}: the upgrades "Now" line draws its numbers at ≥ 24 px like "Next", words 18 px ink`, () => {
+      const row = shopRowRect(1);
+      const drawn = drawTab(pal, 'upgrades', {
+        upgrades: [{ id: 'u.buy', rect: row, label: 'Production', glyph: 'production' as never, tier: 1, maxTier: 5, cost: 300, effectNow: '+5 % production', effectNext: '+10 % production', affordable: true }],
+      });
+      const left = (d: Drawn) => d.x < shopRowBuyRect(row).x;
+      const now = drawn.filter((d) => d.y > row.y + 92 && d.y <= row.y + 118 && left(d));
+      expect(now.map((d) => d.text).join('')).toBe('Now +5 % production');
+      for (const d of now) expect(d.fill, `"${d.text}"`).toBe(pal.ink);
+      const number = now.find((d) => d.text === '+5 %');
+      expect(number?.px).toBeGreaterThanOrEqual(24);
+      expect(number?.weight).toBe(700);
+      expect(now.filter((d) => d !== number).every((d) => d.px === 18 && d.weight === 500)).toBe(true);
+      expect(new Set(now.map((d) => d.y)).size).toBe(1);
+      // the same size as the "Next" numbers under it (ART-15 left "Now" at 18 px, smaller than "Next")
+      const next = drawn.find((d) => d.text === '+10 %' && left(d));
+      expect(next?.px).toBe(number?.px);
+      expect(next!.y).toBeGreaterThan(number!.y);
+      // tier 0: "Not trained" keeps its words, no number to enlarge
+      const fresh = drawTab(pal, 'upgrades', {
+        upgrades: [{ id: 'u.new', rect: row, label: 'Production', glyph: 'production' as never, tier: 0, maxTier: 5, cost: 100, effectNow: '', effectNext: '+5 % production', affordable: true }],
+      }).filter((d) => d.y > row.y + 92 && d.y <= row.y + 118 && left(d));
+      expect(fresh.map((d) => [d.text, d.px, d.fill])).toEqual([['Not trained yet', 18, pal.ink]]);
+    });
+
+    it(`${name}: toast amounts are their own 24 px bold runs inside 21 px words (ruling (a))`, () => {
+      for (const [kind, ink] of [
+        ['error', pal.toastError],
+        ['ok', pal.shopBuy],
+      ] as const) {
+        const out: Drawn[] = [];
+        drawToast(recordingCtx(out, new Set<string>()), pal, { text: 'Need 200 gold', kind, t: 0.5 });
+        expect(out.map((d) => d.text)).toEqual(['Need ', '200', ' gold']);
+        for (const d of out) expect(d.fill).toBe(ink.text);
+        expect(out[1]).toMatchObject({ px: 24, weight: 700 });
+        expect(out[0]).toMatchObject({ px: 21, weight: 500 });
+        expect(out[2]).toMatchObject({ px: 21, weight: 500 });
+        expect(new Set(out.map((d) => d.y)).size).toBe(1);
+        // centred on the screen's middle, never squeezed by fillText's maxWidth
+        const w = out[2]!.x + 5 * 0.6 * 21 - out[0]!.x;
+        expect(out[0]!.x + w / 2).toBeCloseTo(360, 5);
+        expect(out.every((d) => d.maxW === undefined)).toBe(true);
+      }
+    });
+
+    it(`${name}: a long toast wraps at " · " instead of shrinking, the amount kept at 24 px, the pill growing upwards`, () => {
+      const text = 'Need 1200 gold · earn stars or watch ×2 gold after a win';
+      const out: Drawn[] = [];
+      const fills = new Set<string>();
+      drawToast(recordingCtx(out, new Set<string>(), fills), pal, { text, kind: 'error', t: 0.5 });
+      const lines = [...new Set(out.map((d) => d.y))];
+      expect(lines).toHaveLength(2);
+      expect(lines[1]! - lines[0]!).toBe(TOAST.lineH);
+      expect(out.filter((d) => d.y === lines[0]).map((d) => d.text).join('')).toBe('Need 1200 gold');
+      expect(out.filter((d) => d.y === lines[1]).map((d) => d.text).join('')).toBe('earn stars or watch ×2 gold after a win');
+      for (const d of out) expect(d.px, `"${d.text}"`).toBe(NUMERAL.test(d.text) ? 24 : 21);
+      expect(out.every((d) => d.maxW === undefined)).toBe(true);
+      // the bottom line sits where a one-line toast sits (pill bottom fixed at y + 24)
+      const one: Drawn[] = [];
+      drawToast(recordingCtx(one, new Set<string>()), pal, { text: 'Need 1200 gold', kind: 'error', t: 0.5 });
+      expect(lines[1]).toBe(one[0]!.y);
+      expect(fills).toContain(pal.toastError.face);
+    });
+  }
+
+  it('toast fit pass: every long toast of every language fits ≤ 4 lines at full size with 10 % slack', async () => {
+    registerDictionary('az', az);
+    registerDictionary('ru', ru);
+    registerDictionary('tr', tr);
+    const out: Drawn[] = [];
+    const ctx = recordingCtx(out, new Set<string>());
+    try {
+      for (const lang of ['en', 'az', 'ru', 'tr'] as const) {
+        await setLanguage(lang);
+        const names = ACHIEVEMENTS.map((a) => achievementName(a)).sort((a, b) => b.length - a.length);
+        const achievement = t('achievements.unlocked', { names: names.slice(0, 2).join(', '), crystals: 25 });
+        const single = [
+          t('shop.toast.needGold', { n: 1200 }),
+          t('shop.toast.needCrystals', { n: 250 }),
+          t('shop.toast.crateAdded', { o: 3, f: 3, a: 3 }),
+          t('hint.stalemate'),
+          t('result.notEnoughCrystals'),
+          achievement,
+        ];
+        // the recorder measures 0.6 em per character, wider than Fredoka / Nunito (≈ 0.5 em), and the
+        // column is 10 % narrower than the toast's 604 px
+        const column = (TOAST.maxW - TOAST.pad * 2) / 1.1;
+        for (const text of single) {
+          const wrap = wrapNumeralText(ctx, text, column, TOAST.wordPx, TOAST.maxLines);
+          expect(wrap.wordPx, `${lang}: ${text}`).toBe(TOAST.wordPx);
+          expect(wrap.lines.length, `${lang}: ${text}`).toBeLessThanOrEqual(TOAST.maxLines);
+        }
+        // the daily reward claimed together with two long achievements (one toast, screens.ts
+        // withAchievements): still ≤ 4 lines; under the pessimistic measure its words may give a
+        // few px (Chromium measures 4 lines at 21 px in RU with the slack, 3 in AZ)
+        const combo = `${t('title.dailyReward', { day: 7, parts: `${t('amount.gold', { n: 150 })} · ${t('amount.crystals', { n: 20 })}` })} · ${achievement}`;
+        const wrap = wrapNumeralText(ctx, combo, column, TOAST.wordPx, TOAST.maxLines);
+        expect(wrap.lines.length, `${lang}: ${combo}`).toBeLessThanOrEqual(TOAST.maxLines);
+        expect(wrap.wordPx, `${lang}: ${combo}`).toBeGreaterThanOrEqual(16);
+      }
+    } finally {
+      await setLanguage('en');
+    }
+  });
 });

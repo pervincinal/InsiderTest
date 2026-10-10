@@ -56,6 +56,152 @@ export function fitFontPx(ctx: CanvasRenderingContext2D, text: string, px: numbe
   return Math.max(8, Math.floor((px * maxWidth) / w));
 }
 
+/* ---------- numerals in translated lines (ART-15 / ART-16) ---------- */
+
+/**
+ * Size of a number the player reads (ART_DIRECTION §6, BUG-22 / ART-15): prices, pack sizes, the
+ * upgrades "Now" / "Next" values, the streak pill, toast amounts. Only a fit pass may go below it.
+ */
+export const NUMERAL_PX = 24;
+
+/** A number inside a translated line: "+10 %", "−20 %", "+3", "2.5k", "7." (pct() puts a space before %). */
+const NUMERAL_RUN = /[+\-−]?\d[\d.,]*(?:\s?%)?k?/g;
+
+/** One run of a numeral line: a number (bold, NUMERAL_PX) or the words between numbers. */
+export interface NumeralRun {
+  s: string;
+  num: boolean;
+}
+
+/** Split a translated line into word and number runs ("Need 200 gold" → "Need ", "200", " gold"). */
+export function numeralRuns(text: string): NumeralRun[] {
+  const runs: NumeralRun[] = [];
+  let at = 0;
+  for (const m of text.matchAll(NUMERAL_RUN)) {
+    if (m.index > at) runs.push({ s: text.slice(at, m.index), num: false });
+    runs.push({ s: m[0], num: true });
+    at = m.index + m[0].length;
+  }
+  if (at < text.length) runs.push({ s: text.slice(at), num: false });
+  return runs;
+}
+
+/** Width of `text` set as a numeral line (words at `wordPx` 500, numbers at `numPx` 700). Leaves `ctx.font` changed. */
+export function numeralLineWidth(ctx: CanvasRenderingContext2D, text: string, wordPx: number, numPx: number = NUMERAL_PX): number {
+  let w = 0;
+  for (const r of numeralRuns(text)) {
+    ctx.font = font(r.num ? numPx : wordPx, r.num ? '700' : '500');
+    w += ctx.measureText(r.s).width;
+  }
+  return w;
+}
+
+/**
+ * One line (alphabetic baseline at `y`) whose numbers are drawn bold at NUMERAL_PX and the words at
+ * `wordPx` (ART-15: numerals ≥ 24 px where a number is read, the translated words keep their size).
+ * `x` is the left edge, or the centre with `align: 'center'`. A line too wide for `maxW` shrinks its
+ * words first (≥ 12 px) and its numbers only as a last resort, so `fillText` never squeezes the
+ * glyphs (BUG-21). Returns the drawn width.
+ */
+export function drawNumeralLine(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxW: number,
+  colour: string,
+  wordPx: number,
+  align: 'left' | 'center' = 'left',
+): number {
+  ctx.save();
+  const runs = numeralRuns(text);
+  const widthOf = (num: boolean, px: number): number =>
+    runs.reduce((sum, r) => {
+      if (r.num !== num) return sum;
+      ctx.font = font(px, num ? '700' : '500');
+      return sum + ctx.measureText(r.s).width;
+    }, 0);
+  let numPx = NUMERAL_PX;
+  const numW = widthOf(true, numPx);
+  let wordW = widthOf(false, wordPx);
+  if (numW + wordW > maxW && wordW > 0) {
+    wordPx = Math.max(12, Math.floor((wordPx * Math.max(0, maxW - numW)) / wordW));
+    wordW = widthOf(false, wordPx);
+  }
+  let total = numW + wordW;
+  if (total > maxW) {
+    const k = maxW / total;
+    numPx = Math.max(8, Math.floor(numPx * k));
+    wordPx = Math.max(8, Math.floor(wordPx * k));
+    total = widthOf(true, numPx) + widthOf(false, wordPx);
+  }
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = colour;
+  let cx = align === 'center' ? x - total / 2 : x;
+  for (const r of runs) {
+    ctx.font = font(r.num ? numPx : wordPx, r.num ? '700' : '500');
+    ctx.fillText(r.s, cx, y);
+    cx += ctx.measureText(r.s).width;
+  }
+  ctx.restore();
+  return total;
+}
+
+/** Result of `wrapNumeralText`: the lines and the word size they were laid out at. */
+export interface NumeralWrap {
+  lines: string[];
+  wordPx: number;
+  /** Widest line in px (words at `wordPx`, numbers at NUMERAL_PX). */
+  width: number;
+}
+
+/**
+ * Break a translated line into at most `maxLines` numeral lines no wider than `maxW` (ART-16 toast
+ * fit pass). " · " is the preferred break (the separator is dropped at a line end: "Need 200 gold ·
+ * earn stars …" → "Need 200 gold" / "earn stars …"); a part still too wide breaks between words. If
+ * the text needs more lines than `maxLines`, the words shrink a pixel at a time (≥ `minWordPx`) and
+ * the numbers stay at NUMERAL_PX; past that `drawNumeralLine` shrinks a line as its last resort.
+ */
+export function wrapNumeralText(ctx: CanvasRenderingContext2D, text: string, maxW: number, wordPx: number, maxLines: number, minWordPx = 16): NumeralWrap {
+  for (let px = wordPx; ; px--) {
+    const lines = wrapAt(ctx, text, maxW, px);
+    if (lines.length <= maxLines || px <= minWordPx) {
+      const width = lines.reduce((m, l) => Math.max(m, numeralLineWidth(ctx, l, px)), 0);
+      return { lines, wordPx: px, width };
+    }
+  }
+}
+
+function wrapAt(ctx: CanvasRenderingContext2D, text: string, maxW: number, wordPx: number): string[] {
+  const fits = (s: string): boolean => numeralLineWidth(ctx, s, wordPx) <= maxW;
+  const lines: string[] = [];
+  let line = '';
+  for (const part of text.split(' · ')) {
+    const joined = line ? `${line} · ${part}` : part;
+    if (fits(joined)) {
+      line = joined;
+      continue;
+    }
+    if (line) lines.push(line);
+    line = '';
+    if (fits(part)) {
+      line = part;
+      continue;
+    }
+    for (const word of part.split(' ')) {
+      const next = line ? `${line} ${word}` : word;
+      if (!line || fits(next)) line = next;
+      else {
+        lines.push(line);
+        line = word;
+      }
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
 export function inRect(r: Rect, x: number, y: number): boolean {
   return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
 }

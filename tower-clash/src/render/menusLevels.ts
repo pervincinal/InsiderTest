@@ -3,7 +3,7 @@ import type { Palette } from './palette';
 import { shade } from './palette';
 import type { View } from './view';
 import type { Rect } from './widgets';
-import { drawButton, drawCard, drawExtrudedText, drawGlassBand, drawPill, drawStar, drawStars, fitFontPx, font, formatTime, withShadow } from './widgets';
+import { drawButton, drawCard, drawExtrudedText, drawGlassBand, drawNumeralLine, drawPill, drawStar, drawStars, fitFontPx, font, formatTime, withShadow } from './widgets';
 import { drawFlag, drawLock } from './menuWidgets';
 import { LEVEL_MAP, levelNodeCentre, levelNodeRect } from './menuLayout';
 import type { ToastOpts } from './economyWidgets';
@@ -106,7 +106,8 @@ function drawCardTabs(ctx: CanvasRenderingContext2D, pal: Palette, active: 'dail
     const face = pal.shopBuy.face;
     if (on) drawPill(ctx, seg, pressed === hit ? shade(face, -0.15) : face, shade(face, -0.35), 2);
     const label = t(id === 'daily' ? 'daily.title' : 'weekly.title');
-    ctx.fillStyle = on ? pal.shopBuy.text : dim ? pal.textDim : pal.ink;
+    // ART-16: a locked card's inactive tab is dim but readable on the tinted frame (textDim was 4.35:1)
+    ctx.fillStyle = on ? pal.shopBuy.text : dim ? pal.textDimFrame : pal.ink;
     ctx.font = font(fitFontPx(ctx, label, 17, seg.w - 14));
     ctx.fillText(label, seg.x + seg.w / 2, seg.y + seg.h / 2 + 1, seg.w - 14);
   }
@@ -199,13 +200,12 @@ function drawDailyCard(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, o: 
     if (d.streak > 0 || nextBonus || weekly) {
       const live = d.streak > 0;
       const sp: Rect = { x: pill.x - wide, y: r.y + 66, w: rightW + wide, h: 30 };
-      drawPill(ctx, sp, live ? pal.owners.player : pal.paper, live ? shade(pal.owners.player, -0.35) : undefined, 2);
-      ctx.textAlign = 'center';
-      ctx.fillStyle = live ? pal.paper : pal.textDim;
+      // ART-16: a live streak is an active state, so the pill takes the active-choice pair (paper
+      // 7.1:1; paper on the owner mid blue was 4.35:1); its numbers are 24 px bold, the words 16 px
+      const face = pal.shopBuy.face;
+      drawPill(ctx, sp, live ? face : pal.paper, live ? shade(face, -0.35) : undefined, 2);
       const label = weekly ? t('weekly.streak', { n: d.streak }) : nextBonus ? t('daily.streakNext', { n: d.streak, day: nextBonus[0], crystals: nextBonus[1] }) : t('daily.streak', { n: d.streak });
-      ctx.font = font(fitFontPx(ctx, label, 16, sp.w - 16));
-      ctx.fillText(label, sp.x + sp.w / 2, sp.y + sp.h / 2 + 1, sp.w - 16);
-      ctx.textAlign = 'left';
+      drawNumeralLine(ctx, label, sp.x + sp.w / 2, sp.y + sp.h / 2 + 8, sp.w - 16, live ? pal.shopBuy.text : pal.textDim, 16, 'center');
     }
   } else {
     ctx.fillStyle = pal.textDim;

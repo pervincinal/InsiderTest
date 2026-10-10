@@ -1,7 +1,7 @@
 import type { Palette } from './palette';
 import { shade } from './palette';
-import type { Rect } from './widgets';
-import { drawPill, drawStars, font } from './widgets';
+import type { NumeralWrap, Rect } from './widgets';
+import { drawNumeralLine, drawPill, drawStars, font, wrapNumeralText } from './widgets';
 import { drawCrystal, drawGoldCoin } from './sprites';
 import { prefersReducedMotion } from './particles';
 import { reducedMotionOverride } from '../ui/motion';
@@ -72,7 +72,28 @@ export interface ToastOpts {
   y?: number;
 }
 
-/** Transient status pill (purchase result, reward claimed, "not enough crystals"). */
+/** Toast type sizes (ART-16): words 21 px, numbers NUMERAL_PX (24 px), up to four lines in a ≤ 660 px pill. */
+export const TOAST = Object.freeze({ wordPx: 21, maxW: 660, pad: 28, maxLines: 4, lineH: 30, h: 48 });
+
+let lastWrap: { key: string; wrap: NumeralWrap } | null = null;
+
+/** Lines of a toast (memoised on the text and the language's font stack: toasts redraw every frame). */
+export function toastLines(ctx: CanvasRenderingContext2D, text: string): NumeralWrap {
+  const key = `${font(TOAST.wordPx)}|${text}`;
+  if (lastWrap?.key !== key) lastWrap = { key, wrap: wrapNumeralText(ctx, text, TOAST.maxW - TOAST.pad * 2, TOAST.wordPx, TOAST.maxLines) };
+  return lastWrap.wrap;
+}
+
+/**
+ * Transient status pill (purchase result, reward claimed, "not enough crystals").
+ * ART-16 ruling: the amounts a toast carries ("Need 200 gold", "+150 gold · +20 crystals") are drawn
+ * as their own bold 24 px runs inside the 21 px words (`drawNumeralLine`), not the whole toast at
+ * 24 px. Every RU / AZ / TR toast with a long tail ("· earn stars or watch ×2 gold after a win")
+ * is wider than the 604 px text column at 21 px already (RU 788 px), so a 24 px toast would have to
+ * wrap anyway and would wrap twice as often; the numeral runs add ≤ 20 px to a line. Long toasts
+ * break at " · " (then between words) into up to four lines instead of being squeezed by
+ * `fillText`'s maxWidth; the pill grows upwards from its bottom edge so it never nears the screen foot.
+ */
 export function drawToast(ctx: CanvasRenderingContext2D, pal: Palette, o: ToastOpts): void {
   const fadeIn = Math.min(1, o.t / 0.1);
   const fadeOut = Math.min(1, (1 - o.t) / 0.2);
@@ -80,21 +101,24 @@ export function drawToast(ctx: CanvasRenderingContext2D, pal: Palette, o: ToastO
   if (alpha <= 0) return;
   ctx.save();
   ctx.globalAlpha = alpha;
-  ctx.font = font(21, '500');
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  const w = Math.min(660, ctx.measureText(o.text).width + 56);
-  const y = (o.y ?? 1090) - (1 - fadeIn) * 12;
-  const pill: Rect = { x: 360 - w / 2, y: y - 24, w, h: 48 };
+  const wrap = toastLines(ctx, o.text);
+  const textW = TOAST.maxW - TOAST.pad * 2;
+  const w = Math.min(TOAST.maxW, wrap.width + TOAST.pad * 2);
+  const h = TOAST.h + (wrap.lines.length - 1) * TOAST.lineH;
+  const bottom = (o.y ?? 1090) + TOAST.h / 2 - (1 - fadeIn) * 12;
+  const pill: Rect = { x: 360 - w / 2, y: bottom - h, w, h };
   // ART-15: info / success toasts on the active-choice blue (paper 7.1:1; the owner mid blue was
   // 4.35:1), errors on the alarm red with ink text (4.7:1; paper on it was 2.9:1)
   const ink = o.kind === 'ok' ? pal.shopBuy : pal.toastError;
   drawPill(ctx, pill, ink.face, shade(ink.face, -0.35));
-  ctx.fillStyle = ink.text;
-  ctx.fillText(o.text, 360, y + 1, w - 24);
+  // alphabetic baseline ≈ half the words' cap height under each line's centre (Fredoka caps ≈ 0.7 em)
+  const base = Math.round(wrap.wordPx * 0.33);
+  wrap.lines.forEach((line, i) => {
+    const cy = pill.y + TOAST.h / 2 + i * TOAST.lineH;
+    drawNumeralLine(ctx, line, 360, cy + base, textW, ink.text, wrap.wordPx, 'center');
+  });
   ctx.restore();
 }
-
 
 /** Rotating arc inside a button while a purchase / ad is in flight. */
 export function drawSpinner(ctx: CanvasRenderingContext2D, color: string, cx: number, cy: number, r: number, nowMs: number): void {
