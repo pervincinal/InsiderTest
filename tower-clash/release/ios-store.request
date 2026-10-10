@@ -23,5 +23,5 @@
 action=metadata
 build=
 iphone65=no
-note=MM-12 first request: expected to stop at the secrets check until the stakeholder adds the Apple secrets
-requested=2026-10-09T16:00:00Z
+note=first metadata upload: variant-B texts, 6.7in screenshots (PUB-20), age rating, Free + AZE/TUR/KAZ/GEO; no submission
+requested=2026-10-10T19:14:00Z
