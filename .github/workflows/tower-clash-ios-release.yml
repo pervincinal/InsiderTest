@@ -313,24 +313,37 @@ jobs:
       # MM-14: the team's environment cannot read job logs (the GitHub proxy blocks /actions/*),
       # only check-run annotations. `surface` runs a command, keeps its full log and, on failure,
       # turns the error lines into ::error:: annotations and the log tail into a ::notice::.
+      # QA-19 (tests/release/surfaceHelper.test.ts runs this block with bash):
+      #   * -e stays off until the report is printed and the caller's own -e is restored after,
+      #     so a grep that matches nothing (exit 1 under `shell: bash` = -eo pipefail) can never
+      #     end the step before the annotations (BUG-28);
+      #   * at most 8 error lines, first occurrences in log order: GitHub keeps 10 error
+      #     annotations per step, and the final ::error:: plus the archive step's "Register one
+      #     device" hint must still fit (BUG-29);
+      #   * altool's own markers count as error lines too: `ERROR:` and `VERIFY FAILED` /
+      #     `UPLOAD FAILED` (BUG-30, the 2026-10-09 validate run annotated none of them);
+      #   * every xcodebuild / altool call of this workflow goes through it, except
+      #     `xcodebuild -version` (tests/repo/hygiene.test.ts).
       - name: Define the log-surfacing helper
         run: |
           cat > "$RUNNER_TEMP/surface.sh" <<'SH'
           surface() {
             local name="$1"; shift
             local log="$RUNNER_TEMP/$name.log"
+            local errexit=""
+            case $- in *e*) errexit=1 ;; esac
             set +e
             "$@" 2>&1 | tee "$log"
             local rc=${PIPESTATUS[0]}
-            set -e
             if [ "$rc" -ne 0 ]; then
-              grep -E "error:|Error Domain|fatal error|\*\* .* FAILED \*\*|No signing certificate|No profiles|doesn't support|not allowed|Provisioning profile|Cloud signing" "$log" \
-                | grep -v "^warning" | sort -u | head -n 20 \
+              grep -E "error:|ERROR:|Error Domain|fatal error|\*\* .* FAILED \*\*|(VERIFY|UPLOAD) FAILED|No signing certificate|No profiles|doesn't support|not allowed|Provisioning profile|Cloud signing" "$log" \
+                | grep -v "^warning" | awk '!seen[$0]++' | head -n 8 \
                 | while IFS= read -r line; do printf '::error title=%s::%s\n' "$name" "${line:0:700}"; done
-              tail -n 40 "$log" | tr '\n' ' ' | cut -c1-2000 | sed 's/^/::notice title='"$name"' (log tail)::/'
+              tail -n 40 "$log" | tr '\n' ' ' | sed 's/^/::notice title='"$name"' (log tail)::/' | cut -c1-2000
               echo
               echo "::error::$name failed with exit code $rc — full log in the artifact ios-build-logs"
             fi
+            if [ -n "$errexit" ]; then set -e; fi
             return "$rc"
           }
           SH
@@ -471,10 +484,11 @@ jobs:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
         run: |
+          source "$RUNNER_TEMP/surface.sh"
           echo "::warning::altool upload failed — retrying with xcodebuild -exportArchive destination=upload"
           cd ios/App
           plutil -replace destination -string upload build/ExportOptions.plist
-          xcodebuild -exportArchive \
+          surface upload-fallback xcodebuild -exportArchive \
             -archivePath build/App.xcarchive \
             -exportOptionsPlist build/ExportOptions.plist \
             -exportPath build/upload \

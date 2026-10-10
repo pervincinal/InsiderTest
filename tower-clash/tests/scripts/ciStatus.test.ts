@@ -20,7 +20,7 @@ const PAGES_404 =
 const NO_SECRETS = 'Missing repository secrets: APP_STORE_CONNECT_API_KEY_ID APP_STORE_CONNECT_API_ISSUER_ID';
 
 type Run = { id: number; name: string; status: string; conclusion: string | null };
-type Note = { annotation_level: string; message: string };
+type Note = { annotation_level: string; message: string; title?: string };
 const ok = (id: number, name: string): Run => ({ id, name, status: 'completed', conclusion: 'success' });
 const red = (id: number, name: string): Run => ({ id, name, status: 'completed', conclusion: 'failure' });
 
@@ -174,6 +174,69 @@ describe('scripts/ciStatus.mjs — CI per job, not per workflow (QA-18, BUG-26)'
     const r = run(gh);
     expect(r.status).toBe(3);
     expect(r.stderr).toContain('exited 1: gh: Access to this GitHub API path is not permitted through this proxy. (HTTP 403)');
+  });
+});
+
+/*
+ * QA-19: the iOS lane's `surface` helper (MM-14) writes several annotations per failed step —
+ * one per xcodebuild error line, the log tail as a notice, the final exit-code error and the
+ * "Register one device" hint. The first-failure summary shows one of them; --annotations prints
+ * them all so the Producer sees the surfaced lines without a second call. Shapes as the
+ * check-run annotations API returns them for `::error title=…::` / `::notice title=…::`.
+ */
+describe('scripts/ciStatus.mjs --annotations (QA-19)', () => {
+  const IOS_RED = red(5, 'signed archive + App Store Connect upload');
+  const TAIL = `Signing Identity: "Apple Development" ${'x'.repeat(1900)}`;
+  const SURFACED: Note[] = [
+    { annotation_level: 'failure', title: 'archive', message: "error: No profiles for 'com.pervincinal.towerclash' were found" },
+    { annotation_level: 'failure', title: 'archive', message: '** ARCHIVE FAILED **' },
+    { annotation_level: 'warning', title: '', message: 'Node.js 20 is deprecated.' },
+    { annotation_level: 'notice', title: 'archive (log tail)', message: TAIL },
+    { annotation_level: 'failure', title: '', message: 'archive failed with exit code 65 — full log in the artifact ios-build-logs' },
+    { annotation_level: 'failure', title: 'Register one device', message: 'Apple cannot generate the development profile …\nsecond line' },
+    { annotation_level: 'failure', title: '', message: 'Process completed with exit code 65.' },
+  ];
+
+  it('prints every failure and notice annotation of a red job, whole and in order, warnings left out', () => {
+    const r = run(fakeGh([[...GREEN_RUNS, IOS_RED]], { 5: SURFACED }).gh, '--annotations');
+    expect(r.status).toBe(1);
+    const job = `  signed archive + App Store Connect upload: failure — error: No profiles for 'com.pervincinal.towerclash' were found\n`;
+    expect(r.stdout).toContain(
+      job +
+        "      failure [archive] error: No profiles for 'com.pervincinal.towerclash' were found\n" +
+        '      failure [archive] ** ARCHIVE FAILED **\n' +
+        `      notice  [archive (log tail)] ${TAIL}\n` +
+        '      failure archive failed with exit code 65 — full log in the artifact ios-build-logs\n' +
+        '      failure [Register one device] Apple cannot generate the development profile …\n' +
+        '              second line\n' +
+        '      failure Process completed with exit code 65.\n' +
+        'CI: 3 job(s) green, expected-red: none; RED: signed archive + App Store Connect upload (efeb5e7)\n',
+    );
+    expect(r.stdout).not.toContain('Node.js 20 is deprecated');
+  });
+
+  it('expected-red jobs list theirs too; green jobs are never asked; without the flag the output stays one line per job', () => {
+    const notes = { ...NOTES, 5: SURFACED };
+    const runs = [...GREEN_RUNS, IOS_RED, IOS_LANES[1]!];
+    const allow = ['--allow', 'App Store Connect metadata'];
+    const { gh, dir } = fakeGh([runs], notes);
+    const all = run(gh, ...allow, '--annotations');
+    expect(all.status).toBe(1);
+    expect(all.stdout).toContain(
+      `  App Store Connect metadata / review submission: failure (expected) — ${NO_SECRETS}\n` +
+        '      failure Process completed with exit code 1.\n' +
+        `      failure ${NO_SECRETS}\n`,
+    );
+    expect(all.stdout).toContain('      failure [Register one device] Apple cannot generate the development profile …\n');
+    const annotationCalls = readCalls(dir).filter((c) => c.includes('/annotations'));
+    expect(annotationCalls).toEqual([
+      'api repos/pervincinal/InsiderTest/check-runs/6/annotations?per_page=100',
+      'api repos/pervincinal/InsiderTest/check-runs/5/annotations?per_page=100',
+    ]);
+    const plain = run(fakeGh([runs], notes).gh, ...allow);
+    expect(plain.stdout.split('\n').filter((l) => l.startsWith('      '))).toEqual([]);
+    expect(plain.stdout).not.toContain('ARCHIVE FAILED');
+    expect(plain.stdout).toContain(`  signed archive + App Store Connect upload: failure — error: No profiles for 'com.pervincinal.towerclash' were found\n`);
   });
 });
 

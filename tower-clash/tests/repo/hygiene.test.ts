@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { onBlock, readWorkflow, runBlocks, stepText } from '../workflowYaml';
 
 /*
  * Repository hygiene guards (QA). Regression test for BUG-2: the Android/iOS workflows write
@@ -173,5 +174,94 @@ describe('.github/workflows/tower-clash-pages.yml (BUG-26)', () => {
       'GitHub Pages is NOT enabled — enable it at Settings → Pages (Source: GitHub Actions); the privacy policy URL required by Apple and Google is not live',
     );
     expect(status).toContain('Settings → Environments → github-pages → Deployment branches');
+  });
+});
+
+/*
+ * QA-19: the MM-14 release-lane changes must not regress silently — the team reads only check-run
+ * annotations, never job logs, so an xcodebuild / altool call outside `surface`, a logs artifact
+ * that is skipped on failure or a lost device hint would hide the next failed build. The helper
+ * itself is executed by tests/release/surfaceHelper.test.ts. MM-12 / MM-13 rule: a release
+ * workflow starts from its request file, never from a push of its own file (once the secrets
+ * exist, editing a workflow must not upload anything).
+ */
+describe('.github/workflows/tower-clash-ios-release.yml (QA-19, MM-14)', () => {
+  const IOS = readWorkflow('tower-clash-ios-release.yml');
+  const HELPER = 'Define the log-surfacing helper';
+
+  it('every xcodebuild / xcrun altool call goes through surface (BUG-27), except `xcodebuild -version`', () => {
+    const blocks = runBlocks(IOS).filter((b) => b.step !== HELPER);
+    expect(blocks.length).toBeGreaterThanOrEqual(20);
+    const bare: string[] = [];
+    const surfaced: string[] = [];
+    for (const { step, run } of blocks) {
+      for (const raw of run.split('\n')) {
+        // Quoted text is a message, not a call ("retrying with xcodebuild …", "xcodebuild (fallback)"),
+        // unless it holds a command substitution: "$(xcodebuild archive …)" is still a call.
+        const line = raw
+          .trim()
+          .replace(/'[^']*'/g, "''")
+          .replace(/"(?:[^"\\]|\\.)*"/g, (q) => (q.includes('$(') ? q : '""'));
+        if (line.startsWith('#')) continue;
+        for (const m of line.matchAll(/\b(xcodebuild|xcrun\s+altool)\b/g)) {
+          if (/^xcodebuild -version\b/.test(line.slice(m.index))) continue; // informational, cannot fail on signing
+          const before = line.slice(0, m.index);
+          if (/(^|\s)surface [\w-]+ $/.test(before)) surfaced.push(`${step}: ${before.trim().split(' ').pop()}`);
+          else bare.push(`${step}: ${line}`);
+        }
+      }
+    }
+    expect(bare).toEqual([]);
+    expect(surfaced.sort()).toEqual(
+      [
+        'Archive (Release, generic iOS device): archive',
+        'Archive (Release, generic iOS device): archive',
+        'Export signed .ipa: export',
+        'Upload to App Store Connect (altool): upload',
+        'Upload to App Store Connect (xcodebuild fallback): upload-fallback',
+        'Validate with altool: validate',
+      ].sort(),
+    );
+    for (const { run } of blocks.filter((b) => /\bsurface [\w-]+ (xcodebuild|xcrun)/.test(b.run))) {
+      expect(run.startsWith('source "$RUNNER_TEMP/surface.sh"\n')).toBe(true);
+    }
+    // No line starts with a bare call anywhere in a run block (the plain grep of the backlog item).
+    for (const { run } of blocks) expect(run).not.toMatch(/^\s*(xcodebuild (?!-version)|xcrun altool)/m);
+  });
+
+  it('the helper step is defined before the first step that sources it', () => {
+    const at = (s: string): number => IOS.indexOf(s);
+    expect(at(`- name: ${HELPER}`)).toBeGreaterThan(0);
+    expect(at(`- name: ${HELPER}`)).toBeLessThan(at('source "$RUNNER_TEMP/surface.sh"'));
+  });
+
+  it('the ios-build-logs artifact is uploaded even when a step failed', () => {
+    const logs = stepText(IOS, 'Upload build logs artifact');
+    expect(logs).toMatch(/\n {8}if: always\(\)\n/);
+    expect(logs).toContain('uses: actions/upload-artifact@v4');
+    expect(logs).toContain('name: ios-build-logs');
+    expect(logs).toContain('path: ${{ runner.temp }}/*.log');
+  });
+
+  it('the archive step turns "has no devices" into the "Register one device" annotation and keeps exit 65', () => {
+    const archive = stepText(IOS, 'Archive (Release, generic iOS device)');
+    expect(archive).toContain('if grep -q "has no devices" "$RUNNER_TEMP/archive.log"; then');
+    expect(archive).toMatch(/echo "::error title=Register one device::[^"\n]*Devices -> \+ -> Platform iOS[^"\n]*UDID[^"\n]*ios-release\.request[^"\n]*LAUNCH_CHECKLIST\.md §0b step 5b\."/);
+    expect(archive).toMatch(/\n {14}exit 65\n/);
+  });
+});
+
+describe('release workflows start from their request file, never from their own path (QA-19, MM-12, MM-13)', () => {
+  it.each([
+    ['tower-clash-ios-release.yml', 'tower-clash/release/ios-release.request'],
+    ['tower-clash-ios-store.yml', 'tower-clash/release/ios-store.request'],
+    ['tower-clash-android-release.yml', 'tower-clash/release/android-release.request'],
+  ])('%s', (file, request) => {
+    const on = onBlock(readWorkflow(file));
+    expect(on).toContain(`      - '${request}'`);
+    expect(on).toContain('      - claude/tower-war-game-plan-weqwpb');
+    expect(on).not.toContain(file);
+    expect(on).not.toContain('.github/workflows');
+    expect(on).not.toMatch(/pull_request|schedule|paths-ignore/);
   });
 });

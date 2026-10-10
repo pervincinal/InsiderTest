@@ -4,16 +4,21 @@
  * job — and prints each job's own conclusion, so a `continue-on-error` job that failed (the Pages
  * deploy, red on every push for 11 days behind a green workflow) can no longer hide.
  *
- * Usage:  node scripts/ciStatus.mjs [<sha>] [--allow <regex>] [--wait <seconds>] [--repo <owner/name>]
+ * Usage:  node scripts/ciStatus.mjs [<sha>] [--allow <regex>] [--wait <seconds>] [--annotations] [--repo <owner/name>]
  *   <sha>      commit to read (default `git rev-parse HEAD`; short shas are resolved with git)
  *   --allow    jobs whose name matches this regex may be red; reported as "expected"
  *              (the release lanes while their secrets do not exist)
  *   --wait     keep polling every 30 s while jobs are queued / in progress, up to <seconds>
+ *   --annotations  (QA-19) under each red / expected-red job, print EVERY failure and notice
+ *              annotation in full, in the API's order — e.g. the iOS lane's `surface` lines
+ *              (`::error title=archive::…`, the `archive (log tail)` notice, "Register one
+ *              device") — instead of only the first failure. Warnings are left out.
  * Exit: 0 every job green (or expected-red) · 1 a job that is not allowed concluded red
  *       (failure, timed_out, cancelled, action_required, …) · 2 jobs still running (or none yet)
  *       · 3 gh missing / API error / bad arguments.
  * Data: `gh api repos/<repo>/commits/<sha>/check-runs` and, for each red job, the first
- * failure-level message of `…/check-runs/<id>/annotations`. Only `repos/*` paths are used.
+ * failure-level message of `…/check-runs/<id>/annotations` (one call per red job; with
+ * --annotations all of them). Only `repos/*` paths are used.
  * Tests point CI_STATUS_GH at a fake gh (tests/scripts/ciStatus.test.ts); CI_STATUS_POLL_SECONDS
  * overrides the 30 s poll interval.
  */
@@ -37,6 +42,12 @@ const opt = (name) => {
 const allowSrc = opt('--allow');
 const waitArg = opt('--wait');
 const repo = opt('--repo') ?? 'pervincinal/InsiderTest';
+const flag = (name) => {
+  const i = args.indexOf(name);
+  if (i >= 0) args.splice(i, 1);
+  return i >= 0;
+};
+const showAll = flag('--annotations');
 let allow;
 try {
   allow = allowSrc === undefined ? undefined : new RegExp(allowSrc);
@@ -76,14 +87,30 @@ function ghApi(path) {
   }
 }
 
-/** First failure-level annotation, preferring a real message over "Process completed with exit code 1." */
-function firstFailure(id) {
+/** A job's annotations (GitHub keeps at most 50 per job, so one page of 100 holds them all). */
+function annotations(id) {
   const notes = ghApi(`repos/${repo}/check-runs/${id}/annotations?per_page=100`);
-  const failures = (Array.isArray(notes) ? notes : []).filter((a) => a.annotation_level === 'failure');
+  return Array.isArray(notes) ? notes : [];
+}
+
+/** First failure-level annotation, preferring a real message over "Process completed with exit code 1." */
+function firstFailure(notes) {
+  const failures = notes.filter((a) => a.annotation_level === 'failure');
   const best = failures.find((a) => !GENERIC.test(String(a.message).trim())) ?? failures[0];
   if (!best) return undefined;
   const line = String(best.message).trim().split('\n')[0];
   return line.length > 240 ? `${line.slice(0, 239)}…` : line;
+}
+
+/** --annotations: every failure / notice annotation, whole, continuation lines indented under it. */
+function annotationLines(notes) {
+  return notes
+    .filter((a) => a.annotation_level === 'failure' || a.annotation_level === 'notice')
+    .map((a) => {
+      const title = a.title ? ` [${a.title}]` : '';
+      const text = String(a.message ?? '').trim().split('\n').join('\n              ');
+      return `      ${a.annotation_level.padEnd(7)}${title} ${text}`;
+    });
 }
 
 function snapshot() {
@@ -117,8 +144,10 @@ for (const j of jobs) {
     continue;
   }
   const tag = j.state === 'expected' ? ' (expected)' : '';
-  const why = j.state === 'green' ? undefined : firstFailure(j.id);
+  const notes = j.state === 'green' ? [] : annotations(j.id);
+  const why = firstFailure(notes);
   console.log(`  ${j.name}: ${j.conclusion}${tag}${why ? ` — ${why}` : ''}`);
+  if (showAll) for (const line of annotationLines(notes)) console.log(line);
 }
 
 const names = (state) => jobs.filter((j) => j.state === state).map((j) => j.name);
