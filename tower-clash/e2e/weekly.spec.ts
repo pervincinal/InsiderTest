@@ -174,7 +174,7 @@ test.describe('weekly challenge', () => {
     expect(result.coinsEarned).toBe(WEEKLY_REWARD.gold);
     expect(result.crystalsEarned).toBe(WEEKLY_REWARD.crystals);
     expect(result.achievements).toEqual([]);
-    expect(await page.evaluate(() => window.__towerclash.getToast())).toBe(await page.evaluate(() => window.__towerclash.getText('weekly.resultTarget').replace('{crystals}', '20')));
+    expect(await page.evaluate(() => window.__towerclash.getToast())).toBe(await page.evaluate(() => window.__towerclash.getText('weekly.resultTarget', { crystals: 20 })));
     const after = await save(page);
     expect(after.gold).toBe(100 + WEEKLY_REWARD.gold);
     expect(after.crystals).toBe(3 + WEEKLY_REWARD.crystals);

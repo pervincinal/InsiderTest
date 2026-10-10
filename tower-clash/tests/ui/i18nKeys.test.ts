@@ -83,3 +83,55 @@ describe('level text in every language (I18N-2)', () => {
     expect(missing).toEqual([]);
   });
 });
+
+/* ---------- Plural forms (L10N-2) ---------- */
+
+/** Placeholder names of a string: `{name}` and `{name|form|…}` alike (names only, not forms). */
+function placeholderNames(s: string): string[] {
+  return [...new Set([...s.matchAll(/\{(\w+)(?:\|[^{}]*)?\}/g)].map((m) => m[1]!))].sort();
+}
+
+/** Count-noun pairs that need forms: a bare `{n}` before (or a "noun: {n}" label) of these nouns. */
+const RU_BARE_COUNT: readonly RegExp[] = [
+  /\{\w+\}\s+(кристалл|достижени|бо[её]ц|бойц|уровен|уровн|поток|облик|зв[её]зд|дн[еяи]|день|недел)/i,
+  /(кристаллов|достижений|бойцов|уровней|потоков|обликов|звёзд|дней|недель):\s*\{\w+\}/i,
+];
+const EN_BARE_COUNT: readonly RegExp[] = [/\{\w+\}\s+(crystals?|achievements?|levels?|troops?|units?|streams?|skins?|stars?|coins?|days?|weeks?)\b/i];
+
+describe('plural forms in the dictionaries (L10N-2)', () => {
+  const ruWithForms = Object.keys(ru).filter((k) => /\{\w+\|/.test(ru[k as keyof typeof ru]));
+
+  it('RU uses forms (the scan is not silently empty)', () => {
+    expect(ruWithForms).toContain('achievements.many');
+    expect(ruWithForms.length).toBeGreaterThanOrEqual(15);
+  });
+
+  for (const [code, dict] of Object.entries(DICTS)) {
+    it(`${code}: a key with forms in RU has the same placeholder names`, () => {
+      const diff = ruWithForms.filter((k) => placeholderNames(dict[k]!).join() !== placeholderNames(ru[k as keyof typeof ru]).join());
+      expect(diff).toEqual([]);
+    });
+  }
+
+  it('every form choice is well formed: RU one|few|many, EN one|other, and the number is shown too', () => {
+    const FORMS: Record<string, number> = { ru: 3, en: 2 };
+    for (const [code, dict] of Object.entries(DICTS)) {
+      for (const [key, s] of Object.entries(dict)) {
+        for (const m of s.matchAll(/\{(\w+)\|([^{}]*)\}/g)) {
+          if (FORMS[code]) expect(m[2]!.split('|').length, `${code} ${key}: ${FORMS[code]} forms`).toBe(FORMS[code]);
+          expect(s.includes(`{${m[1]}}`), `${code} ${key}: {${m[1]}|…} without a plain {${m[1]}}`).toBe(true);
+        }
+      }
+    }
+  });
+
+  it('RU: no bare "{n} кристаллов"-style count next to a noun', () => {
+    const bad = Object.entries(ru).filter(([, s]) => RU_BARE_COUNT.some((re) => re.test(s)));
+    expect(bad).toEqual([]);
+  });
+
+  it('EN: no bare "{n} crystals"-style count next to a noun', () => {
+    const bad = Object.entries(en).filter(([, s]) => EN_BARE_COUNT.some((re) => re.test(s)));
+    expect(bad).toEqual([]);
+  });
+});

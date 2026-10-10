@@ -325,7 +325,7 @@ test.describe('Tower Clash smoke', () => {
     //      with the hint bubble and no second link.
     expect(await limitHint(page)).toBeNull();
     await tapAt(page, foe.x, foe.y);
-    await expect.poll(() => limitHint(page), { message: 'a second target at L1 should raise the link-limit hint' }).toBe(await text(page, 'hint.linkLimit').then((s) => s.replaceAll('{n}', '2')));
+    await expect.poll(() => limitHint(page), { message: 'a second target at L1 should raise the link-limit hint' }).toBe(await page.evaluate(() => window.__towerclash.getText('hint.linkLimit', { n: 2 })));
     expect(await playerLinks(page)).toEqual([{ owner: 'player', from: 'home', to: 'camp' }]);
     await expect.poll(() => limitHint(page), { message: 'the hint fades on its own' }).toBeNull();
 

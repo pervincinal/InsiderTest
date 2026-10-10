@@ -34,7 +34,7 @@ export function installDebug(app: TowerClashApp): TowerClashDebug {
     getTutorialHint: () => (app.current === app.play ? (app.play?.tutorialStep()?.text ?? null) : null),
     getLimitHint: () => (app.current === app.play && app.play?.gestures.limitHint ? app.play.gestures.limitHintText : null),
     getLanguage: () => currentLanguage(),
-    getText: (key) => t(key as TranslationKey),
+    getText: (key, params) => t(key as TranslationKey, params),
     getToast: () => app.current.toast?.opts(performance.now())?.text ?? null,
     get lastShare() {
       return lastShareRecord();

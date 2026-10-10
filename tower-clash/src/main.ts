@@ -75,7 +75,8 @@ export interface TowerClashDebug {
   getLimitHint(): string | null;
   /** Current UI language code and a translation lookup (I18N e2e). */
   getLanguage(): string;
-  getText(key: string): string;
+  /** `t(key, params)`: with params the string is formatted (plural forms included, L10N-2), without them the raw template. */
+  getText(key: string, params?: Record<string, string | number>): string;
   /** Text of the current screen's toast while it is on screen, or null. */
   getToast(): string | null;
   /**

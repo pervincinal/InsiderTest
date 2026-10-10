@@ -226,7 +226,7 @@ describe('locale', () => {
       expect(s).toContain('{crystals}');
     }
     expect(az['weekly.resultMilestone']).toBe('Həftə seriyası {n} · +{crystals} kristal');
-    expect(ru['weekly.resultMilestone']).toBe('Серия недель {n} · +{crystals} кристаллов');
+    expect(ru['weekly.resultMilestone']).toBe('Серия недель {n} · +{crystals} {crystals|кристалл|кристалла|кристаллов}'); // L10N-2 plural forms
     expect(tr['weekly.resultMilestone']).toBe('Hafta serisi {n} · +{crystals} kristal');
   });
 });

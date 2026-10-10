@@ -48,7 +48,7 @@ interface SaveShape {
 const screen = (page: Page) => page.evaluate(() => window.__towerclash.getScreen());
 const save = (page: Page) => page.evaluate(() => JSON.parse(JSON.stringify(window.__towerclash.economy.getSave())) as SaveShape);
 const toast = (page: Page) => page.evaluate(() => window.__towerclash.getToast());
-const text = (page: Page, key: string) => page.evaluate((k) => window.__towerclash.getText(k), key);
+const text = (page: Page, key: string, params?: Record<string, string | number>) => page.evaluate(([k, p]) => window.__towerclash.getText(k, p), [key, params] as const);
 const fill = (template: string, params: Record<string, string | number>) => template.replace(/\{(\w+)\}/g, (m, k: string) => (k in params ? String(params[k]) : m));
 
 async function tapRect(page: Page, r: R): Promise<void> {
@@ -227,7 +227,7 @@ test.describe('weekly week-streak milestones (QA-15, GDD §8.1)', () => {
     const milestonePrefix = milestoneTemplate.slice(0, milestoneTemplate.indexOf('{'));
     expect(milestonePrefix).toBe('Week streak ');
     // the 3★ target toast when the bot hit it, else no toast at all — never a week-streak line
-    expect(w.toast).toBe(w.target ? fill(await text(page, 'weekly.resultTarget'), { crystals: WEEKLY_REWARD.crystals }) : null);
+    expect(w.toast).toBe(w.target ? await text(page, 'weekly.resultTarget', { crystals: WEEKLY_REWARD.crystals }) : null);
     expect(w.drawn.filter((s) => s.startsWith(milestonePrefix))).toEqual([]);
     expect(w.drawn).toContain(fill(await text(page, 'weekly.resultWon'), { gold: WEEKLY_REWARD.gold, streak: 5 }));
     expect(errors).toEqual([]);

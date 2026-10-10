@@ -94,20 +94,81 @@ export function onLanguageChange(fn: (code: Language) => void): () => void {
 
 export type Params = Readonly<Record<string, string | number>>;
 
-/** Replace `{name}` placeholders; unknown placeholders are left as they are. */
-export function interpolate(template: string, params?: Params): string {
-  if (!params) return template;
-  return template.replace(/\{(\w+)\}/g, (m, name: string) => {
+/* ---------- Plural forms (L10N-2) ---------- */
+
+/**
+ * Plural rule of each language: the count → the index of the form to use in `{n|form0|form1|…}`.
+ * EN one / other; RU one / few / many (fractions take the "few" form — CLDR "other", the genitive
+ * singular: "1,5 кристалла"); AZ and TR do not inflect a noun after a numeral, so every count takes
+ * the first form. Negative counts follow their absolute value.
+ */
+export const PLURAL_RULES: Readonly<Record<Language, (n: number) => number>> = {
+  en: (n) => (n === 1 ? 0 : 1),
+  ru: (n) => {
+    if (!Number.isInteger(n)) return 1;
+    const d = n % 10;
+    const dd = n % 100;
+    if (d === 1 && dd !== 11) return 0;
+    if (d >= 2 && d <= 4 && (dd < 12 || dd > 14)) return 1;
+    return 2;
+  },
+  az: () => 0,
+  tr: () => 0,
+};
+
+/** Form names in index order, per language (docs and tests; the dictionaries list forms in this order). */
+export const PLURAL_FORMS: Readonly<Record<Language, readonly string[]>> = {
+  en: ['one', 'other'],
+  ru: ['one', 'few', 'many'],
+  az: ['other'],
+  tr: ['other'],
+};
+
+/** A numeric parameter as a count: numbers as they are, strings stripped of separators ("1 000"). */
+function countOf(v: string | number): number {
+  return Math.abs(typeof v === 'number' ? v : Number(v.replace(/[^\d.-]/g, '')));
+}
+
+/** Pick `forms[rule(n)]` for `lang`; a missing form (or a non-numeric `n`) falls back to the last one. */
+export function pluralForm(lang: Language, n: string | number, forms: readonly string[]): string {
+  const last = forms[forms.length - 1] ?? '';
+  const c = countOf(n);
+  if (!Number.isFinite(c)) return last;
+  return forms[(PLURAL_RULES[lang] ?? PLURAL_RULES.en)(c)] ?? last;
+}
+
+const PLACEHOLDER = /\{(\w+)\}/g;
+const PLACEHOLDER_OR_FORMS = /\{(\w+)((?:\|[^{}|]*)+)?\}/g;
+
+/**
+ * Replace `{name}` placeholders and plural choices `{name|one|few|many}` (RU) / `{name|one|other}`
+ * (EN): the forms are picked by `lang`'s plural rule from the number in `params[name]` (write
+ * `'{n} {n|достижение|достижения|достижений}'` to show the number too). Unknown placeholders are
+ * left as they are. Strings without `|` take the plain single-pass path.
+ */
+export function interpolate(template: string, params?: Params, lang: Language = current): string {
+  if (!params || template.indexOf('{') === -1) return template;
+  if (template.indexOf('|') === -1) {
+    return template.replace(PLACEHOLDER, (m, name: string) => {
+      const v = params[name];
+      return v === undefined ? m : String(v);
+    });
+  }
+  return template.replace(PLACEHOLDER_OR_FORMS, (m, name: string, forms: string | undefined) => {
     const v = params[name];
-    return v === undefined ? m : String(v);
+    if (v === undefined) return m;
+    return forms === undefined ? String(v) : pluralForm(lang, v, forms.slice(1).split('|'));
   });
 }
 
-/** Translate `key` in the current language (English fallback, then the key itself). */
+/**
+ * Translate `key` in the current language (English fallback, then the key itself). Plural forms
+ * follow the language the string came from, so an English fallback keeps English forms.
+ */
 export function t(key: TranslationKey, params?: Params): string {
-  const dict = loaded[current];
-  const s = dict?.[key] ?? en[key] ?? key;
-  return interpolate(s, params);
+  const own = loaded[current]?.[key];
+  if (own !== undefined) return interpolate(own, params, current);
+  return interpolate(en[key] ?? key, params, 'en');
 }
 
 /**
