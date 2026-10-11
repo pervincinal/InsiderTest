@@ -20,8 +20,8 @@
 #              6.9" set (apple-6.7/en, 1290x2796) is the only one App Store Connect requires
 #   note       free text for the log, at most 200 characters
 #   requested  UTC time of the request, e.g. 2026-10-09T15:30:00Z — change it every time
-action=metadata
-build=
+action=submit
+build=8
 iphone65=no
-note=first metadata upload: variant-B texts, 6.7in screenshots (PUB-20), age rating, Free + AZE/TUR/KAZ/GEO; no submission
-requested=2026-10-10T19:14:00Z
+note=submit 1.0.0 (8) for App Review: privacy page live (BUG-26 fixed), contact filled; release stays manual
+requested=2026-10-11T17:30:00Z
