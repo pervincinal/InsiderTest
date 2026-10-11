@@ -8,7 +8,7 @@ import { isLevelUnlocked } from './ui/save';
 import { ResultScreen, lastShareRecord } from './ui/screens';
 import { lastReviewResult } from './native/review';
 import type { TranslationKey } from './ui/i18n';
-import { currentLanguage, t } from './ui/i18n';
+import { currentLanguage, hasEnglish, loadEnglishMenus, t } from './ui/i18n';
 import { configureFakeStore } from './economy/providers/fakeStore';
 import { getStore } from './economy/store';
 import { grantProduct } from './economy/wallet';
@@ -34,7 +34,11 @@ export function installDebug(app: TowerClashApp): TowerClashDebug {
     getTutorialHint: () => (app.current === app.play ? (app.play?.tutorialStep()?.text ?? null) : null),
     getLimitHint: () => (app.current === app.play && app.play?.gestures.limitHint ? app.play.gestures.limitHintText : null),
     getLanguage: () => currentLanguage(),
-    getText: (key, params) => t(key as TranslationKey, params),
+    // English menu strings are a lazy chunk (PERF-8): fetch them first when the key is not in yet
+    getText: async (key, params) => {
+      if (!hasEnglish(key)) await loadEnglishMenus().catch(() => undefined);
+      return t(key as TranslationKey, params);
+    },
     getToast: () => app.current.toast?.opts(performance.now())?.text ?? null,
     get lastShare() {
       return lastShareRecord();
@@ -76,7 +80,11 @@ export function installDebug(app: TowerClashApp): TowerClashDebug {
         const yesterday = yesterdayOffered(app.save, dayKey) ? challengeFor(previousDayKey(dayKey)) : null;
         return { challenge, unlocked: challengeUnlocked(app.save), done: challengeDone(app.save, dayKey), streak: shownStreak(app.save, dayKey), lastWinDay: c.lastWinDay, best: c.best[dayKey] ?? null, yesterday };
       },
-      start: (dayKey) => app.startChallenge(dayKey),
+      // the picker lives here, not in main.ts: the level map (lazy) and this surface are its only users (PERF-8)
+      start: (dayKey = app.dayKey()) => {
+        const challenge = challengeFor(dayKey);
+        return app.startLevel(challenge.levelId, challenge.seed, { challenge });
+      },
       startYesterday: (dayKey = app.dayKey()) => {
         const y = challengeFor(previousDayKey(dayKey));
         return app.startLevel(y.levelId, y.seed, { challenge: y, practice: true });
@@ -91,7 +99,10 @@ export function installDebug(app: TowerClashApp): TowerClashDebug {
         const w = app.save.weekly;
         return { challenge, unlocked: weeklyUnlocked(app.save), done: weeklyDone(app.save, weekKey), target: weeklyTargetDone(app.save, weekKey), streak: shownWeekStreak(app.save, weekKey), lastWinWeek: w.lastWinWeek, best: w.best[weekKey] ?? null };
       },
-      start: (weekKey) => app.startWeekly(weekKey),
+      start: (weekKey = app.weekKey()) => {
+        const weekly = weeklyFor(weekKey);
+        return app.startLevel(weekly.levelId, weekly.seed, { weekly });
+      },
       tab: () => {
         const L = app.lazy;
         return L && app.current instanceof L.LevelSelectScreen ? app.current.getCardTab() : null;

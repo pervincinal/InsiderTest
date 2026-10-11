@@ -1,14 +1,14 @@
 /**
  * Commander upgrades (ECONOMY.md §3.2): 5 gold-priced tracks × 5 tiers stored as `save.upgrades`,
  * turned into the sim's `PlayerModifiers` at level start. The booster-discount track is not a sim
- * modifier — `entitlements.boosterPrice` applies it to the gold price.
+ * modifier — `entitlements.boosterPrice` applies it to the gold price. The level map's one-line
+ * summary (`commanderSummary`) is ./upgradesSummary.ts, a lazy module (PERF-8).
  */
 import type { PlayerModifiers } from '../sim/types';
 import { DEFAULT_MODIFIERS } from '../sim/types';
 import type { CommanderUpgradeDef } from '../economy/catalog';
 import { COMMANDER_UPGRADES } from '../economy/catalog';
 import type { SaveData } from './save';
-import { t } from './i18n';
 
 export const UPGRADE_DEFS: readonly CommanderUpgradeDef[] = COMMANDER_UPGRADES;
 
@@ -26,31 +26,6 @@ export function upgradeTier(save: SaveData, id: string): number {
 /** 0.08 → "8 %" (card and level-map effect labels). */
 export function pct(n: number): string {
   return `${Math.round(n * 100)} %`;
-}
-
-/** Short per-track label for the level-map summary ("+8 % prod"). */
-function shortEffect(def: CommanderUpgradeDef, tier: number): string {
-  const v = def.effect.perTier * tier;
-  switch (def.effect.kind) {
-    case 'productionMul':
-      return t('upgrade.short.production', { v: pct(v) });
-    case 'capacityMul':
-      return t('upgrade.short.capacity', { v: pct(v) });
-    case 'startingGarrison':
-      return t('upgrade.short.garrison', { v });
-    case 'boosterDiscount':
-      return t('upgrade.short.discount', { v: pct(v) });
-    case 'marchSpeedMul':
-      return t('upgrade.short.speed', { v: pct(v) });
-  }
-}
-
-/** One-line Commander summary for the level map, or null when nothing is bought. */
-export function commanderSummary(save: SaveData): string | null {
-  const parts = UPGRADE_DEFS.map((d) => [d, upgradeTier(save, d.id)] as const)
-    .filter(([, t]) => t > 0)
-    .map(([d, t]) => shortEffect(d, t));
-  return parts.length ? parts.join(' · ') : null;
 }
 
 /** Total tiers bought across all tracks (0..17). */

@@ -17,11 +17,12 @@ import {
   setLanguage,
   t,
 } from '../../src/ui/i18n';
-import { achievementName, skinName, skinShortName, upgradeName } from '../../src/ui/catalogText';
+import { achievementName } from '../../src/ui/catalogText';
+import { skinName, skinShortName, upgradeName } from '../../src/ui/catalogTextShop';
 import { achievementToastText } from '../../src/ui/screens';
 import { defaultSave, normalizeSave } from '../../src/ui/save';
 import { tutorialFor } from '../../src/ui/tutorial';
-import { commanderSummary } from '../../src/ui/upgrades';
+import { commanderSummary } from '../../src/ui/upgradesSummary';
 import { ACHIEVEMENTS, COMMANDER_UPGRADES, SKINS } from '../../src/economy/catalog';
 
 const DICTS = { en, az, ru, tr } as const;

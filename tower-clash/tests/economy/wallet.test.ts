@@ -20,7 +20,8 @@ import {
 } from '../../src/economy/wallet';
 import { boosterDiscount, boosterPrice, equippedSkin, highestClearedLevel, interstitialsDisabled, ownsProduct, shopSkins, skinFamily, spriteSkinId, visibleProducts } from '../../src/economy/entitlements';
 import { HELMET_SKINS, ROOF_SKINS, THEME_IDS } from '../../src/render/sprites';
-import { commanderSummary, modifiersFromSave, upgradeTier } from '../../src/ui/upgrades';
+import { modifiersFromSave, upgradeTier } from '../../src/ui/upgrades';
+import { commanderSummary } from '../../src/ui/upgradesSummary';
 import { buyUpgrade, upgradeCost } from '../../src/ui/shopUpgrades';
 import { CONVERSION, CRYSTAL_SERVICES, EARN_RULES, IAP_PRODUCTS, SKINS } from '../../src/economy/catalog';
 import type { StoreProvider } from '../../src/economy/store';

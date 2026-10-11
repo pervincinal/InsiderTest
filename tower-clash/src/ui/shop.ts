@@ -29,7 +29,7 @@ import type { App, Screen } from './screens';
 import { Toast } from './screens';
 import { playSfx } from '../audio/index';
 import { t } from './i18n';
-import { skinName, skinShortName, upgradeName } from './catalogText';
+import { skinName, skinShortName, upgradeName } from './catalogTextShop';
 
 interface Hit {
   rect: Rect;

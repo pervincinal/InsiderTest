@@ -15,12 +15,12 @@ import { attachPointer } from './input/pointer';
 import type { PointerPoint } from './input/pointer';
 import type { SaveData } from './ui/save';
 import { currentLevelIndex, loadSave, writeSave } from './ui/save';
-import type { App, NativeInfoOverride, Screen, StartOptions } from './ui/screens';
-import { ResultScreen, TitleScreen, beginMapFrame, endMapFrame } from './ui/screens';
+import type { App, NativeInfoOverride, QueuedToast, Screen, StartOptions } from './ui/screens';
+import { ResultScreen, TitleScreen, beginMapFrame, endMapFrame, handOverToasts } from './ui/screens';
 import { PlayScreen } from './ui/play';
 import { applyMotionPref } from './ui/motion';
 import type { Language } from './ui/i18n';
-import { browserLanguages, detectLanguage, onLanguageChange, setLanguage, t } from './ui/i18n';
+import { ENGLISH_MENUS_CHUNK, browserLanguages, detectLanguage, loadEnglishMenus, onLanguageChange, setLanguage, t } from './ui/i18n';
 import { drawSpinner } from './render/economyWidgets';
 import { initAudio, setAudioBackground, toggleMuted, unlockAudio } from './audio/index';
 import { initNative } from './native/index';
@@ -32,7 +32,7 @@ import { getAds } from './economy/ads';
 import type { FakeStoreOptions } from './economy/providers/fakeStore';
 import type { GrantResult } from './economy/wallet';
 import type { DailyChallenge, WeeklyChallenge } from './daily/challenge';
-import { challengeFor, dayKeyOf, weekKeyOf, weeklyFor } from './daily/challenge';
+import { dayKeyOf, weekKeyOf } from './daily/challenge';
 
 /**
  * The level map, shop, achievements and settings screens (and the menu drawing they need) are a
@@ -75,8 +75,11 @@ export interface TowerClashDebug {
   getLimitHint(): string | null;
   /** Current UI language code and a translation lookup (I18N e2e). */
   getLanguage(): string;
-  /** `t(key, params)`: with params the string is formatted (plural forms included, L10N-2), without them the raw template. */
-  getText(key: string, params?: Record<string, string | number>): string;
+  /**
+   * `t(key, params)`: with params the string is formatted (plural forms included, L10N-2), without them the raw template.
+   * Async since PERF-8: an English menu string may first have to arrive with its lazy chunk (`page.evaluate` awaits it).
+   */
+  getText(key: string, params?: Record<string, string | number>): Promise<string>;
   /** Text of the current screen's toast while it is on screen, or null. */
   getToast(): string | null;
   /**
@@ -236,6 +239,8 @@ export class TowerClashApp implements App {
   dayKeyOverride: string | null = null;
   /** Debug override of the Weekly Challenge week (a Monday key). */
   weekKeyOverride: string | null = null;
+  /** Queued toasts of a screen the player left before they showed, waiting for the next menu screen (FE-9). */
+  private carriedToasts: QueuedToast[] = [];
 
   constructor(canvas: HTMLCanvasElement, save: SaveData) {
     this.view = createView(canvas);
@@ -305,9 +310,19 @@ export class TowerClashApp implements App {
   }
 
   go(screen: Screen): void {
+    const queued = this.current.toast?.takeQueued() ?? [];
     this.current.exit?.();
     this.current = screen;
     screen.enter?.();
+    this.handOverToasts(queued);
+  }
+
+  /**
+   * FE-9: toasts still queued on a screen the player leaves (the achievement toast behind a daily
+   * reward) follow them to the next menu screen instead of being lost (rules: `handOverToasts`).
+   */
+  private handOverToasts(queued: readonly QueuedToast[]): void {
+    this.carriedToasts = handOverToasts([...this.carriedToasts, ...queued], this.current);
   }
 
   goTitle(): void {
@@ -320,8 +335,9 @@ export class TowerClashApp implements App {
   /** The lazy chunk, fetched once; a failed fetch is retried on the next call (src/lazyChunk.ts). */
   private loadLazy(): Promise<LazyScreens> {
     if (!this.lazyPromise) {
-      this.lazyPromise = loadChunk(LAZY_SCREENS_KEY, () => import('./ui/lazyScreens'))
-        .then((m) => {
+      // the screens' English strings are a chunk of their own (PERF-8): the screens count as in once both are
+      this.lazyPromise = Promise.all([loadChunk(LAZY_SCREENS_KEY, () => import('./ui/lazyScreens')), loadEnglishMenus()])
+        .then(([m]) => {
           this.lazy = m;
           return m;
         })
@@ -353,7 +369,8 @@ export class TowerClashApp implements App {
       () => {
         if (this.current !== loading) return;
         this.current = from; // no enter(): the screen never left
-        this.chunkFailed(LAZY_SCREENS_KEY, from);
+        this.chunkFailed(chunkFailures(ENGLISH_MENUS_CHUNK) > 0 ? ENGLISH_MENUS_CHUNK : LAZY_SCREENS_KEY, from);
+        this.handOverToasts([]);
       },
     );
   }
@@ -467,21 +484,9 @@ export class TowerClashApp implements App {
     return this.dayKeyOverride ?? dayKeyOf(new Date());
   }
 
-  /** Start the Daily Challenge of `dayKey` (default: today) with its fixed seed and twist. */
-  startChallenge(dayKey = this.dayKey()): Promise<boolean> {
-    const challenge = challengeFor(dayKey);
-    return this.startLevel(challenge.levelId, challenge.seed, { challenge });
-  }
-
   /** This week's Monday UTC key (the UI's only clock read for the weekly), or the debug override. */
   weekKey(): string {
     return this.weekKeyOverride ?? weekKeyOf(new Date());
-  }
-
-  /** Start the Weekly Challenge of `weekKey` (default: this week) with its fixed seed and twist. */
-  startWeekly(weekKey = this.weekKey()): Promise<boolean> {
-    const weekly = weeklyFor(weekKey);
-    return this.startLevel(weekly.levelId, weekly.seed, { weekly });
   }
 
   /**
@@ -510,6 +515,7 @@ export class TowerClashApp implements App {
         if (seq !== this.startSeq || this.current !== loading) return null; // superseded
         if (!level) {
           this.current = from; // no enter(): the screen never left
+          this.handOverToasts([]);
           return null;
         }
         return this.enterLevel(level, seed, opts);
@@ -518,6 +524,7 @@ export class TowerClashApp implements App {
         if (seq === this.startSeq && this.current === loading) {
           this.current = from;
           this.chunkFailed(levelChunkKey(levelId), from);
+          this.handOverToasts([]);
         }
         return null;
       },

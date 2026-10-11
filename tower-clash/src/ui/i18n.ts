@@ -2,13 +2,16 @@
  * UI strings (I18N). `t(key, params)` reads the current language's dictionary and falls back to
  * English for any key the dictionary lacks or while its chunk is still loading. English is bundled
  * eagerly (it is the fallback); az / ru / tr are dynamic imports so the eager bundle carries one
- * dictionary only. The chosen language persists in `save.settings.language` (src/ui/save.ts); the
+ * dictionary only — and of English only the part eager code draws (./locales/enCore.ts, PERF-8):
+ * the menu strings (./locales/enMenus.ts) arrive with the lazy chunks that draw them
+ * (`registerEnglish`). The chosen language persists in `save.settings.language` (src/ui/save.ts); the
  * app detects it from `navigator.language` on the first run (`detectLanguage`).
  *
  * No DOM access except the optional `<html lang>` update, so the sim and tests stay clean.
  */
 import type { Dictionary, TranslationKey } from './locales/en';
-import { en } from './locales/en';
+import { enCore } from './locales/enCore';
+import { loadChunk } from '../lazyChunk';
 
 export type { Dictionary, TranslationKey } from './locales/en';
 
@@ -29,14 +32,17 @@ export function isLanguage(v: unknown): v is Language {
   return typeof v === 'string' && (LANGUAGE_CODES as readonly string[]).includes(v);
 }
 
-const loaders: Record<Language, () => Promise<Dictionary>> = {
+/** English known so far: the eager part, plus ./locales/enMenus.ts once a lazy chunk registered it. */
+const en: Partial<Record<TranslationKey, string>> = { ...enCore };
+
+const loaders: Record<Language, () => Promise<Partial<Dictionary>>> = {
   en: () => Promise.resolve(en),
   az: () => import('./locales/az').then((m) => m.az),
   ru: () => import('./locales/ru').then((m) => m.ru),
   tr: () => import('./locales/tr').then((m) => m.tr),
 };
 
-const loaded: Partial<Record<Language, Dictionary>> = { en };
+const loaded: Partial<Record<Language, Partial<Dictionary>>> = { en };
 const pending: Partial<Record<Language, Promise<void>>> = {};
 let current: Language = DEFAULT_LANGUAGE;
 const listeners = new Set<(code: Language) => void>();
@@ -52,7 +58,45 @@ export function isLanguageLoaded(code: Language): boolean {
 
 /** Tests / preloading: put a dictionary in memory without a dynamic import. */
 export function registerDictionary(code: Language, dict: Dictionary): void {
-  loaded[code] = dict;
+  if (code === 'en') Object.assign(en, dict);
+  else loaded[code] = dict;
+}
+
+/** Add English texts to the fallback table (`loadEnglishMenus`; tests register ./locales/enMenus.ts directly). */
+export function registerEnglish(texts: Readonly<Partial<Record<TranslationKey, string>>>): void {
+  Object.assign(en, texts);
+}
+
+/** `loadChunk` key of the English menu strings (./locales/enMenus.ts). */
+export const ENGLISH_MENUS_CHUNK = 'enMenus';
+let menusIn = false;
+let menusPromise: Promise<void> | null = null;
+
+/**
+ * Fetch the English strings only the lazy screens and cards draw (./locales/enMenus.ts, PERF-8) into
+ * the fallback table. Every lazy chunk that draws them is loaded together with this (src/main.ts lazy
+ * screens, src/render/hud.ts pause / result card, src/ui/screens.ts share) and counts as loaded only
+ * when both are in. Idempotent; a failed download is forgotten so the next call retries — under a
+ * fresh URL when the browser named it (src/lazyChunk.ts). Not a static import of those chunks on
+ * purpose: a failed static dependency would stay pinned in the module map.
+ */
+export function loadEnglishMenus(): Promise<void> {
+  if (menusIn) return Promise.resolve();
+  menusPromise ??= loadChunk(ENGLISH_MENUS_CHUNK, () => import('./locales/enMenus'))
+    .then((m) => {
+      registerEnglish(m.enMenus);
+      menusIn = true;
+    })
+    .catch((err: unknown) => {
+      menusPromise = null;
+      throw err;
+    });
+  return menusPromise;
+}
+
+/** True when English (as loaded so far) has `key` — catalog labels fall back to the catalog's own text otherwise. */
+export function hasEnglish(key: string): key is TranslationKey {
+  return key in en;
 }
 
 /** Fetch a dictionary (no-op when present). Never rejects: a failed chunk leaves English in place. */

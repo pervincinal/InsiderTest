@@ -16,7 +16,7 @@ import type { PointerPoint } from '../input/pointer';
 import { currentLevelIndex, isLevelUnlocked } from './save';
 import type { App, Screen } from './screens';
 import { Toast } from './screens';
-import { commanderSummary } from './upgrades';
+import { commanderSummary } from './upgradesSummary';
 import type { DailyChallenge, WeeklyChallenge } from '../daily/challenge';
 import { REWARD, STREAK_MILESTONES, UNLOCK_AFTER_LEVEL, WEEKLY_REWARD, WEEKLY_UNLOCK_AFTER_LEVEL, challengeFor, goldReward, weeklyFor } from '../daily/challenge';
 import { challengeDone, challengeUnlocked, msToUtcMidnight, previousDayKey, shownStreak, yesterdayOffered } from './daily';

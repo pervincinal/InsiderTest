@@ -26,7 +26,7 @@ import type { AchievementGrant } from '../economy/achievements';
 import { evaluateAchievements } from '../economy/achievements';
 import { equippedSkin } from '../economy/entitlements';
 import type { Language } from './i18n';
-import { currentLanguage, levelLesson, nextLanguage, t } from './i18n';
+import { currentLanguage, levelLesson, loadEnglishMenus, nextLanguage, t } from './i18n';
 import { achievementName } from './catalogText';
 import type { DailyChallenge, WeeklyChallenge } from '../daily/challenge';
 import type { DailyOutcome } from './daily';
@@ -129,12 +129,30 @@ export function achievementToastText(grant: AchievementGrant): string | null {
   return t('achievements.unlocked', { names, crystals: grant.crystals });
 }
 
-/** Transient status pill shared by the screens (purchase results, rewards, errors). */
+/** How long an achievement toast stays up (result screen, title claim follow-up). */
+export const ACHIEVEMENT_TOAST_MS = 3500;
+
+/** A toast waiting for its turn (`Toast.enqueue`). */
+export interface QueuedToast {
+  readonly text: string;
+  readonly kind: ToastOpts['kind'];
+  readonly durationMs: number;
+}
+
+/**
+ * Transient status pill shared by the screens (purchase results, rewards, errors). `show` replaces
+ * the pill on screen; `enqueue` lines a toast up behind it (FE-9: a daily reward and the
+ * achievements it unlocked are two toasts one after the other, not one four-line pill). A queued
+ * toast starts on the first `opts` call after the one before it ended, so its full time is seen.
+ * When the player leaves the screen first, the app shell hands the queue to the next menu screen
+ * (`takeQueued` / `adopt`, src/main.ts `go`).
+ */
 export class Toast {
   private text = '';
   private kind: ToastOpts['kind'] = 'ok';
   private bornMs = 0;
   private durationMs = 0;
+  private queue: QueuedToast[] = [];
 
   show(text: string, kind: ToastOpts['kind'] = 'ok', nowMs = performance.now(), durationMs = 2400): void {
     this.text = text;
@@ -143,12 +161,57 @@ export class Toast {
     this.durationMs = durationMs;
   }
 
+  /** Show `text` after the toasts on screen and in the queue; at once when there are none. */
+  enqueue(text: string, kind: ToastOpts['kind'] = 'ok', nowMs = performance.now(), durationMs = 2400): void {
+    if (this.queue.length === 0 && !this.showing(nowMs)) this.show(text, kind, nowMs, durationMs);
+    else this.queue.push({ text, kind, durationMs });
+  }
+
+  /** Toasts still waiting (oldest first). */
+  queued(): readonly QueuedToast[] {
+    return this.queue;
+  }
+
+  /** Remove and return the waiting toasts (the screen is being left; the one on screen stays). */
+  takeQueued(): QueuedToast[] {
+    const out = this.queue;
+    this.queue = [];
+    return out;
+  }
+
+  /** Line up toasts handed over from another screen, in order, behind whatever this one shows. */
+  adopt(items: readonly QueuedToast[], nowMs = performance.now()): void {
+    for (const q of items) this.enqueue(q.text, q.kind, nowMs, q.durationMs);
+  }
+
+  /** The current toast has been shown and has not ended yet at `nowMs` (or has not started). */
+  private showing(nowMs: number): boolean {
+    return this.durationMs > 0 && nowMs - this.bornMs < this.durationMs;
+  }
+
   opts(nowMs: number): ToastOpts | null {
+    if (this.queue.length > 0 && !this.showing(nowMs)) {
+      const next = this.queue.shift()!;
+      this.show(next.text, next.kind, nowMs, next.durationMs);
+    }
     if (!this.durationMs) return null;
     const t = (nowMs - this.bornMs) / this.durationMs;
     if (t < 0 || t >= 1) return null;
     return { text: this.text, kind: this.kind, t };
   }
+}
+
+/**
+ * FE-9 hand-over: toasts queued on a screen the player left (`carried`) go to `to` when it is a
+ * menu screen with a toast — behind that screen's own toast — and the result is empty. The spinner
+ * screen keeps them waiting (returned as they are); a match start drops them (no status pills over
+ * the first seconds of play — what they named is paid and listed on its own screen either way).
+ */
+export function handOverToasts(carried: readonly QueuedToast[], to: Pick<Screen, 'name' | 'toast'>, nowMs = performance.now()): QueuedToast[] {
+  if (carried.length === 0) return [];
+  if (to.name === 'loading') return [...carried];
+  if (to.name !== 'play') to.toast?.adopt(carried, nowMs);
+  return [];
 }
 
 /** Fill the letterbox and the map background, and leave the context in logical units + clipped. */
@@ -251,10 +314,15 @@ export class TitleScreen implements Screen {
     }
   }
 
-  /** Achievements are re-evaluated on every claim (ECON-4); the toast names what unlocked. */
-  private withAchievements(text: string): string {
+  /**
+   * Toast a claimed reward. Achievements are re-evaluated on every claim (ECON-4); what unlocked is
+   * its own toast right after the reward's (FE-9 — one combined toast filled all four lines in
+   * Russian). Leaving the title before it shows hands it to the next menu screen (src/main.ts `go`).
+   */
+  private toastClaim(text: string): void {
+    this.toast.show(text, 'ok', this.nowMs);
     const extra = achievementToastText(evaluateAchievements(this.app.save));
-    return extra ? `${text} · ${extra}` : text;
+    if (extra) this.toast.enqueue(extra, 'ok', this.nowMs, ACHIEVEMENT_TOAST_MS);
   }
 
   /** Streak reward first; once claimed, the rewarded crystal chest (when a video is available). */
@@ -264,7 +332,7 @@ export class TitleScreen implements Screen {
     if (claimed) {
       playSfx('upgrade');
       const parts = [claimed.gold > 0 ? t('amount.gold', { n: claimed.gold }) : '', claimed.crystals > 0 ? t('amount.crystals', { n: claimed.crystals }) : ''].filter(Boolean);
-      this.toast.show(this.withAchievements(t('title.dailyReward', { day: claimed.day, parts: parts.join(' · ') })), 'ok', this.nowMs);
+      this.toastClaim(t('title.dailyReward', { day: claimed.day, parts: parts.join(' · ') }));
       return;
     }
     if (this.adChestOffered() && !this.pendingAd) {
@@ -275,7 +343,7 @@ export class TitleScreen implements Screen {
         const amount = DAILY_CHEST_PLACEMENT.reward.kind === 'crystals' ? DAILY_CHEST_PLACEMENT.reward.amount : 0;
         earnCrystals(save, amount);
         playSfx('upgrade');
-        this.toast.show(this.withAchievements(t('title.crystalChest', { n: amount })), 'ok', this.nowMs);
+        this.toastClaim(t('title.crystalChest', { n: amount }));
       });
       return;
     }
@@ -356,7 +424,8 @@ let lastShare: ShareRecord | null = null;
 
 /** Load the share chunk (idempotent; a failed download is forgotten so the next tap retries). */
 function loadShareChunk(): Promise<ShareChunk> {
-  shareChunk ??= loadChunk('share', () => import('./share')).catch((err: unknown) => {
+  // with the card's English strings (PERF-8, a chunk of their own)
+  shareChunk ??= Promise.all([loadChunk('share', () => import('./share')), loadEnglishMenus()]).then(([m]) => m).catch((err: unknown) => {
     shareChunk = null;
     throw err;
   });
@@ -411,7 +480,7 @@ export class ResultScreen implements Screen {
           : w?.targetHit
             ? t('weekly.resultTarget', { crystals: w.crystals - w.milestone })
             : null);
-    if (text) this.toast.show(text, 'ok', performance.now(), 3500);
+    if (text) this.toast.show(text, 'ok', performance.now(), ACHIEVEMENT_TOAST_MS);
     if (this.shareOffered()) void loadShareChunk().catch(() => undefined); // warm: the tap's activation must not wait on the network
     void maybeAskForReview(this.info, this.app.save); // MM-9 rating prompt: off by default, never rejects
   }

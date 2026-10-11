@@ -32,7 +32,7 @@ import { badgeY, drawVideoGlyph } from './sprites';
 import type { ToastOpts } from './economyWidgets';
 import { drawToast, drawWallet } from './economyWidgets';
 import type { HudOverlayDrawers } from './hudOverlays';
-import { currentLanguage, levelLesson, levelName, t } from '../ui/i18n';
+import { ENGLISH_MENUS_CHUNK, currentLanguage, levelLesson, levelName, loadEnglishMenus, t } from '../ui/i18n';
 
 /*
  * In-game HUD (ART_DIRECTION §4): glass paper bands top and bottom, level chip, timer pill, pause
@@ -517,8 +517,9 @@ let overlaysPromise: Promise<HudOverlayDrawers> | null = null;
 
 /** Load the pause / result card drawers (idempotent; a failed download is forgotten so the next call retries). */
 export function loadHudOverlays(): Promise<HudOverlayDrawers> {
-  overlaysPromise ??= loadChunk(OVERLAY_CHUNK, () => import('./hudOverlays'))
-    .then((m) => (overlays = m.HUD_OVERLAYS))
+  // with the card's English strings (PERF-8, a chunk of their own): the card is in once both are
+  overlaysPromise ??= Promise.all([loadChunk(OVERLAY_CHUNK, () => import('./hudOverlays')), loadEnglishMenus()])
+    .then(([m]) => (overlays = m.HUD_OVERLAYS))
     .catch((err: unknown) => {
       overlaysPromise = null;
       throw err;
@@ -533,7 +534,7 @@ export function hudOverlaysLoaded(): boolean {
 
 /** Start the overlay download unless one failed a moment ago (draw-time / event-time back-off). Never rejects. */
 export function warmHudOverlays(): void {
-  if (!overlays && !chunkBackoff(OVERLAY_CHUNK)) void loadHudOverlays().catch(() => undefined);
+  if (!overlays && !chunkBackoff(OVERLAY_CHUNK) && !chunkBackoff(ENGLISH_MENUS_CHUNK)) void loadHudOverlays().catch(() => undefined);
 }
 
 /** Plain pause card while the chunk is missing: title, subtitle and the same buttons at the same rects. */
