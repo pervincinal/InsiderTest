@@ -2,6 +2,7 @@ import { C } from '../sim/constants';
 import type { ButtonInk, Palette } from './palette';
 import { shade } from './palette';
 import type { View } from './view';
+import { bleedRect } from './view';
 import type { Rect } from './widgets';
 import {
   drawBoltGlyph,
@@ -28,7 +29,7 @@ import { drawSpinner, drawToast, drawWallet, formatAmount } from './economyWidge
 import { drawCrystal, drawGoldCoin, drawTreasureChest } from './sprites';
 import { drawUpgradeGlyph } from './spritesShop';
 import { drawCrownBadge, drawCrystalCluster, drawNoAdsBadge, drawSkinPreview } from './spritesShop';
-import { beginFrame, drawWater } from './menus';
+import { beginFrame, drawWater, headerBand } from './menus';
 import type { TranslationKey } from '../ui/i18n';
 import { t } from '../ui/i18n';
 
@@ -375,9 +376,9 @@ function drawConvertCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopCon
 }
 
 /** Modal over the crystals tab: "Convert 20 crystals into 100 gold?" with CONVERT / CANCEL. */
-function drawConvertConfirm(ctx: CanvasRenderingContext2D, pal: Palette, q: { crystals: number; gold: number }, o: ShopOpts): void {
+function drawConvertConfirm(ctx: CanvasRenderingContext2D, pal: Palette, q: { crystals: number; gold: number }, o: ShopOpts, dim: Rect): void {
   ctx.fillStyle = 'rgba(26, 58, 90, 0.5)';
-  ctx.fillRect(0, 0, C.MAP_W, C.MAP_H);
+  ctx.fillRect(dim.x, dim.y, dim.w, dim.h); // the whole screen (BUG-34)
   const c = SHOP.convertConfirm;
   drawCard(ctx, pal, c.card);
   ctx.textAlign = 'center';
@@ -509,14 +510,14 @@ export function drawShop(view: View, pal: Palette, o: ShopOpts): void {
   ctx.restore();
 
   // fixed chrome: header + tabs
-  drawGlassBand(ctx, { x: 0, y: 0, w: C.MAP_W, h: SHOP.tabs.y + SHOP.tabs.h + 12 });
+  drawGlassBand(ctx, headerBand(view, SHOP.tabs.y + SHOP.tabs.h + 12)); // up to the screen's top edge (BUG-34)
   drawButton(ctx, pal, o.backRect, t('common.back'), { fontPx: 24, pressed: o.pressed === o.backRect });
   const title = t('shop.title');
   drawExtrudedText(ctx, title, 280, 50, fitFontPx(ctx, title, 40, 220), { face: pal.paper, side: shade(pal.owners.player, -0.25), outline: pal.ink, depth: 4 });
   drawWallet(ctx, pal, o.walletRect, o.gold, o.crystals);
   const tabs = o.tabs ?? SHOP_TABS;
   drawSegmented(ctx, pal, o.tabsRect, tabs.map((tab) => ({ label: t(TAB_KEYS[tab]), value: tab })), tabs.indexOf(o.tab), 19);
-  if (o.confirmConvert) drawConvertConfirm(ctx, pal, o.confirmConvert, o);
+  if (o.confirmConvert) drawConvertConfirm(ctx, pal, o.confirmConvert, o, bleedRect(view));
   if (o.toast) drawToast(ctx, pal, { ...o.toast, y: o.toast.y ?? 1210 });
   ctx.restore();
 }

@@ -69,6 +69,12 @@ export interface TowerClashDebug {
   setSpeed(n: number): void;
   getSpeed(): number;
   toClient(x: number, y: number): { x: number; y: number };
+  /**
+   * Client px of a point on a play-HUD rect (layout.ts `HUD` / `BOOSTERS`, layout coordinates): the
+   * bands are anchored to the screen's safe-area edges (BUG-34), so on a screen taller than 9:16 they
+   * are not where `toClient` puts the layout rect. Identical to `toClient` off the bands.
+   */
+  hudToClient(x: number, y: number): { x: number; y: number };
   /** Text of the tutorial hint on screen, or null. */
   getTutorialHint(): string | null;
   /** Text of the link-limit refusal bubble while it is on screen (rules v2), or null. */
@@ -262,7 +268,7 @@ export class TowerClashApp implements App {
       down: forward('down'),
       move: forward('move'),
       up: forward('up'),
-      cancel: () => this.current.cancel?.(),
+      cancel: (p) => this.current.cancel?.(p),
     });
     // WebAudio may only start inside a user gesture (iOS/Android WebView): unlock on the first
     // pointer/key, and keep trying on later gestures in case the context was suspended again.

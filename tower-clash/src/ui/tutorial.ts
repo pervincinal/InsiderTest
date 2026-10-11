@@ -27,8 +27,19 @@ export interface TutorialStep {
   doneWhen?(state: GameState): boolean;
 }
 
+/**
+ * Longest a step stays on screen without being completed (BUG-33): after this much visible play
+ * time it gives way to the next step (or the tutorial ends), so a player who does not find the
+ * gesture is never stuck under the bubble. Counted only while the step is drawn (not paused / gated).
+ */
+export const TUTORIAL_STEP_TIMEOUT_MS = 20_000;
+/** Largest single frame counted toward the timeout (a stalled frame / background return is not "showing"). */
+const MAX_FRAME_MS = 250;
+
 export class Tutorial {
   private index = 0;
+  /** Visible time of the current step, ms. */
+  private shownMs = 0;
 
   constructor(readonly steps: readonly TutorialStep[]) {}
 
@@ -61,17 +72,31 @@ export class Tutorial {
     if (step?.onSelect?.(selectedTowerId, state)) this.advance();
   }
 
+  /** Real time passed with the game running: the current step times out after `TUTORIAL_STEP_TIMEOUT_MS` on screen. */
+  elapse(dtMs: number, state: GameState): void {
+    if (!this.current(state)) return;
+    this.shownMs += Math.max(0, Math.min(MAX_FRAME_MS, dtMs));
+    if (this.shownMs >= TUTORIAL_STEP_TIMEOUT_MS) this.advance();
+  }
+
   private advance(): void {
     this.index++;
+    this.shownMs = 0;
   }
 }
 
 const isLink = (cmd: Command, from: string, to: string): boolean =>
   cmd.type === 'link' && cmd.owner === 'player' && cmd.from === from && cmd.to === to;
-const isUnlink = (cmd: Command, from: string, to: string): boolean =>
-  cmd.type === 'unlink' && cmd.owner === 'player' && cmd.from === from && (cmd.to === undefined || cmd.to === to);
 const hasLink = (state: GameState, from: string, to: string): boolean =>
   state.links.some((l) => l.owner === 'player' && l.from === from && l.to === to);
+/** Some player stream runs into `to`. */
+const hasLinkInto = (state: GameState, to: string): boolean => state.links.some((l) => l.owner === 'player' && l.to === to);
+/**
+ * A player `unlink` that stops a stream into `to`: a named one (`to` given — a swipe cut or the second
+ * tap), or "all links of `from`" when one of them runs into `to`. Checked before the sim applies it.
+ */
+const stopsStreamInto = (cmd: Command, state: GameState, to: string): boolean =>
+  cmd.type === 'unlink' && cmd.owner === 'player' && (cmd.to === undefined ? hasLink(state, cmd.from, to) : cmd.to === to);
 
 /** A step whose `text` is translated on every read. */
 function step(key: TranslationKey, rest: Omit<TutorialStep, 'text'>, params?: Record<string, number>): TutorialStep {
@@ -85,8 +110,9 @@ function step(key: TranslationKey, rest: Omit<TutorialStep, 'text'>, params?: Re
 
 /*
  * Rules v2 (GDD §2.0): level 1 teaches the stream (tap your tower, then a target — it keeps
- * flowing), level 2 how to stop one (tap the target again), level 3 the auto-upgrade (a tower
- * that fills to its capacity gains a level; L2 can run two streams).
+ * flowing), level 2 how to stop one (swipe across it — BUG-33; the second tap on the target still
+ * works and counts), level 3 the auto-upgrade (a tower that fills to its capacity gains a level; L2
+ * can run two streams).
  */
 const STEPS_BY_LEVEL: Record<number, () => TutorialStep[]> = {
   1: () => [
@@ -97,10 +123,11 @@ const STEPS_BY_LEVEL: Record<number, () => TutorialStep[]> = {
     step('tutorial.tapThenGrey', { towerId: 'mid', onCommand: (cmd) => isLink(cmd, 'home', 'mid') }),
     step('tutorial.stopStream', {
       towerId: 'mid',
-      showWhen: (s) => hasLink(s, 'home', 'mid'),
-      onCommand: (cmd) => isUnlink(cmd, 'home', 'mid'),
+      showWhen: (s) => hasLinkInto(s, 'mid'),
+      // any player stream into mid counts (home→mid or side→mid), cut by a swipe or by a tap
+      onCommand: (cmd, s) => stopsStreamInto(cmd, s, 'mid'),
       // the stream may end on its own (target full): nothing left to teach then
-      doneWhen: (s) => s.towers['mid']?.owner === 'player' && !hasLink(s, 'home', 'mid'),
+      doneWhen: (s) => s.towers['mid']?.owner === 'player' && !hasLinkInto(s, 'mid'),
     }),
   ],
   3: () => [

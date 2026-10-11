@@ -48,6 +48,10 @@ const config: CapacitorConfig = {
   ios: {
     contentInset: 'never',
     backgroundColor: '#0f172a',
+    // BUG-33: the WKWebView's own UIScrollView must never claim a pan. With scrolling on, a finger
+    // drag on the canvas could be taken by the scroll view (rubber-band bounce), and WebKit then
+    // sends \`pointercancel\` mid-gesture — the drag-to-attack / swipe-to-cut never reaches \`pointerup\`.
+    scrollEnabled: false,
   },
   android: {
     allowMixedContent: false,

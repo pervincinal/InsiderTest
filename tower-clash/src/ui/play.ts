@@ -10,7 +10,7 @@ import { getOutcome } from '../sim/outcome';
 import { LEVEL_META, levelIndex } from '../levels/index';
 import { enemyCommands, isAiTick, rngsFor } from '../ai/index';
 import type { View } from '../render/view';
-import { applyTransform, clipToMap } from '../render/view';
+import { applyTransform, clipToMap, hudAnchors, toHudSpace } from '../render/view';
 import { drawGame } from '../render/draw';
 import { BOOSTERS, HUD, PAUSE } from '../render/layout';
 import { inRect } from '../render/widgets';
@@ -335,6 +335,8 @@ export class PlayScreen implements Screen {
     this.nowMs = nowMs;
     this.gestures.tick(nowMs);
     this.tutorial?.onSelect(this.gestures.selectedTowerId, this.state);
+    // a step on screen for TUTORIAL_STEP_TIMEOUT_MS without completion gives way (BUG-33: no overlay softlock)
+    if (!this.loop.paused && !this.loop.finished) this.tutorial?.elapse(dtMs, this.state);
     if (this.loop.advance(dtMs) > 0) {
       this.ring.record(this.snapshot()); // the ring clones at most once per interval
       if (this.stalemate.check(this.state)) {
@@ -388,6 +390,7 @@ export class PlayScreen implements Screen {
       alpha: this.loop.alpha,
       selectedTowerId: this.gestures.selectedTowerId,
       hoverTowerId: this.gestures.hoverTowerId,
+      swipeTrail: this.gestures.trail,
       paused: this.loop.paused,
       limitHint: this.gestures.limitHint ?? undefined,
       limitHintText: this.gestures.limitHintText || undefined,
@@ -482,8 +485,23 @@ export class PlayScreen implements Screen {
 
   /* ----- boosters (M3-1) ----- */
 
+  /**
+   * `p` in HUD layout coordinates (BUG-34): the bands are anchored to the screen's safe-area edges, so
+   * a tap on them is mapped back onto the layout.ts rects; a point on the world comes back unchanged.
+   */
+  private hudPoint(p: PointerPoint): { x: number; y: number } {
+    return toHudSpace(hudAnchors(this.app.view), p.x, p.y);
+  }
+
+  /** Between the two (anchored) HUD bands: where gestures act on the world. */
+  private inWorld(p: PointerPoint): boolean {
+    const a = hudAnchors(this.app.view);
+    return p.y >= HUD.mapTop + a.top && p.y <= HUD.mapBottom + a.bottom;
+  }
+
   private boosterAt(p: PointerPoint): BoosterKind | null {
-    for (const k of BOOSTER_KINDS) if (inRect(BOOSTERS[k], p.x, p.y)) return k;
+    const h = this.hudPoint(p);
+    for (const k of BOOSTER_KINDS) if (inRect(BOOSTERS[k], h.x, h.y)) return k;
     return null;
   }
 
@@ -565,11 +583,12 @@ export class PlayScreen implements Screen {
   /* ----- input ----- */
 
   private hudHit(p: PointerPoint): boolean {
-    if (inRect(HUD.pause, p.x, p.y)) {
+    const h = this.hudPoint(p);
+    if (inRect(HUD.pause, h.x, h.y)) {
       this.togglePause();
       return true;
     }
-    if (inRect(HUD.mute, p.x, p.y)) {
+    if (inRect(HUD.mute, h.x, h.y)) {
       toggleMuted();
       return true;
     }
@@ -578,8 +597,8 @@ export class PlayScreen implements Screen {
       this.useBooster(booster);
       return true;
     }
-    if (inRect(HUD.coins, p.x, p.y) || inRect(HUD.streams, p.x, p.y)) return true;
-    if (inRect(HUD.menu, p.x, p.y)) {
+    if (inRect(HUD.coins, h.x, h.y) || inRect(HUD.streams, h.x, h.y)) return true;
+    if (inRect(HUD.menu, h.x, h.y)) {
       this.app.goLevels();
       return true;
     }
@@ -608,14 +627,14 @@ export class PlayScreen implements Screen {
     if (this.loop.paused) return;
     this.pressedBooster = this.loop.finished ? null : this.boosterAt(p);
     if (this.pressedBooster) return;
-    if (p.y < HUD.mapTop || p.y > HUD.mapBottom) return;
+    if (!this.inWorld(p)) return;
     if (this.targeting) return; // the tap resolves on up: fire or cancel
     this.gestures.down(p);
   }
 
   move(p: PointerPoint): void {
     if (this.loop.paused) return;
-    if (this.pressedBooster && !inRect(BOOSTERS[this.pressedBooster], p.x, p.y)) this.pressedBooster = null;
+    if (this.pressedBooster && this.boosterAt(p) !== this.pressedBooster) this.pressedBooster = null;
     if (this.targeting) return;
     this.gestures.move(p);
   }
@@ -623,16 +642,17 @@ export class PlayScreen implements Screen {
   up(p: PointerPoint): void {
     this.pressedBooster = null;
     if (this.loop.paused) {
-      if (inRect(PAUSE.resume, p.x, p.y) || inRect(HUD.pause, p.x, p.y)) this.togglePause();
+      const h = this.hudPoint(p);
+      if (inRect(PAUSE.resume, p.x, p.y) || inRect(HUD.pause, h.x, h.y)) this.togglePause();
       else if (inRect(PAUSE.speed, p.x, p.y)) this.toggleSpeed();
-      else if (inRect(PAUSE.sound, p.x, p.y) || inRect(HUD.mute, p.x, p.y)) toggleMuted();
+      else if (inRect(PAUSE.sound, p.x, p.y) || inRect(HUD.mute, h.x, h.y)) toggleMuted();
       else if (inRect(PAUSE.settings, p.x, p.y)) this.app.openSettings(this);
       else if (inRect(PAUSE.howto, p.x, p.y)) this.app.openHowTo(this);
       else if (inRect(PAUSE.retry, p.x, p.y)) this.restart();
-      else if (inRect(PAUSE.menu, p.x, p.y) || inRect(HUD.menu, p.x, p.y)) this.app.goLevels();
+      else if (inRect(PAUSE.menu, p.x, p.y) || inRect(HUD.menu, h.x, h.y)) this.app.goLevels();
       return;
     }
-    if (this.targeting && p.y >= HUD.mapTop && p.y <= HUD.mapBottom) {
+    if (this.targeting && this.inWorld(p)) {
       const t = hitTower(this.state, p.x, p.y);
       if (!t || !this.airstrike(t.id)) this.targeting = false; // tap elsewhere (or a non-enemy tower) cancels
       return;
@@ -647,9 +667,16 @@ export class PlayScreen implements Screen {
     if (this.gestures.limitHint && this.gestures.limitHint !== hintBefore) playSfx('refuse');
   }
 
-  cancel(): void {
+  /** `at` (platform `pointercancel` only) lets a drag from an own tower finish there (BUG-33, `PlayGestures.cancel`). */
+  cancel(at?: PointerPoint): void {
     this.pressedBooster = null;
-    this.gestures.cancel();
+    if (this.loop.paused || this.targeting) {
+      this.gestures.cancel();
+      return;
+    }
+    const hintBefore = this.gestures.limitHint;
+    this.gestures.cancel(at);
+    if (this.gestures.limitHint && this.gestures.limitHint !== hintBefore) playSfx('refuse');
   }
 
   key(e: KeyboardEvent): void {

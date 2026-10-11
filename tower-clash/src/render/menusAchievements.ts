@@ -8,7 +8,7 @@ import { ACHIEVEMENTS_LAYOUT } from './menuLayout';
 import type { ToastOpts } from './economyWidgets';
 import { drawToast } from './economyWidgets';
 import { drawCrystal } from './sprites';
-import { beginFrame, drawWater } from './menus';
+import { beginFrame, drawWater, headerBand } from './menus';
 import { t } from '../ui/i18n';
 
 /*
@@ -110,7 +110,7 @@ export function drawAchievements(view: View, pal: Palette, o: AchievementsOpts):
   for (const row of o.rows) drawAchievementRow(ctx, pal, row);
   ctx.restore();
   // fixed chrome: header + summary pill
-  drawGlassBand(ctx, { x: 0, y: 0, w: C.MAP_W, h: L.summary.y + L.summary.h + 12 });
+  drawGlassBand(ctx, headerBand(view, L.summary.y + L.summary.h + 12)); // up to the screen's top edge (BUG-34)
   drawButton(ctx, pal, o.backRect, t('common.back'), { fontPx: 24, pressed: o.pressed === o.backRect });
   const title = t('achievements.title');
   drawExtrudedText(ctx, title, 430, 50, fitFontPx(ctx, title, 34, 500), { face: pal.paper, side: shade(pal.owners.player, -0.25), outline: pal.ink, depth: 4 });

@@ -1,7 +1,7 @@
-import { C } from '../sim/constants';
 import type { Palette } from './palette';
 import { shade } from './palette';
 import type { View } from './view';
+import { bleedRect } from './view';
 import type { Rect } from './widgets';
 import { drawButton, drawCard, drawCoin, drawExtrudedText, drawGlassBand, drawStars, fitFontPx, font } from './widgets';
 import { drawChevronDisc, drawSegmented, drawToggle, paletteGlyph } from './menuWidgets';
@@ -9,7 +9,7 @@ import type { SettingsAboutLayout } from './menuLayout';
 import { SETTINGS } from './menuLayout';
 import type { ToastOpts } from './economyWidgets';
 import { drawToast } from './economyWidgets';
-import { beginFrame, drawWater } from './menus';
+import { beginFrame, drawWater, headerBand } from './menus';
 import type { MotionPref } from '../ui/save';
 import type { Language } from '../ui/i18n';
 import { LANGUAGES, t } from '../ui/i18n';
@@ -150,14 +150,15 @@ export function drawSettings(view: View, pal: Palette, o: SettingsOpts): void {
   drawAboutCard(ctx, pal, o);
 
   // header
-  drawGlassBand(ctx, { x: 0, y: 0, w: C.MAP_W, h: SETTINGS.headerH });
+  drawGlassBand(ctx, headerBand(view, SETTINGS.headerH)); // up to the screen's top edge (BUG-34)
   drawButton(ctx, pal, SETTINGS.back, t('common.back'), { fontPx: 24, pressed: o.pressed === SETTINGS.back });
   const title = t('settings.title');
   drawExtrudedText(ctx, title, 360, 50, fitFontPx(ctx, title, 40, 380), { face: pal.paper, side: shade(pal.owners.player, -0.25), outline: pal.ink, depth: 4 });
 
   if (o.confirming) {
     ctx.fillStyle = 'rgba(26, 58, 90, 0.5)';
-    ctx.fillRect(0, 0, C.MAP_W, C.MAP_H);
+    const dim = bleedRect(view); // the whole screen (BUG-34)
+    ctx.fillRect(dim.x, dim.y, dim.w, dim.h);
     const c = SETTINGS.confirm;
     drawCard(ctx, pal, c.card);
     ctx.textAlign = 'center';

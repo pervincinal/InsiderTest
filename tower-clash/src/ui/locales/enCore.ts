@@ -47,7 +47,7 @@ export const enCore = {
   'hud.free': 'FREE',
   'hud.lesson': 'LESSON',
   'hud.airstrikeHint': 'AIRSTRIKE · tap an enemy tower · tap elsewhere to cancel',
-  'hud.selectHint': 'Tap a connected tower to start a stream · tap it again to stop',
+  'hud.selectHint': 'Tap a tower to start a stream · tap again or swipe across it to stop',
   'hud.streams': 'STREAMS',
   'hint.linkLimit': 'L{n} needed for {n} {n|stream|streams}',
   'hint.blocked': 'Blocked — no clear line',
@@ -102,6 +102,6 @@ export const enCore = {
   'tutorial.tapTower': 'Tap your tower',
   'tutorial.tapGrey': 'Now tap the grey tower — the stream keeps flowing',
   'tutorial.tapThenGrey': 'Tap your tower, then the grey tower',
-  'tutorial.stopStream': 'Tap the target again to stop the stream',
+  'tutorial.stopStream': 'Swipe across the stream to stop it',
   'tutorial.fillToUpgrade': 'Let a tower fill to {n} to upgrade it — L2 can attack 2 targets',
 } as const;

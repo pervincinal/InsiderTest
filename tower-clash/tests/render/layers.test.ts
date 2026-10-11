@@ -4,6 +4,7 @@ import { blankLayer, groundKey, paintGround, resizeLayers } from '../../src/rend
 import type { View } from '../../src/render/view';
 import type { TerrainSpec } from '../../src/render/terrain';
 import { DEFAULT_PALETTE, loadThemes, themeFor } from '../../src/render/palette';
+import type { SeaColors } from '../../src/render/sea';
 
 // the island painter needs a real canvas; the ground layer's cache key is what is under test
 vi.mock('../../src/render/terrain', () => ({ drawTerrain: vi.fn() }));
@@ -88,7 +89,10 @@ describe('layers (PERF-3)', () => {
   });
 
   describe('ground layer and the equipped terrain theme (PERF-5)', () => {
-    const view = { dpr: 2, scale: 0.5, offsetX: 0, offsetY: 0, cssW: 360, cssH: 640 } as View;
+    const view = { dpr: 2, scale: 0.5, offsetX: 0, offsetY: 0, cssW: 360, cssH: 640, insets: { top: 0, right: 0, bottom: 0, left: 0 } } as View;
+    // a flat sea (no gradient / waves): the fake context records the one fill
+    const SEA: SeaColors = { top: '#123456', bottom: '#123456' };
+    const DEFAULT_SEA: SeaColors = { top: '#3fb6de', bottom: '#3fb6de' };
     const spec: TerrainSpec = { key: 'level:15', seed: 15, biome: 'grass', theme: 'theme.neon', obstacles: [], mines: [], towers: [] };
 
     it('is keyed on the resolved theme: a lazily loaded theme that lands after the first paint repaints the ground', async () => {
@@ -96,32 +100,33 @@ describe('layers (PERF-3)', () => {
       // (Another test file may have loaded it already in this worker — then both keys read the theme id and the
       // test still proves the repaint-on-key-change contract below.)
       const { layer, rec } = fakeLayer(720, 1280, '');
-      paintGround(layer, view, DEFAULT_PALETTE, spec, '#123456');
+      paintGround(layer, view, DEFAULT_PALETTE, spec, SEA);
       const first = layer.key;
-      expect(first).toBe(groundKey(view, DEFAULT_PALETTE, spec, '#123456'));
+      expect(first).toBe(groundKey(view, DEFAULT_PALETTE, spec, SEA));
       expect(first).toContain(`|${themeFor('theme.neon').id}|`);
-      expect(rec.fills, 'letterbox fill covers the rounded-up edge column / row').toEqual([[0, 0, 361, 641]]);
+      // logical units (scale 0.5): the whole canvas plus one CSS px (2 logical px) for the rounded-up edge column / row
+      expect(rec.fills, 'sea fill covers the canvas and the rounded-up edge column / row').toEqual([[0, 0, 722, 1282]]);
       // same inputs → no repaint
-      paintGround(layer, view, DEFAULT_PALETTE, spec, '#123456');
+      paintGround(layer, view, DEFAULT_PALETTE, spec, SEA);
       expect(rec.fills.length).toBe(1);
 
       await loadThemes();
       expect(themeFor('theme.neon').id).toBe('theme.neon');
-      paintGround(layer, view, DEFAULT_PALETTE, spec, '#123456');
+      paintGround(layer, view, DEFAULT_PALETTE, spec, SEA);
       expect(layer.key).toContain('|theme.neon|');
       expect(layer.key).not.toContain('|theme.default|');
       // the chunk landing changed the key (unless it was in before the first paint) → the ground was refilled
       expect(rec.fills.length).toBe(first === layer.key ? 1 : 2);
       // the raw sprite id never was the key: unknown ids resolve to the default look
-      expect(groundKey(view, DEFAULT_PALETTE, { ...spec, theme: 'theme.bogus' }, '#123456')).toContain('|theme.default|');
+      expect(groundKey(view, DEFAULT_PALETTE, { ...spec, theme: 'theme.bogus' }, SEA)).toContain('|theme.default|');
     });
 
     it('a theme change (shop equip) repaints: the key differs, the old ground is blanked by the refill', async () => {
       await loadThemes();
       const { layer, rec } = fakeLayer(720, 1280, '');
-      paintGround(layer, view, DEFAULT_PALETTE, { ...spec, theme: undefined }, '#1f8fc2');
+      paintGround(layer, view, DEFAULT_PALETTE, { ...spec, theme: undefined }, DEFAULT_SEA);
       expect(layer.key).toContain('|theme.default|');
-      paintGround(layer, view, DEFAULT_PALETTE, { ...spec, theme: 'theme.dusk' }, '#1f8fc2');
+      paintGround(layer, view, DEFAULT_PALETTE, { ...spec, theme: 'theme.dusk' }, DEFAULT_SEA);
       expect(layer.key).toContain('|theme.dusk|');
       expect(rec.fills.length).toBe(2);
       // and blankLayer after a menu visit really clears it (main.ts blanks the ground on every non-play screen)

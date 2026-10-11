@@ -2,7 +2,8 @@ import type { GameState } from '../sim/types';
 import { C } from '../sim/constants';
 import { chunkBackoff, loadChunk } from '../lazyChunk';
 import { shade } from './palette';
-import type { View } from './view';
+import type { HudAnchors, View } from './view';
+import { bleed, bleedRect, hudAnchors } from './view';
 import { BOOSTERS, HUD, PAUSE, RESULT } from './layout';
 import type { Rect } from './widgets';
 import {
@@ -38,7 +39,12 @@ import { ENGLISH_MENUS_CHUNK, currentLanguage, levelLesson, levelName, loadEngli
  * In-game HUD (ART_DIRECTION §4): glass paper bands top and bottom, level chip, timer pill, pause
  * button, the active-streams pill (rules v2), MENU; the pause card and the result card (slide-up, sequential
  * star pops, extruded VICTORY / DEFEAT, coins counting up). Drawn by draw.ts after the world with
- * the logical (720×1280) transform active and the canvas clipped to the map. Reads state only.
+ * the logical (720×1280) transform active and no clip. Reads state only.
+ *
+ * Full bleed (BUG-34): on a screen taller than 9:16 the bands do not sit on the map rect's edges —
+ * the top band's content moves up to the top safe-area edge and the bottom band's down to the bottom
+ * one (`hudAnchors`), and their glass reaches the screen edges (`bleed`). The HUD rects in layout.ts
+ * stay the layout positions; the play / result screens map taps through `toHudSpace`.
  */
 
 let reducedMotion: boolean | null = null;
@@ -333,8 +339,8 @@ function drawCoinPill(ctx: CanvasRenderingContext2D, ui: PlayUi): void {
   ctx.fillText(String(ui.coinsTotal), r.x + r.w - 14, r.y + r.h / 2 + 1, r.w - 50);
 }
 
-/** Airstrike targeting: pulsing crosshair rings on every enemy tower and an instruction pill. */
-function drawTargeting(ctx: CanvasRenderingContext2D, state: GameState, ui: PlayUi, nowMs: number): void {
+/** Airstrike targeting: pulsing crosshair rings on every enemy tower and an instruction pill (just above the bottom band, moved by `dy`). */
+function drawTargeting(ctx: CanvasRenderingContext2D, state: GameState, ui: PlayUi, nowMs: number, dy: number): void {
   const pal = ui.palette;
   const color = boosterColor(pal, 'airstrike');
   const pulse = motionAllowed() ? (Math.sin(nowMs / 200) + 1) / 2 : 0.5;
@@ -358,7 +364,7 @@ function drawTargeting(ctx: CanvasRenderingContext2D, state: GameState, ui: Play
   ctx.font = font(20, '500');
   const text = t('hud.airstrikeHint');
   const w = Math.min(700, ctx.measureText(text).width + 44);
-  const pill: Rect = { x: 360 - w / 2, y: 1126, w, h: 42 };
+  const pill: Rect = { x: 360 - w / 2, y: 1126 + dy, w, h: 42 };
   drawPill(ctx, pill, color, shade(color, -0.35));
   ctx.fillStyle = pal.paper;
   ctx.textAlign = 'center';
@@ -366,16 +372,33 @@ function drawTargeting(ctx: CanvasRenderingContext2D, state: GameState, ui: Play
   ctx.fillText(text, 360, pill.y + pill.h / 2 + 1, w - 20);
 }
 
-export function drawHud(ctx: CanvasRenderingContext2D, state: GameState, _view: View, ui: PlayUi, nowMs: number): void {
+/** The two glass bands, from the screen edges to the anchored band edges (exactly `HUD.topBar` / `HUD.bottomBar` on a 9:16 screen). */
+export function hudBandRects(view: View, a: HudAnchors = hudAnchors(view)): { top: Rect; bottom: Rect } {
+  const b = bleed(view);
+  const pad = 1 / (view.scale > 0 ? view.scale : 1);
+  const x = b.left;
+  const w = b.right - b.left + (b.right > C.MAP_W ? pad : 0);
+  const topEnd = HUD.topBar.y + HUD.topBar.h + a.top;
+  const bottomStart = HUD.bottomBar.y + a.bottom;
+  const bottomEnd = b.bottom > C.MAP_H ? b.bottom + pad : b.bottom;
+  return { top: { x, y: b.top, w, h: topEnd - b.top }, bottom: { x, y: bottomStart, w, h: bottomEnd - bottomStart } };
+}
+
+export function drawHud(ctx: CanvasRenderingContext2D, state: GameState, view: View, ui: PlayUi, nowMs: number): void {
   const pal = ui.palette;
   const hud = extrasOf(ui);
+  const a = hudAnchors(view);
   ctx.save();
   // stream counters sit on the world, just under the bands
   if (ui.outcome === 'playing') drawStreamChips(ctx, state, ui);
-  // glass bands
-  drawGlassBand(ctx, HUD.topBar);
-  drawGlassBand(ctx, HUD.bottomBar);
+  // glass bands, out to the screen edges (BUG-34)
+  const bands = hudBandRects(view, a);
+  drawGlassBand(ctx, bands.top);
+  drawGlassBand(ctx, bands.bottom);
 
+  // top band content, anchored to the top safe-area edge
+  ctx.save();
+  ctx.translate(0, a.top);
   // level chip: small "LEVEL n" over the name (a challenge: the twist's name over "Daily · name")
   const chip = HUD.levelChip;
   drawPill(ctx, chip, pal.paper, hud?.challenge ? pal.gold : undefined);
@@ -439,7 +462,11 @@ export function drawHud(ctx: CanvasRenderingContext2D, state: GameState, _view: 
     ctx.font = font(px, '500');
     lines.forEach((l, i) => ctx.fillText(l, 360, 108 + 20 + captionH + i * lineH));
   }
+  ctx.restore();
 
+  // bottom band content, anchored to the bottom safe-area edge
+  ctx.save();
+  ctx.translate(0, a.bottom);
   // bottom bar: streams · boosters · coins · menu (wallet replaces boosters + coins once the level is over)
   drawStreamsPill(ctx, ui, hud?.streams ?? 0);
   if (ui.outcome !== 'playing' && hud?.wallet) {
@@ -449,21 +476,23 @@ export function drawHud(ctx: CanvasRenderingContext2D, state: GameState, _view: 
     drawCoinPill(ctx, ui);
   }
   drawButton(ctx, pal, HUD.menu, t('common.menu'), { fontPx: 22 });
+  ctx.restore();
 
-  if (hud?.targeting && ui.outcome === 'playing' && !ui.paused) drawTargeting(ctx, state, ui, nowMs);
+  if (hud?.targeting && ui.outcome === 'playing' && !ui.paused) drawTargeting(ctx, state, ui, nowMs, a.bottom);
   // selection hint (just above the bottom band)
   else if (ui.selectedTowerId && ui.outcome === 'playing') {
     ctx.font = font(19, '500');
     const text = t('hud.selectHint');
     const w = Math.min(700, ctx.measureText(text).width + 40);
-    const pill: Rect = { x: 360 - w / 2, y: 1128, w, h: 38 };
+    const pill: Rect = { x: 360 - w / 2, y: 1128 + a.bottom, w, h: 38 };
     drawPill(ctx, pill, pal.paper);
     ctx.fillStyle = pal.ink;
     ctx.textAlign = 'center';
     ctx.fillText(text, 360, pill.y + pill.h / 2 + 1, w - 20);
   }
-  // transient status while playing (free charge added, "not in the daily challenge"); overlays draw their own
-  if (hud?.toast && ui.outcome === 'playing' && !ui.paused) drawToast(ctx, pal, hud.toast);
+  // transient status while playing (free charge added, "not in the daily challenge"); overlays draw their own.
+  // It sits over the bottom band, so it moves with it.
+  if (hud?.toast && ui.outcome === 'playing' && !ui.paused) drawToast(ctx, pal, { ...hud.toast, y: (hud.toast.y ?? 1090) + a.bottom });
   ctx.restore();
 }
 
@@ -497,10 +526,11 @@ export function hudKey(state: GameState, ui: PlayUi, nowMs: number): string {
 
 const overlayShownAt = new WeakMap<GameState, number>();
 
-function dimWorld(ctx: CanvasRenderingContext2D, lost: boolean): void {
-  // victory: blue-ink dim; defeat: a greyer, slightly desaturating veil
+function dimWorld(ctx: CanvasRenderingContext2D, view: View, lost: boolean): void {
+  // victory: blue-ink dim; defeat: a greyer, slightly desaturating veil — over the whole screen (BUG-34)
   ctx.fillStyle = lost ? 'rgba(70, 80, 100, 0.58)' : 'rgba(26, 58, 90, 0.5)';
-  ctx.fillRect(0, 0, C.MAP_W, C.MAP_H);
+  const r = bleedRect(view);
+  ctx.fillRect(r.x, r.y, r.w, r.h);
 }
 
 /*
@@ -602,27 +632,27 @@ function drawPlainResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui
  * Pause menu (while playing and paused) or the result card (won / lost). Call only when one applies.
  * Draws through the lazy overlay chunk once it is in, the plain cards until then.
  */
-export function drawOverlays(ctx: CanvasRenderingContext2D, state: GameState, _view: View, ui: PlayUi, nowMs: number): void {
+export function drawOverlays(ctx: CanvasRenderingContext2D, state: GameState, view: View, ui: PlayUi, nowMs: number): void {
   ctx.save();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const ov = overlays;
   if (!ov) warmHudOverlays();
   if (ui.outcome === 'playing') {
-    dimWorld(ctx, false);
+    dimWorld(ctx, view, false);
     if (ov) ov.pause(ctx, state, ui);
     else drawPlainPauseCard(ctx, state, ui);
     ctx.restore();
     return;
   }
-  dimWorld(ctx, ui.outcome === 'lost');
+  dimWorld(ctx, view, ui.outcome === 'lost');
   let shown = overlayShownAt.get(state);
   if (shown === undefined) {
     shown = nowMs;
     overlayShownAt.set(state, nowMs);
   }
   const since = nowMs > 0 && motionAllowed() ? nowMs - shown : 10_000;
-  if (ov) ov.result(ctx, state, ui, since);
+  if (ov) ov.result(ctx, state, ui, since, bleed(view).bottom);
   else drawPlainResultCard(ctx, state, ui);
   const toast = extrasOf(ui)?.toast;
   if (toast) drawToast(ctx, ui.palette, toast);

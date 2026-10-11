@@ -3,7 +3,7 @@ import { linksFrom, maxLinksOf } from './sim/step';
 import { referencePlayerCommands } from './ai/index';
 import type { TowerClashApp, TowerClashDebug } from './main';
 import { LEVEL_META, levelIndex } from './levels/index';
-import { toClient } from './render/view';
+import { fromHudSpace, hudAnchors, toClient } from './render/view';
 import { isLevelUnlocked } from './ui/save';
 import { ResultScreen, lastShareRecord } from './ui/screens';
 import { lastReviewResult } from './native/review';
@@ -31,6 +31,10 @@ export function installDebug(app: TowerClashApp): TowerClashDebug {
     setSpeed: (n) => app.setSpeed(n),
     getSpeed: () => app.play?.loop.speed ?? app.speed,
     toClient: (x, y) => toClient(app.view, x, y),
+    hudToClient: (x, y) => {
+      const p = fromHudSpace(hudAnchors(app.view), x, y);
+      return toClient(app.view, p.x, p.y);
+    },
     getTutorialHint: () => (app.current === app.play ? (app.play?.tutorialStep()?.text ?? null) : null),
     getLimitHint: () => (app.current === app.play && app.play?.gestures.limitHint ? app.play.gestures.limitHintText : null),
     getLanguage: () => currentLanguage(),

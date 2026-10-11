@@ -21,7 +21,8 @@ import { levelLesson, t } from '../ui/i18n';
 
 export interface HudOverlayDrawers {
   pause(ctx: CanvasRenderingContext2D, state: GameState, ui: PlayUi): void;
-  result(ctx: CanvasRenderingContext2D, state: GameState, ui: PlayUi, since: number): void;
+  /** `screenBottom`: logical y of the screen's bottom edge (BUG-34: below 1280 on a tall phone); the card slides in from under it. */
+  result(ctx: CanvasRenderingContext2D, state: GameState, ui: PlayUi, since: number, screenBottom?: number): void;
 }
 
 function drawPauseCard(ctx: CanvasRenderingContext2D, state: GameState, ui: PlayUi): void {
@@ -60,13 +61,13 @@ function drawPauseCard(ctx: CanvasRenderingContext2D, state: GameState, ui: Play
   drawButton(ctx, pal, PAUSE.howto, t('pause.howto'), { fontPx: 24 });
 }
 
-function drawResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: PlayUi, since: number): void {
+function drawResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: PlayUi, since: number, screenBottom: number = C.MAP_H): void {
   const pal = ui.palette;
   const won = ui.outcome === 'won';
   const layout = resultShareLayout(hudExtrasOf(ui)?.result, won);
   const card = layout.card;
   // slide up with a bounce
-  const slide = (1 - easeOutBack(Math.min(1, since / 460))) * (C.MAP_H - card.y + 40);
+  const slide = (1 - easeOutBack(Math.min(1, since / 460))) * (Math.max(C.MAP_H, screenBottom) - card.y + 40);
   ctx.save();
   ctx.translate(0, slide);
   drawCard(ctx, pal, card);

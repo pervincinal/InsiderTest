@@ -41,3 +41,21 @@ export async function tapAt(page: Page, lx: number, ly: number): Promise<void> {
 export function tapRect(page: Page, r: Rect): Promise<void> {
   return tapAt(page, r.x + r.w / 2, r.y + r.h / 2);
 }
+
+/**
+ * Client coordinates of a point on a play-HUD rect (src/render/layout.ts `HUD` / `BOOSTERS`), read
+ * after the current screen has painted. BUG-34: the HUD bands are anchored to the screen's safe-area
+ * edges, so on any screen taller than 9:16 (Pixel 5 included) they sit above / below the layout rect.
+ */
+export function hudClientPoint(page: Page, lx: number, ly: number): Promise<{ x: number; y: number }> {
+  return page.evaluate(
+    ([x, y]) => new Promise<{ x: number; y: number }>((resolve) => requestAnimationFrame(() => resolve(window.__towerclash.hudToClient(x, y)))),
+    [lx, ly] as const,
+  );
+}
+
+/** Tap the centre of a play-HUD rect (pause, mute, boosters, MENU, wallet…) where it is drawn. */
+export async function tapHud(page: Page, r: Rect): Promise<void> {
+  const c = await hudClientPoint(page, r.x + r.w / 2, r.y + r.h / 2);
+  await page.mouse.click(c.x, c.y);
+}

@@ -3,13 +3,14 @@ import { C } from '../sim/constants';
 import { roadIdFor } from '../sim/create';
 import { capacityOf, isUnderFire, linksFrom } from '../sim/step';
 import type { Biome, Palette } from './palette';
-import { biomeFor, themeFor, withAlpha } from './palette';
+import { biomeFor, withAlpha } from './palette';
 import type { View } from './view';
-import { applyDeviceTransform, applyTransform, clipToMap } from './view';
-import { HUD } from './layout';
+import { applyDeviceTransform, applyTransform, bleed, bleedRect } from './view';
+import { HUD, SWIPE_TRAIL_MS } from './layout';
 import { font, roundRect } from './widgets';
 import { drawHud, drawOverlays } from './hud';
 import { blankLayer, paintGround, paintHud } from './layers';
+import { drawSea, terrainSea } from './sea';
 import type { TerrainSpec } from './terrain';
 import { drawTerrain, drawTerrainOverlay } from './terrain';
 import type { TowerSkin } from './sprites';
@@ -45,6 +46,11 @@ export interface PlayUi {
    */
   limitHint?: { until: number };
   limitHintText?: string;
+  /**
+   * Swipe-to-cut slash trail (BUG-33), oldest point first; `t` is on the same clock as `nowMs`. The
+   * input layer drops points older than `SWIPE_TRAIL_MS`; the renderer fades them over that span.
+   */
+  swipeTrail?: readonly { x: number; y: number; t: number }[];
 }
 
 /**
@@ -507,6 +513,38 @@ function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState
   }
 }
 
+/* ---------- swipe-to-cut trail (BUG-33) ---------- */
+
+/**
+ * A short slash following the finger: a tapering paper stroke with a player-tone edge, each piece
+ * fading over `SWIPE_TRAIL_MS` from when it was drawn. Reduced motion: a plain constant stroke (no
+ * taper or fade animation); it still disappears once the input layer drops its points.
+ */
+export function drawSwipeTrail(ctx: CanvasRenderingContext2D, pal: Palette, trail: readonly { x: number; y: number; t: number }[], nowMs: number, motion: boolean): void {
+  if (trail.length < 2) return;
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  const edge = pal.ownerTones.player.lit;
+  for (let i = 1; i < trail.length; i++) {
+    const a = trail[i - 1]!;
+    const b = trail[i]!;
+    const k = motion ? Math.max(0, Math.min(1, 1 - (nowMs - b.t) / SWIPE_TRAIL_MS)) : 1;
+    if (k <= 0) continue;
+    ctx.globalAlpha = 0.85 * k;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.strokeStyle = edge;
+    ctx.lineWidth = 4 + 10 * k;
+    ctx.stroke();
+    ctx.strokeStyle = pal.paper;
+    ctx.lineWidth = 1.5 + 4 * k;
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 /* ---------- link-limit hint ---------- */
 
 const HINT_SHAKE_MS = 380;
@@ -619,7 +657,7 @@ function terrainSpec(state: GameState, theme: string | undefined): TerrainSpec {
 export function drawGame(ctx: CanvasRenderingContext2D, state: GameState, view: View, ui: PlayUi, nowMs = 0, layered = false): void {
   const pal = ui.palette;
   const theme = ui.skin?.theme;
-  const letterbox = theme ? themeFor(theme).letterbox : pal.letterbox;
+  const sea = terrainSea(pal, theme, true);
   const motion = motionAllowed();
   const spec = terrainSpec(state, theme);
   // capture shake moves the whole world (not the HUD)
@@ -628,24 +666,29 @@ export function drawGame(ctx: CanvasRenderingContext2D, state: GameState, view: 
   const shake = { dx: snapToDevice(raw.dx, dev), dy: snapToDevice(raw.dy, dev) };
   const layers = layered && ui.outcome === 'playing' && !ui.paused ? view.layers : undefined;
 
-  // Letterbox bars in device space (deep water, themed), then the map in logical space.
+  // The sea over the whole canvas (BUG-34: full bleed, themed; cached on the ground layer while
+  // layered), then the world clipped to the map, then veil / HUD / overlays out to the screen edges.
   applyDeviceTransform(view);
   if (layers) {
-    paintGround(layers.ground, view, pal, spec, letterbox);
+    paintGround(layers.ground, view, pal, spec, sea);
     ctx.clearRect(0, 0, view.cssW, view.cssH);
-  } else {
-    ctx.fillStyle = letterbox;
-    ctx.fillRect(0, 0, view.cssW + 1, view.cssH + 1); // +1: cover the rounded-up last pixel column / row (layers.ts)
   }
 
   ctx.save();
   applyTransform(view);
-  clipToMap(view);
+  if (!layers) drawSea(ctx, view, sea);
+  // the world is clipped to the map's rows; across, it spans the screen (a wide screen's side margins
+  // are sea, so the drifting cloud shadows cross them instead of being cut at the map edge)
+  const screen = bleed(view);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(screen.left, 0, screen.right - screen.left, C.MAP_H);
+  ctx.clip();
   ctx.save();
   if (shake.dx || shake.dy) ctx.translate(shake.dx, shake.dy);
   // a shaking frame re-blits the ground here so the whole world moves together (the layer stays put)
   if (!layers || shake.dx || shake.dy) drawTerrain(ctx, view, pal, spec);
-  drawTerrainOverlay(ctx, pal, spec, nowMs, motion);
+  drawTerrainOverlay(ctx, pal, spec, nowMs, motion, screen);
 
   drawLinks(ctx, pal, state, nowMs, motion);
   drawMineLights(ctx, pal, state, nowMs);
@@ -653,10 +696,14 @@ export function drawGame(ctx: CanvasRenderingContext2D, state: GameState, view: 
   drawWorld(ctx, pal, state, ui, nowMs, spec.biome ?? 'grass', dev);
   ui.particles?.draw(ctx, nowMs);
   ctx.restore();
+  // the slash follows the finger, not the shaking world
+  if (ui.swipeTrail && ui.outcome === 'playing') drawSwipeTrail(ctx, pal, ui.swipeTrail, nowMs, motion);
+  ctx.restore(); // map clip off: the veil, the HUD bands and the overlays reach the screen edges
   if (ui.outcome === 'lost') {
-    // defeat: the world goes a little grey and cold under the card
+    // defeat: the world goes a little grey and cold under the card (the margins' sea too)
     ctx.fillStyle = 'rgba(120, 130, 150, 0.28)';
-    ctx.fillRect(0, 0, C.MAP_W, C.MAP_H);
+    const r = bleedRect(view);
+    ctx.fillRect(r.x, r.y, r.w, r.h);
   }
   if (layers) paintHud(layers.hud, view, state, ui, nowMs);
   else {

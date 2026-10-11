@@ -1,9 +1,11 @@
 import type { Owner, Road, TowerKind } from '../sim/types';
 import { C } from '../sim/constants';
 import type { Palette } from './palette';
-import { shade, themeFor } from './palette';
+import { shade } from './palette';
 import type { View } from './view';
-import { applyDeviceTransform, applyTransform, clipToMap } from './view';
+import { applyTransform, bleed } from './view';
+import type { SeaColors } from './sea';
+import { drawSea, menuSea, terrainSea } from './sea';
 import type { Rect } from './widgets';
 import { FONT, drawButton, drawExtrudedText, drawGearGlyph, drawPill, drawRoundButton, drawSpeakerGlyph, drawTrophyGlyph, font, withShadow } from './widgets';
 import type { TerrainSpec } from './terrain';
@@ -99,16 +101,24 @@ export function motion(): boolean {
   return !reduced;
 }
 
-/** Letterbox fill + logical transform + map clip; the caller ends the frame with `ctx.restore()`. */
-export function beginFrame(view: View, pal: Palette, letterbox: string = pal.letterbox): CanvasRenderingContext2D {
+/**
+ * Full-bleed sea (BUG-34) + logical transform; the caller ends the frame with `ctx.restore()`. No map
+ * clip: the screen's content may run on into the margins of a tall / wide screen (the level map's
+ * path, the shop list), which `toLogical` maps linearly, so whatever shows there is tappable too.
+ */
+export function beginFrame(view: View, pal: Palette, sea: SeaColors = menuSea(pal)): CanvasRenderingContext2D {
   const ctx = view.ctx;
-  applyDeviceTransform(view);
-  ctx.fillStyle = letterbox;
-  ctx.fillRect(0, 0, view.cssW + 1, view.cssH + 1); // +1: cover the rounded-up last pixel column / row (layers.ts)
   ctx.save();
   applyTransform(view);
-  clipToMap(view);
+  drawSea(ctx, view, sea);
   return ctx;
+}
+
+/** A menu's glass header band of layout height `h`, grown up to the screen's top edge and across its width (BUG-34). */
+export function headerBand(view: View, h: number): Rect {
+  const b = bleed(view);
+  const pad = b.right > C.MAP_W ? 1 / (view.scale > 0 ? view.scale : 1) : 0;
+  return { x: b.left, y: b.top, w: b.right - b.left + pad, h: h - b.top };
 }
 
 function drawDemoWorld(ctx: CanvasRenderingContext2D, pal: Palette, nowMs: number, withBadges: boolean): void {
@@ -191,7 +201,7 @@ export interface TitleOpts {
 }
 
 export function drawTitle(view: View, pal: Palette, o: TitleOpts): void {
-  const ctx = beginFrame(view, pal, o.theme ? themeFor(o.theme).letterbox : undefined);
+  const ctx = beginFrame(view, pal, terrainSea(pal, o.theme));
   drawTerrain(ctx, view, pal, demoTerrain(o.theme));
   drawDemoWorld(ctx, pal, o.nowMs, true);
 

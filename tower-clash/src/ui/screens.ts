@@ -1,9 +1,9 @@
 import type { GameState, LevelDef } from '../sim/types';
-import { C } from '../sim/constants';
 import { LEVEL_META, levelIndex } from '../levels/index';
 import type { Palette } from '../render/palette';
 import type { View } from '../render/view';
-import { applyDeviceTransform, applyTransform, clipToMap } from '../render/view';
+import { applyTransform, clipToMap, hudAnchors, toHudSpace } from '../render/view';
+import { drawSea } from '../render/sea';
 import type { ShopTab } from '../render/menuLayout';
 import { HUD, RESULT, TITLE } from '../render/layout';
 import type { Rect } from '../render/widgets';
@@ -46,7 +46,8 @@ export interface Screen {
   down?(p: PointerPoint): void;
   move?(p: PointerPoint): void;
   up?(p: PointerPoint): void;
-  cancel?(): void;
+  /** The press ended without an `up` (`at`: the pointer's last known position on a platform `pointercancel`). */
+  cancel?(at?: PointerPoint): void;
   key?(e: KeyboardEvent): void;
   /** Mouse wheel / trackpad scroll in logical px (positive = content moves up). */
   wheel?(dy: number): void;
@@ -214,17 +215,13 @@ export function handOverToasts(carried: readonly QueuedToast[], to: Pick<Screen,
   return [];
 }
 
-/** Fill the letterbox and the map background, and leave the context in logical units + clipped. */
+/** Fill the whole screen with the map background (BUG-34: full bleed, no bars), and leave the context in logical units + clipped. */
 export function beginMapFrame(view: View, pal: Palette): void {
   const ctx = view.ctx;
-  applyDeviceTransform(view);
-  ctx.fillStyle = pal.letterbox;
-  ctx.fillRect(0, 0, view.cssW + 1, view.cssH + 1); // +1: cover the rounded-up last pixel column / row (layers.ts)
   ctx.save();
   applyTransform(view);
+  drawSea(ctx, view, { top: pal.background, bottom: pal.background });
   clipToMap(view);
-  ctx.fillStyle = pal.background;
-  ctx.fillRect(0, 0, C.MAP_W, C.MAP_H);
 }
 
 export function endMapFrame(view: View): void {
@@ -601,14 +598,23 @@ export class ResultScreen implements Screen {
     return list;
   }
 
+  /** `r` holds the point: the bottom band's rects (wallet, MENU) through `toHudSpace` — the band is anchored to the screen edge (BUG-34) — the card's as they are. */
+  private hits(r: Rect, p: PointerPoint): boolean {
+    if (r === HUD.wallet || r === HUD.menu) {
+      const h = toHudSpace(hudAnchors(this.app.view), p.x, p.y);
+      return inRect(r, h.x, h.y);
+    }
+    return inRect(r, p.x, p.y);
+  }
+
   down(p: PointerPoint): void {
-    this.pressed = this.rects().find((r) => inRect(r, p.x, p.y)) ?? null;
+    this.pressed = this.rects().find((r) => this.hits(r, p)) ?? null;
     // draw the card while the finger is down, so the share sheet opens inside the tap's user activation
     if (this.pressed !== null && this.pressed === resultShareLayout(this.extras(), this.won).share && !this.sharing) void this.prepareShare().catch(() => undefined);
   }
 
   move(p: PointerPoint): void {
-    if (this.pressed && !inRect(this.pressed, p.x, p.y)) this.pressed = null;
+    if (this.pressed && !this.hits(this.pressed, p)) this.pressed = null;
   }
 
   cancel(): void {
@@ -636,7 +642,7 @@ export class ResultScreen implements Screen {
   up(p: PointerPoint): void {
     const hit = this.pressed;
     this.pressed = null;
-    if (!hit || !inRect(hit, p.x, p.y) || this.pending || this.leaving) return;
+    if (!hit || !this.hits(hit, p) || this.pending || this.leaving) return;
     const { ui } = this.info;
     if (hit === RESULT.retry) this.leave(() => this.retry());
     else if (hit === RESULT.menu || hit === HUD.menu) this.leave(() => this.app.goLevels());

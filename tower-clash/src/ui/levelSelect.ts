@@ -266,7 +266,10 @@ export class LevelSelectScreen implements Screen {
       this.tapYesterday(y);
       return;
     }
-    if (p.y < LEVEL_MAP.headerH || p.y >= LEVEL_MAP.commander.y - 10) return;
+    // under the header / around the commander chip nothing is tappable; the map's nodes are, the
+    // ones that run on into the bottom margin of a tall screen included (BUG-34, full bleed)
+    const chip = LEVEL_MAP.commander;
+    if (p.y < LEVEL_MAP.headerH || (p.y >= chip.y - 10 && p.y <= chip.y + chip.h + 10)) return;
     for (let i = 0; i < LEVEL_META.length; i++) {
       const level = LEVEL_META[i];
       if (level && inRect(levelNodeRect(i, this.scroll), p.x, p.y)) {

@@ -3,7 +3,7 @@ import { roadIdFor } from '../sim/create';
 import { linksFrom, maxLinksOf } from '../sim/step';
 import type { View } from '../render/view';
 import { toLogical } from '../render/view';
-import { TOWER_HIT_RADIUS } from '../render/layout';
+import { SWIPE_TRAIL_MS, TOWER_HIT_RADIUS, TOWER_RADIUS } from '../render/layout';
 
 /* ---------- generic pointer adapter ---------- */
 
@@ -25,9 +25,23 @@ export interface PointerHandlers {
  * Attach Pointer Events (mouse + touch + pen) to the canvas and forward them in logical coords.
  * Only the first active pointer is tracked so multi-touch never produces phantom taps.
  * Returns a detach function.
+ *
+ * BUG-33 (iOS WKWebView): `touch-action: none` (index.html) is the declarative way to keep a pan on
+ * the canvas from becoming a scroll, but WebKit can still hand a touch sequence to the web view's
+ * own scroll view, and then it fires `pointercancel` mid-drag. Non-passive `touchstart` /
+ * `touchmove` listeners that call `preventDefault()` are the imperative guarantee every WebKit
+ * honours: the touch sequence stays with the page. Pointer Events still fire (only the legacy
+ * compatibility mouse events and `click` are suppressed — every screen is canvas-drawn and driven by
+ * the pointer handlers below, there is no DOM UI to click). `touchend` is left alone, so it keeps its
+ * user-activation role (audio unlock, Web Share).
+ *
+ * `cancel` receives the pointer's LAST KNOWN position (from down / move), not the cancel event's
+ * own coordinates: WebKit / Chromium report a `pointercancel` at 0,0 or at a stale spot, and the
+ * play screen may finish a drag at the point the finger really was (`PlayGestures.cancel`).
  */
 export function attachPointer(canvas: HTMLCanvasElement, view: View, handlers: PointerHandlers): () => void {
   let activeId: number | null = null;
+  let last: PointerPoint | null = null;
   const point = (e: PointerEvent): PointerPoint => {
     const l = toLogical(view, e.clientX, e.clientY);
     return { id: e.pointerId, x: l.x, y: l.y, timeMs: performance.now() };
@@ -41,36 +55,50 @@ export function attachPointer(canvas: HTMLCanvasElement, view: View, handlers: P
       /* capture is best-effort */
     }
     e.preventDefault();
-    handlers.down?.(point(e));
+    last = point(e);
+    handlers.down?.(last);
   };
   const onMove = (e: PointerEvent): void => {
     if (activeId !== null && e.pointerId !== activeId) return;
-    handlers.move?.(point(e));
+    const p = point(e);
+    if (activeId !== null) last = p;
+    handlers.move?.(p);
   };
   const onUp = (e: PointerEvent): void => {
     if (e.pointerId !== activeId) return;
     activeId = null;
+    last = null;
     e.preventDefault();
     handlers.up?.(point(e));
   };
   const onCancel = (e: PointerEvent): void => {
     if (e.pointerId !== activeId) return;
     activeId = null;
-    handlers.cancel?.(point(e));
+    const p = last ? { ...last, timeMs: performance.now() } : point(e);
+    last = null;
+    handlers.cancel?.(p);
   };
   const onContext = (e: Event): void => e.preventDefault();
+  const onTouch = (e: TouchEvent): void => {
+    if (e.cancelable) e.preventDefault();
+  };
+  const touchOpts: AddEventListenerOptions = { passive: false };
 
   canvas.addEventListener('pointerdown', onDown);
   canvas.addEventListener('pointermove', onMove);
   canvas.addEventListener('pointerup', onUp);
   canvas.addEventListener('pointercancel', onCancel);
   canvas.addEventListener('contextmenu', onContext);
+  canvas.addEventListener('touchstart', onTouch, touchOpts);
+  canvas.addEventListener('touchmove', onTouch, touchOpts);
   return () => {
     canvas.removeEventListener('pointerdown', onDown);
     canvas.removeEventListener('pointermove', onMove);
     canvas.removeEventListener('pointerup', onUp);
     canvas.removeEventListener('pointercancel', onCancel);
     canvas.removeEventListener('contextmenu', onContext);
+    canvas.removeEventListener('touchstart', onTouch, touchOpts);
+    canvas.removeEventListener('touchmove', onTouch, touchOpts);
   };
 }
 
@@ -93,6 +121,78 @@ export function hitTower(state: GameState, x: number, y: number, radius: number 
 export function connectedRoad(state: GameState, a: string, b: string): Road | null {
   return state.roads[roadIdFor(a, b)] ?? null;
 }
+
+/* ---------- swipe-to-cut (BUG-33, GDD §2.0b rule 8) ---------- */
+
+export interface XY {
+  x: number;
+  y: number;
+}
+
+/**
+ * Part of a stream's lane at each end that a swipe does not cut: the tower body (`TOWER_RADIUS`)
+ * — a swipe that merely grazes a tower is not "across the stream".
+ */
+export const SWIPE_LANE_TRIM = TOWER_RADIUS;
+
+/** Twice the signed area of triangle o-a-b (> 0: b is left of o→a). */
+function orient(o: XY, a: XY, b: XY): number {
+  return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+}
+
+/** Whether `p`, known to be collinear with a–b, lies within their bounding box. */
+function within(a: XY, b: XY, p: XY): boolean {
+  return Math.min(a.x, b.x) <= p.x && p.x <= Math.max(a.x, b.x) && Math.min(a.y, b.y) <= p.y && p.y <= Math.max(a.y, b.y);
+}
+
+/** Whether the closed segments a–b and c–d share a point (touching ends and collinear overlap count). */
+export function segmentsIntersect(a: XY, b: XY, c: XY, d: XY): boolean {
+  const d1 = orient(c, d, a);
+  const d2 = orient(c, d, b);
+  const d3 = orient(a, b, c);
+  const d4 = orient(a, b, d);
+  if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) return true;
+  return (d1 === 0 && within(c, d, a)) || (d2 === 0 && within(c, d, b)) || (d3 === 0 && within(a, b, c)) || (d4 === 0 && within(a, b, d));
+}
+
+/** A player stream, as the `unlink` command names it. */
+export interface StreamRef {
+  from: string;
+  to: string;
+}
+
+/**
+ * The player's streams whose lane the swipe segment a–b crosses (pure, unit-tested). Lanes are
+ * straight (rules v3), so each stream is the segment between its towers' centres, trimmed by
+ * `SWIPE_LANE_TRIM` at both ends. Only `owner: 'player'` links are ever returned.
+ */
+export function streamsCrossed(state: GameState, a: XY, b: XY): StreamRef[] {
+  const out: StreamRef[] = [];
+  for (const l of state.links) {
+    if (l.owner !== 'player') continue;
+    const s = state.towers[l.from];
+    const t = state.towers[l.to];
+    if (!s || !t) continue;
+    const len = Math.hypot(t.x - s.x, t.y - s.y);
+    if (len <= SWIPE_LANE_TRIM * 2) continue;
+    const ux = (t.x - s.x) / len;
+    const uy = (t.y - s.y) / len;
+    const p = { x: s.x + ux * SWIPE_LANE_TRIM, y: s.y + uy * SWIPE_LANE_TRIM };
+    const q = { x: t.x - ux * SWIPE_LANE_TRIM, y: t.y - uy * SWIPE_LANE_TRIM };
+    if (segmentsIntersect(a, b, p, q)) out.push({ from: l.from, to: l.to });
+  }
+  return out;
+}
+
+/** One point of the swipe slash trail (logical px; `t` on the pointer clock, `performance.now()`). */
+export interface TrailPoint {
+  x: number;
+  y: number;
+  t: number;
+}
+
+/** Most trail points kept at once (a fast swipe at 120 Hz over `SWIPE_TRAIL_MS` stays well under). */
+const TRAIL_MAX = 48;
 
 /* ---------- play gestures → commands ---------- */
 
@@ -137,7 +237,9 @@ export function decideLink(state: GameState, from: string, to: string, allowUnli
 /**
  * Tap own tower = select; tap a tower with a clear lane from it = start a stream (or stop it when
  * that stream exists; refused with a hint at the link limit); tap a blocked tower = shake + hint;
- * tap the selected tower again = deselect; tap empty = deselect; drag own tower → tower = link.
+ * tap the selected tower again = deselect; tap empty = deselect; drag own tower → tower = link;
+ * a drag that starts anywhere else (empty ground, a neutral or enemy tower) is a swipe: every player
+ * stream its path crosses is cut on the spot (`unlink`, once per stream per swipe — BUG-33).
  * Only ever produces sim commands for owner 'player'.
  */
 export class PlayGestures {
@@ -149,12 +251,24 @@ export class PlayGestures {
    */
   limitHint: { until: number } | null = null;
   limitHintText = '';
+  /**
+   * Swipe-to-cut slash trail for the renderer (`PlayUi.swipeTrail`), oldest first. Points older than
+   * `SWIPE_TRAIL_MS` are dropped by `tick`, so the trail fades out on its own after the finger lifts.
+   */
+  readonly trail: TrailPoint[] = [];
 
   private downTowerId: string | null = null;
   private downX = 0;
   private downY = 0;
   private moved = false;
   private pointerDown = false;
+  /** The press started off an own tower: once it moves past the threshold it is a swipe (cuts streams). */
+  private swipe = false;
+  /** End of the swipe polyline so far (the down point until the first move past the threshold). */
+  private swipeX = 0;
+  private swipeY = 0;
+  /** Streams (`from>to`) this swipe already cut: the sim applies the `unlink` on its next tick. */
+  private readonly cut = new Set<string>();
 
   constructor(private readonly opts: GestureOptions) {}
 
@@ -163,6 +277,7 @@ export class PlayGestures {
     this.hoverTowerId = null;
     this.limitHint = null;
     this.limitHintText = '';
+    this.trail.length = 0;
     this.clearPress();
   }
 
@@ -170,6 +285,13 @@ export class PlayGestures {
     this.downTowerId = null;
     this.moved = false;
     this.pointerDown = false;
+    this.swipe = false;
+    this.cut.clear();
+  }
+
+  /** A press is under way and has moved past the drag threshold. */
+  get dragging(): boolean {
+    return this.pointerDown && this.moved;
   }
 
   down(p: PointerPoint): void {
@@ -181,12 +303,36 @@ export class PlayGestures {
     this.downY = p.y;
     const tower = hitTower(state, p.x, p.y);
     this.downTowerId = tower ? tower.id : null;
+    this.swipe = tower?.owner !== 'player';
+    this.swipeX = p.x;
+    this.swipeY = p.y;
+    this.cut.clear();
+  }
+
+  /** Extend the swipe polyline to `p`: cut every player stream the new piece crosses (live), grow the trail. */
+  private swipeTo(state: GameState, p: PointerPoint): void {
+    for (const s of streamsCrossed(state, { x: this.swipeX, y: this.swipeY }, p)) {
+      const key = `${s.from}>${s.to}`;
+      if (this.cut.has(key)) continue;
+      this.cut.add(key);
+      this.opts.onCommand({ type: 'unlink', owner: 'player', from: s.from, to: s.to });
+    }
+    if (this.trail.length === 0) this.trail.push({ x: this.swipeX, y: this.swipeY, t: p.timeMs });
+    this.trail.push({ x: p.x, y: p.y, t: p.timeMs });
+    if (this.trail.length > TRAIL_MAX) this.trail.splice(0, this.trail.length - TRAIL_MAX);
+    this.swipeX = p.x;
+    this.swipeY = p.y;
   }
 
   move(p: PointerPoint): void {
     const state = this.opts.getState();
     if (!state) return;
     if (this.pointerDown && Math.hypot(p.x - this.downX, p.y - this.downY) > DRAG_THRESHOLD) this.moved = true;
+    if (this.pointerDown && this.moved && this.swipe) {
+      this.hoverTowerId = null;
+      this.swipeTo(state, p);
+      return;
+    }
     // Hover highlight only while dragging from an own tower (the target preview).
     const src = this.downTowerId ? state.towers[this.downTowerId] : undefined;
     if (this.pointerDown && this.moved && src?.owner === 'player') {
@@ -201,6 +347,8 @@ export class PlayGestures {
     const state = this.opts.getState();
     const downTowerId = this.downTowerId;
     const moved = this.moved;
+    // the last piece of a swipe (the finger may lift without a final move event at this point)
+    if (state && this.pointerDown && moved && this.swipe && (p.x !== this.swipeX || p.y !== this.swipeY)) this.swipeTo(state, p);
     this.hoverTowerId = null;
     this.clearPress();
     if (!state) return;
@@ -216,7 +364,7 @@ export class PlayGestures {
       }
       return;
     }
-    if (moved) return; // a drag that started on empty ground / foreign tower: no-op
+    if (moved) return; // a swipe (started on empty ground / a foreign tower): its cuts already happened live
 
     // Tap.
     if (!target) {
@@ -248,17 +396,34 @@ export class PlayGestures {
     this.selectedTowerId = null;
   }
 
-  cancel(): void {
+  /**
+   * The press ends without a regular `up`: pause, a HUD takeover, or a `pointercancel` from the
+   * platform. `at` (only passed for a platform cancel: the pointer's last known position) finishes a
+   * drag from an own tower as if the finger had lifted there (BUG-33): iOS WKWebView may cancel a
+   * touch it decided to treat as a system gesture / scroll after the player already dragged onto
+   * the target, and dropping that drag made "drag to attack" fail silently. A swipe's cuts already
+   * happened live, a tap that never moved stays cancelled (a cancel is not a tap).
+   */
+  cancel(at?: PointerPoint): void {
+    const state = this.opts.getState();
+    const src = state && this.downTowerId ? state.towers[this.downTowerId] : undefined;
+    if (at && this.pointerDown && this.moved && src?.owner === 'player') {
+      this.up(at);
+      return;
+    }
     this.hoverTowerId = null;
     this.clearPress();
   }
 
-  /** Call once per frame so the refusal hint expires. */
+  /** Call once per frame so the refusal hint expires and the swipe trail fades. */
   tick(nowMs: number): void {
     if (this.limitHint && nowMs >= this.limitHint.until) {
       this.limitHint = null;
       this.limitHintText = '';
     }
+    let old = 0;
+    while (old < this.trail.length && nowMs - this.trail[old]!.t >= SWIPE_TRAIL_MS) old++;
+    if (old > 0) this.trail.splice(0, old);
   }
 
   /** Apply `decideLink` for a gesture from `from` onto `to`: emit the command or raise a refusal hint. */

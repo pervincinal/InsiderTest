@@ -40,8 +40,9 @@ const OVERLAYS_CHUNK = /\/assets\/hudOverlays-[^/?]*\.js(\?.*)?$/;
 const EN_MENUS_CHUNK = /\/assets\/enMenus-[^/?]*\.js(\?.*)?$/;
 // src/render/layout.ts — RESULT.retry
 const RESULT_RETRY = { x: 275, y: 780, w: 170, h: 72 };
-// src/render/palette.ts — DEFAULT_THEME.letterbox (#1f8fc2): what the ground layer shows without the neon theme
-const DEFAULT_LETTERBOX = [31, 143, 194];
+// src/render/palette.ts — DEFAULT_THEME.waterTop (#3fb6de): what the ground layer's top corner shows without the
+// neon theme (BUG-34: the sea covers the margins, the gradient's top colour above the map)
+const DEFAULT_SEA_TOP = [63, 182, 222];
 
 const screen = (page: Page) => page.evaluate(() => window.__towerclash.getScreen());
 const simTime = (page: Page) => page.evaluate(() => window.__towerclash.getState()?.time ?? -1);
@@ -228,7 +229,7 @@ test.describe('lazy chunks under a failing network', () => {
     expect(themes, 'the themes chunk was requested').toBeDefined();
     expect(skin!.at, 'skin chunk requested before the first play frame').toBeLessThanOrEqual(playAt);
     expect(themes!.at, 'themes chunk requested before the first play frame').toBeLessThanOrEqual(playAt);
-    expect(ground, 'the ground layer is already lit by the neon theme').not.toEqual(DEFAULT_LETTERBOX);
+    expect(ground, 'the ground layer is already lit by the neon theme').not.toEqual(DEFAULT_SEA_TOP);
     expect(playAt - started, 'the wait for the chunks is short').toBeLessThan(5_000);
     expect(await page.evaluate(() => window.__towerclash.getState()?.levelId)).toBe(15);
     await expect.poll(() => simTime(page)).toBeGreaterThan(200);

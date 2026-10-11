@@ -843,7 +843,15 @@ function ambientFor(spec: TerrainSpec): Ambient {
  * Drifting cloud shadows and twinkling water sparkles over the cached ground. Cheap (≈ 40
  * primitives), no gradients. With `motion` false everything stays put but still draws.
  */
-export function drawTerrainOverlay(ctx: CanvasRenderingContext2D, pal: Palette, spec: TerrainSpec, nowMs: number, motion: boolean): void {
+export function drawTerrainOverlay(
+  ctx: CanvasRenderingContext2D,
+  pal: Palette,
+  spec: TerrainSpec,
+  nowMs: number,
+  motion: boolean,
+  /** Horizontal extent the clouds drift across (BUG-34: a wide screen's side margins); default the map. */
+  across: { left: number; right: number } = { left: 0, right: C.MAP_W },
+): void {
   const amb = ambientFor(spec);
   const theme = themeFor(spec.theme);
   const t = motion ? nowMs / 1000 : 0;
@@ -864,9 +872,9 @@ export function drawTerrainOverlay(ctx: CanvasRenderingContext2D, pal: Palette, 
   if (theme.drawGlow) theme.drawGlow(ctx, amb.specks, t); // fireflies / snow motes / neon dust (theme chunk)
   ctx.globalAlpha = theme.cloudAlpha;
   ctx.fillStyle = pal.groundShadow;
-  const span = C.MAP_W + 560;
+  const span = across.right - across.left + 560;
   for (const c of amb.clouds) {
-    const x = ((c.x0 + t * c.speed) % span) - 280;
+    const x = ((c.x0 + t * c.speed) % span) - 280 + across.left;
     ctx.beginPath();
     for (const l of c.lobes) {
       ctx.moveTo(x + l.dx + l.rx, c.y + l.dy);

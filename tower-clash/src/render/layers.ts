@@ -3,6 +3,9 @@ import type { GameState } from '../sim/types';
 import type { Palette } from './palette';
 import { themeFor } from './palette';
 import type { View } from './view';
+import { hudAnchors } from './view';
+import type { SeaColors } from './sea';
+import { drawSea } from './sea';
 import type { TerrainSpec } from './terrain';
 import { drawTerrain } from './terrain';
 import type { PlayUi } from './draw';
@@ -11,8 +14,8 @@ import { drawHud, hudKey } from './hud';
 /*
  * Static layers (PERF-3): two extra `<canvas>` elements stacked with the game canvas, each
  * repainted only when its cache key changes and composited by the browser for free.
- *   ground (below): letterbox colour + the cached island (`getTerrain`), repainted on level /
- *                   palette / theme / viewport change;
+ *   ground (below): the full-bleed sea (sea.ts, BUG-34) + the cached island (`getTerrain`),
+ *                   repainted on level / palette / theme / viewport change;
  *   hud (above):    `drawHud`, repainted when a HUD input changes (clock once a second, counts,
  *                   toast…); `pointer-events: none` so input still lands on the game canvas.
  * The game canvas in between is cleared (not filled) every frame, so the ground shows through.
@@ -22,7 +25,7 @@ import { drawHud, hudKey } from './hud';
  * theme id (`themeFor`), so a lazily loaded theme that lands mid-level repaints the ground
  * (PERF-5): the raw sprite id would not change when the chunk arrives.
  *
- * Letterbox fills go one CSS px past the viewport: the canvas is `round(css × dpr)` pixels wide, so
+ * The sea fill goes one CSS px past the viewport: the canvas is `round(css × dpr)` pixels wide, so
  * an exact `cssW` fill leaves the last column partly uncovered and whatever sits below shows
  * through it as a faint strip on the right / bottom edge.
  */
@@ -85,42 +88,50 @@ export function blankLayer(layer: Layer | undefined): void {
   layer.key = '';
 }
 
-/** Logical (720×1280) transform + map clip on a layer context (mirrors view.ts for `view.ctx`). */
-function logical(ctx: CanvasRenderingContext2D, view: View): void {
+/** Logical (720×1280) transform on a layer context (mirrors view.ts `applyTransform` for `view.ctx`), optionally clipped to the map. */
+function logical(ctx: CanvasRenderingContext2D, view: View, clip: boolean): void {
   const s = view.dpr * view.scale;
   ctx.setTransform(s, 0, 0, s, view.dpr * view.offsetX, view.dpr * view.offsetY);
+  if (!clip) return;
   ctx.beginPath();
   ctx.rect(0, 0, C.MAP_W, C.MAP_H);
   ctx.clip();
 }
 
-/** Cache key of the ground layer: level / variant (spent mines) / biome / resolved theme / palette / letterbox / viewport. */
-export function groundKey(view: View, pal: Palette, spec: TerrainSpec, letterbox: string): string {
-  return `${spec.key}|${spec.variant ?? ''}|${spec.biome ?? ''}|${themeFor(spec.theme).id}|${pal.owners.enemy1}|${letterbox}|${view.dpr}|${view.scale}|${view.offsetX}|${view.offsetY}`;
+/** Viewport part of the layer keys: the fit, the canvas size and the insets (the full-bleed margins and HUD anchors follow them). */
+function viewKey(view: View): string {
+  const i = view.insets;
+  return `${view.dpr}|${view.scale}|${view.offsetX}|${view.offsetY}|${view.cssW}x${view.cssH}|${i.top},${i.bottom}`;
 }
 
-export function paintGround(layer: Layer, view: View, pal: Palette, spec: TerrainSpec, letterbox: string): void {
-  const key = groundKey(view, pal, spec, letterbox);
+/** Cache key of the ground layer: level / variant (spent mines) / biome / resolved theme / palette / sea / viewport. */
+export function groundKey(view: View, pal: Palette, spec: TerrainSpec, sea: SeaColors): string {
+  const seaKey = `${sea.top},${sea.bottom},${sea.wave ?? ''},${sea.ambient ?? ''}`;
+  return `${spec.key}|${spec.variant ?? ''}|${spec.biome ?? ''}|${themeFor(spec.theme).id}|${pal.owners.enemy1}|${seaKey}|${viewKey(view)}`;
+}
+
+export function paintGround(layer: Layer, view: View, pal: Palette, spec: TerrainSpec, sea: SeaColors): void {
+  const key = groundKey(view, pal, spec, sea);
   if (layer.key === key) return;
   const ctx = layer.ctx;
-  ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
-  ctx.fillStyle = letterbox;
-  ctx.fillRect(0, 0, view.cssW + 1, view.cssH + 1);
   ctx.save();
-  logical(ctx, view);
+  logical(ctx, view, false);
+  drawSea(ctx, view, sea); // full bleed (BUG-34): covers the whole canvas, margins included
+  logical(ctx, view, true);
   drawTerrain(ctx, view, pal, spec);
   ctx.restore();
   layer.key = key;
 }
 
 export function paintHud(layer: Layer, view: View, state: GameState, ui: PlayUi, nowMs: number): void {
-  const key = `${view.dpr}|${view.scale}|${view.offsetX}|${view.offsetY}|${hudKey(state, ui, nowMs)}`;
+  const a = hudAnchors(view);
+  const key = `${viewKey(view)}|${a.top},${a.bottom}|${hudKey(state, ui, nowMs)}`;
   if (layer.key === key) return;
   const ctx = layer.ctx;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, layer.canvas.width, layer.canvas.height);
   ctx.save();
-  logical(ctx, view);
+  logical(ctx, view, false); // the HUD bands reach the screen edges (BUG-34): no map clip
   drawHud(ctx, state, view, ui, nowMs);
   ctx.restore();
   layer.key = key;

@@ -43,8 +43,6 @@ export interface BiomeColors {
 export interface Palette {
   /** Water (fills the map behind the plateau). */
   background: string;
-  /** Deeper water outside the logical map (letterbox bars). */
-  letterbox: string;
   /** Mine light / danger. */
   mine: string;
   /** Dark navy UI text. */
@@ -253,7 +251,6 @@ const mids = (t: Record<Owner, Tones>): Record<Owner, string> => ({
 
 export const DEFAULT_PALETTE: Palette = Object.freeze({
   background: '#3fb6de',
-  letterbox: '#1f8fc2',
   mine: '#ff5a5f',
   text: '#1e2a44',
   textDim: '#5b6b85',
@@ -376,10 +373,9 @@ export interface Speck {
 
 export interface TerrainTheme {
   id: ThemeId;
-  /** Map water gradient (top → bottom), letterbox water and sparkle colour. */
+  /** Map water gradient (top → bottom; it also fills the screen past the map, sea.ts) and sparkle colour. */
   waterTop: string;
   waterBottom: string;
-  letterbox: string;
   waterSparkle: string;
   /** Colour mixed into the biome's grass / cliff tones and how much (0 = untouched). */
   tint: string;
@@ -415,7 +411,6 @@ export const DEFAULT_THEME: TerrainTheme = Object.freeze({
   id: 'theme.default',
   waterTop: '#3fb6de',
   waterBottom: '#8ee2f5',
-  letterbox: '#1f8fc2',
   waterSparkle: 'rgba(232, 251, 255, 0.6)',
   tint: '#ffffff',
   tintAmount: 0,

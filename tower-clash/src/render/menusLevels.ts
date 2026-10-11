@@ -1,7 +1,7 @@
-import { C } from '../sim/constants';
 import type { Palette } from './palette';
 import { shade } from './palette';
 import type { View } from './view';
+import { bleed } from './view';
 import type { Rect } from './widgets';
 import { drawButton, drawCard, drawExtrudedText, drawGlassBand, drawNumeralLine, drawPill, drawStar, drawStars, fitFontPx, font, formatTime, withShadow } from './widgets';
 import { drawFlag, drawLock } from './menuWidgets';
@@ -10,7 +10,7 @@ import type { ToastOpts } from './economyWidgets';
 import { drawToast, drawWallet } from './economyWidgets';
 import { drawCrystal, drawGoldCoin } from './sprites';
 import { drawUpgradeGlyph } from './spritesShop';
-import { beginFrame, drawWater, motion } from './menus';
+import { beginFrame, drawWater, headerBand, motion } from './menus';
 import { t } from '../ui/i18n';
 
 /*
@@ -527,9 +527,10 @@ export function drawLevelSelect(view: View, pal: Palette, o: LevelSelectOpts): v
     if (i % 2 === 0) drawBush(ctx, pal, 360 + side * 150 + ((i * 29) % 60), c.y - 60, 11);
   }
   drawWindingPath(ctx, pal, count);
-  // nodes: only those near the viewport (cheap culling)
-  const minY = o.scroll - 120;
-  const maxY = o.scroll + C.MAP_H + 120;
+  // nodes: only those near the viewport (cheap culling) — the screen, margins included (BUG-34)
+  const screen = bleed(view);
+  const minY = o.scroll + screen.top - 120;
+  const maxY = o.scroll + screen.bottom + 120;
   o.nodes.forEach((node, i) => {
     const y = levelNodeRect(i, 0).y;
     if (y < minY || y > maxY) return;
@@ -538,7 +539,7 @@ export function drawLevelSelect(view: View, pal: Palette, o: LevelSelectOpts): v
   ctx.restore();
 
   // fixed header: glass band, back, title, wallet
-  drawGlassBand(ctx, { x: 0, y: 0, w: C.MAP_W, h: LEVEL_MAP.headerH });
+  drawGlassBand(ctx, headerBand(view, LEVEL_MAP.headerH)); // up to the screen's top edge (BUG-34)
   drawButton(ctx, pal, o.backRect, t('common.back'), { fontPx: 24, pressed: o.pressed === o.backRect });
   const title = t('levels.title');
   drawExtrudedText(ctx, title, 290, 50, fitFontPx(ctx, title, 40, 220), { face: pal.paper, side: shade(pal.owners.player, -0.25), outline: pal.ink, depth: 4 });

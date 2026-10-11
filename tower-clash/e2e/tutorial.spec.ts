@@ -6,8 +6,9 @@ import type { Page } from '@playwright/test';
  * LV-5 / launch checklist R1: the first-play tutorial of levels 1–3 (src/ui/tutorial.ts, rules v2)
  * driven by real touch taps on a fresh save:
  *   level 1  "tap your tower" → "tap the grey tower" → stream started
- *   level 2  "tap your tower, then the grey tower" → (gated on the link) "tap the target again to
- *            stop the stream" → cleared by the unlink
+ *   level 2  "tap your tower, then the grey tower" → (gated on the link) "swipe across the stream to
+ *            stop it" (BUG-33) → cleared by the unlink (here the second tap on the target, which still
+ *            counts; the swipe-cut is driven in swipe.spec.ts)
  *   level 3  "let a tower fill to 25" → cleared when a player tower auto-upgrades to L2, after which
  *            the L2 tower may run two streams
  * and: a cleared level (≥ 1 star) shows no tutorial on replay.

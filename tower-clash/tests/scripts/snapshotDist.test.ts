@@ -75,7 +75,16 @@ describe('e2e/tools/snapshotDist.mjs (QA-20)', () => {
     const child = spawn(process.execPath, [TOOL, join(t, 'dist'), join(t, 'snap'), '--attempts', '50', '--delay-ms', '40'], { stdio: ['ignore', 'ignore', 'pipe'] });
     let stderr = '';
     child.stderr.on('data', (d: Buffer) => (stderr += d.toString()));
-    await new Promise((r) => setTimeout(r, 150));
+    // finish the "build" only after the tool has seen it incomplete once: a fixed delay raced
+    // node's start-up under load (the first attempt already saw the complete build)
+    await new Promise<void>((resolve) => {
+      const seen = (): void => {
+        if (!stderr.includes('incomplete')) return;
+        child.stderr.off('data', seen);
+        resolve();
+      };
+      child.stderr.on('data', seen);
+    });
     writeFileSync(join(t, 'dist', 'assets', 'lazyScreens-CW72UzKY.js'), 'export const s=1;');
     const code = await new Promise<number | null>((resolve) => child.on('close', resolve));
     expect(code, stderr).toBe(0);

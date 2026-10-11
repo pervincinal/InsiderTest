@@ -71,7 +71,7 @@ export const az: Dictionary = {
   'hud.free': 'PULSUZ',
   'hud.lesson': 'DƏRS',
   'hud.airstrikeHint': 'HAVA ZƏRBƏSİ · düşmən qülləsinə toxun · ləğv üçün boş yerə toxun',
-  'hud.selectHint': 'Axın üçün xətti açıq olan qülləyə toxun · dayandırmaq üçün yenə toxun',
+  'hud.selectHint': 'Axın üçün qülləyə toxun · dayandırmaq üçün yenə toxun və ya xətti kəs',
   'hud.streams': 'AXINLAR',
   'hint.linkLimit': '{n} axın üçün L{n} lazımdır',
   'hint.blocked': 'Yol bağlıdır — açıq düz xətt yoxdur',
@@ -295,6 +295,6 @@ export const az: Dictionary = {
   'tutorial.tapTower': 'Öz qüllənə toxun',
   'tutorial.tapGrey': 'İndi boz qülləyə toxun — axın özü davam edir',
   'tutorial.tapThenGrey': 'Öz qüllənə, sonra boz qülləyə toxun',
-  'tutorial.stopStream': 'Axını dayandırmaq üçün hədəfə yenə toxun',
+  'tutorial.stopStream': 'Axını dayandırmaq üçün barmağınla xəttin üstündən keç',
   'tutorial.fillToUpgrade': 'Qoy qüllə {n}-ə dolsun və yüksəlsin — L2 iki hədəfə hücum edir',
 };

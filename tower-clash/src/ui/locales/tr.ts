@@ -71,7 +71,7 @@ export const tr: Dictionary = {
   'hud.free': 'BEDAVA',
   'hud.lesson': 'DERS',
   'hud.airstrikeHint': 'HAVA SALDIRISI · düşman kulesine dokun · iptal için başka yere dokun',
-  'hud.selectHint': 'Akış başlatmak için bağlı kuleye dokun · durdurmak için tekrar dokun',
+  'hud.selectHint': 'Akış için kuleye dokun · durdurmak için tekrar dokun ya da üstünden kaydır',
   'hud.streams': 'AKIŞLAR',
   'hint.linkLimit': '{n} akış için L{n} gerekir',
   'hint.blocked': 'Yol kapalı — düz hat yok',
@@ -295,6 +295,6 @@ export const tr: Dictionary = {
   'tutorial.tapTower': 'Kulene dokun',
   'tutorial.tapGrey': 'Şimdi gri kuleye dokun — akış sürekli devam eder',
   'tutorial.tapThenGrey': 'Kulene, sonra gri kuleye dokun',
-  'tutorial.stopStream': 'Akışı durdurmak için hedefe tekrar dokun',
+  'tutorial.stopStream': 'Akışı durdurmak için parmağını akışın üzerinden geçir',
   'tutorial.fillToUpgrade': 'Kule {n}\'e dolsun ki yükselsin — L2 2 hedefe saldırabilir',
 };

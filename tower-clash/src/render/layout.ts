@@ -101,5 +101,7 @@ export const TITLE = Object.freeze({
 
 export const TOWER_RADIUS = 34;
 export const TOWER_HIT_RADIUS = 44;
+/** Lifetime of one point of the swipe-to-cut slash trail (BUG-33): the input layer drops it then, the renderer fades it over it. */
+export const SWIPE_TRAIL_MS = 220;
 export const UNIT_RADIUS = 6;
 export const TANK_RADIUS = 11;

@@ -1,5 +1,6 @@
 import { C } from '../sim/constants';
 import { isNative } from '../native';
+import { HUD } from './layout';
 import type { Layers } from './layers';
 import { resizeLayers } from './layers';
 
@@ -16,6 +17,8 @@ export interface SafeInsets {
  * Everything is drawn in logical units; `applyTransform` sets the canvas matrix so that
  * (0,0)-(720,1280) maps to the centred, aspect-preserving rectangle inside the canvas,
  * *excluding* the safe-area insets so the HUD never sits under a notch or the home indicator.
+ * The rest of the canvas is not a bar (BUG-34): the sea and the HUD glass are painted full bleed
+ * (`bleed`), and the play HUD's bands move out to the safe-area edges (`hudAnchors`).
  */
 export interface View {
   canvas: HTMLCanvasElement;
@@ -177,7 +180,82 @@ export function insetProbe(view: View, frames: number = INSET_PROBE_FRAMES): { t
   };
 }
 
-/** Client (CSS px, relative to viewport) → logical map coordinates. May fall outside 0..720/0..1280. */
+/**
+ * Full bleed (BUG-34): the whole canvas in logical units. The map rect is (0,0)-(720,1280); on any
+ * aspect ratio other than 9:16 (or with safe-area insets) the canvas reaches past it — `top` < 0 and
+ * `bottom` > 1280 on a tall phone, `left` < 0 and `right` > 720 on a wide screen. Backgrounds (the
+ * sea), modal dims and the HUD's glass bands paint out to these edges so nothing reads as a frame.
+ */
+export interface Bleed {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+type Fit = Pick<View, 'cssW' | 'cssH' | 'scale' | 'offsetX' | 'offsetY'>;
+
+export function bleed(view: Fit): Bleed {
+  const s = view.scale > 0 ? view.scale : 1;
+  return {
+    left: view.offsetX > 0 ? -view.offsetX / s : 0,
+    top: view.offsetY > 0 ? -view.offsetY / s : 0,
+    right: Math.max(C.MAP_W, (view.cssW - view.offsetX) / s),
+    bottom: Math.max(C.MAP_H, (view.cssH - view.offsetY) / s),
+  };
+}
+
+/** `bleed` as a rect, padded by one CSS px on the far edges (the canvas is `round(css × dpr)` px; layers.ts). */
+export function bleedRect(view: Fit): { x: number; y: number; w: number; h: number } {
+  const b = bleed(view);
+  const pad = 1 / (view.scale > 0 ? view.scale : 1);
+  return { x: b.left, y: b.top, w: b.right - b.left + pad, h: b.bottom - b.top + pad };
+}
+
+/**
+ * Where the play HUD's bands sit (BUG-34), as logical offsets from their layout positions
+ * (`HUD.topBar` at y 0, `HUD.bottomBar` at y 1180): the top band moves up to the top safe-area edge
+ * of the screen (`top` ≤ 0) and the bottom band down to the bottom safe-area edge (`bottom` ≥ 0).
+ * Their glass reaches the screen edge (under the notch / home indicator); their content stays inside
+ * the safe area. Both are 0 on a 9:16 screen without insets, where the map fills the screen.
+ */
+export interface HudAnchors {
+  top: number;
+  bottom: number;
+}
+
+export function hudAnchors(view: Fit & Pick<View, 'insets'>): HudAnchors {
+  const s = view.scale;
+  if (!(s > 0) || !view.insets) return { top: 0, bottom: 0 }; // not laid out yet (stub views in tests)
+  const top = Math.min(0, (view.insets.top - view.offsetY) / s);
+  const bottom = Math.max(0, (view.cssH - view.insets.bottom - view.offsetY) / s - C.MAP_H);
+  return { top: Number.isFinite(top) ? top : 0, bottom: Number.isFinite(bottom) ? bottom : 0 };
+}
+
+/**
+ * Screen logical point → HUD layout coordinates (the rects in layout.ts `HUD` / `BOOSTERS`): a point
+ * on the moved top band (above its bottom edge) is shifted by `-a.top`, one on the moved bottom band
+ * by `-a.bottom`, anything in between (the world) is returned as it is. Hit tests of the HUD rects
+ * use this; the world (towers) uses the plain logical point.
+ */
+export function toHudSpace(a: HudAnchors, x: number, y: number): { x: number; y: number } {
+  if (y < HUD.mapTop + a.top) return { x, y: y - a.top };
+  if (y >= HUD.mapBottom + a.bottom) return { x, y: y - a.bottom };
+  return { x, y };
+}
+
+/** Inverse of `toHudSpace` for a point on a HUD rect: where it is drawn on the screen (logical). */
+export function fromHudSpace(a: HudAnchors, x: number, y: number): { x: number; y: number } {
+  if (y < HUD.mapTop) return { x, y: y + a.top };
+  if (y >= HUD.mapBottom) return { x, y: y + a.bottom };
+  return { x, y };
+}
+
+/**
+ * Client (CSS px, relative to viewport) → logical map coordinates. Linear over the whole canvas, so
+ * it falls outside 0..720 / 0..1280 in the full-bleed margins (BUG-34): a tap on the moved HUD band
+ * above the map has y < 0 — `toHudSpace` maps it back onto the HUD rects.
+ */
 export function toLogical(view: View, clientX: number, clientY: number): { x: number; y: number } {
   const rect = view.canvas.getBoundingClientRect();
   return {
@@ -192,7 +270,7 @@ export function toClient(view: View, x: number, y: number): { x: number; y: numb
   return { x: rect.left + view.offsetX + x * view.scale, y: rect.top + view.offsetY + y * view.scale };
 }
 
-/** Reset the matrix to device pixels (for painting the letterbox bars). */
+/** Reset the matrix to device pixels (CSS px × dpr). */
 export function applyDeviceTransform(view: View): void {
   view.ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
 }

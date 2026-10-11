@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { tapAt, tapRect } from './helpers/tap';
+import { tapAt, tapHud, tapRect } from './helpers/tap';
 
 /*
  * Smoke: PWA files → title → level select (locks) → play level 1 (tutorial + manual stream: select
@@ -326,19 +326,19 @@ test.describe('Tower Clash smoke', () => {
     // (c2) booster bar: OVERDRIVE costs 30 coins, lands in state.boosters and persists the balance;
     //      a second tap while it runs is ignored (one active per type).
     expect(await boosters(page)).toEqual([]);
-    await tapRect(page, BOOSTERS.overdrive);
+    await tapHud(page, BOOSTERS.overdrive);
     await expect.poll(() => coins(page)).toBe(SEEDED_COINS - OVERDRIVE_COST);
     await expect.poll(async () => (await boosters(page)).map((b) => b.type)).toEqual(['overdrive']);
     expect((await readSave(page))?.gold).toBe(SEEDED_COINS - OVERDRIVE_COST);
-    await tapRect(page, BOOSTERS.overdrive);
+    await tapHud(page, BOOSTERS.overdrive);
     await page.waitForTimeout(150);
     expect(await coins(page)).toBe(SEEDED_COINS - OVERDRIVE_COST);
     expect((await boosters(page)).length).toBe(1);
     await shot(page, 'play');
     // HUD mute toggles the persisted sound setting
-    await tapRect(page, HUD.mute);
+    await tapHud(page, HUD.mute);
     await expect.poll(async () => (await readSave(page))?.settings.sound).toBe(false);
-    await tapRect(page, HUD.mute);
+    await tapHud(page, HUD.mute);
     await expect.poll(async () => (await readSave(page))?.settings.sound).toBe(true);
     const coinsBeforeWin = SEEDED_COINS - OVERDRIVE_COST;
 
@@ -418,7 +418,7 @@ test.describe('Tower Clash smoke', () => {
     await expect.poll(() => page.evaluate(() => window.__towerclash.getSpeed())).toBe(2);
     await tapRect(page, PAUSE.resume);
     await expect.poll(() => simTime(page)).toBeGreaterThan(pausedAt);
-    await tapRect(page, HUD.pause); // HUD button pauses too
+    await tapHud(page, HUD.pause); // HUD button pauses too (where the anchored band draws it, BUG-34)
     await page.waitForTimeout(100);
     const pausedAgain = await simTime(page);
     await page.waitForTimeout(200);
