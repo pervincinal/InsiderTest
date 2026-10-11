@@ -26,6 +26,8 @@ What must NOT be claimed: leaderboards, multiplayer, cloud save, more than 50 le
 
 ## 1. Google Play
 
+Paste-ready Play Console order (PUB-21, 2026-10-11): `PLAY_CONSOLE_SHEET.md` — 1.0.0 goes to Play **without in-app purchases**, so it uses the variant-B long descriptions of §2.1 (EN 3863 / AZ 3825), no Purchase-history row in Data safety and "digital purchases: No" in IARC; the texts below are variant A (1.0.1).
+
 | Field | Limit | EN | AZ |
 |---|---|---|---|
 | App name | 30 | `Tower Clash` (11) | `Tower Clash` (11) |

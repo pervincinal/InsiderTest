@@ -211,6 +211,8 @@ Shared facts: app id / bundle id / package name **`com.pervincinal.towerclash`**
 
 ## 2. Google Play
 
+**Paste sheet (PUB-21, 2026-10-11): `PLAY_CONSOLE_SHEET.md`** — every Play Console screen for G1–G20 in order (account, Create app, the App content forms incl. IARC / Data safety / advertising ID for 1.0.0 without purchases, EN + AZ listing with counts, closed test and the production-access answers, manual `.aab` upload, production countries), an AZ summary and a Cowork prompt.
+
 | # | Step | Status | Notes |
 |---|---|---|---|
 | G1 | Google Play Console developer account (USD 25 one-time, identity verification, D-U-N-S only for organisations) | needs stakeholder | Personal accounts created after Nov 2023 must run a closed test with 12+ testers for 14 days before production access |
