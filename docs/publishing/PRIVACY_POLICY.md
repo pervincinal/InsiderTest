@@ -109,8 +109,8 @@ Changelog: 2.1 (2026-09-14) — the iOS app never asks for tracking permission (
 
 ### Contact
 
-Questions about this policy or a deletion request: `[developer e-mail]`
-Data controller: `[developer name / address]` (the person or company that publishes the app on the stores).
+Questions about this policy or a deletion request: yusifli.pervin@gmail.com
+Data controller: Parvin Yusifli, Baku, Azerbaijan (the person or company that publishes the app on the stores).
 
 ---
 
@@ -219,5 +219,5 @@ Dəyişikliklər tarixçəsi: 2.1 (14.09.2026) — iOS tətbiqi heç vaxt izləm
 
 ### Əlaqə
 
-Bu siyasətlə bağlı suallar və ya silinmə sorğusu: `[developer e-mail]`
-Məlumat nəzarətçisi: `[developer name / address]` (tətbiqi mağazalarda nəşr edən şəxs və ya şirkət).
+Bu siyasətlə bağlı suallar və ya silinmə sorğusu: yusifli.pervin@gmail.com
+Məlumat nəzarətçisi: Parvin Yusifli, Bakı, Azərbaycan (tətbiqi mağazalarda nəşr edən şəxs və ya şirkət).

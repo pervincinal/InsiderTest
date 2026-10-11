@@ -34,7 +34,7 @@ Paste-ready Play Console order (PUB-21, 2026-10-11): `PLAY_CONSOLE_SHEET.md` —
 | Short description | 80 | `Capture every tower. One-thumb real-time strategy, 50 levels, plays offline.` (76) | `Bütün qüllələri tut. Bir barmaqla real vaxt strategiya, 50 səviyyə, oflayn.` (75) |
 | Category | — | Games › Strategy | Oyunlar › Strategiya |
 | Tags | — | Strategy, Casual, Single player, Offline, Stylised | — |
-| Contact e-mail | — | `[developer e-mail]` | — |
+| Contact e-mail | — | `yusifli.pervin@gmail.com` | — |
 | Privacy policy URL | — | `https://pervincinal.github.io/InsiderTest/privacy.html` (policy v2.1 with the ads/purchases section; the page is `tower-clash/public/privacy.html`, published by the Pages job — not live yet: GitHub Pages was never enabled, BUG-26, checklist W3) | — |
 | Website (optional) | — | `https://pervincinal.github.io/InsiderTest/` — support page `https://pervincinal.github.io/InsiderTest/support.html` | — |
 | Store labels (automatic) | — | **Contains ads** (from the Ads declaration) · **In-app purchases** (from the product list) — Google adds both badges; nothing to type | — |

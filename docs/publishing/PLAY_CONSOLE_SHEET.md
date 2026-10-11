@@ -181,7 +181,7 @@ Why: the AdMob SDK merges the `com.google.android.gms.permission.AD_ID` permissi
 | App or game (Tətbiq/oyun) | **Game** | |
 | Category (Kateqoriya) | **Strategy** (Strategiya) | `STORE_LISTING.md` §1 "Games › Strategy" |
 | Tags (Teqlər) → Manage tags, up to 5 | **Strategy**, **Casual**, **Single player**, **Offline**, **Stylized** ⚠ 10 | pick the closest names the tag picker offers (`STORE_LISTING.md` §1: "Strategy, Casual, Single player, Offline, Stylised"); never a competitor's name |
-| Email address (E-poçt ünvanı) — public | `[developer e-mail]` — **stakeholder fills** (G18) | the same address as on the privacy and support pages; not yet sent to the team |
+| Email address (E-poçt ünvanı) — public | `yusifli.pervin@gmail.com` (G18, sent 2026-10-11) | the same address as on the privacy and support pages; not yet sent to the team |
 | Phone number (Telefon) — public | leave **empty** | optional |
 | Website (Veb sayt) — public | `https://pervincinal.github.io/InsiderTest/` | not live yet (BUG-26, §2.1); support page `…/support.html` |
 | External marketing (Xarici marketinq) | leave the default (on) | |
@@ -322,7 +322,7 @@ What the eight frames show (`STORE_LISTING.md` §1.3): 01 title "Capture every t
 | Countries / regions (Ölkələr) → Add countries / regions | **Azerbaijan, Türkiye, Kazakhstan, Georgia** + the country of any tester who lives elsewhere | a tester outside the track's countries cannot install |
 | Testers (Test edənlər) → **Email lists** → *Create email list* | list name `Tower Clash testers`; add the testers' **Google (Gmail) addresses**, comma-separated or one per line → **Save changes** → tick the list → **Save** | **stakeholder fills** the addresses (they never go into the repository); invite **15–20** people so that 12 stay opted in for 14 days |
 | — alternative: **Google Groups** | create a group at groups.google.com (e.g. `tower-clash-testers@googlegroups.com`), let people join, add only the group address under *Google Groups* | easier when testers change; the people must join the group with the same Google account they use on the phone |
-| Feedback URL or email address (Rəy ünvanı) | `[developer e-mail]` — **stakeholder fills** | testers see it on the opt-in page |
+| Feedback URL or email address (Rəy ünvanı) | `yusifli.pervin@gmail.com` | testers see it on the opt-in page |
 | How testers join your test → **Copy link** | the opt-in link `https://play.google.com/apps/testing/com.pervincinal.towerclash` (shown after the first release is saved) | the link only works for the addresses on the list |
 
 Also add the same addresses under **Setup → License testing** only for 1.0.1 (purchases free for testers, MZ5) — not needed in 1.0.0.
