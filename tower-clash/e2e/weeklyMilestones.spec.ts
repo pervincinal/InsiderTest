@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { tapRect } from './helpers/tap';
+import { recordToasts, toastsSeen } from './helpers/toasts';
 
 /*
  * QA-15 — week-streak milestones in the real UI (WK-1, GDD §8.1 "Week-streak milestones", §8.4 item 6;
@@ -10,6 +12,9 @@ import type { Page } from '@playwright/test';
  * milestone > 3★ target), the crystals the wallet received, and `save.weekly.streak`. The toast is read
  * twice — from the debug surface (`getToast`) and from the strings actually drawn on the #game canvas
  * (a `fillText` recorder, as e2e/shopNoStore.spec.ts) — so "shown" means painted, not only queued.
+ * QA-20: both are recorded page-side for the whole time the result screen is up (e2e/helpers/toasts.ts
+ * and the `fillText` hook in `boot`) and polled, so a 3.5 s toast that expires before a slow
+ * round-trip under load is still seen.
  *
  * The week is weekly.spec.ts's WEEK_A (2026-09-21 → level 33 Three Kings, seed 743047, Fast feet,
  * 35 s target; the bot clocks ~32.9 s, so the 3★ target usually pays too). The target is not asserted
@@ -36,7 +41,7 @@ const SEED_CRYSTALS = 3;
 const SEED_GOLD = 100;
 
 type R = { x: number; y: number; w: number; h: number };
-type RecWindow = Window & { __qaTexts: string[] | null };
+type RecWindow = Window & { __qaResultTexts: string[] };
 
 interface SaveShape {
   gold: number;
@@ -47,14 +52,9 @@ interface SaveShape {
 
 const screen = (page: Page) => page.evaluate(() => window.__towerclash.getScreen());
 const save = (page: Page) => page.evaluate(() => JSON.parse(JSON.stringify(window.__towerclash.economy.getSave())) as SaveShape);
-const toast = (page: Page) => page.evaluate(() => window.__towerclash.getToast());
 const text = (page: Page, key: string, params?: Record<string, string | number>) => page.evaluate(([k, p]) => window.__towerclash.getText(k, p), [key, params] as const);
 const fill = (template: string, params: Record<string, string | number>) => template.replace(/\{(\w+)\}/g, (m, k: string) => (k in params ? String(params[k]) : m));
 
-async function tapRect(page: Page, r: R): Promise<void> {
-  const c = await page.evaluate(([x, y]) => window.__towerclash.toClient(x, y), [r.x + r.w / 2, r.y + r.h / 2] as const);
-  await page.mouse.click(c.x, c.y);
-}
 
 /** Levels 1–32 at one star: the weekly is unlocked (GDD §8.1 "Unlock"). */
 function unlockedStars(): Record<string, number> {
@@ -84,15 +84,18 @@ async function boot(page: Page, seeded: Record<string, unknown>, language: 'az' 
   });
   await page.addInitScript(([key, data]) => localStorage.setItem(key, JSON.stringify(data)), [SAVE_KEY, seeded] as const);
   await page.addInitScript(() => {
+    // every run drawn on #game while the result screen is current, in draw order, duplicates kept
+    // (ART-16 toasts draw numbers as separate runs; `compact` below needs every run in place)
     const w = window as unknown as RecWindow;
-    w.__qaTexts = null;
+    w.__qaResultTexts = [];
     const orig = CanvasRenderingContext2D.prototype.fillText;
     CanvasRenderingContext2D.prototype.fillText = function (s: string, x: number, y: number, maxWidth?: number): void {
-      if (w.__qaTexts && this.canvas.id === 'game') w.__qaTexts.push(String(s));
+      if (this.canvas.id === 'game' && w.__qaResultTexts.length < 200_000 && window.__towerclash?.getScreen?.() === 'result') w.__qaResultTexts.push(String(s));
       if (maxWidth === undefined) orig.call(this, s, x, y);
       else orig.call(this, s, x, y, maxWidth);
     };
   });
+  await recordToasts(page);
   await page.goto('/');
   await page.waitForFunction(() => typeof window.__towerclash?.weekly?.get === 'function');
   await page.evaluate((key) => window.__towerclash.setWeekKey(key), WEEK);
@@ -102,17 +105,30 @@ async function boot(page: Page, seeded: Record<string, unknown>, language: 'az' 
   return errors;
 }
 
-/** Every string drawn on #game during the next three animation frames. */
-async function drawnTexts(page: Page): Promise<string[]> {
-  return page.evaluate(async () => {
-    const w = window as unknown as RecWindow;
-    w.__qaTexts = [];
-    for (let i = 0; i < 3; i++) await new Promise((r) => requestAnimationFrame(r));
-    const out = w.__qaTexts ?? [];
-    w.__qaTexts = null;
-    return out; // in draw order, duplicates kept: the compact() checks below need every run in place (ART-16 toasts draw numbers as separate runs)
-  });
+/**
+ * ART-16 (2026-10-10): a toast is no longer one fillText call — the words and the 24 px numerals are
+ * separate runs and long toasts wrap — so a toast string is looked for in the concatenation of every
+ * drawn run with all whitespace removed.
+ */
+const compact = (s: string | readonly string[]): string => (Array.isArray(s) ? s.join(' ') : String(s)).replace(/\s+/g, '');
+
+/** Whether `needle` is in the compacted concatenation of every run drawn on the result screen so far. */
+function drawnIncludes(page: Page, needle: string): Promise<boolean> {
+  return page.evaluate((n) => (window as unknown as RecWindow).__qaResultTexts.join(' ').replace(/\s+/g, '').includes(n), compact(needle));
 }
+
+/** `text` was painted on the result screen (polled: the recorder fills while the screen draws). */
+async function expectDrawn(page: Page, text: string): Promise<void> {
+  await expect.poll(() => drawnIncludes(page, text), { message: `"${text}" drawn on the result screen` }).toBe(true);
+}
+
+/** Runs drawn on the result screen so far that start with `prefix`. */
+function drawnStartingWith(page: Page, prefix: string): Promise<string[]> {
+  return page.evaluate((p) => (window as unknown as RecWindow).__qaResultTexts.filter((s) => s.startsWith(p)), prefix);
+}
+
+/** Toasts the result screen showed (page-side recorder). */
+const resultToasts = (page: Page) => toastsSeen(page, { screen: 'result' });
 
 /** Reference player at ×10 on the weekly that is starting / running → a won result screen. */
 async function winRunning(page: Page): Promise<void> {
@@ -139,24 +155,13 @@ interface Won {
   after: SaveShape;
   /** The 3★ target crystals were paid on this run (the bot was at or under the level's star3 clock). */
   target: boolean;
-  toast: string | null;
-  drawn: string[];
 }
 
 async function readWin(page: Page): Promise<Won> {
   const result = (await page.evaluate(() => window.__towerclash.getResult()))!;
   const after = await save(page);
-  const t = await toast(page);
-  const drawn = await drawnTexts(page);
-  return { result, after, target: after.weekly.best[WEEK]?.target === true, toast: t, drawn };
+  return { result, after, target: after.weekly.best[WEEK]?.target === true };
 }
-
-/**
- * ART-16 (2026-10-10): a toast is no longer one fillText call — the words and the 24 px numerals are
- * separate runs and long toasts wrap — so a toast string is looked for in the concatenation of every
- * drawn run with all whitespace removed.
- */
-const compact = (s: string | readonly string[]): string => (Array.isArray(s) ? s.join(' ') : String(s)).replace(/\s+/g, '');
 
 test.describe('weekly week-streak milestones (QA-15, GDD §8.1)', () => {
   test('streak 3 → 4 through the card (AZ), first run: 15 milestone + 20 weekly_streak_4 = +35 crystals, the achievement takes the toast slot', async ({ page }) => {
@@ -187,11 +192,12 @@ test.describe('weekly week-streak milestones (QA-15, GDD §8.1)', () => {
     const achievementToast = fill(await text(page, 'achievements.unlocked'), { names: await text(page, 'achievement.weekly_streak_4'), crystals: WEEKLY_STREAK_4_CRYSTALS });
     const milestoneToast = fill(await text(page, 'weekly.resultMilestone'), { n: 4, streak: 4, crystals: milestone });
     expect(milestoneToast).toBe('Həftə seriyası 4 · +15 kristal');
-    expect(w.toast).toBe(achievementToast);
-    expect(compact(w.drawn)).toContain(compact(achievementToast));
-    expect(compact(w.drawn)).not.toContain(compact(milestoneToast));
+    await expect.poll(() => resultToasts(page)).toEqual([achievementToast]);
+    await expectDrawn(page, achievementToast);
     // the line under the stars stays weekly.resultWon with the new streak
-    expect(compact(w.drawn)).toContain(compact(fill(await text(page, 'weekly.resultWon'), { gold: WEEKLY_REWARD.gold, streak: 4 })));
+    await expectDrawn(page, fill(await text(page, 'weekly.resultWon'), { gold: WEEKLY_REWARD.gold, streak: 4 }));
+    expect(await drawnIncludes(page, milestoneToast)).toBe(false);
+    expect(await resultToasts(page)).toEqual([achievementToast]);
     expect(errors).toEqual([]);
   });
 
@@ -211,9 +217,9 @@ test.describe('weekly week-streak milestones (QA-15, GDD §8.1)', () => {
     const expected = fill(await text(page, 'weekly.resultMilestone'), { n: 4, streak: 4, crystals: milestone });
     expect(expected).toBe('Həftə seriyası 4 · +15 kristal');
     // the milestone outranks the 3★ target (whose 20 is credited, not named)
-    expect(w.toast).toBe(expected);
-    expect(compact(w.drawn)).toContain(compact(expected));
-    expect(compact(w.drawn)).toContain(compact(fill(await text(page, 'weekly.resultWon'), { gold: WEEKLY_REWARD.gold, streak: 4 })));
+    await expect.poll(() => resultToasts(page)).toEqual([expected]);
+    await expectDrawn(page, expected);
+    await expectDrawn(page, fill(await text(page, 'weekly.resultWon'), { gold: WEEKLY_REWARD.gold, streak: 4 }));
     expect(Object.keys(w.after.weekly).sort()).toEqual(['best', 'lastWinWeek', 'streak']); // no new save field
     expect(errors).toEqual([]);
   });
@@ -234,9 +240,11 @@ test.describe('weekly week-streak milestones (QA-15, GDD §8.1)', () => {
     const milestonePrefix = milestoneTemplate.slice(0, milestoneTemplate.indexOf('{'));
     expect(milestonePrefix).toBe('Week streak ');
     // the 3★ target toast when the bot hit it, else no toast at all — never a week-streak line
-    expect(w.toast).toBe(w.target ? await text(page, 'weekly.resultTarget', { crystals: WEEKLY_REWARD.crystals }) : null);
-    expect(w.drawn.filter((s) => s.startsWith(milestonePrefix))).toEqual([]);
-    expect(compact(w.drawn)).toContain(compact(fill(await text(page, 'weekly.resultWon'), { gold: WEEKLY_REWARD.gold, streak: 5 })));
+    const targetToast = await text(page, 'weekly.resultTarget', { crystals: WEEKLY_REWARD.crystals });
+    await expect.poll(() => resultToasts(page)).toEqual(w.target ? [targetToast] : []);
+    await expectDrawn(page, fill(await text(page, 'weekly.resultWon'), { gold: WEEKLY_REWARD.gold, streak: 5 }));
+    expect(await drawnStartingWith(page, milestonePrefix)).toEqual([]);
+    expect(await resultToasts(page)).toEqual(w.target ? [targetToast] : []);
     expect(errors).toEqual([]);
   });
 
@@ -252,8 +260,8 @@ test.describe('weekly week-streak milestones (QA-15, GDD §8.1)', () => {
     expect(w.result.achievements).toEqual([]);
     expect(w.result.crystalsEarned).toBe(milestone + targetPart);
     expect(w.after.crystals - SEED_CRYSTALS).toBe(milestone + targetPart);
-    expect(w.toast).toBe('Week streak 12 · +60 crystals');
-    expect(compact(w.drawn)).toContain(compact('Week streak 12 · +60 crystals'));
+    await expect.poll(() => resultToasts(page)).toEqual(['Week streak 12 · +60 crystals']);
+    await expectDrawn(page, 'Week streak 12 · +60 crystals');
     expect(errors).toEqual([]);
   });
 });

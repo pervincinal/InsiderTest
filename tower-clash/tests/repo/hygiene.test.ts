@@ -127,6 +127,90 @@ describe('tower-clash/e2e/share.spec.ts (BUG-25)', () => {
 });
 
 /*
+ * QA-20: the e2e suite stays green under load without retries. Three guards:
+ * - Toasts are read from the page-side recorder (e2e/helpers/toasts.ts, BUG-25 generalised): a
+ *   one-shot `getToast()` read races the toast's 2.4–3.5 s wall-clock life. The only other
+ *   `getToast()` call allowed is stalemate.spec.ts's `probe`, which samples the toast together with
+ *   the sim time inside one evaluate and is polled for the whole match (a negative check).
+ * - Taps go through e2e/helpers/tap.ts, which reads the client point inside a requestAnimationFrame
+ *   callback: the shop builds its hit regions while drawing, and a tap before its first frame was
+ *   dropped (economy.spec.ts "booster crate", 2026-10-10: 15 s poll timeout → 17.1 s failure).
+ * - No fixed sleep above 1000 ms without a same-line `// ok:` reason (a wall-clock animation before a
+ *   screenshot, a Date.now() back-off) — anything else must poll the state it waits for.
+ */
+const E2E_HELPERS_DIR = new URL('helpers/', E2E_DIR);
+const E2E_FILES: { name: string; src: string }[] = [
+  ...E2E_SPECS.map((f) => ({ name: f, src: readFileSync(new URL(f, E2E_DIR), 'utf8') })),
+  ...readdirSync(E2E_HELPERS_DIR)
+    .filter((f) => f.endsWith('.ts'))
+    .map((f) => ({ name: `helpers/${f}`, src: readFileSync(new URL(f, E2E_HELPERS_DIR), 'utf8') })),
+];
+/** Source lines without comment-only lines (`//`, `/*`, ` *`), with their 1-based numbers. */
+const codeLines = (src: string): { n: number; line: string }[] =>
+  src
+    .split('\n')
+    .map((line, i) => ({ n: i + 1, line }))
+    .filter(({ line }) => !/^\s*(\/\/|\/\*|\*)/.test(line));
+
+describe('tower-clash/e2e load tolerance (QA-20)', () => {
+  it('no one-shot getToast() read outside e2e/helpers/toasts.ts', () => {
+    const oneShot = /evaluate\(\s*\(\)\s*=>\s*window\.__towerclash\.getToast\(\)\s*\)/;
+    const offenders: string[] = [];
+    for (const { name, src } of E2E_FILES) {
+      if (name === 'helpers/toasts.ts') continue;
+      for (const { n, line } of codeLines(src)) {
+        if (oneShot.test(line)) offenders.push(`${name}:${n}`);
+        else if (/\.getToast\(\)/.test(line) && name !== 'stalemate.spec.ts') offenders.push(`${name}:${n} (getToast() call)`);
+      }
+    }
+    expect(offenders, 'read toasts with expectToast / toastsSeen from e2e/helpers/toasts.ts').toEqual([]);
+    expect(E2E_FILES.find((f) => f.name === 'helpers/toasts.ts')?.src).toMatch(/setInterval\(/);
+  });
+
+  it('every spec that reads the toast recorder installs it (toastsSeen throws at run time when it was not installed before boot)', () => {
+    for (const { name, src } of E2E_FILES.filter((f) => /from '\.\/helpers\/toasts'/.test(f.src))) {
+      expect(src, `${name} imports the recorder but never installs it`).toContain('await recordToasts(page);');
+    }
+    expect(E2E_FILES.find((f) => f.name === 'helpers/toasts.ts')?.src).toMatch(/throw new Error\('toastsSeen: recordToasts\(page\) was not installed/);
+  });
+
+  it('the specs the BUG-25 row listed assert toasts from the recorder', () => {
+    for (const f of ['daily.spec.ts', 'weekly.spec.ts', 'lazy.spec.ts', 'weeklyMilestones.spec.ts', 'share.spec.ts', 'pwa.spec.ts']) {
+      expect(E2E_FILES.find((x) => x.name === f)?.src, f).toMatch(/import \{[^}]*\brecordToasts\b[^}]*\} from '\.\/helpers\/toasts'/);
+    }
+  });
+
+  it('no waitForTimeout above 1000 ms (or with a computed duration) without a same-line `// ok:` reason', () => {
+    const offenders: string[] = [];
+    for (const { name, src } of E2E_FILES) {
+      for (const { n, line } of codeLines(src)) {
+        for (const m of line.matchAll(/waitForTimeout\(([^)]*)\)/g)) {
+          const arg = m[1]!.trim();
+          const ms = /^[\d_]+$/.test(arg) ? Number(arg.replace(/_/g, '')) : NaN;
+          if ((Number.isNaN(ms) || ms > 1000) && !/\/\/ ok: \S/.test(line)) offenders.push(`${name}:${n} waitForTimeout(${arg})`);
+        }
+      }
+    }
+    expect(offenders, 'poll the state instead, or justify the sleep with `// ok: <reason>` on the same line').toEqual([]);
+  });
+
+  it('taps are frame-synced: no spec defines its own tapRect / tapAt, the tapping specs import e2e/helpers/tap.ts', () => {
+    const local = E2E_FILES.filter((f) => f.name.endsWith('.spec.ts') && /(async )?function (tapRect|tapAt)\(/.test(f.src)).map((f) => f.name);
+    expect(local).toEqual([]);
+    for (const f of ['economy.spec.ts', 'shopNoStore.spec.ts', 'smoke.spec.ts', 'tapSync.spec.ts']) {
+      expect(E2E_FILES.find((x) => x.name === f)?.src, f).toMatch(/from '\.\/helpers\/tap'/);
+    }
+    const tap = E2E_FILES.find((f) => f.name === 'helpers/tap.ts')?.src ?? '';
+    expect(tap).toMatch(/requestAnimationFrame\(\(\) => resolve\(window\.__towerclash\.toClient\(x, y\)\)\)/);
+  });
+
+  it('the preview serves a dist snapshot checked for completeness, never a bare cp of dist/', () => {
+    expect(PW_CONFIG).toMatch(/node e2e\/tools\/snapshotDist\.mjs dist "\$\{DIST_SNAPSHOT\}" --attempts \d+ --delay-ms \d+/);
+    expect(PW_CONFIG).not.toMatch(/cp -R dist\//);
+  });
+});
+
+/*
  * QA-17: the chromium e2e step runs on two Playwright workers to stay well inside its 15-minute CI
  * timeout. Parallelism stays at the file level (`fullyParallel: false`: a spec's tests run in
  * order in one worker), with at most 2 workers for the 4-vCPU runner and perf.spec.ts's frame

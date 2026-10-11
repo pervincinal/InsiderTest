@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { tapRect } from './helpers/tap';
 
 /*
  * QA-14 (L10N, 2026-10-06): the 1080 × 1350 share card (SHARE-1, GDD §7.3) in every UI language —
@@ -200,8 +201,7 @@ async function shareCard(page: Page, expectName: string): Promise<{ draws: Draw[
     window.__shareDraws = [];
     window.__shareDownloads = [];
   });
-  const c = await page.evaluate(([x, y]) => window.__towerclash.toClient(x, y), [RESULT_SHARE.x + RESULT_SHARE.w / 2, RESULT_SHARE.y + RESULT_SHARE.h / 2] as const);
-  await page.mouse.click(c.x, c.y);
+  await tapRect(page, RESULT_SHARE);
   await expect.poll(() => page.evaluate(() => window.__shareDownloads?.[0]?.base64 ?? null), { timeout: 15_000, intervals: [50] }).not.toBeNull();
   const downloads = (await page.evaluate(() => window.__shareDownloads))!;
   expect(downloads).toHaveLength(1);

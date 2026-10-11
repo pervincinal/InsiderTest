@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
+import { tapRect } from './helpers/tap';
+import { expectToast, recordToasts, toastMark } from './helpers/toasts';
 
 /*
  * Daily Challenge v1 (GDD §7): the level-map card is locked on a fresh save and opens once level 8
@@ -36,10 +38,6 @@ const SHOTS = fileURLToPath(new URL('./__screenshots__/', import.meta.url));
 const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}${name}.png`, scale: 'css' });
 
 type R = { x: number; y: number; w: number; h: number };
-async function tapRect(page: Page, r: R): Promise<void> {
-  const c = await page.evaluate(([x, y]) => window.__towerclash.toClient(x, y), [r.x + r.w / 2, r.y + r.h / 2] as const);
-  await page.mouse.click(c.x, c.y);
-}
 
 interface SaveShape {
   gold: number;
@@ -59,6 +57,7 @@ async function boot(page: Page, seeded: Record<string, unknown>, dayKey: string)
     if (msg.type() === 'error') errors.push(msg.text());
   });
   await page.addInitScript(([key, data]) => localStorage.setItem(key, JSON.stringify(data)), [SAVE_KEY, seeded] as const);
+  await recordToasts(page);
   await page.goto('/');
   await page.waitForFunction(() => typeof window.__towerclash?.daily?.get === 'function');
   await page.evaluate((key) => window.__towerclash.setDayKey(key), dayKey);
@@ -132,7 +131,7 @@ test.describe('daily challenge', () => {
     expect(after.challenge.streak).toBe(1);
     expect(after.challenge.best[DAY_A]).toMatchObject({ stars: result.stars });
     expect(after.stars[String(info.challenge.levelId)]).toBeUndefined(); // no level stars from a challenge
-    await page.waitForTimeout(2200); // card slide + count-up
+    await page.waitForTimeout(2200); // ok: screenshot timing only — the card slide + count-up run on wall clock
     await shot(page, 'look3-daily-result');
 
     // replay the same day: nothing is paid, the best is reported
@@ -203,7 +202,7 @@ test.describe('daily challenge', () => {
       expect(s.challenge.lastWinDay).toBe(day);
       expect(s.challenge.milestones).toEqual(i === 2 ? [3] : []);
     }
-    await page.waitForTimeout(2200); // card slide + count-up; the milestone toast is still up (3.5 s)
+    await page.waitForTimeout(2200); // ok: screenshot timing only — card slide + count-up run on wall clock; the milestone toast is still up (3.5 s)
     await shot(page, 'look3-daily-milestone');
 
     // a replay on day 3 pays nothing and keeps the milestone paid
@@ -244,6 +243,7 @@ test.describe('daily challenge', () => {
     const before = await save(page);
 
     // tap the row → yesterday's level, seed and twist; the no-reward toast is up
+    const beforeTap = await toastMark(page);
     await tapRect(page, LEVEL_MAP_YESTERDAY);
     await expect.poll(() => screen(page)).toBe('play');
     const state = await page.evaluate(() => {
@@ -254,7 +254,7 @@ test.describe('daily challenge', () => {
     expect(state.seed).toBe(yesterday.seed);
     expect(state.modifiers).toEqual(yesterday.twist.modifiers);
     const noReward = await page.evaluate(() => window.__towerclash.getText('daily.yesterdayNoReward'));
-    expect(await page.evaluate(() => window.__towerclash.getToast())).toBe(noReward);
+    await expectToast(page, noReward, { since: beforeTap, screen: 'play' });
 
     await winRunningChallenge(page);
     const result = (await page.evaluate(() => window.__towerclash.getResult()))!;
@@ -267,7 +267,7 @@ test.describe('daily challenge', () => {
     expect(after.crystals).toBe(before.crystals);
     expect(after.challenge).toEqual(before.challenge);
     expect(after.stars).toEqual(before.stars);
-    await page.waitForTimeout(2200); // card slide + count-up
+    await page.waitForTimeout(2200); // ok: screenshot timing only — the card slide + count-up run on wall clock
     await shot(page, 'look3-daily-yesterday-result');
 
     // NEXT → the map; nothing was booked, so the row is still offered
@@ -288,10 +288,11 @@ test.describe('daily challenge', () => {
     await expect.poll(() => screen(page)).toBe('play');
     // midnight passes while the match runs; the pause menu's restart (R) re-reads the day
     await page.evaluate((key) => window.__towerclash.setDayKey(key), DAY_B);
+    const beforeRestart = await toastMark(page);
     await page.keyboard.press('r');
     await expect.poll(() => screen(page)).toBe('levelSelect');
     expect(await page.evaluate(() => window.__towerclash.getState())).toBeNull();
-    expect(await page.evaluate(() => window.__towerclash.getToast())).toBe(await page.evaluate(() => window.__towerclash.getText('daily.newReady')));
+    await expectToast(page, await page.evaluate(() => window.__towerclash.getText('daily.newReady')), { since: beforeRestart, screen: 'levelSelect' });
     // the card now offers day B; a tap starts it, not day A's run
     expect((await daily(page)).challenge.dayKey).toBe(DAY_B);
     await tapRect(page, LEVEL_MAP_DAILY);

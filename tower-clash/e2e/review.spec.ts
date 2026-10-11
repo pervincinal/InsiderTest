@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { tapRect } from './helpers/tap';
 
 /*
  * QA-16 A: the rating prompt (MM-9, src/native/review.ts) on the web path. The result screen calls
@@ -62,10 +63,6 @@ const reviewAsked = (page: Page) =>
     return { live, stored };
   }, SAVE_KEY);
 
-async function tapRect(page: Page, r: { x: number; y: number; w: number; h: number }): Promise<void> {
-  const c = await page.evaluate(([x, y]) => window.__towerclash.toClient(x, y), [r.x + r.w / 2, r.y + r.h / 2] as const);
-  await page.mouse.click(c.x, c.y);
-}
 
 /**
  * The whole run: level 11 seed 31 under the reference player at ×10 → 3★ campaign result (the

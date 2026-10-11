@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { recordToasts, toastsSeen } from './helpers/toasts';
 
 /*
  * FE-1 / FE-2 (BUG-13): the stalemate hint — src/ui/play.ts `StalemateWatch` — is a toast that fires
@@ -131,6 +132,7 @@ async function startLevel(page: Page, id: number): Promise<void> {
 async function boot(page: Page): Promise<{ pageErrors: string[]; hint: string }> {
   const pageErrors: string[] = [];
   page.on('pageerror', (err) => pageErrors.push(String(err)));
+  await recordToasts(page);
   await page.goto('/');
   await page.waitForFunction(() => typeof window.__towerclash?.getToast === 'function');
   expect(await page.evaluate(() => window.__towerclash.getScreen())).toBe('title');
@@ -246,7 +248,7 @@ test.describe('stalemate hint (FE-1 / FE-2)', () => {
     expect(last.screen, 'the stream wins level 1').toBe('result');
     expect(last.time, 'the match ran past the 8 s window with the stream up').toBeGreaterThan(createdMs + HINT_MS);
     expect((await page.evaluate(() => window.__towerclash.getResult()))?.outcome).toBe('won');
-    expect(await page.evaluate(() => window.__towerclash.getToast()), 'no toast on the result screen either').not.toBe(hint);
+    expect(await toastsSeen(page, { screen: 'result' }), 'no stalemate toast on the result screen either').not.toContain(hint);
 
     expect(pageErrors).toEqual([]);
   });

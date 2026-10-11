@@ -56,11 +56,16 @@ const DIST_SNAPSHOT = path.join(os.tmpdir(), 'tower-clash-e2e', String(PORT), 'd
  * other projects block the worker, so it changes nothing for them. `??=` keeps an explicit override.
  */
 process.env.PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS ??= '1';
+/**
+ * QA-20: the copy is taken by e2e/tools/snapshotDist.mjs, which checks that it is a complete build
+ * (index.html and every hashed chunk it reaches) and copies again every 2 s, up to 20 times, while it
+ * is not — another agent's `npm run build` empties dist/ and rewrites it over a few seconds, and a
+ * snapshot taken inside that window served 404 for `/` to the whole run (2026-10-11: 36/36 failed in
+ * boot). The 40 s of attempts fit the webServer's 60 s start budget.
+ */
 const PREVIEW_COMMAND = [
   `test -d dist || { echo 'e2e: no dist/ — run npm run build first' >&2; exit 1; }`,
-  `rm -rf "${DIST_SNAPSHOT}"`,
-  `mkdir -p "${DIST_SNAPSHOT}"`,
-  `cp -R dist/. "${DIST_SNAPSHOT}"`,
+  `node e2e/tools/snapshotDist.mjs dist "${DIST_SNAPSHOT}" --attempts 20 --delay-ms 2000`,
   `npm run preview -- --outDir "${DIST_SNAPSHOT}" --port ${PORT} --strictPort`,
 ].join(' && ');
 

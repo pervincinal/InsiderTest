@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import type { BrowserContext, Page } from '@playwright/test';
+import { expectToast, recordToasts } from './helpers/toasts';
 
 /*
  * QA-8: the PWA offline path — public/sw.js (precache of the app shell + cache-first runtime cache
@@ -112,7 +113,6 @@ const isWorkerScript = (url: URL) => url.pathname === '/sw.js';
 const screen = (page: Page) => page.evaluate(() => window.__towerclash.getScreen());
 const simTime = (page: Page) => page.evaluate(() => window.__towerclash.getState()?.time ?? -1);
 const levelId = (page: Page) => page.evaluate(() => window.__towerclash.getState()?.levelId ?? -1);
-const toast = (page: Page) => page.evaluate(() => window.__towerclash.getToast());
 const text = (page: Page, key: string) => page.evaluate((k) => window.__towerclash.getText(k), key);
 const onLine = (page: Page) => page.evaluate(() => navigator.onLine);
 const controlled = (page: Page) => page.evaluate(() => navigator.serviceWorker.controller !== null);
@@ -212,6 +212,7 @@ test.describe('PWA offline (QA-8)', () => {
     const pageErrors: string[] = [];
     page.on('pageerror', (err) => pageErrors.push(String(err)));
     await page.addInitScript(([key, data]) => localStorage.setItem(key, JSON.stringify(data)), [SAVE_KEY, { version: 3 }] as const);
+    await recordToasts(page);
 
     let cacheName = '';
     await test.step('1. first launch: the worker registers and precaches the shell and the entry chunk', async () => {
@@ -255,7 +256,7 @@ test.describe('PWA offline (QA-8)', () => {
       expect(await page.evaluate((id) => window.__towerclash.loadLevel(id, 1), COLD_LEVEL)).toBe(false);
       await expect.poll(() => screen(page)).toBe('title');
       expect(await page.evaluate(() => window.__towerclash.getState())).toBeNull();
-      expect(await toast(page)).toBe(await text(page, 'common.loadFailed'));
+      await expectToast(page, await text(page, 'common.loadFailed'), { screen: 'title' });
       expect(failed.length, 'the worker tried the network for the cold chunk').toBeGreaterThanOrEqual(1);
       expect(failed.every((e) => e === 'net::ERR_INTERNET_DISCONNECTED'), `refused offline: ${failed.join(', ')}`).toBe(true);
       expect(pageErrors).toEqual([]);

@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { tapRect } from './helpers/tap';
+import { expectToast, recordToasts } from './helpers/toasts';
 
 /*
  * Lazy chunks under a failing network (PERF-1 lazy screens, PERF-2 per-level JSON, M3-2 silhouette
@@ -34,6 +36,8 @@ const THEMES_CHUNK = /\/assets\/themes-[^/?]*\.js(\?.*)?$/;
 const LEVEL15_CHUNK = /\/assets\/015-[^/?]*\.js(\?.*)?$/;
 // PERF-6: pause menu + result card drawing (src/render/hudOverlays.ts), warmed by the play screen
 const OVERLAYS_CHUNK = /\/assets\/hudOverlays-[^/?]*\.js(\?.*)?$/;
+// PERF-8: the English strings only the lazy screens / cards draw (src/ui/locales/enMenus.ts), loaded beside them
+const EN_MENUS_CHUNK = /\/assets\/enMenus-[^/?]*\.js(\?.*)?$/;
 // src/render/layout.ts — RESULT.retry
 const RESULT_RETRY = { x: 275, y: 780, w: 170, h: 72 };
 // src/render/palette.ts — DEFAULT_THEME.letterbox (#1f8fc2): what the ground layer shows without the neon theme
@@ -41,7 +45,6 @@ const DEFAULT_LETTERBOX = [31, 143, 194];
 
 const screen = (page: Page) => page.evaluate(() => window.__towerclash.getScreen());
 const simTime = (page: Page) => page.evaluate(() => window.__towerclash.getState()?.time ?? -1);
-const toast = (page: Page) => page.evaluate(() => window.__towerclash.getToast());
 const text = (page: Page, key: string) => page.evaluate((k) => window.__towerclash.getText(k), key);
 
 /** QA-6 boot budgets, per attempt: the document must commit within the first, the debug surface must appear within the second. */
@@ -53,6 +56,7 @@ async function boot(page: Page, seeded: Record<string, unknown> = { version: 3 }
   const pageErrors: string[] = [];
   page.on('pageerror', (err) => pageErrors.push(String(err)));
   await page.addInitScript(([key, data]) => localStorage.setItem(key, JSON.stringify(data)), [SAVE_KEY, seeded] as const);
+  await recordToasts(page); // QA-20: toasts are asserted from the page-side recorder (e2e/helpers/toasts.ts)
   const failures: string[] = [];
   for (let attempt = 1; attempt <= BOOT_ATTEMPTS; attempt++) {
     let phase = `navigation (${BOOT_NAV_TIMEOUT_MS} ms)`;
@@ -71,10 +75,6 @@ async function boot(page: Page, seeded: Record<string, unknown> = { version: 3 }
   throw new Error(`boot: the game did not come up in ${BOOT_ATTEMPTS} attempts\n${failures.join('\n')}`);
 }
 
-async function tapRect(page: Page, r: { x: number; y: number; w: number; h: number }): Promise<void> {
-  const c = await page.evaluate(([x, y]) => window.__towerclash.toClient(x, y), [r.x + r.w / 2, r.y + r.h / 2] as const);
-  await page.mouse.click(c.x, c.y);
-}
 
 test.describe('lazy chunks under a failing network', () => {
   test('level chunk: a failed download returns to the screen the player was on with a toast; the level opens once the network is back', async ({ page }) => {
@@ -88,14 +88,16 @@ test.describe('lazy chunks under a failing network', () => {
     expect(aborted.length).toBeGreaterThanOrEqual(1);
     await expect.poll(() => screen(page)).toBe('title');
     expect(await page.evaluate(() => window.__towerclash.getState())).toBeNull();
-    expect(await toast(page)).toBe(await text(page, 'common.loadFailed'));
+    await expectToast(page, await text(page, 'common.loadFailed'), { screen: 'title' });
     // a second tap while still offline re-fetches under a fresh URL (module map) and fails again with the toast
     const before = aborted.length;
     expect(await page.evaluate(() => window.__towerclash.loadLevel(3, 1))).toBe(false);
     expect(aborted.length).toBeGreaterThan(before);
     expect(aborted[aborted.length - 1]).toMatch(/003-[^/?]*\.js\?r=\d+$/);
     await expect.poll(() => screen(page)).toBe('title');
-    expect(await toast(page)).toBe(await text(page, 'common.loadFailed'));
+    // the same text while the first pill may still be up: the recorder cannot tell a re-show from the first one,
+    // so this holds as much as the one-shot read it replaces did (the `?r=` re-fetch above is the real evidence)
+    await expectToast(page, await text(page, 'common.loadFailed'), { screen: 'title' });
     // the rest of the game is untouched: another level still opens
     expect(await page.evaluate(() => window.__towerclash.loadLevel(1, 1))).toBe(true);
     await expect.poll(() => screen(page)).toBe('play');
@@ -125,10 +127,10 @@ test.describe('lazy chunks under a failing network', () => {
     await expect.poll(() => screen(page), { timeout: 5_000 }).toBe('title');
     await page.waitForTimeout(300);
     expect(await screen(page)).toBe('title');
-    expect(await toast(page)).toBe(await text(page, 'common.loadFailed'));
+    await expectToast(page, await text(page, 'common.loadFailed'), { screen: 'title' });
     // the debug openShop goes through the same path and resolves (does not hang) on failure;
     // wait out the chunk back-off first so this attempt really issues a `?r=` re-fetch
-    await page.waitForTimeout(3_300);
+    await page.waitForTimeout(3_300); // ok: src/lazyChunk.ts RETRY_AFTER_MS = 3000 is a Date.now() back-off, nothing to poll
     await page.evaluate(() => window.__towerclash.openShop());
     expect(await screen(page)).toBe('title');
     // the idle preload failed first, so every user attempt since is a `?r=` re-fetch, aborted here
@@ -142,6 +144,32 @@ test.describe('lazy chunks under a failing network', () => {
     await page.unroute(MENU_CHUNK);
     await tapRect(page, TITLE_PLAY);
     await expect.poll(() => screen(page), { timeout: 5_000 }).toBe('levelSelect');
+    expect(errors).toEqual([]);
+  });
+
+  test('English menu strings chunk (enMenus, PERF-8): PLAY returns to the title with a toast when it fails, no throw; once the network is back the map opens in English', async ({ page }) => {
+    const aborted: string[] = [];
+    await page.route(EN_MENUS_CHUNK, (route) => {
+      aborted.push(route.request().url());
+      void route.abort('failed');
+    });
+    const errors = await boot(page);
+    await tapRect(page, TITLE_PLAY);
+    // the screens chunk itself may land; without their strings the map is not opened
+    await expect.poll(() => screen(page), { timeout: 5_000 }).toBe('title');
+    await page.waitForTimeout(300);
+    expect(await screen(page)).toBe('title');
+    await expectToast(page, await text(page, 'common.loadFailed'), { screen: 'title' });
+    await expect.poll(() => aborted.length, { timeout: 5_000 }).toBeGreaterThanOrEqual(1);
+    expect(errors).toEqual([]);
+
+    // Network back: the strings are re-fetched under `?r=` (src/lazyChunk.ts) and the map opens with them.
+    await page.unroute(EN_MENUS_CHUNK);
+    const fetched = page.waitForResponse((r) => EN_MENUS_CHUNK.test(r.url()) && r.url().includes('?r='), { timeout: 15_000 });
+    await tapRect(page, TITLE_PLAY);
+    expect((await fetched).ok()).toBe(true);
+    await expect.poll(() => screen(page), { timeout: 5_000 }).toBe('levelSelect');
+    expect(await text(page, 'levels.title')).toBe('LEVELS');
     expect(errors).toEqual([]);
   });
 

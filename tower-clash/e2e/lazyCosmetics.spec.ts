@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { tapRect } from './helpers/tap';
 
 /*
  * PERF-4 lazy cosmetics (QA 2026-09-21). With a lazy roof material (roof_pagoda → the skinShapes
@@ -43,8 +44,7 @@ test('lazy roof + theme + shape skin: 3 s of level 1 without errors, each cosmet
   expect((await page.evaluate(() => window.__towerclash.economy.getSave())).skins.equipped).toEqual(EQUIPPED);
 
   // first tap: PLAY on the title (pointer-down unlocks audio, the tap warms the SFX recipes chunk)
-  const c = await page.evaluate(([x, y]) => window.__towerclash.toClient(x, y), [TITLE_PLAY.x + TITLE_PLAY.w / 2, TITLE_PLAY.y + TITLE_PLAY.h / 2] as const);
-  await page.mouse.click(c.x, c.y);
+  await tapRect(page, TITLE_PLAY);
   await expect.poll(() => screen(page)).toBe('levelSelect');
   await expect.poll(() => fetched.get('sfxRecipes')?.length ?? 0, { message: 'SFX recipes chunk warmed after the first tap' }).toBeGreaterThanOrEqual(1);
 

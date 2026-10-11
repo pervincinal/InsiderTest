@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { tapAt, tapRect } from './helpers/tap';
 
 /*
  * Smoke: PWA files → title → level select (locks) → play level 1 (tutorial + manual stream: select
@@ -69,17 +70,6 @@ const SHOTS = fileURLToPath(new URL('./__screenshots__/', import.meta.url));
 const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}smoke-${name}.png`, scale: 'css' });
 /** Look-review shots (rules v2 streams / tutorial), named without the `smoke-` prefix. */
 const lookShot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}${name}.png`, scale: 'css' });
-
-/** Tap the centre of a logical rectangle. */
-async function tapRect(page: Page, r: { x: number; y: number; w: number; h: number }): Promise<void> {
-  await tapAt(page, r.x + r.w / 2, r.y + r.h / 2);
-}
-
-/** Tap a logical (720×1280) point. */
-async function tapAt(page: Page, lx: number, ly: number): Promise<void> {
-  const c = await page.evaluate(([x, y]) => window.__towerclash.toClient(x, y), [lx, ly] as const);
-  await page.mouse.click(c.x, c.y);
-}
 
 /** Tap segment `i` of a segmented control drawn with `drawSegmented` (4 px inset, equal widths). */
 async function tapSegment(page: Page, r: { x: number; y: number; w: number; h: number }, count: number, i: number): Promise<void> {

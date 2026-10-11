@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { tapRect } from './helpers/tap';
 
 /*
  * Economy (Phase A, docs/ECONOMY.md): commander upgrades reach the sim as `state.modifiers`, skins
@@ -88,10 +89,6 @@ const CONTINUE_REWIND_MS = 20_000;
 const REWIND_LEVEL = 15;
 const REWIND_SEED = 2; // seed 3 wins under rules v2.1 + the level-15 retune (the trickle pauses enemy production); seed 2 loses at 68 s
 
-async function tapRect(page: Page, r: R): Promise<void> {
-  const c = await page.evaluate(([x, y]) => window.__towerclash.toClient(x, y), [r.x + r.w / 2, r.y + r.h / 2] as const);
-  await page.mouse.click(c.x, c.y);
-}
 
 /** Tap segment `i` of a segmented control drawn with `drawSegmented` (4 px inset, equal widths). */
 async function tapSegment(page: Page, r: R, count: number, i: number): Promise<void> {

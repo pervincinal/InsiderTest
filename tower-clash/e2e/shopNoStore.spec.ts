@@ -1,6 +1,8 @@
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { tapRect } from './helpers/tap';
+import { recordToasts, toastsSeen } from './helpers/toasts';
 
 /*
  * QA-13: the no-store shop — what App Review sees on build 8 (no IAP products configured), reached on
@@ -64,6 +66,7 @@ async function boot(page: Page, url: string): Promise<string[]> {
     if (msg.type() === 'error') errors.push(msg.text());
   });
   await page.addInitScript(([key, data]) => localStorage.setItem(key, JSON.stringify(data)), [SAVE_KEY, seededSave()] as const);
+  await recordToasts(page);
   await page.addInitScript(() => {
     const w = window as unknown as RecWindow;
     w.__qaTexts = null;
@@ -122,10 +125,6 @@ function skinButton(texts: DrawnText[], label: string): string | null {
   return btn?.t ?? null;
 }
 
-async function tapRect(page: Page, r: R): Promise<void> {
-  const c = await page.evaluate(([x, y]) => window.__towerclash.toClient(x, y), [r.x + r.w / 2, r.y + r.h / 2] as const);
-  await page.mouse.click(c.x, c.y);
-}
 
 /** Tap segment `i` of `count` in the tab row (`drawSegmented`: 4 px inset, equal widths). */
 async function tapTabSegment(page: Page, count: number, i: number): Promise<void> {
@@ -192,7 +191,7 @@ test.describe('shop without a store (QA-13, App Review build 8)', () => {
     expect(tabLabels(texts)).toEqual([S['shop.tab.skins'], S['shop.tab.upgrades']]);
     expect(all()).toContain(S['shop.roofs']);
     expect(await screen(page)).toBe('shop');
-    expect(await page.evaluate(() => window.__towerclash.getToast())).toBeNull(); // no "store unavailable" toast either
+    expect(await toastsSeen(page, { screen: 'shop' }), 'no toast on the shop so far — no "store unavailable" either').toEqual([]);
 
     // Slate roof (first roof card) for earned crystals → owned and equipped; tap again → EQUIP
     await tapRect(page, shopSkinRect(SKIN_ROOFS_TOP, 0));

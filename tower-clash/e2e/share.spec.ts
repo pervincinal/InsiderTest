@@ -2,6 +2,8 @@ import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { tapRect } from './helpers/tap';
+import { recordToasts, toastsSeen } from './helpers/toasts'; // BUG-25: page-side toast recorder
 
 /*
  * Share card (SHARE-1, GDD §7.6): the result screen's SHARE button draws a 1080 × 1350 PNG on an
@@ -35,10 +37,6 @@ function levelName(id: number): string {
 const SHOTS = fileURLToPath(new URL('./__screenshots__/', import.meta.url));
 
 type R = { x: number; y: number; w: number; h: number };
-async function tapRect(page: Page, r: R): Promise<void> {
-  const c = await page.evaluate(([x, y]) => window.__towerclash.toClient(x, y), [r.x + r.w / 2, r.y + r.h / 2] as const);
-  await page.mouse.click(c.x, c.y);
-}
 const screen = (page: Page) => page.evaluate(() => window.__towerclash.getScreen());
 
 interface Captured {
@@ -57,28 +55,8 @@ declare global {
     __shareCaptured?: Captured | null;
     __shareCalls?: number;
     __downloads?: { download: string; href: string }[];
-    __toastsSeen?: string[];
   }
 }
-
-/**
- * BUG-25: the toast lives 2.4 s of page wall clock (`Toast.show`, src/ui/screens.ts), so reading
- * `getToast()` once, several Playwright round-trips after the share resolved, raced the expiry
- * under load (2026-10-09, load 9.7: `getToast()` → null 1.5–2.5 s after "Shared" went up). The
- * page records every toast text it shows from its own 16 ms timer, so the assertion no longer
- * depends on protocol latency; a 2.4 s main-thread stall would be needed to miss one.
- */
-function recordToasts(page: Page): Promise<void> {
-  return page.addInitScript(() => {
-    window.__toastsSeen = [];
-    setInterval(() => {
-      const t = window.__towerclash?.getToast?.() ?? null;
-      const seen = window.__toastsSeen!;
-      if (t !== null && seen[seen.length - 1] !== t) seen.push(t);
-    }, 16);
-  });
-}
-const toastsSeen = (page: Page) => page.evaluate(() => window.__toastsSeen ?? []);
 
 /** Web Share stubs: canShare accepts files, share() records the payload (and decodes the PNG). */
 function stubWebShare(page: Page): Promise<void> {

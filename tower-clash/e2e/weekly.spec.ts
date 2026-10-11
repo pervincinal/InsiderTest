@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
+import { tapRect } from './helpers/tap';
+import { expectToast, recordToasts, toastMark } from './helpers/toasts';
 
 /*
  * Weekly Challenge (GDD §8, WEEKLY-1): the WEEKLY tab of the level-map card is locked on a fresh save
@@ -38,10 +40,6 @@ const SHOTS = fileURLToPath(new URL('./__screenshots__/', import.meta.url));
 const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}${name}.png`, scale: 'css' });
 
 type R = { x: number; y: number; w: number; h: number };
-async function tapRect(page: Page, r: R): Promise<void> {
-  const c = await page.evaluate(([x, y]) => window.__towerclash.toClient(x, y), [r.x + r.w / 2, r.y + r.h / 2] as const);
-  await page.mouse.click(c.x, c.y);
-}
 
 interface SaveShape {
   gold: number;
@@ -68,6 +66,7 @@ async function boot(page: Page, seeded: Record<string, unknown>, weekKey: string
     if (msg.type() === 'error') errors.push(msg.text());
   });
   await page.addInitScript(([key, data]) => localStorage.setItem(key, JSON.stringify(data)), [SAVE_KEY, seeded] as const);
+  await recordToasts(page);
   await page.goto('/');
   await page.waitForFunction(() => typeof window.__towerclash?.weekly?.get === 'function');
   await page.evaluate((key) => window.__towerclash.setWeekKey(key), weekKey);
@@ -115,13 +114,14 @@ test.describe('weekly challenge', () => {
     await expect.poll(() => tab(page)).toBe('weekly');
     await page.waitForTimeout(300);
     await shot(page, 'look3-weekly-card-locked');
+    const beforeLockedTap = await toastMark(page);
     await tapRect(page, LEVEL_MAP_DAILY);
     await page.waitForTimeout(300);
     expect(await screen(page)).toBe('levelSelect');
     expect(await page.evaluate(() => window.__towerclash.getState())).toBeNull();
     const locked = await page.evaluate(() => window.__towerclash.getText('weekly.locked'));
     expect(locked).toContain('{n}');
-    expect(await page.evaluate(() => window.__towerclash.getToast())).toBe(locked.replace('{n}', String(UNLOCK_AFTER_LEVEL)));
+    await expectToast(page, locked.replace('{n}', String(UNLOCK_AFTER_LEVEL)), { since: beforeLockedTap, screen: 'levelSelect' });
     // the DAILY tab still starts the daily
     await tapRect(page, TAB_DAILY);
     await expect.poll(() => tab(page)).toBe('daily');
@@ -174,7 +174,7 @@ test.describe('weekly challenge', () => {
     expect(result.coinsEarned).toBe(WEEKLY_REWARD.gold);
     expect(result.crystalsEarned).toBe(WEEKLY_REWARD.crystals);
     expect(result.achievements).toEqual([]);
-    expect(await page.evaluate(() => window.__towerclash.getToast())).toBe(await page.evaluate(() => window.__towerclash.getText('weekly.resultTarget', { crystals: 20 })));
+    await expectToast(page, await page.evaluate(() => window.__towerclash.getText('weekly.resultTarget', { crystals: 20 })), { screen: 'result' });
     const after = await save(page);
     expect(after.gold).toBe(100 + WEEKLY_REWARD.gold);
     expect(after.crystals).toBe(3 + WEEKLY_REWARD.crystals);
@@ -184,7 +184,7 @@ test.describe('weekly challenge', () => {
     expect(after.weekly.best[WEEK_A]!.timeMs).toBeLessThanOrEqual(info.challenge.targetMs);
     expect(after.stars[String(info.challenge.levelId)]).toBeUndefined(); // no level stars from a challenge
     expect(after.challenge.lastWinDay).toBeNull(); // separate ledger from the daily
-    await page.waitForTimeout(2200); // card slide + count-up
+    await page.waitForTimeout(2200); // ok: screenshot timing only — the card slide + count-up run on wall clock
     await shot(page, 'look3-weekly-result');
 
     // replay the same week: nothing is paid, the best is reported
@@ -243,10 +243,11 @@ test.describe('weekly challenge', () => {
     await expect.poll(() => screen(page)).toBe('play');
     // Monday 00:00 UTC passes while the match runs; the pause menu's restart (R) re-reads the week
     await page.evaluate((key) => window.__towerclash.setWeekKey(key), WEEK_B);
+    const beforeRestart = await toastMark(page);
     await page.keyboard.press('r');
     await expect.poll(() => screen(page)).toBe('levelSelect');
     expect(await page.evaluate(() => window.__towerclash.getState())).toBeNull();
-    expect(await page.evaluate(() => window.__towerclash.getToast())).toBe(await page.evaluate(() => window.__towerclash.getText('weekly.newReady')));
+    await expectToast(page, await page.evaluate(() => window.__towerclash.getText('weekly.newReady')), { since: beforeRestart, screen: 'levelSelect' });
     // the card now offers week B (the tab is remembered); a tap starts it, not week A's run
     expect(await tab(page)).toBe('weekly');
     expect((await weekly(page)).challenge.weekKey).toBe(WEEK_B);
