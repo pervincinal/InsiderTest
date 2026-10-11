@@ -203,6 +203,7 @@ export class PlayScreen implements Screen {
       limitHintText: (n) => t('hint.linkLimit', { n }),
       blockedHintText: () => t('hint.blocked'),
       emptyHintText: () => t('hint.empty'),
+      fullHintText: () => t('hint.full'),
       onCommand: (cmd) => {
         this.tutorial?.onCommand(cmd, this.state);
         this.loop.enqueue(cmd);
@@ -390,6 +391,7 @@ export class PlayScreen implements Screen {
       alpha: this.loop.alpha,
       selectedTowerId: this.gestures.selectedTowerId,
       hoverTowerId: this.gestures.hoverTowerId,
+      drag: this.gestures.drag ?? undefined,
       swipeTrail: this.gestures.trail,
       paused: this.loop.paused,
       limitHint: this.gestures.limitHint ?? undefined,

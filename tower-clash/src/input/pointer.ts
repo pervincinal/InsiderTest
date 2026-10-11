@@ -1,6 +1,6 @@
 import type { Command, GameState, Road, Tower } from '../sim/types';
 import { roadIdFor } from '../sim/create';
-import { linksFrom, maxLinksOf } from '../sim/step';
+import { capacityOf, isLinked, linksFrom, maxLevelOf, maxLinksOf } from '../sim/step';
 import type { View } from '../render/view';
 import { toLogical } from '../render/view';
 import { SWIPE_TRAIL_MS, TOWER_HIT_RADIUS, TOWER_RADIUS } from '../render/layout';
@@ -209,10 +209,27 @@ export interface GestureOptions {
   blockedHintText?(): string;
   /** Localised text for a stream from a selected tower with no soldiers (`hint.empty`, BUG-10). */
   emptyHintText?(): string;
+  /** Localised text for a stream into an own tower that is already at capacity (`hint.full`, BUG-35). */
+  fullHintText?(): string;
+}
+
+/** Where a drag from an own tower is right now (for the renderer's rubber-band line). */
+export interface DragPreview {
+  fromId: string;
+  /** The finger, logical px. */
+  x: number;
+  y: number;
 }
 
 /** What a tap / drag from `from` onto `to` should do (pure, unit-tested). */
-export type LinkDecision = { kind: 'link' } | { kind: 'unlink' } | { kind: 'limit'; nextLevel: number } | { kind: 'blocked' } | { kind: 'empty' } | { kind: 'none' };
+export type LinkDecision =
+  | { kind: 'link' }
+  | { kind: 'unlink' }
+  | { kind: 'limit'; nextLevel: number }
+  | { kind: 'blocked' }
+  | { kind: 'empty' }
+  | { kind: 'full' }
+  | { kind: 'none' };
 
 /**
  * Rules v2 / v3 (GDD §2.0, §2.0b): an existing `from → to` stream toggles off; otherwise a new
@@ -231,6 +248,11 @@ export function decideLink(state: GameState, from: string, to: string, allowUnli
   if (links.some((l) => l.to === to)) return allowUnlink ? { kind: 'unlink' } : { kind: 'none' };
   if (src.units < 1) return { kind: 'empty' }; // same guard as sim `link()` (rules v3 rule 6)
   if (links.length >= maxLinksOf(src)) return { kind: 'limit', nextLevel: src.level + 1 };
+  // BUG-35: a stream into an own tower at capacity ends on the sim's next tick (`targetFull`) — the
+  // player saw nothing happen. A full tower below its top level upgrades the moment it stops
+  // streaming (`tryAutoUpgrade` skips a linked tower), so say so instead of emitting a doomed link.
+  const dst = state.towers[to]!;
+  if (dst.owner === 'player' && dst.units >= capacityOf(dst, state) && (dst.level >= maxLevelOf(dst) || isLinked(state, dst.id))) return { kind: 'full' };
   return { kind: 'link' };
 }
 
@@ -245,6 +267,11 @@ export function decideLink(state: GameState, from: string, to: string, allowUnli
 export class PlayGestures {
   selectedTowerId: string | null = null;
   hoverTowerId: string | null = null;
+  /**
+   * A drag from an own tower in progress: the renderer draws a line from that tower to the finger
+   * (snapping onto `hoverTowerId` when the finger is over a reachable target). Null otherwise.
+   */
+  drag: DragPreview | null = null;
   /**
    * Refusal for the renderer (`PlayUi.limitHint` / `limitHintText`): a fresh object per refusal
    * (the renderer keys its shake on the object identity), null once it expired.
@@ -275,6 +302,7 @@ export class PlayGestures {
   reset(): void {
     this.selectedTowerId = null;
     this.hoverTowerId = null;
+    this.drag = null;
     this.limitHint = null;
     this.limitHintText = '';
     this.trail.length = 0;
@@ -283,6 +311,7 @@ export class PlayGestures {
 
   private clearPress(): void {
     this.downTowerId = null;
+    this.drag = null;
     this.moved = false;
     this.pointerDown = false;
     this.swipe = false;
@@ -338,8 +367,10 @@ export class PlayGestures {
     if (this.pointerDown && this.moved && src?.owner === 'player') {
       const t = hitTower(state, p.x, p.y);
       this.hoverTowerId = t && t.id !== src.id && connectedRoad(state, src.id, t.id) ? t.id : null;
+      this.drag = { fromId: src.id, x: p.x, y: p.y };
     } else {
       this.hoverTowerId = null;
+      this.drag = null;
     }
   }
 
@@ -447,6 +478,10 @@ export class PlayGestures {
       case 'empty':
         this.limitHint = { until: nowMs + LIMIT_HINT_MS };
         this.limitHintText = this.opts.emptyHintText?.() ?? 'No soldiers';
+        return;
+      case 'full':
+        this.limitHint = { until: nowMs + LIMIT_HINT_MS };
+        this.limitHintText = this.opts.fullHintText?.() ?? 'Full';
         return;
       case 'none':
         return;

@@ -79,6 +79,8 @@ export interface TowerClashDebug {
   getTutorialHint(): string | null;
   /** Text of the link-limit refusal bubble while it is on screen (rules v2), or null. */
   getLimitHint(): string | null;
+  /** The drag preview from an own tower while the finger is down and past the drag threshold (BUG-35), or null. */
+  getDrag(): { fromId: string; x: number; y: number; hoverTowerId: string | null } | null;
   /** Current UI language code and a translation lookup (I18N e2e). */
   getLanguage(): string;
   /**

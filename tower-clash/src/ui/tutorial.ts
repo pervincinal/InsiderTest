@@ -2,6 +2,7 @@ import type { Command, GameState } from '../sim/types';
 import { C } from '../sim/constants';
 import type { Palette } from '../render/palette';
 import { TOWER_RADIUS } from '../render/layout';
+import { badgeY } from '../render/sprites';
 import { font, roundRect } from '../render/widgets';
 import type { TranslationKey } from './i18n';
 import { t } from './i18n';
@@ -170,10 +171,12 @@ export function drawTutorial(ctx: CanvasRenderingContext2D, pal: Palette, state:
   ctx.stroke();
   ctx.globalAlpha = 1;
 
-  // Bubble above the tower unless it is near the top edge, then below.
+  // Bubble above the tower unless it is near the top edge, then below. Above, the arrow points at
+  // the unit-count badge from above it, so neither the arrow nor the bubble covers the number
+  // (BUG-35: "the text sits on top of it").
   const below = y < 300;
   const bob = pulse * 8;
-  const arrowTip = below ? y + TOWER_RADIUS + 30 + bob : y - TOWER_RADIUS - 30 - bob;
+  const arrowTip = below ? y + TOWER_RADIUS + 30 + bob : y + badgeY(tower.kind, tower.level) - 30 - bob;
   const arrowBase = below ? arrowTip + ARROW_H : arrowTip - ARROW_H;
   ctx.fillStyle = pal.star;
   ctx.beginPath();

@@ -37,6 +37,10 @@ export function installDebug(app: TowerClashApp): TowerClashDebug {
     },
     getTutorialHint: () => (app.current === app.play ? (app.play?.tutorialStep()?.text ?? null) : null),
     getLimitHint: () => (app.current === app.play && app.play?.gestures.limitHint ? app.play.gestures.limitHintText : null),
+    getDrag: () => {
+      const g = app.current === app.play ? app.play?.gestures : undefined;
+      return g?.drag ? { ...g.drag, hoverTowerId: g.hoverTowerId } : null;
+    },
     getLanguage: () => currentLanguage(),
     // English menu strings are a lazy chunk (PERF-8): fetch them first when the key is not in yet
     getText: async (key, params) => {

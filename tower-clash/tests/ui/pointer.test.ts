@@ -92,6 +92,7 @@ describe('PlayGestures (taps and drags → link / unlink commands)', () => {
       limitHintText: (n) => `L${n} needed for ${n} streams`,
       blockedHintText: () => 'Blocked — no clear line',
       emptyHintText: () => 'No soldiers — let the tower grow',
+      fullHintText: () => 'Full — stop its stream and it levels up',
     });
     let now = 1000;
     const at = (id: string, dx = 0, dy = 0): PointerPoint => ({ id: 1, x: state.towers[id]!.x + dx, y: state.towers[id]!.y + dy, timeMs: now });
@@ -253,6 +254,57 @@ describe('PlayGestures (taps and drags → link / unlink commands)', () => {
     // a blocked lane still reads as blocked, and an empty tower at the limit reads as empty
     expect(decideLink(state, 'p', 'x')).toEqual({ kind: 'blocked' });
     expect(decideLink(state, 'p', 'n')).toEqual({ kind: 'empty' });
+  });
+
+  it('a drag from an own tower exposes a rubber-band preview that follows the finger and clears on release (BUG-35)', () => {
+    const state = fixture();
+    const { g, at } = harness(state);
+    g.down(at('p'));
+    expect(g.drag).toBeNull(); // a press is not a drag yet
+    g.move(at('p', 4, 0));
+    expect(g.drag).toBeNull(); // under the drag threshold
+    g.move(at('p', 60, -120));
+    expect(g.drag).toEqual({ fromId: 'p', x: state.towers['p']!.x + 60, y: state.towers['p']!.y - 120 });
+    expect(g.hoverTowerId).toBeNull(); // empty ground under the finger: the line ends at the finger
+    g.move(at('n'));
+    expect(g.drag).toEqual({ fromId: 'p', x: state.towers['n']!.x, y: state.towers['n']!.y });
+    expect(g.hoverTowerId).toBe('n'); // over a reachable target: the line snaps onto it
+    g.up(at('n'));
+    expect(g.drag).toBeNull();
+    expect(state.links).toEqual([expect.objectContaining({ owner: 'player', from: 'p', to: 'n' })]);
+    // A swipe (press off an own tower) never shows the band.
+    g.down(at('e'));
+    g.move(at('e', 80, 0));
+    expect(g.drag).toBeNull();
+    g.up(at('e', 80, 0));
+  });
+
+  it('a stream into an own tower at capacity is refused with hint.full while it streams or sits at its top level (BUG-35)', () => {
+    const state = fixture();
+    const { g, commands, tap, drag, clock } = harness(state);
+    // n becomes ours, full (L1 capacity) and streaming out, so it can neither grow nor upgrade.
+    const n = state.towers['n']!;
+    n.owner = 'player';
+    n.units = C.CAPACITY[1];
+    applyCommand(state, { type: 'link', owner: 'player', from: 'n', to: 'e' });
+    expect(decideLink(state, 'p', 'n')).toEqual({ kind: 'full' });
+    drag('p', 'n');
+    expect(commands).toEqual([]);
+    expect(g.limitHint).toEqual({ until: clock() + LIMIT_HINT_MS });
+    expect(g.limitHintText).toBe('Full — stop its stream and it levels up');
+    tap('p');
+    tap('n');
+    expect(commands).toEqual([]);
+    // Stopping n's stream frees it: the same tap now links (the sim will upgrade n on its next tick).
+    applyCommand(state, { type: 'unlink', owner: 'player', from: 'n', to: 'e' });
+    expect(decideLink(state, 'p', 'n')).toEqual({ kind: 'link' });
+    // A full tower at its top level is also `full` (nothing to reinforce), with or without streams.
+    n.level = 3;
+    n.units = C.CAPACITY[3];
+    expect(decideLink(state, 'p', 'n')).toEqual({ kind: 'full' });
+    // Below capacity it is a plain reinforcement.
+    n.units = C.CAPACITY[3] - 1;
+    expect(decideLink(state, 'p', 'n')).toEqual({ kind: 'link' });
   });
 
   it('long-press does nothing any more (no bridges to cut)', () => {

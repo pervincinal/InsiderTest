@@ -8,6 +8,7 @@ import type { View } from './view';
 import { applyDeviceTransform, applyTransform, bleed, bleedRect } from './view';
 import { HUD, SWIPE_TRAIL_MS } from './layout';
 import { font, roundRect } from './widgets';
+type XY = { x: number; y: number };
 import { drawHud, drawOverlays } from './hud';
 import { blankLayer, paintGround, paintHud } from './layers';
 import { drawSea, terrainSea } from './sea';
@@ -26,6 +27,8 @@ export interface PlayUi {
   alpha: number;
   selectedTowerId: string | null;
   hoverTowerId: string | null;
+  /** A drag from an own tower in progress: a line from that tower follows the finger (`PlayGestures.drag`). */
+  drag?: { fromId: string; x: number; y: number };
   paused: boolean;
   outcome: Outcome;
   stars: number; // only meaningful when outcome === 'won'
@@ -360,33 +363,47 @@ function drawGroundMarks(ctx: CanvasRenderingContext2D, pal: Palette, state: Gam
   }
   const sel = ui.selectedTowerId ? state.towers[ui.selectedTowerId] : undefined;
   const hov = ui.hoverTowerId ? state.towers[ui.hoverTowerId] : undefined;
+  // While the finger drags from an own tower, that tower is the line's origin even before it is selected.
+  const dragSrc = ui.drag ? state.towers[ui.drag.fromId] : undefined;
+  const origin = dragSrc ?? sel;
   if (sel) {
     drawGuideLines(ctx, pal, state, sel);
     const pulse = motion ? (Math.sin(nowMs / 180) + 1) / 2 : 0.5;
     selectionRing(ctx, pal, sel.x, sel.y, 54 + pulse * 4);
   }
-  if (hov && sel && hov.id !== sel.id) {
-    const road = state.roads[roadIdFor(sel.id, hov.id)];
-    if (road) {
-      ctx.lineCap = 'round';
-      ctx.setLineDash([16, 14]);
-      ctx.lineDashOffset = motion ? -(nowMs / 25) % 30 : 0;
-      ctx.beginPath();
-      ctx.moveTo(sel.x, sel.y);
-      ctx.lineTo(hov.x, hov.y);
-      ctx.strokeStyle = pal.goldShade;
-      ctx.lineWidth = 12;
-      ctx.stroke();
-      ctx.strokeStyle = pal.gold;
-      ctx.lineWidth = 8;
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.lineDashOffset = 0;
-    }
+  if (dragSrc && dragSrc.id !== sel?.id) selectionRing(ctx, pal, dragSrc.x, dragSrc.y, 56);
+  if (hov && origin && hov.id !== origin.id) {
+    const road = state.roads[roadIdFor(origin.id, hov.id)];
+    if (road) drawRubberBand(ctx, pal, origin, hov, nowMs, motion, true);
     selectionRing(ctx, pal, hov.x, hov.y, 56, [12, 9], motion ? -(nowMs / 40) % 21 : 0);
+  } else if (ui.drag && dragSrc) {
+    // No target under the finger yet: the line follows the finger (BUG-35 "xətt gəlsin mənlə").
+    drawRubberBand(ctx, pal, dragSrc, ui.drag, nowMs, motion, false);
   } else if (hov && !sel) {
     selectionRing(ctx, pal, hov.x, hov.y, 56, [12, 9]);
   }
+}
+
+/**
+ * The drag / target preview line from `from` to `to`: solid gold once it snaps onto a reachable
+ * target (`snapped`), thinner and translucent while it just follows the finger.
+ */
+function drawRubberBand(ctx: CanvasRenderingContext2D, pal: Palette, from: XY, to: XY, nowMs: number, motion: boolean, snapped: boolean): void {
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.setLineDash([16, 14]);
+  ctx.lineDashOffset = motion ? -(nowMs / 25) % 30 : 0;
+  if (!snapped) ctx.globalAlpha = 0.7;
+  ctx.beginPath();
+  ctx.moveTo(from.x, from.y);
+  ctx.lineTo(to.x, to.y);
+  ctx.strokeStyle = pal.goldShade;
+  ctx.lineWidth = snapped ? 12 : 9;
+  ctx.stroke();
+  ctx.strokeStyle = pal.gold;
+  ctx.lineWidth = snapped ? 8 : 5;
+  ctx.stroke();
+  ctx.restore();
 }
 
 /* ---------- units & towers ---------- */

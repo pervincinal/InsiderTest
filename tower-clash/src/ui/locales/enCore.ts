@@ -52,6 +52,7 @@ export const enCore = {
   'hint.linkLimit': 'L{n} needed for {n} {n|stream|streams}',
   'hint.blocked': 'Blocked — no clear line',
   'hint.empty': 'No soldiers — let the tower grow',
+  'hint.full': 'Full — stop its stream and it levels up',
   'hint.stalemate': 'Stalemate — stop the stream and hit from another side',
 
   'pause.title': 'PAUSED',
