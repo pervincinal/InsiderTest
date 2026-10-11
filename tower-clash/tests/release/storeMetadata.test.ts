@@ -283,13 +283,21 @@ describe('request files (scripts/releaseRequest.mjs)', () => {
     expect(runParser('ios-release', join(ROOT, 'release/ios-release.request'), true).stdout).toBe('LANE=testflight\n');
   });
 
-  it('release/ios-store.request parses: metadata only, never submit by default', () => {
+  it('release/ios-store.request parses: metadata without a build, or a deliberate submit of a build already made', () => {
     const r = runParser('ios-store', join(ROOT, 'release/ios-store.request'));
     expect(r.status).toBe(0);
-    expect(JSON.parse(r.stdout)).toMatchObject({ action: 'metadata', build: null, iphone65: false });
-    expect(runParser('ios-store', join(ROOT, 'release/ios-store.request'), true).stdout).toBe(
-      'STORE_ACTION=metadata\nSTORE_BUILD=\nSTORE_IPHONE65=no\n',
-    );
+    const req = JSON.parse(r.stdout) as { action: string; build: number | null; iphone65: boolean };
+    const env = runParser('ios-store', join(ROOT, 'release/ios-store.request'), true).stdout;
+    if (req.action === 'submit') {
+      // a submit names a build that exists: 1 ≤ build ≤ config.buildNumber (the lane refuses a higher one)
+      const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as { config: { buildNumber: number } };
+      expect(req.build).toBeGreaterThanOrEqual(1);
+      expect(req.build).toBeLessThanOrEqual(pkg.config.buildNumber);
+      expect(env).toBe(`STORE_ACTION=submit\nSTORE_BUILD=${req.build}\nSTORE_IPHONE65=${req.iphone65 ? 'yes' : 'no'}\n`);
+    } else {
+      expect(req).toMatchObject({ action: 'metadata', build: null });
+      expect(env).toBe(`STORE_ACTION=metadata\nSTORE_BUILD=\nSTORE_IPHONE65=${req.iphone65 ? 'yes' : 'no'}\n`);
+    }
   });
 
   it('accepts appstore / submit requests', () => {
