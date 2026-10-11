@@ -86,8 +86,23 @@ export interface LevelSelectOpts {
   toast?: ToastOpts | null;
 }
 
-/** Width of the countdown pill (the DONE badge and the streak pill keep the 176 px right column). */
-const COUNTDOWN_W = 250;
+/**
+ * Countdown pill (ART-17): from 8 px right of the WEEKLY tab to the card's 14 px right margin
+ * (x 370–676, 306 px wide; it was 250), text inset 8 px a side. Its numbers are 24 px bold, so "New
+ * in 6d 23h (Mon 00:00 UTC)" needs the whole title row beside the tabs; the DONE badge and the streak
+ * pill keep the 176 px right column.
+ */
+const COUNTDOWN_GAP = 8;
+/** Room for the countdown inside its pill. */
+export const COUNTDOWN_INSET = 8;
+/** Word size of the countdown and the reward line (their numbers are NUMERAL_PX). */
+const CARD_WORD_PX = 17;
+
+/** Countdown pill rect of the challenge card `r` (exported for the contrast / fit tests). */
+export function countdownPillRect(r: Rect): Rect {
+  const x = LEVEL_MAP.dailyTabWeekly.x + LEVEL_MAP.dailyTabWeekly.w + COUNTDOWN_GAP;
+  return { x, y: r.y + 12, w: r.x + r.w - 14 - x, h: 32 };
+}
 
 /** DAILY / WEEKLY segmented control in the card's title row (hit rects: `LEVEL_MAP.dailyTabDaily` / `dailyTabWeekly`). */
 function drawCardTabs(ctx: CanvasRenderingContext2D, pal: Palette, active: 'daily' | 'weekly', dim: boolean, pressed: Rect | null): void {
@@ -156,24 +171,38 @@ function drawDailyCard(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, o: 
   if (d.unlocked) {
     const done = d.done;
     // The countdown names the reset ("New in 12:34 (00:00 UTC)", GDD §7.4), so its pill is wider
-    // than the DONE badge / streak column; the tabs still have ≥ 290 px beside it.
-    const cd: Rect = done ? pill : { x: r.x + r.w - COUNTDOWN_W - 14, y: pill.y, w: COUNTDOWN_W, h: pill.h };
+    // than the DONE badge / streak column: it takes the title row beside the tabs.
+    const cd: Rect = done ? pill : countdownPillRect(r);
     drawPill(ctx, cd, done ? pal.gold : pal.paper, done ? pal.goldShade : undefined, 2);
-    ctx.textAlign = 'center';
-    const label = done ? t('daily.done') : d.countdown;
-    // the weekly's DONE badge carries a ★ pip once the 3★ target crystals are paid (GDD §8.2)
-    const pip = done && weekly && o.weekly.target;
-    ctx.fillStyle = done ? pal.ink : pal.textDim;
-    ctx.font = font(fitFontPx(ctx, label, 17, cd.w - 20 - (pip ? 28 : 0), done ? '700' : '500'), done ? '700' : '500');
-    ctx.fillText(label, cd.x + cd.w / 2 - (pip ? 12 : 0), cd.y + cd.h / 2 + 1, cd.w - 20);
-    if (pip) drawStar(ctx, pal, cd.x + cd.w - 26, cd.y + cd.h / 2, 10, true);
-    ctx.textAlign = 'left';
+    if (done) {
+      // the weekly's DONE badge carries a ★ pip once the 3★ target crystals are paid (GDD §8.2)
+      const pip = weekly && o.weekly.target;
+      const label = t('daily.done');
+      ctx.textAlign = 'center';
+      ctx.fillStyle = pal.ink;
+      ctx.font = font(fitFontPx(ctx, label, 17, cd.w - 20 - (pip ? 28 : 0), '700'), '700');
+      ctx.fillText(label, cd.x + cd.w / 2 - (pip ? 12 : 0), cd.y + cd.h / 2 + 1, cd.w - 20);
+      if (pip) drawStar(ctx, pal, cd.x + cd.w - 26, cd.y + cd.h / 2, 10, true);
+      ctx.textAlign = 'left';
+    } else {
+      // ART-17: the time left and the reset time are 24 px bold numerals (dim on the paper pill,
+      // ≥ 4.5:1), the words 17 px; a long line gives up word size first (drawNumeralLine)
+      drawNumeralLine(ctx, d.countdown, cd.x + cd.w / 2, cd.y + cd.h / 2 + 8, cd.w - COUNTDOWN_INSET * 2, pal.textDim, CARD_WORD_PX, 'center');
+    }
   }
   // line 2: level · twist, or the unlock hint
-  const line2 = d.unlocked ? `${d.levelName} · ${d.twist}` : t(weekly ? 'weekly.locked' : 'daily.locked', { n: d.unlockLevel });
-  ctx.fillStyle = d.unlocked ? pal.ink : pal.textDim;
-  ctx.font = font(fitFontPx(ctx, line2, 19, d.unlocked ? textW : r.w - (left - r.x) - 24, '500'), '500');
-  ctx.fillText(line2, left, r.y + 56, d.unlocked ? textW : r.w - (left - r.x) - 24);
+  const lockedW = r.w - (left - r.x) - 24;
+  if (d.unlocked) {
+    const line2 = `${d.levelName} · ${d.twist}`;
+    ctx.fillStyle = pal.ink;
+    ctx.font = font(fitFontPx(ctx, line2, 19, textW, '500'), '500');
+    ctx.fillText(line2, left, r.y + 56, textW);
+  } else {
+    // ART-17: "Clear level 8 to unlock" — the level number 24 px bold, the words 19 px; the baseline
+    // keeps the numeral's top 3 px under the tab frame (frame bottom r.y + 46)
+    const hint = t(weekly ? 'weekly.locked' : 'daily.locked', { n: d.unlockLevel });
+    drawNumeralLine(ctx, hint, left, r.y + 66, lockedW, pal.textDim, 19);
+  }
   // line 3: reward (best when done) + streak pill (wider when it names the next bonus); the countdown while locked
   if (d.unlocked) {
     let x = left;
@@ -192,10 +221,10 @@ function drawDailyCard(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, o: 
       drawGoldCoin(ctx, pal, x + 9, r.y + 84, 9);
       drawCrystal(ctx, pal, x + 30, r.y + 84, 9);
       x += 46;
-      ctx.fillStyle = pal.ink;
+      // ART-17: "up to +60 gold · +5 crystals" — amounts 24 px bold, words 17 px, on the streak
+      // pill's baseline (sp.y + sp.h / 2 + 8)
       const reward = t(weekly ? 'weekly.reward' : 'daily.reward', { gold: d.gold, crystals: d.crystals });
-      ctx.font = font(fitFontPx(ctx, reward, 17, textW - 46 - wide, '500'), '500');
-      ctx.fillText(reward, x, r.y + 84, textW - 46 - wide);
+      drawNumeralLine(ctx, reward, x, r.y + 89, textW - 46 - wide, pal.ink, CARD_WORD_PX);
     }
     if (d.streak > 0 || nextBonus || weekly) {
       const live = d.streak > 0;
@@ -208,9 +237,8 @@ function drawDailyCard(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, o: 
       drawNumeralLine(ctx, label, sp.x + sp.w / 2, sp.y + sp.h / 2 + 8, sp.w - 16, live ? pal.shopBuy.text : pal.textDim, 16, 'center');
     }
   } else {
-    ctx.fillStyle = pal.textDim;
-    ctx.font = font(16, '500');
-    ctx.fillText(d.countdown, left, r.y + 84, r.w - (left - r.x) - 24);
+    // ART-17: the locked card's countdown, numerals 24 px like the pill's (words 17 px, were 16 px)
+    drawNumeralLine(ctx, d.countdown, left, r.y + 91, lockedW, pal.textDim, CARD_WORD_PX);
   }
   ctx.restore();
 }

@@ -434,9 +434,10 @@ function drawUpgradeCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopUpg
   const textW = r.w - 130 - SHOP.buyW - 36;
   ctx.fillText(c.label, textX, r.y + 36, textW);
   drawTierPips(ctx, pal, textX + 10, r.y + 70, c.tier, c.maxTier);
-  ctx.fillStyle = pal.textDim;
-  ctx.font = font(16, '500');
-  ctx.fillText(t('shop.tier', { tier: c.tier, max: c.maxTier }), textX + c.maxTier * 24 + 8, r.y + 70, 110);
+  // ART-17: "Tier 1/5" beside the pips — the fraction 24 px bold (one run), the word 16 px, dim on the
+  // card (≥ 4.5:1); baseline 8 px under the pips' centre puts the numerals' middle on it
+  const tierX = textX + c.maxTier * 24 + 8;
+  drawNumeralLine(ctx, t('shop.tier', { tier: c.tier, max: c.maxTier }), tierX, r.y + 78, textX + textW - tierX, pal.textDim, 16);
   // ART-16: the current tier's numbers at ≥ 24 px like the "Next" line below (same helper), the
   // words still 18 px ink; baseline 6 px under the old 18 px middle line keeps its visual centre
   drawNumeralLine(ctx, c.tier > 0 ? t('shop.now', { effect: c.effectNow }) : t('shop.notTrained'), textX, r.y + 110, textW, pal.ink, 18);

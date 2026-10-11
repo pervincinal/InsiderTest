@@ -64,8 +64,14 @@ export function fitFontPx(ctx: CanvasRenderingContext2D, text: string, px: numbe
  */
 export const NUMERAL_PX = 24;
 
-/** A number inside a translated line: "+10 %", "−20 %", "+3", "2.5k", "7." (pct() puts a space before %). */
-const NUMERAL_RUN = /[+\-−]?\d[\d.,]*(?:\s?%)?k?/g;
+/**
+ * A number inside a translated line: "+10 %", "−20 %", "+3", "2.5k", "1,200", "7." (an ordinal),
+ * and (ART-17) a clock or a fraction as one run — "12:34", "00:00", "5/5" — so the separator is not
+ * set at word size between two bold halves. A comma or a full stop is only part of the number when
+ * a digit follows it, a trailing full stop being the ordinal mark ("8. bölümü"): RU "8, чтобы" keeps
+ * its comma at word size.
+ */
+const NUMERAL_RUN = /[+\-−]?\d+(?:[.,:/]\d+)*\.?(?:\s?%)?k?/g;
 
 /** One run of a numeral line: a number (bold, NUMERAL_PX) or the words between numbers. */
 export interface NumeralRun {
@@ -73,8 +79,14 @@ export interface NumeralRun {
   num: boolean;
 }
 
+/** Recently split lines: the card redraws the same few strings every frame (ART-17). */
+const runsMemo = new Map<string, NumeralRun[]>();
+const RUNS_MEMO_MAX = 128;
+
 /** Split a translated line into word and number runs ("Need 200 gold" → "Need ", "200", " gold"). */
 export function numeralRuns(text: string): NumeralRun[] {
+  const hit = runsMemo.get(text);
+  if (hit) return hit;
   const runs: NumeralRun[] = [];
   let at = 0;
   for (const m of text.matchAll(NUMERAL_RUN)) {
@@ -83,16 +95,49 @@ export function numeralRuns(text: string): NumeralRun[] {
     at = m.index + m[0].length;
   }
   if (at < text.length) runs.push({ s: text.slice(at), num: false });
+  if (runsMemo.size >= RUNS_MEMO_MAX) runsMemo.clear();
+  runsMemo.set(text, runs);
   return runs;
 }
 
-/** Width of `text` set as a numeral line (words at `wordPx` 500, numbers at `numPx` 700). Leaves `ctx.font` changed. */
+/*
+ * ART-17: run widths are memoised per canvas, keyed by the font shorthand and the run text, so a
+ * numeral line drawn every frame (the challenge card's countdown, the shop's upgrade rows) measures
+ * each run once instead of three times a frame, and sets `ctx.font` only where it changes. A
+ * countdown that ticks every second adds one new key a second ("59:59" → "59:58"); the map is
+ * dropped when it grows past RUN_WIDTHS_MAX. A web font that finishes loading (the Fredoka
+ * latin-ext face on the first AZ / TR "ə" / "ğ", Nunito on the switch to Russian) changes the
+ * metrics behind a key, so every cache is dropped on `document.fonts` "loadingdone".
+ */
+let runWidths = new WeakMap<CanvasRenderingContext2D, Map<string, number>>();
+const RUN_WIDTHS_MAX = 256;
+const fontSet = (globalThis as { document?: { fonts?: { addEventListener?: (type: string, fn: () => void) => void } } }).document?.fonts;
+fontSet?.addEventListener?.('loadingdone', () => {
+  runWidths = new WeakMap();
+});
+
+/** Width of `s` set in the CSS font `f`, memoised per canvas. Sets `ctx.font` (to `f`) only on a miss. */
+export function runWidth(ctx: CanvasRenderingContext2D, f: string, s: string): number {
+  let widths = runWidths.get(ctx);
+  if (!widths) {
+    widths = new Map();
+    runWidths.set(ctx, widths);
+  }
+  const key = `${f}\n${s}`;
+  let w = widths.get(key);
+  if (w === undefined) {
+    ctx.font = f;
+    w = ctx.measureText(s).width;
+    if (widths.size >= RUN_WIDTHS_MAX) widths.clear();
+    widths.set(key, w);
+  }
+  return w;
+}
+
+/** Width of `text` set as a numeral line (words at `wordPx` 500, numbers at `numPx` 700). May change `ctx.font`. */
 export function numeralLineWidth(ctx: CanvasRenderingContext2D, text: string, wordPx: number, numPx: number = NUMERAL_PX): number {
   let w = 0;
-  for (const r of numeralRuns(text)) {
-    ctx.font = font(r.num ? numPx : wordPx, r.num ? '700' : '500');
-    w += ctx.measureText(r.s).width;
-  }
+  for (const r of numeralRuns(text)) w += runWidth(ctx, font(r.num ? numPx : wordPx, r.num ? '700' : '500'), r.s);
   return w;
 }
 
@@ -115,12 +160,12 @@ export function drawNumeralLine(
 ): number {
   ctx.save();
   const runs = numeralRuns(text);
-  const widthOf = (num: boolean, px: number): number =>
-    runs.reduce((sum, r) => {
-      if (r.num !== num) return sum;
-      ctx.font = font(px, num ? '700' : '500');
-      return sum + ctx.measureText(r.s).width;
-    }, 0);
+  const widthOf = (num: boolean, px: number): number => {
+    const f = font(px, num ? '700' : '500');
+    let sum = 0;
+    for (const r of runs) if (r.num === num) sum += runWidth(ctx, f, r.s);
+    return sum;
+  };
   let numPx = NUMERAL_PX;
   const numW = widthOf(true, numPx);
   let wordW = widthOf(false, wordPx);
@@ -139,10 +184,18 @@ export function drawNumeralLine(
   ctx.textBaseline = 'alphabetic';
   ctx.fillStyle = colour;
   let cx = align === 'center' ? x - total / 2 : x;
+  // runs are drawn in reading order; the font is set only where it changes (widths come from the memo)
+  const numFont = font(numPx, '700');
+  const wordFont = font(wordPx, '500');
+  let set = '';
   for (const r of runs) {
-    ctx.font = font(r.num ? numPx : wordPx, r.num ? '700' : '500');
+    const f = r.num ? numFont : wordFont;
+    if (f !== set) {
+      ctx.font = f;
+      set = f;
+    }
     ctx.fillText(r.s, cx, y);
-    cx += ctx.measureText(r.s).width;
+    cx += runWidth(ctx, f, r.s);
   }
   ctx.restore();
   return total;

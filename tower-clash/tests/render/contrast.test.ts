@@ -8,15 +8,21 @@ import type { View } from '../../src/render/view';
 import type { SettingsOpts } from '../../src/render/menusSettings';
 import { drawSettings } from '../../src/render/menusSettings';
 import type { DailyCardOpts, LevelSelectOpts } from '../../src/render/menusLevels';
-import { drawLevelSelect } from '../../src/render/menusLevels';
+import { COUNTDOWN_INSET, countdownPillRect, drawLevelSelect } from '../../src/render/menusLevels';
 import { TOAST, drawToast } from '../../src/render/economyWidgets';
-import { wrapNumeralText } from '../../src/render/widgets';
+import { FONT_RU, NUMERAL_PX, drawNumeralLine, numeralRuns, wrapNumeralText } from '../../src/render/widgets';
 import { registerDictionary, setLanguage, t } from '../../src/ui/i18n';
+import { en } from '../../src/ui/locales/en';
 import { az } from '../../src/ui/locales/az';
 import { ru } from '../../src/ui/locales/ru';
 import { tr } from '../../src/ui/locales/tr';
 import { ACHIEVEMENTS } from '../../src/economy/catalog';
 import { achievementName } from '../../src/ui/catalogText';
+import { ADVANCES, ADVANCE_CHARS } from './fontAdvances';
+
+// the menus draw English menu strings that the app registers with its lazy chunks; these tests
+// import the drawing modules directly, so they register the whole English dictionary themselves
+registerDictionary('en', en);
 
 /*
  * BUG-22 (ART_DIRECTION §6: numerals ≥ 24 px logical, contrast ≥ 4.5:1). The rule covers every shop
@@ -107,19 +113,41 @@ interface Drawn {
   weight: number;
   /** fillText's maxWidth argument (undefined: the glyphs can never be squeezed). */
   maxW?: number;
+  /** The font shorthand at the time of the call. */
+  font: string;
 }
+
+/** Text width for a CSS font shorthand (the recorder's measureText). */
+type Measure = (text: string, font: string) => number;
+const pxOf = (font: string): number => Number(/(\d+(?:\.\d+)?)px/.exec(font)?.[1] ?? 10);
+/** Default measure: 0.6 em per character, wider than Fredoka / Nunito (pessimistic). */
+const wideMeasure: Measure = (text, font) => text.length * 0.6 * pxOf(font);
+/**
+ * ART-17: the game's own fonts — per-glyph advances of the Fredoka-first and Nunito-first stacks
+ * measured in Chromium (tests/render/fontAdvances.ts, scripts/fontAdvances.ts); a glyph outside the
+ * table counts 0.6 em.
+ */
+const fontMeasure: Measure = (text, font) => {
+  const table = ADVANCES[`${font.includes(FONT_RU) ? 'ru' : 'latin'}${/^700/.test(font) ? 700 : 500}` as keyof typeof ADVANCES];
+  let em = 0;
+  for (const c of text) {
+    const i = ADVANCE_CHARS.indexOf(c);
+    em += i < 0 ? 0.6 : table[i]!;
+  }
+  return em * pxOf(font);
+};
 
 /**
  * Canvas stand-in that records fillText with the current fillStyle and font size, the colour at
  * stop 1 of every linear gradient (drawButton's face ends on its `fill`) and, when asked, every flat
  * colour a shape is filled with (pills, segments); everything else is a no-op.
  */
-function recordingCtx(out: Drawn[], faces: Set<string>, fills?: Set<string>): CanvasRenderingContext2D {
+function recordingCtx(out: Drawn[], faces: Set<string>, fills?: Set<string>, measure: Measure = wideMeasure): CanvasRenderingContext2D {
   const store: Record<string | symbol, unknown> = { font: '700 10px sans-serif', fillStyle: '#000000', globalAlpha: 1 };
   const stack: Record<string | symbol, unknown>[] = [];
   const gradient = { addColorStop: (at: number, colour: string) => void (at === 1 && faces.add(colour)) };
   const methods: Record<string, (...a: never[]) => unknown> = {
-    measureText: (s: string) => ({ width: String(s).length * 0.6 * Number(/(\d+(?:\.\d+)?)px/.exec(String(store.font))?.[1] ?? 10) }),
+    measureText: (s: string) => ({ width: measure(String(s), String(store.font)) }),
     createLinearGradient: () => gradient,
     createRadialGradient: () => gradient,
     createPattern: () => null,
@@ -137,6 +165,7 @@ function recordingCtx(out: Drawn[], faces: Set<string>, fills?: Set<string>): Ca
         fill: store.fillStyle,
         px: Number(/(\d+(?:\.\d+)?)px/.exec(String(store.font))?.[1]),
         weight: Number(/^(\d+)/.exec(String(store.font))?.[1]),
+        font: String(store.font),
         x,
         y,
         maxW,
@@ -469,7 +498,8 @@ describe('active-state controls through a recording canvas (ART-15)', () => {
 
 /* ---------- ART-16: streak pill, locked card tab, upgrades "Now", toast amounts ---------- */
 
-const NUMERAL = /^[+\-−]?\d[\d.,]*(?:\s?%)?k?$/;
+/** A numeral run as widgets.ts splits it (ART-17: clocks and fractions are one run). */
+const NUMERAL = /^[+\-−]?\d+(?:[.,:/]\d+)*\.?(?:\s?%)?k?$/;
 /** The locked card's tab frame: `shade(paper, -0.08)` with drawPill's white top highlight. */
 const tabFrame = (pal: Palette): string => shade(pal.paper, -0.08);
 /** The streak pill rect of the card at LEVEL_MAP.daily (menusLevels.ts drawDailyCard), `wide` when it names the next bonus. */
@@ -656,16 +686,325 @@ describe('ART-16 through a recording canvas', () => {
           expect(wrap.wordPx, `${lang}: ${text}`).toBe(TOAST.wordPx);
           expect(wrap.lines.length, `${lang}: ${text}`).toBeLessThanOrEqual(TOAST.maxLines);
         }
-        // the daily reward claimed together with two long achievements (one toast, screens.ts
-        // withAchievements): still ≤ 4 lines; under the pessimistic measure its words may give a
-        // few px (Chromium measures 4 lines at 21 px in RU with the slack, 3 in AZ)
-        const combo = `${t('title.dailyReward', { day: 7, parts: `${t('amount.gold', { n: 150 })} · ${t('amount.crystals', { n: 20 })}` })} · ${achievement}`;
-        const wrap = wrapNumeralText(ctx, combo, column, TOAST.wordPx, TOAST.maxLines);
-        expect(wrap.lines.length, `${lang}: ${combo}`).toBeLessThanOrEqual(TOAST.maxLines);
-        expect(wrap.wordPx, `${lang}: ${combo}`).toBeGreaterThanOrEqual(16);
+        // the daily reward is its own toast since FE-9 (the achievements it unlocks follow as a second
+        // toast, screens.ts `toastClaim` — together they filled all four lines in RU): full size, ≤ 2 lines
+        const reward = t('title.dailyReward', { day: 7, parts: `${t('amount.gold', { n: 150 })} · ${t('amount.crystals', { n: 20 })}` });
+        const wrap = wrapNumeralText(ctx, reward, column, TOAST.wordPx, TOAST.maxLines);
+        expect(wrap.wordPx, `${lang}: ${reward}`).toBe(TOAST.wordPx);
+        expect(wrap.lines.length, `${lang}: ${reward}`).toBeLessThanOrEqual(2);
       }
     } finally {
       await setLanguage('en');
     }
+  });
+});
+
+/* ---------- ART-17: countdown, reward line, locked hint, shop tier ---------- */
+
+/** Card face behind the four lines: the panel, the paper countdown pill, and their white inner highlight. */
+const CARD_FACES = (pal: Palette): string[] => [pal.panel, pal.paper, '#ffffff'];
+/** Room of the reward line: card text column minus the coin + crystal glyphs and, beside the wide streak pill, 70 px. */
+const rewardRoom = (wide: boolean): number => LEVEL_MAP.daily.w - 96 - 176 - 24 - 46 - (wide ? 70 : 0);
+/** Room of the locked card's hint and countdown lines. */
+const LOCKED_ROOM = LEVEL_MAP.daily.w - 96 - 24;
+/** Shop upgrade row: text column x and the room of the "Tier n/5" label right of the five pips. */
+const tierGeometry = (row: { x: number; w: number }) => {
+  const textX = row.x + 130;
+  const tierX = textX + 5 * 24 + 8;
+  return { textX, tierX, room: textX + (row.w - 130 - SHOP.buyW - 36) - tierX };
+};
+
+/** Draw the level select (realistic font measure) and return what was drawn. */
+function drawCardWith(pal: Palette, daily: DailyCardOpts, measure: Measure = fontMeasure): Drawn[] {
+  const out: Drawn[] = [];
+  drawLevelSelect(recordingView(recordingCtx(out, new Set<string>(), undefined, measure)), pal, levelSelectOpts(daily));
+  return out;
+}
+const lineAt = (drawn: Drawn[], y: number, x0: number, x1: number): Drawn[] => drawn.filter((d) => d.y === y && d.x >= x0 && d.x < x1);
+/** Left-to-right width of a run line as drawn (each run at its own font). */
+const drawnWidth = (runs: Drawn[]): number => runs.reduce((w, d) => w + fontMeasure(d.text, d.font), 0);
+
+/** Every number of `runs` 24 px bold, every word `wordPx` 500, all in `colour`, on one baseline, never squeezed. */
+function expectNumeralLine(runs: Drawn[], text: string, colour: string, wordPx: number): void {
+  expect(runs.map((d) => d.text).join(''), text).toBe(text);
+  const numbers = runs.filter((d) => NUMERAL.test(d.text));
+  expect(numbers.length, text).toBeGreaterThan(0);
+  for (const d of runs) {
+    expect(d.fill, `"${d.text}" colour`).toBe(colour);
+    expect(d.maxW, `"${d.text}" maxWidth`).toBeUndefined();
+    if (numbers.includes(d)) expect([d.px, d.weight], `"${d.text}" size / weight`).toEqual([NUMERAL_PX, 700]);
+    else expect([d.px, d.weight], `"${d.text}" size / weight`).toEqual([wordPx, 500]);
+  }
+  expect(new Set(runs.map((d) => d.y)).size).toBe(1);
+  runs.slice(1).forEach((d, i) => expect(d.x).toBeGreaterThan(runs[i]!.x));
+}
+
+describe('ART-17 colour pairs', () => {
+  for (const [name, pal] of PALETTES) {
+    it(`${name}: countdown, locked hint and tier (dim) and the reward (ink) ≥ 4.5:1 on every face pixel behind them`, () => {
+      for (const face of CARD_FACES(pal)) {
+        expect(contrast(pal.textDim, face), `textDim on ${face}`).toBeGreaterThanOrEqual(MIN_TEXT);
+        expect(contrast(pal.ink, face), `ink on ${face}`).toBeGreaterThanOrEqual(MIN_TEXT);
+      }
+    });
+  }
+
+  it('pinned ratios (the colours stay; ART-17 changes the numeral size)', () => {
+    for (const pal of [DEFAULT_PALETTE, COLOR_BLIND_PALETTE]) {
+      expect(pal.panel).toBe('#fffaf0');
+      expect(pal.paper).toBe('#fffaf0');
+      expect(contrast(pal.textDim, pal.panel)).toBeCloseTo(5.19, 2);
+      expect(contrast(pal.textDim, '#ffffff')).toBeCloseTo(5.4, 2);
+      expect(contrast(pal.ink, pal.panel)).toBeCloseTo(13.73, 2);
+    }
+  });
+});
+
+describe('ART-17 through a recording canvas', () => {
+  const r = LEVEL_MAP.daily;
+  for (const [name, pal] of PALETTES) {
+    it(`${name}: the countdown pill draws its times 24 px bold, words 17 px, dim, centred inside the pill`, () => {
+      const pill = countdownPillRect(r);
+      // the pill takes the title row right of the WEEKLY tab: 306 px (was 250)
+      expect(pill).toEqual({ x: 370, y: r.y + 12, w: 306, h: 32 });
+      expect(pill.x).toBeGreaterThan(LEVEL_MAP.dailyTabWeekly.x + LEVEL_MAP.dailyTabWeekly.w);
+      for (const [tab, countdown] of [
+        ['daily', 'New in 12:34 (00:00 UTC)'],
+        ['daily', 'New in 20h (00:00 UTC)'],
+        ['weekly', 'New in 6d 23h (Mon 00:00 UTC)'],
+      ] as const) {
+        const base = dailyOpts(tab);
+        const daily = tab === 'daily' ? { ...base, countdown } : { ...base, weekly: { ...base.weekly, countdown } };
+        const runs = drawCardWith(pal, daily).filter((d) => inside(d, pill));
+        expectNumeralLine(runs, countdown, pal.textDim, 17);
+        // one run per clock: "12:34" and "00:00" are never split around a word-size colon
+        if (countdown.includes('12:34')) expect(runs.map((d) => d.text)).toEqual(['New in ', '12:34', ' (', '00:00', ' UTC)']);
+        // centred, inside the inset, numerals' cap height (0.72 em) inside the 32 px pill
+        const left = runs[0]!.x;
+        const right = left + drawnWidth(runs);
+        expect((left + right) / 2).toBeCloseTo(pill.x + pill.w / 2, 5);
+        expect(left).toBeGreaterThanOrEqual(pill.x + COUNTDOWN_INSET);
+        expect(right).toBeLessThanOrEqual(pill.x + pill.w - COUNTDOWN_INSET);
+        const y = runs[0]!.y;
+        expect(y - 0.72 * NUMERAL_PX).toBeGreaterThanOrEqual(pill.y + 2);
+        expect(y).toBeLessThanOrEqual(pill.y + pill.h - 4);
+      }
+      // DONE keeps its 176 px gold badge (no number on it)
+      const done = drawCardWith(pal, { ...dailyOpts('daily'), done: true, best: { stars: 3, timeMs: 61_000 } });
+      expect(done.filter((d) => inside(d, pill) && NUMERAL.test(d.text))).toEqual([]);
+    });
+
+    it(`${name}: the reward line draws its amounts 24 px bold, words 17 px ink, on the streak pill's baseline`, () => {
+      for (const [daily, text, wide] of [
+        [dailyOpts('daily'), 'up to +60 gold · +5 crystals', true],
+        [{ ...dailyOpts('daily'), nextBonus: null }, 'up to +60 gold · +5 crystals', false],
+        [dailyOpts('weekly'), '+60 gold · +5 crystals at 3★', false],
+      ] as const) {
+        const drawn = drawCardWith(pal, daily);
+        const sp = streakPill(wide);
+        const runs = lineAt(drawn, r.y + 89, r.x + 96, sp.x);
+        expectNumeralLine(runs, text, pal.ink, 17);
+        expect(runs.filter((d) => NUMERAL.test(d.text)).map((d) => d.text)).toEqual(text.includes('3★') ? ['+60', '+5', '3'] : ['+60', '+5']);
+        // after the coin + crystal glyphs, clear of the streak pill
+        expect(runs[0]!.x).toBe(r.x + 96 + 46);
+        expect(runs[0]!.x + drawnWidth(runs)).toBeLessThanOrEqual(sp.x - 4);
+        // the streak pill's own numerals sit on the same baseline
+        const pillRuns = drawn.filter((d) => inside(d, sp));
+        expect(new Set(pillRuns.map((d) => d.y))).toEqual(new Set([r.y + 89]));
+      }
+    });
+
+    it(`${name}: the locked card's hint and countdown draw their numbers 24 px bold in textDim inside the card`, () => {
+      for (const tab of ['daily', 'weekly'] as const) {
+        const drawn = drawCardWith(pal, dailyOpts(tab, false));
+        const hint = lineAt(drawn, r.y + 66, r.x + 96, r.x + r.w);
+        expectNumeralLine(hint, 'Clear level 3 to unlock', pal.textDim, 19);
+        // the numeral's top stays under the tab frame (frame bottom r.y + 46)
+        expect(hint[0]!.y - 0.72 * NUMERAL_PX).toBeGreaterThan(r.y + 46);
+        const countdown = lineAt(drawn, r.y + 91, r.x + 96, r.x + r.w);
+        expectNumeralLine(countdown, 'New in 12:34', pal.textDim, 17);
+        // two lines, numerals' cap tops clear of the line above's descenders (0.22 em of 19 px)
+        expect(countdown[0]!.y - 0.72 * NUMERAL_PX).toBeGreaterThan(hint[0]!.y + 0.22 * 19);
+      }
+    });
+
+    it(`${name}: the card does not grow — every line stays on its 104 px face, over the same map`, () => {
+      expect(LEVEL_MAP.daily).toEqual({ x: 30, y: 112, w: 660, h: 104 });
+      for (const daily of [dailyOpts('daily'), dailyOpts('weekly'), dailyOpts('daily', false), { ...dailyOpts('weekly'), weekly: { ...dailyOpts('weekly').weekly, countdown: 'New in 6d 23h (Mon 00:00 UTC)' } }]) {
+        const card = drawCardWith(pal, daily).filter((d) => d.x >= r.x && d.x <= r.x + r.w && d.y >= r.y && d.y <= r.y + r.h + 40);
+        expect(card.length).toBeGreaterThan(0);
+        // baseline + a 0.22 em descent inside the face (the bottom 5 px are the clay edge)
+        for (const d of card) expect(d.y + 0.22 * d.px, `"${d.text}"`).toBeLessThanOrEqual(r.y + r.h - 5);
+      }
+    });
+
+    it(`${name}: the shop's "Tier n/5" draws the fraction as one 24 px bold run, the word 16 px dim, right of the pips`, () => {
+      const row = shopRowRect(1);
+      const { tierX, room } = tierGeometry(row);
+      for (const tier of [0, 1, 5]) {
+        const out: Drawn[] = [];
+        drawShop(recordingView(recordingCtx(out, new Set<string>(), undefined, fontMeasure)), pal, {
+          ...shopOpts('upgrades'),
+          upgrades: [{ id: 'u', rect: row, label: 'Production', glyph: 'production' as never, tier, maxTier: 5, cost: tier < 5 ? 300 : null, effectNow: '+5 % production', effectNext: '+10 % production', affordable: true }],
+        });
+        const runs = lineAt(out, row.y + 78, tierX, tierX + room);
+        expectNumeralLine(runs, `Tier ${tier}/5`, pal.textDim, 16);
+        expect(runs.map((d) => d.text)).toEqual(['Tier ', `${tier}/5`]);
+        expect(runs[0]!.x).toBe(tierX);
+        // the numerals' middle sits on the pips' centre line (row.y + 70) within 2 px
+        expect(Math.abs(row.y + 78 - 0.36 * NUMERAL_PX - (row.y + 70))).toBeLessThanOrEqual(2);
+        // the "Now" line under it still starts below the tier numerals' descent
+        const now = out.find((d) => d.text === '+5 %' && d.x < tierX);
+        if (tier > 0) expect(now!.y - 0.72 * NUMERAL_PX).toBeGreaterThan(row.y + 78);
+      }
+    });
+  }
+});
+
+/**
+ * Locale fit (ART-17), measured with the game's fonts (fontAdvances.ts, Chromium ±1.8 %): every
+ * numeral of the four lines stays 24 px in every language (the rule's floor is 20 px: no line comes
+ * near it), every line fits its room, and a line whose natural width leaves < 5 % slack is a known
+ * tight line whose words give up size first (≥ 12 px, helper floor). TIGHT names them; the test
+ * fails when a tight line is missing from it or a listed one has become roomy, so the list stays true.
+ */
+const TIGHT = new Set([
+  'az countdown weekly 6d',
+  'ru countdown daily mm:ss',
+  'ru countdown weekly 6d',
+  'ru countdown weekly h',
+  'tr countdown weekly 6d',
+  'tr countdown weekly h',
+  'ru reward daily +bonus',
+  'ru reward weekly',
+]);
+
+describe('ART-17 locale fit at 360 px (720 logical)', () => {
+  it('numbers 24 px in every locale, every line inside its room, < 5 % slack only on the known tight lines', async () => {
+    registerDictionary('az', az);
+    registerDictionary('ru', ru);
+    registerDictionary('tr', tr);
+    const pal = DEFAULT_PALETTE;
+    const r = LEVEL_MAP.daily;
+    const pill = countdownPillRect(r);
+    const row = shopRowRect(1);
+    const tierGeo = tierGeometry(row);
+    const tight: string[] = [];
+    try {
+      for (const lang of ['en', 'az', 'ru', 'tr'] as const) {
+        await setLanguage(lang);
+        // [id, drawn runs, nominal word px, room]
+        const lines: [string, Drawn[], number, number][] = [];
+        const countdowns: [string, 'daily' | 'weekly', string][] = [
+          ['daily h', 'daily', t('daily.newIn', { h: 24 })],
+          ['daily mm:ss', 'daily', t('daily.newInTime', { time: '59:59' })],
+          ['weekly 6d', 'weekly', t('weekly.newInDays', { d: 6, h: 23 })],
+          ['weekly h', 'weekly', t('weekly.newIn', { h: 23 })],
+        ];
+        for (const [id, tab, countdown] of countdowns) {
+          const base = dailyOpts(tab);
+          const open = tab === 'daily' ? { ...base, countdown } : { ...base, weekly: { ...base.weekly, countdown } };
+          lines.push([`countdown ${id}`, drawCardWith(pal, open).filter((d) => inside(d, pill)), 17, pill.w - COUNTDOWN_INSET * 2]);
+          const locked = tab === 'daily' ? { ...open, unlocked: false } : { ...open, weekly: { ...open.weekly, unlocked: false } };
+          lines.push([`locked countdown ${id}`, lineAt(drawCardWith(pal, locked), r.y + 91, r.x + 96, r.x + r.w), 17, LOCKED_ROOM]);
+        }
+        const reward = (daily: DailyCardOpts, wide: boolean) => lineAt(drawCardWith(pal, daily), r.y + 89, r.x + 96, streakPill(wide).x);
+        for (const crystals of [5, 2, 1]) {
+          const d = { ...dailyOpts('daily'), crystals, gold: 60 };
+          lines.push([`reward daily +bonus${crystals === 5 ? '' : ` ${crystals}`}`, reward(d, true), 17, rewardRoom(true)]);
+          lines.push([`reward daily${crystals === 5 ? '' : ` ${crystals}`}`, reward({ ...d, nextBonus: null }, false), 17, rewardRoom(false)]);
+        }
+        for (const crystals of [20, 21]) {
+          const base = dailyOpts('weekly');
+          lines.push([`reward weekly${crystals === 20 ? '' : ` ${crystals}`}`, reward({ ...base, weekly: { ...base.weekly, gold: 100, crystals } }, false), 17, rewardRoom(false)]);
+        }
+        for (const [tab, n] of [
+          ['daily', 8],
+          ['weekly', 32],
+        ] as const) {
+          const base = dailyOpts(tab, false);
+          const d = tab === 'daily' ? { ...base, unlockLevel: n } : { ...base, weekly: { ...base.weekly, unlockLevel: n } };
+          lines.push([`locked hint ${tab}`, lineAt(drawCardWith(pal, d), r.y + 66, r.x + 96, r.x + r.w), 19, LOCKED_ROOM]);
+        }
+        for (const tier of [0, 5]) {
+          const out: Drawn[] = [];
+          drawShop(recordingView(recordingCtx(out, new Set<string>(), undefined, fontMeasure)), pal, {
+            ...shopOpts('upgrades'),
+            upgrades: [{ id: 'u', rect: row, label: 'X', glyph: 'production' as never, tier, maxTier: 5, cost: 300, effectNow: 'a', effectNext: 'b', affordable: true }],
+          });
+          lines.push([`tier ${tier}/5`, lineAt(out, row.y + 78, tierGeo.tierX, tierGeo.tierX + tierGeo.room), 16, tierGeo.room]);
+        }
+
+        for (const [id, runs, wordPx, room] of lines) {
+          const key = `${lang} ${id}`;
+          expect(runs.length, key).toBeGreaterThan(0);
+          const numbers = runs.filter((d) => NUMERAL.test(d.text));
+          expect(numbers.length, key).toBeGreaterThan(0);
+          // the rule: numbers 24 px bold (never below 20, and here never shrunk at all)
+          for (const d of numbers) expect([d.px, d.weight], `${key}: "${d.text}"`).toEqual([NUMERAL_PX, 700]);
+          // the drawn line fits; its words are the nominal size or shrunk, never under 12 px
+          expect(drawnWidth(runs), key).toBeLessThanOrEqual(room + 0.5);
+          const text = runs.map((d) => d.text).join('');
+          const natural = numeralRuns(text).reduce((w, run) => w + fontMeasure(run.s, `${run.num ? 700 : 500} ${run.num ? NUMERAL_PX : wordPx}px ${lang === 'ru' ? FONT_RU : 'x'}`), 0);
+          const words = runs.filter((d) => !numbers.includes(d));
+          if (natural <= room * 0.95) {
+            for (const d of words) expect(d.px, `${key}: "${d.text}"`).toBe(wordPx);
+          } else {
+            tight.push(key.replace(/ (\d+)$/, ''));
+            for (const d of words) expect(d.px, `${key}: "${d.text}"`).toBeGreaterThanOrEqual(12);
+          }
+        }
+      }
+    } finally {
+      await setLanguage('en');
+    }
+    expect([...new Set(tight)].sort()).toEqual([...TIGHT].sort());
+  });
+});
+
+describe('ART-17 numeral runs and the per-frame cost of a numeral line', () => {
+  it('clocks and fractions are one run; a comma or full stop joins a number only before a digit (or as the ordinal mark)', () => {
+    const split = (s: string) => numeralRuns(s).map((r) => (r.num ? `[${r.s}]` : r.s)).join('');
+    expect(split('New in 12:34 (00:00 UTC)')).toBe('New in [12:34] ([00:00] UTC)');
+    expect(split('Tier 1/5')).toBe('Tier [1/5]');
+    expect(split('Пройди уровень 8, чтобы открыть')).toBe('Пройди уровень [8], чтобы открыть');
+    expect(split('Açmak için 8. bölümü geç')).toBe('Açmak için [8.] bölümü geç');
+    expect(split('+10 % production · 2.5k gold · 1,200')).toBe('[+10 %] production · [2.5k] gold · [1,200]');
+    expect(split('+20 crystals at 3★')).toBe('[+20] crystals at [3]★');
+  });
+
+  it('a line redrawn every frame measures each run once and sets the font only where it changes', () => {
+    let measures = 0;
+    let fontSets = 0;
+    const out: Drawn[] = [];
+    const inner = recordingCtx(out, new Set<string>(), undefined, (s, f) => {
+      measures++;
+      return fontMeasure(s, f);
+    });
+    const ctx = new Proxy(inner, {
+      get: (target, key) => Reflect.get(target, key),
+      set: (target, key, value) => {
+        if (key === 'font') fontSets++;
+        return Reflect.set(target, key, value);
+      },
+    });
+    const text = 'New in 59:59 (00:00 UTC)';
+    const runs = numeralRuns(text).length;
+    drawNumeralLine(ctx, text, 360, 100, 290, '#000000', 17, 'center');
+    // first frame: one measure per run (numbers and words at their fonts)
+    expect(measures).toBe(runs);
+    const firstSets = fontSets;
+    measures = 0;
+    fontSets = 0;
+    for (let frame = 0; frame < 60; frame++) drawNumeralLine(ctx, text, 360, 100, 290, '#000000', 17, 'center');
+    expect(measures).toBe(0);
+    // runs alternate number / words, so one font set per run per frame and no more
+    expect(fontSets).toBe(60 * runs);
+    expect(firstSets).toBeLessThanOrEqual(2 * runs);
+    // the next second only measures the run that changed
+    drawNumeralLine(ctx, 'New in 59:58 (00:00 UTC)', 360, 100, 290, '#000000', 17, 'center');
+    expect(measures).toBe(1);
+    // the drawn runs of every frame are identical
+    expect(new Set(out.filter((d) => d.text === '59:59').map((d) => `${d.x},${d.px}`)).size).toBe(1);
   });
 });
