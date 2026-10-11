@@ -135,7 +135,7 @@ Qeyd: menyular, işarələr, təlimat, səviyyə adları və dərslər azərbayc
 
 | Asset | Requirement | File |
 |---|---|---|
-| App icon | 512×512 PNG, 32-bit | `tower-clash/public/icons/icon-512.png` (same mark as `resources/icon.svg`) |
+| App icon | 512×512 PNG, 32-bit | `tower-clash/public/icons/icon-512.png` (full-bleed, same art as every app icon — `src/render/appIcon.ts`, ART-18) |
 | Feature graphic | 1024×500 PNG/JPG | `tower-clash/store/feature-graphic.png` (144 KB) |
 | Phone screenshots | 2–8, 9:16, 320–3840 px | `tower-clash/store/screenshots/en/01..08.png`, `az/`, `ru/`, `tr/` (one set per store language; caption *and* the game's own UI in that language, PUB-7), 1080×1920, each < 600 KB (Rules v3 render, `0e0ee66`, 2026-09-21, all four languages; re-rendered on build 6, `e3117c7`, 2026-09-25; AZ set re-rendered on build 7, 2026-09-27, after L10N-1; **PUB-6 re-cut, all four sets re-rendered on build 7, 2026-09-27**: frames 04 / 06 / 08 are level 24, level 45 and the WEEKLY tab — `LAUNCH_CHECKLIST.md` G10; frame 07 re-cut 2026-10-09 on `d208419`+ (PUB-17): SHARE button, other frames unchanged; **RU set re-cut 2026-10-09 (PUB-19, ART-13 font)** on `b6cbe5a`: all eight `ru/` frames, Cyrillic and digits in one Nunito family; **all sets re-cut 2026-10-10 (PUB-20, after ART-15/ART-16/L10N-2)** on `fc862b4`: all 32 frames, selected WEEKLY segment #1f4bc0, week-streak pill numerals 24 px, toast amounts as 24 px runs, RU toast "4 достижения · +30 кристаллов") |
 | IAP review screenshot (Apple only, not shown on any store page) | ≥ 640×920 | `tower-clash/store/iap-review/shop-crystals.png`, 1290×2796, uncaptioned shop Crystals tab (see §6.1; re-rendered in the PUB-6 run, same content) |

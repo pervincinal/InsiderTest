@@ -23,7 +23,7 @@
  *   level 1 could not start offline; FE-8: likewise a Russian install lost its Latin digits face).
  *   A new runtime rule alone is not a shape change: the byte-different sw.js already installs.
  */
-const CACHE_VERSION = 'v4';
+const CACHE_VERSION = 'v5'; // v5 (ART-18): new app icons — the precached ./icons/* are served cache-first
 const CACHE_NAME = `towerclash-${CACHE_VERSION}`;
 const PRECACHE = [
   './',

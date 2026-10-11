@@ -149,9 +149,9 @@ npm run ios:open       # = cap:sync + open ios/App/App.xcodeproj in Xcode
 ```
 Then pick a Simulator (or your iPhone) as the run destination and press Run. The first time Xcode resolves the Capacitor Swift package automatically. To run on a physical iPhone, select your Apple ID team under *Signing & Capabilities* (a free Apple ID works for 7-day personal builds).
 
-**Icons and splash screens** are generated from `resources/icon.svg` and `resources/splash.svg`:
+**Icons and splash screens** are drawn in code by `src/render/appIcon.ts` (ART-18: the game's clay tower on a sunburst, no image files) and written to every target — PWA icons, iOS AppIcon and launch screen, Android legacy + adaptive mipmaps and splash drawables, `resources/icon.png` / `splash.png` — by one script:
 ```bash
-npm run icons:generate # renders the SVGs to PNG with headless Chromium, then runs @capacitor/assets
+npm run icons:render   # headless Chromium; `-- --variant=island|duel` renders another candidate, `-- --out=<dir>` previews without touching the tree
 ```
 
 Project facts:
@@ -479,7 +479,6 @@ Reverting to option B (personalised ads on iOS) would need: the ATT call back in
 
 ## 7. Open items
 
-- Keep `public/icons/*` (PWA) and `resources/icon.svg` (native) visually in sync when the mark changes; `npm run icons:generate` only regenerates the native assets.
 - Signed builds: **iOS** — `tower-clash-ios-release.yml` is in place (§3) and has never run: the first run with the four `APP_STORE_CONNECT_*` / `APPLE_TEAM_ID` secrets is the test (watch for the Admin-role certificate creation and for `xcrun altool` on the current Xcode; the fallback uploader is wired). **Android** — `tower-clash-android-release.yml` (signed `.aab` + `.apk`, signature check, optional Play draft upload) and `tower-clash-android-keystore.yml` (upload key without a computer) are in place (§6, 2026-10-02, MM-6) and have never run with real secrets: Gradle could not run in the development sandbox (no Android SDK), so the first run validates `bundleRelease` / `assembleRelease` (incl. `lintVitalRelease`) with the AdMob and RevenueCat modules. The first `.aab` must be uploaded by hand in Play Console; `PLAY_SERVICE_ACCOUNT_JSON` is optional after that.
 - `workflow_dispatch` needs the workflow file on the default branch `main`, which has no workflows today, so GitHub shows no **Run workflow** button for any Tower Clash workflow (iOS release included). Workarounds in place: the iOS workflows start from the request files of §3.2 (MM-12), the Android keystore / release workflows from the request files of §6 (MM-13), tag pushes, and the Android keystore workflow also runs when its own file is pushed to the working branch (the stakeholder re-runs that run from Safari). Lasting fix (Producer / stakeholder decision): get the `.github/workflows/tower-clash-*.yml` files onto `main`.
 - MM-12 store lane (§3.2) has never run against App Store Connect: the first `action=metadata` run after "iOS sirləri hazırdır" is the test (watch the price / availability step and the age-rating PATCH).

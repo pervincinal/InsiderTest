@@ -26,7 +26,7 @@
     "android:build": "npm run cap:sync && cd android && ./gradlew assembleDebug",
     "ios:open": "npm run cap:sync && cap open ios",
     "icons:render": "tsx scripts/renderIcons.ts",
-    "icons:generate": "npm run icons:render && capacitor-assets generate --android --ios --iconBackgroundColor \"#0f172a\" --splashBackgroundColor \"#0f172a\""
+    "icons:generate": "npm run icons:render"
   },
   "devDependencies": {
     "@capacitor/assets": "3.0.5",

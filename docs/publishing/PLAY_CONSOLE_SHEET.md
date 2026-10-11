@@ -298,7 +298,7 @@ Qeyd: menyular, işarələr, təlimat, səviyyə adları və dərslər azərbayc
 
 | Asset (AZ) | Play rule | File (from the repository) | Checked 2026-10-11 |
 |---|---|---|---|
-| App icon (Tətbiq ikonu) | 512×512 PNG, 32-bit, ≤ 1 MB | `tower-clash/public/icons/icon-512.png` | 512×512, RGBA, 40 KB |
+| App icon (Tətbiq ikonu) | 512×512 PNG, 32-bit, ≤ 1 MB | `tower-clash/public/icons/icon-512.png` | 512×512, RGBA (every pixel opaque), 177 KB — new icon 2026-10-11 (ART-18) |
 | Feature graphic (Əsas qrafika) | 1024×500 PNG / JPEG, no alpha, ≤ 15 MB | `tower-clash/store/feature-graphic.png` | 1024×500, RGB, 117 KB |
 | Phone screenshots — English (Telefon skrinşotları) | 2–8, PNG / JPEG ≤ 8 MB, 9:16, each side 320–3840 px | `tower-clash/store/screenshots/en/01.png` … `08.png` — upload in file order | 8 files, 1080×1920, RGB, 361–534 KB; re-cut 2026-10-10 on `fc862b4` (PUB-20) |
 | Phone screenshots — Azerbaijani translation | same | `tower-clash/store/screenshots/az/01.png` … `08.png` (Azerbaijani captions *and* Azerbaijani in-game UI) | 8 files, 1080×1920, RGB, 368–539 KB; PUB-20 |
