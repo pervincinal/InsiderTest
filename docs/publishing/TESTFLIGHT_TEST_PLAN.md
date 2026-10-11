@@ -99,7 +99,7 @@ Ciddilik (POST_LAUNCH §5.1): **S1** — çökmə, keçilməyən / açılmayan s
 #### TF-08 · Səviyyə 2: seçimi ləğv et, axını dayandır, zoom yoxdur (2 dəq)
 - **Toxun:** **NÖVBƏTİ** → səviyyə 2 "Təchizat Xətti".
   1. İpucu **"Öz qüllənə, sonra boz qülləyə toxun"** (halqa ortadakı boz qüllədə) → öz qüllənə, sonra ortadakı boz qülləyə toxun.
-  2. İpucu **"Axını dayandırmaq üçün hədəfə yenə toxun"** → ortadakı qülləyə yenə toxun (heç nə olmasa: əvvəl öz qüllənə, sonra ortadakına).
+  2. İpucu **"Axını dayandırmaq üçün barmağınla xəttin üstündən keç"** → barmağını boş yerdən başlayıb axının (xəttin) üstündən keçir — axın dərhal dayanır, barmağın arxasında qısa iz görünür (build 9, BUG-33). İpucu 20 saniyədən sonra özü də itir.
   3. **Seçimi ləğv et:** öz qüllənə bir dəfə toxun (işıqlanır, aşağıda "Axın üçün xətti açıq olan qülləyə toxun · …" yazısı çıxır) → **eyni qülləyə yenə toxun**.
   4. Bir qülləyə **cəld iki dəfə** toxun; sonra bir qülləni **1 saniyə basılı saxla**.
   5. Səviyyəni udmağa davam et.
@@ -312,7 +312,7 @@ Severity (POST_LAUNCH §5.1): **S1** — crash, a level that cannot be won or lo
 #### TF-08 · Level 2: cancel a selection, stop a stream, no zoom (2 min)
 - **Tap:** **NÖVBƏTİ** → level 2 "Təchizat Xətti" (Supply Line).
   1. Hint **"Öz qüllənə, sonra boz qülləyə toxun"** (Tap your tower, then the grey tower; ring on the middle grey tower) → tap your tower, then the middle grey tower.
-  2. Hint **"Axını dayandırmaq üçün hədəfə yenə toxun"** (Tap the target again to stop the stream) → tap the middle tower again (if nothing happens: your tower first, then the middle one).
+  2. Hint **"Axını dayandırmaq üçün barmağınla xəttin üstündən keç"** (Swipe across the stream to stop it) → start on empty ground and swipe across the stream line — it stops at once and a short trail follows the finger (build 9, BUG-33). The hint also hides by itself after 20 s.
   3. **Cancel a selection:** tap your tower once (it lights up, a line "Axın üçün xətti açıq olan qülləyə toxun · …" appears at the bottom) → **tap the same tower again**.
   4. **Double-tap** a tower quickly; then **press and hold** a tower for 1 s.
   5. Go on and win the level.
