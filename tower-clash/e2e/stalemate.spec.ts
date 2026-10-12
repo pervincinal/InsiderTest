@@ -55,9 +55,11 @@ const ATTACK_AT_MS = 12_000;
 const REACTION_WINDOW_MS = 1900;
 /**
  * Sim ms at which the spec returns to ×1 (so the taps follow the 12 s attack within a few ticks of
- * sim time). Reached at ×10, so the sim overshoots it by up to ~1 s (poll interval + the speed change).
+ * sim time). Reached at ×10, so the sim overshoots it by the poll interval + the speed change — ~1 s
+ * alone, 3.15 s once under the two-worker load (2026-10-12: a stalled frame catches up a whole
+ * chunk of sim at ×10), so the stop is 5 s before the `< 11 s` check instead of 3 s.
  */
-const SLOW_DOWN_AT_MS = 8000;
+const SLOW_DOWN_AT_MS = 6000;
 
 interface LevelJson {
   id: number;
