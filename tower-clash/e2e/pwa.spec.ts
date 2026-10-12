@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
-import type { BrowserContext, Page } from '@playwright/test';
-import { expectToast, recordToasts } from './helpers/toasts';
+import type { BrowserContext, Page, Request, Response } from '@playwright/test';
+import { tapRect } from './helpers/tap';
+import { expectToast, recordToasts, toastMark, toastsSeen } from './helpers/toasts';
 
 /*
  * QA-8: the PWA offline path — public/sw.js (precache of the app shell + cache-first runtime cache
@@ -28,7 +29,7 @@ import { expectToast, recordToasts } from './helpers/toasts';
  * navigation and cached subresources still resolve from the worker's cache with the route on, since
  * a request the worker answers from Cache Storage never reaches the network layer.
  *
- * One test, three steps that build on the same registration:
+ * One test, four steps that build on the same registration:
  *  1. first launch: the worker registers, `navigator.serviceWorker.ready` resolves, the page is
  *     claimed, and the single `towerclash-*` cache holds every PRECACHE entry of public/sw.js
  *     (index.html, manifest, icons, fonts — the list is read from the file, not copied here) plus
@@ -46,6 +47,13 @@ import { expectToast, recordToasts } from './helpers/toasts';
  *     uncaught error reached `window.onerror`.
  *  3. back online: the same level loads on the next tap through the `?r=` re-fetch (BUG-8 path,
  *     src/lazyChunk.ts) and its chunk is now in the runtime cache.
+ *  4. offline again (QA-21): a fresh launch opens the level map from the title's PLAY. The map needs
+ *     two lazy chunks (src/main.ts `loadLazy`): the screens (`lazyScreens-*`) and the English menu
+ *     strings (`enMenus-*`, PERF-8; `levels.title` lives only there). Neither is precached: both
+ *     reached the runtime cache through the idle preload of step 1, and offline both must be served by
+ *     the worker from Cache Storage — the page gets them `fromServiceWorker()`, the worker itself sends
+ *     no network request for them, no load-failed toast — and the map reads in English. (Checked once
+ *     by the Frontend Engineer with a temporary spec; this makes it part of the suite.)
  *
  * QA-9 adds two more tests, each in its own context (fresh registration, fresh Cache Storage):
  *  - upgrade: the previous worker version is installed first — `context.route` serves public/sw.js
@@ -90,6 +98,10 @@ const SAVE_KEY = 'towerclash.save.v3';
 const ENTRY_CHUNK = /^\/assets\/index-[^/]+\.js$/;
 const LEVEL1_CHUNK = /^\/assets\/001-[^/]+\.js$/;
 const MENU_CHUNK = /^\/assets\/lazyScreens-[^/]+\.js$/;
+/** English menu strings (PERF-8): a lazy chunk the level map cannot open without. */
+const EN_MENUS_CHUNK = /^\/assets\/enMenus-[^/]+\.js$/;
+/** src/render/layout.ts TITLE.play */
+const TITLE_PLAY = { x: 180, y: 640, w: 360, h: 96 };
 /** The Playwright surface itself is a lazy chunk (PERF-6): `window.__towerclash` exists offline only when it is cached. */
 const DEBUG_CHUNK = /^\/assets\/debug-[^/]+\.js$/;
 /** The first level no boot / level-1 start preloads (see the header). */
@@ -203,7 +215,7 @@ async function navigate(page: Page): Promise<void> {
 test.describe('PWA offline (QA-8)', () => {
   test.setTimeout(60_000);
 
-  test('first launch precaches the shell; the game boots and plays level 1 offline; a cold level chunk fails with the offline toast and loads once back online', async ({ page, context }, testInfo) => {
+  test('first launch precaches the shell; the game boots and plays level 1 offline; a cold level chunk fails with the offline toast and loads once back online; offline again the level map opens from the runtime cache', async ({ page, context }, testInfo) => {
     expect(process.env.PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS, 'worker network emulation flag (playwright.config.ts)').toBeTruthy();
     expect(testInfo.project.use.serviceWorkers, 'run this spec in the pwa project').toBe('allow');
     expect(PRECACHE.length, 'PRECACHE parsed from public/sw.js').toBeGreaterThanOrEqual(5);
@@ -275,6 +287,48 @@ test.describe('PWA offline (QA-8)', () => {
         .poll(async () => (await cachedPaths(page))[cacheName] ?? [], { timeout: 15_000 })
         .toEqual(expect.arrayContaining([expect.stringMatching(/^\/assets\/003-[^/]+\.js$/)]));
       expect(pageErrors).toEqual([]);
+    });
+
+    await test.step('4. offline again: PLAY opens the level map — the lazy screens and the English menu strings come from the runtime cache (QA-21)', async () => {
+      const cached = (await cachedPaths(page))[cacheName] ?? [];
+      expect(cached, 'the English menu strings were runtime-cached by the step-1 preload').toEqual(expect.arrayContaining([expect.stringMatching(EN_MENUS_CHUNK), expect.stringMatching(MENU_CHUNK)]));
+      expect(PRECACHE.some((p) => EN_MENUS_CHUNK.test(p)), 'enMenus is not precached: this is the runtime cache at work').toBe(false);
+      await goOffline(context);
+      const isMapChunk = (path: string) => EN_MENUS_CHUNK.test(path) || MENU_CHUNK.test(path);
+      const fromWorker: string[] = [];
+      const workerNetwork: string[] = [];
+      const failed: string[] = [];
+      const onResponse = (r: Response) => {
+        if (r.fromServiceWorker() && r.ok()) fromWorker.push(new URL(r.url()).pathname);
+      };
+      const onRequest = (r: Request) => {
+        if (r.serviceWorker() && isMapChunk(new URL(r.url()).pathname)) workerNetwork.push(r.url());
+      };
+      const onFailed = (r: Request) => {
+        if (isMapChunk(new URL(r.url()).pathname)) failed.push(`${r.url()} ${r.failure()?.errorText ?? ''}`);
+      };
+      page.on('response', onResponse);
+      context.on('request', onRequest);
+      context.on('requestfailed', onFailed);
+      try {
+        await navigate(page);
+        expect(await onLine(page)).toBe(false);
+        expect(await controlled(page)).toBe(true);
+        const mark = await toastMark(page);
+        await tapRect(page, TITLE_PLAY);
+        await expect.poll(() => screen(page), { message: 'PLAY opens the level map offline' }).toBe('levelSelect');
+        expect(fromWorker, 'the page got the English menu strings from the worker').toEqual(expect.arrayContaining([expect.stringMatching(EN_MENUS_CHUNK)]));
+        expect(fromWorker, 'and the lazy screens').toEqual(expect.arrayContaining([expect.stringMatching(MENU_CHUNK)]));
+        expect(workerNetwork, 'the worker answered from Cache Storage, no network attempt').toEqual([]);
+        expect(failed).toEqual([]);
+        expect(await text(page, 'levels.title'), 'the map reads in English').toBe('LEVELS');
+        expect(await toastsSeen(page, { since: mark }), 'no load-failed toast').toEqual([]);
+        expect(pageErrors).toEqual([]);
+      } finally {
+        page.off('response', onResponse);
+        context.off('request', onRequest);
+        context.off('requestfailed', onFailed);
+      }
     });
   });
 
