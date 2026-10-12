@@ -1,8 +1,10 @@
-# Tower Clash — Google Play Console paste sheet (1.0.0 — versionCode 8, closed test → production)
+# Tower Clash — Google Play Console paste sheet (1.0.0 — the first Android build, closed test → production)
 
-Owner: Publisher. Written 2026-10-11 (PUB-21) as the Google Play counterpart of `APP_STORE_CONNECT_SHEET.md`, for a stakeholder who has an iPhone and a computer with Claude Cowork and uses the Play Console in a **desktop browser** (play.google.com/console). Every form is listed in the order the Play Console shows it, with the final value ready to copy; English field labels as on the screen, the Azerbaijani word in parentheses is only there to match the screen (Azərbaycanca: mötərizədəki söz sahənin adıdır; mətnin özü kod blokundan olduğu kimi yapışdırılır). Sources: `STORE_LISTING.md` §1 (texts, assets), §4 (content rating facts), §6.2 (ads, advertising ID), §6.3 (Data safety), §6.5 (audience); `LAUNCH_CHECKLIST.md` §2 G1–G20; `docs/MOBILE.md` §6 (keystore, release lane, `android-release.request`); `POST_LAUNCH.md` §2 (closed test, countries); `RELEASE_NOTES.md` v1.0.0 ("What's new"). Character counts were produced by a script on 2026-10-11 (§9) — do not edit a text without re-counting.
+Owner: Publisher. Written 2026-10-11 (PUB-21) as the Google Play counterpart of `APP_STORE_CONNECT_SHEET.md`, for a stakeholder who has an iPhone and a computer with Claude Cowork and uses the Play Console in a **desktop browser** (play.google.com/console). Every form is listed in the order the Play Console shows it, with the final value ready to copy; English field labels as on the screen, the Azerbaijani word in parentheses is only there to match the screen (Azərbaycanca: mötərizədəki söz sahənin adıdır; mətnin özü kod blokundan olduğu kimi yapışdırılır). Sources: `STORE_LISTING.md` §1 (texts, assets), §4 (content rating facts), §6.2 (ads, advertising ID), §6.3 (Data safety), §6.5 (audience); `LAUNCH_CHECKLIST.md` §2 G1–G20; `docs/MOBILE.md` §6 (keystore, release lane, `android-release.request`); `POST_LAUNCH.md` §2 (closed test, countries); `RELEASE_NOTES.md` v1.0.0 ("What's new"). Character counts were produced by a script on 2026-10-11 and re-run on 2026-10-12 after the RU / TR listing texts were added (§9, PUB-22) — do not edit a text without re-counting.
 
-**1.0.0 on Google Play has no in-app purchases** (the Play counterpart of the App Store's variant B). The Android build is made without `RC_ANDROID_KEY`, so the purchase SDK is never configured and the shop shows only its Skins and Upgrades tabs (PUB-14) — no price, product or Restore Purchases button is reachable. Therefore: no in-app products are created in Play Console, no payments profile / merchant account is needed for 1.0.0 (MZ1, MZ5 wait for 1.0.1), the content rating answers "digital purchases: **No**", Data safety has **no Purchase history** row, and the long descriptions are the **variant-B** texts (`STORE_LISTING.md` §2.1 substitutions applied to §1.1 / §1.2). In-app purchases arrive with **1.0.1 (versionCode 9)**; what changes then is §8.
+**Build number on Play.** No Android build has been made yet (the keystore secrets G3 / G4 are missing), so the first `.aab` gets the `config.buildNumber` of `tower-clash/package.json` on the day the team makes it — **10** if it is made from build 10 (cut 2026-10-12 for TestFlight), higher if a later build comes first; Play and the App Store count separately, so the same number on both is fine. This sheet writes it as **`<N>`**; the team names the real number in the report thread with the run.
+
+**1.0.0 on Google Play has no in-app purchases** (the Play counterpart of the App Store's variant B). The Android build is made without `RC_ANDROID_KEY`, so the purchase SDK is never configured and the shop shows only its Skins and Upgrades tabs (PUB-14) — no price, product or Restore Purchases button is reachable. Therefore: no in-app products are created in Play Console, no payments profile / merchant account is needed for 1.0.0 (MZ1, MZ5 wait for 1.0.1), the content rating answers "digital purchases: **No**", Data safety has **no Purchase history** row, and the long descriptions are the **variant-B** texts (`STORE_LISTING.md` §2.1 substitutions applied to §1.1 / §1.2). In-app purchases arrive with **1.0.1**, which takes the next free build number when it is cut; what changes then is §8.
 
 Ads: the closed-test build may show Google's **test** ads; the build that goes to production must carry the real Android AdMob ids (`ADMOB_ANDROID_APP_ID`, `ADMOB_ANDROID_INTERSTITIAL`, `ADMOB_ANDROID_REWARDED` — `LAUNCH_CHECKLIST.md` §0c step 6, MZ7). Create those three secrets **before** the team's first Android build so that the closed-test binary is already the production binary (§5.5, ⚠ 9).
 
@@ -15,9 +17,9 @@ Fields marked **stakeholder fills** are personal values the team must not invent
 1. **Play Console hesabı (G1, bir dəfə):** play.google.com/console → hesab növü **Personal (Şəxsi)**, 25 USD, şəxsiyyət vəsiqəsi ilə təsdiq; yeni şəxsi hesablar üçün bir Android telefonda Play Console tətbiqinə bir dəfə daxil olmaq tələb oluna bilər — ailədən/dostdan telefon kifayətdir (§1.1, ⚠ 1).
 2. **Tətbiqi yarat (G2):** *Create app* — ad `Tower Clash`, dil English (United States), Game, Free (§1.2).
 3. **AdMob-da Android tətbiqi + 3 sirr** (`LAUNCH_CHECKLIST.md` §0c, 6-cı addım) — ilk Android build-dən **əvvəl**, ki test build-i elə production build-i olsun.
-4. **Açar sirləri (G3/G4):** `ANDROID_KEYSTORE_PASSWORD` → "parol sirrini əlavə etdim"; artefakt gələndə `ANDROID_KEYSTORE_BASE64` → "açar sirri hazırdır". Komanda build 8-i yığır.
+4. **Açar sirləri (G3/G4):** `ANDROID_KEYSTORE_PASSWORD` → "parol sirrini əlavə etdim"; artefakt gələndə `ANDROID_KEYSTORE_BASE64` → "açar sirri hazırdır". Komanda build-i yığır (versionCode = həmin günkü `config.buildNumber`, 10 və ya daha böyük; vərəqdə `<N>`).
 5. **App content formaları (§2):** gizlilik səhifəsi canlı olandan sonra (BUG-26) — cavablar hazırdır, sadəcə seç.
-6. **Mağaza səhifəsi (§3):** EN + AZ mətnlər, ikon, feature graphic, 8 skrinşot.
+6. **Mağaza səhifəsi (§3):** EN mətnlər, sonra AZ, RU, TR tərcümələri (*Manage translations*, §3.3, §3.5, §3.6), ikon, feature graphic, hər dil üçün 8 skrinşot.
 7. **Qapalı test (§4, §5.2):** artefaktdakı `.aab`-ı *Closed testing*-ə yüklə, 12+ test edənin Gmail-ini siyahıya əlavə et (15–20 tövsiyə olunur), linki iki sətirlik mesajla göndər.
 8. **14 gün gözlə** (ən azı 12 nəfər testdə qalmalıdır), sonra *Apply for production* — cavabların qaralaması §4.6-dadır.
 9. **İstəyə bağlı (G4b):** Play xidmət hesabı → `PLAY_SERVICE_ACCOUNT_JSON` — sonra yükləmələri komanda edir.
@@ -192,15 +194,15 @@ Why: the AdMob SDK merges the `com.google.android.gms.permission.AD_ID` permissi
 |---|---|---|---|
 | App name (Ad) | 30 | `Tower Clash` | 11 |
 | Short description (Qısa təsvir) | 80 | `Capture every tower. One-thumb real-time strategy, 50 levels, plays offline.` | 76 |
-| Full description (Tam təsvir) | 4000 | the block below — `STORE_LISTING.md` §1.1 with the four §2.1 variant-B substitutions; identical to `APP_STORE_CONNECT_SHEET.md` §6.3 | 3863 |
+| Full description (Tam təsvir) | 4000 | the block below — `STORE_LISTING.md` §1.1 with the four §2.1 variant-B substitutions; identical to `APP_STORE_CONNECT_SHEET.md` §6.3 | 3858 |
 
-Full description EN — variant B (no purchases in 1.0.0), 3863 characters:
+Full description EN — variant B (no purchases in 1.0.0), 3858 characters (2026-10-12, PUB-22: the stream now stops with a swipe across it — BUG-33 — instead of "until you tap the target again"; tapping the target again still works but is no longer named):
 
 ```
 Tower Clash is a one-thumb real-time strategy game: tap one of your towers, tap a target, and a stream of soldiers starts marching — and keeps marching until you stop it. Reinforce friendly towers, overwhelm hostile ones, and when a garrison hits zero the tower is yours. Capture every enemy tower to win.
 
 HOW IT PLAYS
-• Tap a blue tower, then tap any tower it can see in a straight line: a stream of soldiers starts flowing there — and keeps flowing until you tap the target again. Walls, water and rocks block the line. Drag from tower to tower works too.
+• Tap a blue tower, then tap any tower it can see in a straight line: a stream of soldiers starts flowing there — and keeps flowing until you swipe across it. Walls, water and rocks block the line. Drag from tower to tower works too.
 • Towers upgrade themselves: let one fill to 25 soldiers and it becomes level 2, at 50 level 3 (100 max). Bigger towers recruit faster and run more streams — one at level 1, two at level 2, three at level 3.
 • Sending never empties a tower — it only stops growing while it streams, and bigger towers stream faster. Close the stream to let it level up.
 • A tower under attack stops recruiting — answer every enemy stream, or the tower falls.
@@ -246,15 +248,15 @@ Menus, hints, the tutorial, level names and lessons are in English, Azerbaijani,
 |---|---|---|---|
 | App name (Ad) | 30 | `Tower Clash` | 11 |
 | Short description (Qısa təsvir) | 80 | `Bütün qüllələri tut. Bir barmaqla real vaxt strategiya, 50 səviyyə, oflayn.` | 75 |
-| Full description (Tam təsvir) | 4000 | the block below — `STORE_LISTING.md` §1.2 with the four §2.1 variant-B substitutions | 3825 |
+| Full description (Tam təsvir) | 4000 | the block below — `STORE_LISTING.md` §1.2 with the four §2.1 variant-B substitutions | 3833 |
 
-Full description AZ — variant B, 3825 characters:
+Full description AZ — variant B, 3833 characters (2026-10-12, PUB-22: the same swipe sentence as EN):
 
 ```
 Tower Clash bir barmaqla oynanan real vaxt strategiya oyunudur: öz qüllənə toxun, hədəfə toxun — əsgər axını yola düşür və sən dayandırana qədər davam edir. Dost qüllələri gücləndir, düşmən qüllələrini sıxışdır; qarnizon sıfıra düşəndə qüllə sənindir. Qalib gəlmək üçün bütün düşmən qüllələrini tut.
 
 NECƏ OYNANIR
-• Mavi qülləyə toxun, sonra düz xətlə gördüyü istənilən qülləyə toxun: ora əsgər axını başlayır — və sən hədəfə yenidən toxunana qədər davam edir. Divar, su və qaya xətti kəsir. Qüllədən qülləyə sürükləmək də işləyir.
+• Mavi qülləyə toxun, sonra düz xətlə gördüyü istənilən qülləyə toxun: ora əsgər axını başlayır — və sən barmağınla onun üstündən keçənə qədər davam edir. Divar, su və qaya xətti kəsir. Qüllədən qülləyə sürükləmək də işləyir.
 • Qüllələr özləri təkmilləşir: biri 25 əsgərə dolsun — 2-ci səviyyə olur, 50-də 3-cü səviyyə (maksimum 100). Böyük qüllə daha sürətli əsgər yığır və daha çox axın aparır — 1-ci səviyyədə bir, 2-cidə iki, 3-cüdə üç.
 • Göndərmək qülləni boşaltmır — axın verərkən yalnız böyümür, böyük qüllə daha sürətli axın verir. Səviyyəsi qalxsın istəyirsənsə axını bağla.
 • Hücum altındakı qüllə əsgər yığmır — hər düşmən axınına cavab ver, yoxsa qüllə düşər.
@@ -299,17 +301,129 @@ Qeyd: menyular, işarələr, təlimat, səviyyə adları və dərslər azərbayc
 | Asset (AZ) | Play rule | File (from the repository) | Checked 2026-10-11 |
 |---|---|---|---|
 | App icon (Tətbiq ikonu) | 512×512 PNG, 32-bit, ≤ 1 MB | `tower-clash/public/icons/icon-512.png` | 512×512, RGBA (every pixel opaque), 177 KB — new icon 2026-10-11 (ART-18) |
-| Feature graphic (Əsas qrafika) | 1024×500 PNG / JPEG, no alpha, ≤ 15 MB | `tower-clash/store/feature-graphic.png` | 1024×500, RGB, 117 KB |
+| Feature graphic (Əsas qrafika) | 1024×500 PNG / JPEG, no alpha, ≤ 15 MB | `tower-clash/store/feature-graphic.png` — one file for every language (a translation without its own feature graphic shows this one) | 1024×500, RGB, 117 KB (the Tech Artist re-renders it on 2026-10-12, ART-19 — take the file as it is on the branch on upload day) |
 | Phone screenshots — English (Telefon skrinşotları) | 2–8, PNG / JPEG ≤ 8 MB, 9:16, each side 320–3840 px | `tower-clash/store/screenshots/en/01.png` … `08.png` — upload in file order | 8 files, 1080×1920, RGB, 361–534 KB; re-cut 2026-10-10 on `fc862b4` (PUB-20) |
 | Phone screenshots — Azerbaijani translation | same | `tower-clash/store/screenshots/az/01.png` … `08.png` (Azerbaijani captions *and* Azerbaijani in-game UI) | 8 files, 1080×1920, RGB, 368–539 KB; PUB-20 |
+| Phone screenshots — Russian translation (§3.5) | same | `tower-clash/store/screenshots/ru/01.png` … `08.png` (Russian captions and in-game UI) | 8 files, 1080×1920, RGB, 364–534 KB; PUB-20 (checked 2026-10-12) |
+| Phone screenshots — Turkish translation (§3.6) | same | `tower-clash/store/screenshots/tr/01.png` … `08.png` (Turkish captions and in-game UI) | 8 files, 1080×1920, RGB, 363–538 KB; PUB-20 (checked 2026-10-12) |
 | 7-inch / 10-inch tablet, Chromebook, Android XR screenshots | optional | **none** — phone-only listing (G11) | |
 | Video (YouTube URL) | optional | **none** | |
 
-What the eight frames show (`STORE_LISTING.md` §1.3): 01 title "Capture every tower" · 02 level 1 tutorial · 03 level 5, both stream colours · 04 level 24, mines and two rivals · 05 level 9 fortress · 06 level 45, three enemies · 07 three-star result with SHARE · 08 WEEKLY tab. If the Azerbaijani translation is saved without its own screenshots, Play shows the English ones — upload the `az/` set.
+What the eight frames show (`STORE_LISTING.md` §1.3): 01 title "Capture every tower" · 02 level 1 tutorial · 03 level 5, both stream colours · 04 level 24, mines and two rivals · 05 level 9 fortress · 06 level 45, three enemies · 07 three-star result with SHARE · 08 WEEKLY tab. If a translation is saved without its own screenshots, Play shows the English ones — upload the `az/`, `ru/` and `tr/` sets to their translations. The four sets are the 2026-10-10 render (PUB-20, before BUG-33 / BUG-34): no frame shows a stream being stopped, and at 9:16 there is no letterbox to see; a re-cut after BUG-34 is ART-19.
 
-### 3.5 Russian and Turkish (Rus və türk dilləri) — not in 1.0.0
+### 3.5 Russian translation (Rusca tərcümə) — Store listings → Default store listing → **Manage translations** → *Add your own translation text* → **Russian – ru-RU** → Apply; then switch the language selector at the top of the listing to Russian
 
-`STORE_LISTING.md` §1 has **no Russian or Turkish listing texts** (no short or full description in those languages), and Play does not accept a translation without them, so 1.0.0 lists **English + Azerbaijani only**; Russian- and Turkish-language phones in the soft-launch countries see the English listing. The screenshot sets `tower-clash/store/screenshots/ru/01..08.png` and `tr/01..08.png` (PUB-20) and the RU / TR "What's new" texts are ready for the day the texts exist (⚠ 11 — proposed as a follow-up for the Publisher).
+Written 2026-10-12 (PUB-22) from the variant-B EN text of §3.2 — the same facts, no others; not word-for-word. Game words follow the Russian in-game UI (`src/ui/locales/ru.ts`): уровень, башня, поток, Ежедневный / Недельный вызов, Ускорение / Заморозка / Авиаудар, облики, прокачка, командир.
+
+| Field (AZ) | Limit | Value | Count |
+|---|---|---|---|
+| App name (Ad) | 30 | `Tower Clash` | 11 |
+| Short description (Qısa təsvir) | 80 | `Захвати все башни. Стратегия в реальном времени одним пальцем: 50 уровней офлайн` | 80 |
+| Full description (Tam təsvir) | 4000 | the block below | 3976 |
+
+Full description RU — variant B (no purchases in 1.0.0), 3976 characters:
+
+```
+Tower Clash — стратегия в реальном времени для одного пальца: нажми на свою башню, затем на цель — и туда двинется поток солдат, который не прервётся, пока ты его не остановишь. Подкрепляй свои башни, задавливай чужие: как только гарнизон падает до нуля, башня твоя. Захвати все вражеские башни, чтобы победить.
+
+КАК ИГРАТЬ
+• Нажми на синюю башню, затем на любую башню, которую она видит по прямой: туда пойдёт поток солдат — и будет идти, пока ты не проведёшь пальцем поперёк него. Стены, вода и скалы перекрывают линию. Можно и протянуть палец от башни к башне.
+• Башни растут сами: наполни башню до 25 солдат — она станет второго уровня, до 50 — третьего (максимум 100). Чем выше уровень, тем быстрее башня набирает солдат и тем больше ведёт потоков: один, два или три.
+• Поток никогда не опустошает башню — пока он идёт, башня просто не растёт, а большие башни шлют быстрее. Останови поток, чтобы башня смогла подняться в уровне.
+• Башня под атакой не набирает солдат — отвечай на каждый вражеский поток, иначе башню захватят.
+• Вражеские потоки видны как прямые ленты их цвета: всегда ясно, откуда идёт следующая атака и куда бить в ответ.
+
+50 УРОВНЕЙ РУЧНОЙ РАБОТЫ
+• Уровни 1–3 учат основам в коротком встроенном обучении; каждый следующий уровень начинается с урока в одну строку.
+• Крепости (с 9-го уровня) отражают половину любой атаки — бери солдат с запасом.
+• Артиллерия (с 12-го уровня) расстреливает солдат, вошедших в зону огня, — заходи с правильной стороны.
+• С 17-го уровня против тебя сразу два соперника, с 33-го — три, и они воюют ещё и друг с другом.
+• Стены, реки и скалы, закрывающие линию атаки, и мины, которые уничтожают первых прошедших по ним солдат.
+• Танковые заводы (с 25-го уровня): танк весит как пять солдат, но ползёт медленно — пусти его первым, а пехота догонит.
+• Уровни 41–50, Большая кампания: три противника, стены и мины на каждой карте, самые трудные острова — новых правил нет, зато все сразу.
+• На каждом уровне можно взять три звезды: чем быстрее победа, тем больше звёзд. Звёзды открывают следующий уровень и приносят золото.
+• Ежедневный вызов: каждый день один уровень с особым условием, одинаковый для всех, — бесплатные попытки, золото и кристаллы за первую победу, бонусные кристаллы за серию из 3, 7 и 30 дней.
+• Недельный вызов: каждый понедельник уровень из поздней кампании с особым условием, общий для всех, — 100 золота за первую победу и 20 кристаллов, если уложишься во время на три звезды.
+
+ЗОЛОТО, КРИСТАЛЛЫ И ПРОКАЧКА
+• Золото зарабатывается игрой — звёзды, повторные прохождения, ежедневные награды — и тратится на Ускорение (×3 производство на 10 с), Заморозку (враги не производят 5 с), Авиаудар (−10 солдат в одной вражеской башне) и постоянную прокачку командира (производство, вместимость, стартовый гарнизон, скорость марша, скидка на усилители).
+• Кристаллы дают за вехи, достижения и ежедневный сундук; на них покупают облики башен, шлемов и островов или второй шанс после поражения.
+• Любой уровень можно пройти, ничего не тратя: прокачка — короткий путь, а не обязательное условие.
+
+ШЕСТЬ ОСТРОВОВ
+• Зелёный, осенний, песчаный, снежный, вулканический и сумеречный острова в мягком «пластилиновом» стиле с солнечными тенями.
+
+СДЕЛАНО ДЛЯ ТЕЛЕФОНА
+• Вертикальный экран, одна рука, каждый уровень короче трёх минут.
+• В меню паузы — скорость ×2, когда победа уже в кармане.
+• Настройки: звук, палитра для дальтоников, меньше анимации, язык; кнопка звука прямо на игровом экране.
+• Играй без интернета: кампании сеть не нужна (рекламе — нужна).
+
+ЧЕСТНАЯ ИГРА
+• Без аккаунта и входа — прогресс хранится только на твоём устройстве.
+• В этой версии ничего не продаётся: золото и кристаллы зарабатываются игрой. Без подписок и лутбоксов.
+• Короткая реклама между уровнями — не чаще чем раз в три уровня, никогда во время боя и никогда в первых пяти уровнях. Видео за награду — только по твоему желанию.
+
+Меню, подсказки, обучение, названия уровней и уроки — на русском, английском, азербайджанском и турецком.
+```
+
+### 3.6 Turkish translation (Türkcə tərcümə) — Store listings → Default store listing → **Manage translations** → *Add your own translation text* → **Turkish – tr-TR** → Apply; then switch the language selector at the top of the listing to Turkish
+
+Written 2026-10-12 (PUB-22) from the variant-B EN text of §3.2 — the same facts, no others; not word-for-word. Game words follow the Turkish in-game UI (`src/ui/locales/tr.ts`): bölüm (a level of the campaign), seviye (a tower's level), kule, akış, Günlük / Haftalık Meydan Okuma, Hızlandırma / Dondurma / Hava Saldırısı, görünüm, Komutan.
+
+| Field (AZ) | Limit | Value | Count |
+|---|---|---|---|
+| App name (Ad) | 30 | `Tower Clash` | 11 |
+| Short description (Qısa təsvir) | 80 | `Tüm kuleleri fethet. Tek parmakla gerçek zamanlı strateji, 50 bölüm, çevrimdışı.` | 80 |
+| Full description (Tam təsvir) | 4000 | the block below | 3959 |
+
+Full description TR — variant B (no purchases in 1.0.0), 3959 characters:
+
+```
+Tower Clash, tek parmakla oynanan gerçek zamanlı bir strateji oyunu: kulelerinden birine dokun, bir hedefe dokun — asker akışı yola çıkar ve sen durdurana kadar sürer. Dost kuleleri güçlendir, düşman kulelerini bunalt; garnizon sıfıra indiğinde kule senindir. Kazanmak için bütün düşman kulelerini ele geçir.
+
+NASIL OYNANIR
+• Mavi bir kuleye, sonra onun düz bir hatta gördüğü herhangi bir kuleye dokun: oraya asker akışı başlar — ve parmağını üzerinden geçirene kadar sürer. Duvarlar, su ve kayalar hattı keser. Kuleden kuleye parmağını sürüklemek de işe yarar.
+• Kuleler kendiliğinden yükselir: 25 askere dolan kule 2. seviyeye, 50'ye dolan 3. seviyeye çıkar (en fazla 100). Büyük kule daha hızlı asker toplar ve daha çok akış yürütür: 1. seviyede bir, 2. seviyede iki, 3. seviyede üç.
+• Göndermek kuleyi asla boşaltmaz — akış sürerken kule yalnızca büyümez; büyük kuleler daha hızlı akış verir. Seviye atlasın istiyorsan akışı kapat.
+• Saldırı altındaki kule asker toplamaz — her düşman akışına cevap ver, yoksa kule düşer.
+• Düşman akışları kendi renklerinde düz şeritler olarak çizilir: bir sonraki saldırının nereden geldiğini ve nereye karşılık vereceğini hep görürsün.
+
+50 EL YAPIMI BÖLÜM
+• 1–3. bölümler kısa bir eğitimle temelleri öğretir; sonraki her bölüm tek cümlelik bir dersle açılır.
+• Kaleler (9. bölümden itibaren) her saldırının yarısını savuşturur — sandığından fazla asker götür.
+• Toplar (12. bölümden itibaren) menzillerine giren askerleri vurur — doğru taraftan yaklaş.
+• 17. bölümden itibaren aynı anda iki, 33. bölümden itibaren üç rakip — üstelik birbirleriyle de savaşırlar.
+• Saldırı hattını kesen duvarlar, nehirler ve kayalar; üzerinden geçen ilk askerleri yok eden mayınlar.
+• Tank fabrikaları (25. bölümden itibaren): bir tank beş asker ağırlığındadır ama ağır ilerler — önce onu gönder, piyade arkadan yetişsin.
+• 41–50. bölümler, Büyük Sefer: her haritada üç rakip, duvar ve mayın, en zorlu adalar — yeni kural yok, hepsi bir arada.
+• Her bölümde üç yıldız topla: ne kadar hızlı kazanırsan o kadar çok yıldız. Yıldızlar sonraki bölümü açar ve altın kazandırır.
+• Günlük Meydan Okuma: her gün herkes için aynı bölüm ve aynı özel kural — ücretsiz tekrar denemeler, ilk zafere altın ve kristal, 3, 7 ve 30 günlük galibiyet serisine bonus kristal.
+• Haftalık Meydan Okuma: her pazartesi seferin son kısmından özel kurallı bir bölüm, herkes için aynı — ilk zafere 100 altın, üç yıldız süresinin altında bitirirsen 20 kristal.
+
+ALTIN, KRİSTAL VE YÜKSELTMELER
+• Altın oynayarak kazanılır — yıldızlar, tekrar oyunlar ve günlük ödüller — ve Hızlandırma (10 sn boyunca ×3 üretim), Dondurma (rakipler 5 sn üretim yapamaz), Hava Saldırısı (bir düşman kulesinden −10 asker) ile kalıcı Komutan yükseltmelerine (üretim, kapasite, başlangıç garnizonu, yürüyüş hızı, daha ucuz güçlendiriciler) harcanır.
+• Kristaller hedeflerden, başarımlardan ve günlük sandıktan gelir; onlarla kule, miğfer ve ada görünümleri ya da yenilgiden sonra ikinci bir şans alınır.
+• Her bölüm hiçbir şey harcamadan geçilebilir — yükseltmeler kestirme yoldur, zorunluluk değil.
+
+ALTI ADA
+• Çimen, sonbahar, kum, kar, volkan ve alacakaranlık adaları; güneşli gölgelerle yumuşak bir kil tarzında.
+
+TELEFON İÇİN TASARLANDI
+• Dikey ekran, tek el, her bölüm üç dakikadan kısa.
+• Duraklatma menüsünde ×2 hız düğmesi — zafer zaten cebindeyse.
+• Ayarlar: ses, renk körlüğü paleti, azaltılmış hareket, dil; sessiz düğmesi doğrudan oyun ekranında.
+• Çevrimdışı oynanır: sefer için internet gerekmez (reklamlar için gerekir).
+
+DÜRÜST TASARIM
+• Hesap yok, giriş yok — ilerlemen yalnızca kendi cihazında saklanır.
+• Bu sürümde satın alınacak bir şey yok: altın ve kristal oynayarak kazanılır. Abonelik yok, ganimet kutusu yok.
+• Bölümler arasında kısa bir reklam en fazla üç bölümde bir çıkar; asla savaş sırasında, asla ilk beş bölümde değil. Ödüllü videolar her zaman senin tercihin.
+
+Menüler, ipuçları, eğitim, bölüm adları ve dersler Türkçe, İngilizce, Azerbaycanca ve Rusça.
+```
+
+Russian- and Turkish-language phones see these translations; phones in any other language see the English default. Screenshots for both are in §3.4.
 
 ---
 
@@ -361,13 +475,13 @@ A three-part questionnaire (⚠ 14: the question wording and limits are from Goo
 | 2 | How easy was it to recruit testers? (Nə qədər asan idi?) | **stakeholder picks** from the list (Very easy … Very difficult) — honest choice | — |
 | 3 | Describe the engagement you received from testers (Test edənlərin fəallığı) | `Testers installed the game from the closed track and played the campaign, the Daily Challenge and the Weekly Challenge during the 14 days. [Fill in: about how many played on several days and how far they got, e.g. "About N of the M testers played on most days; most reached level X".]` | 284 |
 | 4 | Summary of the feedback and how you collected it (Rəylərin xülasəsi) | `Feedback was collected in a private chat with the testers, by e-mail and through Google Play's private tester feedback. Main points: [fill in the two to four main points, e.g. a level that felt too hard, a text that was unclear, a device that ran slowly].` | 255 |
-| 5 | Who is the intended audience of your app? (Hədəf auditoriya) | `Players aged 13 and over who like short, casual strategy games on a phone. The game is in English, Azerbaijani, Russian and Turkish, its store listing in English and Azerbaijani; the first release goes to Azerbaijan, Türkiye, Kazakhstan and Georgia.` | 249 |
+| 5 | Who is the intended audience of your app? (Hədəf auditoriya) | `Players aged 13 and over who like short, casual strategy games on a phone. The game and its store listing are in English, Azerbaijani, Russian and Turkish; the first release goes to Azerbaijan, Türkiye, Kazakhstan and Georgia.` | 226 |
 | 6 | How does your app provide value to users? (İstifadəçiyə nə verir?) | `Tower Clash is a single-player real-time strategy game played with one thumb: 50 hand-made levels of under three minutes each, Daily and Weekly Challenges, no account, plays offline. It is free; a short ad shows at most every third level, never during a battle; rewarded videos are optional.` | 291 |
 | 7 | How many installs do you expect in the first year? (İlk il üçün gözlənilən yükləmə) | **0 – 10K** | — |
 | 8 | What changes did you make based on the closed test? (Testdən sonra nə dəyişdi?) | `[Fill in from the team's list of closed-test fixes in the daily report, e.g. "We fixed …, made level X easier and clarified …".] If nothing needed changing: "Testers reported no crashes or blocking problems, so the build stayed the same apart from small text fixes."` | 266 |
 | 9 | How did you decide that your app is ready for production? (Hazır olduğuna necə qərar verdiniz?) | `Every build passes our automated checks (more than 1,200 unit tests, end-to-end tests and an automatic playtest that wins all 50 levels). During the closed test Android vitals showed [no / N] crashes and ANRs, and testers finished the tutorial and played the challenges without help.` | 283 |
 
-Answer 5 names the listing languages of 1.0.0 (§3.5); if RU / TR listing texts are added before the application, write "its store listing in all four". Answer 9's numbers: 1286 unit tests, 50/50 playtest on 2026-10-10 (`reports/2026-10-10.md`). **Submit** is the stakeholder's click (a declaration); Google answers usually within days ⚠ 14, after which **Production** opens.
+Answer 5 names the listing languages of 1.0.0 — all four since 2026-10-12 (§3.2, §3.3, §3.5, §3.6); if a translation is not saved when the application is sent, drop that language from the sentence. Answer 9's numbers: 1286 unit tests, 50/50 playtest on 2026-10-10 (`reports/2026-10-10.md`). **Submit** is the stakeholder's click (a declaration); Google answers usually within days ⚠ 14, after which **Production** opens.
 
 ---
 
@@ -375,20 +489,20 @@ Answer 5 names the listing languages of 1.0.0 (§3.5); if RU / TR listing texts 
 
 ### 5.1 Who starts a build (Build-i kim başladır)
 
-Nobody presses *Run workflow*. The team commits `tower-clash/release/android-release.request` (`track=` internal / closed / production, `status=` draft / completed, `note=`, a new `requested=` UTC time) on `claude/tower-war-game-plan-weqwpb`; the push starts `tower-clash-android-release.yml`, which builds and signs **1.0.0 (versionCode 8)** from `package.json` (`docs/MOBILE.md` §6 "How to run it", MM-13). Preconditions the stakeholder provides: G1 + G2 (§1), the Android AdMob secrets (§0c step 6), `ANDROID_KEYSTORE_PASSWORD` + `ANDROID_KEYSTORE_BASE64` ("açar sirri hazırdır", G3 / G4). About 15–20 minutes later the team posts the run result in the report thread.
+Nobody presses *Run workflow*. The team commits `tower-clash/release/android-release.request` (`track=` internal / closed / production, `status=` draft / completed, `note=`, a new `requested=` UTC time) on `claude/tower-war-game-plan-weqwpb`; the push starts `tower-clash-android-release.yml`, which builds and signs **1.0.0 (versionCode `<N>`)** from `package.json` (`docs/MOBILE.md` §6 "How to run it", MM-13). Preconditions the stakeholder provides: G1 + G2 (§1), the Android AdMob secrets (§0c step 6), `ANDROID_KEYSTORE_PASSWORD` + `ANDROID_KEYSTORE_BASE64` ("açar sirri hazırdır", G3 / G4). About 15–20 minutes later the team posts the run result in the report thread.
 
 | `PLAY_SERVICE_ACCOUNT_JSON` (G4b) | What the team requests | What the stakeholder does |
 |---|---|---|
-| **absent** (today) | `track=internal`, `status=draft` → the run summary says **Play upload: SKIPPED** and names the artifact **`tower-clash-android-1.0.0-8-aab`** (kept 90 days). A `closed` / `production` request without the secret stops before building | uploads the `.aab` by hand — §5.2 — straight into **Closed testing** |
+| **absent** (today) | `track=internal`, `status=draft` → the run summary says **Play upload: SKIPPED** and names the artifact **`tower-clash-android-1.0.0-<N>-aab`** (kept 90 days). A `closed` / `production` request without the secret stops before building | uploads the `.aab` by hand — §5.2 — straight into **Closed testing** |
 | **present** (only after the first manual upload — Google's API cannot create an app's first release) | `track=closed` (or `production`), `status=draft` | opens the draft → **Review release** → **Start rollout to Closed testing** (production: §5.5) |
 
 ### 5.2 Manual upload — exact clicks (Əl ilə yükləmə), computer browser
 
-1. **Download:** github.com/pervincinal/InsiderTest → **Actions** → **tower-clash-android-release** → the run the team named → bottom of the page, **Artifacts** → **`tower-clash-android-1.0.0-8-aab`** → a `.zip` downloads → unzip → **`tower-clash-1.0.0-8.aab`**. (Not the `-apk` artifact: Play wants the `.aab`.)
+1. **Download:** github.com/pervincinal/InsiderTest → **Actions** → **tower-clash-android-release** → the run the team named → bottom of the page, **Artifacts** → **`tower-clash-android-1.0.0-<N>-aab`** → a `.zip` downloads → unzip → **`tower-clash-1.0.0-<N>.aab`**. (Not the `-apk` artifact: Play wants the `.aab`.)
 2. play.google.com/console → **Tower Clash** → left menu **Test and release** → **Testing** → **Closed testing** → track **Closed testing - Alpha** → **Create new release** (Yeni buraxılış yarat).
 3. **First release only — App integrity / Play App Signing:** keep **"Use Google-generated key"** (the default) → **Next / Continue**. Google keeps the app signing key; our keystore is only the upload key (`docs/MOBILE.md` §6, "Why a CI-generated key is acceptable").
-4. **App bundles → Upload** → pick `tower-clash-1.0.0-8.aab`. Play reads the package name `com.pervincinal.towerclash` (permanent from now on), version **1.0.0**, code **8**.
-5. **Release name** (Buraxılışın adı): `1.0.0 (8)` (Play pre-fills `8 (1.0.0)` — either is fine; the sheet's form matches the App Store).
+4. **App bundles → Upload** → pick `tower-clash-1.0.0-<N>.aab`. Play reads the package name `com.pervincinal.towerclash` (permanent from now on), version **1.0.0**, code **`<N>`**.
+5. **Release name** (Buraxılışın adı): `1.0.0 (<N>)`, e.g. `1.0.0 (10)` (Play pre-fills `<N> (1.0.0)` — either is fine; the sheet's form matches the App Store).
 6. **Release notes** (Buraxılış qeydləri): paste the block of §5.4 as it is (with the language tags).
 7. **Next** → the review screen lists errors (must be fixed — paste the text in the report thread) and warnings (usually fine; e.g. "no deobfuscation file" is expected) → **Save**.
 8. **Publishing overview** (left menu) → **Send changes for review** (Dəyişiklikləri rəyə göndər) ⚠ 15. The closed track goes live for the testers when Google approves it.
@@ -401,7 +515,7 @@ Click path for the secret: `LAUNCH_CHECKLIST.md` G4b and §0 step 4 (AZ, steps a
 
 ### 5.4 Release name and notes (Buraxılışın adı və qeydləri)
 
-Release name: `1.0.0 (8)` (9 characters). Release notes: `RELEASE_NOTES.md` v1.0.0 "What's new", EN 496 / AZ 489 characters (limit **500 per language**). Paste this whole block into the single *Release notes* box — Play splits it by the tags:
+Release name: `1.0.0 (<N>)` — `1.0.0 (10)` is 10 characters (limit 50). Release notes: `RELEASE_NOTES.md` v1.0.0 "What's new", EN 496 / AZ 489 / RU 475 / TR 474 characters (limit **500 per language**). Paste this whole block into the single *Release notes* box — Play splits it by the tags:
 
 ```
 <en-US>
@@ -410,15 +524,21 @@ Tower Clash 1.0 with Rules v3: no more roads — a tower attacks any tower it ca
 <az-AZ>
 Tower Clash 1.0, Qaydalar v3 ilə: yollar yoxdur — qüllə düz xətlə gördüyü hər qülləyə hücum edir; divar, su və qaya xətti kəsir. Göndərmək qülləni boşaltmır, yalnız böyüməsini dayandırır; böyük qüllə daha sürətli axın verir. Böyük Kampaniya: altı adada 50 əl ilə hazırlanmış səviyyə, son onunda üç rəqib, divar və mina. Günlük və Həftəlik Çağırış, seriyalar. "Necə oynanır" kartı, hər məğlubiyyətdən sonra məsləhət, səkkiz yeni görünüş. Hesabsız, oflayn — quraşdırılmış veb tətbiq kimi də.
 </az-AZ>
+<ru-RU>
+Tower Clash 1.0 с правилами v3: дорог больше нет — башня атакует любую башню на прямой линии; стены, вода и скалы перекрывают линию. Отправка не опустошает башню, а лишь останавливает её рост; башни выше уровнем шлют быстрее. Большая кампания: 50 уровней ручной работы на шести островах, в последних десяти три противника, стены и мины. Ежедневный и недельный вызовы с сериями. Карточка «Как играть», совет после каждого поражения, восемь новых обликов. Без аккаунта, офлайн.
+</ru-RU>
+<tr-TR>
+Tower Clash 1.0, Kurallar v3 ile: yol yok — bir kule düz çizgide gördüğü her kuleye saldırır; duvar, su ve kaya çizgiyi keser. Göndermek kuleyi boşaltmaz, yalnızca büyümesini durdurur; büyük kuleler daha hızlı akış verir. Büyük Sefer: altı adada 50 el yapımı bölüm, son onunda üç rakip, duvar ve mayın. Günlük ve Haftalık Meydan Okuma, seriler. "Nasıl oynanır" kartı, her yenilgiden sonra ipucu, sekiz yeni görünüm. Hesapsız, çevrimdışı — yüklenmiş web uygulaması olarak da.
+</tr-TR>
 ```
 
-RU / TR blocks (475 / 474, `RELEASE_NOTES.md`) are left out while the listing has no RU / TR translation (§3.5) ⚠ 11. The EN / AZ text opens with "Rules v3: no more roads" — written for players of the earlier web versions; true of the build, harmless for new Play users (⚠ 16, wording only).
+The RU / TR blocks (475 / 474) are `RELEASE_NOTES.md` v1.0.0 verbatim; paste the four-language block only after the RU and TR translations of §3.5 / §3.6 are saved; if one of them is not saved yet, delete its `<ru-RU>` / `<tr-TR>` block from the box first (⚠ 11). The text opens with "Rules v3: no more roads" — written for players of the earlier web versions; true of the build, harmless for new Play users (⚠ 16, wording only).
 
 ### 5.5 Production (G20) — only after §4.6 is approved
 
 1. **Test and release → Production → Countries / regions** (Ölkələr / regionlar) → **Add countries / regions** → tick **Azerbaijan**, **Türkiye**, **Kazakhstan**, **Georgia** (`POST_LAUNCH.md` §2.2 soft launch; all countries is the week-4 decision, L+28) → **Add** → confirm.
-2. **Production → Create new release** → **Add from library** → select **8 (1.0.0)** → **Add to release**. (Only if that build carries the real Android AdMob ids — the run log of the build says `VITE_ADMOB_ANDROID_INTERSTITIAL: set`; otherwise the team makes a new build first, ⚠ 9.)
-3. Release name `1.0.0 (8)`, release notes = §5.4 → **Next** → **Save**.
+2. **Production → Create new release** → **Add from library** → select **`<N>` (1.0.0)** → **Add to release**. (Only if that build carries the real Android AdMob ids — the run log of the build says `VITE_ADMOB_ANDROID_INTERSTITIAL: set`; otherwise the team makes a new build first, ⚠ 9.)
+3. Release name `1.0.0 (<N>)`, release notes = §5.4 → **Next** → **Save**.
 4. **Rollout:** the first production release goes to **100 %** inside the four countries (a staged-rollout percentage, if offered, = 100).
 5. **Publishing overview → Send changes for review** → after approval **Start rollout to Production** (Production-a buraxılışa başla). **This click is the stakeholder's only — never Cowork's, never the team's without a written go-ahead.** Optional, like the App Store's "Manually release": turn on **Publishing overview → Managed publishing** just before step 5, so that approved changes wait for the stakeholder's **Publish changes**.
 
@@ -426,7 +546,7 @@ After the release: AdMob → Apps → Tower Clash (Android) → *App settings* �
 
 ---
 
-## 6. Status of the prerequisites on 2026-10-11
+## 6. Status of the prerequisites on 2026-10-12
 
 | Item | Status |
 |---|---|
@@ -435,7 +555,7 @@ After the release: AdMob → Apps → Tower Clash (Android) → *App settings* �
 | G3 / G4 keystore secrets | needs stakeholder ("parol sirrini əlavə etdim", "açar sirri hazırdır") |
 | G4b `PLAY_SERVICE_ACCOUNT_JSON` | optional; needs stakeholder after the first manual upload |
 | Privacy URL live (BUG-26) and `[developer e-mail]` (G18) | needs stakeholder: the `github-pages` environment branch rule and the e-mail / name line |
-| Texts, counts, assets (this sheet) | done (Publisher, 2026-10-11) |
+| Texts, counts, assets (this sheet) | done (Publisher, 2026-10-11; RU / TR translations and the swipe sentence 2026-10-12, PUB-22) |
 | Release lane (`android-release.request`) | done (Mobile Engineer, MM-13); first real run waits on G4 |
 
 ## 7. ⚠ Items the team could not verify (reason, and what to do)
@@ -448,47 +568,56 @@ After the release: AdMob → Apps → Tower Clash (Android) → *App settings* �
 6. **Data deletion = No** — `STORE_LISTING.md` §6.3's default. In 1.0.0 the developer holds no user data at all (no account, no RevenueCat); the advertising data sits with Google and is reset from Android's own settings (privacy policy B.2 / B.7). Switch to Yes only if the stakeholder commits to answering deletion e-mails.
 7. **"Shared" and the AdMob rows** — §6.3 marks every AdMob type as shared (and location as ephemeral); Google's "Play data disclosure requirements for the Google Mobile Ads SDK" page decides whether transfers to Google count as sharing and which purposes apply. The sandbox cannot fetch it: read it on submission day and follow it where it differs.
 8. **Device or other IDs = Required** — Play calls a type optional only when the user can refuse it *inside the app*; the UMP consent form switches ad personalisation, not the collection of the advertising ID, so Required is the honest answer.
-9. **AdMob ids in the closed-test build** — if build 8 is made before the `ADMOB_ANDROID_*` secrets exist, it shows Google test ads and must not be promoted to production; a new build then needs a higher versionCode, while the plan reserves 9 for 1.0.1 with purchases (`RELEASE_NOTES.md` "Build numbers"). Avoid it by adding the AdMob secrets first (summary step 3); otherwise the Producer decides the number.
+9. **AdMob ids in the closed-test build** — if the first Android build is made before the `ADMOB_ANDROID_*` secrets exist, it shows Google test ads and must not be promoted to production; a new build with the ids then needs a higher versionCode. No number is reserved for that or for anything else: 1.0.1 (purchases) takes the next free build number when it is cut (`RELEASE_NOTES.md` "Build numbers"). Avoid the extra build by adding the AdMob secrets first (summary step 3); otherwise the Producer raises `config.buildNumber` for the rebuild.
 10. **Tag names** — the picker's list is Google's; "Stylized" is the US spelling of the listing's "Stylised". If a tag is missing, leave it out.
-11. **RU / TR listing** — no RU / TR texts in `STORE_LISTING.md` §1, so no RU / TR translation, screenshots or release-note blocks in 1.0.0. Proposed follow-up (Publisher): write and count RU / TR short and full descriptions so the two ready screenshot sets can be used.
+11. **RU / TR translations and the release-notes box** — done 2026-10-12 (PUB-22): §3.5 / §3.6 carry the texts, §3.4 the screenshot sets, §5.4 the `<ru-RU>` / `<tr-TR>` blocks. Not verified from the sandbox: whether Play refuses or silently drops a release-notes block for a language that has no saved translation — hence the rule in §5.4 (paste the RU / TR blocks only once both translations are saved). The Russian and Turkish wording was written by the Publisher without a native-speaker review; a tester's correction is welcome and is re-counted before pasting.
 12. **Review time of the first closed release** — not published by Google; new accounts often wait longer.
 13. **Tester engagement** — Google says it looks at whether testers used the app; the exact measure is not public. Ask testers to open the game on several days.
 14. **Production-access questionnaire** — wording, answer limits and review time are from Google's public description, not from the Console; trim or extend to what the form accepts.
 15. **"Send changes for review" vs "Save and publish"** — testing-track releases on some accounts publish with **Save and publish** on the release page instead of the Publishing overview button; either is right.
 16. **"Rules v3: no more roads"** in the release notes — accurate, but a first-time Play user never saw roads; the text is kept because it is the counted, shared "What's new" of 1.0.0 across channels. A Play-only rewrite would be a Publisher follow-up, not a blocker.
 
-## 8. 1.0.1 (versionCode 9) — what changes on Play with in-app purchases
+## 8. 1.0.1 (the next free build number when it is cut) — what changes on Play with in-app purchases
 
 | Form | Change |
 |---|---|
 | Content rating (§2.4) | re-open the questionnaire → **Digital purchases: Yes** → "random items / loot boxes": **No** → expected interactive element **In-Game Purchases** (rating itself unchanged) |
 | Data safety (§2.7) | add **Financial info → Purchase history**: collected Yes, shared Yes, ephemeral No, **Optional**, purposes App functionality; Fraud prevention, security and compliance (RevenueCat); add **App functionality** to Device or other IDs (RevenueCat's anonymous app-user id); deletion question per §6.3 (B.7 e-mail path) |
-| Store listing (§3.2 / §3.3) | variant A texts — `STORE_LISTING.md` §1.1 / §1.2 verbatim (EN 3984 / AZ 3955); Play adds the **In-app purchases** label by itself |
+| Store listing (§3.2 / §3.3) | variant A texts — `STORE_LISTING.md` §1.1 / §1.2 verbatim (EN 3979 / AZ 3963 since 2026-10-12); Play adds the **In-app purchases** label by itself |
+| Store listing RU / TR (§3.5 / §3.6) | no variant A exists yet: before 1.0.1 the Publisher writes the RU / TR wording of the four `STORE_LISTING.md` §2.1 substitutions (purchases named, "Nothing to buy in this version" removed) and re-counts — RU is at 3976 of 4000, so its purchase lines must replace, not add |
 | Products, payments profile, license testers | MZ1, MZ5, MZ6, MZ13 (Android halves) — `STORE_LISTING.md` §6.1 ids, `LAUNCH_CHECKLIST.md` §6 |
 | Secrets | `RC_ANDROID_KEY` |
 
-## 9. Character counts (2026-10-11, `[...s].length` code points, script in the Publisher's scratch; texts read from this file, `STORE_LISTING.md` and `RELEASE_NOTES.md`)
+## 9. Character counts (2026-10-12, PUB-22; first run 2026-10-11; `[...s].length` code points, script in the Publisher's scratch; texts read from this file, `APP_STORE_CONNECT_SHEET.md`, `STORE_LISTING.md`, `RELEASE_NOTES.md` and `tower-clash/fastlane/metadata/en-US/description.txt`)
 
 ```
-   11 app name EN / AZ                     (limit 30)
-   26 app name fallback (not used)         (limit 30)
-   76 short description EN                 (limit 80)
-   75 short description AZ                 (limit 80)
- 3863 full description EN (variant B)      (limit 4000; = APP_STORE_CONNECT_SHEET §6.3: true)
- 3825 full description AZ (variant B)      (limit 4000)
-    9 release name                         (limit 50)
-  496 release notes EN                     (limit 500)
-  489 release notes AZ                     (limit 500)
-  185 tester message AZ, line 1            (—)
-   88 tester message AZ, line 2            (—)
-  210 production-access answer 1           (limit not verified (⚠ 14))
-  284 production-access answer 3           (limit not verified (⚠ 14))
-  255 production-access answer 4           (limit not verified (⚠ 14))
-  249 production-access answer 5           (limit not verified (⚠ 14))
-  291 production-access answer 6           (limit not verified (⚠ 14))
-  266 production-access answer 8           (limit not verified (⚠ 14))
-  283 production-access answer 9           (limit not verified (⚠ 14))
- 2840 Cowork prompt                        (—)
+   11 app name EN / AZ / RU / TR             (limit 30)
+   26 app name fallback (not used)           (limit 30)
+   76 short description EN                   (limit 80)
+   75 short description AZ                   (limit 80)
+   80 short description RU                   (limit 80)
+   80 short description TR                   (limit 80)
+ 3858 full description EN (variant B)        (limit 4000; = APP_STORE_CONNECT_SHEET §6.3 and fastlane description.txt: true; 3863 before the swipe sentence)
+ 3833 full description AZ (variant B)        (limit 4000; 3825 before)
+ 3976 full description RU (variant B)        (limit 4000)
+ 3959 full description TR (variant B)        (limit 4000)
+ 3979 full description EN (variant A, 1.0.1) (limit 4000; STORE_LISTING §1.1, 3984 before)
+ 3963 full description AZ (variant A, 1.0.1) (limit 4000; STORE_LISTING §1.2, 3955 before)
+   10 release name "1.0.0 (10)"              (limit 50)
+  496 release notes EN                       (limit 500)
+  489 release notes AZ                       (limit 500)
+  475 release notes RU                       (limit 500)
+  474 release notes TR                       (limit 500; all four = RELEASE_NOTES.md v1.0.0: true)
+  185 tester message AZ, line 1              (—)
+   88 tester message AZ, line 2              (—)
+  210 production-access answer 1             (limit not verified (⚠ 14))
+  284 production-access answer 3             (limit not verified (⚠ 14))
+  255 production-access answer 4             (limit not verified (⚠ 14))
+  226 production-access answer 5             (limit not verified (⚠ 14); 249 with "listing in English and Azerbaijani")
+  291 production-access answer 6             (limit not verified (⚠ 14))
+  266 production-access answer 8             (limit not verified (⚠ 14))
+  283 production-access answer 9             (limit not verified (⚠ 14))
+ 3336 Cowork prompt                          (—)
 ```
 
 ## 10. Cowork prompt (paste into Claude Cowork on the computer)
@@ -496,7 +625,7 @@ After the release: AdMob → Apps → Tower Clash (Android) → *App settings* �
 ```
 You are helping me fill in the Google Play Console for my game "Tower Clash" in this browser. The single source for every value is this sheet:
 https://github.com/pervincinal/InsiderTest/blob/claude/tower-war-game-plan-weqwpb/docs/publishing/PLAY_CONSOLE_SHEET.md
-Read it fully first. Files to upload are in the same repository (branch claude/tower-war-game-plan-weqwpb); download them from https://raw.githubusercontent.com/pervincinal/InsiderTest/claude/tower-war-game-plan-weqwpb/<path> — the icon tower-clash/public/icons/icon-512.png, the feature graphic tower-clash/store/feature-graphic.png, the screenshots tower-clash/store/screenshots/en/01.png … 08.png and tower-clash/store/screenshots/az/01.png … 08.png.
+Read it fully first. Files to upload are in the same repository (branch claude/tower-war-game-plan-weqwpb); download them from https://raw.githubusercontent.com/pervincinal/InsiderTest/claude/tower-war-game-plan-weqwpb/<path> — the icon tower-clash/public/icons/icon-512.png, the feature graphic tower-clash/store/feature-graphic.png, the screenshots tower-clash/store/screenshots/en/01.png … 08.png, tower-clash/store/screenshots/az/01.png … 08.png, tower-clash/store/screenshots/ru/01.png … 08.png and tower-clash/store/screenshots/tr/01.png … 08.png (one set per listing language).
 
 Safety rules — follow them strictly:
 1. I sign in myself. Never ask me for, and never type, a password, a 2-step code, a recovery code, a card number, an ID document, a keystore, a service-account JSON or any GitHub secret. If a screen asks for one, stop and tell me which screen it is.
@@ -507,5 +636,5 @@ Safety rules — follow them strictly:
 6. Paste values exactly as in the sheet's code spans and code blocks — do not rewrite, translate or shorten them. Fields marked "stakeholder fills" or containing [developer e-mail] / [developer name]: ask me for the value in the chat (an e-mail address or a name is fine; secrets are not).
 7. Where the sheet marks an item with ⚠, read the reason in its section 7 and ask me before choosing anything the sheet does not state.
 
-Work order: section 1.2 (Create app, if it does not exist yet) → section 2 forms in order (2.1 only if the privacy URL opens in the browser; otherwise skip it and tell me) → section 3 (store settings, English listing, Azerbaijani translation, graphics) → section 4.1 (closed testing track: countries, tester e-mail list — I give you the addresses —, feedback e-mail). When a step needs the .aab file (section 5.2), stop and tell me; I download it from GitHub. At the end, give me a short list: what you filled, what you skipped and why, and every warning the Console showed, word for word.
+Work order: section 1.2 (Create app, if it does not exist yet) → section 2 forms in order (2.1 only if the privacy URL opens in the browser; otherwise skip it and tell me) → section 3 (store settings 3.1; English listing 3.2 with the English graphics of 3.4; then Main store listing (Default store listing) → Manage translations → Add your own translation text → add Azerbaijani (az-AZ), Russian (ru-RU) and Turkish (tr-TR) → Apply; switch the language selector to each one in turn and paste its texts — Azerbaijani 3.3, Russian 3.5, Turkish 3.6 — and upload its own screenshot set from 3.4; save after each language) → section 4.1 (closed testing track: countries, tester e-mail list — I give you the addresses —, feedback e-mail). When a step needs the .aab file (section 5.2), stop and tell me; I download it from GitHub. At the end, give me a short list: what you filled, what you skipped and why, and every warning the Console showed, word for word.
 ```

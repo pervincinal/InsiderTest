@@ -5,11 +5,11 @@ Owner: Publisher. Written 2026-09-28 (PUB-12) for the stakeholder's first App St
 **Which variant to paste — default B.** Two variants exist for the fields that mention purchases:
 
 - **Variant A — with in-app purchases** (RevenueCat key `RC_IOS_KEY` in the GitHub secrets, the nine products of `STORE_LISTING.md` §6.1 created and attached to the version, Paid Applications agreement Active — checklist MZ2, MZ3, MZ13).
-- **Variant B — without in-app purchases (default for 1.0.0).** The build is made without `RC_IOS_KEY`; the purchase SDK is never configured, so the shop hides its Crystals and Bundles tabs (PUB-14, 2026-10-03) and shows cosmetic skins and gold upgrades only — no price, product or Restore Purchases button is reachable; skins and Commander upgrades work with crystals / gold earned in play. No product is created in App Store Connect, no Paid Applications agreement is needed. IAP arrives in 1.0.1 (build 9) once MZ13 is done, with variant A texts and the products submitted with that version.
+- **Variant B — without in-app purchases (default for 1.0.0).** The build is made without `RC_IOS_KEY`; the purchase SDK is never configured, so the shop hides its Crystals and Bundles tabs (PUB-14, 2026-10-03) and shows cosmetic skins and gold upgrades only — no price, product or Restore Purchases button is reachable; skins and Commander upgrades work with crystals / gold earned in play. No product is created in App Store Connect, no Paid Applications agreement is needed. IAP arrives in 1.0.1 — it takes the next free build number when it is cut — once MZ13 is done, with variant A texts and the products submitted with that version.
 
 Fields marked **stakeholder fills** are personal values the team must not invent (`[developer …]` placeholders; no e-mail address or phone number is written anywhere in the repository).
 
-Ads in both variants: the review build must carry the real AdMob iOS ids (`ADMOB_IOS_APP_ID`, `ADMOB_IOS_INTERSTITIAL`, `ADMOB_IOS_REWARDED` — checklist MZ7, §5). Without them the build serves Google's **test** ad units ("Test Ad" placeholders) — fine for TestFlight, not for a public App Store build. Nothing on this sheet changes with the AdMob ids except the build picked in §6.2 — **1.0.0 (8)**, the first build with the real ids. Build numbers (Producer, 2026-10-03): **7** = the release candidate with Google test ads, TestFlight only; **8** = 1.0.0 with the real AdMob ids, the App Review build; **9** = 1.0.1 with in-app purchases (`LAUNCH_CHECKLIST.md` §0c step 9, `RELEASE_NOTES.md` v1.0.0).
+Ads in both variants: the review build must carry the real AdMob iOS ids (`ADMOB_IOS_APP_ID`, `ADMOB_IOS_INTERSTITIAL`, `ADMOB_IOS_REWARDED` — checklist MZ7, §5). Without them the build serves Google's **test** ad units ("Test Ad" placeholders) — fine for TestFlight, not for a public App Store build. Nothing on this sheet changes with the AdMob ids except the build picked in §6.2 — **1.0.0 (8)**, the first build with the real ids. Build numbers (Producer, 2026-10-03): **7** = the release candidate with Google test ads, TestFlight only; **8** = 1.0.0 with the real AdMob ids, the App Review build; **9** (2026-10-11) and **10** (2026-10-12) = further 1.0.0 builds with the iPhone fixes (BUG-33 / BUG-34 / BUG-35), for TestFlight and to replace 8 in App Review once the stakeholder has checked them; 1.0.1 (purchases) takes the next free build number when it is cut (`LAUNCH_CHECKLIST.md` §0c step 9, `RELEASE_NOTES.md` v1.0.0 "Build numbers"). Pick the 1.0.0 build the team names in the report thread.
 
 ---
 
@@ -124,8 +124,8 @@ App Previews (videos): none. "Use the same screenshots for all sizes" is not nee
 |---|---|---|---|
 | Promotional Text (Tanıtım mətni) | 170 | **Variant B (default):** `Tap, send, conquer. 50 levels of one-thumb real-time strategy: fortresses, artillery, tanks, walls, mines. Plays offline, no account.` | 133 |
 | ″ | 170 | Variant A: `Tap, send, conquer. 50 levels of one-thumb real-time strategy: fortresses, artillery, tanks, walls, mines. Plays offline, no account. Ads removable.` | 148 |
-| Description (Təsvir) | 4000 | **Variant B (default):** the block in §6.3 below | 3863 |
-| ″ | 4000 | Variant A: `STORE_LISTING.md` §1.1 verbatim | 3984 |
+| Description (Təsvir) | 4000 | **Variant B (default):** the block in §6.3 below | 3858 |
+| ″ | 4000 | Variant A: `STORE_LISTING.md` §1.1 verbatim | 3979 |
 | Keywords (Açar sözlər) | 100 | `war,strategy,rts,capture,castle,army,offline,casual,defense,attack,soldiers,siege,kingdom,battle` — commas, no spaces; 2026-10-09: `tower`, `tap`, `conquer` dropped because the accepted name "Tower Clash: Tap & Conquer" already indexes them, replaced by `siege`, `kingdom`, `battle` | 96 |
 | Support URL (Dəstək URL) | — | `https://pervincinal.github.io/InsiderTest/support.html` | not live yet (BUG-26 — `LAUNCH_CHECKLIST.md` §0b step 0); the `[developer e-mail]` on the page must be replaced before submission (G18 / T3, §0b step 9) |
 | Marketing URL (Marketinq URL) | — | `https://pervincinal.github.io/InsiderTest/` | optional; not live yet (BUG-26) |
@@ -134,18 +134,18 @@ App Previews (videos): none. "Use the same screenshots for all sizes" is not nee
 | Routing App Coverage File | — | none | — |
 | Game Center (Oyun mərkəzi) | — | **not enabled** | no leaderboards in 1.0 |
 | App Clip, iMessage | — | none | — |
-| Build (Build) → "+" | — | **1.0.0 (8)** — the first build with the real AdMob ids (`LAUNCH_CHECKLIST.md` §0c step 9); appears ≈ 15–30 min after the workflow uploads it (TestFlight → "processing" first). Build 7 serves Google test ads and stays on TestFlight | build numbers: 7 = RC with test ads (TestFlight only), 8 = 1.0.0 with real AdMob ids (this field), 9 = 1.0.1 with IAP; the Producer bumps with `npm run version:sync` |
+| Build (Build) → "+" | — | **1.0.0 (8)** — the first build with the real AdMob ids (`LAUNCH_CHECKLIST.md` §0c step 9); appears ≈ 15–30 min after the workflow uploads it (TestFlight → "processing" first). Build 7 serves Google test ads and stays on TestFlight | build numbers: 7 = RC with test ads (TestFlight only), 8 = 1.0.0 with real AdMob ids (this field, until a later 1.0.0 build replaces it), 9 / 10 = 1.0.0 with the iPhone fixes, 1.0.1 with IAP = the next free number when it is cut; the Producer bumps with `npm run version:sync` |
 | What's New in This Version (Bu versiyada yeniliklər) | 4000 | Not shown for the very first version. From 1.0.1 on: the EN block of the version in `RELEASE_NOTES.md` | (v1.0.0 EN block = 496 chars since 2026-10-06, re-counted 2026-10-08; ready if the field appears) |
 
-### 6.3 Description — variant B (without in-app purchases), 3863 characters
+### 6.3 Description — variant B (without in-app purchases), 3858 characters
 
-Identical to `STORE_LISTING.md` §1.1 except four purchase phrases (listed in `STORE_LISTING.md` §2.1). Paste as is:
+Identical to `STORE_LISTING.md` §1.1 except four purchase phrases (listed in `STORE_LISTING.md` §2.1). 2026-10-12 (PUB-22): "keeps flowing until you tap the target again" became "keeps flowing until you swipe across it" (BUG-33, builds 9+; 3863 → 3858); `tower-clash/fastlane/metadata/en-US/description.txt` changed with it, so the store lane uploads the new text with the next submission — the sentence is not true of build 8, so it goes out only with build 9 or later. Paste as is:
 
 ```
 Tower Clash is a one-thumb real-time strategy game: tap one of your towers, tap a target, and a stream of soldiers starts marching — and keeps marching until you stop it. Reinforce friendly towers, overwhelm hostile ones, and when a garrison hits zero the tower is yours. Capture every enemy tower to win.
 
 HOW IT PLAYS
-• Tap a blue tower, then tap any tower it can see in a straight line: a stream of soldiers starts flowing there — and keeps flowing until you tap the target again. Walls, water and rocks block the line. Drag from tower to tower works too.
+• Tap a blue tower, then tap any tower it can see in a straight line: a stream of soldiers starts flowing there — and keeps flowing until you swipe across it. Walls, water and rocks block the line. Drag from tower to tower works too.
 • Towers upgrade themselves: let one fill to 25 soldiers and it becomes level 2, at 50 level 3 (100 max). Bigger towers recruit faster and run more streams — one at level 1, two at level 2, three at level 3.
 • Sending never empties a tower — it only stops growing while it streams, and bigger towers stream faster. Close the stream to let it level up.
 • A tower under attack stops recruiting — answer every enemy stream, or the tower falls.
@@ -236,9 +236,9 @@ Single-player offline game, no account or sign-in needed, so no demo account is 
 
 ## 8. After approval (Təsdiqdən sonra)
 
-App Store → 1.0.0 shows **Pending Developer Release** → *Release This Version*. The store page appears within a few hours in the four countries of §3. Widening the country list (Pricing and Availability) needs no new review; a new build does (1.0.1 / build 9).
+App Store → 1.0.0 shows **Pending Developer Release** → *Release This Version*. The store page appears within a few hours in the four countries of §3. Widening the country list (Pricing and Availability) needs no new review; a new build does (e.g. 1.0.1, on the next free build number).
 
-## 9. Character counts (2026-09-28; description B, review notes B and the `premium_bundle` texts re-run 2026-10-03; review notes A / B re-run 2026-10-08, PUB-16; name and keywords re-run 2026-10-09, PUB-18; `[...s].length` code points; script in the Publisher's scratch, texts taken from this sheet / `STORE_LISTING.md`)
+## 9. Character counts (2026-09-28; descriptions A / B re-run 2026-10-12, PUB-22; description B, review notes B and the `premium_bundle` texts re-run 2026-10-03; review notes A / B re-run 2026-10-08, PUB-16; name and keywords re-run 2026-10-09, PUB-18; `[...s].length` code points; script in the Publisher's scratch, texts taken from this sheet / `STORE_LISTING.md`)
 
 ```
    26 name (accepted 2026-10-09)        (limit 30)
@@ -248,10 +248,10 @@ App Store → 1.0.0 shows **Pending Developer Release** → *Release This Versio
   148 promo A                           (limit 170)
   133 promo B                           (limit 170)
    96 keywords                          (limit 100; no space after a comma; re-cut 2026-10-09)
- 3984 description A (EN, §1.1 verbatim) (limit 4000)
- 3863 description B (EN)                (limit 4000)
- 3955 description A (AZ, §1.2 verbatim) (limit 4000 — Play only)
- 3825 description B (AZ)                (limit 4000 — Play only)
+ 3979 description A (EN, §1.1 verbatim) (limit 4000; 3984 before 2026-10-12)
+ 3858 description B (EN)                (limit 4000; 3863 before 2026-10-12 — swipe sentence, PUB-22)
+ 3963 description A (AZ, §1.2 verbatim) (limit 4000 — Play only; 3955 before 2026-10-12)
+ 3833 description B (AZ)                (limit 4000 — Play only; 3825 before 2026-10-12)
    23 copyright (with the placeholder)
    10 SKU
  1025 review notes A                    (limit 4000; 878 before PUB-16)

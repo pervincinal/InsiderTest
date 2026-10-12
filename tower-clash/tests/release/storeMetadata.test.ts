@@ -110,7 +110,7 @@ describe('fastlane/metadata = APP_STORE_CONNECT_SHEET.md variant B', () => {
     expect(codePoints(SHEET_B.subtitle)).toBe(19);
     expect(codePoints(SHEET_B.promotional)).toBe(133);
     expect(codePoints(SHEET_B.keywords)).toBe(96);
-    expect(codePoints(SHEET_B.description)).toBe(3863);
+    expect(codePoints(SHEET_B.description)).toBe(3858); // 3863 until 2026-10-12 (PUB-22: swipe sentence)
     expect(codePoints(SHEET_B.reviewNotes)).toBe(1202);
     expect(codePoints(SHEET_B.copyright)).toBe(23);
   });

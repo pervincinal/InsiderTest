@@ -13,7 +13,7 @@ Play in the browser: **https://pervincinal.github.io/InsiderTest/** (not live ye
 
 ## How to play
 
-1. Tap a **blue** tower to select it, then tap any tower it can see in a straight line (thin guide lines show what is reachable; walls, water, rocks and other towers block the line). A **stream** opens: soldiers leave one by one and keep coming until you tap the target again (dragging from tower to tower works too).
+1. Tap a **blue** tower to select it, then tap any tower it can see in a straight line (thin guide lines show what is reachable; walls, water, rocks and other towers block the line). A **stream** opens: soldiers leave one by one and keep coming until you swipe across the stream or tap the target again (dragging from tower to tower works too — a line follows your finger and snaps onto the tower you can reach).
 2. Friendly towers are reinforced; hostile towers lose one defender per attacker. Reduce a garrison below zero and the tower flips to you — the stream keeps supplying it until you stop it or the tower is full.
 3. Towers **upgrade themselves** when they fill: 25 soldiers → level 2, 50 → level 3 (100 max). Higher levels recruit faster and may run more streams — **1 / 2 / 3 streams at level 1 / 2 / 3** (the hint "L2 needed for 2 streams" tells you when you hit the limit). Sending never empties a tower — its soldiers stay home, it only stops growing while it streams; each stream flows at the tower's speed (1 / 1.4 / 2 soldiers per second at level 1 / 2 / 3). Close the stream when you want it to level up.
 4. Enemy streams are drawn as straight ribbons in their colour — read them, then answer them: reinforce the threatened tower or hit the attacker's source, which has stopped growing. A tower under attack stops recruiting (its count badge turns peach with a crossed-swords pip), so an unanswered stream eventually takes it.
@@ -78,7 +78,7 @@ No engine, no art assets: TypeScript, HTML5 Canvas 2D and WebAudio. The simulati
 
 ## Credits and license
 
-Built by an autonomous Claude agent team (producer, engineers, level designer, QA, publisher) with a human stakeholder reading daily reports. Version 1.0.0, build 7 — see [`../docs/publishing/RELEASE_NOTES.md`](../docs/publishing/RELEASE_NOTES.md).
+Built by an autonomous Claude agent team (producer, engineers, level designer, QA, publisher) with a human stakeholder reading daily reports. Version 1.0.0 (the build number is `config.buildNumber` in `package.json`: 9 since 2026-10-11, and the Producer cuts build 10 on 2026-10-12) — see [`../docs/publishing/RELEASE_NOTES.md`](../docs/publishing/RELEASE_NOTES.md).
 
 License: All rights reserved (placeholder).
 
@@ -92,7 +92,7 @@ Brauzerdə oyna: **https://pervincinal.github.io/InsiderTest/** (hələ canlı d
 
 ## Necə oynanır
 
-1. **Mavi** qülləyə toxunub seç, sonra düz xətlə gördüyü istənilən qülləyə toxun (nazik bələdçi xətlər çata biləcəyi qüllələri göstərir; divar, su, qaya və digər qüllələr xətti kəsir). **Axın** açılır: əsgərlər bir-bir çıxır və sən hədəfə yenidən toxunana qədər gəlməyə davam edir (qüllədən qülləyə sürükləmək də işləyir).
+1. **Mavi** qülləyə toxunub seç, sonra düz xətlə gördüyü istənilən qülləyə toxun (nazik bələdçi xətlər çata biləcəyi qüllələri göstərir; divar, su, qaya və digər qüllələr xətti kəsir). **Axın** açılır: əsgərlər bir-bir çıxır və sən barmağınla axının üstündən keçənə və ya hədəfə yenidən toxunana qədər gəlməyə davam edir (qüllədən qülləyə sürükləmək də işləyir — barmağın arxasınca xətt gəlir və çata bildiyin qülləyə yapışır).
 2. Dost qüllələr güclənir; düşmən qüllələrində hər hücumçu bir müdafiəçini aparır. Qarnizon sıfırın altına düşəndə qüllə sənə keçir — axın sən dayandırana və ya qüllə dolana qədər onu təchiz etməyə davam edir.
 3. Qüllələr dolanda **özləri təkmilləşir**: 25 əsgər → 2-ci səviyyə, 50 → 3-cü səviyyə (maksimum 100). Yüksək səviyyə daha sürətli əsgər yığır və daha çox axın apara bilir — **1 / 2 / 3-cü səviyyədə 1 / 2 / 3 axın** (limitə çatanda "2 axın üçün L2 lazımdır" işarəsi çıxır). Göndərmək qülləni heç vaxt boşaltmır — əsgərlər yerində qalır, qüllə axın verərkən yalnız böyümür; hər axın qüllənin sürəti ilə gedir (1 / 2 / 3-cü səviyyədə saniyədə 1 / 1.4 / 2 əsgər). Səviyyəsi qalxsın istəyirsənsə axını bağla.
 4. Düşmən axınları düz lentlərlə öz rəngində çəkilir — oxu və cavab ver: təhdid altındakı qülləni gücləndir və ya hücumçunun böyüməsi dayanmış mənbəyini vur. Hücum altındakı qüllə əsgər yığmır (say nişanı şaftalı rəngə keçir, üstündə çarpaz qılınc işarəsi), ona görə cavabsız qalan axın onu gec-tez alır.
@@ -135,6 +135,6 @@ Node 22 lazımdır. `tower-clash/` qovluğunda: `npm ci`, sonra `npm run dev` (y
 
 ## Müəlliflər və lisenziya
 
-Avtonom Claude agent komandası tərəfindən hazırlanıb (prodüser, mühəndislər, səviyyə dizayneri, QA, nəşriyyatçı); insan tərəf gündəlik hesabatları oxuyur. Versiya 1.0.0, build 7 — bax [`../docs/publishing/RELEASE_NOTES.md`](../docs/publishing/RELEASE_NOTES.md).
+Avtonom Claude agent komandası tərəfindən hazırlanıb (prodüser, mühəndislər, səviyyə dizayneri, QA, nəşriyyatçı); insan tərəf gündəlik hesabatları oxuyur. Versiya 1.0.0 (build nömrəsi `package.json`-dakı `config.buildNumber`-dir: 2026-10-11-dən 9, build 10-u Prodüser 2026-10-12-də kəsir) — bax [`../docs/publishing/RELEASE_NOTES.md`](../docs/publishing/RELEASE_NOTES.md).
 
 Lisenziya: Bütün hüquqlar qorunur (müvəqqəti qeyd).
