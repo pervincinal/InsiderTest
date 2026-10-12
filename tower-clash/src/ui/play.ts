@@ -213,7 +213,6 @@ export class PlayScreen implements Screen {
       limitHintText: (n) => t('hint.linkLimit', { n }),
       blockedHintText: () => t('hint.blocked'),
       emptyHintText: () => t('hint.empty'),
-      fullHintText: () => t('hint.full'),
       fullTopHintText: () => t('hint.fullTop'),
       onCommand: (cmd) => {
         this.tutorial?.onCommand(cmd, this.state);

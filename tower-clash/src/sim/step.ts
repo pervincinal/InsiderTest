@@ -226,10 +226,49 @@ export function removeLink(state: GameState, link: Link, reason: UnlinkReason): 
   state.events.push({ type: 'unlinked', owner: link.owner, from: link.from, to: link.to, reason });
 }
 
+/** True when `tower` is owned by `owner` and its garrison is at its (modified) capacity. */
+function isFullFor(state: GameState, tower: Tower, owner: Owner): boolean {
+  return tower.owner === owner && tower.units >= capacityOf(tower, state);
+}
+
+/** Outgoing links of `towerId` that belong to `owner`, in creation order (the relay's round-robin order). */
+function relayLinks(state: GameState, towerId: string, owner: Owner): Link[] {
+  return state.links.filter((l) => l.from === towerId && l.owner === owner);
+}
+
+/**
+ * True when a unit of `owner` landing on `towerId` is taken by someone: the tower is not `owner`'s
+ * (a hostile or neutral landing), it is below capacity (a reinforcement), or it is full and relays
+ * (GDD §2.0b rule 13) along an `owner` link to a tower that takes it. A closed loop of full towers
+ * takes nothing — without this a ring of full towers streaming into each other would circulate
+ * units for ever and every emission would add one more.
+ */
+function takesUnit(state: GameState, owner: Owner, towerId: string, seen: Set<string>): boolean {
+  const tower = state.towers[towerId];
+  if (!tower) return false;
+  if (!isFullFor(state, tower, owner)) return true;
+  if (seen.has(towerId)) return false;
+  seen.add(towerId);
+  return relayLinks(state, towerId, owner).some((l) => takesUnit(state, owner, l.to, seen));
+}
+
+/**
+ * Relay (GDD §2.0b rule 13, RELAY-1): true when `tower` is full and passes friendly arrivals onward —
+ * it has at least one outgoing link of its owner that (directly, or through further full relaying
+ * towers) reaches a tower that takes the unit. Pure read for the input layer and the AI.
+ */
+export function relaysOnward(state: GameState, tower: Tower): boolean {
+  if (tower.owner === 'neutral' || !isFullFor(state, tower, tower.owner)) return false;
+  return relayLinks(state, tower.id, tower.owner).some((l) => takesUnit(state, tower.owner, l.to, new Set([tower.id])));
+}
+
 /**
  * Auto-unlink: a link ends when its source changed owner or is gone (`sourceLost`), its source holds
  * less than one unit (`sourceEmpty`, rules v3 rule 6), or its target is the link owner's and sits at
- * capacity (`targetFull`).
+ * capacity (`targetFull`) — for a **relay** link (created into a full tower that relayed onward, GDD
+ * §2.0b rule 13) only while the target also no longer relays onward. Re-checked every prune: when a
+ * relay target's onward stream stops, the supply line into it ends with `targetFull`; a plain
+ * (reinforce) link ends as soon as its target fills, whether or not the target streams onward.
  */
 function pruneLinks(state: GameState): void {
   for (const link of [...state.links]) {
@@ -237,7 +276,7 @@ function pruneLinks(state: GameState): void {
     const to = state.towers[link.to];
     if (!from || !to || from.owner !== link.owner) removeLink(state, link, 'sourceLost');
     else if (from.units < 1) removeLink(state, link, 'sourceEmpty');
-    else if (to.owner === link.owner && to.units >= capacityOf(to, state)) removeLink(state, link, 'targetFull');
+    else if (isFullFor(state, to, link.owner) && (!link.relay || !takesUnit(state, link.owner, link.to, new Set()))) removeLink(state, link, 'targetFull');
   }
 }
 
@@ -401,9 +440,28 @@ export function laneStalemate(state: Pick<GameState, 'units'>, link: Pick<Link, 
   return false;
 }
 
+/**
+ * Relay (GDD §2.0b rule 13, RELAY-1): a friendly unit landing on its owner's full tower that has
+ * outgoing links of that owner — whichever link brought it (relay or plain: the last units of a
+ * reinforce link that just ended with `targetFull` are passed on rather than capped away) — is not absorbed — it leaves again at once on the next of those links
+ * (round-robin over `relayLinks`, cursor `tower.relayCursor`) as a fresh unit at the tower, same kind
+ * and weight, normal speed. The garrison, `genAccMs` and every link's `emitAccMs` are untouched.
+ * Returns false (nothing done) when the tower has no such link.
+ */
+function relay(state: GameState, tower: Tower, unit: Unit): boolean {
+  const links = relayLinks(state, tower.id, unit.owner);
+  if (links.length === 0) return false;
+  const link = links[tower.relayCursor % links.length]!;
+  tower.relayCursor = (tower.relayCursor + 1) % links.length;
+  const relayed = spawnUnit(state, unit.owner, unit.kind, tower.id, link.to, link.roadId);
+  relayed.weight = unit.weight; // a tank worn down by a clash stays worn down
+  return true;
+}
+
 function arrive(state: GameState, tower: Tower, unit: Unit): void {
   state.events.push({ type: 'landed', towerId: tower.id, owner: unit.owner, weight: unit.weight, hostile: tower.owner !== unit.owner });
   if (tower.owner === unit.owner) {
+    if (isFullFor(state, tower, unit.owner) && relay(state, tower, unit)) return;
     tower.units = Math.min(capacityOf(tower, state), tower.units + unit.weight);
     tryAutoUpgrade(state, tower); // reinforcements count toward the auto-upgrade too
     return;
@@ -432,6 +490,7 @@ function arrive(state: GameState, tower: Tower, unit: Unit): void {
     tower.artilleryCooldownMs = 0;
     tower.defenceAcc = 0;
     tower.underFireUntilMs = 0;
+    tower.relayCursor = 0;
     state.events.push({ type: 'capture', towerId: tower.id, by: unit.owner, from });
     // The old owner's streams out of this tower die with it (the new owner may re-link).
     for (const link of linksFrom(state, tower.id)) removeLink(state, link, 'sourceLost');
@@ -442,7 +501,8 @@ function arrive(state: GameState, tower: Tower, unit: Unit): void {
 
 function arrivals(state: GameState): void {
   const dead = new Set<number>();
-  for (const u of state.units) {
+  // Snapshot the list: a relay (rule 13) appends fresh units at progress 0 that must not be visited.
+  for (const u of [...state.units]) {
     if (u.progress < 1 - EPS) continue;
     const tower = state.towers[u.to];
     if (tower) arrive(state, tower, u);

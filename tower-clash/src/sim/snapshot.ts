@@ -28,9 +28,10 @@ export function deepCopy<T>(value: T): T {
 
 /**
  * Snapshot layout version: bump when `GameState` changes shape. 2 = rules v3 (links carry `emitAccMs`,
- * state carries `obstacles` and `mines`; towers lost `linkCursor` / `drainAccMs`).
+ * state carries `obstacles` and `mines`; towers lost `linkCursor` / `drainAccMs`); 3 = relay (towers carry
+ * `relayCursor`, links carry `relay`, GDD §2.0b rule 13).
  */
-export const SNAPSHOT_VERSION = 2;
+export const SNAPSHOT_VERSION = 3;
 
 function hasStaticObstacles(value: unknown): value is { obstacles: unknown[] } {
   return value !== null && typeof value === 'object' && Array.isArray((value as { obstacles?: unknown }).obstacles);

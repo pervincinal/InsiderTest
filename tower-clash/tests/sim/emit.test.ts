@@ -61,7 +61,7 @@ describe('link command', () => {
     const state = hub({});
     run(state, 2);
     link(state, 'p', 'a');
-    expect(state.links).toEqual([{ owner: 'player', from: 'p', to: 'a', roadId: 'a-p', createdMs: 100, emitAccMs: 0 }]);
+    expect(state.links).toEqual([{ owner: 'player', from: 'p', to: 'a', roadId: 'a-p', createdMs: 100, emitAccMs: 0, relay: false }]);
     expect(state.events).toContainEqual({ type: 'linked', owner: 'player', from: 'p', to: 'a' });
     expect(isLinked(state, 'p')).toBe(true);
   });
@@ -362,14 +362,30 @@ describe('auto-unlink', () => {
     expect(state.units).toEqual([]);
   });
 
-  it('targetFull: an own target at capacity releases the supply line in the arrival tick', () => {
+  it('targetFull: an own target at capacity that does not stream onward releases the supply line in the arrival tick', () => {
+    // `a` is under fire (a hostile landing every tick keeps it so), so it does not grow: it must fill through p's stream.
+    const state = hub({ level: 3, units: 50 }, [{ id: 'a', owner: 'player', units: 99, level: 3 }]);
+    link(state, 'p', 'a');
+    for (let i = 0; i < 10 + 38; i++) {
+      state.towers['a']!.underFireUntilMs = state.time + 1000;
+      step(state);
+    }
+    expect(state.links.length).toBe(1);
+    expect(state.towers['a']!.units).toBe(99);
+    step(state); // tick 49: arrival → 100 = capacity, no onward stream
+    expect(state.towers['a']!.units).toBe(100);
+    expect(state.links).toEqual([]);
+    expect(unlinked(state)).toEqual([{ type: 'unlinked', owner: 'player', from: 'p', to: 'a', reason: 'targetFull' }]);
+  });
+
+  it('RELAY-1: a reinforce link (made while the target was below capacity) ends with targetFull when the target fills, even though it streams onward', () => {
     const state = hub({ level: 3, units: 50 }, [{ id: 'a', owner: 'player', units: 99, level: 3 }]);
     link(state, 'a', 'b'); // `a` streams itself, so it does not grow: it must fill through p's stream
     link(state, 'p', 'a');
+    expect(state.links.map((l) => l.relay)).toEqual([false, false]);
     run(state, 10 + 38); // spawn at 500 ms (tick 10), lands 39 ticks later (tick 49)
     expect(state.links.length).toBe(2);
-    expect(state.towers['a']!.units).toBe(99);
-    step(state); // tick 49: arrival → 100 = capacity
+    step(state); // tick 49: arrival → 100 = capacity: the reinforcement is done, p is free again
     expect(state.towers['a']!.units).toBe(100);
     expect(state.links.map((l) => `${l.from}>${l.to}`)).toEqual(['a>b']);
     expect(unlinked(state)).toEqual([{ type: 'unlinked', owner: 'player', from: 'p', to: 'a', reason: 'targetFull' }]);
@@ -526,7 +542,7 @@ describe('acceptance 1(h): snapshots and determinism', () => {
   it('links do not count as units in transit for the outcome', () => {
     const state = duel({ units: 10 }, { owner: 'neutral', units: 0 });
     expect(getOutcome(state)).toBe('won');
-    state.links.push({ owner: 'enemy1', from: 'e', to: 'p', roadId: 'e-p', createdMs: 0, emitAccMs: 0 });
+    state.links.push({ owner: 'enemy1', from: 'e', to: 'p', roadId: 'e-p', createdMs: 0, emitAccMs: 0, relay: false });
     expect(getOutcome(state)).toBe('won');
   });
 });

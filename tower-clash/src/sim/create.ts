@@ -81,6 +81,7 @@ export function createState(level: LevelDef, seed: number, modifiers: Readonly<P
       artilleryCooldownMs: 0,
       defenceAcc: 0,
       underFireUntilMs: 0,
+      relayCursor: 0,
     };
     if (tower.owner === 'player' && mods.startGarrisonBonus > 0) {
       tower.units = Math.min(capacityOf(tower, { modifiers: mods }), tower.units + mods.startGarrisonBonus);

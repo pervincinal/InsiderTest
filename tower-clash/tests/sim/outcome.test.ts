@@ -33,7 +33,7 @@ describe('outcome', () => {
     expect(getOutcome(state)).toBe('playing');
     state.units = [];
     expect(getOutcome(state)).toBe('won');
-    state.links.push({ owner: 'enemy1', from: 'e', to: 'p', roadId: 'e-p', createdMs: 0, emitAccMs: 0 });
+    state.links.push({ owner: 'enemy1', from: 'e', to: 'p', roadId: 'e-p', createdMs: 0, emitAccMs: 0, relay: false });
     expect(getOutcome(state)).toBe('won');
   });
 

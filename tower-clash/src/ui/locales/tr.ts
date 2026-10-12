@@ -76,7 +76,6 @@ export const tr: Dictionary = {
   'hint.linkLimit': '{n} akış için L{n} gerekir',
   'hint.blocked': 'Yol kapalı — düz hat yok',
   'hint.empty': 'Asker yok — kale büyüsün',
-  'hint.full': 'Dolu — akışı durdur, seviye atlasın',
   'hint.fullTop': 'Dolu — kule en üst seviyede',
   'hint.stalemate': 'Açmaz — akışı durdur, başka yönden vur',
 

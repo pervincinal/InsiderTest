@@ -186,7 +186,7 @@ describe('createState lanes (acceptance 1(a))', () => {
       id: 'n-p', a: 'n', b: 'p', points: [P(360, 760), P(360, 1000)], length: 240, mineHits: [],
     });
     applyCommand(open, { type: 'link', owner: 'player', from: 'p', to: 'n' });
-    expect(open.links).toEqual([{ owner: 'player', from: 'p', to: 'n', roadId: 'n-p', createdMs: 0, emitAccMs: 0 }]);
+    expect(open.links).toEqual([{ owner: 'player', from: 'p', to: 'n', roadId: 'n-p', createdMs: 0, emitAccMs: 0, relay: false }]);
   });
 
   it('a third tower on the segment blocks that pair but joins both ends; the lane graph is otherwise complete', () => {

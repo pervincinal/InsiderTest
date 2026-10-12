@@ -10,7 +10,7 @@ describe('createState', () => {
     const p = state.towers['p']!;
     expect(p).toEqual({
       id: 'p', x: 0, y: 0, owner: 'player', kind: 'barracks', level: 1, units: 0,
-      genAccMs: 0, artilleryCooldownMs: 0, defenceAcc: 0, underFireUntilMs: 0,
+      genAccMs: 0, artilleryCooldownMs: 0, defenceAcc: 0, underFireUntilMs: 0, relayCursor: 0,
     });
     expect(state.time).toBe(0);
     expect(state.seed).toBe(1);

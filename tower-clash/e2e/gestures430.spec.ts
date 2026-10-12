@@ -20,7 +20,9 @@ import { clientPoint, hudClientPoint } from './helpers/tap';
  *   BUG-34  the pause button and MENU sit on the bands anchored to the safe edges and take taps there.
  *   BUG-35  the gold rubber band runs from the tower to the finger during a drag (getDrag(), and the
  *           pixels on the canvas), snaps on a reachable tower, and is gone on release; a drag onto an
- *           own full tower is refused with `hint.full` and links nothing.
+ *           own full tower at its top level with no onward stream is refused with `hint.fullTop` and
+ *           links nothing (BUG-38; RELAY-1 replaced the old `hint.full` refusal: a full tower that
+ *           streams onward relays, so a stream into it is a plain link).
  *   and their interplay: a drag from one own tower across another own tower's stream (band up, nothing
  *   cut, nothing linked on empty ground), a drag released on empty ground, two fingers at once.
  *
@@ -489,10 +491,9 @@ test.describe('touch gestures on a 430×932 iPhone-class screen, DPR 3, safe ins
 
   test('BUG-35 / BUG-38: a drag onto an own full tower (level 49, the L2 fortress at its top level) is refused with hint.fullTop and links nothing', async ({ page }) => {
     const errors = await boot(page, { ...CLEARED, stars: { ...CLEARED.stars } });
-    // BUG-38: at its top level the keep cannot level up, so the bubble says so (not "stop its stream and it levels up")
+    // BUG-38: at its top level (and with no onward stream to relay through) the keep cannot take a stream, so the bubble says so
     const full = await text(page, 'hint.fullTop');
     expect(full).not.toBe('hint.fullTop');
-    expect(full).not.toBe(await text(page, 'hint.full'));
     await startLevel(page, 49);
     expect(await tower(page, 'keep')).toMatchObject({ owner: 'player', level: 2 });
     // the keep grows to its capacity on its own (a few seconds at ×10), then the sim runs at ×1 again
@@ -515,7 +516,6 @@ test.describe('touch gestures on a 430×932 iPhone-class screen, DPR 3, safe ins
     await expect.poll(() => drag(page), { message: 'the band snaps on the full keep (it is reachable)' }).toMatchObject({ fromId: 'lamp', hoverTowerId: 'keep' });
     await f.end();
     await expect.poll(() => limitHintsSeen(page), { message: 'the refusal bubble says the keep is full at its top level' }).toContain(full);
-    expect(await limitHintsSeen(page), 'never the "stop its stream" text for a top-level tower').not.toContain(await text(page, 'hint.full'));
     await page.waitForTimeout(200);
     expect((await playerLinks(page)).filter((l) => l.to === 'keep'), 'no stream into the full keep').toEqual([]);
     expect(await drag(page)).toBeNull();

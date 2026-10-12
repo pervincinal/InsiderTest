@@ -39,8 +39,8 @@ describe('determinism', () => {
     expect(s.towers['a']!).toMatchObject({ owner: 'enemy1', level: 1 }); // enemy1's tank and fortress streams took the hub at 9.65 s
     expect(s.towers['t']!).toMatchObject({ owner: 'enemy1', units: 10 }); // airstruck to 0 at 18 s, two tanks regrown since
     expect(s.links).toEqual([
-      { owner: 'enemy1', from: 'e', to: 'a', roadId: 'a-e', createdMs: 2000, emitAccMs: 0 }, // supply line into the captured hub
-      { owner: 'player', from: 'p', to: 'a', roadId: 'a-p', createdMs: 20_000, emitAccMs: 0 }, // the [440] a → e link was refused: not the player's
+      { owner: 'enemy1', from: 'e', to: 'a', roadId: 'a-e', createdMs: 2000, emitAccMs: 0, relay: false }, // supply line into the captured hub
+      { owner: 'player', from: 'p', to: 'a', roadId: 'a-p', createdMs: 20_000, emitAccMs: 0, relay: false }, // the [440] a → e link was refused: not the player's
     ]);
     expect(s.boosters).toEqual([]);
   });

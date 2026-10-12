@@ -75,6 +75,12 @@ export interface Tower {
    * Under fire pauses growth only: a linked tower keeps streaming.
    */
   underFireUntilMs: number;
+  /**
+   * Relay (GDD §2.0b rule 13, RELAY-1): index of the outgoing link (in creation order, modulo the
+   * count) that the next friendly arrival relayed through this full tower takes; advanced per relay,
+   * reset by a capture. Only `sim/` writes it.
+   */
+  relayCursor: number;
 }
 
 /** Runtime copy of an `ObstacleDef` with defaults applied. Static for the whole match. */
@@ -129,6 +135,14 @@ export interface Link {
   roadId: string;
   createdMs: number; // sim time of the `link` command
   emitAccMs: number; // accumulated ms toward the next emitted unit
+  /**
+   * RELAY-1 (GDD §2.0b rule 13): true when the link was created as a **supply line** — at `link` time
+   * its target was the owner's, at capacity and relaying onward (`relaysOnward`). A relay link ends with
+   * `targetFull` only when the target is full and no longer relays onward; a plain link (false) into an
+   * own tower ends with `targetFull` as soon as the target is full (reinforcing it until full frees the
+   * source again). Fixed at creation.
+   */
+  relay: boolean;
 }
 
 export type UnlinkReason = 'manual' | 'sourceLost' | 'targetFull' | 'sourceEmpty';

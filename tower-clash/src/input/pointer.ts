@@ -1,6 +1,6 @@
 import type { Command, GameState, Road, Tower } from '../sim/types';
 import { roadIdFor } from '../sim/create';
-import { capacityOf, isLinked, linksFrom, maxLevelOf, maxLinksOf } from '../sim/step';
+import { capacityOf, linksFrom, maxLevelOf, maxLinksOf, relaysOnward } from '../sim/step';
 import type { View } from '../render/view';
 import { toLogical } from '../render/view';
 import { SWIPE_TRAIL_MS, TOWER_HIT_RADIUS, TOWER_RADIUS } from '../render/layout';
@@ -209,8 +209,6 @@ export interface GestureOptions {
   blockedHintText?(): string;
   /** Localised text for a stream from a selected tower with no soldiers (`hint.empty`, BUG-10). */
   emptyHintText?(): string;
-  /** Localised text for a stream into an own full tower that streams out (`hint.full`, BUG-35: stopping its stream levels it up). */
-  fullHintText?(): string;
   /** Localised text for a stream into an own full tower at its top level (`hint.fullTop`, BUG-38). */
   fullTopHintText?(): string;
 }
@@ -230,7 +228,6 @@ export type LinkDecision =
   | { kind: 'limit'; nextLevel: number }
   | { kind: 'blocked' }
   | { kind: 'empty' }
-  | { kind: 'full' }
   | { kind: 'fullTop' }
   | { kind: 'none' };
 
@@ -251,14 +248,14 @@ export function decideLink(state: GameState, from: string, to: string, allowUnli
   if (links.some((l) => l.to === to)) return allowUnlink ? { kind: 'unlink' } : { kind: 'none' };
   if (src.units < 1) return { kind: 'empty' }; // same guard as sim `link()` (rules v3 rule 6)
   if (links.length >= maxLinksOf(src)) return { kind: 'limit', nextLevel: src.level + 1 };
-  // BUG-35: a stream into an own tower at capacity ends on the sim's next tick (`targetFull`) — the
-  // player saw nothing happen. A full tower below its top level upgrades the moment it stops
-  // streaming (`tryAutoUpgrade` skips a linked tower), so say so instead of emitting a doomed link.
-  // BUG-38: a full tower at its top level has nothing to level up to — its own refusal and text.
+  // RELAY-1 (GDD §2.0b rule 13): an own full tower that streams onward relays every arrival, so a
+  // stream into it is a supply line through it (`link`; it replaced BUG-35's `hint.full` refusal).
+  // BUG-38: a full tower at its top level with no onward stream has nothing to grow into and would
+  // end the stream on the sim's next tick (`targetFull`) — refused with its own text. A full tower
+  // below its top level without a stream upgrades on its next tick, so a stream into it is fine.
   const dst = state.towers[to]!;
-  if (dst.owner === 'player' && dst.units >= capacityOf(dst, state)) {
-    if (dst.level >= maxLevelOf(dst)) return { kind: 'fullTop' };
-    if (isLinked(state, dst.id)) return { kind: 'full' };
+  if (dst.owner === 'player' && dst.units >= capacityOf(dst, state) && dst.level >= maxLevelOf(dst) && !relaysOnward(state, dst)) {
+    return { kind: 'fullTop' };
   }
   return { kind: 'link' };
 }
@@ -485,10 +482,6 @@ export class PlayGestures {
       case 'empty':
         this.limitHint = { until: nowMs + LIMIT_HINT_MS };
         this.limitHintText = this.opts.emptyHintText?.() ?? 'No soldiers';
-        return;
-      case 'full':
-        this.limitHint = { until: nowMs + LIMIT_HINT_MS };
-        this.limitHintText = this.opts.fullHintText?.() ?? 'Full';
         return;
       case 'fullTop':
         this.limitHint = { until: nowMs + LIMIT_HINT_MS };

@@ -1,7 +1,7 @@
 import type { Command, GameState } from './types';
 import { C } from './constants';
 import { roadIdFor } from './geometry';
-import { linksFrom, maxLinksOf, removeLink } from './step';
+import { capacityOf, linksFrom, maxLinksOf, relaysOnward, removeLink } from './step';
 
 /**
  * Apply a command to the state. Invalid commands (wrong owner, no lane, unknown tower, …)
@@ -31,6 +31,8 @@ export function applyCommand(state: GameState, cmd: Command): void {
 /**
  * Rules v3: start a persistent stream `from → to`. Valid when the owner holds `from`, a lane joins the
  * two towers, the link does not already exist and `from` is under its per-level link limit.
+ * The link is a relay (supply line, GDD §2.0b rule 13) when its target is the owner's, full and
+ * relaying onward at this moment; otherwise it is a plain stream (attack or reinforcement).
  * A source holding < 1 unit may be linked; the next tick ends the link with `sourceEmpty`.
  */
 function link(state: GameState, cmd: Extract<Command, { type: 'link' }>): void {
@@ -43,7 +45,9 @@ function link(state: GameState, cmd: Extract<Command, { type: 'link' }>): void {
   const existing = linksFrom(state, from.id);
   if (existing.some((l) => l.to === to.id)) return;
   if (existing.length >= maxLinksOf(from)) return;
-  state.links.push({ owner: cmd.owner, from: from.id, to: to.id, roadId: road.id, createdMs: state.time, emitAccMs: 0 });
+  // RELAY-1: streaming into an own full tower that already streams onward is the supply-line gesture.
+  const relay = to.owner === cmd.owner && to.units >= capacityOf(to, state) && relaysOnward(state, to);
+  state.links.push({ owner: cmd.owner, from: from.id, to: to.id, roadId: road.id, createdMs: state.time, emitAccMs: 0, relay });
   state.events.push({ type: 'linked', owner: cmd.owner, from: from.id, to: to.id });
 }
 
