@@ -209,8 +209,10 @@ export interface GestureOptions {
   blockedHintText?(): string;
   /** Localised text for a stream from a selected tower with no soldiers (`hint.empty`, BUG-10). */
   emptyHintText?(): string;
-  /** Localised text for a stream into an own tower that is already at capacity (`hint.full`, BUG-35). */
+  /** Localised text for a stream into an own full tower that streams out (`hint.full`, BUG-35: stopping its stream levels it up). */
   fullHintText?(): string;
+  /** Localised text for a stream into an own full tower at its top level (`hint.fullTop`, BUG-38). */
+  fullTopHintText?(): string;
 }
 
 /** Where a drag from an own tower is right now (for the renderer's rubber-band line). */
@@ -229,6 +231,7 @@ export type LinkDecision =
   | { kind: 'blocked' }
   | { kind: 'empty' }
   | { kind: 'full' }
+  | { kind: 'fullTop' }
   | { kind: 'none' };
 
 /**
@@ -251,8 +254,12 @@ export function decideLink(state: GameState, from: string, to: string, allowUnli
   // BUG-35: a stream into an own tower at capacity ends on the sim's next tick (`targetFull`) — the
   // player saw nothing happen. A full tower below its top level upgrades the moment it stops
   // streaming (`tryAutoUpgrade` skips a linked tower), so say so instead of emitting a doomed link.
+  // BUG-38: a full tower at its top level has nothing to level up to — its own refusal and text.
   const dst = state.towers[to]!;
-  if (dst.owner === 'player' && dst.units >= capacityOf(dst, state) && (dst.level >= maxLevelOf(dst) || isLinked(state, dst.id))) return { kind: 'full' };
+  if (dst.owner === 'player' && dst.units >= capacityOf(dst, state)) {
+    if (dst.level >= maxLevelOf(dst)) return { kind: 'fullTop' };
+    if (isLinked(state, dst.id)) return { kind: 'full' };
+  }
   return { kind: 'link' };
 }
 
@@ -482,6 +489,10 @@ export class PlayGestures {
       case 'full':
         this.limitHint = { until: nowMs + LIMIT_HINT_MS };
         this.limitHintText = this.opts.fullHintText?.() ?? 'Full';
+        return;
+      case 'fullTop':
+        this.limitHint = { until: nowMs + LIMIT_HINT_MS };
+        this.limitHintText = this.opts.fullTopHintText?.() ?? 'Full';
         return;
       case 'none':
         return;

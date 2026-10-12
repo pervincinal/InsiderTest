@@ -1,9 +1,63 @@
 import type { Rect } from './widgets';
+import type { HudAnchors } from './view';
 
 /*
  * Geometry only the lazily loaded menu screens use (settings, level map, achievements, shop):
  * kept out of layout.ts so it stays off the eager chunk (scripts/checkBundle.mjs budget, PERF-6).
  */
+
+/* ---------- full-bleed bands of the menus (FE-11) ---------- */
+
+/**
+ * FE-11 (from BUG-34): on a screen taller than 9:16 a menu's header band — glass *and* content — sits
+ * on the top safe-area edge like the play HUD's top band (`hudAnchors(view).top`, ≤ 0), its bottom
+ * chrome (the level map's commander chip, the how-to CLOSE) on the bottom one (`.bottom`, ≥ 0), and
+ * the content in between takes the room this frees. The rects in this file stay the 9:16 layout; a
+ * screen maps between them and the screen's logical points with its `MenuBands` split:
+ *   layout y < `topEnd`                → moved with the header (+ a.top)
+ *   layout y ≥ `bottomStart`           → moved with the bottom chrome (+ a.bottom)
+ *   in between                         → the content, moved by `content(a)` (a scrolling list follows
+ *                                        the header; the level map's path stays put)
+ * On 9:16 (and on a wide screen) both anchors are 0 and every mapping is the identity.
+ */
+export interface MenuBands {
+  /** Layout y where the top band (header + sticky rows) ends. */
+  topEnd: number;
+  /** Layout y where the bottom band starts (Infinity: the screen has none). */
+  bottomStart: number;
+  /** Offset of the content between the bands for anchors `a`. */
+  content: (a: HudAnchors) => number;
+}
+
+/** Where layout point (x, y) of a screen with bands `b` is drawn (screen logical). */
+export function bandToScreen(a: HudAnchors, b: MenuBands, x: number, y: number): { x: number; y: number } {
+  if (y < b.topEnd) return { x, y: y + a.top };
+  if (y >= b.bottomStart) return { x, y: y + a.bottom };
+  return { x, y: y + b.content(a) };
+}
+
+/** Inverse of `bandToScreen`: the layout point under screen logical point (x, y) — what hit tests use. */
+export function screenToBand(a: HudAnchors, b: MenuBands, x: number, y: number): { x: number; y: number } {
+  if (y < b.topEnd + a.top) return { x, y: y - a.top };
+  if (y >= b.bottomStart + a.bottom) return { x, y: y - a.bottom };
+  return { x, y: y - b.content(a) };
+}
+
+/**
+ * Which band screen logical y falls in. A screen whose content does not move with the header (the
+ * level map's path, the how-to's stretched card) hit-tests each rect only in its own band: the
+ * content's layout range overlaps the header's / bottom chrome's rects on a tall screen.
+ */
+export function bandAt(a: HudAnchors, b: MenuBands, y: number): 'top' | 'content' | 'bottom' {
+  if (y < b.topEnd + a.top) return 'top';
+  if (y >= b.bottomStart + a.bottom) return 'bottom';
+  return 'content';
+}
+
+/** Header-only screens whose whole body follows the header (shop, settings, achievements). */
+export const followHeader = (a: HudAnchors): number => a.top;
+/** Content that does not move (the level map's path: its scroll range grows instead). */
+export const staysPut = (): number => 0;
 
 /* ---------- settings ---------- */
 
@@ -41,6 +95,9 @@ export const SETTINGS = Object.freeze({
   aboutRowH: 62,
 });
 
+/** Settings bands (FE-11): the cards follow the header up; no bottom chrome. The confirm card stays centred (not banded). */
+export const SETTINGS_BANDS: MenuBands = Object.freeze({ topEnd: SETTINGS.headerH, bottomStart: Infinity, content: followHeader });
+
 /* ---------- level select: winding path map ---------- */
 
 /** Level-select geometry (content space scrolls vertically under a fixed header). */
@@ -73,6 +130,16 @@ export const LEVEL_MAP = Object.freeze({
   /** Extra content below the last node. */
   tail: 220,
 });
+
+/**
+ * Level map bands (FE-11): header + challenge card (+ the "Yesterday's map" row) go up with the
+ * header, the commander chip (and the 10 px dead zone around it) down to the bottom safe edge; the
+ * path stays where it is and the scroll range follows the chip (`levelMapMaxScroll(count, MAP_H + a.bottom)`).
+ */
+export function levelMapBands(yesterdayRow: boolean): MenuBands {
+  const sticky = yesterdayRow ? LEVEL_MAP.yesterday : LEVEL_MAP.daily;
+  return { topEnd: sticky.y + sticky.h, bottomStart: LEVEL_MAP.commander.y - 10, content: staysPut };
+}
 
 /** Content-space centre of level node `index`. */
 export function levelNodeCentre(index: number): { x: number; y: number } {
@@ -180,6 +247,17 @@ export const HOWTO = Object.freeze({
   close: { x: 180, y: 1054, w: 360, h: 72 } as Rect,
 });
 
+/**
+ * How-to bands (FE-11): header up, CLOSE (with the card's bottom edge) down to the bottom safe edge;
+ * the card stretches between them and its rows spread evenly over the extra height (`howtoRowShift`).
+ */
+export const HOWTO_BANDS: MenuBands = Object.freeze({ topEnd: HOWTO.headerH, bottomStart: HOWTO.close.y - 14, content: followHeader });
+
+/** Vertical shift of how-to row `i` on a tall screen: from the header's (a.top) towards CLOSE's (a.bottom), evenly. */
+export function howtoRowShift(a: HudAnchors, i: number): number {
+  return a.top + ((a.bottom - a.top) * (i + 0.5)) / HOWTO.rows;
+}
+
 /** Row `i` (0-based) of the card. */
 export function howtoRowRect(i: number): Rect {
   const r = HOWTO.row;
@@ -207,16 +285,19 @@ export const ACHIEVEMENTS_LAYOUT = Object.freeze({
   contentBottom: 1262,
 });
 
+/** Achievements bands (FE-11): summary pill and rows follow the header; the rows' viewport reaches `contentBottom + a.bottom − a.top`. */
+export const ACHIEVEMENTS_BANDS: MenuBands = Object.freeze({ topEnd: ACHIEVEMENTS_LAYOUT.contentTop, bottomStart: Infinity, content: followHeader });
+
 /** Content-space rect of achievement row `i`. */
 export function achievementRowRect(i: number): Rect {
   const r = ACHIEVEMENTS_LAYOUT.row;
   return { x: r.x, y: r.y0 + i * (r.h + r.gap), w: r.w, h: r.h };
 }
 
-/** Largest scroll for `count` rows (0 when everything fits). */
-export function achievementsMaxScroll(count: number): number {
+/** Largest scroll for `count` rows (0 when everything fits); `extra` = the room a tall screen adds to the viewport (FE-11). */
+export function achievementsMaxScroll(count: number, extra = 0): number {
   const bottom = ACHIEVEMENTS_LAYOUT.row.y0 + count * (ACHIEVEMENTS_LAYOUT.row.h + ACHIEVEMENTS_LAYOUT.row.gap) + 10;
-  return Math.max(0, bottom - ACHIEVEMENTS_LAYOUT.contentBottom);
+  return Math.max(0, bottom - ACHIEVEMENTS_LAYOUT.contentBottom - Math.max(0, extra));
 }
 
 /* ---------- shop (ECONOMY.md §4, Phase A) ---------- */
@@ -250,6 +331,18 @@ export const SHOP = Object.freeze({
     no: { x: 380, y: 676, w: 210, h: 72 } as Rect,
   },
 });
+
+/**
+ * Shop bands (FE-11): header, tabs and the scrolling cards all follow the header up; the cards'
+ * viewport (layout `contentTop` … `contentBottom + a.bottom − a.top`) takes the freed room. The
+ * crystals → gold confirm card stays centred on the screen (not banded).
+ */
+export const SHOP_BANDS: MenuBands = Object.freeze({ topEnd: SHOP.contentTop, bottomStart: Infinity, content: followHeader });
+
+/** Layout bottom of the shop's / achievements' scrolling viewport on a screen with anchors `a`. */
+export function bandedContentBottom(contentBottom: number, a: HudAnchors): number {
+  return contentBottom + a.bottom - a.top;
+}
 
 export function shopPackRect(i: number): Rect {
   const p = SHOP.pack;

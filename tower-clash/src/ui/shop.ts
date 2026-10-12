@@ -7,11 +7,12 @@
  * Input produces wallet / save mutations only; the sim is never touched here.
  */
 import type { View } from '../render/view';
+import { hudAnchors } from '../render/view';
 import type { Rect } from '../render/widgets';
 import { inRect } from '../render/widgets';
 import { segmentAt } from '../render/menuWidgets';
 import type { ShopTab } from '../render/menuLayout';
-import { SHOP, shopBuyRect, shopConvertSegRect, shopPackRect, shopRowRect, shopSkinRect, shopTabsFor } from '../render/menuLayout';
+import { SHOP, SHOP_BANDS, bandToScreen, bandedContentBottom, screenToBand, shopBuyRect, shopConvertSegRect, shopPackRect, shopRowRect, shopSkinRect, shopTabsFor } from '../render/menuLayout';
 import type { ShopBundleCard, ShopConvertCard, ShopCrateCard, ShopPackCard, ShopSkinCard, ShopUpgradeCard } from '../render/menusShop';
 import { drawShop } from '../render/menusShop';
 import { ParticleSystem } from '../render/particles';
@@ -127,6 +128,7 @@ export class ShopScreen implements Screen {
 
   enter(): void {
     this.activeTab();
+    this.relayout(); // FE-10: hit regions before the first painted frame
     const ids = visibleProducts(this.app.save).map((p) => p.id);
     void getStore()
       .getProducts(ids)
@@ -147,6 +149,7 @@ export class ShopScreen implements Screen {
     this.scroll = 0;
     this.pressed = null;
     this.confirmConvert = null;
+    this.relayout(); // FE-10: a tap right after the switch hits the new tab's cards, painted or not
   }
 
   /** Conversion awaiting confirmation, if any (e2e). */
@@ -262,8 +265,38 @@ export class ShopScreen implements Screen {
     return out;
   }
 
+  /**
+   * Rebuild the active tab's hit regions and content height from the current save (FE-10). `draw()`
+   * does it every frame; `enter()`, `setTab()` and every content hit test do it too, so a tap that
+   * lands before the shop's first painted frame (or after a purchase changed the cards) is not dropped.
+   */
+  private relayout(): Layout {
+    const lay = this.layout();
+    this.hits = lay.hits;
+    this.contentHeight = lay.contentHeight;
+    return lay;
+  }
+
+  /** Layout bottom of the cards' viewport: `SHOP.contentBottom`, plus the room a tall screen adds (FE-11). */
+  private contentBottom(): number {
+    return bandedContentBottom(SHOP.contentBottom, hudAnchors(this.app.view));
+  }
+
   private maxScroll(): number {
-    return Math.max(0, this.contentHeight - SHOP.contentBottom);
+    return Math.max(0, this.contentHeight - this.contentBottom());
+  }
+
+  /**
+   * FE-11: screen logical point → layout point. The header, the tabs and the cards follow the header
+   * up to the top safe edge of a tall screen; the confirm card is centred on the screen (identity).
+   */
+  toLayout(x: number, y: number): { x: number; y: number } {
+    return this.confirmConvert ? { x, y } : screenToBand(hudAnchors(this.app.view), SHOP_BANDS, x, y);
+  }
+
+  /** Where layout point (x, y) is drawn (e2e: `layoutToClient`). */
+  fromLayout(x: number, y: number): { x: number; y: number } {
+    return this.confirmConvert ? { x, y } : bandToScreen(hudAnchors(this.app.view), SHOP_BANDS, x, y);
   }
 
   setScroll(y: number): void {
@@ -277,9 +310,7 @@ export class ShopScreen implements Screen {
 
   draw(view: View, nowMs: number): void {
     this.nowMs = nowMs;
-    const lay = this.layout();
-    this.hits = lay.hits;
-    this.contentHeight = lay.contentHeight;
+    const lay = this.relayout();
     this.setScroll(this.scroll);
     drawShop(view, this.app.palette(), {
       tab: this.tab,
@@ -310,10 +341,12 @@ export class ShopScreen implements Screen {
 
   /* ----- input ----- */
 
-  private contentHit(p: PointerPoint): Hit | null {
-    if (p.y < SHOP.contentTop || p.y > SHOP.contentBottom) return null;
-    const y = p.y + this.scroll;
-    return this.hits.find((h) => inRect(h.rect, p.x, y)) ?? null;
+  /** The card / button under layout point `l` (scroll applied here); the regions are rebuilt first (FE-10). */
+  private contentHit(l: { x: number; y: number }): Hit | null {
+    if (l.y < SHOP.contentTop || l.y > this.contentBottom()) return null;
+    this.relayout();
+    const y = l.y + this.scroll;
+    return this.hits.find((h) => inRect(h.rect, l.x, y)) ?? null;
   }
 
   down(p: PointerPoint): void {
@@ -326,8 +359,9 @@ export class ShopScreen implements Screen {
     this.downY = p.y;
     this.scrollAtDown = this.scroll;
     this.dragging = false;
-    if (inRect(SHOP.back, p.x, p.y)) this.pressed = SHOP.back;
-    else this.pressed = this.contentHit(p)?.rect ?? null;
+    const l = this.toLayout(p.x, p.y);
+    if (inRect(SHOP.back, l.x, l.y)) this.pressed = SHOP.back;
+    else this.pressed = this.contentHit(l)?.rect ?? null;
   }
 
   move(p: PointerPoint): void {
@@ -356,25 +390,26 @@ export class ShopScreen implements Screen {
     this.held = false;
     this.dragging = false;
     if (wasDrag) return;
-    if (inRect(SHOP.back, p.x, p.y)) {
+    const l = this.toLayout(p.x, p.y);
+    if (inRect(SHOP.back, l.x, l.y)) {
       this.back();
       return;
     }
-    if (inRect(SHOP.wallet, p.x, p.y)) {
+    if (inRect(SHOP.wallet, l.x, l.y)) {
       this.setTab('crystals');
       return;
     }
-    if (inRect(SHOP.tabs, p.x, p.y)) {
+    if (inRect(SHOP.tabs, l.x, l.y)) {
       const tabs = this.tabs;
-      const tab = tabs[segmentAt(SHOP.tabs, tabs.length, p.x, p.y)];
+      const tab = tabs[segmentAt(SHOP.tabs, tabs.length, l.x, l.y)];
       if (tab && tab !== this.activeTab()) {
         playSfx('button');
         this.setTab(tab);
       }
       return;
     }
-    const target = this.contentHit(p);
-    if (target && hit && inRect(hit, p.x, p.y + this.scroll)) target.action({ ...p, y: p.y + this.scroll });
+    const target = this.contentHit(l);
+    if (target && hit && inRect(hit, l.x, l.y + this.scroll)) target.action({ ...p, x: l.x, y: l.y + this.scroll });
   }
 
   wheel(dy: number): void {

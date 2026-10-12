@@ -60,7 +60,7 @@ export const az: Dictionary = {
   'weekly.streak': 'Həftəlik seriya {n}',
   'weekly.locked': 'Səviyyə {n} keçiləndə açılır',
   'weekly.newIn': 'Yenisi {h} saata (B.e. 00:00 UTC)',
-  'weekly.newInDays': 'Yenisi {d} gün {h} saata (B.e. 00:00 UTC)',
+  'weekly.newInDays': '{d} gün {h} saata (B.e. 00:00 UTC)',
   'weekly.noBoosters': 'Həftəlik çağırışda işləmir',
   'weekly.newReady': 'Yeni həftəlik çağırış hazırdır',
   'weekly.resultWon': 'Həftəlik çağırış keçildi · +{gold} qızıl · seriya {streak}',
@@ -77,6 +77,7 @@ export const az: Dictionary = {
   'hint.blocked': 'Yol bağlıdır — açıq düz xətt yoxdur',
   'hint.empty': 'Əsgər yoxdur — qoy qüllə böyüsün',
   'hint.full': 'Doludur — axını dayandır, səviyyə qalxsın',
+  'hint.fullTop': 'Doludur — qüllə ən yüksək səviyyədədir',
   'hint.stalemate': 'Axın ilişib — dayandır və başqa tərəfdən vur',
 
   'pause.title': 'FASİLƏ',

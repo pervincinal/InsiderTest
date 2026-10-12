@@ -2,10 +2,11 @@ import type { Owner } from '../sim/types';
 import type { Palette } from './palette';
 import { shade } from './palette';
 import type { View } from './view';
+import { hudAnchors } from './view';
 import type { Rect } from './widgets';
 import { drawButton, drawCard, drawExtrudedText, drawGlassBand, fitFontPx, font, roundRect, wrapText } from './widgets';
 import { badgeY, drawBadge, drawSwordsPip, drawTowerShadow, drawTowerSprite } from './sprites';
-import { HOWTO, howtoIconRect, howtoRowRect } from './menuLayout';
+import { HOWTO, howtoIconRect, howtoRowRect, howtoRowShift } from './menuLayout';
 import { beginFrame, drawWater, headerBand } from './menus';
 import type { TranslationKey } from '../ui/i18n';
 import { t } from '../ui/i18n';
@@ -268,10 +269,16 @@ const ICONS: readonly ((ctx: CanvasRenderingContext2D, pal: Palette, b: Rect, no
 export function drawHowTo(view: View, pal: Palette, o: HowToOpts): void {
   const ctx = beginFrame(view, pal);
   drawWater(ctx, pal, o.nowMs, 0);
-  drawCard(ctx, pal, HOWTO.card);
+  // FE-11: on a tall screen the header sits on the top safe-area edge (a.top ≤ 0) and CLOSE on the
+  // bottom one (a.bottom ≥ 0); the card stretches between them and its rows spread over the extra room
+  const a = hudAnchors(view);
+  const card = HOWTO.card;
+  drawCard(ctx, pal, a.top === 0 && a.bottom === 0 ? card : { x: card.x, y: card.y + a.top, w: card.w, h: card.h + a.bottom - a.top });
   for (let i = 0; i < HOWTO.rows; i++) {
     const row = howtoRowRect(i);
     const box = howtoIconRect(i);
+    ctx.save();
+    ctx.translate(0, howtoRowShift(a, i));
     // icon plate
     ctx.fillStyle = shade(pal.panel, -0.06);
     roundRect(ctx, box, 22);
@@ -298,17 +305,26 @@ export function drawHowTo(view: View, pal: Palette, o: HowToOpts): void {
     const lines = wrapText(ctx, t(HOWTO_KEYS[i]!), HOWTO.text.w, HOWTO.maxLines);
     const y0 = row.y + row.h / 2 - ((lines.length - 1) * HOWTO.lineH) / 2;
     lines.forEach((line, k) => ctx.fillText(line, HOWTO.text.x, y0 + k * HOWTO.lineH, HOWTO.text.w));
+    ctx.restore();
     if (i < HOWTO.rows - 1) {
+      // separator halfway between this row and the next (their gap grows on a tall screen)
+      const y = row.y + row.h - 1 + (howtoRowShift(a, i) + howtoRowShift(a, i + 1)) / 2;
       ctx.fillStyle = 'rgba(30, 42, 68, 0.1)';
-      ctx.fillRect(row.x, row.y + row.h - 1, row.w, 2);
+      ctx.fillRect(row.x, y, row.w, 2);
     }
   }
+  ctx.save();
+  ctx.translate(0, a.bottom);
   drawButton(ctx, pal, HOWTO.close, t('howto.close'), { fill: pal.owners.player, fontPx: 26, pressed: o.pressed === HOWTO.close });
+  ctx.restore();
 
   // header
-  drawGlassBand(ctx, headerBand(view, HOWTO.headerH)); // up to the screen's top edge (BUG-34)
+  drawGlassBand(ctx, headerBand(view, HOWTO.headerH + a.top)); // up to the screen's top edge (BUG-34)
+  ctx.save();
+  ctx.translate(0, a.top);
   drawButton(ctx, pal, HOWTO.back, t('common.back'), { fontPx: 24, pressed: o.pressed === HOWTO.back });
   const title = t('howto.title');
   drawExtrudedText(ctx, title, 360, 50, fitFontPx(ctx, title, 40, 380), { face: pal.paper, side: shade(pal.owners.player, -0.25), outline: pal.ink, depth: 4 });
+  ctx.restore();
   ctx.restore();
 }

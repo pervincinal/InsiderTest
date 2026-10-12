@@ -75,6 +75,17 @@ export interface TowerClashDebug {
    * are not where `toClient` puts the layout rect. Identical to `toClient` off the bands.
    */
   hudToClient(x: number, y: number): { x: number; y: number };
+  /**
+   * Client px of a layout point of the current screen (FE-11): the menus anchor their header (and
+   * bottom chrome) to the safe-area edges of a tall screen, so their 9:16 rects (menuLayout.ts) are
+   * drawn elsewhere; each screen maps them (`Screen.fromLayout`). The identity — `toClient` — on
+   * screens without bands (title, play world, result card, pause card).
+   */
+  layoutToClient(x: number, y: number): { x: number; y: number };
+  /** Inverse of `layoutToClient` before the client step: logical (720×1280 space) point → the current screen's layout point. */
+  logicalToLayout(x: number, y: number): { x: number; y: number };
+  /** The menus' / play HUD's safe-edge offsets in logical px (`hudAnchors`): top ≤ 0, bottom ≥ 0; both 0 on 9:16. */
+  getAnchors(): { top: number; bottom: number };
   /** Text of the tutorial hint on screen, or null. */
   getTutorialHint(): string | null;
   /** Text of the link-limit refusal bubble while it is on screen (rules v2), or null. */

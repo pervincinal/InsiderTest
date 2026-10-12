@@ -4,7 +4,8 @@
  * gets its star goals paid here). Loaded lazily with its drawing (PERF-1, src/ui/lazyScreens.ts).
  */
 import type { View } from '../render/view';
-import { ACHIEVEMENTS_LAYOUT, achievementRowRect, achievementsMaxScroll } from '../render/menuLayout';
+import { hudAnchors } from '../render/view';
+import { ACHIEVEMENTS_BANDS, ACHIEVEMENTS_LAYOUT, achievementRowRect, achievementsMaxScroll, bandToScreen, screenToBand } from '../render/menuLayout';
 import type { Rect } from '../render/widgets';
 import { inRect } from '../render/widgets';
 import type { AchievementRow } from '../render/menusAchievements';
@@ -45,8 +46,20 @@ export class AchievementsScreen implements Screen {
     return achievementProgress(this.app.save).map((p, i) => ({ ...p, label: achievementName(p), rect: achievementRowRect(i) }));
   }
 
+  /** The rows' viewport grows by the room a tall screen adds (FE-11), so the list scrolls less. */
   private maxScroll(): number {
-    return achievementsMaxScroll(ACHIEVEMENTS.length);
+    const a = hudAnchors(this.app.view);
+    return achievementsMaxScroll(ACHIEVEMENTS.length, a.bottom - a.top);
+  }
+
+  /** FE-11: screen logical point → layout point (header, summary and rows follow the header up on a tall screen). */
+  toLayout(x: number, y: number): { x: number; y: number } {
+    return screenToBand(hudAnchors(this.app.view), ACHIEVEMENTS_BANDS, x, y);
+  }
+
+  /** Where layout point (x, y) is drawn (e2e: `layoutToClient`). */
+  fromLayout(x: number, y: number): { x: number; y: number } {
+    return bandToScreen(hudAnchors(this.app.view), ACHIEVEMENTS_BANDS, x, y);
   }
 
   setScroll(y: number): void {
@@ -55,6 +68,7 @@ export class AchievementsScreen implements Screen {
 
   draw(view: View, nowMs: number): void {
     this.nowMs = nowMs;
+    this.setScroll(this.scroll); // the viewport grows / shrinks with the screen's height (FE-11): re-clamp
     const save = this.app.save;
     drawAchievements(view, this.app.palette(), {
       rows: this.rows(),
@@ -74,7 +88,8 @@ export class AchievementsScreen implements Screen {
     this.downY = p.y;
     this.scrollAtDown = this.scroll;
     this.dragging = false;
-    this.pressed = inRect(ACHIEVEMENTS_LAYOUT.back, p.x, p.y) ? ACHIEVEMENTS_LAYOUT.back : null;
+    const l = this.toLayout(p.x, p.y);
+    this.pressed = inRect(ACHIEVEMENTS_LAYOUT.back, l.x, l.y) ? ACHIEVEMENTS_LAYOUT.back : null;
   }
 
   move(p: PointerPoint): void {
@@ -93,7 +108,8 @@ export class AchievementsScreen implements Screen {
     this.held = false;
     this.dragging = false;
     if (wasDrag) return;
-    if (hit === ACHIEVEMENTS_LAYOUT.back && inRect(hit, p.x, p.y)) this.back();
+    const l = this.toLayout(p.x, p.y);
+    if (hit === ACHIEVEMENTS_LAYOUT.back && inRect(hit, l.x, l.y)) this.back();
   }
 
   wheel(dy: number): void {

@@ -379,7 +379,9 @@ test.describe('economy', () => {
         return rec.map(({ t, dx, dy }) => {
           const cx = b.left + (dx * b.width) / c.width;
           const cy = b.top + (dy * b.height) / c.height;
-          return { t, x: ((cx - o.x) * 720) / (e.x - o.x), y: ((cy - o.y) * 1280) / (e.y - o.y) };
+          // FE-11: back into the shop's layout space (its cards follow the header up on a tall screen)
+          const l = window.__towerclash.logicalToLayout(((cx - o.x) * 720) / (e.x - o.x), ((cy - o.y) * 1280) / (e.y - o.y));
+          return { t, x: l.x, y: l.y };
         });
       });
     type Drawn = Awaited<ReturnType<typeof drawnTexts>>[number];

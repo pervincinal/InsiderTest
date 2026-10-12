@@ -23,10 +23,17 @@ export interface Rect {
   h: number;
 }
 
-/** Client coordinates of logical (`lx`, `ly`), read after the current screen has painted a frame. */
+/**
+ * Client coordinates of logical (`lx`, `ly`), read after the current screen has painted a frame.
+ * FE-11: a point of a menu's layout (menuLayout.ts rects — header, tabs, cards, the level map's
+ * challenge card and commander chip, settings rows, how-to CLOSE) goes through the screen's band
+ * mapping (`layoutToClient`): on a screen taller than 9:16 (Pixel 5 included) those menus anchor
+ * their header to the top safe edge and their bottom chrome to the bottom one. On the play world,
+ * the title, the result and pause cards it is plain `toClient`.
+ */
 export function clientPoint(page: Page, lx: number, ly: number): Promise<{ x: number; y: number }> {
   return page.evaluate(
-    ([x, y]) => new Promise<{ x: number; y: number }>((resolve) => requestAnimationFrame(() => resolve(window.__towerclash.toClient(x, y)))),
+    ([x, y]) => new Promise<{ x: number; y: number }>((resolve) => requestAnimationFrame(() => resolve(window.__towerclash.layoutToClient(x, y)))),
     [lx, ly] as const,
   );
 }

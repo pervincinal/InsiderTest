@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { hudClientPoint, tapHud } from './helpers/tap';
+import { hudClientPoint, tapHud, tapRect } from './helpers/tap';
 
 /*
  * BUG-34 (TestFlight 1.0.0 (8), iPhone 17 Pro Max, ~19.5:9): "the game does not fill the screen".
@@ -23,6 +23,21 @@ const OLD_BAND = [0x1f, 0x8f, 0xc2];
 // src/render/layout.ts — HUD / BOOSTERS (layout coordinates; the bands move, these do not)
 const HUD = { pause: { x: 636, y: 18, w: 66, h: 60 }, menu: { x: 586, y: 1196, w: 116, h: 64 } };
 const BOOSTERS = { overdrive: { x: 232, y: 1186, w: 66, h: 88 } };
+// FE-11 — src/render/menuLayout.ts (layout coordinates of the menus; their header / bottom chrome move on a tall screen)
+const TITLE_PLAY = { x: 180, y: 640, w: 360, h: 96 };
+const TITLE_SETTINGS = { x: 180, y: 780, w: 172, h: 64 };
+const MENU_BACK = { x: 18, y: 20, w: 140, h: 60 };
+const SHOP_TABS = { x: 30, y: 112, w: 660, h: 60 };
+const SHOP_ROW_0 = { x: 34, y: 200, w: 652, h: 168 };
+const SETTINGS_COLOR_BLIND = { x: 470, y: 312, w: 160, h: 56 };
+const LEVEL_MAP = { tabDaily: { x: 126, y: 118, w: 118, h: 44 }, tabWeekly: { x: 244, y: 118, w: 118, h: 44 }, commander: { x: 60, y: 1206, w: 600, h: 54 }, nodeR: 46, top: 260, step: 150, amp: 185, period: 5 };
+function levelNodeRect(index: number, scroll = 0): { x: number; y: number; w: number; h: number } {
+  const cx = 360 + LEVEL_MAP.amp * Math.sin((index * Math.PI * 2) / LEVEL_MAP.period);
+  const cy = LEVEL_MAP.top + index * LEVEL_MAP.step - scroll;
+  return { x: cx - LEVEL_MAP.nodeR, y: cy - LEVEL_MAP.nodeR, w: LEVEL_MAP.nodeR * 2, h: LEVEL_MAP.nodeR * 2 };
+}
+/** Tap segment `i` of `count` of a segmented control (menuWidgets.ts drawSegmented: 4 px inset, equal widths). */
+const segment = (r: { x: number; y: number; w: number; h: number }, count: number, i: number) => ({ x: r.x + 4 + i * ((r.w - 8) / count), y: r.y, w: (r.w - 8) / count, h: r.h });
 // src/economy (booster price) — OVERDRIVE costs 30 gold
 const OVERDRIVE_COST = 30;
 const GOLD = 200;
@@ -63,6 +78,10 @@ function expectSea(px: number[], edge: Rgb, why: string): void {
 const screen = (page: Page) => page.evaluate(() => window.__towerclash.getScreen());
 const simTime = (page: Page) => page.evaluate(() => window.__towerclash.getState()?.time ?? -1);
 const toClient = (page: Page, x: number, y: number) => page.evaluate(([lx, ly]) => window.__towerclash.toClient(lx, ly), [x, y] as const);
+/** Where the current menu draws its layout point (FE-11), client px. */
+const layoutToClient = (page: Page, x: number, y: number) =>
+  page.evaluate(([lx, ly]) => new Promise<{ x: number; y: number }>((r) => requestAnimationFrame(() => r(window.__towerclash.layoutToClient(lx, ly)))), [x, y] as const);
+const save = (page: Page) => page.evaluate(() => JSON.parse(JSON.stringify(window.__towerclash.economy.getSave())) as { gold: number; upgrades: Record<string, number>; settings: { colorBlind: boolean } });
 
 async function boot(page: Page, safe: { top: number; bottom: number }): Promise<string[]> {
   const errors: string[] = [];
@@ -159,6 +178,58 @@ for (const phone of PHONES) {
       for (const px of Object.values(map)) expect(px[3]).toBe(255);
       expect(dist(map.bl, OLD_BAND)).toBeGreaterThan(40);
       expect(dist(map.br, OLD_BAND)).toBeGreaterThan(40);
+      expect(errors).toEqual([]);
+    });
+
+    test('menus (FE-11): headers on the top safe edge, the commander chip on the bottom one; a shop tab, a settings row and a level node take taps where they are drawn', async ({ page }, info) => {
+      const errors = await boot(page, phone.safe);
+      const scale = (await toClient(page, 720, 0)).x / 720;
+      const anchors = await page.evaluate(() => window.__towerclash.getAnchors());
+      expect(anchors.top, 'the header moves up on a tall screen').toBeLessThan(-30);
+      expect(anchors.bottom, 'the bottom chrome moves down').toBeGreaterThan(30);
+
+      // shop: BACK on the top safe edge; the UPGRADES tab and Production's row where they are drawn
+      await page.evaluate(() => window.__towerclash.economy.openShop('crystals'));
+      await expect.poll(() => screen(page)).toBe('shop');
+      const back = await layoutToClient(page, MENU_BACK.x, MENU_BACK.y);
+      expect(back.y, 'BACK top edge = safe top + 20 layout px').toBeCloseTo(phone.safe.top + MENU_BACK.y * scale, 0);
+      const tab = segment(SHOP_TABS, 4, 3);
+      const tabAt = await layoutToClient(page, tab.x, tab.y);
+      expect(tabAt.y, 'the tab row moved up with the header').toBeLessThan((await toClient(page, tab.x, tab.y)).y - 15);
+      await tapRect(page, tab); // UPGRADES
+      await tapRect(page, SHOP_ROW_0); // Production tier 1: 200 gold
+      await expect.poll(async () => (await save(page)).upgrades.production ?? 0, { message: 'Production bought from the moved row' }).toBe(1);
+      expect((await save(page)).gold).toBe(0);
+      await page.screenshot({ path: info.outputPath(`fe11-${phone.name}-shop.png`), scale: 'css' });
+      await tapRect(page, MENU_BACK);
+      await expect.poll(() => screen(page)).toBe('title');
+
+      // settings: the colour-blind row where it is drawn (the whole card follows the header up)
+      await tapRect(page, TITLE_SETTINGS);
+      await expect.poll(() => screen(page)).toBe('settings');
+      const row = await layoutToClient(page, SETTINGS_COLOR_BLIND.x, SETTINGS_COLOR_BLIND.y);
+      expect(row.y).toBeLessThan((await toClient(page, SETTINGS_COLOR_BLIND.x, SETTINGS_COLOR_BLIND.y)).y - 15);
+      await tapRect(page, SETTINGS_COLOR_BLIND);
+      await expect.poll(async () => (await save(page)).settings.colorBlind, { message: 'colour-blind toggled from the moved row' }).toBe(true);
+      await tapRect(page, SETTINGS_COLOR_BLIND);
+      await expect.poll(async () => (await save(page)).settings.colorBlind).toBe(false);
+      await page.screenshot({ path: info.outputPath(`fe11-${phone.name}-settings.png`), scale: 'css' });
+      await tapRect(page, MENU_BACK);
+      await expect.poll(() => screen(page)).toBe('title');
+
+      // level map: header + challenge card up, commander chip down to the bottom safe edge; WEEKLY tab and a node by tap
+      await tapRect(page, TITLE_PLAY);
+      await expect.poll(() => screen(page)).toBe('levelSelect');
+      const chip = await layoutToClient(page, LEVEL_MAP.commander.x, LEVEL_MAP.commander.y + LEVEL_MAP.commander.h);
+      expect(chip.y, 'chip bottom edge = safe bottom − 20 layout px').toBeCloseTo(phone.viewport.height - phone.safe.bottom - 20 * scale, 0);
+      await tapRect(page, LEVEL_MAP.tabWeekly);
+      await expect.poll(() => page.evaluate(() => window.__towerclash.weekly.tab())).toBe('weekly');
+      await tapRect(page, LEVEL_MAP.tabDaily);
+      await expect.poll(() => page.evaluate(() => window.__towerclash.weekly.tab())).toBe('daily');
+      await page.evaluate(() => window.__towerclash.setLevelSelectScroll(0));
+      await page.screenshot({ path: info.outputPath(`fe11-${phone.name}-levelmap.png`), scale: 'css' });
+      await tapRect(page, levelNodeRect(1)); // level 2 (unlocked by the seeded stars); the path itself does not move
+      await expect.poll(() => page.evaluate(() => window.__towerclash.getState()?.levelId ?? -1)).toBe(2);
       expect(errors).toEqual([]);
     });
   });

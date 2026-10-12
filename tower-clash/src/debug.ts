@@ -35,6 +35,12 @@ export function installDebug(app: TowerClashApp): TowerClashDebug {
       const p = fromHudSpace(hudAnchors(app.view), x, y);
       return toClient(app.view, p.x, p.y);
     },
+    layoutToClient: (x, y) => {
+      const p = app.current.fromLayout?.(x, y) ?? { x, y };
+      return toClient(app.view, p.x, p.y);
+    },
+    logicalToLayout: (x, y) => app.current.toLayout?.(x, y) ?? { x, y },
+    getAnchors: () => hudAnchors(app.view),
     getTutorialHint: () => (app.current === app.play ? (app.play?.tutorialStep()?.text ?? null) : null),
     getLimitHint: () => (app.current === app.play && app.play?.gestures.limitHint ? app.play.gestures.limitHintText : null),
     getDrag: () => {

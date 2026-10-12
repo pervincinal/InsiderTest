@@ -862,22 +862,24 @@ describe('ART-17 through a recording canvas', () => {
 });
 
 /**
- * Locale fit (ART-17), measured with the game's fonts (fontAdvances.ts, Chromium ±1.8 %): every
+ * Locale fit (ART-17, L10N-3), measured with the game's fonts (fontAdvances.ts, Chromium ±1.8 %): every
  * numeral of the four lines stays 24 px in every language (the rule's floor is 20 px: no line comes
  * near it), every line fits its room, and a line whose natural width leaves < 5 % slack is a known
- * tight line whose words give up size first (≥ 12 px, helper floor). TIGHT names them; the test
- * fails when a tight line is missing from it or a listed one has become roomy, so the list stays true.
+ * tight line whose words give up size first. L10N-3: the words never go under WORD_FLOOR_PX in any
+ * locale and any countdown form (24h, 59:59, 6d 23h, 23h) — on the countdown pill, the locked card's
+ * countdown and the reward line alike (AZ / RU / TR weekly strings dropped their "in" word for it).
+ * Measured at 9:16: the extra height a tall phone gives the level map (FE-11) does not count.
+ * TIGHT names the tight lines; the test fails when a tight line is missing from it or a listed one
+ * has become roomy, so the list stays true.
  */
 const TIGHT = new Set([
-  'az countdown weekly 6d',
-  'ru countdown daily mm:ss',
   'ru countdown weekly 6d',
-  'ru countdown weekly h',
   'tr countdown weekly 6d',
-  'tr countdown weekly h',
   'ru reward daily +bonus',
   'ru reward weekly',
 ]);
+/** L10N-3: smallest word size of any line here (was 12 px, the helper's floor; AZ/RU/TR weekly hit 13–14 px). */
+const WORD_FLOOR_PX = 16;
 
 describe('ART-17 locale fit at 360 px (720 logical)', () => {
   it('numbers 24 px in every locale, every line inside its room, < 5 % slack only on the known tight lines', async () => {
@@ -951,7 +953,7 @@ describe('ART-17 locale fit at 360 px (720 logical)', () => {
             for (const d of words) expect(d.px, `${key}: "${d.text}"`).toBe(wordPx);
           } else {
             tight.push(key.replace(/ (\d+)$/, ''));
-            for (const d of words) expect(d.px, `${key}: "${d.text}"`).toBeGreaterThanOrEqual(12);
+            for (const d of words) expect(d.px, `${key}: "${d.text}"`).toBeGreaterThanOrEqual(WORD_FLOOR_PX);
           }
         }
       }

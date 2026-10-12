@@ -28,6 +28,7 @@ type R = { x: number; y: number; w: number; h: number };
 // src/render/menuLayout.ts — SHOP: tab row, content viewport, glass band under the tabs (menusShop.ts drawShop: tabs.y + tabs.h + 12)
 const SHOP_TABS: R = { x: 30, y: 112, w: 660, h: 60 };
 const CONTENT_TOP = 192;
+/** On 9:16; a taller screen adds `getAnchors().bottom − .top` (FE-11: header on the top safe edge, viewport to the bottom one). */
 const CONTENT_BOTTOM = 1262;
 const GLASS_BAND_BOTTOM = SHOP_TABS.y + SHOP_TABS.h + 12;
 // src/render/menuLayout.ts — SHOP.skin, shopSkinRect; src/ui/shop.ts layout(): roofs at SHOP.row.y0 − 6, each section 22 px under the previous one
@@ -157,7 +158,9 @@ async function drawnTexts(page: Page): Promise<Drawn[]> {
       const cy = b.top + (r.dy * b.height) / c.height;
       // measureText / maxWidth are in the context's user space: × the matrix scale → device px → logical
       const toLogical = r.sx * kx;
-      return { ...r, x: ((cx - o.x) * 720) / (e.x - o.x), y: ((cy - o.y) * 1280) / (e.y - o.y), width: r.width * toLogical, maxWidth: r.maxWidth === null ? null : r.maxWidth * toLogical, px: r.px * toLogical };
+      // FE-11: back into the shop's layout space (header, tabs and cards follow the top safe edge on a tall screen)
+      const l = window.__towerclash.logicalToLayout(((cx - o.x) * 720) / (e.x - o.x), ((cy - o.y) * 1280) / (e.y - o.y));
+      return { ...r, x: l.x, y: l.y, width: r.width * toLogical, maxWidth: r.maxWidth === null ? null : r.maxWidth * toLogical, px: r.px * toLogical };
     });
   });
   const seen = new Map<string, Drawn>();
@@ -169,12 +172,12 @@ async function drawnTexts(page: Page): Promise<Drawn[]> {
   return [...seen.values()];
 }
 
-/** Mean RGB of the 3×3 device pixels of #game around a logical point. */
+/** Mean RGB of the 3×3 device pixels of #game around a point of the shop's layout (FE-11: where the shop draws it). */
 const pixelAt = (page: Page, p: { x: number; y: number }) =>
   page.evaluate(({ x, y }) => {
     const c = document.getElementById('game') as HTMLCanvasElement;
     const b = c.getBoundingClientRect();
-    const q = window.__towerclash.toClient(x, y);
+    const q = window.__towerclash.layoutToClient(x, y);
     const px = Math.round(((q.x - b.left) * c.width) / b.width);
     const py = Math.round(((q.y - b.top) * c.height) / b.height);
     const d = c.getContext('2d')!.getImageData(px - 1, py - 1, 3, 3).data;
@@ -242,6 +245,9 @@ async function checkHelmets(page: Page, opts: { store: boolean; colorBlind: bool
     id === EQUIPPED ? S.equipped : id === OWNED ? S.equip : PACK_ONLY_HELMETS.has(id) ? S.packOnly : '';
 
   expect(await page.evaluate(() => window.__towerclash.economy.shopScroll(0))).toBe(0);
+  // FE-11: on a tall screen the cards' viewport runs on by the room the anchored header frees (layout px)
+  const anchors = await page.evaluate(() => window.__towerclash.getAnchors());
+  const contentBottom = CONTENT_BOTTOM + anchors.bottom - anchors.top;
   // 1. section headers: HELMETS pill where the layout puts it, THEMES after the last helmet row
   const all = await drawnTexts(page);
   const header = all.find((d) => d.t === S.helmets);
@@ -260,16 +266,16 @@ async function checkHelmets(page: Page, opts: { store: boolean; colorBlind: bool
   for (const [i, id] of listed.entries()) {
     const card = shopSkinRect(helmetsTop, i);
     // 2. scroll the card to the middle of the content viewport (clamped by the shop) → fully inside it
-    const want = Math.round(card.y + card.h / 2 - (CONTENT_TOP + CONTENT_BOTTOM) / 2);
+    const want = Math.round(card.y + card.h / 2 - (CONTENT_TOP + contentBottom) / 2);
     const s = await page.evaluate((y) => window.__towerclash.economy.shopScroll(y), Math.max(0, want));
     const top = card.y - s;
     const bottom = card.y + card.h - s;
     const where = `${opts.tag} ${id} (card #${i}, scroll ${s})`;
     expect(top, `${where}: top under the tab bar's glass band`).toBeGreaterThanOrEqual(CONTENT_TOP);
     expect(top, where).toBeGreaterThan(GLASS_BAND_BOTTOM);
-    expect(bottom, `${where}: bottom above the content bottom`).toBeLessThanOrEqual(CONTENT_BOTTOM);
+    expect(bottom, `${where}: bottom above the content bottom`).toBeLessThanOrEqual(contentBottom);
     const corners = await page.evaluate(
-      ([a, b]) => [window.__towerclash.toClient(a.x, a.y), window.__towerclash.toClient(b.x, b.y)],
+      ([a, b]) => [window.__towerclash.layoutToClient(a.x, a.y), window.__towerclash.layoutToClient(b.x, b.y)],
       [
         { x: card.x, y: top },
         { x: card.x + card.w, y: bottom },
@@ -295,7 +301,7 @@ async function checkHelmets(page: Page, opts: { store: boolean; colorBlind: bool
     expect(btn!.left, `${where}: "${btn!.t}" inside its button`).toBeGreaterThanOrEqual(buy.x + 6);
     expect(btn!.right, `${where}: "${btn!.t}" inside its button`).toBeLessThanOrEqual(buy.x + buy.w - 6);
     expect(btn!.width, `${where}: "${btn!.t}" squeezed`).toBeLessThanOrEqual((btn!.maxWidth ?? Infinity) + 0.5);
-    expect(btn!.y, `${where}: label inside the content viewport`).toBeLessThanOrEqual(CONTENT_BOTTOM - 10);
+    expect(btn!.y, `${where}: label inside the content viewport`).toBeLessThanOrEqual(contentBottom - 10);
 
     // painted: the EQUIPPED / price button face carries the palette colour at its lower left
     let ratio: number | null = null;

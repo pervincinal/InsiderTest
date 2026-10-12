@@ -2,9 +2,10 @@ import { C } from '../sim/constants';
 import type { Palette } from './palette';
 import { shade } from './palette';
 import type { View } from './view';
+import { hudAnchors } from './view';
 import type { Rect } from './widgets';
 import { drawButton, drawCard, drawExtrudedText, drawGlassBand, drawPill, drawRoundButton, drawTrophyGlyph, fitFontPx, font, roundRect } from './widgets';
-import { ACHIEVEMENTS_LAYOUT } from './menuLayout';
+import { ACHIEVEMENTS_LAYOUT, bandedContentBottom } from './menuLayout';
 import type { ToastOpts } from './economyWidgets';
 import { drawToast } from './economyWidgets';
 import { drawCrystal } from './sprites';
@@ -102,15 +103,21 @@ export function drawAchievements(view: View, pal: Palette, o: AchievementsOpts):
   const ctx = beginFrame(view, pal);
   drawWater(ctx, pal, o.nowMs, o.scroll * 0.4);
   const L = ACHIEVEMENTS_LAYOUT;
+  // FE-11: on a tall screen the header and the summary sit on the top safe-area edge (a.top ≤ 0), the
+  // rows follow them up and their viewport runs on to 18 layout px above the bottom safe edge
+  const a = hudAnchors(view);
   ctx.save();
+  ctx.translate(0, a.top);
   ctx.beginPath();
-  ctx.rect(0, L.contentTop, C.MAP_W, L.contentBottom - L.contentTop);
+  ctx.rect(0, L.contentTop, C.MAP_W, bandedContentBottom(L.contentBottom, a) - L.contentTop);
   ctx.clip();
   ctx.translate(0, -o.scroll);
   for (const row of o.rows) drawAchievementRow(ctx, pal, row);
   ctx.restore();
   // fixed chrome: header + summary pill
-  drawGlassBand(ctx, headerBand(view, L.summary.y + L.summary.h + 12)); // up to the screen's top edge (BUG-34)
+  drawGlassBand(ctx, headerBand(view, L.summary.y + L.summary.h + 12 + a.top)); // up to the screen's top edge (BUG-34)
+  ctx.save();
+  ctx.translate(0, a.top);
   drawButton(ctx, pal, o.backRect, t('common.back'), { fontPx: 24, pressed: o.pressed === o.backRect });
   const title = t('achievements.title');
   drawExtrudedText(ctx, title, 430, 50, fitFontPx(ctx, title, 34, 500), { face: pal.paper, side: shade(pal.owners.player, -0.25), outline: pal.ink, depth: 4 });
@@ -123,6 +130,7 @@ export function drawAchievements(view: View, pal: Palette, o: AchievementsOpts):
   const summaryW = Math.min(ctx.measureText(summary).width, L.summary.w - 60);
   ctx.fillText(summary, 360 + 10, L.summary.y + L.summary.h / 2 + 1, L.summary.w - 60);
   drawCrystal(ctx, pal, 360 + 10 + summaryW / 2 + 16, L.summary.y + L.summary.h / 2, 9);
-  if (o.toast) drawToast(ctx, pal, { ...o.toast, y: o.toast.y ?? 1210 });
+  ctx.restore();
+  if (o.toast) drawToast(ctx, pal, { ...o.toast, y: (o.toast.y ?? 1210) + a.bottom });
   ctx.restore();
 }

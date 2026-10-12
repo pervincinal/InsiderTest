@@ -93,6 +93,7 @@ describe('PlayGestures (taps and drags → link / unlink commands)', () => {
       blockedHintText: () => 'Blocked — no clear line',
       emptyHintText: () => 'No soldiers — let the tower grow',
       fullHintText: () => 'Full — stop its stream and it levels up',
+      fullTopHintText: () => 'Full — this tower is at its top level',
     });
     let now = 1000;
     const at = (id: string, dx = 0, dy = 0): PointerPoint => ({ id: 1, x: state.towers[id]!.x + dx, y: state.towers[id]!.y + dy, timeMs: now });
@@ -279,7 +280,7 @@ describe('PlayGestures (taps and drags → link / unlink commands)', () => {
     g.up(at('e', 80, 0));
   });
 
-  it('a stream into an own tower at capacity is refused with hint.full while it streams or sits at its top level (BUG-35)', () => {
+  it('a stream into an own tower at capacity is refused: hint.full while it streams (BUG-35), hint.fullTop at its top level (BUG-38)', () => {
     const state = fixture();
     const { g, commands, tap, drag, clock } = harness(state);
     // n becomes ours, full (L1 capacity) and streaming out, so it can neither grow nor upgrade.
@@ -298,10 +299,17 @@ describe('PlayGestures (taps and drags → link / unlink commands)', () => {
     // Stopping n's stream frees it: the same tap now links (the sim will upgrade n on its next tick).
     applyCommand(state, { type: 'unlink', owner: 'player', from: 'n', to: 'e' });
     expect(decideLink(state, 'p', 'n')).toEqual({ kind: 'link' });
-    // A full tower at its top level is also `full` (nothing to reinforce), with or without streams.
+    // BUG-38: a full tower at its top level is its own refusal (`fullTop`, hint.fullTop — stopping a
+    // stream would level nothing up), with or without streams.
     n.level = 3;
     n.units = C.CAPACITY[3];
-    expect(decideLink(state, 'p', 'n')).toEqual({ kind: 'full' });
+    expect(decideLink(state, 'p', 'n')).toEqual({ kind: 'fullTop' });
+    applyCommand(state, { type: 'link', owner: 'player', from: 'n', to: 'e' });
+    expect(decideLink(state, 'p', 'n')).toEqual({ kind: 'fullTop' });
+    drag('p', 'n');
+    expect(commands).toEqual([]);
+    expect(g.limitHintText).toBe('Full — this tower is at its top level');
+    applyCommand(state, { type: 'unlink', owner: 'player', from: 'n', to: 'e' });
     // Below capacity it is a plain reinforcement.
     n.units = C.CAPACITY[3] - 1;
     expect(decideLink(state, 'p', 'n')).toEqual({ kind: 'link' });

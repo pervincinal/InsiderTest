@@ -126,6 +126,9 @@ export class StalemateWatch {
   }
 }
 
+/** Tappable things on the play HUD bands (BUG-36: each acts only for a press that began on it). */
+type HudButton = 'pause' | 'mute' | 'menu' | 'coins' | 'streams' | BoosterKind;
+
 export class PlayScreen implements Screen {
   readonly name = 'play' as const;
   readonly loop: GameLoop;
@@ -145,6 +148,13 @@ export class PlayScreen implements Screen {
   /** Airstrike targeting mode (M3-1): the next tap on an enemy tower fires, anywhere else cancels. */
   targeting = false;
   private pressedBooster: BoosterKind | null = null;
+  /**
+   * Where the current press began (BUG-36 / BUG-37): `world` = handed to the gestures (a tap / drag /
+   * swipe there always ends through `gestures.up` / `cancel`, wherever the finger lifts); `hud` = on
+   * the HUD bands, with the button it started on (null once the finger left it); `target` = an
+   * airstrike-targeting tap; null = no press (hover moves, a lift whose down was never seen).
+   */
+  private press: { kind: 'world' } | { kind: 'hud'; button: HudButton | null } | { kind: 'target' } | null = null;
   /** This attempt already used its "Reinforcements" continue (ECONOMY.md §3.5) — offered once per attempt. */
   private continued: boolean;
   /** State + rng snapshots of the last `C.SNAPSHOT_CAPACITY_MS` of sim time, one per `C.SNAPSHOT_INTERVAL_MS`. */
@@ -204,6 +214,7 @@ export class PlayScreen implements Screen {
       blockedHintText: () => t('hint.blocked'),
       emptyHintText: () => t('hint.empty'),
       fullHintText: () => t('hint.full'),
+      fullTopHintText: () => t('hint.fullTop'),
       onCommand: (cmd) => {
         this.tutorial?.onCommand(cmd, this.state);
         this.loop.enqueue(cmd);
@@ -584,27 +595,26 @@ export class PlayScreen implements Screen {
 
   /* ----- input ----- */
 
-  private hudHit(p: PointerPoint): boolean {
+  /** The HUD button under `p` (moved bands mapped back, BUG-34), or null. */
+  private hudButtonAt(p: PointerPoint): HudButton | null {
     const h = this.hudPoint(p);
-    if (inRect(HUD.pause, h.x, h.y)) {
-      this.togglePause();
-      return true;
-    }
-    if (inRect(HUD.mute, h.x, h.y)) {
-      toggleMuted();
-      return true;
-    }
+    if (inRect(HUD.pause, h.x, h.y)) return 'pause';
+    if (inRect(HUD.mute, h.x, h.y)) return 'mute';
     const booster = this.boosterAt(p);
-    if (booster) {
-      this.useBooster(booster);
-      return true;
-    }
-    if (inRect(HUD.coins, h.x, h.y) || inRect(HUD.streams, h.x, h.y)) return true;
-    if (inRect(HUD.menu, h.x, h.y)) {
-      this.app.goLevels();
-      return true;
-    }
-    return false;
+    if (booster) return booster;
+    if (inRect(HUD.coins, h.x, h.y)) return 'coins';
+    if (inRect(HUD.streams, h.x, h.y)) return 'streams';
+    if (inRect(HUD.menu, h.x, h.y)) return 'menu';
+    return null;
+  }
+
+  /** A tap on HUD button `b` (pressed and released on it). */
+  private hudAction(b: HudButton): void {
+    if (b === 'pause') this.togglePause();
+    else if (b === 'mute') toggleMuted();
+    else if (b === 'menu') this.app.goLevels();
+    else if (b === 'overdrive' || b === 'freeze' || b === 'airstrike') this.useBooster(b);
+    // coins / streams pills: no action, but the tap is theirs
   }
 
   togglePause(): void {
@@ -626,23 +636,35 @@ export class PlayScreen implements Screen {
   }
 
   down(p: PointerPoint): void {
+    this.press = null;
     if (this.loop.paused) return;
     this.pressedBooster = this.loop.finished ? null : this.boosterAt(p);
-    if (this.pressedBooster) return;
-    if (!this.inWorld(p)) return;
-    if (this.targeting) return; // the tap resolves on up: fire or cancel
+    if (!this.inWorld(p)) {
+      this.press = { kind: 'hud', button: this.hudButtonAt(p) };
+      return;
+    }
+    if (this.targeting) {
+      this.press = { kind: 'target' }; // the tap resolves on up: fire or cancel
+      return;
+    }
+    this.press = { kind: 'world' };
     this.gestures.down(p);
   }
 
   move(p: PointerPoint): void {
     if (this.loop.paused) return;
     if (this.pressedBooster && this.boosterAt(p) !== this.pressedBooster) this.pressedBooster = null;
-    if (this.targeting) return;
-    this.gestures.move(p);
+    // a HUD press that slides off its button no longer taps it (BUG-36)
+    const press = this.press;
+    if (press?.kind === 'hud' && press.button && this.hudButtonAt(p) !== press.button) press.button = null;
+    if (this.targeting || press?.kind === 'hud') return;
+    this.gestures.move(p); // a world press, or a hover (no press: the gestures only update the hover)
   }
 
   up(p: PointerPoint): void {
     this.pressedBooster = null;
+    const press = this.press;
+    this.press = null;
     if (this.loop.paused) {
       const h = this.hudPoint(p);
       if (inRect(PAUSE.resume, p.x, p.y) || inRect(HUD.pause, h.x, h.y)) this.togglePause();
@@ -654,15 +676,22 @@ export class PlayScreen implements Screen {
       else if (inRect(PAUSE.menu, p.x, p.y) || inRect(HUD.menu, h.x, h.y)) this.app.goLevels();
       return;
     }
-    if (this.targeting && this.inWorld(p)) {
-      const t = hitTower(this.state, p.x, p.y);
-      if (!t || !this.airstrike(t.id)) this.targeting = false; // tap elsewhere (or a non-enemy tower) cancels
+    if (!press) return; // BUG-37: a lift whose press nobody saw (or that began while paused) does nothing
+    if (press.kind === 'target') {
+      if (this.targeting && this.inWorld(p)) {
+        const t = hitTower(this.state, p.x, p.y);
+        if (!t || !this.airstrike(t.id)) this.targeting = false; // tap elsewhere (or a non-enemy tower) cancels
+      }
       return;
     }
-    if (this.hudHit(p)) {
-      this.gestures.cancel();
+    if (press.kind === 'hud') {
+      // BUG-36: a HUD button acts only for a press that began on it and lifts on it; a press that began
+      // on the bands never reaches the gestures (BUG-37), wherever it lifts
+      const b = press.button;
+      if (b && this.hudButtonAt(p) === b) this.hudAction(b);
       return;
     }
+    // a world press ends through the gestures, wherever the finger lifts (BUG-36: never a HUD button)
     const hintBefore = this.gestures.limitHint;
     this.gestures.up(p);
     // A refusal (link limit / blocked lane / empty source) is a fresh `limitHint` object: one thud per refused tap.
@@ -672,7 +701,10 @@ export class PlayScreen implements Screen {
   /** `at` (platform `pointercancel` only) lets a drag from an own tower finish there (BUG-33, `PlayGestures.cancel`). */
   cancel(at?: PointerPoint): void {
     this.pressedBooster = null;
-    if (this.loop.paused || this.targeting) {
+    const press = this.press;
+    this.press = null;
+    if (this.loop.paused || this.targeting || press?.kind !== 'world') {
+      // BUG-37: only a press the gestures saw may finish a drag at `at`
       this.gestures.cancel();
       return;
     }

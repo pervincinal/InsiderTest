@@ -53,6 +53,12 @@ export interface Screen {
   wheel?(dy: number): void;
   /** Status pill of the screen, when it has one (the app shell reports a failed chunk download on it). */
   readonly toast?: Toast;
+  /**
+   * FE-11: menus whose header / bottom chrome is anchored to the safe-area edges of a tall screen map
+   * a layout point (their 9:16 rects) to where it is drawn, and back. Absent = the identity.
+   */
+  fromLayout?(x: number, y: number): { x: number; y: number };
+  toLayout?(x: number, y: number): { x: number; y: number };
 }
 
 /** Per-attempt options for `App.startLevel`. */

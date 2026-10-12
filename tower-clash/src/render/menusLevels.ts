@@ -1,7 +1,7 @@
 import type { Palette } from './palette';
 import { shade } from './palette';
 import type { View } from './view';
-import { bleed } from './view';
+import { bleed, hudAnchors } from './view';
 import type { Rect } from './widgets';
 import { drawButton, drawCard, drawExtrudedText, drawGlassBand, drawNumeralLine, drawPill, drawStar, drawStars, fitFontPx, font, formatTime, withShadow } from './widgets';
 import { drawFlag, drawLock } from './menuWidgets';
@@ -538,8 +538,12 @@ export function drawLevelSelect(view: View, pal: Palette, o: LevelSelectOpts): v
   });
   ctx.restore();
 
-  // fixed header: glass band, back, title, wallet
-  drawGlassBand(ctx, headerBand(view, LEVEL_MAP.headerH)); // up to the screen's top edge (BUG-34)
+  // fixed header: glass band, back, title, wallet — on the top safe-area edge of a tall screen, the
+  // challenge card with it; the commander chip on the bottom one (FE-11, `levelMapBands`)
+  const a = hudAnchors(view);
+  drawGlassBand(ctx, headerBand(view, LEVEL_MAP.headerH + a.top)); // up to the screen's top edge (BUG-34)
+  ctx.save();
+  ctx.translate(0, a.top);
   drawButton(ctx, pal, o.backRect, t('common.back'), { fontPx: 24, pressed: o.pressed === o.backRect });
   const title = t('levels.title');
   drawExtrudedText(ctx, title, 290, 50, fitFontPx(ctx, title, 40, 220), { face: pal.paper, side: shade(pal.owners.player, -0.25), outline: pal.ink, depth: 4 });
@@ -547,7 +551,10 @@ export function drawLevelSelect(view: View, pal: Palette, o: LevelSelectOpts): v
   // daily challenge card, sticky under the header (tap → start)
   drawDailyCard(ctx, pal, LEVEL_MAP.daily, o.daily, o.pressed ?? null);
   if (o.daily.tab === 'daily' && o.daily.yesterday) drawYesterdayRow(ctx, pal, LEVEL_MAP.yesterday, o.daily.yesterday, o.pressed === LEVEL_MAP.yesterday);
+  ctx.restore();
   // commander summary chip (tap → upgrades)
+  ctx.save();
+  ctx.translate(0, a.bottom);
   const cr = o.commanderRect;
   drawButton(ctx, pal, cr, '', { fontPx: 18, pressed: o.pressed === cr, flat: true });
   drawUpgradeGlyph(ctx, pal, cr.x + 30, cr.y + (cr.h - 4) / 2, 17, 'production');
@@ -559,6 +566,7 @@ export function drawLevelSelect(view: View, pal: Palette, o: LevelSelectOpts): v
   ctx.fillStyle = o.commander ? pal.ink : pal.textDim;
   ctx.font = font(17, '500');
   ctx.fillText(o.commander ?? t('levels.noUpgrades'), cr.x + 190, cr.y + (cr.h - 4) / 2 + 1, cr.w - 204);
-  if (o.toast) drawToast(ctx, pal, o.toast);
+  ctx.restore();
+  if (o.toast) drawToast(ctx, pal, { ...o.toast, y: (o.toast.y ?? 1090) + a.bottom });
   ctx.restore();
 }

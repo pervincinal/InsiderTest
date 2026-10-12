@@ -59,8 +59,8 @@ export const tr: Dictionary = {
   'weekly.best': 'En iyi {stars}★ · {time} · 3★ için {target}',
   'weekly.streak': 'Hafta serisi {n}',
   'weekly.locked': 'Açmak için {n}. bölümü geç',
-  'weekly.newIn': 'Yeni: {h} sa sonra (Pzt 00:00 UTC)',
-  'weekly.newInDays': 'Yeni: {d} gün {h} sa sonra (Pzt 00:00 UTC)',
+  'weekly.newIn': 'Yeni: {h} sa (Pzt 00:00 UTC)',
+  'weekly.newInDays': 'Yeni: {d} gün {h} sa (Pzt 00:00 UTC)',
   'weekly.noBoosters': 'Haftalık meydan okumada yok',
   'weekly.newReady': 'Yeni haftalık meydan okuma hazır',
   'weekly.resultWon': 'Haftalık meydan okuma tamam · +{gold} altın · seri {streak}',
@@ -77,6 +77,7 @@ export const tr: Dictionary = {
   'hint.blocked': 'Yol kapalı — düz hat yok',
   'hint.empty': 'Asker yok — kale büyüsün',
   'hint.full': 'Dolu — akışı durdur, seviye atlasın',
+  'hint.fullTop': 'Dolu — kule en üst seviyede',
   'hint.stalemate': 'Açmaz — akışı durdur, başka yönden vur',
 
   'pause.title': 'DURAKLATILDI',

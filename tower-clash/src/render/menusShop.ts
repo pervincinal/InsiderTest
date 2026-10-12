@@ -2,7 +2,7 @@ import { C } from '../sim/constants';
 import type { ButtonInk, Palette } from './palette';
 import { shade } from './palette';
 import type { View } from './view';
-import { bleedRect } from './view';
+import { bleedRect, hudAnchors } from './view';
 import type { Rect } from './widgets';
 import {
   drawBoltGlyph,
@@ -22,7 +22,7 @@ import {
 } from './widgets';
 import { drawSegmented } from './menuWidgets';
 import type { ShopTab } from './menuLayout';
-import { SHOP, SHOP_TABS, shopBuyRect, shopRowBuyRect } from './menuLayout';
+import { SHOP, SHOP_TABS, bandedContentBottom, shopBuyRect, shopRowBuyRect } from './menuLayout';
 import type { UpgradeKind } from './sprites';
 import type { ToastOpts } from './economyWidgets';
 import { drawSpinner, drawToast, drawWallet, formatAmount } from './economyWidgets';
@@ -460,11 +460,15 @@ function drawUpgradeCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopUpg
 export function drawShop(view: View, pal: Palette, o: ShopOpts): void {
   const ctx = beginFrame(view, pal);
   drawWater(ctx, pal, o.nowMs, o.scroll * 0.4);
+  // FE-11: on a tall screen the header and the tabs sit on the top safe-area edge (a.top ≤ 0) and the
+  // cards follow them up; their viewport runs on to 18 layout px above the bottom safe edge
+  const a = hudAnchors(view);
 
   // scrolled content, clipped under the tab row
   ctx.save();
+  ctx.translate(0, a.top);
   ctx.beginPath();
-  ctx.rect(0, SHOP.contentTop, C.MAP_W, SHOP.contentBottom - SHOP.contentTop);
+  ctx.rect(0, SHOP.contentTop, C.MAP_W, bandedContentBottom(SHOP.contentBottom, a) - SHOP.contentTop);
   ctx.clip();
   ctx.translate(0, -o.scroll);
   for (const c of o.packs) drawPackCard(ctx, pal, c, o);
@@ -509,15 +513,18 @@ export function drawShop(view: View, pal: Palette, o: ShopOpts): void {
   o.particles?.draw(ctx, o.nowMs);
   ctx.restore();
 
-  // fixed chrome: header + tabs
-  drawGlassBand(ctx, headerBand(view, SHOP.tabs.y + SHOP.tabs.h + 12)); // up to the screen's top edge (BUG-34)
+  // fixed chrome: header + tabs, on the top safe-area edge (FE-11)
+  drawGlassBand(ctx, headerBand(view, SHOP.tabs.y + SHOP.tabs.h + 12 + a.top)); // up to the screen's top edge (BUG-34)
+  ctx.save();
+  ctx.translate(0, a.top);
   drawButton(ctx, pal, o.backRect, t('common.back'), { fontPx: 24, pressed: o.pressed === o.backRect });
   const title = t('shop.title');
   drawExtrudedText(ctx, title, 280, 50, fitFontPx(ctx, title, 40, 220), { face: pal.paper, side: shade(pal.owners.player, -0.25), outline: pal.ink, depth: 4 });
   drawWallet(ctx, pal, o.walletRect, o.gold, o.crystals);
   const tabs = o.tabs ?? SHOP_TABS;
   drawSegmented(ctx, pal, o.tabsRect, tabs.map((tab) => ({ label: t(TAB_KEYS[tab]), value: tab })), tabs.indexOf(o.tab), 19);
+  ctx.restore();
   if (o.confirmConvert) drawConvertConfirm(ctx, pal, o.confirmConvert, o, bleedRect(view));
-  if (o.toast) drawToast(ctx, pal, { ...o.toast, y: o.toast.y ?? 1210 });
+  if (o.toast) drawToast(ctx, pal, { ...o.toast, y: (o.toast.y ?? 1210) + a.bottom });
   ctx.restore();
 }

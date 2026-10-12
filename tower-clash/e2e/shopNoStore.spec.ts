@@ -102,7 +102,9 @@ async function drawnTexts(page: Page): Promise<DrawnText[]> {
     return rec.map(({ t, dx, dy }) => {
       const cx = b.left + (dx * b.width) / c.width;
       const cy = b.top + (dy * b.height) / c.height;
-      return { t, x: ((cx - o.x) * 720) / (e.x - o.x), y: ((cy - o.y) * 1280) / (e.y - o.y) };
+      // FE-11: back into the shop's layout space (header, tabs and cards follow the top safe edge on a tall screen)
+      const l = window.__towerclash.logicalToLayout(((cx - o.x) * 720) / (e.x - o.x), ((cy - o.y) * 1280) / (e.y - o.y));
+      return { t, x: l.x, y: l.y };
     });
   });
   const seen = new Map<string, DrawnText>();

@@ -201,7 +201,8 @@ describe('tower-clash/e2e load tolerance (QA-20)', () => {
       expect(E2E_FILES.find((x) => x.name === f)?.src, f).toMatch(/from '\.\/helpers\/tap'/);
     }
     const tap = E2E_FILES.find((f) => f.name === 'helpers/tap.ts')?.src ?? '';
-    expect(tap).toMatch(/requestAnimationFrame\(\(\) => resolve\(window\.__towerclash\.toClient\(x, y\)\)\)/);
+    // FE-11: the frame-synced conversion goes through the current screen's band mapping (layoutToClient = toClient off the menus)
+    expect(tap).toMatch(/requestAnimationFrame\(\(\) => resolve\(window\.__towerclash\.layoutToClient\(x, y\)\)\)/);
   });
 
   it('the preview serves a dist snapshot checked for completeness, never a bare cp of dist/', () => {

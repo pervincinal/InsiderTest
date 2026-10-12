@@ -1,7 +1,7 @@
 import type { Palette } from './palette';
 import { shade } from './palette';
 import type { View } from './view';
-import { bleedRect } from './view';
+import { bleedRect, hudAnchors } from './view';
 import type { Rect } from './widgets';
 import { drawButton, drawCard, drawCoin, drawExtrudedText, drawGlassBand, drawStars, fitFontPx, font } from './widgets';
 import { drawChevronDisc, drawSegmented, drawToggle, paletteGlyph } from './menuWidgets';
@@ -102,6 +102,10 @@ function drawAboutCard(ctx: CanvasRenderingContext2D, pal: Palette, o: SettingsO
 export function drawSettings(view: View, pal: Palette, o: SettingsOpts): void {
   const ctx = beginFrame(view, pal);
   drawWater(ctx, pal, o.nowMs, 0);
+  // FE-11: on a tall screen the header sits on the top safe-area edge (a.top ≤ 0) and the cards follow it up
+  const a = hudAnchors(view);
+  ctx.save();
+  ctx.translate(0, a.top);
   const card = SETTINGS.card;
   drawCard(ctx, pal, card);
   // rows
@@ -148,12 +152,16 @@ export function drawSettings(view: View, pal: Palette, o: SettingsOpts): void {
   drawCoin(ctx, pal, 360 + 12 + sw / 2 + 22, SETTINGS.reset.y - 44, 11);
   drawButton(ctx, pal, SETTINGS.reset, t('settings.reset'), { fontPx: 24, border: pal.owners.enemy1, text: pal.owners.enemy1, pressed: o.pressed === SETTINGS.reset });
   drawAboutCard(ctx, pal, o);
+  ctx.restore();
 
   // header
-  drawGlassBand(ctx, headerBand(view, SETTINGS.headerH)); // up to the screen's top edge (BUG-34)
+  drawGlassBand(ctx, headerBand(view, SETTINGS.headerH + a.top)); // up to the screen's top edge (BUG-34)
+  ctx.save();
+  ctx.translate(0, a.top);
   drawButton(ctx, pal, SETTINGS.back, t('common.back'), { fontPx: 24, pressed: o.pressed === SETTINGS.back });
   const title = t('settings.title');
   drawExtrudedText(ctx, title, 360, 50, fitFontPx(ctx, title, 40, 380), { face: pal.paper, side: shade(pal.owners.player, -0.25), outline: pal.ink, depth: 4 });
+  ctx.restore();
 
   if (o.confirming) {
     ctx.fillStyle = 'rgba(26, 58, 90, 0.5)';
@@ -173,6 +181,6 @@ export function drawSettings(view: View, pal: Palette, o: SettingsOpts): void {
     drawButton(ctx, pal, c.yes, t('settings.resetYes'), { fill: pal.owners.enemy1, fontPx: 26, pressed: o.pressed === c.yes });
     drawButton(ctx, pal, c.no, t('common.cancel'), { fontPx: 26, pressed: o.pressed === c.no });
   }
-  if (o.toast) drawToast(ctx, pal, o.toast);
+  if (o.toast) drawToast(ctx, pal, { ...o.toast, y: (o.toast.y ?? 1090) + a.bottom });
   ctx.restore();
 }

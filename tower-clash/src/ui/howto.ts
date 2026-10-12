@@ -5,7 +5,8 @@
  * own beyond the pressed button. Loaded lazily with its drawing (PERF-1, src/ui/lazyScreens.ts).
  */
 import type { View } from '../render/view';
-import { HOWTO } from '../render/menuLayout';
+import { hudAnchors } from '../render/view';
+import { HOWTO, HOWTO_BANDS, bandAt, bandToScreen, screenToBand } from '../render/menuLayout';
 import type { Rect } from '../render/widgets';
 import { inRect } from '../render/widgets';
 import { drawHowTo } from '../render/menusHowto';
@@ -26,22 +27,39 @@ export class HowToScreen implements Screen {
     drawHowTo(view, this.app.palette(), { nowMs, pressed: this.pressed });
   }
 
-  private rects(): readonly Rect[] {
-    return [HOWTO.back, HOWTO.close];
+  /**
+   * BACK or CLOSE under screen point `p`, each tested in its own band (FE-11: on a tall screen the
+   * stretched card's layout range overlaps CLOSE's rect), or null.
+   */
+  private buttonAt(p: { x: number; y: number }): Rect | null {
+    const band = bandAt(hudAnchors(this.app.view), HOWTO_BANDS, p.y);
+    const r = band === 'top' ? HOWTO.back : band === 'bottom' ? HOWTO.close : null;
+    const l = this.toLayout(p.x, p.y);
+    return r && inRect(r, l.x, l.y) ? r : null;
+  }
+
+  /** FE-11: screen logical point → layout point (BACK moves up with the header, CLOSE down to the bottom safe edge). */
+  toLayout(x: number, y: number): { x: number; y: number } {
+    return screenToBand(hudAnchors(this.app.view), HOWTO_BANDS, x, y);
+  }
+
+  /** Where layout point (x, y) is drawn (e2e: `layoutToClient`). */
+  fromLayout(x: number, y: number): { x: number; y: number } {
+    return bandToScreen(hudAnchors(this.app.view), HOWTO_BANDS, x, y);
   }
 
   down(p: PointerPoint): void {
-    this.pressed = this.rects().find((r) => inRect(r, p.x, p.y)) ?? null;
+    this.pressed = this.buttonAt(p);
   }
 
   move(p: PointerPoint): void {
-    if (this.pressed && !inRect(this.pressed, p.x, p.y)) this.pressed = null;
+    if (this.pressed && this.buttonAt(p) !== this.pressed) this.pressed = null;
   }
 
   up(p: PointerPoint): void {
     const hit = this.pressed;
     this.pressed = null;
-    if (!hit || !inRect(hit, p.x, p.y)) return;
+    if (!hit || this.buttonAt(p) !== hit) return;
     playSfx('button');
     this.back();
   }

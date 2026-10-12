@@ -6,8 +6,9 @@
  * paused play screen). Loaded lazily with its drawing (PERF-1, src/ui/lazyScreens.ts).
  */
 import type { View } from '../render/view';
+import { hudAnchors } from '../render/view';
 import type { SettingsAboutLayout } from '../render/menuLayout';
-import { SETTINGS, settingsAboutLayout } from '../render/menuLayout';
+import { SETTINGS, SETTINGS_BANDS, bandToScreen, screenToBand, settingsAboutLayout } from '../render/menuLayout';
 import type { Rect } from '../render/widgets';
 import { inRect } from '../render/widgets';
 import { segmentAt } from '../render/menuWidgets';
@@ -149,17 +150,33 @@ export class SettingsScreen implements Screen {
       });
   }
 
+  /**
+   * FE-11: screen logical point → layout point. The header and both cards follow the header up to the
+   * top safe edge of a tall screen; the reset confirm card is centred on the screen (identity).
+   */
+  toLayout(x: number, y: number): { x: number; y: number } {
+    return this.confirming ? { x, y } : screenToBand(hudAnchors(this.app.view), SETTINGS_BANDS, x, y);
+  }
+
+  /** Where layout point (x, y) is drawn (e2e: `layoutToClient`). */
+  fromLayout(x: number, y: number): { x: number; y: number } {
+    return this.confirming ? { x, y } : bandToScreen(hudAnchors(this.app.view), SETTINGS_BANDS, x, y);
+  }
+
   down(p: PointerPoint): void {
-    this.pressed = this.rects().find((r) => inRect(r, p.x, p.y)) ?? null;
+    const l = this.toLayout(p.x, p.y);
+    this.pressed = this.rects().find((r) => inRect(r, l.x, l.y)) ?? null;
   }
 
   move(p: PointerPoint): void {
-    if (this.pressed && !inRect(this.pressed, p.x, p.y)) this.pressed = null;
+    const l = this.toLayout(p.x, p.y);
+    if (this.pressed && !inRect(this.pressed, l.x, l.y)) this.pressed = null;
   }
 
-  up(p: PointerPoint): void {
+  up(pointer: PointerPoint): void {
     const hit = this.pressed;
     this.pressed = null;
+    const p = { ...pointer, ...this.toLayout(pointer.x, pointer.y) };
     if (!hit || !inRect(hit, p.x, p.y)) return;
     const save = this.app.save;
     if (this.confirming) {

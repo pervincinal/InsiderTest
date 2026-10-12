@@ -7,7 +7,8 @@ import { C } from '../sim/constants';
 import { LEVEL_META, getLevelMeta } from '../levels/index';
 import { levelName, t } from './i18n';
 import type { View } from '../render/view';
-import { LEVEL_MAP, levelMapMaxScroll, levelMapMinScroll, levelNodeCentre, levelNodeRect } from '../render/menuLayout';
+import { hudAnchors } from '../render/view';
+import { LEVEL_MAP, bandAt, bandToScreen, levelMapBands, levelMapMaxScroll, levelMapMinScroll, levelNodeCentre, levelNodeRect, screenToBand } from '../render/menuLayout';
 import type { Rect } from '../render/widgets';
 import { formatTime, inRect } from '../render/widgets';
 import type { DailyCardOpts, WeeklyCardOpts } from '../render/menusLevels';
@@ -67,8 +68,36 @@ export class LevelSelectScreen implements Screen {
     this.setScroll(levelNodeCentre(this.current).y - C.MAP_H * 0.5);
   }
 
+  /** The path may scroll on until the last node clears the commander chip where it is drawn (FE-11: the bottom safe edge). */
   private maxScroll(): number {
-    return levelMapMaxScroll(LEVEL_META.length, C.MAP_H);
+    return levelMapMaxScroll(LEVEL_META.length, C.MAP_H + hudAnchors(this.app.view).bottom);
+  }
+
+  /**
+   * FE-11: screen logical point → this screen's layout point (header + challenge card moved to the top
+   * safe edge, the commander chip to the bottom one; the path as it is). Hit tests use this.
+   */
+  toLayout(x: number, y: number): { x: number; y: number } {
+    return screenToBand(hudAnchors(this.app.view), levelMapBands(this.yesterday() !== null), x, y);
+  }
+
+  /** Where layout point (x, y) is drawn (e2e: `layoutToClient`). */
+  fromLayout(x: number, y: number): { x: number; y: number } {
+    return bandToScreen(hudAnchors(this.app.view), levelMapBands(this.yesterday() !== null), x, y);
+  }
+
+  /**
+   * The header / card / chip rect under screen point `p`, each tested only in its own band (FE-11: on a
+   * tall screen the path's layout range overlaps both), or null — then `p` is on the path.
+   */
+  private chromeAt(p: { x: number; y: number }): Rect | null {
+    const bands = levelMapBands(this.yesterday() !== null);
+    const band = bandAt(hudAnchors(this.app.view), bands, p.y);
+    if (band === 'content') return null;
+    const l = this.toLayout(p.x, p.y);
+    const rects = band === 'bottom' ? [LEVEL_MAP.commander] : [BACK, LEVEL_MAP.wallet, LEVEL_MAP.dailyTabDaily, LEVEL_MAP.dailyTabWeekly, LEVEL_MAP.daily];
+    if (band === 'top' && this.yesterday()) rects.push(LEVEL_MAP.yesterday);
+    return rects.find((r) => inRect(r, l.x, l.y)) ?? null;
   }
 
   setScroll(y: number): void {
@@ -220,9 +249,7 @@ export class LevelSelectScreen implements Screen {
     this.downY = p.y;
     this.scrollAtDown = this.scroll;
     this.dragging = false;
-    const rects = [BACK, LEVEL_MAP.wallet, LEVEL_MAP.commander, LEVEL_MAP.dailyTabDaily, LEVEL_MAP.dailyTabWeekly, LEVEL_MAP.daily];
-    if (this.yesterday()) rects.push(LEVEL_MAP.yesterday);
-    this.pressed = rects.find((r) => inRect(r, p.x, p.y)) ?? null;
+    this.pressed = this.chromeAt(p);
   }
 
   move(p: PointerPoint): void {
@@ -240,36 +267,38 @@ export class LevelSelectScreen implements Screen {
     this.held = false;
     this.dragging = false;
     if (wasDrag) return;
-    if (inRect(BACK, p.x, p.y)) {
+    // FE-11: the header block and the chip are hit-tested in layout space, each in its own band (they
+    // move on a tall screen); the path's nodes with the plain logical point
+    const hit = this.chromeAt(p);
+    const y = this.yesterday();
+    if (hit === BACK) {
       this.app.goTitle();
       return;
     }
-    if (inRect(LEVEL_MAP.wallet, p.x, p.y)) {
+    if (hit === LEVEL_MAP.wallet) {
       this.app.goShop('crystals', () => this.app.goLevels());
       return;
     }
-    if (inRect(LEVEL_MAP.commander, p.x, p.y)) {
+    if (hit === LEVEL_MAP.commander) {
       this.app.goShop('upgrades', () => this.app.goLevels());
       return;
     }
-    if (inRect(LEVEL_MAP.dailyTabDaily, p.x, p.y) || inRect(LEVEL_MAP.dailyTabWeekly, p.x, p.y)) {
-      cardTab = inRect(LEVEL_MAP.dailyTabWeekly, p.x, p.y) ? 'weekly' : 'daily';
+    if (hit === LEVEL_MAP.dailyTabDaily || hit === LEVEL_MAP.dailyTabWeekly) {
+      cardTab = hit === LEVEL_MAP.dailyTabWeekly ? 'weekly' : 'daily';
       this.setScroll(this.scroll); // the row comes and goes with the tab: re-clamp
       return;
     }
-    if (inRect(LEVEL_MAP.daily, p.x, p.y)) {
+    if (hit === LEVEL_MAP.daily) {
       this.tapDaily();
       return;
     }
-    const y = this.yesterday();
-    if (y && inRect(LEVEL_MAP.yesterday, p.x, p.y)) {
+    if (y && hit === LEVEL_MAP.yesterday) {
       this.tapYesterday(y);
       return;
     }
-    // under the header / around the commander chip nothing is tappable; the map's nodes are, the
-    // ones that run on into the bottom margin of a tall screen included (BUG-34, full bleed)
-    const chip = LEVEL_MAP.commander;
-    if (p.y < LEVEL_MAP.headerH || (p.y >= chip.y - 10 && p.y <= chip.y + chip.h + 10)) return;
+    // under the header block and on / around the commander chip nothing else is tappable; the map's
+    // nodes are, the ones that run on into the margins of a tall screen included (BUG-34, full bleed)
+    if (bandAt(hudAnchors(this.app.view), levelMapBands(y !== null), p.y) !== 'content') return;
     for (let i = 0; i < LEVEL_META.length; i++) {
       const level = LEVEL_META[i];
       if (level && inRect(levelNodeRect(i, this.scroll), p.x, p.y)) {
