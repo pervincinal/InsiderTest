@@ -145,7 +145,7 @@ function layerLike(ctx: CanvasRenderingContext2D): { canvas: HTMLCanvasElement; 
  * Sticker outline: paints `draw` offscreen, stamps its silhouette 32 times around a circle of
  * `px` device pixels, tints the stamp with `color`, then lays the art on top.
  */
-function outlined(ctx: CanvasRenderingContext2D, px: number, color: string, draw: (g: CanvasRenderingContext2D) => void): void {
+export function outlined(ctx: CanvasRenderingContext2D, px: number, color: string, draw: (g: CanvasRenderingContext2D) => void): void {
   const art = layerLike(ctx);
   draw(art.g);
   const rim = layerLike(ctx);
@@ -181,7 +181,7 @@ function radial(ctx: CanvasRenderingContext2D, x: number, y: number, r0: number,
 }
 
 /** Alternating rays from (x, y), `n` pairs, slightly turned so no ray points straight up. */
-function rays(ctx: CanvasRenderingContext2D, x: number, y: number, n: number, color: string, turn = 0.5): void {
+export function rays(ctx: CanvasRenderingContext2D, x: number, y: number, n: number, color: string, turn = 0.5): void {
   ctx.fillStyle = color;
   ctx.beginPath();
   const step = TAU / n;
@@ -224,7 +224,7 @@ function sea(ctx: CanvasRenderingContext2D, top: number): void {
  * Island plateau (ART_DIRECTION §3 world): soft shadow on the water, cliff band (lit / shade),
  * three-tone grass top with a sun patch, foam where water meets cliff.
  */
-interface Ground {
+export interface Ground {
   cx: number;
   cy: number;
   rx: number;
@@ -232,7 +232,7 @@ interface Ground {
 }
 
 /** Draws the plateau and returns its grass top (cast shadows are clipped to it). */
-function island(ctx: CanvasRenderingContext2D, cx: number, cy: number, rx: number, ry: number, depth: number): Ground {
+export function island(ctx: CanvasRenderingContext2D, cx: number, cy: number, rx: number, ry: number, depth: number): Ground {
   const grass = PAL.grassTones;
   ctx.fillStyle = PAL.groundShadow;
   ctx.beginPath();
@@ -279,7 +279,7 @@ function island(ctx: CanvasRenderingContext2D, cx: number, cy: number, rx: numbe
 }
 
 /** A round clay bush (the biome props): shade, mid, lit puff. */
-function bush(ctx: CanvasRenderingContext2D, x: number, y: number, r: number): void {
+export function bush(ctx: CanvasRenderingContext2D, x: number, y: number, r: number): void {
   const b = PAL.biomes.grass.bush;
   ctx.fillStyle = PAL.objectShadow;
   ctx.beginPath();
@@ -301,7 +301,7 @@ function bush(ctx: CanvasRenderingContext2D, x: number, y: number, r: number): v
   ctx.fill();
 }
 
-interface TowerLookOpts {
+export interface TowerLookOpts {
   tones: Tones;
   /** Gold gems on the plinth (the game's tower level). */
   level: number;
@@ -339,7 +339,7 @@ function clayTower(ctx: CanvasRenderingContext2D, t: TowerLookOpts): void {
  * Draws a tower with the game's long ground shadow (clipped to the island top), an ink sticker outline (so the silhouette holds
  * on any wallpaper) and the clay body. `s` = design units per map unit.
  */
-function heroTower(ctx: CanvasRenderingContext2D, deviceSize: number, ground: Ground, x: number, y: number, s: number, t: TowerLookOpts, outline = 16): void {
+export function heroTower(ctx: CanvasRenderingContext2D, deviceSize: number, ground: Ground, x: number, y: number, s: number, t: TowerLookOpts, outline = 16): void {
   ctx.save();
   ctx.beginPath();
   ctx.ellipse(ground.cx, ground.cy, ground.rx, ground.ry, 0, 0, TAU);
@@ -413,7 +413,7 @@ function ribbon(ctx: CanvasRenderingContext2D, ax: number, ay: number, bx: numbe
 }
 
 /** Spiky impact star (gold with a paper core), the "clash" accent. */
-function clashStar(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, points: number, rot: number): void {
+export function clashStar(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, points: number, rot: number): void {
   const star = (rr: number, inner: number): void => {
     ctx.beginPath();
     for (let i = 0; i < points * 2; i++) {
@@ -438,7 +438,7 @@ function clashStar(ctx: CanvasRenderingContext2D, x: number, y: number, r: numbe
 }
 
 /** One sword (blade up from the guard at the origin, length `len`), ink-outlined; `hilt` = grip colour, or no grip. */
-function sword(ctx: CanvasRenderingContext2D, len: number, hilt: Tones | null): void {
+export function sword(ctx: CanvasRenderingContext2D, len: number, hilt: Tones | null): void {
   const bw = len * 0.075;
   const path = (): void => {
     ctx.beginPath();

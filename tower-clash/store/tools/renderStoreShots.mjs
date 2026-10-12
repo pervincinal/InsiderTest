@@ -3,6 +3,7 @@
  * Renders the store assets from the real game with Playwright (PUB-2, PUB-5).
  *
  *   cd tower-clash && npm run build && node store/tools/renderStoreShots.mjs [--google] [--apple] [--all] [--port=4180]
+ *   cd tower-clash && node store/tools/renderStoreShots.mjs --feature-only [--feature-variant=duel|hero]
  *   Env: PW_PORT=<n> (default 4180, `--port=` wins), PW_OUTPUT=<dir> (write under <dir> instead of store/),
  *        PW_DIST=<dir> (serve that dist snapshot instead of dist/).
  *
@@ -14,7 +15,11 @@
  *   store/screenshots/<lang>/01..08.png        – captioned phone screenshots, en / az / ru / tr: caption *and*
  *                                                in-game text (title, HUD, lesson banner, tutorial hint, shop,
  *                                                result) in that language
- *   store/feature-graphic.png                  – 1024×500 Google Play feature graphic (drawn on canvas)
+ *   store/feature-graphic.png                  – 1024×500 Google Play feature graphic, 24-bit RGB, no alpha
+ *                                                (src/render/featureGraphic.ts, ART-19). `--feature-only`
+ *                                                writes just this file (no build or preview server
+ *                                                needed) and leaves every screenshot set alone;
+ *                                                `--feature-variant=<id>` picks a candidate.
  *   Google Play accepts any 9:16 size between 320 and 3840 px, so this set may be scaled down
  *   (1080×1920 → 945×1680 → …) until every file fits the size budget.
  *
@@ -85,6 +90,10 @@ const PORT = portArg ? Number(portArg.slice('--port='.length)) : Number(process.
 const URL = `http://localhost:${PORT}/`;
 const DO_APPLE = flag('apple') || flag('all');
 const DO_GOOGLE = flag('google') || flag('all') || !flag('apple');
+/** `--feature-only`: just the Google Play feature graphic (no build, no preview server, no screenshot sets). */
+const FEATURE_ONLY = flag('feature-only');
+/** `--feature-variant=<id>`: a candidate from src/render/featureGraphic.ts FEATURE_VARIANTS (default DEFAULT_FEATURE). */
+const FEATURE_VARIANT = args.find((a) => a.startsWith('--feature-variant='))?.slice('--feature-variant='.length);
 /** The IAP review frame is taken from the Apple 6.7" set (1290×2796) when it is rendered, else from the Google set (1080×1920). */
 const IAP_REVIEW_SET = DO_APPLE ? 'apple-6.7' : 'google';
 
@@ -817,253 +826,76 @@ async function composeAll(browser, set) {
 
 /* ---------- feature graphic 1024×500 ---------- */
 
-const drawFeatureInPage = () => {
-  const W = 1024;
-  const H = 500;
-  const c = document.getElementById('c');
-  c.width = W;
-  c.height = H;
-  const ctx = c.getContext('2d');
-  const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
-  const P = {
-    water: '#5ec1e6', waterLight: '#8fd9f0', grass: '#8fd16a', grassLight: '#a3dd7d', bush: '#5ea94a',
-    cliff: '#e0c99a', cliffDark: '#b89b67', text: '#1e2a44', selection: '#ffd23f',
-    // rules v3 obstacles, from src/render/palette.ts (grass biome wall tones, rock, water, sparkle)
-    grassShade: '#5aa836', wallLit: '#e3d9c6', wallMid: '#b9ad99', wallShade: '#7f7566',
-    rock: '#d9d4c8', rockDark: '#a39c8c', river: '#5fc9e8', waterSparkle: 'rgba(232,251,255,0.8)', shadow: 'rgba(26,58,90,0.22)',
-    player: '#3b82f6', playerLit: '#6d9bff', playerDark: '#1d4ed8', enemy: '#ef4444', enemyDark: '#b91c1c', neutral: '#8a94a6', neutralDark: '#5b6b85',
-    crown: '#facc15', crownEdge: '#ca8a04', crownDot: '#fde68a',
-  };
-
-  // water + waves
-  ctx.fillStyle = P.water;
-  ctx.fillRect(0, 0, W, H);
-  ctx.strokeStyle = P.waterLight;
-  ctx.lineWidth = 4;
-  for (let y = 30; y < H; y += 70) {
-    ctx.beginPath();
-    for (let x = -30; x <= W + 30; x += 12) ctx.lineTo(x, y + Math.sin((x + y) / 45) * 6);
-    ctx.stroke();
-  }
-
-  // island: cliff edge then grass plateau
-  const island = (dy, fill) => {
-    ctx.fillStyle = fill;
-    ctx.beginPath();
-    ctx.moveTo(60, 150 + dy);
-    ctx.bezierCurveTo(140, 60 + dy, 420, 40 + dy, 620, 70 + dy);
-    ctx.bezierCurveTo(820, 90 + dy, 1000, 140 + dy, 980, 270 + dy);
-    ctx.bezierCurveTo(960, 400 + dy, 760, 470 + dy, 520, 450 + dy);
-    ctx.bezierCurveTo(300, 435 + dy, 100, 420 + dy, 50, 320 + dy);
-    ctx.bezierCurveTo(20, 250 + dy, 30, 190 + dy, 60, 150 + dy);
-    ctx.closePath();
-    ctx.fill();
-  };
-  island(18, P.cliffDark);
-  island(10, P.cliff);
-  island(0, P.grass);
-  ctx.fillStyle = P.grassLight;
-  for (const [x, y, r] of [[300, 330, 70], [700, 150, 55], [880, 400, 45]]) {
-    ctx.beginPath();
-    ctx.ellipse(x, y, r, r * 0.55, 0, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.fillStyle = P.bush;
-  for (const [x, y] of [[130, 250], [180, 380], [900, 230], [820, 400], [560, 420], [660, 60], [420, 90]]) {
-    ctx.beginPath();
-    ctx.arc(x, y, 12, 0, Math.PI * 2);
-    ctx.arc(x + 14, y + 4, 10, 0, Math.PI * 2);
-    ctx.arc(x - 12, y + 5, 9, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  // three towers on the island; v3: no roads — a stone wall with a gap, a river and a boulder are
-  // the obstacles, and streams are straight owner-coloured ribbons between towers that see each other
-  const T = [
-    { x: 150, y: 160, n: 24, fill: P.player, edge: P.playerDark, crown: true },
-    { x: 890, y: 130, n: 18, fill: P.enemy, edge: P.enemyDark, flag: true },
-    { x: 800, y: 320, n: 7, fill: P.neutral, edge: P.neutralDark },
-  ];
-  const poly = (pts) => {
-    ctx.beginPath();
-    pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
-  };
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-
-  // river (terrain.ts drawRiver): dark bank lip, pale wet rim, water body, lighter centre, ripple line
-  const river = [[40, 285], [150, 318], [232, 400], [285, 452]];
-  const rw = 26;
-  poly(river); ctx.strokeStyle = P.grassShade; ctx.lineWidth = rw + 8; ctx.stroke();
-  poly(river); ctx.strokeStyle = P.waterLight; ctx.lineWidth = rw + 2; ctx.stroke();
-  poly(river); ctx.strokeStyle = P.river; ctx.lineWidth = rw - 2; ctx.stroke();
-  poly(river); ctx.strokeStyle = P.waterLight; ctx.globalAlpha = 0.45; ctx.lineWidth = rw * 0.45; ctx.stroke();
-  ctx.globalAlpha = 0.8; ctx.strokeStyle = P.waterSparkle; ctx.lineWidth = 2;
-  ctx.beginPath();
-  for (let i = 1; i < river.length; i++) {
-    const [ax, ay] = river[i - 1]; const [bx, by] = river[i];
-    const len = Math.hypot(bx - ax, by - ay); const tx = (bx - ax) / len; const ty = (by - ay) / len;
-    for (let d = 6; d <= len - 6; d += 4) {
-      const sn = Math.sin((d / 22) * Math.PI * 2) * 2.5 - rw * 0.14;
-      const x = ax + tx * d - ty * sn; const y = ay + ty * d + tx * sn;
-      if (i === 1 && d === 6) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    }
-  }
-  ctx.stroke();
-  ctx.globalAlpha = 1;
-
-  // stone wall with a gap (terrain.ts drawWall): shadow, ink contour, shaded side face, lit top face,
-  // cap line, lit edge and battlement merlons — the enemy's stream to the neutral tower runs through the gap
-  const ww = 24;
-  const wallSegs = [[[640, 205], [790, 222]], [[850, 230], [975, 246]]];
-  for (const seg of wallSegs) {
-    poly(seg); ctx.save(); ctx.translate(4, 8); ctx.globalAlpha = 0.55; ctx.strokeStyle = P.shadow; ctx.lineWidth = ww + 4; ctx.stroke(); ctx.restore();
-    poly(seg); ctx.save(); ctx.translate(0, 4); ctx.strokeStyle = 'rgba(30,42,68,0.4)'; ctx.lineWidth = ww + 3; ctx.stroke();
-    ctx.strokeStyle = P.wallShade; ctx.lineWidth = ww; ctx.stroke(); ctx.restore();
-    poly(seg); ctx.strokeStyle = P.wallMid; ctx.lineWidth = ww; ctx.stroke();
-    poly(seg); ctx.strokeStyle = 'rgba(70,62,54,0.7)'; ctx.lineWidth = 2; ctx.stroke();
-    const [[ax, ay], [bx, by]] = seg;
-    const len = Math.hypot(bx - ax, by - ay); const tx = (bx - ax) / len; const ty = (by - ay) / len;
-    const nx = ty; const ny = -tx; // lit (upper-left facing) side
-    const half = ww / 2;
-    ctx.strokeStyle = 'rgba(227,217,198,0.85)'; ctx.lineWidth = 2.5;
-    ctx.beginPath(); ctx.moveTo(ax + nx * (half - 2), ay + ny * (half - 2)); ctx.lineTo(bx + nx * (half - 2), by + ny * (half - 2)); ctx.stroke();
-    const pitch = 16; const count = Math.max(1, Math.floor(len / pitch)); const start = (len - (count - 1) * pitch) / 2;
-    for (let k = 0; k < count; k++) {
-      const d = start + k * pitch;
-      ctx.save(); ctx.translate(ax + tx * d + nx * (half - 1), ay + ty * d + ny * (half - 1)); ctx.rotate(Math.atan2(ty, tx));
-      ctx.fillStyle = P.wallLit; ctx.fillRect(-3.5, -5, 7, 6);
-      ctx.strokeStyle = 'rgba(30,42,68,0.35)'; ctx.lineWidth = 1; ctx.strokeRect(-3.5, -5, 7, 6);
-      ctx.restore();
-    }
-  }
-
-  // boulder (terrain.ts drawRock look): ground shadow, shaded base, lit top facet
-  const rock = (x, y, r) => {
-    ctx.fillStyle = P.shadow;
-    ctx.beginPath(); ctx.ellipse(x + 6, y + r * 0.55, r * 1.15, r * 0.5, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = P.rockDark;
-    ctx.beginPath(); ctx.moveTo(x - r, y + r * 0.35); ctx.quadraticCurveTo(x - r * 0.9, y - r * 0.8, x - r * 0.2, y - r);
-    ctx.quadraticCurveTo(x + r * 0.7, y - r * 1.05, x + r, y - r * 0.1); ctx.quadraticCurveTo(x + r * 0.9, y + r * 0.6, x, y + r * 0.62);
-    ctx.quadraticCurveTo(x - r * 0.6, y + r * 0.62, x - r, y + r * 0.35); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = 'rgba(30,42,68,0.35)'; ctx.lineWidth = 2; ctx.stroke();
-    ctx.fillStyle = P.rock;
-    ctx.beginPath(); ctx.moveTo(x - r * 0.75, y + r * 0.05); ctx.quadraticCurveTo(x - r * 0.7, y - r * 0.7, x - r * 0.15, y - r * 0.82);
-    ctx.quadraticCurveTo(x + r * 0.45, y - r * 0.85, x + r * 0.6, y - r * 0.3); ctx.quadraticCurveTo(x + r * 0.1, y - r * 0.1, x - r * 0.75, y + r * 0.05); ctx.closePath(); ctx.fill();
-  };
-  rock(735, 425, 30);
-  rock(560, 90, 18);
-
-  // guide line (rules v3 §2.0b.8): the player's tower can see the enemy keep — thin, 30 % owner colour
-  ctx.save(); ctx.globalAlpha = 0.3; ctx.strokeStyle = P.player; ctx.lineWidth = 3; ctx.setLineDash([10, 8]);
-  ctx.beginPath(); ctx.moveTo(T[0].x + 60, T[0].y - 2); ctx.lineTo(T[1].x - 60, T[1].y + 2); ctx.stroke(); ctx.restore();
-
-  // straight stream ribbons (draw.ts drawLinks): translucent owner body, paper chevrons marching to the
-  // target, arrowhead at the target end; the player's has an ink outline so it reads first
-  const R = 54;
-  const ribbon = (a, b, body, mine) => {
-    const len = Math.hypot(b.x - a.x, b.y - a.y); const dx = (b.x - a.x) / len; const dy = (b.y - a.y) / len;
-    const nx = -dy; const ny = dx;
-    const s0 = R + 12; const s1 = len - R - 16;
-    const at = (s) => ({ x: a.x + dx * s, y: a.y + dy * s });
-    const p0 = at(s0); const p1 = at(s1);
-    if (mine) { ctx.globalAlpha = 0.6; ctx.strokeStyle = P.text; ctx.lineWidth = 14; ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke(); }
-    ctx.globalAlpha = mine ? 0.72 : 0.55; ctx.strokeStyle = body; ctx.lineWidth = 12;
-    ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
-    ctx.globalAlpha = mine ? 0.9 : 0.75; ctx.strokeStyle = '#fffaf0'; ctx.lineWidth = 2.6;
-    ctx.beginPath();
-    for (let sp = s0 + 10; sp < s1 - 8; sp += 26) {
-      const p = at(sp);
-      ctx.moveTo(p.x - dx * 3.5 + nx * 4, p.y - dy * 3.5 + ny * 4); ctx.lineTo(p.x + dx * 3, p.y + dy * 3); ctx.lineTo(p.x - dx * 3.5 - nx * 4, p.y - dy * 3.5 - ny * 4);
-    }
-    ctx.stroke();
-    ctx.globalAlpha = 1;
-    ctx.beginPath(); ctx.moveTo(p1.x + dx * 14, p1.y + dy * 14); ctx.lineTo(p1.x - dx * 6 + nx * 12, p1.y - dy * 6 + ny * 12);
-    ctx.lineTo(p1.x - dx, p1.y - dy); ctx.lineTo(p1.x - dx * 6 - nx * 12, p1.y - dy * 6 - ny * 12); ctx.closePath();
-    if (mine) { ctx.strokeStyle = P.text; ctx.lineWidth = 3; ctx.stroke(); }
-    ctx.fillStyle = body; ctx.fill();
-    return { dx, dy, at, s0, s1 };
-  };
-  ribbon(T[1], T[2], P.enemy, false); // enemy stream through the wall gap into the neutral tower
-  const blue = ribbon(T[0], T[2], P.playerLit, true); // player stream, straight across the island
-  // marching soldiers (as dots, the app-icon look) on the player's stream
-  for (let i = 1; i <= 6; i++) {
-    const p = blue.at(blue.s0 + 80 + i * 62);
-    ctx.fillStyle = P.player;
-    ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = P.playerDark; ctx.lineWidth = 2; ctx.stroke();
-  }
-
-  // towers in the app-icon look: filled disc, darker ring, bold count, crown for the player
-  const crown = (x, y, s) => {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.scale(s, s);
-    ctx.beginPath();
-    ctx.moveTo(-120, 60); ctx.lineTo(-90, -30); ctx.lineTo(-36, 30); ctx.lineTo(0, -60);
-    ctx.lineTo(36, 30); ctx.lineTo(90, -30); ctx.lineTo(120, 60); ctx.closePath();
-    ctx.fillStyle = P.crown; ctx.strokeStyle = P.crownEdge; ctx.lineWidth = 10; ctx.lineJoin = 'round';
-    ctx.fill(); ctx.stroke();
-    ctx.fillRect(-120, 60, 240, 40); ctx.strokeRect(-120, 60, 240, 40);
-    ctx.fillStyle = P.crownDot;
-    for (const [cx, cy, r] of [[-90, -30, 16], [0, -60, 18], [90, -30, 16]]) { ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill(); }
-    ctx.restore();
-  };
-  for (const t of T) {
-    const R = 54;
-    ctx.fillStyle = 'rgba(25,45,70,0.22)';
-    ctx.beginPath(); ctx.ellipse(t.x, t.y + R * 0.9, R * 1.1, R * 0.4, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'rgba(59,130,246,0.12)';
-    ctx.beginPath(); ctx.arc(t.x, t.y, R * 1.25, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = t.fill;
-    ctx.beginPath(); ctx.arc(t.x, t.y, R, 0, Math.PI * 2); ctx.fill();
-    ctx.lineWidth = 6; ctx.strokeStyle = t.edge; ctx.stroke();
-    ctx.fillStyle = '#fff'; ctx.font = `900 ${R * 1.15}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(String(t.n), t.x, t.y + 4);
-    if (t.crown) crown(t.x, t.y - R - 22, 0.22);
-    if (t.flag) {
-      ctx.strokeStyle = P.text; ctx.lineWidth = 4;
-      ctx.beginPath(); ctx.moveTo(t.x + R - 6, t.y - R + 4); ctx.lineTo(t.x + R - 6, t.y - R - 40); ctx.stroke();
-      ctx.fillStyle = P.enemy;
-      ctx.beginPath(); ctx.moveTo(t.x + R - 6, t.y - R - 40); ctx.lineTo(t.x + R + 30, t.y - R - 30); ctx.lineTo(t.x + R - 6, t.y - R - 18); ctx.closePath(); ctx.fill();
-    }
-  }
-
-  // title in the game's outlined style
-  const outlined = (text, x, y, fill, px) => {
-    ctx.font = `900 ${px}px ${FONT}`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
-    ctx.lineWidth = px * 0.2; ctx.strokeStyle = P.text; ctx.strokeText(text, x, y);
-    ctx.fillStyle = fill; ctx.fillText(text, x, y);
-  };
-  outlined('TOWER', 512, 150, '#ffffff', 118);
-  outlined('CLASH', 512, 262, P.selection, 118);
-  // tagline pill
-  ctx.font = `bold 30px ${FONT}`;
-  const tag = 'Capture every tower';
-  const tw = ctx.measureText(tag).width + 56;
-  ctx.fillStyle = '#ffffff';
-  ctx.beginPath(); ctx.roundRect(512 - tw / 2, 372, tw, 56, 28); ctx.fill();
-  ctx.strokeStyle = '#b8c6da'; ctx.lineWidth = 3; ctx.stroke();
-  ctx.fillStyle = P.text; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText(tag, 512, 401);
-
-  return c.toDataURL('image/png').split(',')[1];
-};
+/**
+ * ART-19: the feature graphic is drawn by src/render/featureGraphic.ts (the app icon's "Sunburst"
+ * field and clay hero tower, the game's own soldiers / badges / wordmark), bundled with esbuild for
+ * the page like scripts/renderIcons.ts does with appIcon.ts. It needs no game build and no preview
+ * server: the page is a fake origin that only serves the bundled Fredoka faces from public/fonts.
+ */
+const FEATURE_ORIGIN = 'http://tower-clash.feature';
+const FEATURE_PAGE = `<!doctype html><html><head><meta charset="utf-8"><style>
+@font-face { font-family: 'Fredoka'; font-weight: 700; src: url('/fonts/fredoka-700-latin.woff2') format('woff2'); }
+@font-face { font-family: 'Fredoka'; font-weight: 500; src: url('/fonts/fredoka-500-latin.woff2') format('woff2'); }
+</style></head><body style="margin:0"></body></html>`;
+/** Google Play: 1024×500, 24-bit PNG or JPEG, no alpha, at most 1 MB (we keep it under MAX_BYTES). */
+const FEATURE_W = 1024;
+const FEATURE_H = 500;
 
 async function featureGraphic(browser) {
-  const page = await browser.newPage({ viewport: { width: 1024, height: 500 } });
-  await page.setContent(CANVAS_PAGE);
-  const b64 = await page.evaluate(drawFeatureInPage);
-  const file = join(STORE, 'feature-graphic.png');
-  writeFileSync(file, recompressPng(Buffer.from(b64, 'base64')));
+  const { build } = await import('esbuild');
+  const bundle = await build({
+    entryPoints: [join(ROOT, 'src/render/featureGraphic.ts')],
+    bundle: true,
+    format: 'iife',
+    globalName: 'TCFeature',
+    target: 'es2022',
+    write: false,
+    logLevel: 'error',
+  });
+  const page = await browser.newPage({ viewport: { width: FEATURE_W, height: FEATURE_H } });
+  await page.route(`${FEATURE_ORIGIN}/**`, (route) => {
+    const path = new globalThis.URL(route.request().url()).pathname;
+    if (path.startsWith('/fonts/')) return route.fulfill({ contentType: 'font/woff2', body: readFileSync(join(ROOT, 'public', path)) });
+    return route.fulfill({ contentType: 'text/html', body: FEATURE_PAGE });
+  });
+  await page.goto(`${FEATURE_ORIGIN}/`);
+  await page.addScriptTag({ content: bundle.outputFiles[0].text });
+  const variants = await page.evaluate(() => [window.TCFeature.DEFAULT_FEATURE, window.TCFeature.FEATURE_VARIANTS]);
+  const variant = FEATURE_VARIANT ?? variants[0];
+  if (!variants[1].includes(variant)) throw new Error(`unknown feature variant ${variant} (${variants[1].join(', ')})`);
+  const b64 = await page.evaluate(async (v) => {
+    await document.fonts.load('700 100px Fredoka');
+    if (!document.fonts.check('700 100px Fredoka')) throw new Error('Fredoka 700 did not load');
+    const c = document.createElement('canvas');
+    c.width = window.TCFeature.FEATURE_W;
+    c.height = window.TCFeature.FEATURE_H;
+    window.TCFeature.drawFeatureGraphic(c.getContext('2d'), { variant: v });
+    return c.toDataURL('image/png').split(',')[1];
+  }, variant);
   await page.close();
-  const size = statSync(file).size;
-  if (size > MAX_BYTES) throw new Error(`feature graphic is ${size} bytes (> 600 KB)`);
-  console.log(`feature graphic written (${kb(size)})`);
+  const png = recompressPng(Buffer.from(b64, 'base64'));
+  // Play rejects an alpha channel: the canvas is opaque, so the re-encoder must have dropped it
+  const [w, h] = pngSize(png);
+  if (w !== FEATURE_W || h !== FEATURE_H) throw new Error(`feature graphic is ${w}×${h}, not ${FEATURE_W}×${FEATURE_H}`);
+  if (png[25] !== 2) throw new Error(`feature graphic PNG colour type ${png[25]} (want 2 = RGB, no alpha)`);
+  if (png.length > MAX_BYTES) throw new Error(`feature graphic is ${png.length} bytes (> 600 KB)`);
+  const file = join(STORE, 'feature-graphic.png');
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, png);
+  console.log(`feature graphic "${variant}" written to ${file} (${w}×${h} RGB, ${kb(png.length)})`);
 }
 
 /* ---------- main ---------- */
+
+if (FEATURE_ONLY) {
+  const browser = await chromium.launch(existsSync(HEADLESS_SHELL) ? { executablePath: HEADLESS_SHELL } : {});
+  try {
+    await featureGraphic(browser);
+  } finally {
+    await browser.close();
+  }
+  process.exit(0);
+}
 
 const server = await startPreview();
 const cleanup = () => {
