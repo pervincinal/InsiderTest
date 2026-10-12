@@ -2,6 +2,7 @@ import type { Owner, TowerKind, UnitKind } from '../sim/types';
 import type { Palette, Tones } from './palette';
 import { shade } from './palette';
 import { TANK_RADIUS, UNIT_OUTLINE_PX } from './layout';
+import { C } from '../sim/constants';
 import { font, roundRect } from './widgets';
 import { SHADOW_DX, SHADOW_DY } from './terrain';
 import { chunkBackoff, loadChunk } from '../lazyChunk';
@@ -41,6 +42,8 @@ export interface TowerDrawOptions {
   skin?: TowerSkin;
   /** Bypass the sprite cache (offscreen exports such as the share card draw at their own scale). */
   direct?: boolean;
+  /** Depth scale about the anchor (ART-21 camera: < 1 away from the near edge); the cache blits resampled, no new keys. */
+  scale?: number;
 }
 
 /**
@@ -1065,15 +1068,16 @@ export function towerSpriteKey(pal: Palette, t: TowerLook, o: TowerDrawOptions):
 /** Draw one building (without its shadow — call drawTowerShadow earlier so units walk over it). */
 export function drawTowerSprite(ctx: CanvasRenderingContext2D, pal: Palette, t: TowerLook, o: TowerDrawOptions): void {
   const tones = pal.ownerTones[t.owner];
-  const y = t.y - (o.raised ? 4 : 0);
+  const k = o.scale ?? 1;
+  const y = t.y - (o.raised ? 4 * k : 0);
   const key = towerSpriteKey(pal, t, o);
-  if (key !== null && drawSprite(ctx, key, t.x, y, towerBox(t.kind, t.level), (c, p) => drawKind(c, pal, tones, t.kind, t.x, y, t.level, o, p))) return;
+  if (key !== null && drawSprite(ctx, key, t.x, y, towerBox(t.kind, t.level), (c, p) => drawKind(c, pal, tones, t.kind, t.x, y, t.level, o, p), k)) return;
   const squash = o.squash ?? 1;
-  const transformed = squash !== 1;
+  const transformed = squash !== 1 || k !== 1;
   if (transformed) {
     ctx.save();
     ctx.translate(t.x, y);
-    ctx.scale(1 + (1 - squash) * 0.7, squash);
+    ctx.scale((1 + (1 - squash) * 0.7) * k, squash * k);
     ctx.translate(-t.x, -y);
   }
   const wipe = o.wipe;
@@ -1215,27 +1219,180 @@ export function unitStyle(pal: Palette, owner: Owner): UnitStyle {
 /**
  * Ink sticker outline under a soldier: one capsule from the head centre to the body bottom, `r` wide
  * (the body radius plus `UNIT_OUTLINE_PX`), so the silhouette reads on a ribbon of its own hue (BUG-39).
- * Shared with the shape skins in skinShapes.ts.
+ * `xb` is the capsule's bottom centre when the body leans (defaults to `x`). Shared with the shape
+ * skins in skinShapes.ts.
  */
-export function unitOutline(ctx: CanvasRenderingContext2D, pal: Palette, x: number, headY: number, bottom: number, r: number): void {
+export function unitOutline(ctx: CanvasRenderingContext2D, pal: Palette, x: number, headY: number, bottom: number, r: number, xb = x): void {
   ctx.fillStyle = pal.ink;
-  capsule(ctx, x, headY, bottom, r);
+  capsule(ctx, x, headY, bottom, r, xb);
   ctx.fill();
 }
 
-export function capsule(ctx: CanvasRenderingContext2D, x: number, top: number, bottom: number, r: number): void {
+/** Vertical capsule (or a leaning one when the bottom centre `xb` differs from the top centre `x`). */
+export function capsule(ctx: CanvasRenderingContext2D, x: number, top: number, bottom: number, r: number, xb = x): void {
   ctx.beginPath();
   ctx.moveTo(x - r, top);
   ctx.arc(x, top, r, Math.PI, 0);
-  ctx.lineTo(x + r, bottom);
-  ctx.arc(x, bottom, r, 0, Math.PI);
+  ctx.lineTo(xb + r, bottom);
+  ctx.arc(xb, bottom, r, 0, Math.PI);
   ctx.closePath();
 }
 
+/* ---------- the march (ART-20) ---------- */
+
+/** Face radius around the head centre (the helmet skins are drawn to it). */
+const HEAD_R = 4.2;
+/** Tank tread band height (× the tank radius); the links show below the hull. */
+export const TREAD_H = 1.4;
+/** Ground speed of a tank (sim px per ms): the bottom run of the tread scrolls back at it. */
+const TREAD_PX_PER_MS = (C.UNIT_SPEED * C.TANK_SPEED_MUL) / 1000;
+
 /**
- * Clay soldier or tank. (dx, dy) is the unit direction of travel; the squash-and-stretch bob uses
- * `id` so a column does not march in lock-step. `scale` < 1 for the spawn scale-in. Cheap: no
- * gradients, no transforms, ≤ 7 fills per soldier (outline included).
+ * Stride cycle of a marching soldier: each leg swings fore and aft 6.5 times a second. At the sim's
+ * 120 px/s and the play draw scale (×1.45) a foot on the ground travels back 120 / 13 ≈ 9.2 px per
+ * half cycle, which is what the ±`STRIDE_SWING` design px swing covers — planted feet do not skate.
+ */
+export const STRIDE_HZ = 6.5;
+/** Fore / aft foot swing and the lift of the swinging foot, in design px (× the unit's scale). */
+export const STRIDE_SWING = 3.2;
+const STRIDE_LIFT = 2.6;
+const STRIDE_RAD_PER_MS = (TAU * STRIDE_HZ) / 1000;
+/** Leg stroke (design px): clay legs are chunky with round boots, robot pistons a touch thinner. */
+const LEG_W = 2.1;
+
+/**
+ * Stride phase in radians: leg 0 is forward-most at π/2, leg 1 half a cycle behind. `id` offsets it
+ * (golden angle) so a column is never in lock-step; reduced motion holds a mid-stride pose.
+ */
+export function stridePhase(id: number, nowMs: number, motion: boolean): number {
+  return motion ? nowMs * STRIDE_RAD_PER_MS + id * 2.39996 : Math.PI / 2;
+}
+
+/** Radians from `phase` to the nearest push-off (one foot plants in front, the other leaves the ground behind). */
+export function pushOffDistance(phase: number): number {
+  const m = (((phase - Math.PI / 2) % Math.PI) + Math.PI) % Math.PI;
+  return Math.min(m, Math.PI - m);
+}
+
+/** Pose of a marching soldier at one instant (one shared object: read it before the next `soldierPose`). */
+export interface SoldierPose {
+  /** Stride phase (`stridePhase`). */
+  phase: number;
+  /** Bob above the ground: highest as the legs pass, lowest at full stride (design px × scale). */
+  hop: number;
+  /** Squash-and-stretch factor (> 1 tall, < 1 squashed on landing). */
+  stretch: number;
+  hipY: number;
+  /** Body capsule: top / bottom centres, their x (the body leans into the travel direction), radius. */
+  bodyTop: number;
+  bodyBottom: number;
+  xTop: number;
+  xBottom: number;
+  r: number;
+  /** Head centre (the helmet contract: face radius 4.2 × scale around it). */
+  hx: number;
+  hy: number;
+}
+
+const POSE: SoldierPose = { phase: 0, hop: 0, stretch: 1, hipY: 0, bodyTop: 0, bodyBottom: 0, xTop: 0, xBottom: 0, r: 0, hx: 0, hy: 0 };
+
+/** Where body and head sit this frame: shared by the clay soldier and the shield-bearer skin. */
+export function soldierPose(x: number, y: number, dx: number, id: number, nowMs: number, motion: boolean, s: number): SoldierPose {
+  const phase = stridePhase(id, nowMs, motion);
+  const pass = Math.abs(Math.cos(phase)); // 1 as the legs pass each other, 0 at full stride
+  const p = POSE;
+  p.phase = phase;
+  p.hop = pass * 1.1 * s;
+  p.stretch = 1 + (pass - 0.5) * 0.1;
+  p.r = 3.8 * s * (2 - p.stretch);
+  p.hipY = y - 6.8 * s - p.hop;
+  p.bodyBottom = p.hipY - 2.4 * s;
+  p.bodyTop = p.bodyBottom - 2.6 * s * p.stretch;
+  // forward lean: hips over the feet, shoulders and head ahead of them in the travel direction
+  p.xBottom = x + dx * 0.3 * s;
+  p.xTop = x + dx * 1.2 * s;
+  p.hx = x + dx * 1.7 * s;
+  p.hy = p.bodyTop - 2.6 * s;
+  return p;
+}
+
+/**
+ * Two legs, alternating (ART-20), shared by every soldier shape: hip → knee → foot → toe, one path
+ * stroked twice (ink outline, then `tone`). The swinging foot lifts and its knee bends forward; the
+ * planted foot slides back under the body. In profile the hips overlap and the legs scissor; facing
+ * the camera they stand apart and step up and down. Toes point the way the soldier walks. `piston`:
+ * straight robot legs with square ends.
+ */
+export function drawLegs(ctx: CanvasRenderingContext2D, pal: Palette, x: number, hipY: number, y: number, dx: number, dy: number, phase: number, s: number, tone: string, piston = false): void {
+  const spread = 1.5 * s * (1 - 0.5 * Math.abs(dx));
+  const toe = dx * (piston ? 1.1 : 1.5) * s;
+  const footY = y - 1.1 * s;
+  ctx.beginPath();
+  for (let i = 0; i < 2; i++) {
+    const ph = phase + i * Math.PI;
+    const swing = Math.sin(ph) * STRIDE_SWING * s;
+    const lift = Math.max(0, Math.cos(ph)) * STRIDE_LIFT * s;
+    const hx = x + (i ? spread : -spread);
+    const fx = hx + dx * swing;
+    const fy = footY + dy * swing * 0.5 - lift;
+    ctx.moveTo(hx, hipY);
+    ctx.lineTo((hx + fx) / 2 + (piston ? 0 : dx * lift * 1.4), (hipY + fy) / 2);
+    ctx.lineTo(fx, fy);
+    ctx.lineTo(fx + toe, fy);
+  }
+  ctx.lineCap = piston ? 'square' : 'round';
+  ctx.lineJoin = piston ? 'miter' : 'round';
+  ctx.strokeStyle = pal.ink;
+  ctx.lineWidth = (LEG_W + 1.6 * UNIT_OUTLINE_PX) * s;
+  ctx.stroke();
+  ctx.strokeStyle = tone;
+  ctx.lineWidth = (piston ? LEG_W - 0.3 : LEG_W) * s;
+  ctx.stroke();
+}
+
+/** Eyes looking the way the soldier walks, just under the helmet brim (one fill, two dots). */
+export function drawEyes(ctx: CanvasRenderingContext2D, color: string, hx: number, hy: number, dx: number, s: number): void {
+  const ex = hx + dx * 1.5 * s;
+  const gap = 1.45 * s * (1 - 0.3 * Math.abs(dx));
+  const ey = hy + 0.85 * s;
+  const er = 0.85 * s;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(ex - gap + er, ey);
+  ctx.arc(ex - gap, ey, er, 0, TAU);
+  ctx.moveTo(ex + gap + er, ey);
+  ctx.arc(ex + gap, ey, er, 0, TAU);
+  ctx.fill();
+}
+
+/**
+ * Tread links on a tank's tracks (ART-20): short light ticks along the bottom run that scroll back
+ * under the hull as the tank moves (static under reduced motion). One stroke. `top`/`bottom` bound
+ * the visible tread band, `hw` its half width.
+ */
+export function treadMarks(ctx: CanvasRenderingContext2D, pal: Palette, x: number, top: number, bottom: number, hw: number, dx: number, nowMs: number, motion: boolean, s: number): void {
+  const gap = 0.42 * s;
+  const w = hw * 2;
+  // the run on the ground stays put while the hull moves over it: it scrolls against the travel direction
+  const shift = motion ? (((nowMs * TREAD_PX_PER_MS * (dx >= 0 ? -1 : 1)) % gap) + gap) % gap : gap / 2;
+  ctx.beginPath();
+  for (let u = shift; u < w; u += gap) {
+    const tx = x - hw + u;
+    ctx.moveTo(tx, top);
+    ctx.lineTo(tx - (dx >= 0 ? 0.12 : -0.12) * s, bottom);
+  }
+  ctx.strokeStyle = pal.metal.lit;
+  ctx.lineWidth = Math.max(1, 0.1 * s);
+  ctx.lineCap = 'butt';
+  ctx.stroke();
+}
+
+/**
+ * Clay soldier or tank. (dx, dy) is the unit direction of travel; the stride and the bob use `id`
+ * so a column does not march in lock-step. `scale` < 1 for the spawn scale-in. Cheap: no gradients,
+ * no transforms, no save/restore, ≤ 12 fills / strokes per soldier (ART-20, outline included):
+ * shadow · legs (ink + tone) · outline · shade side · body · lit facet · spear shaft · spear head ·
+ * face + fist · eyes · helmet.
  */
 export function drawUnitSprite(
   ctx: CanvasRenderingContext2D,
@@ -1267,10 +1424,12 @@ export function drawUnitSprite(
     ctx.beginPath();
     ctx.ellipse(x + 3, y + 5, s + 3, s * 0.55, 0, 0, Math.PI * 2);
     ctx.fill();
-    // treads
+    // treads, with links scrolling back under the hull (ART-20)
+    const tTop = y - s * 0.55 + rock * 0.3;
     ctx.fillStyle = pal.metal.shade;
-    roundRect(ctx, { x: x - s - 1, y: y - s * 0.55 + rock * 0.3, w: s * 2 + 2, h: s * 1.2 }, 3);
+    roundRect(ctx, { x: x - s - 1, y: tTop, w: s * 2 + 2, h: s * TREAD_H }, 3);
     ctx.fill();
+    treadMarks(ctx, pal, x, tTop + 1, tTop + s * TREAD_H - 1, s - 1.5, dx, nowMs, motion, s);
     // hull: shade (offset) then mid then lit top strip
     ctx.fillStyle = st.shade;
     roundRect(ctx, { x: x - s + 3.5, y: y - s * 0.85 + rock + 1.5, w: s * 2 - 4, h: s * 1.25 }, 3);
@@ -1295,41 +1454,91 @@ export function drawUnitSprite(
     ctx.stroke();
     return;
   }
-  // squash & stretch: stretched tall at the top of the hop, squashed on landing
-  const ph = motion ? Math.sin(nowMs / 95 + id * 1.7) : 0;
-  const stretch = 1 + ph * 0.09;
-  const hop = Math.max(0, ph) * 1.6;
-  const r = 4.4 * scale * (2 - stretch);
-  const bodyTop = y - (12.5 * scale) * stretch - hop;
-  const bodyBottom = y - 4 * scale - hop;
-  const lean = dx * 1.3;
+  const s = scale;
+  const p = soldierPose(x, y, dx, id, nowMs, motion, s);
+  const o = UNIT_OUTLINE_PX * s;
   // 1 shadow (long, to the lower-right)
   ctx.fillStyle = st.shadow;
   ctx.beginPath();
-  ctx.ellipse(x + 2.5, y + 3.5, 6.5 * scale, 2.8 * scale, 0, 0, Math.PI * 2);
+  ctx.ellipse(x + 2.5 * s, y + 3 * s, 6.5 * s, 2.6 * s, 0, 0, TAU);
   ctx.fill();
-  // 2 ink sticker outline around head + body (BUG-39: separates the soldier from a same-hue ribbon)
-  const hy = bodyTop - 3.2 * scale;
-  unitOutline(ctx, pal, x + lean * 0.45, hy, bodyBottom, r + UNIT_OUTLINE_PX * scale);
-  // 3 shade side / backpack (offset away from the light and opposite to travel)
+  // 2–3 legs, alternating (ink outline + owner shade)
+  drawLegs(ctx, pal, x, p.hipY, y, dx, dy, p.phase, s, st.helmet);
+  // 4 ink sticker outline around head + body (BUG-39: separates the soldier from a same-hue ribbon)
+  ctx.fillStyle = pal.ink;
+  capsule(ctx, p.xTop, p.bodyTop, p.bodyBottom, p.r + o, p.xBottom);
+  ctx.moveTo(p.hx + HEAD_R * s + o, p.hy);
+  ctx.arc(p.hx, p.hy, HEAD_R * s + o, 0, TAU);
+  ctx.fill();
+  // 5 shade side / backpack (offset away from the light and opposite to travel)
+  const back = (0.7 - dx * 0.6) * s; // stays inside the ink outline
   ctx.fillStyle = st.shade;
-  capsule(ctx, x + 1.4 - dx * 1.2, bodyTop + 1.5, bodyBottom + 1, r);
+  capsule(ctx, p.xTop + back, p.bodyTop + 1.4 * s, p.bodyBottom + 0.8 * s, p.r, p.xBottom + back);
   ctx.fill();
-  // 4 body
+  // 6 body, leaning into the march
   ctx.fillStyle = st.mid;
-  capsule(ctx, x + lean * 0.3, bodyTop, bodyBottom, r);
+  capsule(ctx, p.xTop, p.bodyTop, p.bodyBottom, p.r, p.xBottom);
   ctx.fill();
-  // 5 lit facet (upper-left)
+  // 7 lit facet (upper-left)
   ctx.fillStyle = st.lit;
-  capsule(ctx, x + lean * 0.3 - r * 0.45, bodyTop + 0.5, bodyTop + (bodyBottom - bodyTop) * 0.55, r * 0.32);
+  capsule(ctx, p.xTop - p.r * 0.45, p.bodyTop + 0.5 * s, p.bodyTop + (p.bodyBottom - p.bodyTop) * 0.6, p.r * 0.32);
   ctx.fill();
-  // 6 face
+  // 8–9 spear on the travel side, swung with the arm against the front leg (shaft, bright head)
+  const hand = spear(ctx, pal, p, dx, s);
+  // 10 face + fist (one fill)
   ctx.fillStyle = st.face;
   ctx.beginPath();
-  ctx.arc(x + lean * 0.6, hy, 4.2 * scale, 0, Math.PI * 2);
+  ctx.arc(p.hx, p.hy, HEAD_R * s, 0, TAU);
+  ctx.moveTo(hand.x + 1.3 * s, hand.y);
+  ctx.arc(hand.x, hand.y, 1.3 * s, 0, TAU);
   ctx.fill();
-  // 7 helmet: owner-coloured cap by default, or the equipped skin
-  drawHelmet(ctx, pal, st, helmet, x + lean * 0.6, hy, scale, dx);
+  // 11 eyes, looking where he walks
+  drawEyes(ctx, pal.ink, p.hx, p.hy, dx, s);
+  // 12 helmet: owner-coloured cap by default, or the equipped skin
+  drawHelmet(ctx, pal, st, helmet, p.hx, p.hy, s, dx);
+}
+
+const HAND = { x: 0, y: 0 };
+
+/**
+ * A spear held on the travel side (right when walking straight up / down), rocking with the arm
+ * swing: ink shaft and a paper-bright leaf head above the helmet. Returns the hand (shared object).
+ */
+function spear(ctx: CanvasRenderingContext2D, pal: Palette, p: SoldierPose, dx: number, s: number): { x: number; y: number } {
+  const side = dx < -0.2 ? -1 : 1;
+  const arm = -Math.sin(p.phase); // the arm swings against leg 0
+  HAND.x = p.xBottom + side * 3.4 * s + dx * arm * 1.1 * s;
+  HAND.y = p.bodyBottom - 0.6 * s;
+  // shaft direction: tilted the way he walks, rocking a little with the arm
+  let ux = dx * 0.3 + side * 0.06 + arm * 0.07;
+  let uy = -1;
+  const len = Math.hypot(ux, uy);
+  ux /= len;
+  uy /= len;
+  const up = 15 * s;
+  const tx = HAND.x + ux * up;
+  const ty = HAND.y + uy * up;
+  ctx.strokeStyle = pal.ink;
+  ctx.lineWidth = 1.2 * s;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(HAND.x - ux * 3 * s, HAND.y - uy * 3 * s);
+  ctx.lineTo(tx, ty);
+  ctx.stroke();
+  // leaf head: base at the shaft top, point 3.4 px on, 1.3 px either side
+  const nx = -uy * 1.3 * s;
+  const ny = ux * 1.3 * s;
+  const mx = tx + ux * 1.2 * s;
+  const my = ty + uy * 1.2 * s;
+  ctx.fillStyle = pal.paper;
+  ctx.beginPath();
+  ctx.moveTo(tx, ty);
+  ctx.lineTo(mx + nx, my + ny);
+  ctx.lineTo(tx + ux * 3.4 * s, ty + uy * 3.4 * s);
+  ctx.lineTo(mx - nx, my - ny);
+  ctx.closePath();
+  ctx.fill();
+  return HAND;
 }
 
 /** Owner-coloured (or skin-coloured) cap: the upper half-disc of the helmet, closed along the brow. */

@@ -349,6 +349,21 @@ export function biomeFor(levelId: number): Biome {
   return 'twilight';
 }
 
+/**
+ * Footstep and wake puffs of marching columns per biome (ART-20; was sand only): the ground's own
+ * dust, lighter than the ground so a puff reads on it and on an owner ribbon — dry soil on grass and
+ * autumn, pale sand, powder snow, grey ash on the volcanic band, lilac heather dust at twilight.
+ * Kept out of `BiomeColors` so the terrain themes' re-lighting does not have to carry it.
+ */
+export const BIOME_DUST: Readonly<Record<Biome, string>> = Object.freeze({
+  grass: '#f4ecd2',
+  autumn: '#f7e3c0',
+  sand: '#fff6e0',
+  snow: '#ffffff',
+  volcanic: '#bdb4c2',
+  twilight: '#f3ecfd',
+});
+
 const shadeCache = new Map<string, string>();
 
 /* ---------- terrain themes (shop cosmetics, ECON-5) ---------- */

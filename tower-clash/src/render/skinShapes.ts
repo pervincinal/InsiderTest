@@ -16,7 +16,7 @@ import { shade } from './palette';
 import { TANK_RADIUS, UNIT_OUTLINE_PX } from './layout';
 import { roundRect } from './widgets';
 import type { RoofPart, RoofStyle, ShapeSkinDrawers, TowerDrawOptions, UnitStyle } from './sprites';
-import { INK_LINE, RIM, TAU, awning, banner, barrel, capsule, chimneySmoke, chimneyStack, cone, crenelsHalf, cylinder, dome, door, flag, gems, helmetCap, ledge, plinth, tier, unitOutline, wallRing } from './sprites';
+import { INK_LINE, RIM, TAU, awning, banner, barrel, capsule, chimneySmoke, chimneyStack, cone, crenelsHalf, cylinder, dome, door, drawLegs, flag, gems, helmetCap, ledge, plinth, soldierPose, stridePhase, tier, treadMarks, TREAD_H, unitOutline, wallRing } from './sprites';
 
 type T3 = readonly [number, number, number];
 
@@ -416,132 +416,146 @@ function unitShadow(ctx: CanvasRenderingContext2D, st: UnitStyle, x: number, y: 
 }
 
 /**
- * Shield bearer: the clay soldier under a steel great helm with an owner crest, carrying a kite
- * shield in owner colour on the travel side (≈ 11 fills; skins are player-only, so at most half
- * the column pays for it).
+ * Shield bearer: the clay soldier (same pose and legs as sprites.ts) under a steel great helm with
+ * an owner crest, carrying a kite shield in owner colour on the travel side. ≤ 12 fills / strokes:
+ * shadow · legs (ink + tone) · outline · shade side · body · helm · visor · crest · shield rim +
+ * face · boss (the shield covers the body's lit facet, so it has none).
  */
-function shieldSoldier(ctx: CanvasRenderingContext2D, pal: Palette, st: UnitStyle, x: number, y: number, dx: number, id: number, nowMs: number, motion: boolean, s: number): void {
-  const ph = motion ? Math.sin(nowMs / 95 + id * 1.7) : 0;
-  const stretch = 1 + ph * 0.09;
-  const hop = Math.max(0, ph) * 1.6;
-  const r = 4.4 * s * (2 - stretch);
-  const bodyTop = y - 12.5 * s * stretch - hop;
-  const bodyBottom = y - 4 * s - hop;
-  const lean = dx * 1.3;
+function shieldSoldier(ctx: CanvasRenderingContext2D, pal: Palette, st: UnitStyle, x: number, y: number, dx: number, dy: number, id: number, nowMs: number, motion: boolean, s: number): void {
+  const p = soldierPose(x, y, dx, id, nowMs, motion, s);
   unitShadow(ctx, st, x, y, s);
+  drawLegs(ctx, pal, x, p.hipY, y, dx, dy, p.phase, s, st.helmet);
   // ink sticker outline from the great helm down to the body (BUG-39)
-  unitOutline(ctx, pal, x + lean * 0.45, bodyTop - 3.5 * s, bodyBottom, Math.max(r, 4.7 * s) + UNIT_OUTLINE_PX * s);
+  unitOutline(ctx, pal, p.hx, p.hy - 0.3 * s, p.bodyBottom, Math.max(p.r, 4.7 * s) + UNIT_OUTLINE_PX * s, p.xBottom);
+  const back = (0.7 - dx * 0.6) * s; // stays inside the ink outline
   ctx.fillStyle = st.shade;
-  capsule(ctx, x + 1.4 - dx * 1.2, bodyTop + 1.5, bodyBottom + 1, r);
+  capsule(ctx, p.xTop + back, p.bodyTop + 1.4 * s, p.bodyBottom + 0.8 * s, p.r, p.xBottom + back);
   ctx.fill();
   ctx.fillStyle = st.mid;
-  capsule(ctx, x + lean * 0.3, bodyTop, bodyBottom, r);
+  capsule(ctx, p.xTop, p.bodyTop, p.bodyBottom, p.r, p.xBottom);
   ctx.fill();
-  ctx.fillStyle = st.lit;
-  capsule(ctx, x + lean * 0.3 - r * 0.45, bodyTop + 0.5, bodyTop + (bodyBottom - bodyTop) * 0.55, r * 0.32);
-  ctx.fill();
-  // great helm over the face: steel dome, visor slit, lit rim, owner crest
-  const hx = x + lean * 0.6;
-  const hy = bodyTop - 3.2 * s;
+  // great helm over the face: steel dome, visor slit (looking ahead), owner crest
+  const hx = p.hx;
+  const hy = p.hy;
   const m = pal.metal;
   ctx.fillStyle = m.mid;
   ctx.beginPath();
   ctx.arc(hx, hy - 0.3 * s, 4.7 * s, 0, TAU);
   ctx.fill();
   ctx.fillStyle = m.shade;
-  ctx.fillRect(hx - 3.6 * s, hy - 0.9 * s, 7.2 * s, 1.5 * s);
-  ctx.strokeStyle = m.lit;
-  ctx.lineWidth = 1.3 * s;
-  ctx.beginPath();
-  ctx.arc(hx, hy - 0.3 * s, 3.6 * s, Math.PI * 1.02, Math.PI * 1.6);
-  ctx.stroke();
+  ctx.fillRect(hx - 3.6 * s + dx * 0.8 * s, hy - 0.2 * s, 7.2 * s, 1.5 * s);
   ctx.fillStyle = st.mid;
   ctx.fillRect(hx - 0.9 * s, hy - 6.6 * s, 1.8 * s, 2.8 * s);
-  // kite shield on the travel side: shade rim, owner face, paper boss
-  const sx = x + dx * 4 * s + lean * 0.3;
-  const top = bodyTop + 0.5 * s;
-  const bot = bodyBottom + 3 * s;
+  // kite shield on the travel side, rocking with the arm swing: owner face (its ink rim is the outline), paper boss
+  const arm = -Math.sin(p.phase) * 0.8 * s;
+  const sx = p.xBottom + dx * 4 * s + dx * arm;
+  const top = p.bodyTop + 0.5 * s;
+  const bot = p.bodyBottom + 3 * s;
   const sw = 3.4 * s;
-  const kite = (ox: number, oy: number, color: string): void => {
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.moveTo(sx - sw + ox, top + 1.5 * s + oy);
-    ctx.quadraticCurveTo(sx + ox, top - 1 * s + oy, sx + sw + ox, top + 1.5 * s + oy);
-    ctx.lineTo(sx + sw + ox, top + (bot - top) * 0.45 + oy);
-    ctx.quadraticCurveTo(sx + sw * 0.6 + ox, bot + oy, sx + ox, bot + 0.8 * s + oy);
-    ctx.quadraticCurveTo(sx - sw * 0.6 + ox, bot + oy, sx - sw + ox, top + (bot - top) * 0.45 + oy);
-    ctx.closePath();
-    ctx.fill();
-  };
-  kite(0.8, 0.8, st.shade);
-  kite(0, 0, st.mid);
+  ctx.fillStyle = st.mid;
+  ctx.strokeStyle = pal.ink;
+  ctx.lineWidth = 1 * s;
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(sx - sw, top + 1.5 * s);
+  ctx.quadraticCurveTo(sx, top - 1 * s, sx + sw, top + 1.5 * s);
+  ctx.lineTo(sx + sw, top + (bot - top) * 0.45);
+  ctx.quadraticCurveTo(sx + sw * 0.6, bot, sx, bot + 0.8 * s);
+  ctx.quadraticCurveTo(sx - sw * 0.6, bot, sx - sw, top + (bot - top) * 0.45);
+  ctx.closePath();
+  ctx.stroke();
+  ctx.fill();
   ctx.fillStyle = STRIPE.lit;
   ctx.beginPath();
   ctx.arc(sx - 0.3 * s, top + (bot - top) * 0.42, 1.2 * s, 0, TAU);
   ctx.fill();
 }
 
+/** Rounded-rectangle sub-path (no beginPath), so two boxes can share one fill. */
+function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
 /**
- * Clockwork robot: boxy owner-coloured torso on piston legs, steel cube head with a glowing visor
- * and an owner antenna light; a stiff piston march instead of squash-and-stretch (≈ 10 fills).
+ * Clockwork robot: boxy owner-coloured torso on piston legs that step with the same stride as the
+ * clay soldier (`drawLegs`, piston mode), steel cube head with two glowing eyes looking ahead and an
+ * owner antenna light; a stiff march (no squash). ≤ 12 fills / strokes: shadow · legs (ink + metal)
+ * · outline · torso shade / mid / lit · head · head lit · eyes · antenna · light.
  */
-function robotSoldier(ctx: CanvasRenderingContext2D, pal: Palette, st: UnitStyle, x: number, y: number, dx: number, id: number, nowMs: number, motion: boolean, s: number): void {
-  const ph = motion ? Math.sin(nowMs / 110 + id * 1.7) : 0;
-  const hop = Math.abs(ph) * 1.4;
-  const tilt = ph * 0.6 * dx;
+function robotSoldier(ctx: CanvasRenderingContext2D, pal: Palette, st: UnitStyle, x: number, y: number, dx: number, dy: number, id: number, nowMs: number, motion: boolean, s: number): void {
+  const phase = stridePhase(id, nowMs, motion);
+  const hop = Math.abs(Math.cos(phase)) * 1.0 * s;
+  const tilt = dx * 0.9 * s + Math.sin(phase) * 0.4 * s * dx;
   const w = 4.2 * s;
-  const top = y - 12 * s - hop;
-  const bottom = y - 4 * s - hop;
+  const hipY = y - 6.2 * s - hop;
+  const bottom = hipY;
+  const top = bottom - 6.6 * s;
+  const hx = x + tilt;
+  const hy = top - 4.2 * s;
+  const o = UNIT_OUTLINE_PX * s;
+  const tx = x + tilt * 0.4;
   unitShadow(ctx, st, x, y, s);
-  // ink sticker outline from the cube head down to the legs (BUG-39)
-  unitOutline(ctx, pal, x + tilt * 0.25, top - 4.4 * s, bottom + 2 * s, w + UNIT_OUTLINE_PX * s);
-  // piston legs, alternating
-  ctx.fillStyle = pal.metal.shade;
+  drawLegs(ctx, pal, x, hipY, y, dx, dy, phase, s, pal.metal.mid, true);
+  // ink sticker outline (BUG-39): the cube head and the torso box, one fill; the legs stay clear of it
+  ctx.fillStyle = pal.ink;
   ctx.beginPath();
-  ctx.rect(x - 2.8 * s + tilt, bottom - 1, 2.2 * s, 4.6 * s + (ph > 0 ? 1 : 0));
-  ctx.rect(x + 0.6 * s - tilt, bottom - 1, 2.2 * s, 4.6 * s - (ph > 0 ? 1 : 0));
+  roundRectPath(ctx, hx - 3.6 * s - o, hy - 3.2 * s - o, 7.2 * s + 2 * o, 6.4 * s + 2 * o, 1.2 * s + o);
+  roundRectPath(ctx, tx - w - o, top - o, w * 2 + 1.2 * s + 2 * o, bottom - top + 1.2 * s + 2 * o, 1.5 * s + o);
   ctx.fill();
-  // torso: shade offset, mid, lit strip
+  // torso: shade offset, mid, lit strip (leaning a touch into the march)
   ctx.fillStyle = st.shade;
-  roundRect(ctx, { x: x - w + 1.2, y: top + 1.2, w: w * 2, h: bottom - top }, 1.5);
+  roundRect(ctx, { x: tx - w + 1.2 * s, y: top + 1.2 * s, w: w * 2, h: bottom - top }, 1.5 * s);
   ctx.fill();
   ctx.fillStyle = st.mid;
-  roundRect(ctx, { x: x - w, y: top, w: w * 2, h: bottom - top }, 1.5);
+  roundRect(ctx, { x: tx - w, y: top, w: w * 2, h: bottom - top }, 1.5 * s);
   ctx.fill();
   ctx.fillStyle = st.lit;
-  ctx.fillRect(x - w + 0.6 * s, top + 0.6 * s, w * 0.6, (bottom - top) * 0.5);
-  // head: steel cube, lit top, glowing visor, antenna
-  const hx = x + tilt * 0.5;
-  const hy = top - 4.4 * s;
+  ctx.fillRect(tx - w + 0.6 * s, top + 0.6 * s, w * 0.6, (bottom - top) * 0.5);
+  // head: steel cube, lit top, two glowing eyes looking ahead, antenna
   ctx.fillStyle = pal.metal.mid;
   roundRect(ctx, { x: hx - 3.6 * s, y: hy - 3.2 * s, w: 7.2 * s, h: 6.4 * s }, 1.2 * s);
   ctx.fill();
   ctx.fillStyle = pal.metal.lit;
   ctx.fillRect(hx - 3.6 * s, hy - 3.2 * s, 7.2 * s, 1.2 * s);
+  const ex = hx + dx * 1.1 * s;
+  const gap = 1.6 * s * (1 - 0.3 * Math.abs(dx));
   ctx.fillStyle = '#bfe8ff';
-  ctx.fillRect(hx - 2.6 * s, hy - 1 * s, 5.2 * s, 1.8 * s);
+  ctx.beginPath();
+  ctx.rect(ex - gap - 0.9 * s, hy - 0.6 * s, 1.8 * s, 2 * s);
+  ctx.rect(ex + gap - 0.9 * s, hy - 0.6 * s, 1.8 * s, 2 * s);
+  ctx.fill();
   ctx.strokeStyle = st.shade;
   ctx.lineWidth = 1 * s;
   ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.moveTo(hx + 2 * s, hy - 3.2 * s);
-  ctx.lineTo(hx + 2.6 * s, hy - 6.4 * s);
+  ctx.lineTo(hx + 2.6 * s - dx * Math.cos(phase) * 0.6 * s, hy - 6.4 * s);
   ctx.stroke();
   ctx.fillStyle = st.lit;
   ctx.beginPath();
-  ctx.arc(hx + 2.6 * s, hy - 6.8 * s, 1.2 * s, 0, TAU);
+  ctx.arc(hx + 2.6 * s - dx * Math.cos(phase) * 0.6 * s, hy - 6.8 * s, 1.2 * s, 0, TAU);
   ctx.fill();
 }
 
-/** Treads + hull shared by both tank shapes; `corner` is the hull radius (3 clay, 1 robot). */
-function tankBase(ctx: CanvasRenderingContext2D, pal: Palette, st: UnitStyle, x: number, y: number, s: number, rock: number, corner: number): void {
+/**
+ * Treads + hull shared by both tank shapes; `corner` is the hull radius (3 clay, 1 robot). The tread
+ * links scroll back under the hull as it rolls (`treadMarks`, ART-20).
+ */
+function tankBase(ctx: CanvasRenderingContext2D, pal: Palette, st: UnitStyle, x: number, y: number, s: number, rock: number, corner: number, dx: number, nowMs: number, motion: boolean): void {
   ctx.fillStyle = st.shadow;
   ctx.beginPath();
   ctx.ellipse(x + 3, y + 5, s + 3, s * 0.55, 0, 0, TAU);
   ctx.fill();
+  const tTop = y - s * 0.55 + rock * 0.3;
   ctx.fillStyle = pal.metal.shade;
-  roundRect(ctx, { x: x - s - 1, y: y - s * 0.55 + rock * 0.3, w: s * 2 + 2, h: s * 1.2 }, 3);
+  roundRect(ctx, { x: x - s - 1, y: tTop, w: s * 2 + 2, h: s * TREAD_H }, 3);
   ctx.fill();
+  treadMarks(ctx, pal, x, tTop + 1, tTop + s * TREAD_H - 1, s - 1.5, dx, nowMs, motion, s);
   ctx.fillStyle = st.shade;
   roundRect(ctx, { x: x - s + 3.5, y: y - s * 0.85 + rock + 1.5, w: s * 2 - 4, h: s * 1.25 }, corner);
   ctx.fill();
@@ -557,7 +571,7 @@ function tankBase(ctx: CanvasRenderingContext2D, pal: Palette, st: UnitStyle, x:
 function shieldTank(ctx: CanvasRenderingContext2D, pal: Palette, st: UnitStyle, x: number, y: number, dx: number, dy: number, id: number, nowMs: number, motion: boolean, scale: number): void {
   const s = TANK_RADIUS * scale;
   const rock = motion ? Math.sin(nowMs / 160 + id) * 0.9 : 0;
-  tankBase(ctx, pal, st, x, y, s, rock, 3);
+  tankBase(ctx, pal, st, x, y, s, rock, 3, dx, nowMs, motion);
   for (let i = 0; i < 3; i++) {
     const px = x - s + 3 + i * s * 0.62;
     const py = y - s * 0.2 + rock;
@@ -604,7 +618,7 @@ function shieldTank(ctx: CanvasRenderingContext2D, pal: Palette, st: UnitStyle, 
 function robotTank(ctx: CanvasRenderingContext2D, pal: Palette, st: UnitStyle, x: number, y: number, dx: number, dy: number, id: number, nowMs: number, motion: boolean, scale: number): void {
   const s = TANK_RADIUS * scale;
   const rock = motion ? Math.sin(nowMs / 160 + id) * 0.9 : 0;
-  tankBase(ctx, pal, st, x, y, s, rock, 1);
+  tankBase(ctx, pal, st, x, y, s, rock, 1, dx, nowMs, motion);
   ctx.fillStyle = '#bfe8ff';
   ctx.fillRect(x - s * 0.55, y + rock, s * 1.1, s * 0.16);
   const ty = y - s * 0.5 + rock;
@@ -1450,7 +1464,7 @@ export const SHAPE_SKINS: ShapeSkinDrawers = {
     if (kind === 'tank') {
       if (robots) robotTank(ctx, pal, st, x, y, dx, dy, id, nowMs, motion, scale);
       else shieldTank(ctx, pal, st, x, y, dx, dy, id, nowMs, motion, scale);
-    } else if (robots) robotSoldier(ctx, pal, st, x, y, dx, id, nowMs, motion, scale);
-    else shieldSoldier(ctx, pal, st, x, y, dx, id, nowMs, motion, scale);
+    } else if (robots) robotSoldier(ctx, pal, st, x, y, dx, dy, id, nowMs, motion, scale);
+    else shieldSoldier(ctx, pal, st, x, y, dx, dy, id, nowMs, motion, scale);
   },
 };
