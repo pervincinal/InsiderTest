@@ -9,6 +9,7 @@ import { HUD, RESULT, TITLE } from '../render/layout';
 import type { Rect } from '../render/widgets';
 import { inRect } from '../render/widgets';
 import { drawTitle } from '../render/menus';
+import { screenToTitle, titleRectShift, titleShifts, titleToScreen } from '../render/titleLayout';
 import type { ToastOpts } from '../render/economyWidgets';
 import type { PointerPoint } from '../input/pointer';
 import { drawGame } from '../render/draw';
@@ -290,8 +291,26 @@ export class TitleScreen implements Screen {
     });
   }
 
+  /**
+   * FE-12: on a tall screen the title's groups move with the island (src/render/titleLayout.ts); a
+   * rect is hit where it is drawn — its layout rect moved by the same shift the renderer applies.
+   */
+  private on(r: Rect, p: { x: number; y: number }): boolean {
+    return inRect(r, p.x, p.y - titleRectShift(titleShifts(this.app.view), r));
+  }
+
+  /** Screen logical point → title layout point (e2e: `logicalToLayout`). */
+  toLayout(x: number, y: number): { x: number; y: number } {
+    return screenToTitle(titleShifts(this.app.view), x, y);
+  }
+
+  /** Where title layout point (x, y) is drawn (e2e: `layoutToClient`). */
+  fromLayout(x: number, y: number): { x: number; y: number } {
+    return titleToScreen(titleShifts(this.app.view), x, y);
+  }
+
   private hit(p: PointerPoint): Rect | null {
-    for (const r of [TITLE_PLAY, TITLE_SETTINGS, TITLE_SOUND, TITLE.shop, TITLE.daily, TITLE.achievements, TITLE.wallet, TITLE.lang]) if (inRect(r, p.x, p.y)) return r;
+    for (const r of [TITLE_PLAY, TITLE_SETTINGS, TITLE_SOUND, TITLE.shop, TITLE.daily, TITLE.achievements, TITLE.wallet, TITLE.lang]) if (this.on(r, p)) return r;
     return null;
   }
 
@@ -300,18 +319,18 @@ export class TitleScreen implements Screen {
   }
 
   move(p: PointerPoint): void {
-    if (this.pressed && !inRect(this.pressed, p.x, p.y)) this.pressed = null;
+    if (this.pressed && !this.on(this.pressed, p)) this.pressed = null;
   }
 
   up(p: PointerPoint): void {
     this.pressed = null;
-    if (inRect(TITLE_PLAY, p.x, p.y)) this.app.goLevels();
-    else if (inRect(TITLE_SETTINGS, p.x, p.y)) this.app.openSettings(this);
-    else if (inRect(TITLE_SOUND, p.x, p.y)) toggleMuted(); // persists settings.sound via the audio facade
-    else if (inRect(TITLE.shop, p.x, p.y) || inRect(TITLE.wallet, p.x, p.y)) this.app.goShop('crystals', () => this.app.goTitle());
-    else if (inRect(TITLE.daily, p.x, p.y)) this.claimChest();
-    else if (inRect(TITLE.achievements, p.x, p.y)) this.app.goAchievements(() => this.app.goTitle());
-    else if (inRect(TITLE.lang, p.x, p.y)) {
+    if (this.on(TITLE_PLAY, p)) this.app.goLevels();
+    else if (this.on(TITLE_SETTINGS, p)) this.app.openSettings(this);
+    else if (this.on(TITLE_SOUND, p)) toggleMuted(); // persists settings.sound via the audio facade
+    else if (this.on(TITLE.shop, p) || this.on(TITLE.wallet, p)) this.app.goShop('crystals', () => this.app.goTitle());
+    else if (this.on(TITLE.daily, p)) this.claimChest();
+    else if (this.on(TITLE.achievements, p)) this.app.goAchievements(() => this.app.goTitle());
+    else if (this.on(TITLE.lang, p)) {
       playSfx('button');
       this.app.setLanguage(nextLanguage(currentLanguage()));
     }

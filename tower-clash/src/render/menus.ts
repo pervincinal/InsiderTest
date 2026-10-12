@@ -9,7 +9,9 @@ import { drawSea, menuSea, terrainSea } from './sea';
 import type { Rect } from './widgets';
 import { FONT, drawButton, drawExtrudedText, drawGearGlyph, drawPill, drawRoundButton, drawSpeakerGlyph, drawTrophyGlyph, font, withShadow } from './widgets';
 import type { TerrainSpec } from './terrain';
-import { drawTerrain } from './terrain';
+import { drawTerrain, getTerrain } from './terrain';
+import type { TitleGroup, TitleShifts } from './titleLayout';
+import { NO_TITLE_SHIFTS, TITLE_GROUND_BANDS, TITLE_ISLAND, titleRectShift, titleShifts } from './titleLayout';
 import type { ToastOpts } from './economyWidgets';
 import { drawToast, drawWallet } from './economyWidgets';
 import { badgeY, drawBadge, drawCrystal, drawTowerShadow, drawTowerSprite, drawTreasureChest, drawUnitSprite, drawVideoGlyph } from './sprites';
@@ -45,9 +47,9 @@ const DEMO_TOWERS: DemoTower[] = [
   { x: 360, y: 1040, owner: 'neutral', kind: 'barracks', level: 1, units: 7 },
 ];
 
-function demoRoad(a: number, b: number): Road {
-  const p = DEMO_TOWERS[a]!;
-  const q = DEMO_TOWERS[b]!;
+function demoRoad(towers: readonly DemoTower[], a: number, b: number): Road {
+  const p = towers[a]!;
+  const q = towers[b]!;
   return {
     id: `d${a}-d${b}`,
     a: `d${a}`,
@@ -61,7 +63,30 @@ function demoRoad(a: number, b: number): Road {
   };
 }
 
-const DEMO_ROADS: Road[] = [demoRoad(0, 1), demoRoad(0, 2), demoRoad(1, 2)];
+function demoRoads(towers: readonly DemoTower[]): Road[] {
+  return [demoRoad(towers, 0, 1), demoRoad(towers, 0, 2), demoRoad(towers, 1, 2)];
+}
+
+interface DemoScene {
+  towers: readonly DemoTower[];
+  roads: readonly Road[];
+}
+
+const DEMO_SCENE: DemoScene = { towers: DEMO_TOWERS, roads: demoRoads(DEMO_TOWERS) };
+let movedScene: { top: number; bottom: number; scene: DemoScene } | null = null;
+
+/**
+ * The demo towers where a tall screen draws them (FE-12): the two top ones move with the island's
+ * top edge, the bottom one with its foot; the marching columns follow the longer roads between them.
+ */
+function demoScene(sh: TitleShifts): DemoScene {
+  if (sh.top === 0 && sh.bottom === 0) return DEMO_SCENE;
+  if (movedScene?.top !== sh.top || movedScene.bottom !== sh.bottom) {
+    const towers = DEMO_TOWERS.map((t) => ({ ...t, y: t.y + (t.y < 640 ? sh.top : sh.bottom) }));
+    movedScene = { top: sh.top, bottom: sh.bottom, scene: { towers, roads: demoRoads(towers) } };
+  }
+  return movedScene.scene;
+}
 
 const DEMO_TERRAIN: TerrainSpec = {
   key: 'title',
@@ -69,8 +94,8 @@ const DEMO_TERRAIN: TerrainSpec = {
   obstacles: [],
   mines: [],
   towers: DEMO_TOWERS,
-  top: 120,
-  bottom: 1150,
+  top: TITLE_ISLAND.top,
+  bottom: TITLE_ISLAND.bottom,
 };
 
 /** The title island re-lit by the equipped terrain theme (`TerrainSpec.theme`); memoised per theme id. */
@@ -121,12 +146,13 @@ export function headerBand(view: View, h: number): Rect {
   return { x: b.left, y: b.top, w: b.right - b.left + pad, h: h - b.top };
 }
 
-function drawDemoWorld(ctx: CanvasRenderingContext2D, pal: Palette, nowMs: number, withBadges: boolean): void {
+function drawDemoWorld(ctx: CanvasRenderingContext2D, pal: Palette, nowMs: number, withBadges: boolean, scene: DemoScene = DEMO_SCENE): void {
   const anim = motion();
-  for (const t of DEMO_TOWERS) drawTowerShadow(ctx, pal, t.x, t.y, t.kind, t.level);
+  const towers = scene.towers;
+  for (const t of towers) drawTowerShadow(ctx, pal, t.x, t.y, t.kind, t.level);
   const t0 = anim ? nowMs / 1000 : 0;
   for (const col of DEMO_COLUMNS) {
-    const road = DEMO_ROADS[col.road]!;
+    const road = scene.roads[col.road]!;
     const speed = C.UNIT_SPEED / road.length;
     for (let i = 0; i < col.count; i++) {
       const f = (((t0 * speed + col.phase + i * 0.06) % 1) + 1) % 1;
@@ -135,8 +161,8 @@ function drawDemoWorld(ctx: CanvasRenderingContext2D, pal: Palette, nowMs: numbe
       drawUnitSprite(ctx, pal, p.x, p.y, col.owner, 'infantry', p.dx * s, p.dy * s, i + col.road * 10, nowMs, anim);
     }
   }
-  for (const t of DEMO_TOWERS) drawTowerSprite(ctx, pal, t, { nowMs, motion: anim });
-  if (withBadges) for (const t of DEMO_TOWERS) drawBadge(ctx, pal, t.x, t.y + badgeY(t.kind, t.level), String(t.units));
+  for (const t of towers) drawTowerSprite(ctx, pal, t, { nowMs, motion: anim });
+  if (withBadges) for (const t of towers) drawBadge(ctx, pal, t.x, t.y + badgeY(t.kind, t.level), String(t.units));
 }
 
 /** Gradient water with drifting sparkles (menus background; `scroll` parallaxes the sparkles). */
@@ -200,10 +226,45 @@ export interface TitleOpts {
   theme?: string;
 }
 
+/**
+ * The title island's ground (FE-12): on 9:16 the cached terrain as it is; on a taller screen cut into
+ * the groups' rigid pieces, each moved by its shift, and the plain-grass bands between them stretched
+ * over the room that opens (`TITLE_GROUND_BANDS`). The bands are drawn first, 2 px past each end, so
+ * the rigid pieces cover their joins and no sea shows through a sub-pixel seam.
+ */
+function drawTitleGround(ctx: CanvasRenderingContext2D, view: View, pal: Palette, spec: TerrainSpec, sh: TitleShifts): void {
+  if (sh === NO_TITLE_SHIFTS) {
+    drawTerrain(ctx, view, pal, spec);
+    return;
+  }
+  const img = getTerrain(view, pal, spec);
+  const ky = img.height / C.MAP_H;
+  const piece = (y0: number, y1: number, d0: number, d1: number): void => ctx.drawImage(img, 0, y0 * ky, img.width, (y1 - y0) * ky, 0, d0, C.MAP_W, d1 - d0);
+  for (const b of TITLE_GROUND_BANDS) piece(b.y0 - 2, b.y1 + 2, b.y0 + sh[b.from] - 2, b.y1 + sh[b.to] + 2);
+  let y = 0;
+  let g: TitleGroup = 'top';
+  for (const b of TITLE_GROUND_BANDS) {
+    piece(y, b.y0, y + sh[g], b.y0 + sh[g]);
+    y = b.y1;
+    g = b.to;
+  }
+  piece(y, C.MAP_H, y + sh[g], C.MAP_H + sh[g]);
+}
+
 export function drawTitle(view: View, pal: Palette, o: TitleOpts): void {
   const ctx = beginFrame(view, pal, terrainSea(pal, o.theme));
-  drawTerrain(ctx, view, pal, demoTerrain(o.theme));
-  drawDemoWorld(ctx, pal, o.nowMs, true);
+  const sh = titleShifts(view);
+  drawTitleGround(ctx, view, pal, demoTerrain(o.theme), sh);
+  drawDemoWorld(ctx, pal, o.nowMs, true, demoScene(sh));
+  // FE-12: each group is drawn moved by its shift (a tall screen); on 9:16 the matrix is never touched
+  const moved = sh !== NO_TITLE_SHIFTS;
+  const base = moved ? ctx.getTransform() : null;
+  const shiftTo = (dy: number): void => {
+    if (!base) return;
+    ctx.setTransform(base);
+    if (dy) ctx.translate(0, dy);
+  };
+  shiftTo(sh.logo);
 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -238,6 +299,7 @@ export function drawTitle(view: View, pal: Palette, o: TitleOpts): void {
   ctx.font = font(22, '500');
   ctx.fillText(tagline, 360, sub.y + sub.h / 2 + 1, subW - 24);
 
+  shiftTo(titleRectShift(sh, o.playRect));
   drawButton(ctx, pal, o.playRect, t('title.play'), { fill: blue, fontPx: 46, pressed: o.pressed === o.playRect });
 
   // settings row: gear · sound
@@ -261,7 +323,8 @@ export function drawTitle(view: View, pal: Palette, o: TitleOpts): void {
   ctx.textAlign = 'center';
   ctx.fillText(t('title.shop'), o.shopRect.x + o.shopRect.w / 2 + 12, o.shopRect.y + o.shopRect.h / 2 - 1);
 
-  // daily reward chest (top-right): open + pulsing when claimable, closed once claimed
+  // daily reward chest (bottom-right): open + pulsing when claimable, closed once claimed
+  shiftTo(titleRectShift(sh, o.dailyRect));
   drawDailyChest(ctx, pal, o.dailyRect, o.daily, o.nowMs, o.pressed === o.dailyRect);
   // trophy (bottom-left): achievements
   drawTrophyButton(ctx, pal, o.achievementsRect, o.achievements, o.pressed === o.achievementsRect);
@@ -270,7 +333,9 @@ export function drawTitle(view: View, pal: Palette, o: TitleOpts): void {
   drawWallet(ctx, pal, o.walletRect, o.gold, o.crystals, { stars: o.totalStars, pressed: o.pressed === o.walletRect });
   // language chip (top-right): "EN" · tap → next language
   const lr = o.langRect;
+  shiftTo(titleRectShift(sh, lr));
   drawButton(ctx, pal, lr, o.language.toUpperCase(), { fontPx: 19, flat: true, pressed: o.pressed === lr });
+  shiftTo(0);
   if (o.toast) drawToast(ctx, pal, o.toast);
   ctx.restore();
 }
