@@ -6,7 +6,7 @@ import type { Biome, Palette } from './palette';
 import { biomeFor, withAlpha } from './palette';
 import type { View } from './view';
 import { applyDeviceTransform, applyTransform, bleed, bleedRect } from './view';
-import { HUD, SWIPE_TRAIL_MS } from './layout';
+import { HUD, SOLDIER_DRAW_SCALE, SWIPE_TRAIL_MS, TANK_DRAW_SCALE } from './layout';
 import { font, roundRect } from './widgets';
 type XY = { x: number; y: number };
 import { drawHud, drawOverlays } from './hud';
@@ -486,8 +486,11 @@ function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState
   // painter's order: everything sorted by ground y so units walk in front of / behind buildings
   let ui_ = 0;
   const skin = ui.skin;
-  const drawUnit = (u: UnitDraw): void =>
-    drawUnitSprite(ctx, pal, u.x, u.y, u.unit.owner, u.unit.kind, u.dx, u.dy, u.unit.id, nowMs, motion, u.scale, u.unit.owner === 'player' ? skin?.helmet : undefined);
+  // BUG-39: play-size units (larger than the sprite's design size, see layout.ts)
+  const drawUnit = (u: UnitDraw): void => {
+    const size = u.scale * (u.unit.kind === 'tank' ? TANK_DRAW_SCALE : SOLDIER_DRAW_SCALE);
+    drawUnitSprite(ctx, pal, u.x, u.y, u.unit.owner, u.unit.kind, u.dx, u.dy, u.unit.id, nowMs, motion, size, u.unit.owner === 'player' ? skin?.helmet : undefined);
+  };
   const fx = ui.particles;
   const hint = limitHintState(ui, nowMs);
   // rules v2.1 "under fire": who is landing on whom (badge tint + impact rings, see particles.ts)

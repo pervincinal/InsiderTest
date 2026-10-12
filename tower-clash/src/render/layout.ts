@@ -105,3 +105,13 @@ export const TOWER_HIT_RADIUS = 44;
 export const SWIPE_TRAIL_MS = 220;
 export const UNIT_RADIUS = 6;
 export const TANK_RADIUS = 11;
+/**
+ * BUG-39 (2026-10-12, iPhone 17 Pro Max): at 430 px the 9 × 21 unit soldier was ≈ 5 × 12 CSS px and its
+ * owner mid tone sat on the owner-coloured stream ribbon, so columns vanished into the line. The play
+ * renderer draws soldiers / tanks this much larger than the sprite's design size (shop previews and the
+ * title keep their own scales) and every soldier gets an ink sticker outline (`UNIT_OUTLINE_PX`).
+ */
+export const SOLDIER_DRAW_SCALE = 1.45;
+export const TANK_DRAW_SCALE = 1.2;
+/** Width of the ink outline around a soldier's head + body silhouette, in design px (scaled with the unit). */
+export const UNIT_OUTLINE_PX = 1.4;

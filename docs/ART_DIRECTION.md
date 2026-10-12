@@ -50,7 +50,7 @@ Colour-blind palette keeps the same lit/mid/shade structure with blue / orange /
 - **Towers** (taller, ~1.35× current): stone plinth → cylindrical body with 3-tone vertical shading and a rim light on the left edge → owner-coloured roof (cone/cap) with a lit facet → flag on a pole that waves → **long directional ground shadow** + contact shadow. Level = 1–3 gold gems set into the plinth front (glint animation). Kinds: barracks (tent awning at base), artillery (short bunker + barrel that tracks the last target), tankFactory (boxy with chimney puffing tiny smoke), fortress (wide with wall ring + crenellations). Selected: gold clay ring on the ground with a soft outer glow, tower lifts 4 px. Drag target: animated dashed path in gold + target ring.
 - **Badge**: paper pill above the roof with 2 px owner-coloured stroke, soft shadow, ink numerals in Fredoka 700; count changes tween the number (scale pop).
 - **Badge under fire** (rules v2.1, GDD §2.0): while a hostile stream is landing, the pill turns warm alert paper (`badgeAlert`, ink numerals stay ≥ 4.5:1), the stroke thickens to 3.5 px in the **attacker's** colour and a crossed-swords pip sits before the number (shape, not only colour — same in the colour-blind palette); each landing jolts the badge 3 px and drops a small impact ring + sparks in the attacker's colour at the tower base. Reduced motion: the static tint/pip only, no jolt, no ring.
-- **Units**: clay soldiers — capsule body (lit/mid/shade), lighter face, helmet band in owner colour, tiny backpack; squash-and-stretch bob while marching, small dust puffs behind columns on sand; tanks = rounded box with turret and treads, slight rocking.
+- **Units**: clay soldiers — capsule body (lit/mid/shade), lighter face, helmet band in owner colour, tiny backpack, an ink sticker outline around head + body (BUG-39: on a 430 px phone a soldier's mid tone vanished into the owner-coloured ribbon; the play renderer also draws soldiers ×1.45 and tanks ×1.2 over the sprite's design size, `SOLDIER_DRAW_SCALE` / `TANK_DRAW_SCALE` in layout.ts, so a soldier is ≈ 8 × 18 CSS px on that phone); squash-and-stretch bob while marching, small dust puffs behind columns on sand; tanks = rounded box with turret and treads, slight rocking.
 
 ## 4. UI (claymorphism)
 - **Typeface**: Fredoka (Google Fonts, OFL) 700 for numerals/headings, 500 for labels; files in `public/fonts/`, `@font-face` in `index.html`, canvas waits for `document.fonts.ready`. Fallback: system rounded sans.
@@ -69,7 +69,7 @@ Colour-blind palette keeps the same lit/mid/shade structure with blue / orange /
 - Victory: confetti + star sequence; defeat: desaturate world slightly, card slides in.
 
 ## 6. Performance & readability
-- 400 units at 60 fps on a mid phone: per-unit drawing is ≤ 6 primitives, no per-frame gradients on units (pre-tinted), shadows are flat ellipses.
+- 400 units at 60 fps on a mid phone: per-unit drawing is ≤ 7 primitives (outline included), no per-frame gradients on units (pre-tinted), shadows are flat ellipses.
 - Numerals ≥ 24 px logical, contrast ≥ 4.5:1 on badges; owner colours distinguishable in both palettes.
 
 ## 7. App icon (ART-18, 2026-10-11)

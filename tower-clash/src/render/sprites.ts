@@ -1,7 +1,7 @@
 import type { Owner, TowerKind, UnitKind } from '../sim/types';
 import type { Palette, Tones } from './palette';
 import { shade } from './palette';
-import { TANK_RADIUS } from './layout';
+import { TANK_RADIUS, UNIT_OUTLINE_PX } from './layout';
 import { font, roundRect } from './widgets';
 import { SHADOW_DX, SHADOW_DY } from './terrain';
 import { chunkBackoff, loadChunk } from '../lazyChunk';
@@ -1212,6 +1212,17 @@ export function unitStyle(pal: Palette, owner: Owner): UnitStyle {
   return s;
 }
 
+/**
+ * Ink sticker outline under a soldier: one capsule from the head centre to the body bottom, `r` wide
+ * (the body radius plus `UNIT_OUTLINE_PX`), so the silhouette reads on a ribbon of its own hue (BUG-39).
+ * Shared with the shape skins in skinShapes.ts.
+ */
+export function unitOutline(ctx: CanvasRenderingContext2D, pal: Palette, x: number, headY: number, bottom: number, r: number): void {
+  ctx.fillStyle = pal.ink;
+  capsule(ctx, x, headY, bottom, r);
+  ctx.fill();
+}
+
 export function capsule(ctx: CanvasRenderingContext2D, x: number, top: number, bottom: number, r: number): void {
   ctx.beginPath();
   ctx.moveTo(x - r, top);
@@ -1224,7 +1235,7 @@ export function capsule(ctx: CanvasRenderingContext2D, x: number, top: number, b
 /**
  * Clay soldier or tank. (dx, dy) is the unit direction of travel; the squash-and-stretch bob uses
  * `id` so a column does not march in lock-step. `scale` < 1 for the spawn scale-in. Cheap: no
- * gradients, no transforms, ≤ 6 fills per soldier.
+ * gradients, no transforms, ≤ 7 fills per soldier (outline included).
  */
 export function drawUnitSprite(
   ctx: CanvasRenderingContext2D,
@@ -1297,25 +1308,27 @@ export function drawUnitSprite(
   ctx.beginPath();
   ctx.ellipse(x + 2.5, y + 3.5, 6.5 * scale, 2.8 * scale, 0, 0, Math.PI * 2);
   ctx.fill();
-  // 2 shade side / backpack (offset away from the light and opposite to travel)
+  // 2 ink sticker outline around head + body (BUG-39: separates the soldier from a same-hue ribbon)
+  const hy = bodyTop - 3.2 * scale;
+  unitOutline(ctx, pal, x + lean * 0.45, hy, bodyBottom, r + UNIT_OUTLINE_PX * scale);
+  // 3 shade side / backpack (offset away from the light and opposite to travel)
   ctx.fillStyle = st.shade;
   capsule(ctx, x + 1.4 - dx * 1.2, bodyTop + 1.5, bodyBottom + 1, r);
   ctx.fill();
-  // 3 body
+  // 4 body
   ctx.fillStyle = st.mid;
   capsule(ctx, x + lean * 0.3, bodyTop, bodyBottom, r);
   ctx.fill();
-  // 4 lit facet (upper-left)
+  // 5 lit facet (upper-left)
   ctx.fillStyle = st.lit;
   capsule(ctx, x + lean * 0.3 - r * 0.45, bodyTop + 0.5, bodyTop + (bodyBottom - bodyTop) * 0.55, r * 0.32);
   ctx.fill();
-  // 5 face
-  const hy = bodyTop - 3.2 * scale;
+  // 6 face
   ctx.fillStyle = st.face;
   ctx.beginPath();
   ctx.arc(x + lean * 0.6, hy, 4.2 * scale, 0, Math.PI * 2);
   ctx.fill();
-  // 6 helmet: owner-coloured cap by default, or the equipped skin
+  // 7 helmet: owner-coloured cap by default, or the equipped skin
   drawHelmet(ctx, pal, st, helmet, x + lean * 0.6, hy, scale, dx);
 }
 

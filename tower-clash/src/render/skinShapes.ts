@@ -13,10 +13,10 @@
 import type { TowerKind, UnitKind } from '../sim/types';
 import type { Palette, Tones } from './palette';
 import { shade } from './palette';
-import { TANK_RADIUS } from './layout';
+import { TANK_RADIUS, UNIT_OUTLINE_PX } from './layout';
 import { roundRect } from './widgets';
 import type { RoofPart, RoofStyle, ShapeSkinDrawers, TowerDrawOptions, UnitStyle } from './sprites';
-import { INK_LINE, RIM, TAU, awning, banner, barrel, capsule, chimneySmoke, chimneyStack, cone, crenelsHalf, cylinder, dome, door, flag, gems, helmetCap, ledge, plinth, tier, wallRing } from './sprites';
+import { INK_LINE, RIM, TAU, awning, banner, barrel, capsule, chimneySmoke, chimneyStack, cone, crenelsHalf, cylinder, dome, door, flag, gems, helmetCap, ledge, plinth, tier, unitOutline, wallRing } from './sprites';
 
 type T3 = readonly [number, number, number];
 
@@ -429,6 +429,8 @@ function shieldSoldier(ctx: CanvasRenderingContext2D, pal: Palette, st: UnitStyl
   const bodyBottom = y - 4 * s - hop;
   const lean = dx * 1.3;
   unitShadow(ctx, st, x, y, s);
+  // ink sticker outline from the great helm down to the body (BUG-39)
+  unitOutline(ctx, pal, x + lean * 0.45, bodyTop - 3.5 * s, bodyBottom, Math.max(r, 4.7 * s) + UNIT_OUTLINE_PX * s);
   ctx.fillStyle = st.shade;
   capsule(ctx, x + 1.4 - dx * 1.2, bodyTop + 1.5, bodyBottom + 1, r);
   ctx.fill();
@@ -491,6 +493,8 @@ function robotSoldier(ctx: CanvasRenderingContext2D, pal: Palette, st: UnitStyle
   const top = y - 12 * s - hop;
   const bottom = y - 4 * s - hop;
   unitShadow(ctx, st, x, y, s);
+  // ink sticker outline from the cube head down to the legs (BUG-39)
+  unitOutline(ctx, pal, x + tilt * 0.25, top - 4.4 * s, bottom + 2 * s, w + UNIT_OUTLINE_PX * s);
   // piston legs, alternating
   ctx.fillStyle = pal.metal.shade;
   ctx.beginPath();
