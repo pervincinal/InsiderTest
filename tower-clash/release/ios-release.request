@@ -15,5 +15,5 @@
 # The build number is config.buildNumber in tower-clash/package.json (npm run version:sync);
 # App Store Connect accepts every build number only once.
 lane=testflight
-note=build 9 (1.0.0): swipe-to-cut + iPhone drag fix (BUG-33), full-bleed tall screens (BUG-34), new app icon (ART-18); TestFlight only
-requested=2026-10-11T19:03:00Z
+note=build 10 (1.0.0): BUG-35 drag band + full hint, BUG-36/37/38 HUD press fixes, FE-11 menu headers, FE-10, L10N-3; TestFlight only
+requested=2026-10-12T05:08:00Z
