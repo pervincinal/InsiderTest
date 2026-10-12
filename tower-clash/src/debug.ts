@@ -1,5 +1,5 @@
 import type { Command, GameState, Tower } from './sim/types';
-import { linksFrom, maxLinksOf } from './sim/step';
+import { capacityOf, linksFrom, maxLinksOf, relaysOnward } from './sim/step';
 import { referencePlayerCommands } from './ai/index';
 import type { TowerClashApp, TowerClashDebug } from './main';
 import { LEVEL_META, levelIndex } from './levels/index';
@@ -190,6 +190,8 @@ export function suicideCommands(state: GameState): Command[] {
     let best: { to: string; score: number } | null = null;
     for (const other of neighbours(t.id)) {
       if (streamsInto(t.id, other.id) || streamsInto(other.id, t.id)) continue;
+      // RELAY-1: a stream into an own full tower that streams onward would be a supply line and feed the attack
+      if (other.owner === 'player' && other.units >= capacityOf(other, state) && relaysOnward(state, other)) continue;
       // a hostile target first (the strongest, so our trickle matters least); a player neighbour only pauses growth
       const score = other.owner === 'player' ? -1 : (other.owner === 'neutral' ? 0 : 1000) + other.units;
       if (!best || score > best.score) best = { to: other.id, score };

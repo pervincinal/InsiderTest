@@ -197,8 +197,10 @@ test.describe('lazy chunks under a failing network', () => {
     expect(errors).toEqual([]);
 
     // Network back: the next level's first skinned frame re-fetches the chunk under `?r=` and it lands.
-    await page.unroute(SKIN_CHUNK);
+    // listen first: a draw on the result screen may re-fetch the chunk the moment the route is gone (aborted
+    // requests never produce a response, so nothing is caught early)
     const fetched = page.waitForResponse((r) => SKIN_CHUNK.test(r.url()) && r.url().includes('?r='), { timeout: 15_000 });
+    await page.unroute(SKIN_CHUNK);
     expect(await page.evaluate(() => window.__towerclash.loadLevel(2, 1))).toBe(true);
     expect((await fetched).ok()).toBe(true);
     await expect.poll(() => screen(page)).toBe('play');

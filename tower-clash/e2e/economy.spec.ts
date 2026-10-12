@@ -87,7 +87,7 @@ const DUSK_COST = 150;
 // after the full rewind window (~27 s of sim time) so the continue really goes back 20 s (tests/ui/continue.test.ts)
 const CONTINUE_REWIND_MS = 20_000;
 const REWIND_LEVEL = 15;
-const REWIND_SEED = 2; // seed 3 wins under rules v2.1 + the level-15 retune (the trickle pauses enemy production); seed 2 loses at 68 s
+const REWIND_SEED = 1; // the lose bot loses on seed 1 at ~135 s sim (RELAY-1, 2026-10-12: seed 2 now wins — full own towers relay its streams onward); was 2 under rules v2.1 + the level-15 retune
 
 
 /** Tap segment `i` of a segmented control drawn with `drawSegmented` (4 px inset, equal widths). */
