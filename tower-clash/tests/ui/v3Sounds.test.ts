@@ -64,8 +64,9 @@ function fixture(playerUnits = 10): LevelDef {
   });
 }
 
+/** Tap map point (x, y) where the play screen draws it (ART-21: through the tilted camera). */
 const tap = (play: PlayScreen, x: number, y: number, timeMs: number): void => {
-  const p = { x, y, id: 1, type: 'mouse' as const, timeMs };
+  const p = { ...play.fromLayout(x, y), id: 1, type: 'mouse' as const, timeMs };
   play.down(p);
   play.up(p);
 };

@@ -30,7 +30,12 @@ export function installDebug(app: TowerClashApp): TowerClashDebug {
     autoplay: () => app.withPlay((play) => play.setPlayerBot(referencePlayerCommands)),
     setSpeed: (n) => app.setSpeed(n),
     getSpeed: () => app.play?.loop.speed ?? app.speed,
-    toClient: (x, y) => toClient(app.view, x, y),
+    // On the play screen a map point is drawn through the tilted camera (ART-21, `PlayScreen.fromLayout`):
+    // tower / lane coordinates land where they are drawn; HUD and pause-card points stay as they are.
+    toClient: (x, y) => {
+      const p = app.current === app.play && app.play ? app.play.fromLayout(x, y) : { x, y };
+      return toClient(app.view, p.x, p.y);
+    },
     hudToClient: (x, y) => {
       const p = fromHudSpace(hudAnchors(app.view), x, y);
       return toClient(app.view, p.x, p.y);

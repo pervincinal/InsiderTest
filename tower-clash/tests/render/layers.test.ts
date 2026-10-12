@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Layer, Layers } from '../../src/render/layers';
 import { blankLayer, groundKey, paintGround, resizeLayers } from '../../src/render/layers';
+import { FLAT, playCamera, setTilt } from '../../src/render/camera';
 import type { View } from '../../src/render/view';
 import type { TerrainSpec } from '../../src/render/terrain';
 import { DEFAULT_PALETTE, loadThemes, themeFor } from '../../src/render/palette';
@@ -100,39 +101,54 @@ describe('layers (PERF-3)', () => {
       // (Another test file may have loaded it already in this worker — then both keys read the theme id and the
       // test still proves the repaint-on-key-change contract below.)
       const { layer, rec } = fakeLayer(720, 1280, '');
-      paintGround(layer, view, DEFAULT_PALETTE, spec, SEA);
+      paintGround(layer, view, DEFAULT_PALETTE, spec, SEA, FLAT);
       const first = layer.key;
-      expect(first).toBe(groundKey(view, DEFAULT_PALETTE, spec, SEA));
+      expect(first).toBe(groundKey(view, DEFAULT_PALETTE, spec, SEA, FLAT));
       expect(first).toContain(`|${themeFor('theme.neon').id}|`);
       // logical units (scale 0.5): the whole canvas plus one CSS px (2 logical px) for the rounded-up edge column / row
       expect(rec.fills, 'sea fill covers the canvas and the rounded-up edge column / row').toEqual([[0, 0, 722, 1282]]);
       // same inputs → no repaint
-      paintGround(layer, view, DEFAULT_PALETTE, spec, SEA);
+      paintGround(layer, view, DEFAULT_PALETTE, spec, SEA, FLAT);
       expect(rec.fills.length).toBe(1);
 
       await loadThemes();
       expect(themeFor('theme.neon').id).toBe('theme.neon');
-      paintGround(layer, view, DEFAULT_PALETTE, spec, SEA);
+      paintGround(layer, view, DEFAULT_PALETTE, spec, SEA, FLAT);
       expect(layer.key).toContain('|theme.neon|');
       expect(layer.key).not.toContain('|theme.default|');
       // the chunk landing changed the key (unless it was in before the first paint) → the ground was refilled
       expect(rec.fills.length).toBe(first === layer.key ? 1 : 2);
       // the raw sprite id never was the key: unknown ids resolve to the default look
-      expect(groundKey(view, DEFAULT_PALETTE, { ...spec, theme: 'theme.bogus' }, SEA)).toContain('|theme.default|');
+      expect(groundKey(view, DEFAULT_PALETTE, { ...spec, theme: 'theme.bogus' }, SEA, FLAT)).toContain('|theme.default|');
     });
 
     it('a theme change (shop equip) repaints: the key differs, the old ground is blanked by the refill', async () => {
       await loadThemes();
       const { layer, rec } = fakeLayer(720, 1280, '');
-      paintGround(layer, view, DEFAULT_PALETTE, { ...spec, theme: undefined }, DEFAULT_SEA);
+      paintGround(layer, view, DEFAULT_PALETTE, { ...spec, theme: undefined }, DEFAULT_SEA, FLAT);
       expect(layer.key).toContain('|theme.default|');
-      paintGround(layer, view, DEFAULT_PALETTE, { ...spec, theme: 'theme.dusk' }, DEFAULT_SEA);
+      paintGround(layer, view, DEFAULT_PALETTE, { ...spec, theme: 'theme.dusk' }, DEFAULT_SEA, FLAT);
       expect(layer.key).toContain('|theme.dusk|');
       expect(rec.fills.length).toBe(2);
       // and blankLayer after a menu visit really clears it (main.ts blanks the ground on every non-play screen)
       blankLayer(layer);
       expect(layer.key).toBe('');
       expect(rec.clears).toEqual([[0, 0, 720, 1280]]);
+    });
+
+    it('is keyed on the camera tilt (ART-21): the default play camera is tilted, ?tilt=0 / setTilt(0) is the flat map', () => {
+      setTilt(undefined);
+      const tilted = playCamera();
+      expect(tilted.k).toBeLessThan(1);
+      expect(groundKey(view, DEFAULT_PALETTE, spec, SEA, tilted)).not.toBe(groundKey(view, DEFAULT_PALETTE, spec, SEA, FLAT));
+      expect(groundKey(view, DEFAULT_PALETTE, spec, SEA)).toBe(groundKey(view, DEFAULT_PALETTE, spec, SEA, tilted));
+      setTilt(0);
+      try {
+        expect(playCamera()).toBe(FLAT);
+        expect(groundKey(view, DEFAULT_PALETTE, spec, SEA)).toBe(groundKey(view, DEFAULT_PALETTE, spec, SEA, FLAT));
+      } finally {
+        setTilt(undefined);
+      }
     });
   });
 });

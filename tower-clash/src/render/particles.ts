@@ -23,7 +23,10 @@ export function prefersReducedMotion(): boolean {
   }
 }
 
-export type Kind = 'confetti' | 'ring' | 'impact' | 'puff' | 'dust' | 'spark' | 'flash' | 'tracer' | 'plank' | 'glint' | 'coin' | 'gem';
+/** Map point → where it is drawn and its depth scale (the play camera, ART-21 camera.ts `proj`). */
+export type ParticleProjection = (x: number, y: number) => { x: number; y: number; s: number };
+
+export type Kind = 'confetti' | 'ring' | 'impact' | 'puff' | 'dust' | 'step' | 'spark' | 'flash' | 'tracer' | 'plank' | 'glint' | 'coin' | 'gem';
 
 export interface Particle {
   kind: Kind;
@@ -50,8 +53,10 @@ const CAPTURE_MS = 520;
 const SHAKE_PX = 6;
 const SHAKE_MS = 320;
 const SHAKE_CYCLES = 3;
-/** Marching columns on sand: at most one dust puff per column per this many ms. */
+/** Marching columns on sand: at most one wake puff per column per this many ms… */
 const DUST_INTERVAL_MS = 200;
+/** …and on every biome (ART-20) at most one footstep puff per column per this many ms (≈ 11 a second, ≈ 4 alive per column). */
+const STEP_INTERVAL_MS = 90;
 /** Under fire (rules v2.1): badge jolt per hostile landing (px, length) and the impact-ring rate cap per tower. */
 const HIT_PX = 3;
 const HIT_MS = 180;
@@ -136,6 +141,7 @@ export class ParticleSystem implements BurstHost {
   private readonly captures = new Map<string, { at: number; from: Owner }>();
   private readonly aims = new Map<string, number>();
   private readonly dustAt = new Map<string, number>();
+  private readonly stepAt = new Map<string, number>();
   /** Per tower: last seen `underFireUntilMs`, wall-clock of the last hostile landing and of the last impact ring. */
   private readonly fire = new Map<string, { until: number; hitAt: number; ringAt: number }>();
   private shakeAt = -Infinity;
@@ -305,6 +311,23 @@ export class ParticleSystem implements BurstHost {
     this.push(p);
   }
 
+  /**
+   * ART-20: a small flat footstep puff where a marching soldier pushes off (or behind a tank's
+   * tracks), in the biome's dust colour, rate-limited per column (`key`) to one every
+   * STEP_INTERVAL_MS — whichever unit of the column steps first gets it, so the puffs walk along the
+   * column instead of trailing its last soldier.
+   */
+  step(key: string, x: number, y: number, color: string, nowMs: number): void {
+    if (this.reducedMotion) return;
+    const last = this.stepAt.get(key);
+    if (last !== undefined && nowMs - last < STEP_INTERVAL_MS) return;
+    this.stepAt.set(key, nowMs);
+    const p = this.make('step', x + (this.rnd() - 0.5) * 2, y, color, 300 + this.rnd() * 120, 1.6 + this.rnd() * 1.2);
+    p.vx = (this.rnd() - 0.5) * 6;
+    p.vy = -5 - this.rnd() * 5;
+    this.push(p);
+  }
+
   /** Gold gem glints, roof pulse and a rising sparkle ring. */
   upgrade(towerId: string, x: number, y: number, color: string, nowMs: number): void {
     if (this.reducedMotion) return;
@@ -413,7 +436,7 @@ export class ParticleSystem implements BurstHost {
   }
 
   /** Step by wall-clock time and paint. Expects the logical transform to be active. */
-  draw(ctx: CanvasRenderingContext2D, nowMs: number): void {
+  draw(ctx: CanvasRenderingContext2D, nowMs: number, project?: ParticleProjection): void {
     if (!this.warmed && !this.reducedMotion) {
       this.warmed = true;
       warmEconomyBursts();
@@ -423,6 +446,9 @@ export class ParticleSystem implements BurstHost {
     if (!this.ps.length) return;
     const s = dt / 1000;
     ctx.save();
+    // ART-21 camera: world particles are drawn upright at their projected point, scaled by depth
+    // (one setTransform each); confetti and purchase coins / gems live in screen space and are not
+    const base = project ? (ctx.getTransform() as DOMMatrix | undefined) : undefined;
     for (let i = this.ps.length - 1; i >= 0; i--) {
       const p = this.ps[i]!;
       p.age += dt;
@@ -437,6 +463,13 @@ export class ParticleSystem implements BurstHost {
       p.rot += p.vrot * s;
       const t = p.age / p.life;
       const fade = 1 - t;
+      if (project && base) {
+        if (p.kind === 'confetti' || p.kind === 'coin' || p.kind === 'gem' || p.kind === 'tracer') ctx.setTransform(base);
+        else {
+          const q = project(p.x, p.y);
+          ctx.setTransform(base.a * q.s, 0, 0, base.d * q.s, base.e + base.a * (q.x - q.s * p.x), base.f + base.d * (q.y - q.s * p.y));
+        }
+      }
       switch (p.kind) {
         case 'ring':
           ctx.globalAlpha = fade;
@@ -480,6 +513,16 @@ export class ParticleSystem implements BurstHost {
           ctx.arc(p.x, p.y, p.size + (p.kind === 'dust' ? 7 : 9) * t, 0, Math.PI * 2);
           ctx.fill();
           break;
+        case 'step': {
+          // a flat ground puff spreading out (ellipse, like the unit shadows)
+          ctx.globalAlpha = fade * 0.85;
+          ctx.fillStyle = p.color;
+          const r = p.size + 4.5 * t;
+          ctx.beginPath();
+          ctx.ellipse(p.x, p.y, r, r * 0.55, 0, 0, Math.PI * 2);
+          ctx.fill();
+          break;
+        }
         case 'spark':
         case 'glint': {
           ctx.globalAlpha = fade;
@@ -510,16 +553,20 @@ export class ParticleSystem implements BurstHost {
           ctx.arc(p.x, p.y, p.size * (0.6 + t), 0, Math.PI * 2);
           ctx.fill();
           break;
-        case 'tracer':
+        case 'tracer': {
+          // both ends through the camera (a shell's flight is a straight line on the screen too)
+          const a = project ? project(p.x, p.y) : p;
+          const b = project ? project(p.x2, p.y2) : { x: p.x2, y: p.y2 };
           ctx.globalAlpha = fade;
           ctx.strokeStyle = p.color;
-          ctx.lineWidth = p.size;
+          ctx.lineWidth = project ? p.size * project(p.x, p.y).s : p.size;
           ctx.lineCap = 'round';
           ctx.beginPath();
-          ctx.moveTo(p.x, p.y);
-          ctx.lineTo(p.x2, p.y2);
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
           ctx.stroke();
           break;
+        }
         case 'coin':
         case 'gem':
           economy?.draw(ctx, p, t, fade);

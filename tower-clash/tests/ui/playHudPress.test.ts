@@ -54,7 +54,8 @@ function fixture(): LevelDef {
   });
 }
 
-const pt = (x: number, y: number) => ({ x, y, id: 1, type: 'touch' as const, timeMs: 0 });
+/** A pointer at map / layout point (x, y), placed where the play screen draws it (ART-21: towers through the tilted camera, HUD rects as they are). */
+const pt = (x: number, y: number) => ({ ...play.fromLayout(x, y), id: 1, type: 'touch' as const, timeMs: 0 });
 const centre = (r: Rect) => pt(r.x + r.w / 2, r.y + r.h / 2);
 
 /** A press at `from`, eight moves along the straight line, the lift at `to` (QA's repro shape). */

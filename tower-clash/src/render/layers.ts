@@ -10,6 +10,8 @@ import type { TerrainSpec } from './terrain';
 import { drawTerrain } from './terrain';
 import type { PlayUi } from './draw';
 import { drawHud, hudKey } from './hud';
+import type { Camera } from './camera';
+import { horizonY, playCamera } from './camera';
 
 /*
  * Static layers (PERF-3): two extra `<canvas>` elements stacked with the game canvas, each
@@ -104,28 +106,30 @@ function viewKey(view: View): string {
   return `${view.dpr}|${view.scale}|${view.offsetX}|${view.offsetY}|${view.cssW}x${view.cssH}|${i.top},${i.bottom}`;
 }
 
-/** Cache key of the ground layer: level / variant (spent mines) / biome / resolved theme / palette / sea / viewport. */
-export function groundKey(view: View, pal: Palette, spec: TerrainSpec, sea: SeaColors): string {
+/** Cache key of the ground layer: level / variant (spent mines) / biome / resolved theme / palette / sea / camera tilt / viewport. */
+export function groundKey(view: View, pal: Palette, spec: TerrainSpec, sea: SeaColors, cam: Camera = playCamera()): string {
   const seaKey = `${sea.top},${sea.bottom},${sea.wave ?? ''},${sea.ambient ?? ''}`;
-  return `${spec.key}|${spec.variant ?? ''}|${spec.biome ?? ''}|${themeFor(spec.theme).id}|${pal.owners.enemy1}|${seaKey}|${viewKey(view)}`;
+  return `${spec.key}|${spec.variant ?? ''}|${spec.biome ?? ''}|${themeFor(spec.theme).id}|${pal.owners.enemy1}|${seaKey}|${cam.k}|${viewKey(view)}`;
 }
 
-export function paintGround(layer: Layer, view: View, pal: Palette, spec: TerrainSpec, sea: SeaColors): void {
-  const key = groundKey(view, pal, spec, sea);
+/** The play screen's ground: the full-bleed sea (with the far-sea haze under a tilted camera, ART-21) and the cached island. */
+export function paintGround(layer: Layer, view: View, pal: Palette, spec: TerrainSpec, sea: SeaColors, cam: Camera = playCamera()): void {
+  const key = groundKey(view, pal, spec, sea, cam);
   if (layer.key === key) return;
   const ctx = layer.ctx;
   ctx.save();
   logical(ctx, view, false);
-  drawSea(ctx, view, sea); // full bleed (BUG-34): covers the whole canvas, margins included
+  drawSea(ctx, view, sea, horizonY(cam)); // full bleed (BUG-34): covers the whole canvas, margins included
   logical(ctx, view, true);
-  drawTerrain(ctx, view, pal, spec);
+  drawTerrain(ctx, view, pal, spec, cam);
   ctx.restore();
   layer.key = key;
 }
 
 export function paintHud(layer: Layer, view: View, state: GameState, ui: PlayUi, nowMs: number): void {
   const a = hudAnchors(view);
-  const key = `${viewKey(view)}|${a.top},${a.bottom}|${hudKey(state, ui, nowMs)}`;
+  // the stream chips and airstrike rings stand at the towers' tilted anchors (ART-21): keyed on the tilt
+  const key = `${viewKey(view)}|${a.top},${a.bottom}|${playCamera().k}|${hudKey(state, ui, nowMs)}`;
   if (layer.key === key) return;
   const ctx = layer.ctx;
   ctx.setTransform(1, 0, 0, 1, 0, 0);

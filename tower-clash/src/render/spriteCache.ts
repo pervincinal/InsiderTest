@@ -95,6 +95,11 @@ const player = {
   y: 0,
   slot: 0,
   blitted: false,
+  /** Draw-time scale (ART-21 depth): 1 = the pixel-exact integer blit. */
+  k: 1,
+  /** Device position of the layer's top-left corner when `k` ≠ 1 (sub-pixel, scaled about the anchor). */
+  sx: 0,
+  sy: 0,
   fixed(): void {
     if (this.blitted) return;
     this.blitted = true;
@@ -102,7 +107,8 @@ const player = {
     if (!layer) return;
     const ctx = this.ctx!;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.drawImage(layer, this.x, this.y);
+    if (this.k === 1) ctx.drawImage(layer, this.x, this.y);
+    else ctx.drawImage(layer, this.sx, this.sy, layer.width * this.k, layer.height * this.k);
     ctx.setTransform(this.m!);
   },
   live(draw: () => void): void {
@@ -161,14 +167,17 @@ function bake(ctx: CanvasRenderingContext2D, key: string, x: number, y: number, 
  * Draw `paint` at logical (x, y) through the cache. Returns false (nothing drawn) when the current
  * transform is not a uniform axis-aligned scale, no offscreen canvas is available, or this frame's
  * bake budget is spent — the caller then draws direct. `key` must name everything the fixed parts
- * depend on except scale and position.
+ * depend on except scale and position. `drawScale` (ART-21 depth, ≠ 1 for a building away from the
+ * camera's near edge) scales the drawing about (x, y) at draw time: the layers are baked at the
+ * frame's base scale (no new keys, one sub-pixel phase) and blitted resampled; live parts draw
+ * through the scaled transform.
  */
-export function drawSprite(ctx: CanvasRenderingContext2D, key: string, x: number, y: number, box: SpriteBox, paint: Paint): boolean {
+export function drawSprite(ctx: CanvasRenderingContext2D, key: string, x: number, y: number, box: SpriteBox, paint: Paint, drawScale = 1): boolean {
   if (!enabled || typeof ctx.getTransform !== 'function') return false;
   const m = ctx.getTransform() as DOMMatrix | undefined; // test stubs return undefined
   if (!m || typeof m.a !== 'number') return false;
   const s = m.a;
-  if (m.b !== 0 || m.c !== 0 || m.d !== s || !(s > 0)) return false;
+  if (m.b !== 0 || m.c !== 0 || m.d !== s || !(s > 0) || !(drawScale > 0)) return false;
   const sk = s.toFixed(4);
   if (sk !== scaleKey) {
     scaleKey = sk;
@@ -178,8 +187,9 @@ export function drawSprite(ctx: CanvasRenderingContext2D, key: string, x: number
   const ay = m.f + s * y;
   const ix = Math.round(ax);
   const iy = Math.round(ay);
-  const qx = Math.round((ax - ix) * PHASE_STEPS) / PHASE_STEPS;
-  const qy = Math.round((ay - iy) * PHASE_STEPS) / PHASE_STEPS;
+  const scaled = drawScale !== 1;
+  const qx = scaled ? 0 : Math.round((ax - ix) * PHASE_STEPS) / PHASE_STEPS;
+  const qy = scaled ? 0 : Math.round((ay - iy) * PHASE_STEPS) / PHASE_STEPS;
   const full = `${key}|${qx}|${qy}`;
   let entry: Entry | null | undefined = cache.get(full);
   if (entry) {
@@ -194,19 +204,27 @@ export function drawSprite(ctx: CanvasRenderingContext2D, key: string, x: number
     }
     if (bakes >= BAKES_PER_FRAME) return false;
     bakes++;
+    // a scaled draw bakes at phase 0: the anchor sits exactly at (ox, oy) of every layer
     entry = bake(ctx, full, x, y, s, qx, qy, box, paint);
     if (!entry) return false;
   }
+  const mDraw = scaled ? m.translate(x, y).scale(drawScale).translate(-x, -y) : m;
+  if (scaled) ctx.setTransform(mDraw);
   player.ctx = ctx;
   player.entry = entry;
-  player.m = m;
+  player.m = mDraw;
   player.x = ix - entry.ox;
   player.y = iy - entry.oy;
+  player.k = drawScale;
+  player.sx = ax - entry.ox * drawScale;
+  player.sy = ay - entry.oy * drawScale;
   player.slot = 0;
   player.blitted = false;
   paint(ctx, player);
+  if (scaled) ctx.setTransform(m);
   player.ctx = null;
   player.entry = null;
   player.m = null;
+  player.k = 1;
   return true;
 }

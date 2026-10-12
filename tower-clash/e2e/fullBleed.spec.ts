@@ -20,6 +20,10 @@ const SAVE_KEY = 'towerclash.save.v3';
 const SEA_TOP = [0x3f, 0xb6, 0xde];
 const SEA_BOTTOM = [0x8e, 0xe2, 0xf5];
 const OLD_BAND = [0x1f, 0x8f, 0xc2];
+// ART-21 (src/render/sea.ts paintHaze): on the play screen the far sea above the island fades into a pale
+// horizon haze — hazeColour = shade(SEA_TOP, HAZE_LIFT 0.62) = #b6e3f2 at HAZE_ALPHA 0.72 over SEA_TOP,
+// full from logical y 40 upward, so the play ground's top corners are this tone (the title keeps SEA_TOP).
+const SEA_HAZE = [149, 214, 236];
 // src/render/layout.ts — HUD / BOOSTERS (layout coordinates; the bands move, these do not)
 const HUD = { pause: { x: 636, y: 18, w: 66, h: 60 }, menu: { x: 586, y: 1196, w: 116, h: 64 } };
 const BOOSTERS = { overdrive: { x: 232, y: 1186, w: 66, h: 88 } };
@@ -137,8 +141,8 @@ for (const phone of PHONES) {
 
       // ground layer: the sea in all four corners; HUD layer: its glass bands cover the corners
       const ground = await corners(page, 'ground');
-      expectSea(ground.tl, SEA_TOP, 'ground top-left');
-      expectSea(ground.tr, SEA_TOP, 'ground top-right');
+      expectSea(ground.tl, SEA_HAZE, 'ground top-left (horizon haze)');
+      expectSea(ground.tr, SEA_HAZE, 'ground top-right (horizon haze)');
       expectSea(ground.bl, SEA_BOTTOM, 'ground bottom-left');
       expectSea(ground.br, SEA_BOTTOM, 'ground bottom-right');
       await expect.poll(async () => Object.values(await corners(page, 'hud')).map((px) => px[3]! > 100), { message: 'HUD glass reaches all four corners' }).toEqual([true, true, true, true]);

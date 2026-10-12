@@ -12,7 +12,8 @@ import { enemyCommands, isAiTick, rngsFor } from '../ai/index';
 import type { View } from '../render/view';
 import { applyTransform, clipToMap, hudAnchors, toHudSpace } from '../render/view';
 import { drawGame } from '../render/draw';
-import { BOOSTERS, HUD, PAUSE } from '../render/layout';
+import { BOOSTERS, HUD, PAUSE, TOWER_HIT_RADIUS } from '../render/layout';
+import { playCamera, proj, unproj } from '../render/camera';
 import { inRect } from '../render/widgets';
 import { ParticleSystem } from '../render/particles';
 import type { HudPlayUi } from '../render/hud';
@@ -214,6 +215,7 @@ export class PlayScreen implements Screen {
       blockedHintText: () => t('hint.blocked'),
       emptyHintText: () => t('hint.empty'),
       fullTopHintText: () => t('hint.fullTop'),
+      project: (x, y) => proj(playCamera(), x, y),
       onCommand: (cmd) => {
         this.tutorial?.onCommand(cmd, this.state);
         this.loop.enqueue(cmd);
@@ -490,7 +492,8 @@ export class PlayScreen implements Screen {
       ctx.save();
       applyTransform(view);
       clipToMap(view);
-      drawTutorial(ctx, ui.palette, this.state, step, nowMs);
+      const cam = playCamera();
+      drawTutorial(ctx, ui.palette, this.state, step, nowMs, (x, y) => proj(cam, x, y), !cam.flat);
       ctx.restore();
     }
   }
@@ -503,6 +506,34 @@ export class PlayScreen implements Screen {
    */
   private hudPoint(p: PointerPoint): { x: number; y: number } {
     return toHudSpace(hudAnchors(this.app.view), p.x, p.y);
+  }
+
+  /**
+   * ART-21: a screen logical point on the world → map coordinates (the camera undone, exactly). The
+   * gestures, the hit tests and the drag / swipe previews all work in map coordinates; the renderer
+   * draws them back through the same camera, so the line still ends under the finger.
+   */
+  private toWorld(p: PointerPoint): PointerPoint {
+    const cam = playCamera();
+    return cam.flat ? p : { ...p, ...unproj(cam, p.x, p.y) };
+  }
+
+  /**
+   * Layout point → screen logical point (Screen.fromLayout; the debug hooks `toClient` /
+   * `layoutToClient` use it): while the world takes input, a point of the map's band
+   * (HUD.mapTop..HUD.mapBottom) is a map point and goes through the camera (ART-21); the HUD
+   * bands, the pause card and anything else are drawn untilted and come back unchanged.
+   */
+  fromLayout(x: number, y: number): { x: number; y: number } {
+    if (this.loop.paused || y < HUD.mapTop || y > HUD.mapBottom) return { x, y };
+    const p = proj(playCamera(), x, y);
+    return { x: p.x, y: p.y };
+  }
+
+  /** Inverse of `fromLayout` for a point on the world's screen band. */
+  toLayout(x: number, y: number): { x: number; y: number } {
+    if (this.loop.paused || !this.inWorld({ id: 0, x, y, timeMs: 0 })) return { x, y };
+    return unproj(playCamera(), x, y);
   }
 
   /** Between the two (anchored) HUD bands: where gestures act on the world. */
@@ -647,7 +678,7 @@ export class PlayScreen implements Screen {
       return;
     }
     this.press = { kind: 'world' };
-    this.gestures.down(p);
+    this.gestures.down(this.toWorld(p));
   }
 
   move(p: PointerPoint): void {
@@ -657,7 +688,7 @@ export class PlayScreen implements Screen {
     const press = this.press;
     if (press?.kind === 'hud' && press.button && this.hudButtonAt(p) !== press.button) press.button = null;
     if (this.targeting || press?.kind === 'hud') return;
-    this.gestures.move(p); // a world press, or a hover (no press: the gestures only update the hover)
+    this.gestures.move(this.toWorld(p)); // a world press, or a hover (no press: the gestures only update the hover)
   }
 
   up(p: PointerPoint): void {
@@ -678,7 +709,9 @@ export class PlayScreen implements Screen {
     if (!press) return; // BUG-37: a lift whose press nobody saw (or that began while paused) does nothing
     if (press.kind === 'target') {
       if (this.targeting && this.inWorld(p)) {
-        const t = hitTower(this.state, p.x, p.y);
+        const w = this.toWorld(p);
+        const cam = playCamera();
+        const t = hitTower(this.state, w.x, w.y, TOWER_HIT_RADIUS, (x, y) => proj(cam, x, y));
         if (!t || !this.airstrike(t.id)) this.targeting = false; // tap elsewhere (or a non-enemy tower) cancels
       }
       return;
@@ -692,7 +725,7 @@ export class PlayScreen implements Screen {
     }
     // a world press ends through the gestures, wherever the finger lifts (BUG-36: never a HUD button)
     const hintBefore = this.gestures.limitHint;
-    this.gestures.up(p);
+    this.gestures.up(this.toWorld(p));
     // A refusal (link limit / blocked lane / empty source) is a fresh `limitHint` object: one thud per refused tap.
     if (this.gestures.limitHint && this.gestures.limitHint !== hintBefore) playSfx('refuse');
   }
@@ -708,7 +741,7 @@ export class PlayScreen implements Screen {
       return;
     }
     const hintBefore = this.gestures.limitHint;
-    this.gestures.cancel(at);
+    this.gestures.cancel(at ? this.toWorld(at) : undefined);
     if (this.gestures.limitHint && this.gestures.limitHint !== hintBefore) playSfx('refuse');
   }
 

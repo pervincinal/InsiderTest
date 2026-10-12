@@ -1,7 +1,7 @@
 import type { Command, GameState } from '../sim/types';
 import { C } from '../sim/constants';
 import type { Palette } from '../render/palette';
-import { TOWER_RADIUS } from '../render/layout';
+import { HUD, TOWER_RADIUS } from '../render/layout';
 import { badgeY } from '../render/sprites';
 import { font, roundRect } from '../render/widgets';
 import type { TranslationKey } from './i18n';
@@ -154,12 +154,79 @@ const PAD_X = 22;
 const BUBBLE_H = 56;
 const ARROW_H = 38;
 
-/** Draw the ring, arrow and hint for `step`. Expects the logical-map transform to be active. */
-export function drawTutorial(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, step: TutorialStep, nowMs: number): void {
+interface Box {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+const LINE_H = 30;
+const SIDE_PAD_Y = 12;
+const SIDE_MIN_W = 180;
+
+function overlaps(a: Box, b: Box): boolean {
+  return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+}
+
+/** Greedy word wrap of `text` into lines no wider than `maxW` at the current font. */
+function wrap(ctx: CanvasRenderingContext2D, text: string, maxW: number): string[] {
+  const lines: string[] = [];
+  let line = '';
+  for (const word of text.split(' ')) {
+    const next = line ? `${line} ${word}` : word;
+    if (line && ctx.measureText(next).width > maxW) {
+      lines.push(line);
+      line = word;
+    } else line = next;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+/**
+ * The hint bubble beside a tower (ART-21): on the side with more room, wrapped to fit it, vertically
+ * centred on the tower's body (`cy`, `half` = its half width) and kept inside the play band; null when
+ * no side has room or the bubble would cover another tower there too.
+ */
+function sideBubble(ctx: CanvasRenderingContext2D, text: string, x: number, cy: number, half: number, others: Box[]): { rect: Box; lines: string[]; right: boolean; tipX: number; cy: number } | null {
+  const gap = 6;
+  const leftRoom = x - half - gap - ARROW_H - 12 - 12;
+  const rightRoom = C.MAP_W - 12 - (x + half + gap + ARROW_H + 12);
+  const right = rightRoom >= leftRoom;
+  const room = Math.min(C.MAP_W - 24, right ? rightRoom : leftRoom);
+  if (room < SIDE_MIN_W) return null;
+  const lines = wrap(ctx, text, room - PAD_X * 2);
+  const textW = Math.max(...lines.map((l) => ctx.measureText(l).width));
+  const w = Math.min(room, textW + PAD_X * 2);
+  const h = lines.length * LINE_H + SIDE_PAD_Y * 2;
+  const tipX = right ? x + half + gap : x - half - gap;
+  const bx = right ? tipX + ARROW_H + 12 : tipX - ARROW_H - 12 - w;
+  const by = Math.max(HUD_TOP_GAP, Math.min(cy - h / 2, HUD_BOTTOM_GAP - h));
+  const rect = { x: bx, y: by, w, h };
+  if (others.some((o) => overlaps(o, rect))) return null;
+  return { rect, lines, right, tipX, cy };
+}
+
+/** The side bubble stays inside the play band, with a margin. */
+const HUD_TOP_GAP = HUD.mapTop + 8;
+const HUD_BOTTOM_GAP = HUD.mapBottom - 8;
+
+/**
+ * Draw the ring, arrow and hint for `step`. Expects the logical-map transform to be active; `project`
+ * maps a map point to the screen with its depth scale (the play camera, ART-21); `avoidTowers` (the
+ * camera is on) moves the bubble beside the tower when above it would cover another tower.
+ */
+export function drawTutorial(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, step: TutorialStep, nowMs: number, project: (x: number, y: number) => { x: number; y: number; s: number } = (x, y) => ({ x, y, s: 1 }), avoidTowers = false): void {
   const tower = state.towers[step.towerId];
   if (!tower) return;
   const pulse = (Math.sin(nowMs / 220) + 1) / 2; // 0..1
-  const { x, y } = tower;
+  // ART-21: the tower stands at its projected anchor, scaled by depth (play camera); the ring and the
+  // arrow's offsets follow that size, the arrow and bubble keep their readable size
+  const at = project(tower.x, tower.y);
+  const x = at.x;
+  const y = at.y;
+  const k = at.s;
 
   ctx.save();
   // Pulsing ring
@@ -167,18 +234,64 @@ export function drawTutorial(ctx: CanvasRenderingContext2D, pal: Palette, state:
   ctx.lineWidth = 5;
   ctx.globalAlpha = 0.55 + 0.45 * (1 - pulse);
   ctx.beginPath();
-  ctx.arc(x, y, TOWER_RADIUS + 16 + pulse * 10, 0, Math.PI * 2);
+  ctx.arc(x, y, (TOWER_RADIUS + 16 + pulse * 10) * k, 0, Math.PI * 2);
   ctx.stroke();
   ctx.globalAlpha = 1;
 
   // Bubble above the tower unless it is near the top edge, then below. Above, the arrow points at
   // the unit-count badge from above it, so neither the arrow nor the bubble covers the number
-  // (BUG-35: "the text sits on top of it").
+  // (BUG-35: "the text sits on top of it"). ART-21: when that would cover another tower (towers sit
+  // closer together on the screen under the camera), the bubble moves beside the tower instead —
+  // to the roomier side, text wrapped, the arrow pointing sideways at the tower's body.
   const below = y < 300;
   const bob = pulse * 8;
-  const arrowTip = below ? y + TOWER_RADIUS + 30 + bob : y + badgeY(tower.kind, tower.level) - 30 - bob;
+  ctx.font = font(HINT_PX);
+  const textW = ctx.measureText(step.text).width;
+  const arrowTip = below ? y + (TOWER_RADIUS + 30) * k + bob : y + badgeY(tower.kind, tower.level) * k - 30 - bob;
   const arrowBase = below ? arrowTip + ARROW_H : arrowTip - ARROW_H;
+  const w = Math.min(C.MAP_W - 24, textW + PAD_X * 2);
+  const bx = Math.max(12, Math.min(C.MAP_W - 12 - w, x - w / 2));
+  const by = below ? arrowBase + 16 : arrowBase - 16 - BUBBLE_H;
+  const others: Box[] = [];
+  for (const id in state.towers) {
+    if (id === tower.id) continue;
+    const o = state.towers[id]!;
+    const p = project(o.x, o.y);
+    others.push({ x: p.x - 44 * p.s, y: p.y + (badgeY(o.kind, o.level) - 20) * p.s, w: 88 * p.s, h: (20 - badgeY(o.kind, o.level)) * p.s });
+  }
+  const above: Box = { x: bx, y: Math.min(by, arrowTip), w, h: BUBBLE_H + ARROW_H + 16 };
+  const side = avoidTowers && others.some((o) => overlaps(o, above)) ? sideBubble(ctx, step.text, x, y - 46 * k, 44 * k, others) : null;
   ctx.fillStyle = pal.star;
+  if (side) {
+    // horizontal arrow at the tower's body, the bubble beyond it
+    const dir = side.right ? 1 : -1;
+    const tip = side.tipX + dir * bob;
+    const base = tip + dir * ARROW_H;
+    const cy = side.cy;
+    ctx.beginPath();
+    ctx.moveTo(tip, cy);
+    ctx.lineTo(base, cy - 20);
+    ctx.lineTo(base, cy - 7);
+    ctx.lineTo(base + dir * 12, cy - 7);
+    ctx.lineTo(base + dir * 12, cy + 7);
+    ctx.lineTo(base, cy + 7);
+    ctx.lineTo(base, cy + 20);
+    ctx.closePath();
+    ctx.fill();
+    const r = side.rect;
+    roundRect(ctx, r, 14);
+    ctx.fillStyle = pal.panel;
+    ctx.fill();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = pal.star;
+    ctx.stroke();
+    ctx.fillStyle = pal.text;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    side.lines.forEach((line, i) => ctx.fillText(line, r.x + r.w / 2, r.y + SIDE_PAD_Y + LINE_H * (i + 0.5) + 1, r.w - PAD_X));
+    ctx.restore();
+    return;
+  }
   ctx.beginPath();
   ctx.moveTo(x, arrowTip);
   ctx.lineTo(x - 20, arrowBase);
@@ -190,11 +303,6 @@ export function drawTutorial(ctx: CanvasRenderingContext2D, pal: Palette, state:
   ctx.closePath();
   ctx.fill();
 
-  ctx.font = font(HINT_PX);
-  const textW = ctx.measureText(step.text).width;
-  const w = Math.min(C.MAP_W - 24, textW + PAD_X * 2);
-  const bx = Math.max(12, Math.min(C.MAP_W - 12 - w, x - w / 2));
-  const by = below ? arrowBase + 16 : arrowBase - 16 - BUBBLE_H;
   roundRect(ctx, { x: bx, y: by, w, h: BUBBLE_H }, 14);
   ctx.fillStyle = pal.panel;
   ctx.fill();

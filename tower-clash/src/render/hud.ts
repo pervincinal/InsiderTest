@@ -30,6 +30,7 @@ import { prefersReducedMotion } from './particles';
 import { reducedMotionOverride } from '../ui/motion';
 import type { BoosterKind, BoosterStatus } from '../ui/boosters';
 import { badgeY, drawVideoGlyph } from './sprites';
+import { BADGE_MIN_SCALE, playCamera, proj } from './camera';
 import type { ToastOpts } from './economyWidgets';
 import { drawToast, drawWallet } from './economyWidgets';
 import type { HudOverlayDrawers } from './hudOverlays';
@@ -234,13 +235,16 @@ function drawStreamChips(ctx: CanvasRenderingContext2D, state: GameState, ui: Pl
   ctx.save();
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
+  const cam = playCamera(); // next to the badge, which stands at the tower's projected anchor (ART-21); the chip keeps its size
   for (const [id, n] of counts) {
     const tw = state.towers[id];
     if (!tw) continue;
     const raise = ui.selectedTowerId === tw.id ? 4 : 0;
-    const by = Math.max(HUD.mapTop + 26, tw.y + badgeY(tw.kind, tw.level) - raise);
+    const at = proj(cam, tw.x, tw.y);
+    const by = Math.max(HUD.mapTop + 26, at.y + (badgeY(tw.kind, tw.level) - raise) * at.s);
+    const bs = at.s === 1 ? 1 : Math.max(BADGE_MIN_SCALE, at.s); // the badge's scale: the chip sits against its left end
     const tones = pal.ownerTones[tw.owner];
-    const chip: Rect = { x: tw.x - 72, y: by - 11, w: 46, h: 24 };
+    const chip: Rect = { x: at.x - 26 * bs - 46, y: by - 11, w: 46, h: 24 };
     ctx.fillStyle = pal.groundShadow;
     roundRect(ctx, { x: chip.x + 1, y: chip.y + 3, w: chip.w, h: chip.h }, 12);
     ctx.fill();
@@ -345,20 +349,22 @@ function drawTargeting(ctx: CanvasRenderingContext2D, state: GameState, ui: Play
   const color = boosterColor(pal, 'airstrike');
   const pulse = motionAllowed() ? (Math.sin(nowMs / 200) + 1) / 2 : 0.5;
   ctx.save();
+  const cam = playCamera(); // rings around the tower where it stands (ART-21 projected anchor, depth-scaled)
   for (const id in state.towers) {
-    const t = state.towers[id]!;
-    if (t.owner === 'player' || t.owner === 'neutral') continue;
+    const tw = state.towers[id]!;
+    if (tw.owner === 'player' || tw.owner === 'neutral') continue;
+    const t = proj(cam, tw.x, tw.y);
     ctx.globalAlpha = 0.55 + 0.45 * (1 - pulse);
     ctx.strokeStyle = color;
     ctx.lineWidth = 5;
     ctx.setLineDash([14, 10]);
     ctx.lineDashOffset = motionAllowed() ? -(nowMs / 30) % 24 : 0;
     ctx.beginPath();
-    ctx.arc(t.x, t.y, 52 + pulse * 6, 0, Math.PI * 2);
+    ctx.arc(t.x, t.y, (52 + pulse * 6) * t.s, 0, Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.globalAlpha = 1;
-    drawCrosshairGlyph(ctx, color, t.x, t.y - 70, 14);
+    drawCrosshairGlyph(ctx, color, t.x, t.y - 70 * t.s, 14);
   }
   ctx.restore();
   ctx.font = font(20, '500');

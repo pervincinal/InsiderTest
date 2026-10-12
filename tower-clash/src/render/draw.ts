@@ -3,7 +3,7 @@ import { C } from '../sim/constants';
 import { roadIdFor } from '../sim/create';
 import { capacityOf, isUnderFire, linksFrom } from '../sim/step';
 import type { Biome, Palette } from './palette';
-import { biomeFor, withAlpha } from './palette';
+import { BIOME_DUST, biomeFor, withAlpha } from './palette';
 import type { View } from './view';
 import { applyDeviceTransform, applyTransform, bleed, bleedRect } from './view';
 import { HUD, SOLDIER_DRAW_SCALE, SWIPE_TRAIL_MS, TANK_DRAW_SCALE } from './layout';
@@ -14,8 +14,10 @@ import { blankLayer, paintGround, paintHud } from './layers';
 import { drawSea, terrainSea } from './sea';
 import type { TerrainSpec } from './terrain';
 import { drawTerrain, drawTerrainOverlay } from './terrain';
-import type { TowerSkin } from './sprites';
-import { badgeY, drawBadge, drawTowerShadow, drawTowerSprite, drawUnitSprite, towerFootprintRadius } from './sprites';
+import type { Camera } from './camera';
+import { BADGE_MIN_SCALE, FLAT, horizonY, playCamera, proj, projAngle, projDir, standingAt } from './camera';
+import type { TowerLook, TowerSkin } from './sprites';
+import { STRIDE_SWING, badgeY, drawBadge, drawTowerShadow, drawTowerSprite, drawUnitSprite, pushOffDistance, stridePhase, towerFootprintRadius } from './sprites';
 import type { ParticleSystem } from './particles';
 import { hostileAttackers, prefersReducedMotion } from './particles';
 
@@ -108,20 +110,21 @@ function chip(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number,
   drawBadge(ctx, pal, x, y, text, false, { stroke, scale: 0.72 });
 }
 
-/** Blinking lamp and charge chip over every live mine (the body sits in the cached terrain). */
-function drawMineLights(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, nowMs: number): void {
+/** Blinking lamp and charge chip over every live mine (the body sits in the cached terrain); upright at the projected anchor, the lamp depth-scaled, the chip at its readable size (ART-21). */
+function drawMineLights(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, nowMs: number, cam: Camera = FLAT): void {
   const mines = state.mines;
   if (mines.length === 0) return;
   const blink = motionAllowed() ? 0.55 + 0.45 * Math.sin(nowMs / 160) : 1;
   for (const m of mines) {
     if (m.charges <= 0) continue;
+    const p = proj(cam, m.x, m.y);
     ctx.fillStyle = pal.mine;
     ctx.globalAlpha = blink;
     ctx.beginPath();
-    ctx.arc(m.x, m.y - 4, 4, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y - 4 * p.s, 4 * p.s, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
-    chip(ctx, pal, m.x, m.y - 30, String(m.charges), pal.mine);
+    chip(ctx, pal, p.x, p.y - 30 * p.s, String(m.charges), pal.mine);
   }
 }
 
@@ -153,12 +156,22 @@ function ribbonPose(road: Road, forward: boolean, s: number, off: number): Ribbo
   return { x: p.x - dy * off, y: p.y + dx * off, dx, dy };
 }
 
-function traceRibbon(ctx: CanvasRenderingContext2D, road: Road, forward: boolean, s0: number, s1: number, off: number): void {
-  const a = ribbonPose(road, forward, s0, off);
-  const b = ribbonPose(road, forward, s1, off);
+/** A ribbon pose where it is drawn (ART-21 camera): projected point, screen direction, depth scale `s`. */
+function screenPose(cam: Camera, p: RibbonPt): RibbonPt & { s: number } {
+  if (cam.flat) return { x: p.x, y: p.y, dx: p.dx, dy: p.dy, s: 1 };
+  const q = proj(cam, p.x, p.y);
+  const d = projDir(cam, p.x, p.y, p.dx, p.dy);
+  return { x: q.x, y: q.y, dx: d.dx, dy: d.dy, s: q.s };
+}
+
+/** Trace the ribbon's centre line (straight on the screen too: the camera is a plane homography); returns the mean depth scale of its ends. */
+function traceRibbon(ctx: CanvasRenderingContext2D, road: Road, forward: boolean, s0: number, s1: number, off: number, cam: Camera): number {
+  const a = screenPose(cam, ribbonPose(road, forward, s0, off));
+  const b = screenPose(cam, ribbonPose(road, forward, s1, off));
   ctx.beginPath();
   ctx.moveTo(a.x, a.y);
   ctx.lineTo(b.x, b.y);
+  return (a.s + b.s) / 2;
 }
 
 function linkRoad(state: LinkedState, link: LinkLike): Road | undefined {
@@ -176,8 +189,11 @@ function linkRoad(state: LinkedState, link: LinkLike): Road | undefined {
  * reduced motion) and an arrowhead sits at the target end.
  * Opposite links on one lane are offset to their right so both read. Sources with ≥ 1 link get a
  * soft pulsing "streaming" ring on the ground (growth paused, rules v3). Drawn under units / towers.
+ * Under the tilted camera (ART-21) everything is drawn at projected points, sized by depth (the
+ * ribbon by the mean depth of its ends); the rings keep the building's own base perspective and
+ * scale (`standingAt`) so they hug its plinth.
  */
-export function drawLinks(ctx: CanvasRenderingContext2D, pal: Palette, state: LinkedState, nowMs: number, motion: boolean): void {
+export function drawLinks(ctx: CanvasRenderingContext2D, pal: Palette, state: LinkedState, nowMs: number, motion: boolean, cam: Camera = FLAT): void {
   const links = state.links ?? [];
   if (links.length === 0) return;
   // which lanes carry traffic both ways, and which towers are streaming
@@ -197,16 +213,18 @@ export function drawLinks(ctx: CanvasRenderingContext2D, pal: Palette, state: Li
     const tones = pal.ownerTones[owner];
     const pulse = motion ? 0.5 + 0.5 * Math.sin(nowMs / 260 + t.x * 0.02) : 0.5;
     const r = towerFootprintRadius(t.kind, t.level) + 10 + pulse * 5;
-    ctx.strokeStyle = withAlpha(tones.mid, 0.3 + pulse * 0.25);
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.ellipse(t.x, t.y + 8, r, r * 0.42, 0, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.strokeStyle = withAlpha(tones.lit, 0.35 + pulse * 0.25);
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.ellipse(t.x, t.y + 8, r - 6, (r - 6) * 0.42, 0, 0, Math.PI * 2);
-    ctx.stroke();
+    standingAt(ctx, cam, t.x, t.y, () => {
+      ctx.strokeStyle = withAlpha(tones.mid, 0.3 + pulse * 0.25);
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.ellipse(t.x, t.y + 8, r, r * 0.42, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = withAlpha(tones.lit, 0.35 + pulse * 0.25);
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.ellipse(t.x, t.y + 8, r - 6, (r - 6) * 0.42, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    });
   }
   const phase = motion ? ((nowMs / 1000) * CHEVRON_SPEED) % CHEVRON_PITCH : 0;
   for (const l of links) {
@@ -223,31 +241,34 @@ export function drawLinks(ctx: CanvasRenderingContext2D, pal: Palette, state: Li
     const tones = pal.ownerTones[l.owner];
     const body = mine ? tones.lit : tones.mid;
     // ribbon: thin ink outline (every owner), then the translucent body
-    traceRibbon(ctx, road, forward, s0, s1, off);
+    const ws = traceRibbon(ctx, road, forward, s0, s1, off, cam);
     ctx.globalAlpha = mine ? 0.6 : 0.5;
     ctx.strokeStyle = pal.ink;
-    ctx.lineWidth = LINK_WIDTH + 2;
+    ctx.lineWidth = (LINK_WIDTH + 2) * ws;
     ctx.stroke();
     ctx.globalAlpha = mine ? 0.72 : 0.68;
     ctx.strokeStyle = body;
-    ctx.lineWidth = LINK_WIDTH;
+    ctx.lineWidth = LINK_WIDTH * ws;
     ctx.stroke();
-    // chevrons pointing at the target
+    // chevrons pointing at the target (each sized by its own depth)
     ctx.globalAlpha = mine ? 0.9 : 0.75;
     ctx.strokeStyle = pal.paper;
-    ctx.lineWidth = 2.4;
+    ctx.lineWidth = 2.4 * ws;
     ctx.beginPath();
     for (let sPos = s0 + 8 + phase; sPos < s1 - 6; sPos += CHEVRON_PITCH) {
-      const p = ribbonPose(road, forward, sPos, off);
-      const nx = -p.dy;
-      const ny = p.dx;
-      ctx.moveTo(p.x - p.dx * 3 + nx * 3.4, p.y - p.dy * 3 + ny * 3.4);
-      ctx.lineTo(p.x + p.dx * 2.5, p.y + p.dy * 2.5);
-      ctx.lineTo(p.x - p.dx * 3 - nx * 3.4, p.y - p.dy * 3 - ny * 3.4);
+      const p = screenPose(cam, ribbonPose(road, forward, sPos, off));
+      const k = p.s;
+      const nx = -p.dy * k;
+      const ny = p.dx * k;
+      ctx.moveTo(p.x - p.dx * 3 * k + nx * 3.4, p.y - p.dy * 3 * k + ny * 3.4);
+      ctx.lineTo(p.x + p.dx * 2.5 * k, p.y + p.dy * 2.5 * k);
+      ctx.lineTo(p.x - p.dx * 3 * k - nx * 3.4, p.y - p.dy * 3 * k - ny * 3.4);
     }
     ctx.stroke();
     // arrowhead at the target end
-    const e = ribbonPose(road, forward, s1, off);
+    const ep = screenPose(cam, ribbonPose(road, forward, s1, off));
+    const ek = ep.s;
+    const e = { x: ep.x, y: ep.y, dx: ep.dx * ek, dy: ep.dy * ek };
     const nx = -e.dy;
     const ny = e.dx;
     ctx.beginPath();
@@ -278,8 +299,12 @@ export function drawLinks(ctx: CanvasRenderingContext2D, pal: Palette, state: Li
 
 /* ---------- ground marks (under towers/units) ---------- */
 
-/** Gold clay ring on the ground with a soft outer glow. */
-function selectionRing(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, r: number, dash?: number[], offset = 0): void {
+/** Gold clay ring on the ground with a soft outer glow (in the building's base perspective and depth scale: `standingAt`, ART-21). */
+function selectionRing(ctx: CanvasRenderingContext2D, pal: Palette, cam: Camera, x: number, y: number, r: number, dash?: number[], offset = 0): void {
+  standingAt(ctx, cam, x, y, () => selectionRingFlat(ctx, pal, x, y, r, dash, offset));
+}
+
+function selectionRingFlat(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, r: number, dash?: number[], offset = 0): void {
   const ry = r * 0.42;
   ctx.setLineDash(dash ?? []);
   ctx.lineDashOffset = offset;
@@ -316,8 +341,9 @@ export const GUIDE_LINE_DASH: readonly number[] = Object.freeze([10, 8]);
  * Rules v3 §2.0b(8): while a player tower is selected, a thin dashed line (owner colour, 45 % alpha,
  * 2 px, 10/8 dashes) from it to every tower it has a clear lane to, skipping targets it already
  * streams into. Blocked towers get nothing, so the player sees at a glance what is reachable.
+ * ART-21: trimmed in map units, drawn between the projected ends (straight under the camera).
  */
-export function drawGuideLines(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, sel: Tower): void {
+export function drawGuideLines(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, sel: Tower, cam: Camera = FLAT): void {
   if (sel.owner !== 'player') return;
   const linked = new Set<string>();
   for (const l of linksFrom(state, sel.id)) linked.add(l.to);
@@ -338,14 +364,16 @@ export function drawGuideLines(ctx: CanvasRenderingContext2D, pal: Palette, stat
     const len = Math.hypot(dx, dy);
     const r1 = towerFootprintRadius(t.kind, t.level) + 6;
     if (len <= r0 + r1) continue;
-    ctx.moveTo(sel.x + (dx / len) * r0, sel.y + (dy / len) * r0);
-    ctx.lineTo(t.x - (dx / len) * r1, t.y - (dy / len) * r1);
+    const a = proj(cam, sel.x + (dx / len) * r0, sel.y + (dy / len) * r0);
+    const b = proj(cam, t.x - (dx / len) * r1, t.y - (dy / len) * r1);
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
   }
   ctx.stroke();
   ctx.restore();
 }
 
-function drawGroundMarks(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, ui: PlayUi, nowMs: number): void {
+function drawGroundMarks(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, ui: PlayUi, nowMs: number, cam: Camera): void {
   const motion = motionAllowed();
   // artillery ranges (the sim measures a circle in map units)
   for (const id in state.towers) {
@@ -356,7 +384,16 @@ function drawGroundMarks(ctx: CanvasRenderingContext2D, pal: Palette, state: Gam
     ctx.lineWidth = 3;
     ctx.setLineDash([10, 10]);
     ctx.beginPath();
-    ctx.arc(t.x, t.y, C.ARTILLERY_RANGE, 0, Math.PI * 2);
+    if (cam.flat) ctx.arc(t.x, t.y, C.ARTILLERY_RANGE, 0, Math.PI * 2);
+    else {
+      // ART-21: the range circle on the ground, through the camera (a narrowing oval)
+      for (let i = 0; i <= RANGE_SEGMENTS; i++) {
+        const a = (i / RANGE_SEGMENTS) * Math.PI * 2;
+        const p = proj(cam, t.x + Math.cos(a) * C.ARTILLERY_RANGE, t.y + Math.sin(a) * C.ARTILLERY_RANGE);
+        if (i === 0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+      }
+    }
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.globalAlpha = 1;
@@ -367,26 +404,30 @@ function drawGroundMarks(ctx: CanvasRenderingContext2D, pal: Palette, state: Gam
   const dragSrc = ui.drag ? state.towers[ui.drag.fromId] : undefined;
   const origin = dragSrc ?? sel;
   if (sel) {
-    drawGuideLines(ctx, pal, state, sel);
+    drawGuideLines(ctx, pal, state, sel, cam);
     const pulse = motion ? (Math.sin(nowMs / 180) + 1) / 2 : 0.5;
-    selectionRing(ctx, pal, sel.x, sel.y, 54 + pulse * 4);
+    selectionRing(ctx, pal, cam, sel.x, sel.y, 54 + pulse * 4);
   }
-  if (dragSrc && dragSrc.id !== sel?.id) selectionRing(ctx, pal, dragSrc.x, dragSrc.y, 56);
+  if (dragSrc && dragSrc.id !== sel?.id) selectionRing(ctx, pal, cam, dragSrc.x, dragSrc.y, 56);
   if (hov && origin && hov.id !== origin.id) {
     const road = state.roads[roadIdFor(origin.id, hov.id)];
-    if (road) drawRubberBand(ctx, pal, origin, hov, nowMs, motion, true);
-    selectionRing(ctx, pal, hov.x, hov.y, 56, [12, 9], motion ? -(nowMs / 40) % 21 : 0);
+    if (road) drawRubberBand(ctx, pal, proj(cam, origin.x, origin.y), proj(cam, hov.x, hov.y), nowMs, motion, true);
+    selectionRing(ctx, pal, cam, hov.x, hov.y, 56, [12, 9], motion ? -(nowMs / 40) % 21 : 0);
   } else if (ui.drag && dragSrc) {
     // No target under the finger yet: the line follows the finger (BUG-35 "xətt gəlsin mənlə").
-    drawRubberBand(ctx, pal, dragSrc, ui.drag, nowMs, motion, false);
+    drawRubberBand(ctx, pal, proj(cam, dragSrc.x, dragSrc.y), proj(cam, ui.drag.x, ui.drag.y), nowMs, motion, false);
   } else if (hov && !sel) {
-    selectionRing(ctx, pal, hov.x, hov.y, 56, [12, 9]);
+    selectionRing(ctx, pal, cam, hov.x, hov.y, 56, [12, 9]);
   }
 }
 
+/** Segments of an artillery range drawn through the tilted camera. */
+const RANGE_SEGMENTS = 64;
+
 /**
- * The drag / target preview line from `from` to `to`: solid gold once it snaps onto a reachable
- * target (`snapped`), thinner and translucent while it just follows the finger.
+ * The drag / target preview line from `from` to `to` (screen points: the camera already applied):
+ * solid gold once it snaps onto a reachable target (`snapped`), thinner and translucent while it just
+ * follows the finger.
  */
 function drawRubberBand(ctx: CanvasRenderingContext2D, pal: Palette, from: XY, to: XY, nowMs: number, motion: boolean, snapped: boolean): void {
   ctx.save();
@@ -456,17 +497,29 @@ function badgePop(state: GameState, id: string, n: number, nowMs: number, motion
   return 1 + 0.18 * Math.sin(t * Math.PI);
 }
 
-/** Dust behind the rearmost soldier of every marching column (sand only; rate-limited in the system). */
-function spawnDust(fx: ParticleSystem, pal: Palette, units: UnitDraw[], nowMs: number): void {
+/**
+ * Ground cues of marching columns: footstep puffs on every biome in its dust colour (ART-20) where a
+ * soldier's back foot pushes off (its stride phase, sprites.ts) or behind a tank's tracks, plus the
+ * bigger wake puff behind the rearmost unit on sand (`wake`; on a ribbon elsewhere it read as a
+ * blot). Both are rate-limited per column in the particle system, so 400 units cost a few puffs per frame.
+ */
+function spawnDust(fx: ParticleSystem, color: string, units: UnitDraw[], nowMs: number, wake: boolean): void {
   const rear = new Map<string, UnitDraw>();
   for (const u of units) {
     const key = `${u.unit.roadId}|${u.unit.from}`;
     const prev = rear.get(key);
     if (!prev || u.unit.progress < prev.unit.progress) rear.set(key, u);
+    if (u.scale < 1) continue; // still leaving the gate
+    if (u.unit.kind === 'tank') fx.step(key, u.x - u.dx * 14, u.y + 4, color, nowMs);
+    else if (pushOffDistance(stridePhase(u.unit.id, nowMs, true)) < 0.45) {
+      const back = STRIDE_SWING * SOLDIER_DRAW_SCALE;
+      fx.step(key, u.x - u.dx * back, u.y - u.dy * back * 0.5, color, nowMs);
+    }
   }
+  if (!wake) return;
   for (const [key, u] of rear) {
     if (u.scale < 1) continue; // still leaving the gate
-    fx.dust(key, u.x - u.dx * 8, u.y + 2, pal.dust, nowMs);
+    fx.dust(key, u.x - u.dx * 8, u.y + 2 - u.dy * 4, color, nowMs);
   }
 }
 
@@ -475,21 +528,44 @@ function snapToDevice(v: number, dev: number): number {
   return dev > 0 ? Math.round(v * dev) / dev : v;
 }
 
-function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, ui: PlayUi, nowMs: number, biome: Biome, dev: number): void {
+/** Every building's ground shadow, under all buildings and units (ART-21: at the projected anchor, depth-scaled, in the sprite's own perspective). */
+function drawTowerShadows(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, cam: Camera): void {
+  for (const id in state.towers) {
+    const t = state.towers[id]!;
+    standingAt(ctx, cam, t.x, t.y, () => drawTowerShadow(ctx, pal, t.x, t.y, t.kind, t.level));
+  }
+}
+
+/** Where a building stands on the screen (ART-21): its projected ground anchor and depth scale. */
+function standing(cam: Camera, t: Tower): TowerLook & { s: number } {
+  const p = proj(cam, t.x, t.y);
+  return { x: p.x, y: p.y, s: p.s, owner: t.owner, kind: t.kind, level: t.level };
+}
+
+/**
+ * Units, buildings, badges and the refusal bubble, upright in the logical frame at their projected
+ * anchors and scaled by depth (ART-21): buildings through the PERF-4 sprite cache's draw-time scale,
+ * units through their size, badges no smaller than BADGE_MIN_SCALE (24 px numerals). Sorting by map
+ * y and by screen y is the same order (the camera keeps y monotonic). Units stay in map coordinates
+ * for the dust (particles are projected when drawn).
+ */
+function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, ui: PlayUi, nowMs: number, biome: Biome, dev: number, cam: Camera): void {
   const motion = motionAllowed();
   const towers = Object.values(state.towers).sort((a, b) => a.y - b.y);
-  for (const t of towers) drawTowerShadow(ctx, pal, t.x, t.y, t.kind, t.level);
 
   const units: UnitDraw[] = [];
   unitDraws(state, ui.alpha, units);
-  if (motion && biome === 'sand' && ui.particles && units.length) spawnDust(ui.particles, pal, units, nowMs);
+  if (motion && ui.particles && units.length) spawnDust(ui.particles, BIOME_DUST[biome], units, nowMs, biome === 'sand');
   // painter's order: everything sorted by ground y so units walk in front of / behind buildings
   let ui_ = 0;
   const skin = ui.skin;
   // BUG-39: play-size units (larger than the sprite's design size, see layout.ts)
   const drawUnit = (u: UnitDraw): void => {
-    const size = u.scale * (u.unit.kind === 'tank' ? TANK_DRAW_SCALE : SOLDIER_DRAW_SCALE);
-    drawUnitSprite(ctx, pal, u.x, u.y, u.unit.owner, u.unit.kind, u.dx, u.dy, u.unit.id, nowMs, motion, size, u.unit.owner === 'player' ? skin?.helmet : undefined);
+    // ART-21: upright at the projected anchor, depth-scaled, heading along the lane as it appears on the screen
+    const p = proj(cam, u.x, u.y);
+    const d = projDir(cam, u.x, u.y, u.dx, u.dy);
+    const size = u.scale * (u.unit.kind === 'tank' ? TANK_DRAW_SCALE : SOLDIER_DRAW_SCALE) * p.s;
+    drawUnitSprite(ctx, pal, p.x, p.y, u.unit.owner, u.unit.kind, d.dx, d.dy, u.unit.id, nowMs, motion, size, u.unit.owner === 'player' ? skin?.helmet : undefined);
   };
   const fx = ui.particles;
   const hint = limitHintState(ui, nowMs);
@@ -500,15 +576,18 @@ function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState
     while (ui_ < units.length && units[ui_]!.y <= t.y + 4) drawUnit(units[ui_++]!);
     const shake = hint && ui.selectedTowerId === t.id && motion ? snapToDevice(hint.shake, dev) : 0;
     if (shake) ctx.translate(shake, 0);
-    drawTowerSprite(ctx, pal, t, {
+    const aim = fx?.aimOf(t.id);
+    const look = standing(cam, t);
+    drawTowerSprite(ctx, pal, look, {
       nowMs,
       motion,
       raised: ui.selectedTowerId === t.id,
       pulse: fx?.towerPulse(t.id, nowMs) ?? 0,
       squash: fx?.towerSquash(t.id, nowMs) ?? 1,
       wipe: fx?.towerWipe(t.id, nowMs) ?? undefined,
-      aim: fx?.aimOf(t.id),
+      aim: aim === undefined ? undefined : projAngle(cam, t.x, t.y, aim),
       skin: t.owner === 'player' ? skin : undefined,
+      scale: look.s === 1 ? undefined : look.s,
     });
     if (shake) ctx.translate(-shake, 0);
   }
@@ -517,19 +596,23 @@ function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState
   // badges on top of everything in the world
   for (const t of towers) {
     const raise = ui.selectedTowerId === t.id ? 4 : 0;
-    const by = Math.max(HUD.mapTop + 26, t.y + badgeY(t.kind, t.level) - raise);
+    const look = standing(cam, t);
+    const by = Math.max(HUD.mapTop + 26, look.y + (badgeY(t.kind, t.level) - raise) * look.s);
     const pop = badgePop(state, t.id, t.units, nowMs, motion);
     const by_ = isUnderFire(state, t) ? attackers.get(t.id) : undefined;
-    drawBadge(ctx, pal, t.x, by, String(t.units), t.units >= capacityOf(t), {
+    drawBadge(ctx, pal, look.x, by, String(t.units), t.units >= capacityOf(t), {
       stroke: pal.ownerTones[t.owner].shade,
-      scale: pop,
+      scale: look.s === 1 ? pop : pop * Math.max(BADGE_MIN_SCALE, look.s),
       underFire: isUnderFire(state, t) ? (by_ ? pal.owners[by_] : pal.ink) : undefined,
       shake: motion ? (fx?.badgeHit(t.id, nowMs) ?? 0) : 0,
     });
   }
   if (hint && ui.limitHintText && ui.selectedTowerId) {
     const t = state.towers[ui.selectedTowerId];
-    if (t) drawHintBubble(ctx, pal, t, Math.max(HUD.mapTop + 26, t.y + badgeY(t.kind, t.level) - 4), ui.limitHintText, hint.alpha);
+    if (t) {
+      const look = standing(cam, t);
+      drawHintBubble(ctx, pal, look, Math.max(HUD.mapTop + 26, look.y + (badgeY(t.kind, t.level) - 4) * look.s), ui.limitHintText, hint.alpha);
+    }
   }
 }
 
@@ -538,23 +621,25 @@ function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState
 /**
  * A short slash following the finger: a tapering paper stroke with a player-tone edge, each piece
  * fading over `SWIPE_TRAIL_MS` from when it was drawn. Reduced motion: a plain constant stroke (no
- * taper or fade animation); it still disappears once the input layer drops its points.
+ * taper or fade animation); it still disappears once the input layer drops its points. The points
+ * are map coordinates (ART-21): drawn at their projections, i.e. under the finger.
  */
-export function drawSwipeTrail(ctx: CanvasRenderingContext2D, pal: Palette, trail: readonly { x: number; y: number; t: number }[], nowMs: number, motion: boolean): void {
+export function drawSwipeTrail(ctx: CanvasRenderingContext2D, pal: Palette, trail: readonly { x: number; y: number; t: number }[], nowMs: number, motion: boolean, cam: Camera = FLAT): void {
   if (trail.length < 2) return;
   ctx.save();
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   const edge = pal.ownerTones.player.lit;
   for (let i = 1; i < trail.length; i++) {
-    const a = trail[i - 1]!;
     const b = trail[i]!;
+    const a = proj(cam, trail[i - 1]!.x, trail[i - 1]!.y);
+    const bp = proj(cam, b.x, b.y);
     const k = motion ? Math.max(0, Math.min(1, 1 - (nowMs - b.t) / SWIPE_TRAIL_MS)) : 1;
     if (k <= 0) continue;
     ctx.globalAlpha = 0.85 * k;
     ctx.beginPath();
     ctx.moveTo(a.x, a.y);
-    ctx.lineTo(b.x, b.y);
+    ctx.lineTo(bp.x, bp.y);
     ctx.strokeStyle = edge;
     ctx.lineWidth = 4 + 10 * k;
     ctx.stroke();
@@ -591,7 +676,7 @@ function limitHintState(ui: PlayUi, nowMs: number): { shake: number; alpha: numb
  * Paper speech bubble with ink text above (or, near the map top, below) a tower. Text ≥ 22 px
  * logical; the bubble stays inside the map horizontally.
  */
-function drawHintBubble(ctx: CanvasRenderingContext2D, pal: Palette, t: Tower, badgeTop: number, text: string, alpha: number): void {
+function drawHintBubble(ctx: CanvasRenderingContext2D, pal: Palette, t: XY, badgeTop: number, text: string, alpha: number): void {
   const px = 22;
   ctx.font = font(px, '700');
   const w = Math.min(C.MAP_W - 24, ctx.measureText(text).width + 30);
@@ -685,18 +770,20 @@ export function drawGame(ctx: CanvasRenderingContext2D, state: GameState, view: 
   const raw = motion ? (ui.particles?.shake(nowMs) ?? { dx: 0, dy: 0 }) : { dx: 0, dy: 0 };
   const shake = { dx: snapToDevice(raw.dx, dev), dy: snapToDevice(raw.dy, dev) };
   const layers = layered && ui.outcome === 'playing' && !ui.paused ? view.layers : undefined;
+  // ART-21: the tilted play camera (`?tilt=` override); the HUD and the overlays are not tilted
+  const cam = playCamera();
 
   // The sea over the whole canvas (BUG-34: full bleed, themed; cached on the ground layer while
   // layered), then the world clipped to the map, then veil / HUD / overlays out to the screen edges.
   applyDeviceTransform(view);
   if (layers) {
-    paintGround(layers.ground, view, pal, spec, sea);
+    paintGround(layers.ground, view, pal, spec, sea, cam);
     ctx.clearRect(0, 0, view.cssW, view.cssH);
   }
 
   ctx.save();
   applyTransform(view);
-  if (!layers) drawSea(ctx, view, sea);
+  if (!layers) drawSea(ctx, view, sea, horizonY(cam));
   // the world is clipped to the map's rows; across, it spans the screen (a wide screen's side margins
   // are sea, so the drifting cloud shadows cross them instead of being cut at the map edge)
   const screen = bleed(view);
@@ -707,17 +794,21 @@ export function drawGame(ctx: CanvasRenderingContext2D, state: GameState, view: 
   ctx.save();
   if (shake.dx || shake.dy) ctx.translate(shake.dx, shake.dy);
   // a shaking frame re-blits the ground here so the whole world moves together (the layer stays put)
-  if (!layers || shake.dx || shake.dy) drawTerrain(ctx, view, pal, spec);
-  drawTerrainOverlay(ctx, pal, spec, nowMs, motion, screen);
+  if (!layers || shake.dx || shake.dy) drawTerrain(ctx, view, pal, spec, cam);
 
-  drawLinks(ctx, pal, state, nowMs, motion);
-  drawMineLights(ctx, pal, state, nowMs);
-  drawGroundMarks(ctx, pal, state, ui, nowMs);
-  drawWorld(ctx, pal, state, ui, nowMs, spec.biome ?? 'grass', dev);
-  ui.particles?.draw(ctx, nowMs);
+  // ART-21 (camera.ts): everything is drawn in the logical frame at projected map points — first what
+  // lies on the ground, then what stands on it (upright, depth-scaled)
+  drawTerrainOverlay(ctx, pal, spec, nowMs, motion, screen, cam);
+  drawLinks(ctx, pal, state, nowMs, motion, cam);
+  drawMineLights(ctx, pal, state, nowMs, cam);
+  drawGroundMarks(ctx, pal, state, ui, nowMs, cam);
+  drawTowerShadows(ctx, pal, state, cam);
+  drawWorld(ctx, pal, state, ui, nowMs, spec.biome ?? 'grass', dev, cam);
+  // effects are spawned in map coordinates (particles.ts): each drawn upright at its projected point
+  ui.particles?.draw(ctx, nowMs, cam.flat ? undefined : (x, y) => proj(cam, x, y));
   ctx.restore();
-  // the slash follows the finger, not the shaking world
-  if (ui.swipeTrail && ui.outcome === 'playing') drawSwipeTrail(ctx, pal, ui.swipeTrail, nowMs, motion);
+  // the slash follows the finger, not the shaking world (its points are map coordinates)
+  if (ui.swipeTrail && ui.outcome === 'playing') drawSwipeTrail(ctx, pal, ui.swipeTrail, nowMs, motion, cam);
   ctx.restore(); // map clip off: the veil, the HUD bands and the overlays reach the screen edges
   if (ui.outcome === 'lost') {
     // defeat: the world goes a little grey and cold under the card (the margins' sea too)

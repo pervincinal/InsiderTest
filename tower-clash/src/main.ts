@@ -68,6 +68,12 @@ export interface TowerClashDebug {
   autoplay(): boolean;
   setSpeed(n: number): void;
   getSpeed(): number;
+  /**
+   * Client px of a logical point. On the play screen (not paused) a point of the map's band
+   * (HUD.mapTop..HUD.mapBottom) is a map point and goes through the tilted camera (ART-21,
+   * `PlayScreen.fromLayout`), so towers / lanes land where they are drawn; anything else is the plain
+   * letterbox mapping.
+   */
   toClient(x: number, y: number): { x: number; y: number };
   /**
    * Client px of a point on a play-HUD rect (layout.ts `HUD` / `BOOSTERS`, layout coordinates): the
@@ -78,8 +84,10 @@ export interface TowerClashDebug {
   /**
    * Client px of a layout point of the current screen (FE-11): the menus anchor their header (and
    * bottom chrome) to the safe-area edges of a tall screen, so their 9:16 rects (menuLayout.ts) are
-   * drawn elsewhere; each screen maps them (`Screen.fromLayout`). The identity — `toClient` — on
-   * screens without bands (title, play world, result card, pause card).
+   * drawn elsewhere; each screen maps them (`Screen.fromLayout`). FE-12: the title's groups follow its
+   * island to the safe edges the same way (TITLE in layout.ts; PLAY / settings / SHOP stay put). The
+   * identity on screens without bands (result card, pause card); the play world's map points go
+   * through the tilted camera like `toClient` (ART-21).
    */
   layoutToClient(x: number, y: number): { x: number; y: number };
   /** Inverse of `layoutToClient` before the client step: logical (720×1280 space) point → the current screen's layout point. */
