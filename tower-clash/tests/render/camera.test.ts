@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { BADGE_MIN_SCALE, FAR_SHORE_Y, FLAT, ISLAND_FAR_Y, TILT_DEFAULT, TILT_MIN, depth, horizonY, jacY, normaliseTilt, playCamera, proj, projAngle, projDir, projY, setTilt, unproj, unprojY } from '../../src/render/camera';
-import { HUD, TOWER_HIT_RADIUS } from '../../src/render/layout';
+import { BADGE_MIN_SCALE, FAR_SHORE_Y, FLAT, ISLAND_FAR_Y, TILT_DEFAULT, TILT_MIN, TILT_PERSPECTIVE, depth, horizonY, jacY, makeCamera, normaliseTilt, playCamera, proj, projAngle, projDir, projY, setTilt, unproj, unprojY } from '../../src/render/camera';
+import { HUD, TOWER_HIT_RADIUS, WORLD_ZOOM } from '../../src/render/layout';
 import { towerTop } from '../../src/render/sprites';
 import { hitTower } from '../../src/input/pointer';
 import { createState } from '../../src/sim/index';
@@ -8,13 +8,27 @@ import { makeLevel } from '../helpers';
 
 /*
  * ART-21 play camera v2: a plane homography of the ground (lines stay lines), depth scale 1 at the
- * near edge and k at the far edge, exact inverse; ?tilt=0 is the identity.
+ * near edge and k at the far edge, exact inverse; ?tilt=0 is the identity. ART-24: the default is the
+ * flat map again (identity) with bigger standing things (WORLD_ZOOM); the perspective camera is the
+ * `?tilt=0.72` override (TILT_PERSPECTIVE), checked here through `makeCamera`.
  */
 describe('play camera (ART-21)', () => {
   afterEach(() => setTilt(undefined));
 
-  it('defaults to the perspective camera; setTilt(0) is the flat map, other values clamp to TILT_MIN..1', () => {
-    expect(playCamera().k).toBe(TILT_DEFAULT);
+  it('defaults to the flat map (ART-24); setTilt(0.72) is the perspective camera, setTilt(0) flat again, other values clamp to TILT_MIN..1', () => {
+    expect(TILT_DEFAULT).toBe(1);
+    expect(playCamera()).toBe(FLAT);
+    for (const [x, y] of [
+      [0, 0],
+      [360, 640],
+      [700, 1250],
+    ] as const) {
+      expect(proj(playCamera(), x, y)).toEqual({ x, y, s: 1 });
+      expect(unproj(playCamera(), x, y)).toEqual({ x, y });
+    }
+    expect(horizonY(playCamera())).toBeUndefined();
+    setTilt(TILT_PERSPECTIVE);
+    expect(playCamera().k).toBe(TILT_PERSPECTIVE);
     expect(playCamera()).toBe(playCamera()); // stable object per value
     setTilt(0);
     expect(playCamera()).toBe(FLAT);
@@ -29,7 +43,7 @@ describe('play camera (ART-21)', () => {
   });
 
   it('narrows the far edge to k, keeps the near edge, lands the far shore on FAR_SHORE_Y and inverts exactly', () => {
-    const cam = playCamera();
+    const cam = makeCamera(TILT_PERSPECTIVE);
     expect(depth(cam, HUD.mapBottom)).toBeCloseTo(1, 12);
     expect(depth(cam, HUD.mapTop)).toBeCloseTo(cam.k, 12);
     expect(projY(cam, HUD.mapBottom)).toBeCloseTo(HUD.mapBottom, 9);
@@ -59,7 +73,7 @@ describe('play camera (ART-21)', () => {
   });
 
   it('maps straight lines to straight lines (a homography): a lane midpoint lands on the projected chord', () => {
-    const cam = playCamera();
+    const cam = makeCamera(TILT_PERSPECTIVE);
     const a = { x: 100, y: 1100 };
     const b = { x: 620, y: 200 };
     const pa = proj(cam, a.x, a.y);
@@ -73,7 +87,7 @@ describe('play camera (ART-21)', () => {
   });
 
   it('projects directions, keeps badges readable and puts the horizon haze just past the far shore', () => {
-    const cam = playCamera();
+    const cam = makeCamera(TILT_PERSPECTIVE);
     const d = projDir(cam, 200, 600, 0, -1);
     expect(Math.hypot(d.dx, d.dy)).toBeCloseTo(1, 9);
     expect(d.dy).toBeLessThan(0); // up the screen
@@ -85,7 +99,7 @@ describe('play camera (ART-21)', () => {
   });
 
   describe('tower hit areas under the camera (QA-23)', () => {
-    const cam = playCamera();
+    const cam = makeCamera(TILT_PERSPECTIVE);
     const project = (x: number, y: number) => proj(cam, x, y);
     const state = createState(
       makeLevel({
@@ -100,11 +114,12 @@ describe('play camera (ART-21)', () => {
     /** The map point drawn at screen point (x, y). */
     const at = (x: number, y: number) => unproj(cam, x, y);
 
-    it('never shrinks a far tower below the flat 44 px: a tap 40 px beside its base hits (44 × s would miss)', () => {
+    it('never shrinks a far tower below the flat radius: a tap 50 px beside its base hits (radius × s would miss)', () => {
       const p = proj(cam, 360, 230);
       expect(p.s).toBeLessThan(0.8);
-      expect(40).toBeGreaterThan(TOWER_HIT_RADIUS * p.s);
-      const m = at(p.x + 40, p.y);
+      expect(50).toBeGreaterThan(TOWER_HIT_RADIUS * p.s);
+      expect(50).toBeLessThan(TOWER_HIT_RADIUS);
+      const m = at(p.x + 50, p.y);
       expect(hitTower(state, m.x, m.y, TOWER_HIT_RADIUS, project)?.id).toBe('far');
       const out = at(p.x + TOWER_HIT_RADIUS + 3, p.y);
       expect(hitTower(state, out.x, out.y, TOWER_HIT_RADIUS, project)).toBeNull();
@@ -112,7 +127,7 @@ describe('play camera (ART-21)', () => {
 
     it("takes a tap on the roof of the drawn building, and misses above the roof by more than the radius", () => {
       const p = proj(cam, 360, 230);
-      const roof = towerTop('fortress', 1) * p.s;
+      const roof = towerTop('fortress', 1) * WORLD_ZOOM.tower * p.s;
       const onRoof = at(p.x, p.y - roof * 0.9);
       expect(hitTower(state, onRoof.x, onRoof.y, TOWER_HIT_RADIUS, project)?.id).toBe('far');
       const justAbove = at(p.x, p.y - roof - TOWER_HIT_RADIUS * 0.9);
@@ -135,6 +150,32 @@ describe('play camera (ART-21)', () => {
       const n = proj(cam, 200, 1100);
       const side = at(n.x + TOWER_HIT_RADIUS - 2, n.y);
       expect(hitTower(state, side.x, side.y, TOWER_HIT_RADIUS, project)?.id).toBe('near');
+    });
+  });
+
+  describe('ART-24 flat default: zoomed hit radius and roof capsule', () => {
+    const project = (x: number, y: number) => proj(FLAT, x, y);
+    const state = createState(
+      makeLevel({
+        towers: [
+          { id: 'a', x: 200, y: 600, owner: 'player', units: 5, level: 1, kind: 'barracks' },
+          { id: 'b', x: 520, y: 600, owner: 'neutral', units: 5 },
+        ],
+      }),
+      1,
+    );
+
+    it('the hit radius follows the tower zoom (44 → 57) and the roof of the zoomed building takes a tap', () => {
+      expect(TOWER_HIT_RADIUS).toBe(Math.round(44 * WORLD_ZOOM.tower));
+      expect(TOWER_HIT_RADIUS).toBe(57);
+      expect(hitTower(state, 200 + TOWER_HIT_RADIUS - 1, 600, TOWER_HIT_RADIUS, project)?.id).toBe('a');
+      expect(hitTower(state, 200 + TOWER_HIT_RADIUS + 3, 600, TOWER_HIT_RADIUS, project)).toBeNull();
+      const roof = towerTop('barracks', 1) * WORLD_ZOOM.tower;
+      expect(roof).toBeGreaterThan(TOWER_HIT_RADIUS);
+      expect(hitTower(state, 200, 600 - roof * 0.95, TOWER_HIT_RADIUS, project)?.id).toBe('a');
+      expect(hitTower(state, 200, 600 - roof - TOWER_HIT_RADIUS - 3, TOWER_HIT_RADIUS, project)).toBeNull();
+      // without the projection (other callers): the plain base circle
+      expect(hitTower(state, 200, 600 - roof * 0.95)).toBeNull();
     });
   });
 });

@@ -53,6 +53,7 @@ export function installDebug(app: TowerClashApp): TowerClashDebug & QaDebugExtra
         obstacles: st.obstacles.map((o) => ({ kind: o.kind, points: o.points, width: o.width })),
         mines: st.mines.map((m) => ({ x: m.x, y: m.y, charges: m.charges })),
         towers: Object.values(st.towers).map((t) => ({ x: t.x, y: t.y })),
+        zoom: true, // as the play screen builds it (ART-24)
       };
       const t0 = performance.now();
       getTerrain(app.view, app.palette(), spec, flat ? FLAT : playCamera());

@@ -6,12 +6,12 @@ import type { Biome, Palette } from './palette';
 import { BIOME_DUST, biomeFor, withAlpha } from './palette';
 import type { View } from './view';
 import { applyDeviceTransform, applyTransform, bleed, bleedRect, hudAnchors } from './view';
-import { HUD, SOLDIER_DRAW_SCALE, SWIPE_TRAIL_MS, TANK_DRAW_SCALE } from './layout';
+import { HUD, SOLDIER_DRAW_SCALE, SWIPE_TRAIL_MS, TANK_DRAW_SCALE, WORLD_ZOOM } from './layout';
 import { font, roundRect } from './widgets';
 type XY = { x: number; y: number };
 import { drawHud, drawOverlays, lessonCardLayout } from './hud';
 import type { BadgeBox } from './worldChips';
-import { badgeBox, badgeMinY, badgeScale, chipMinTop, drawWorldChips } from './worldChips';
+import { badgeBox, badgeCentre, badgeMinY, badgeScale, chipMinTop, drawWorldChips } from './worldChips';
 import { blankLayer, paintGround, paintHud } from './layers';
 import { drawSea, terrainSea } from './sea';
 import type { TerrainSpec } from './terrain';
@@ -115,10 +115,11 @@ function drawMineLights(ctx: CanvasRenderingContext2D, pal: Palette, state: Game
   for (const m of mines) {
     if (m.charges <= 0) continue;
     const p = proj(cam, m.x, m.y);
+    const k = p.s * WORLD_ZOOM.prop; // ART-24: the lamp sits on the zoomed mine body
     ctx.fillStyle = pal.mine;
     ctx.globalAlpha = blink;
     ctx.beginPath();
-    ctx.arc(p.x, p.y - 4 * p.s, 4 * p.s, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y - 4 * k, 4 * k, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
   }
@@ -233,25 +234,29 @@ export function drawLinks(ctx: CanvasRenderingContext2D, pal: Palette, state: Li
       ctx.beginPath();
       ctx.ellipse(t.x, t.y + 8, r - 6, (r - 6) * 0.42, 0, 0, Math.PI * 2);
       ctx.stroke();
-    });
+    }, WORLD_ZOOM.tower);
   }
-  const phase = motion ? ((nowMs / 1000) * CHEVRON_SPEED) % CHEVRON_PITCH : 0;
+  // ART-24 zoom: the ribbon, its chevrons and arrowhead × WORLD_ZOOM.link; its ends clear the zoomed bases
+  const zl = WORLD_ZOOM.link;
+  const zt = WORLD_ZOOM.tower;
+  const pitch = CHEVRON_PITCH * zl;
+  const phase = motion ? ((nowMs / 1000) * CHEVRON_SPEED * zl) % pitch : 0;
   for (const l of links) {
     const road = linkRoad(state, l);
     if (!road) continue;
     const forward = l.from === road.a;
-    const off = dirs.get(road.id) === 3 ? LINK_SIDE_PX : 0;
+    const off = dirs.get(road.id) === 3 ? LINK_SIDE_PX * zl : 0;
     const len = road.length;
     const target = state.towers[l.to];
-    const endPx = (target ? towerFootprintRadius(target.kind, target.level) : 32) + LINK_END_PAD;
-    const s0 = Math.min(LINK_START_PX, len * 0.45);
+    const endPx = (target ? towerFootprintRadius(target.kind, target.level) : 32) * zt + LINK_END_PAD;
+    const s0 = Math.min(LINK_START_PX * zt, len * 0.45);
     const s1 = Math.max(len - endPx, len * 0.55);
     const mine = l.owner === 'player';
     const tones = pal.ownerTones[l.owner];
     const body = mine ? tones.lit : tones.mid;
     // ribbon: a faint wide owner-lit glow under it (ART-23: a stream reads as light on the ground,
     // not tape), the thin ink outline (every owner), then the translucent body
-    const ws = traceRibbon(ctx, road, forward, s0, s1, off, cam);
+    const ws = traceRibbon(ctx, road, forward, s0, s1, off, cam) * zl;
     ctx.globalAlpha = LINK_GLOW_ALPHA;
     ctx.strokeStyle = tones.lit;
     ctx.lineWidth = (LINK_WIDTH + LINK_GLOW_PX) * ws;
@@ -279,9 +284,9 @@ export function drawLinks(ctx: CanvasRenderingContext2D, pal: Palette, state: Li
     ctx.strokeStyle = pal.paper;
     ctx.lineWidth = 2.4 * ws;
     ctx.beginPath();
-    for (let sPos = s0 + 8 + phase; sPos < s1 - 6; sPos += CHEVRON_PITCH) {
+    for (let sPos = s0 + 8 * zl + phase; sPos < s1 - 6 * zl; sPos += pitch) {
       const p = screenPose(cam, ribbonPose(road, forward, sPos, off));
-      const k = p.s;
+      const k = p.s * zl;
       const nx = -p.dy * k;
       const ny = p.dx * k;
       ctx.moveTo(p.x - p.dx * 3 * k + nx * 3.4, p.y - p.dy * 3 * k + ny * 3.4);
@@ -291,7 +296,7 @@ export function drawLinks(ctx: CanvasRenderingContext2D, pal: Palette, state: Li
     ctx.stroke();
     // arrowhead at the target end
     const ep = screenPose(cam, ribbonPose(road, forward, s1, off));
-    const ek = ep.s;
+    const ek = ep.s * zl;
     const e = { x: ep.x, y: ep.y, dx: ep.dx * ek, dy: ep.dy * ek };
     const nx = -e.dy;
     const ny = e.dx;
@@ -325,7 +330,7 @@ export function drawLinks(ctx: CanvasRenderingContext2D, pal: Palette, state: Li
 
 /** Gold clay ring on the ground with a soft outer glow (in the building's base perspective and depth scale: `standingAt`, ART-21). */
 function selectionRing(ctx: CanvasRenderingContext2D, pal: Palette, cam: Camera, x: number, y: number, r: number, dash?: number[], offset = 0): void {
-  standingAt(ctx, cam, x, y, () => selectionRingFlat(ctx, pal, x, y, r, dash, offset));
+  standingAt(ctx, cam, x, y, () => selectionRingFlat(ctx, pal, x, y, r, dash, offset), WORLD_ZOOM.tower);
 }
 
 function selectionRingFlat(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, r: number, dash?: number[], offset = 0): void {
@@ -358,7 +363,8 @@ function selectionRingFlat(ctx: CanvasRenderingContext2D, pal: Palette, x: numbe
 
 /** Guide line look (ART-7): 2 px owner colour at 45 %, dashed 10 on / 8 off in map units so it still reads at a 360 px viewport (map × 0.5). */
 export const GUIDE_LINE_ALPHA = 0.45;
-export const GUIDE_LINE_WIDTH = 2;
+/** 2 px at design size × the ART-24 guide zoom (2.5 px). */
+export const GUIDE_LINE_WIDTH = 2 * WORLD_ZOOM.guide;
 export const GUIDE_LINE_DASH: readonly number[] = Object.freeze([10, 8]);
 
 /**
@@ -371,7 +377,7 @@ export function drawGuideLines(ctx: CanvasRenderingContext2D, pal: Palette, stat
   if (sel.owner !== 'player') return;
   const linked = new Set<string>();
   for (const l of linksFrom(state, sel.id)) linked.add(l.to);
-  const r0 = towerFootprintRadius(sel.kind, sel.level) + 6;
+  const r0 = towerFootprintRadius(sel.kind, sel.level) * WORLD_ZOOM.tower + 6;
   ctx.save();
   ctx.globalAlpha = GUIDE_LINE_ALPHA;
   ctx.strokeStyle = pal.owners[sel.owner];
@@ -386,7 +392,7 @@ export function drawGuideLines(ctx: CanvasRenderingContext2D, pal: Palette, stat
     const dx = t.x - sel.x;
     const dy = t.y - sel.y;
     const len = Math.hypot(dx, dy);
-    const r1 = towerFootprintRadius(t.kind, t.level) + 6;
+    const r1 = towerFootprintRadius(t.kind, t.level) * WORLD_ZOOM.tower + 6;
     if (len <= r0 + r1) continue;
     const a = proj(cam, sel.x + (dx / len) * r0, sel.y + (dy / len) * r0);
     const b = proj(cam, t.x - (dx / len) * r1, t.y - (dy / len) * r1);
@@ -556,8 +562,26 @@ function snapToDevice(v: number, dev: number): number {
 function drawTowerShadows(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, cam: Camera): void {
   for (const id in state.towers) {
     const t = state.towers[id]!;
-    standingAt(ctx, cam, t.x, t.y, () => drawTowerShadow(ctx, pal, t.x, t.y, t.kind, t.level));
+    standingAt(ctx, cam, t.x, t.y, () => drawTowerShadow(ctx, pal, t.x, t.y, t.kind, t.level), WORLD_ZOOM.tower);
   }
+}
+
+/**
+ * A badge centre's offset above its building's anchor at depth 1 (negative = up): the roof top of the
+ * zoomed building (`towerTop × WORLD_ZOOM.tower`, `raise` px lifted with it) plus the zoomed badge's
+ * 18 px clearance (ART-24; sprites.ts `badgeY` at zoom 1).
+ */
+function badgeLift(t: Tower, raise: number): number {
+  return (badgeY(t.kind, t.level) + 18 - raise) * WORLD_ZOOM.tower - 18 * WORLD_ZOOM.badge;
+}
+
+/**
+ * A tower's badge centre (worldChips.ts `badgeCentre`): above the zoomed roof, clamped under the top HUD
+ * band / the lesson card — or, when that clamp would sit it on the tower's own body, below the plinth.
+ */
+function badgeSpot(t: Tower, look: { y: number; s: number }, raise: number, bs: number, cardBottom: number | null): { y: number; below: boolean } {
+  const plinth = towerFootprintRadius(t.kind, t.level) * WORLD_ZOOM.tower * look.s;
+  return badgeCentre(look.y + badgeLift(t, raise) * look.s, badgeMinY(cardBottom, bs), look.y, plinth, bs);
 }
 
 /** Where a building stands on the screen (ART-21): its projected ground anchor and depth scale. */
@@ -603,6 +627,12 @@ function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState
     if (shake) ctx.translate(shake, 0);
     const aim = fx?.aimOf(t.id);
     const look = standing(cam, t);
+    // ART-24 zoom about the anchor through the canvas transform: on the flat map the PERF-4 cache bakes
+    // every building at the one zoomed scale (crisp, no new keys); camera depth stays a draw-time scale
+    ctx.save();
+    ctx.translate(look.x, look.y);
+    ctx.scale(WORLD_ZOOM.tower, WORLD_ZOOM.tower);
+    ctx.translate(-look.x, -look.y);
     drawTowerSprite(ctx, pal, look, {
       nowMs,
       motion,
@@ -614,6 +644,7 @@ function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState
       skin: t.owner === 'player' ? skin : undefined,
       scale: look.s === 1 ? undefined : look.s,
     });
+    ctx.restore();
     if (shake) ctx.translate(-shake, 0);
   }
   while (ui_ < units.length) drawUnit(units[ui_++]!);
@@ -625,7 +656,7 @@ function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState
     const raise = ui.selectedTowerId === t.id ? 4 : 0;
     const look = standing(cam, t);
     const bs = badgeScale(look.s);
-    const by = Math.max(badgeMinY(cardBottom, bs), look.y + (badgeY(t.kind, t.level) - raise) * look.s);
+    const by = badgeSpot(t, look, raise, bs, cardBottom).y;
     const pop = badgePop(state, t.id, t.units, nowMs, motion);
     const fire = isUnderFire(state, t);
     const by_ = fire ? attackers.get(t.id) : undefined;
@@ -646,8 +677,11 @@ function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState
     const t = state.towers[ui.selectedTowerId];
     if (t) {
       const look = standing(cam, t);
-      const by = Math.max(badgeMinY(cardBottom, badgeScale(look.s)), look.y + (badgeY(t.kind, t.level) - 4) * look.s);
-      drawHintBubble(ctx, pal, look, by, ui.limitHintText, hint.alpha);
+      const bs = badgeScale(look.s);
+      const spot = badgeSpot(t, look, 4, bs, cardBottom);
+      // a badge flipped below the tower: the bubble goes under the badge (an anchor at its bottom edge, "below" forced)
+      if (spot.below) drawHintBubble(ctx, pal, { x: look.x, y: spot.y + 18 * bs - 30 }, -Infinity, ui.limitHintText, hint.alpha);
+      else drawHintBubble(ctx, pal, look, spot.y, ui.limitHintText, hint.alpha);
     }
   }
 }
@@ -782,6 +816,7 @@ function terrainSpec(state: GameState, theme: string | undefined): TerrainSpec {
     obstacles: state.obstacles.map((o) => ({ kind: o.kind, points: o.points, width: o.width })),
     mines: state.mines.map((m) => ({ x: m.x, y: m.y, charges: m.charges })),
     towers: Object.values(state.towers).map((t) => ({ x: t.x, y: t.y })),
+    zoom: true, // ART-24: the play world's props / walls drawn larger (the title island keeps design size)
   };
   specCache.set(state, spec);
   return spec;

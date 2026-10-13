@@ -11,6 +11,9 @@ import { clientPoint } from './helpers/tap';
  * X = 360 + (x − 360)·s(y), Y = horizon + span·s(y), standing things scale by s, and a tower's hit area
  * is a screen capsule around the drawn building (base up to roof top, radius TOWER_HIT_RADIUS × max(1, s)). Input unprojects exactly and the
  * debug hooks `toClient` / `layoutToClient` project map points of the play band while not paused.
+ * ART-24 (build 15): the default play view is the flat map again, with buildings / units / badges drawn
+ * larger (layout.ts WORLD_ZOOM; hit radius 57, the roof capsule on the flat map too); the perspective
+ * camera is the `?tilt=0.72` override, so every perspective case below boots with it.
  *
  * On both phone shapes the stakeholder's testers use — the 430 × 932 iPhone-class screen (DPR 3,
  * Dynamic Island / home-indicator insets 59 / 34, the native shell's `?dprcap=2` backing store, as in
@@ -24,7 +27,9 @@ import { clientPoint } from './helpers/tap';
  *      the tallest building's) are drawn inside the play band;
  *   2. a drag home → outpost (a far tower) under the camera links; a swipe through the stream's
  *      map-space midpoint (projected) cuts it, a swipe that stops short of it does not;
- *   3. `?tilt=0` is the old letterbox mapping exactly (computed here from the viewport);
+ *   3. `?tilt=0` and the default are the old letterbox mapping exactly (computed here from the
+ *      viewport), and on the flat default a tap TOWER_HIT_RADIUS − 4 px beside a tower takes it, + 6
+ *      px does not;
  * and on the 430 phone only:
  *   5. the walking soldiers (ART-20) really change pose between two frames 80 ms apart with the sim
  *      paused, and under `prefers-reduced-motion` hold one pose (pixel-identical).
@@ -39,8 +44,12 @@ import { clientPoint } from './helpers/tap';
 
 const SAVE_KEY = 'towerclash.save.v3';
 const SEED = 1;
-// src/render/layout.ts
-const TOWER_HIT_RADIUS = 44;
+// src/render/layout.ts — ART-24 WORLD_ZOOM (towers × 1.3, badges × 1.15) and TOWER_HIT_RADIUS = round(44 × 1.3)
+const ZOOM_TOWER = 1.3;
+const ZOOM_BADGE = 1.15;
+const TOWER_HIT_RADIUS = 57;
+// src/render/camera.ts TILT_PERSPECTIVE: the perspective camera is an override since ART-24 (the default is the flat map)
+const PERSPECTIVE = 'tilt=0.72';
 // src/render/sprites.ts TOWER_TOP.fortress[0]: both far towers (level 15 citadel, level 49 crown) are level-1 fortresses
 const FAR_ROOF = 74;
 const MAP_TOP = 96;
@@ -252,7 +261,7 @@ for (const shape of SHAPES) {
     test.use({ viewport: shape.viewport, deviceScaleFactor: shape.dpr, isMobile: true, hasTouch: true, ...(shape.userAgent ? { userAgent: shape.userAgent } : {}) });
 
     test('toClient is monotone down the band, keeps the centre column, puts the far shore and every badge inside the play band (levels 15, 49)', async ({ page }) => {
-      const errors = await boot(page, shape);
+      const errors = await boot(page, shape, PERSPECTIVE);
       for (const id of [15, 49] as const) {
         await startLevel(page, id);
         const geo = await page.evaluate(
@@ -287,8 +296,9 @@ for (const shape of SHAPES) {
         expect(far.s, 'the camera is on: the far shore is drawn smaller').toBeLessThan(0.8);
         for (const t of LEVELS[id].towers) {
           const d = await drawnAt(page, t);
-          // the tallest building's badge centre is (TOWER_TOP + 18) × s above the base, its half height 18 × max(s, BADGE_MIN_SCALE)
-          const badgeTop = d.c.y - ((TALLEST_TOWER_TOP + BADGE_ABOVE_TOP) * d.s + BADGE_HALF_H * Math.max(d.s, BADGE_MIN_SCALE)) * d.v;
+          // the tallest building's badge centre is (TOWER_TOP × 1.3 + 18 × 1.15) × s above the base (ART-24 zoom, draw.ts
+          // badgeLift), its half height 18 × max(s × 1.15, BADGE_MIN_SCALE)
+          const badgeTop = d.c.y - ((TALLEST_TOWER_TOP * ZOOM_TOWER + BADGE_ABOVE_TOP * ZOOM_BADGE) * d.s + BADGE_HALF_H * Math.max(d.s * ZOOM_BADGE, BADGE_MIN_SCALE)) * d.v;
           expect(badgeTop, `level ${id} ${t.id}: even a level-3 barracks' badge would sit under the top HUD band`).toBeGreaterThan(geo.bandTop);
           expect(d.c.y, `level ${id} ${t.id}: base above the bottom band`).toBeLessThan(geo.bandBottom);
         }
@@ -299,7 +309,7 @@ for (const shape of SHAPES) {
     for (const id of [15, 49] as const) {
       test(`level ${id}: every tower takes a real touch tap at toClient(tower), and it is that tower that takes it`, async ({ page }) => {
         test.setTimeout(120_000);
-        const errors = await boot(page, shape);
+        const errors = await boot(page, shape, PERSPECTIVE);
         await startLevel(page, id, 0.1);
         const blocked = await page.evaluate(() => window.__towerclash.getText('hint.blocked'));
         const f = new Fingers(page, await page.context().newCDPSession(page));
@@ -314,7 +324,7 @@ for (const shape of SHAPES) {
 
     test("a tap on the far tower's drawn roof takes it; one 1.25 × (roof height + hit radius) above its base (toward the sea) takes nothing (levels 15, 49)", async ({ page }) => {
       test.setTimeout(120_000);
-      const errors = await boot(page, shape);
+      const errors = await boot(page, shape, PERSPECTIVE);
       const blocked = await page.evaluate(() => window.__towerclash.getText('hint.blocked'));
       for (const id of [15, 49] as const) {
         await startLevel(page, id, 0.1);
@@ -330,7 +340,7 @@ for (const shape of SHAPES) {
         expect(d.s, `the far tower is drawn at depth < 0.8 (s = ${d.s.toFixed(3)})`).toBeLessThan(0.8);
         // BUG-40 follow-up (pointer.ts hitTower): the hit area is a capsule around the drawn building, from its base
         // up to its roof top (towerTop × s), of radius TOWER_HIT_RADIUS × max(1, s) — never below the flat 44 px
-        const roof = FAR_ROOF * d.s * d.v; // client px, base → roof top
+        const roof = FAR_ROOF * ZOOM_TOWER * d.s * d.v; // client px, base → roof top of the zoomed building (ART-24)
         const r = TOWER_HIT_RADIUS * Math.max(1, d.s) * d.v; // client px
         const onRoof: XY = { x: d.c.x, y: d.c.y - 0.85 * roof };
         const overRoof: XY = { x: d.c.x, y: d.c.y - 1.25 * (roof + r) };
@@ -371,7 +381,7 @@ for (const shape of SHAPES) {
     });
 
     test("drag home → outpost (far) links under the camera; a swipe through the stream's projected midpoint cuts it, one that stops short does not (level 15)", async ({ page }) => {
-      const errors = await boot(page, shape);
+      const errors = await boot(page, shape, PERSPECTIVE);
       await startLevel(page, 15);
       const f = new Fingers(page, await page.context().newCDPSession(page));
       const home = towerAt(15, 'home');
@@ -395,44 +405,92 @@ for (const shape of SHAPES) {
       expect(Math.abs(cross) / Math.hypot(cOut!.x - cHome!.x, cOut!.y - cHome!.y), 'the projected midpoint is on the drawn lane (px)').toBeLessThan(0.5);
       expect(Math.hypot(cMid!.x - (cHome!.x + cOut!.x) / 2, cMid!.y - (cHome!.y + cOut!.y) / 2), 'and away from the chord middle (px)').toBeGreaterThan(5);
 
-      // a swipe from empty ground that stops 30 map px short of the stream: nothing is cut
-      await f.start(along(-120));
-      await f.slide(along(-120), along(-30), 6);
+      // a swipe from the east side that stops 30 map px short of the stream: nothing is cut. (ART-24: the west side
+      // 120 px out is on the bastion's roof capsule now — a press there is a drag from an own tower, not a swipe;
+      // the east start may touch the neutral east tower's capsule, and a press on a neutral tower is still a swipe.)
+      await f.start(along(150));
+      await f.slide(along(150), along(30), 6);
       await f.end();
       await ticksPass(page, 3);
       expect(await playerLinks(page), 'a swipe that stops short cuts nothing').toEqual([{ from: 'home', to: 'outpost' }]);
       // through the midpoint: cut
-      await f.start(along(-120));
-      await f.slide(along(-120), along(120), 8);
+      await f.start(along(150));
+      await f.slide(along(150), along(-120), 8);
       await f.end();
       await expect.poll(() => playerLinks(page), { message: 'the swipe across the projected midpoint cuts home → outpost' }).toEqual([]);
       expect(await screen(page)).toBe('play');
       expect(errors).toEqual([]);
     });
 
-    test('?tilt=0 is the old flat map: toClient is the letterbox of the viewport (three points), and the default camera is not', async ({ page }) => {
-      const errors = await boot(page, shape, 'tilt=0');
-      await startLevel(page, 15);
+    test('?tilt=0 and the default (ART-24) are the old flat map: toClient is the letterbox of the viewport (three points); ?tilt=0.72 is not', async ({ page }) => {
       const pts: XY[] = [
         { x: 360, y: ISLAND_FAR_Y },
         { x: 100, y: 640 },
         { x: 650, y: 1170 },
       ];
-      for (const p of pts) {
-        const c = await clientPoint(page, p.x, p.y);
-        const e = letterbox(shape, p.x, p.y);
-        expect(c.x, `?tilt=0 (${p.x}, ${p.y}) x`).toBeCloseTo(e.x, 6);
-        expect(c.y, `?tilt=0 (${p.x}, ${p.y}) y`).toBeCloseTo(e.y, 6);
+      for (const q of ['tilt=0', '']) {
+        const errors = await boot(page, shape, q);
+        await startLevel(page, 15);
+        for (const p of pts) {
+          const c = await clientPoint(page, p.x, p.y);
+          const e = letterbox(shape, p.x, p.y);
+          expect(c.x, `${q || 'default'} (${p.x}, ${p.y}) x`).toBeCloseTo(e.x, 6);
+          expect(c.y, `${q || 'default'} (${p.x}, ${p.y}) y`).toBeCloseTo(e.y, 6);
+        }
+        expect(errors).toEqual([]);
       }
-      expect(errors).toEqual([]);
 
-      // control: the same far point under the default camera moves well off the letterbox
-      const errors2 = await boot(page, shape);
+      // control: the same far point under the perspective override moves well off the letterbox
+      const errors2 = await boot(page, shape, PERSPECTIVE);
       await startLevel(page, 15);
       const c = await clientPoint(page, 360, ISLAND_FAR_Y);
       const e = letterbox(shape, 360, ISLAND_FAR_Y);
-      expect(c.y - e.y, 'default camera: the far shore is drawn lower than on the flat map (CSS px)').toBeGreaterThan(20);
+      expect(c.y - e.y, '?tilt=0.72: the far shore is drawn lower than on the flat map (CSS px)').toBeGreaterThan(20);
       expect(errors2).toEqual([]);
+    });
+  });
+
+  test.describe(`flat default with the ART-24 zoom on ${shape.name}`, () => {
+    test.use({ viewport: shape.viewport, deviceScaleFactor: shape.dpr, isMobile: true, hasTouch: true, ...(shape.userAgent ? { userAgent: shape.userAgent } : {}) });
+
+    test('a tap TOWER_HIT_RADIUS − 4 px beside a tower takes it, + 6 px takes nothing (level 15 citadel)', async ({ page }) => {
+      test.setTimeout(90_000);
+      const errors = await boot(page, shape);
+      const blocked = await page.evaluate(() => window.__towerclash.getText('hint.blocked'));
+      await startLevel(page, 15, 0.1);
+      const f = new Fingers(page, await page.context().newCDPSession(page));
+      const far = FAR[15];
+      const farAt = towerAt(15, far.id);
+      const { owners, lanes } = await world(page);
+      const sees = (a: string, b: string) => lanes.some(([p, q]) => (p === a && q === b) || (p === b && q === a));
+      const d = await drawnAt(page, farAt);
+      expect(d.s, 'the default camera is flat').toBeCloseTo(1, 6);
+      const r = TOWER_HIT_RADIUS * d.v; // client px
+
+      // r − 4 px right of the base: the citadel takes the tap
+      const before = (await limitHintsSeen(page)).length;
+      await f.tap(towerAt(15, far.selector));
+      await f.tapClient({ x: d.c.x + r - 4, y: d.c.y });
+      if (sees(far.selector, far.id)) {
+        await expect.poll(() => playerLinks(page), { message: `r − 4 beside ${far.id}: ${far.selector} → ${far.id}` }).toEqual([{ from: far.selector, to: far.id }]);
+        await f.tap(farAt);
+        await expect.poll(() => playerLinks(page)).toEqual([]);
+      } else {
+        await expect.poll(async () => (await limitHintsSeen(page)).slice(before), { message: `r − 4 beside ${far.id}: refused as blocked (a hit on ${far.id})` }).toEqual([blocked]);
+      }
+      await f.tap(towerAt(15, far.selector)); // deselect
+
+      // r + 6 px right of the base: nothing takes it — the selection drops; proven by the next own tower being selected afresh
+      const hintsBefore = (await limitHintsSeen(page)).length;
+      await f.tap(towerAt(15, far.selector));
+      await f.tapClient({ x: d.c.x + r + 6, y: d.c.y });
+      const other = Object.keys(owners).find((t) => t !== far.selector && owners[t] === 'player')!;
+      const u = Object.keys(owners).find((t) => owners[t] !== 'player' && sees(other, t))!;
+      await f.tap(towerAt(15, other));
+      await f.tap(towerAt(15, u));
+      await expect.poll(() => playerLinks(page), { message: `r + 6 beside ${far.id} hit nothing, so ${other} got selected and streams to ${u}` }).toEqual([{ from: other, to: u }]);
+      expect((await limitHintsSeen(page)).slice(hintsBefore), 'the r + 6 tap refused nothing').toEqual([]);
+      expect(errors).toEqual([]);
     });
   });
 }
@@ -569,7 +627,7 @@ test.describe(`walking soldiers under the camera on ${PHONE.name} (QA-23, ART-20
   test.use({ viewport: PHONE.viewport, deviceScaleFactor: PHONE.dpr, isMobile: true, hasTouch: true, userAgent: PHONE.userAgent });
 
   test('with the sim paused a marching soldier changes pose between two frames 80 ms apart; the ground next to him does not', async ({ page }) => {
-    const errors = await boot(page, PHONE);
+    const errors = await boot(page, PHONE, PERSPECTIVE);
     const at = await soldierPaused(page);
     const d = await boxDiff(page, at);
     test.info().annotations.push({ type: 'stride', description: JSON.stringify(d) });
@@ -584,7 +642,7 @@ test.describe(`walking soldiers under the camera on ${PHONE.name} (QA-23, ART-20
     test.use({ contextOptions: { reducedMotion: 'reduce' } });
 
     test('with the sim paused the soldier holds one pose: the box is pixel-identical 80 ms later', async ({ page }) => {
-      const errors = await boot(page, PHONE);
+      const errors = await boot(page, PHONE, PERSPECTIVE);
       expect(await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(true);
       const at = await soldierPaused(page);
       const d = await boxDiff(page, at);

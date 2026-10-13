@@ -3,7 +3,7 @@ import { roadIdFor } from '../sim/create';
 import { capacityOf, linksFrom, maxLevelOf, maxLinksOf, relaysOnward } from '../sim/step';
 import type { View } from '../render/view';
 import { toLogical } from '../render/view';
-import { SWIPE_TRAIL_MS, TOWER_HIT_RADIUS, TOWER_RADIUS } from '../render/layout';
+import { SWIPE_TRAIL_MS, TOWER_HIT_RADIUS, TOWER_RADIUS, WORLD_ZOOM } from '../render/layout';
 import { towerTop } from '../render/sprites';
 
 /* ---------- generic pointer adapter ---------- */
@@ -111,11 +111,12 @@ export type HitProjection = (x: number, y: number) => { x: number; y: number; s:
 /**
  * The tower whose base is nearest to the map point (x, y) within `radius`.
  *
- * With the play camera's `project` (ART-21) the test runs on the screen, against what is drawn: a
- * capsule of radius `radius × max(1, depth)` around the segment from the tower's drawn base up to its
- * drawn roof top (`towerTop × depth` above it), so a tap on the roof of a tall far building selects it
- * and a far tower's target never shrinks below the flat map's 44 pt (Apple HIG minimum) even though
- * its sprite does. Where two capsules overlap, the tower whose base is nearest the tap wins.
+ * With the play screen's `project` (the camera, ART-21; the identity on the flat map) the test runs on
+ * the screen, against what is drawn: a capsule of radius `radius × max(1, depth)` around the segment
+ * from the tower's drawn base up to its drawn roof top (`towerTop × WORLD_ZOOM.tower × depth` above it,
+ * ART-24), so a tap on a building's roof selects it and a far tower's target never shrinks below the
+ * flat radius (TOWER_HIT_RADIUS, 44 pt × the tower zoom) even though its sprite does. Where two
+ * capsules overlap, the tower whose base is nearest the tap wins. Without `project`: the plain circle.
  */
 export function hitTower(state: GameState, x: number, y: number, radius: number = TOWER_HIT_RADIUS, project?: HitProjection): Tower | null {
   let best: Tower | null = null;
@@ -134,7 +135,7 @@ export function hitTower(state: GameState, x: number, y: number, radius: number 
   let bestBase = Infinity;
   for (const t of Object.values(state.towers)) {
     const p = project(t.x, t.y);
-    const roof = p.y - towerTop(t.kind, t.level) * p.s;
+    const roof = p.y - towerTop(t.kind, t.level) * WORLD_ZOOM.tower * p.s;
     // distance from the tap to the vertical segment roof..base at the tower's drawn column
     const dy = tap.y > p.y ? tap.y - p.y : tap.y < roof ? roof - tap.y : 0;
     if (Math.hypot(tap.x - p.x, dy) > radius * Math.max(1, p.s)) continue;
@@ -241,7 +242,7 @@ export interface GestureOptions {
   emptyHintText?(): string;
   /** Localised text for a stream into an own full tower at its top level (`hint.fullTop`, BUG-38). */
   fullTopHintText?(): string;
-  /** The play camera (ART-21) while it is on: tower hit areas follow the drawn buildings (`hitTower`). Undefined = the flat map. */
+  /** The play camera's projection (ART-21; the identity on the flat map): tower hit areas follow the drawn buildings (`hitTower`). Undefined = the plain base circle. */
   hitProjection?(): HitProjection | undefined;
 }
 

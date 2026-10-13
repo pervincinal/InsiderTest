@@ -4,7 +4,7 @@ import { chunkBackoff, loadChunk } from '../lazyChunk';
 import { shade } from './palette';
 import type { HudAnchors, View } from './view';
 import { bleed, bleedRect, hudAnchors } from './view';
-import { BOOSTERS, HUD, PAUSE, RESULT } from './layout';
+import { BOOSTERS, HUD, PAUSE, RESULT, WORLD_ZOOM } from './layout';
 import type { Rect } from './widgets';
 import {
   drawBoltGlyph,
@@ -307,11 +307,11 @@ function drawTargeting(ctx: CanvasRenderingContext2D, state: GameState, ui: Play
     ctx.setLineDash([14, 10]);
     ctx.lineDashOffset = motionAllowed() ? -(nowMs / 30) % 24 : 0;
     ctx.beginPath();
-    ctx.arc(t.x, t.y, (52 + pulse * 6) * t.s, 0, Math.PI * 2);
+    ctx.arc(t.x, t.y, (52 + pulse * 6) * t.s * WORLD_ZOOM.tower, 0, Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.globalAlpha = 1;
-    drawCrosshairGlyph(ctx, color, t.x, t.y - 70 * t.s, 14);
+    drawCrosshairGlyph(ctx, color, t.x, t.y - 70 * t.s * WORLD_ZOOM.tower, 14);
   }
   ctx.restore();
   ctx.font = font(20, '500');

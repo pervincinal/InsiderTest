@@ -1,14 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Rect } from '../../src/render/widgets';
 import { BADGE_MIN_SCALE, playCamera, proj, projAngle, setTilt } from '../../src/render/camera';
-import { HUD } from '../../src/render/layout';
-import { artilleryMuzzle, badgeSize, badgeY } from '../../src/render/sprites';
+import { HUD, WORLD_ZOOM } from '../../src/render/layout';
+import { artilleryMuzzle, badgeSize, badgeY, towerFootprintRadius, towerTop } from '../../src/render/sprites';
+import { hudAnchors } from '../../src/render/view';
 import {
   CARD_CLEAR,
   CHIP_GAP,
   CHIP_MAX_SLIDE,
   MINE_CHIP,
   STREAM_CHIP,
+  BADGE_BELOW_GAP,
+  badgeCentre,
   badgeMinY,
   badgeScale,
   chipMinTop,
@@ -50,11 +53,12 @@ function noOverlaps(rects: readonly Rect[]): boolean {
 describe('world chips take their badge scale (ART-22)', () => {
   afterEach(() => setTilt(undefined));
 
-  it('badge scale: 1 on the flat map, the depth scale floored at BADGE_MIN_SCALE, > 1 near the camera', () => {
-    expect(badgeScale(1)).toBe(1);
+  it('badge scale: the ART-24 badge zoom on the flat map, the zoomed depth scale floored at BADGE_MIN_SCALE, > 1 near the camera', () => {
+    const z = WORLD_ZOOM.badge;
+    expect(badgeScale(1)).toBe(z);
     expect(badgeScale(0.72)).toBe(BADGE_MIN_SCALE);
-    expect(badgeScale(0.95)).toBe(0.95);
-    expect(badgeScale(1.2)).toBe(1.2);
+    expect(badgeScale(0.95)).toBeCloseTo(0.95 * z, 12);
+    expect(badgeScale(1.2)).toBeCloseTo(1.2 * z, 12);
   });
 
   it('a stream chip sits CHIP_GAP left of its drawn badge, centred on it, sized by the badge scale', () => {
@@ -190,6 +194,58 @@ describe('badges below the lesson card (ART-22)', () => {
     expect(free - 18 * bs).toBeLessThan(cardBottom + 4); // without the clamp the pill's top is under the card
     const by = Math.max(badgeMinY(cardBottom, bs), free);
     expect(by - 18 * bs).toBeGreaterThanOrEqual(cardBottom + 4 + CARD_CLEAR - 1e-9);
+  });
+});
+
+describe('a badge that would be clamped onto its own tower goes below it (ART-24)', () => {
+  // draw.ts badgeLift / badgeSpot on the flat default: badge centre above the zoomed roof, plinth radius × tower zoom
+  const lift = (kind: 'barracks', level: number): number => (badgeY(kind, level) + 18) * WORLD_ZOOM.tower - 18 * WORLD_ZOOM.badge;
+  const plinth = (kind: 'barracks', level: number): number => towerFootprintRadius(kind, level) * WORLD_ZOOM.tower;
+  // level 3 "Free Real Estate": the foe barracks at the very top of the map, the neutral west tower mid-low
+  const foe = { x: 360, y: 150 };
+  const west = { x: 255, y: 1040 };
+  const lesson = 'Neutral towers are free production: grab both before you fight';
+  const card = lessonCardLayout(fakeCtx(), { time: 1000 } as GameState, { outcome: 'playing', level: makeLevel({ lesson }) } as unknown as PlayUi)!;
+  // the two phone shapes (view.ts resize): 430 × 932 with 59 / 34 insets, 360 × 640 with none
+  const shapes = [
+    { name: '430x932', cssW: 430, cssH: 932, insets: { top: 59, right: 0, bottom: 34, left: 0 } },
+    { name: '360x640', cssW: 360, cssH: 640, insets: { top: 0, right: 0, bottom: 0, left: 0 } },
+  ].map((s) => {
+    const usableH = s.cssH - s.insets.top - s.insets.bottom;
+    const scale = Math.min(s.cssW / 720, usableH / 1280);
+    const offsetY = s.insets.top + (usableH - 1280 * scale) / 2;
+    return { ...s, a: hudAnchors({ cssW: s.cssW, cssH: s.cssH, scale, offsetX: (s.cssW - 720 * scale) / 2, offsetY, insets: s.insets }) };
+  });
+
+  for (const s of shapes) {
+    it(`level 3 foe on ${s.name}: with the card up and after it, the badge sits fully below the base, clear of the sprite`, () => {
+      const bs = badgeScale(1);
+      for (const cardBottom of [card.rect.y + card.rect.h + s.a.top, null]) {
+        const spot = badgeCentre(foe.y + lift('barracks', 1), badgeMinY(cardBottom, bs), foe.y, plinth('barracks', 1), bs);
+        expect(spot.below, `card ${cardBottom}`).toBe(true);
+        const top = spot.y - 18 * bs;
+        // the drawn plinth reaches ≈ (r × 0.42 + 8) × zoom under the anchor; the badge's top edge is below all of it
+        expect(top).toBeGreaterThan(foe.y + (towerFootprintRadius('barracks', 1) * 0.42 + 8) * WORLD_ZOOM.tower);
+        expect(top).toBeCloseTo(foe.y + plinth('barracks', 1) + BADGE_BELOW_GAP, 9);
+        // and nowhere near the roof (the sprite's top is towerTop × zoom above the base)
+        expect(top).toBeGreaterThan(foe.y - towerTop('barracks', 1) * WORLD_ZOOM.tower);
+      }
+    });
+
+    it(`a mid-map tower (level 3 west) on ${s.name} keeps its badge above the roof`, () => {
+      const bs = badgeScale(1);
+      const natural = west.y + lift('barracks', 1);
+      const spot = badgeCentre(natural, badgeMinY(card.rect.y + card.rect.h + s.a.top, bs), west.y, plinth('barracks', 1), bs);
+      expect(spot).toEqual({ y: natural, below: false });
+      expect(spot.y + 18 * bs).toBeLessThan(west.y - towerTop('barracks', 1) * WORLD_ZOOM.tower + 1);
+    });
+  }
+
+  it('a small clamp (≤ a third of the badge height) still just clamps', () => {
+    const bs = 1.15;
+    const minY = 200;
+    expect(badgeCentre(minY - 11.9 * bs, minY, 400, 40, bs)).toEqual({ y: minY, below: false });
+    expect(badgeCentre(minY - 13 * bs, minY, 400, 40, bs).below).toBe(true);
   });
 });
 

@@ -24,9 +24,10 @@ import { HUD } from './layout';
  * projected anchor, scaled by s; the ground image is warped once per level (terrain.ts "mode 7").
  *
  * The sim, the level files and every map coordinate are unchanged; only the play screen's world uses
- * it (HUD bands, overlays and menus are not tilted). `?tilt=0` in the page URL switches it off (the
- * exact flat top-down map), `?tilt=0.65` etc. sets the far-edge scale k (TILT_MIN..1) for on-device
- * A/B screenshots, like `?dprcap=`; `setTilt` does the same from code (tests / debug console).
+ * it (HUD bands, overlays and menus are not tilted). ART-24: the default is the flat top-down map
+ * (`TILT_DEFAULT` = 1, the identity); `?tilt=0.72` (`TILT_PERSPECTIVE`) or any k in TILT_MIN..1 in the
+ * page URL turns the perspective camera on for on-device A/B screenshots, like `?dprcap=`; `?tilt=0`
+ * is the flat map; `setTilt` does the same from code (tests / debug console).
  */
 
 export interface Camera {
@@ -52,8 +53,17 @@ export interface Projected {
   s: number;
 }
 
-/** Default far-edge scale: the far edge of the play band is drawn at 72 % of its width. */
-export const TILT_DEFAULT = 0.72;
+/**
+ * The perspective camera's far-edge scale (`?tilt=0.72`): the far edge of the play band drawn at 72 %
+ * of its width (ART-21 v2, default in builds 13–14).
+ */
+export const TILT_PERSPECTIVE = 0.72;
+/**
+ * The default camera: 1 = the flat top-down map. ART-24 (stakeholder on build 14: "helikopter view et,
+ * amma yaxınlaşdır") brought the flat view back with bigger standing things (layout.ts `WORLD_ZOOM`);
+ * the perspective camera stays behind `?tilt=` / `setTilt` for A/B screenshots.
+ */
+export const TILT_DEFAULT = 1;
 /** Strongest perspective an override may ask for. */
 export const TILT_MIN = 0.6;
 /** The island's far shore in map coordinates (terrain.ts plateau top: `HUD.mapTop + 12`). */
@@ -188,16 +198,16 @@ export function horizonY(cam: Camera): number | undefined {
 
 /**
  * Run `draw` (which draws something standing at map point (x, y) in map units around it) upright at
- * the projected anchor, scaled by the depth there. Call in the logical frame. On the flat map it just
- * runs `draw`.
+ * the projected anchor, scaled by the depth there times `zoom` (ART-24 `WORLD_ZOOM`). Call in the
+ * logical frame. On the flat map at zoom 1 it just runs `draw`.
  */
-export function standingAt(ctx: CanvasRenderingContext2D, cam: Camera, x: number, y: number, draw: () => void, minScale = 0): void {
-  if (cam.flat) {
+export function standingAt(ctx: CanvasRenderingContext2D, cam: Camera, x: number, y: number, draw: () => void, zoom = 1, minScale = 0): void {
+  if (cam.flat && zoom === 1) {
     draw();
     return;
   }
   const p = proj(cam, x, y);
-  const s = Math.max(minScale, p.s);
+  const s = Math.max(minScale, p.s) * zoom;
   ctx.save();
   ctx.translate(p.x - x * s, p.y - y * s);
   ctx.scale(s, s);

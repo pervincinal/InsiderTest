@@ -99,8 +99,24 @@ export const TITLE = Object.freeze({
   lang: { x: 630, y: 18, w: 72, h: 44 } as Rect,
 });
 
+/**
+ * ART-24 (2026-10-13, stakeholder on build 14: "Görünüşü helikopter view et, amma yaxınlaşdır və
+ * qalalar, oyunçular daha böyük olsun" — top-down again, but zoomed in, towers and soldiers bigger;
+ * towers looking closer together is fine). The map, the levels and the sim are untouched: the play
+ * renderer draws everything standing on the 720 × 1280 map larger than its design size, about its own
+ * ground anchor. Title island demo towers and shop previews keep their own scales.
+ *   tower  buildings with their shadows, plinth / selection / streaming rings, badge offsets, airstrike rings
+ *   prop   bushes, pines, cacti, decor rocks, flower dots, mine bodies and lamps
+ *   wall   the drawn thickness of walls and the size of boulder obstacles (not their collision)
+ *   badge  unit-count badges and their stream / mine chips (numerals stay ≥ 24 px)
+ *   link   stream ribbon width (10 → 13) with its chevrons and arrowhead
+ *   guide  the selected tower's dashed guide lines (2 → 2.5 px)
+ */
+export const WORLD_ZOOM = Object.freeze({ tower: 1.3, prop: 1.25, wall: 1.2, badge: 1.15, link: 1.3, guide: 1.25 });
+
 export const TOWER_RADIUS = 34;
-export const TOWER_HIT_RADIUS = 44;
+/** Tap target around a tower's base: 44 pt at design size, × the tower zoom (ART-24: 57). Extends up to the roof (pointer.ts `hitTower`). */
+export const TOWER_HIT_RADIUS = Math.round(44 * WORLD_ZOOM.tower);
 /** Lifetime of one point of the swipe-to-cut slash trail (BUG-33): the input layer drops it then, the renderer fades it over it. */
 export const SWIPE_TRAIL_MS = 220;
 export const UNIT_RADIUS = 6;
@@ -110,8 +126,9 @@ export const TANK_RADIUS = 11;
  * owner mid tone sat on the owner-coloured stream ribbon, so columns vanished into the line. The play
  * renderer draws soldiers / tanks this much larger than the sprite's design size (shop previews and the
  * title keep their own scales) and every soldier gets an ink sticker outline (`UNIT_OUTLINE_PX`).
+ * ART-24 zoom: 1.45 → 1.75 and 1.2 → 1.5.
  */
-export const SOLDIER_DRAW_SCALE = 1.45;
-export const TANK_DRAW_SCALE = 1.2;
+export const SOLDIER_DRAW_SCALE = 1.75;
+export const TANK_DRAW_SCALE = 1.5;
 /** Width of the ink outline around a soldier's head + body silhouette, in design px (scaled with the unit). */
 export const UNIT_OUTLINE_PX = 1.4;

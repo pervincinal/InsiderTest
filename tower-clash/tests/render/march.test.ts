@@ -96,7 +96,7 @@ describe('ART-20 stride', () => {
     const [b0, b1] = feet(3 * quarter); // phase 3π/2: leg 0 back
     expect(a0).toBeGreaterThan(a1);
     expect(b0).toBeLessThan(b1);
-    expect(a0 - a1).toBeGreaterThan(4.5); // ± 3.2 px swing, less the hip spread in profile
+    expect(a0 - a1).toBeGreaterThan(2 * STRIDE_SWING - 2); // ± STRIDE_SWING design px (2.65 since ART-24's ×1.75 play scale), less the hip spread in profile
   });
 });
 

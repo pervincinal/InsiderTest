@@ -1338,13 +1338,14 @@ const TREAD_PX_PER_MS = (C.UNIT_SPEED * C.TANK_SPEED_MUL) / 1000;
 
 /**
  * Stride cycle of a marching soldier: each leg swings fore and aft 6.5 times a second. At the sim's
- * 120 px/s and the play draw scale (×1.45) a foot on the ground travels back 120 / 13 ≈ 9.2 px per
- * half cycle, which is what the ±`STRIDE_SWING` design px swing covers — planted feet do not skate.
+ * 120 px/s and the play draw scale (×1.75 since ART-24, was ×1.45) a foot on the ground travels back
+ * 120 / 13 ≈ 9.2 px per half cycle, which is what the ±`STRIDE_SWING` design px swing covers — planted
+ * feet do not skate (2 × 2.65 × 1.75 ≈ 9.3; the same 4.6 px on screen as 3.2 × 1.45 before).
  */
 export const STRIDE_HZ = 6.5;
 /** Fore / aft foot swing and the lift of the swinging foot, in design px (× the unit's scale). */
-export const STRIDE_SWING = 3.2;
-const STRIDE_LIFT = 2.6;
+export const STRIDE_SWING = 2.65;
+const STRIDE_LIFT = 2.15;
 const STRIDE_RAD_PER_MS = (TAU * STRIDE_HZ) / 1000;
 /** Leg stroke (design px): clay legs are chunky with round boots, robot pistons a touch thinner. */
 const LEG_W = 2.1;

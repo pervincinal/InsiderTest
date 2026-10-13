@@ -12,11 +12,12 @@ import type { Page } from '@playwright/test';
  * The median frame must stay under the budget below; the numbers are reported through test
  * annotations and stdout so the daily report can quote them.
  *
- * QA-23 (ART-21 perspective camera, build 13): sample 1 runs under the default play camera — the test
- * asserts it (the far shore is drawn well below where the flat letterbox would put it) — and a fourth
- * case times the one-off ground-image build of level 40 (the camera's per-row "mode 7" warp runs once
- * per level, in the first frame) at 4× CPU throttling: under GROUND_BUILD_BUDGET_MS, flat map reported
- * alongside for comparison (debug hook `getGroundBuildMs`, src/debug.ts).
+ * QA-23 / ART-24: sample 1 runs under the default play view — since ART-24 the flat map with zoomed
+ * buildings and units; the test asserts the far shore is where the flat letterbox puts it — and a
+ * fourth case times the one-off ground-image build of level 40 under the ART-21 perspective camera
+ * (`?tilt=0.72`; its per-row "mode 7" warp runs once per level, in the first frame) at 4× CPU
+ * throttling: under GROUND_BUILD_BUDGET_MS, the flat default reported alongside for comparison
+ * (debug hook `getGroundBuildMs`, src/debug.ts).
  *
  * Budget: 33 ms (30 fps) is the target on a real device. The sandbox headless shell is software
  * rendered and shares CPU with the preview server, so the assertion uses 50 ms there (see
@@ -112,10 +113,10 @@ function report(summary: string): void {
   test.info().annotations.push({ type: 'perf', description: summary });
 }
 
-async function gotoTitle(page: Page): Promise<string[]> {
+async function gotoTitle(page: Page, query = ''): Promise<string[]> {
   const pageErrors: string[] = [];
   page.on('pageerror', (err) => pageErrors.push(String(err)));
-  await page.goto('/');
+  await page.goto(query ? `/?${query}` : '/');
   await page.waitForFunction(() => typeof window.__towerclash?.loadLevel === 'function');
   await expect.poll(() => page.evaluate(() => window.__towerclash.getScreen())).toBe('title');
   return pageErrors;
@@ -133,9 +134,10 @@ test.describe('Tower Clash perf', () => {
     });
     expect(await page.evaluate(() => window.__towerclash.getSpeed())).toBe(10);
     const simStart = await page.evaluate(() => window.__towerclash.getState()?.time ?? -1);
-    // QA-23: the budget is measured with the ART-21 perspective camera on (the default; ?tilt=0 is the flat map)
+    // ART-24: the budget is measured on the default play view — the flat map with the zoomed buildings / units
+    // (the ART-21 perspective camera is the ?tilt=0.72 override): the far shore is where the flat letterbox puts it
     const drop = await farShoreDrop(page);
-    expect(drop, 'the default perspective camera is on: the far shore is drawn below the flat letterbox (CSS px)').toBeGreaterThan(10);
+    expect(Math.abs(drop), 'the default play view is the flat map: the far shore is not dropped (CSS px)').toBeLessThan(0.5);
 
     const samples = await sampleFrames(page, SAMPLE_MS);
     const simEnd = await page.evaluate(() => window.__towerclash.getState()?.time ?? -1);
@@ -144,7 +146,7 @@ test.describe('Tower Clash perf', () => {
     const s = stats(samples);
     const summary =
       `${describeStats(`level ${HIGHEST} x10 autoplay`, s, SAMPLE_MS)}; ` +
-      `sim ${simStart} → ${simEnd} ms (${((simEnd - simStart) / 1000).toFixed(1)} s sim), screen after: ${screenAfter}, camera on (far shore +${drop.toFixed(0)} CSS px)`;
+      `sim ${simStart} → ${simEnd} ms (${((simEnd - simStart) / 1000).toFixed(1)} s sim), screen after: ${screenAfter}, default flat view (far shore +${drop.toFixed(0)} CSS px)`;
     report(summary);
 
     expect(samples.length, 'must have sampled a meaningful number of frames').toBeGreaterThan(60);
@@ -153,8 +155,9 @@ test.describe('Tower Clash perf', () => {
     expect(s.med, summary).toBeLessThanOrEqual(PERF_BUDGET_MS);
   });
 
-  test(`level ${GROUND_BUILD_LEVEL} ground image (ART-21 per-row warp) builds in < ${GROUND_BUILD_BUDGET_MS} ms at ${CPU_THROTTLE}x CPU`, async ({ page }) => {
-    const pageErrors = await gotoTitle(page);
+  test(`level ${GROUND_BUILD_LEVEL} ground image (ART-21 per-row warp, ?tilt=0.72) builds in < ${GROUND_BUILD_BUDGET_MS} ms at ${CPU_THROTTLE}x CPU`, async ({ page }) => {
+    // ART-24: the perspective camera is an override now; the gate keeps guarding its build, the flat default is sampled alongside
+    const pageErrors = await gotoTitle(page, 'tilt=0.72');
     expect(await page.evaluate((id) => window.__towerclash.loadLevel(id), GROUND_BUILD_LEVEL)).toBe(true);
     await expect.poll(() => page.evaluate(() => window.__towerclash.getScreen())).toBe('play');
     expect(await farShoreDrop(page), 'measured under the perspective camera').toBeGreaterThan(10);

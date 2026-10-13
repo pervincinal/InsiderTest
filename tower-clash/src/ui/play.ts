@@ -215,9 +215,10 @@ export class PlayScreen implements Screen {
       blockedHintText: () => t('hint.blocked'),
       emptyHintText: () => t('hint.empty'),
       fullTopHintText: () => t('hint.fullTop'),
+      // the drawn-building capsule on the flat map too (ART-24: the roof of a zoomed tower takes a tap)
       hitProjection: () => {
         const cam = playCamera();
-        return cam.flat ? undefined : (x, y) => proj(cam, x, y);
+        return (x, y) => proj(cam, x, y);
       },
       onCommand: (cmd) => {
         this.tutorial?.onCommand(cmd, this.state);
@@ -714,7 +715,7 @@ export class PlayScreen implements Screen {
       if (this.targeting && this.inWorld(p)) {
         const w = this.toWorld(p);
         const cam = playCamera();
-        const t = hitTower(this.state, w.x, w.y, TOWER_HIT_RADIUS, cam.flat ? undefined : (x, y) => proj(cam, x, y));
+        const t = hitTower(this.state, w.x, w.y, TOWER_HIT_RADIUS, (x, y) => proj(cam, x, y));
         if (!t || !this.airstrike(t.id)) this.targeting = false; // tap elsewhere (or a non-enemy tower) cancels
       }
       return;

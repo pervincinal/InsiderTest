@@ -1,8 +1,9 @@
 import type { GameState } from '../sim/types';
+import { C } from '../sim/constants';
 import type { Palette } from './palette';
 import type { Camera } from './camera';
 import { BADGE_MIN_SCALE, proj } from './camera';
-import { HUD } from './layout';
+import { HUD, WORLD_ZOOM } from './layout';
 import { badgeSize, drawBadge } from './sprites';
 import type { Rect } from './widgets';
 import { font, roundRect } from './widgets';
@@ -43,9 +44,10 @@ const CARD_EDGE = 4;
 /** A badge's half height at scale 1 (sprites.ts `badgeSize`). */
 const BADGE_HALF_H = 18;
 
-/** The scale a badge (and its chips) is drawn at for depth scale `s`: `s`, floored at BADGE_MIN_SCALE (1 on the flat map). */
+/** The scale a badge (and its chips) is drawn at for depth scale `s`: `s × WORLD_ZOOM.badge`, floored at BADGE_MIN_SCALE (1.15 on the flat map). */
 export function badgeScale(s: number): number {
-  return s === 1 ? 1 : Math.max(BADGE_MIN_SCALE, s);
+  // ART-24: × WORLD_ZOOM.badge (1.15 on the flat map); the 24 px numeral floor still holds under the camera
+  return Math.max(BADGE_MIN_SCALE, s * WORLD_ZOOM.badge);
 }
 
 /**
@@ -57,6 +59,23 @@ export function badgeMinY(cardBottom: number | null, bs: number): number {
   const top = HUD.mapTop + 26;
   if (cardBottom === null) return top;
   return Math.max(top, cardBottom + CARD_EDGE + CARD_CLEAR + BADGE_HALF_H * bs);
+}
+
+/** Clear space (logical px) between a tower's plinth and a badge flipped below it. */
+export const BADGE_BELOW_GAP = 6;
+
+/**
+ * ART-24: where a tower's badge centre goes. Normally above the roof (`naturalY`), clamped down to
+ * `minY` (under the top HUD band / the lesson card). When that clamp would move it by more than a third
+ * of the badge's height — a tower at the very top of the map, whose clamped badge sat on its own
+ * body (level 3's foe) — the badge goes below the tower instead: `plinth` (the zoomed plinth radius,
+ * logical px) under the base, plus half its height and BADGE_BELOW_GAP. Chips are laid out against
+ * wherever it lands (`drawWorldChips`).
+ */
+export function badgeCentre(naturalY: number, minY: number, baseY: number, plinth: number, bs: number): { y: number; below: boolean } {
+  const half = BADGE_HALF_H * bs;
+  if (minY - naturalY <= (2 * half) / 3) return { y: Math.max(minY, naturalY), below: false };
+  return { y: baseY + plinth + half + BADGE_BELOW_GAP, below: true };
 }
 
 /** Highest screen y a chip may slide to: the top of the badge band (HUD.mapTop + 8), or under the lesson card while it is up. */
@@ -104,7 +123,8 @@ function slideUp(r: Rect, taken: readonly Rect[], minTop: number, maxSlide: numb
 /**
  * Collision nudge (pure): `fixed` rects (badges) never move; each chip, in order, takes the first free
  * spot of: its preferred rect slid up by the overlap, then (stream chips) the right of its badge slid
- * up the same way; with neither free it keeps its preferred rect. Placed chips block later ones.
+ * up the same way, then (ART-24) the right and then the left of the rect blocking it, slid up the same
+ * way; with none free it keeps its preferred rect. Placed chips block later ones.
  * Returns one rect per request, in order.
  */
 export function placeChips(fixed: readonly Rect[], chips: readonly ChipRequest[], minTop: number, gap = CHIP_GAP): Rect[] {
@@ -114,6 +134,18 @@ export function placeChips(fixed: readonly Rect[], chips: readonly ChipRequest[]
     const maxSlide = c.rect.h * CHIP_MAX_SLIDE;
     let placed = slideUp(c.rect, taken, minTop, maxSlide, gap);
     if (!placed && c.badge) placed = slideUp({ ...c.rect, x: c.badge.x + c.badge.w + gap }, taken, minTop, maxSlide, gap);
+    if (!placed) {
+      // ART-24: zoomed badges are taller than a chip can slide (a mine just above a keep put its charge
+      // chip on the keep's count, levels 40 / 50): beside whatever blocks it, right then left
+      const block = taken.find((t) => overlaps(c.rect, t, gap));
+      if (block) {
+        // only spots on the map's width (a chip never leaves the screen)
+        for (const x of [block.x + block.w + gap, block.x - gap - c.rect.w]) {
+          if (placed || x < 0 || x + c.rect.w > C.MAP_W) continue;
+          placed = slideUp({ ...c.rect, x }, taken, minTop, maxSlide, gap);
+        }
+      }
+    }
     const r = placed ?? c.rect;
     out.push(r);
     taken.push(r);
@@ -190,7 +222,7 @@ export function drawWorldChips(
     const p = proj(cam, m.x, m.y);
     const s = MINE_CHIP.scale * badgeScale(p.s);
     const text = String(m.charges);
-    const box = badgeBox(ctx, p.x, p.y - MINE_CHIP.rise * p.s, text, s, false);
+    const box = badgeBox(ctx, p.x, p.y - MINE_CHIP.rise * p.s * WORLD_ZOOM.prop, text, s, false);
     reqs.push({ rect: box.rect });
     draws.push((r) => drawBadge(ctx, pal, r.x + r.w / 2, r.y + r.h / 2, text, false, { stroke: pal.mine, scale: s }));
   }

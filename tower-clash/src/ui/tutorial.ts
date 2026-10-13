@@ -1,7 +1,7 @@
 import type { Command, GameState } from '../sim/types';
 import { C } from '../sim/constants';
 import type { Palette } from '../render/palette';
-import { HUD, TOWER_RADIUS } from '../render/layout';
+import { HUD, TOWER_RADIUS, WORLD_ZOOM } from '../render/layout';
 import { badgeY } from '../render/sprites';
 import { font, roundRect } from '../render/widgets';
 import type { TranslationKey } from './i18n';
@@ -234,7 +234,7 @@ export function drawTutorial(ctx: CanvasRenderingContext2D, pal: Palette, state:
   ctx.lineWidth = 5;
   ctx.globalAlpha = 0.55 + 0.45 * (1 - pulse);
   ctx.beginPath();
-  ctx.arc(x, y, (TOWER_RADIUS + 16 + pulse * 10) * k, 0, Math.PI * 2);
+  ctx.arc(x, y, (TOWER_RADIUS + 16 + pulse * 10) * k * WORLD_ZOOM.tower, 0, Math.PI * 2);
   ctx.stroke();
   ctx.globalAlpha = 1;
 
@@ -247,7 +247,9 @@ export function drawTutorial(ctx: CanvasRenderingContext2D, pal: Palette, state:
   const bob = pulse * 8;
   ctx.font = font(HINT_PX);
   const textW = ctx.measureText(step.text).width;
-  const arrowTip = below ? y + (TOWER_RADIUS + 30) * k + bob : y + badgeY(tower.kind, tower.level) * k - 30 - bob;
+  // ART-24: offsets from the zoomed building and its zoomed badge (draw.ts `badgeLift`)
+  const lift = (badgeY(tower.kind, tower.level) + 18) * WORLD_ZOOM.tower - 18 * WORLD_ZOOM.badge;
+  const arrowTip = below ? y + (TOWER_RADIUS + 30) * k * WORLD_ZOOM.tower + bob : y + lift * k - 30 - bob;
   const arrowBase = below ? arrowTip + ARROW_H : arrowTip - ARROW_H;
   const w = Math.min(C.MAP_W - 24, textW + PAD_X * 2);
   const bx = Math.max(12, Math.min(C.MAP_W - 12 - w, x - w / 2));

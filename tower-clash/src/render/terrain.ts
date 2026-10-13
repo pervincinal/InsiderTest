@@ -1,5 +1,5 @@
 import { C } from '../sim/constants';
-import { HUD } from './layout';
+import { HUD, WORLD_ZOOM } from './layout';
 import type { Biome, GroundLight, Palette, TerrainTheme, Tones } from './palette';
 import { BIOME_LIGHT, shade, themeFor, themedBiome, withAlpha } from './palette';
 import type { View } from './view';
@@ -51,6 +51,8 @@ export interface TerrainSpec {
   biome?: Biome;
   /** Equipped terrain theme (`THEME_IDS` in palette.ts); undefined / unknown = untinted. */
   theme?: string;
+  /** ART-24 play-world zoom (layout.ts `WORLD_ZOOM`): props × prop, walls / boulders × wall. Off for the title island. */
+  zoom?: boolean;
 }
 
 interface CacheEntry {
@@ -84,11 +86,33 @@ type Pt = { x: number; y: number };
 interface Stage {
   cam: Camera;
   sea: CanvasRenderingContext2D;
-  up(x: number, y: number, draw: (c: CanvasRenderingContext2D) => void): void;
+  /** ART-24 zoom of props / of walls and boulders (1 = design size, the title island). */
+  prop: number;
+  wall: number;
+  /** Draw a standing thing at map (x, y), upright, scaled by `zoom` (default `prop`) about its anchor. */
+  up(x: number, y: number, draw: (c: CanvasRenderingContext2D) => void, zoom?: number): void;
 }
 
-function flatStage(ctx: CanvasRenderingContext2D): Stage {
-  return { cam: FLAT, sea: ctx, up: (_x, _y, draw) => draw(ctx) };
+function flatStage(ctx: CanvasRenderingContext2D, zoomed = false): Stage {
+  const prop = zoomed ? WORLD_ZOOM.prop : 1;
+  return {
+    cam: FLAT,
+    sea: ctx,
+    prop,
+    wall: zoomed ? WORLD_ZOOM.wall : 1,
+    up: (x, y, draw, zoom = prop) => {
+      if (zoom === 1) {
+        draw(ctx);
+        return;
+      }
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(zoom, zoom);
+      ctx.translate(-x, -y);
+      draw(ctx);
+      ctx.restore();
+    },
+  };
 }
 
 /** Tiny deterministic generator (mulberry32) so decorations never depend on the sim RNG. */
@@ -497,10 +521,10 @@ function traceExtruded(ctx: CanvasRenderingContext2D, pts: Pt[], from: number, t
  * the wall stands `wallHeight` px tall: the top face is lifted, the front face below it is a darker
  * two-tone band with a mortar course, so the wall reads as a standing block.
  */
-function drawWall(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, ob: TerrainObstacle, cam: Camera = FLAT): void {
+function drawWall(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, ob: TerrainObstacle, cam: Camera = FLAT, thick = 1): void {
   const pts = ob.points;
   if (pts.length === 0) return;
-  const w = Math.max(10, ob.width);
+  const w = Math.max(10, ob.width) * thick; // ART-24: drawn thicker (× WORLD_ZOOM.wall), the collision stays ob.width
   const k = cam.k;
   const height = wallHeight(k);
   // map units per screen px of height at the wall's depth, so it stands `height × depth` px on screen
@@ -673,7 +697,7 @@ function drawBoulders(ctx: CanvasRenderingContext2D, pal: Palette, ob: TerrainOb
     }
   }
   rocks.sort((p, q) => p.y - q.y);
-  for (const k of rocks) stage.up(k.x, k.y, (c) => drawRock(c, pal, k.x, k.y, k.s, rng, dark, 0.85));
+  for (const k of rocks) stage.up(k.x, k.y, (c) => drawRock(c, pal, k.x, k.y, k.s, rng, dark, 0.85), stage.wall);
 }
 
 /** Mine body (the blinking lamp and the charge chip are dynamic: `draw.ts`). */
@@ -735,7 +759,7 @@ function drawObstacles(ctx: CanvasRenderingContext2D, pal: Palette, theme: Terra
   const low = (ob: TerrainObstacle): number => ob.points.reduce((m, p) => Math.max(m, p.y), -Infinity);
   solid.sort((p, q) => low(p) - low(q));
   for (const ob of solid) {
-    if (ob.kind === 'wall') drawWall(ctx, pal, wall, ob, stage.cam);
+    if (ob.kind === 'wall') drawWall(ctx, pal, wall, ob, stage.cam, stage.wall);
     else drawBoulders(ctx, pal, ob, rng, dark, stage);
   }
 }
@@ -864,7 +888,7 @@ export function cliffDepth(k: number): number {
  * bodies) upright and depth-scaled through `stage.up`. The rng is consumed in the same order either
  * way, so a level's scatter is identical with the camera on or off.
  */
-function render(ctx: CanvasRenderingContext2D, pal: Palette, spec: TerrainSpec, stage: Stage = flatStage(ctx)): void {
+function render(ctx: CanvasRenderingContext2D, pal: Palette, spec: TerrainSpec, stage: Stage = flatStage(ctx, spec.zoom === true)): void {
   const cam = stage.cam;
   const rng = makeRng(spec.seed * 104729 + 7);
   const top = spec.top ?? HUD.mapTop + 12;
@@ -1064,7 +1088,7 @@ export function getTerrain(view: View, pal: Palette, spec: TerrainSpec, cam: Cam
   const s = view.dpr * view.scale;
   const pxW = Math.max(1, Math.ceil(C.MAP_W * s));
   const pxH = Math.max(1, Math.ceil(C.MAP_H * s));
-  const key = `${spec.key}|${spec.variant ?? ''}|${spec.biome ?? 'grass'}|${themeFor(spec.theme).id}|${pal.owners.enemy1}|${pxW}x${pxH}|${cam.k}`;
+  const key = `${spec.key}|${spec.variant ?? ''}|${spec.biome ?? 'grass'}|${themeFor(spec.theme).id}|${pal.owners.enemy1}|${pxW}x${pxH}|${cam.k}|${spec.zoom === true ? 'z' : ''}`;
   const hit = cache.get(key);
   if (hit) return hit.canvas;
   const canvas = document.createElement('canvas');
@@ -1186,7 +1210,9 @@ function renderTilted(ctx: CanvasRenderingContext2D, pxW: number, pxH: number, p
   const gctx = src.ctx;
   gctx.setTransform(dev, 0, 0, dev, -xL * dev, -yTop * dev);
   // pass 1: the sea onto the cache, the island onto the map-space canvas, props muted
-  render(gctx, pal, spec, { cam, sea: ctx, up: (_x, _y, draw) => draw(noop()) });
+  const prop = spec.zoom === true ? WORLD_ZOOM.prop : 1;
+  const wall = spec.zoom === true ? WORLD_ZOOM.wall : 1;
+  render(gctx, pal, spec, { cam, sea: ctx, prop, wall, up: (_x, _y, draw) => draw(noop()) });
   // warp: device rows r .. r + n of the cache show map rows unprojY(r / sy) .. unprojY((r + n) / sy)
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -1218,11 +1244,14 @@ function renderTilted(ctx: CanvasRenderingContext2D, pxW: number, pxH: number, p
   render(noop(), pal, spec, {
     cam,
     sea: noop(),
-    up: (x, y, draw) => {
+    prop,
+    wall,
+    up: (x, y, draw, zoom = prop) => {
       const p = proj(cam, x, y);
+      const s = p.s * zoom;
       ctx.save();
-      ctx.translate(p.x - x * p.s, p.y - y * p.s);
-      ctx.scale(p.s, p.s);
+      ctx.translate(p.x - x * s, p.y - y * s);
+      ctx.scale(s, s);
       draw(ctx);
       ctx.restore();
     },

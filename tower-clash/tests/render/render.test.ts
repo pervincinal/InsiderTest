@@ -142,7 +142,7 @@ describe('drawGuideLines', () => {
     expect(Math.abs((lx - 200) * (n.y - 1000) - (ly - 1000) * (n.x - 200))).toBeLessThan(1e-6);
     // ART-7 readability: 2 px at 45 % and dashed 10/8 so it still reads at a 360 px viewport
     expect(GUIDE_LINE_ALPHA).toBe(0.45);
-    expect(GUIDE_LINE_WIDTH).toBe(2);
+    expect(GUIDE_LINE_WIDTH).toBe(2.5); // ART-24: 2 px × the guide zoom
     expect(GUIDE_LINE_DASH).toEqual([10, 8]);
     expect(props.globalAlpha).toBe(GUIDE_LINE_ALPHA);
     expect(props.lineWidth).toBe(GUIDE_LINE_WIDTH);
