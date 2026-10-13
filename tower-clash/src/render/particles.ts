@@ -1,7 +1,10 @@
 import type { GameState, Owner, SimEvent, Tower } from '../sim/types';
 import { C } from '../sim/constants';
-import type { Palette } from './palette';
+import type { Palette, Tones } from './palette';
 import { DEFAULT_PALETTE, shade } from './palette';
+import { towerTop } from './sprites';
+import { playCamera, proj, projAngle, unproj } from './camera';
+import { artilleryMuzzle } from './sprites';
 import { reducedMotionOverride } from '../ui/motion';
 import { chunkBackoff, loadChunk } from '../lazyChunk';
 
@@ -26,7 +29,7 @@ export function prefersReducedMotion(): boolean {
 /** Map point → where it is drawn and its depth scale (the play camera, ART-21 camera.ts `proj`). */
 export type ParticleProjection = (x: number, y: number) => { x: number; y: number; s: number };
 
-export type Kind = 'confetti' | 'ring' | 'impact' | 'puff' | 'dust' | 'step' | 'spark' | 'flash' | 'tracer' | 'plank' | 'glint' | 'coin' | 'gem';
+export type Kind = 'confetti' | 'ring' | 'impact' | 'puff' | 'dust' | 'step' | 'spark' | 'flash' | 'tracer' | 'plank' | 'glint' | 'coin' | 'gem' | 'chip' | 'flashRing';
 
 export interface Particle {
   kind: Kind;
@@ -61,6 +64,20 @@ const STEP_INTERVAL_MS = 90;
 const HIT_PX = 3;
 const HIT_MS = 180;
 const IMPACT_INTERVAL_MS = 90;
+/**
+ * ART-23 combat juice budgets. A friendly landing (reinforcement) bursts at most once per tower per
+ * FRIENDLY_LAND_MS; every landing burst (hostile or friendly) also takes a token from one shared
+ * bucket (LAND_TOKENS_MAX, refilled at LAND_TOKENS_PER_S), so a 400-unit late game spawns at most
+ * ≈ 40 small bursts a second (≈ 250 short-lived particles alive) however many towers are hit.
+ */
+export const FRIENDLY_LAND_MS = 160;
+export const LAND_TOKENS_MAX = 8;
+export const LAND_TOKENS_PER_S = 40;
+/** Capture: the badge's halo flash length (the stream-start pulse is draw.ts `STREAM_PULSE_MS`). */
+export const CAPTURE_FLASH_MS = 320;
+/** Capture chips (clay confetti in the new owner's tones) and upgrade fountain sparkles per event. */
+export const CAPTURE_CHIPS = 12;
+export const UPGRADE_SPARKLES = 14;
 
 /**
  * Who is shooting at each tower: the owner of a hostile link into it, else the owner of a hostile
@@ -144,6 +161,9 @@ export class ParticleSystem implements BurstHost {
   private readonly stepAt = new Map<string, number>();
   /** Per tower: last seen `underFireUntilMs`, wall-clock of the last hostile landing and of the last impact ring. */
   private readonly fire = new Map<string, { until: number; hitAt: number; ringAt: number }>();
+  /** ART-23: last friendly landing burst per tower; the shared landing-burst bucket (`takeLandToken`). */
+  private readonly friendAt = new Map<string, number>();
+  private landAt = -Infinity;
   private shakeAt = -Infinity;
   private lastMs = 0;
   private salt = 1;
@@ -204,6 +224,24 @@ export class ParticleSystem implements BurstHost {
     return t >= 1 ? null : { from: c.from, t };
   }
 
+  /** ART-23: 0..1 paper-white flash of a just-captured tower's badge (1 at the capture, gone after CAPTURE_FLASH_MS). */
+  captureFlash(towerId: string, nowMs: number): number {
+    const c = this.captures.get(towerId);
+    if (!c) return 0;
+    const t = (nowMs - c.at) / CAPTURE_FLASH_MS;
+    return t < 0 || t >= 1 ? 0 : (1 - t) * (1 - t);
+  }
+
+  /** One token of the shared landing-burst bucket (refilled at LAND_TOKENS_PER_S, capped at LAND_TOKENS_MAX). */
+  takeLandToken(nowMs: number): boolean {
+    // generic cell rate: `landAt` is when the bucket would next be empty-and-refilling, one token = 1000 / rate ms
+    const gap = 1000 / LAND_TOKENS_PER_S;
+    const tat = Math.max(this.landAt, nowMs);
+    if (tat - nowMs > (LAND_TOKENS_MAX - 1) * gap) return false;
+    this.landAt = tat + gap;
+    return true;
+  }
+
   /** Horizontal badge jolt (px) after a hostile landing on the tower; 0 at rest and under reduced motion. */
   badgeHit(towerId: string, nowMs: number): number {
     if (this.reducedMotion) return 0;
@@ -230,23 +268,36 @@ export class ParticleSystem implements BurstHost {
 
   /* ----- spawners ----- */
 
-  capture(x: number, y: number, color: string, towerId?: string, from: Owner = 'neutral', nowMs = 0, shake = false): void {
+  /**
+   * A tower changes hands (ART-23): squash / wipe / badge flash tweens, the owner ring, a bright flash
+   * ring in the new owner's lit tone racing out from the plinth over a paper-white flash, CAPTURE_CHIPS
+   * clay chips in the owner's tones tumbling out of the roof (two-sided: lit face / shade face) and
+   * eight bright sparks. All in map space, drawn through the camera.
+   */
+  capture(x: number, y: number, color: string, towerId?: string, from: Owner = 'neutral', nowMs = 0, shake = false, tones?: Tones): void {
     if (this.reducedMotion) return;
     if (towerId) this.captures.set(towerId, { at: nowMs, from });
     if (shake) this.shakeAt = nowMs;
-    const ring = this.make('ring', x, y, color, 520, 30);
-    this.push(ring);
-    for (let i = 0; i < 28; i++) {
-      const a = this.rnd() * Math.PI * 2;
-      const sp = 90 + this.rnd() * 220;
-      const p = this.make('confetti', x, y - 40, i % 3 === 0 ? '#fffaf0' : i % 3 === 1 ? color : shade(color, 0.35), 750 + this.rnd() * 450, 4 + this.rnd() * 4);
+    const lit = tones?.lit ?? shade(color, 0.35);
+    const dark = tones?.shade ?? shade(color, -0.25);
+    this.push(this.make('ring', x, y, color, 520, 30));
+    this.push(this.make('flashRing', x, y, lit, 420, 18));
+    this.push(this.make('flash', x, y - 6, '#fffaf0', 180, 16));
+    for (let i = 0; i < CAPTURE_CHIPS; i++) {
+      // thrown out sideways from the roof eave (left / right in turn), never up through the badge
+      const side = i % 2 ? 1 : -1;
+      const a = -Math.PI / 2 + side * (0.7 + this.rnd() * 0.75);
+      const sp = 150 + this.rnd() * 150;
+      const p = this.make('chip', x + side * (8 + this.rnd() * 10), y - 34, i % 4 === 3 ? '#fffaf0' : i % 3 ? color : lit, 650 + this.rnd() * 300, 5 + this.rnd() * 3);
+      p.color2 = i % 4 === 3 ? shade('#fffaf0', -0.12) : dark;
       p.vx = Math.cos(a) * sp;
-      p.vy = Math.sin(a) * sp - 140;
-      p.gravity = 400;
+      p.vy = Math.sin(a) * sp * 0.6;
+      p.gravity = 520;
       p.rot = this.rnd() * Math.PI;
-      p.vrot = (this.rnd() - 0.5) * 12;
+      p.vrot = (this.rnd() - 0.5) * 14;
       this.push(p);
     }
+    this.kick(x, y, [lit, '#fffaf0', lit, '#fffaf0', lit, '#fffaf0', lit, '#fffaf0'], 3.4, 1.2);
   }
 
   /**
@@ -266,25 +317,54 @@ export class ParticleSystem implements BurstHost {
       if (state.time >= until) continue; // expired / cleared by a capture: not a landing
       const rec = this.fire.get(id)!;
       rec.hitAt = nowMs;
-      if (nowMs - rec.ringAt < IMPACT_INTERVAL_MS) continue;
-      rec.ringAt = nowMs;
-      const by = attackers.get(id);
-      this.impact(t.x, t.y, by ? pal.owners[by] : pal.ink);
+      this.hit(rec, t, attackers.get(id), pal, nowMs);
     }
   }
 
-  /** One hostile landing: a small ring at the tower base plus a few sparks in the attacker's colour. */
-  impact(x: number, y: number, color: string): void {
+  /** A hostile landing burst on `t` by `by`, at most once per IMPACT_INTERVAL_MS per tower (`rec`) and one landing token. */
+  private hit(rec: { ringAt: number }, t: Tower, by: Owner | undefined, pal: Palette, nowMs: number): void {
+    if (nowMs - rec.ringAt < IMPACT_INTERVAL_MS || !this.takeLandToken(nowMs)) return;
+    rec.ringAt = nowMs;
+    this.impact(t.x, t.y, by ? pal.owners[by] : pal.ink, by ? pal.ownerTones[by].lit : undefined);
+  }
+
+  /**
+   * One hostile landing ("under fire", ART-23 stronger): an impact ring in the attacker's colour, a
+   * small hit flash in its lit tone and four sparks (attacker mid / lit / paper) kicked up off the plinth.
+   */
+  impact(x: number, y: number, color: string, lit = shade(color, 0.35)): void {
     if (this.reducedMotion) return;
-    this.push(this.make('impact', x, y, color, 300, 12));
-    for (let i = 0; i < 3; i++) {
-      const p = this.make('spark', x + (this.rnd() - 0.5) * 12, y - 2, i === 1 ? '#fffaf0' : color, 220 + this.rnd() * 80, 2.2);
-      p.vx = (this.rnd() - 0.5) * 120;
-      p.vy = -40 - this.rnd() * 90;
-      p.gravity = 360;
+    this.push(this.make('impact', x, y, color, 380, 18));
+    this.push(this.make('flash', x, y - 4, lit, 140, 9));
+    this.kick(x, y, [color, lit, color, '#fffaf0'], 4, 1);
+  }
+
+  /** Sparks kicked up off a plinth, one per colour in `colors`; `k` scales their size / speed / life. */
+  private kick(x: number, y: number, colors: readonly string[], size: number, k: number): void {
+    for (const c of colors) {
+      const p = this.make('spark', x + (this.rnd() - 0.5) * 16 * k, y - 3, c, (200 + this.rnd() * 100) * (0.5 + k * 0.5), size);
+      p.vx = (this.rnd() - 0.5) * 170 * k;
+      p.vy = (-70 - this.rnd() * 120) * k;
+      p.gravity = 380;
       this.push(p);
     }
   }
+
+  /**
+   * ART-23: a unit of the tower's own side lands (reinforcement, `landed` event with `hostile` false):
+   * a faint small ring and three sparks in the owner's lit tone. Once per tower per FRIENDLY_LAND_MS
+   * and one token of the shared landing bucket.
+   */
+  reinforce(towerId: string, x: number, y: number, tones: Tones, nowMs: number): void {
+    if (this.reducedMotion) return;
+    const last = this.friendAt.get(towerId);
+    if (last !== undefined && nowMs - last < FRIENDLY_LAND_MS) return;
+    if (!this.takeLandToken(nowMs)) return;
+    this.friendAt.set(towerId, nowMs);
+    this.push(this.make('impact', x, y, tones.lit, 240, 9));
+    this.kick(x, y, [tones.lit, '#fffaf0', tones.lit], 2.2, 0.6);
+  }
+
 
   death(x: number, y: number): void {
     if (this.reducedMotion) return;
@@ -328,19 +408,27 @@ export class ParticleSystem implements BurstHost {
     this.push(p);
   }
 
-  /** Gold gem glints, roof pulse and a rising sparkle ring. */
-  upgrade(towerId: string, x: number, y: number, color: string, nowMs: number): void {
+  /**
+   * Level-up: roof pulse, gold ring at the base and (ART-23) a short gold sparkle fountain out of the
+   * roof top (`height` = how far the roof is above the anchor): UPGRADE_SPARKLES twinkling glints
+   * shooting up and falling back in gold / pale gold / paper.
+   */
+  upgrade(towerId: string, x: number, y: number, color: string, nowMs: number, height = 60): void {
     if (this.reducedMotion) return;
     this.pulses.set(towerId, nowMs);
     const ring = this.make('ring', x, y - 6, color, 420, 22);
     this.push(ring);
-    for (let i = 0; i < 16; i++) {
-      const a = (i / 16) * Math.PI * 2;
-      const r = 26 + this.rnd() * 10;
-      const p = this.make('glint', x + Math.cos(a) * r, y - 40 + Math.sin(a) * r * 0.6, i % 2 ? color : '#fffaf0', 480 + this.rnd() * 320, 3 + this.rnd() * 4);
-      p.vy = -50 - this.rnd() * 50;
-      p.vx = Math.cos(a) * 20;
-      p.vrot = 5;
+    const pale = shade(color, 0.55);
+    for (let i = 0; i < UPGRADE_SPARKLES; i++) {
+      // two plumes arcing out to either side of the badge column, so the numerals stay clear
+      const a = -Math.PI / 2 + (i % 2 ? 1 : -1) * (0.45 + this.rnd() * 0.5);
+      const sp = 150 + this.rnd() * 140;
+      const p = this.make('glint', x + (this.rnd() - 0.5) * 10, y - height, i % 3 === 0 ? '#fffaf0' : i % 3 === 1 ? color : pale, 560 + this.rnd() * 340, 3.5 + this.rnd() * 3.5);
+      p.vx = Math.cos(a) * sp;
+      p.vy = Math.sin(a) * sp;
+      p.gravity = 420;
+      p.rot = this.rnd() * Math.PI;
+      p.vrot = 9;
       this.push(p);
     }
   }
@@ -406,7 +494,20 @@ export class ParticleSystem implements BurstHost {
       switch (ev.type) {
         case 'capture': {
           const t = state.towers[ev.towerId];
-          if (t) this.capture(t.x, t.y, pal.owners[ev.by], t.id, ev.from, nowMs, ev.by === 'player');
+          if (t) this.capture(t.x, t.y, pal.owners[ev.by], t.id, ev.from, nowMs, ev.by === 'player', pal.ownerTones[ev.by]);
+          break;
+        }
+        case 'landed': {
+          // hostile landings on owned towers burst through `landings` (it also drives the badge jolt); here
+          // the reinforcements and the hostile landings on neutral towers (never "under fire")
+          const t = state.towers[ev.towerId];
+          if (!t) break;
+          if (!ev.hostile) this.reinforce(t.id, t.x, t.y, pal.ownerTones[ev.owner], nowMs);
+          else if (t.owner === 'neutral') {
+            let rec = this.fire.get(t.id);
+            if (!rec) this.fire.set(t.id, (rec = { until: 0, hitAt: -Infinity, ringAt: -Infinity }));
+            this.hit(rec, t, ev.owner, pal, nowMs);
+          }
           break;
         }
         case 'unitDied': {
@@ -416,14 +517,21 @@ export class ParticleSystem implements BurstHost {
             if (gun) {
               const a = Math.atan2(ev.y - 6 - (gun.y - 26), ev.x - gun.x);
               this.aims.set(gun.id, a);
-              this.shot(gun.x + Math.cos(a) * 30, gun.y - 26 + Math.sin(a) * 22, ev.x, ev.y - 6, pal.owners[gun.owner]);
+              // ART-22: the shell leaves the barrel as drawn — the projected gun plus the sprite's muzzle
+              // offset (at the aim draw.ts gives the barrel) × depth, in screen space, carried back to the
+              // map point that projects there (so the flash and the tracer's start sit on the muzzle)
+              const cam = playCamera();
+              const g = proj(cam, gun.x, gun.y);
+              const m = artilleryMuzzle(gun.level, projAngle(cam, gun.x, gun.y, a));
+              const o = unproj(cam, g.x + m.dx * g.s, g.y + m.dy * g.s);
+              this.shot(o.x, o.y, ev.x, ev.y - 6, pal.owners[gun.owner]);
             }
           }
           break;
         }
         case 'upgrade': {
           const t = state.towers[ev.towerId];
-          if (t) this.upgrade(t.id, t.x, t.y, pal.gold, nowMs);
+          if (t) this.upgrade(t.id, t.x, t.y, pal.gold, nowMs, towerTop(t.kind, ev.level) * 0.8);
           break;
         }
         case 'won':
@@ -479,21 +587,39 @@ export class ParticleSystem implements BurstHost {
           ctx.ellipse(p.x, p.y + 4, p.size + 70 * t, (p.size + 70 * t) * 0.45, 0, 0, Math.PI * 2);
           ctx.stroke();
           break;
+        case 'flashRing': {
+          // ART-23: a bright ring racing out from the plinth (ease-out), thick then thin, with a paper core line
+          const e = 1 - (1 - t) * (1 - t);
+          const rx = p.size + 64 * e;
+          ctx.globalAlpha = fade;
+          ctx.strokeStyle = p.color;
+          ctx.lineWidth = 9 * fade + 1.5;
+          ctx.beginPath();
+          ctx.ellipse(p.x, p.y + 4, rx, rx * 0.42, 0, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.strokeStyle = '#fffaf0';
+          ctx.lineWidth = 2.5 * fade + 0.5;
+          ctx.stroke();
+          break;
+        }
         case 'impact':
           ctx.globalAlpha = fade * 0.9;
           ctx.strokeStyle = p.color;
-          ctx.lineWidth = 3.5 * fade + 1;
+          ctx.lineWidth = 5 * fade + 1;
           ctx.beginPath();
-          ctx.ellipse(p.x, p.y + 3, p.size + 24 * t, (p.size + 24 * t) * 0.45, 0, 0, Math.PI * 2);
+          ctx.ellipse(p.x, p.y + 3, p.size + 30 * t, (p.size + 30 * t) * 0.45, 0, 0, Math.PI * 2);
           ctx.stroke();
           break;
         case 'confetti':
+        case 'chip':
         case 'plank': {
-          // rotated rectangle from its four corners (no save/restore per particle)
+          // rotated rectangle from its four corners (no save/restore per particle); an ART-23 clay chip
+          // is a chunkier one that shows its shade face (`color2`) while it tumbles over
           ctx.globalAlpha = Math.min(1, fade * 2);
-          ctx.fillStyle = p.color;
+          const chip = p.kind === 'chip';
+          ctx.fillStyle = chip && Math.sin(p.rot * 1.7) < 0 ? p.color2 : p.color;
           const hw = p.kind === 'plank' ? p.size : p.size / 2;
-          const hh = p.kind === 'plank' ? 2.5 : p.size / 4;
+          const hh = p.kind === 'plank' ? 2.5 : p.size / (chip ? 2.6 : 4);
           const c = Math.cos(p.rot);
           const sn = Math.sin(p.rot);
           ctx.beginPath();

@@ -128,7 +128,7 @@ export function paintGround(layer: Layer, view: View, pal: Palette, spec: Terrai
 
 export function paintHud(layer: Layer, view: View, state: GameState, ui: PlayUi, nowMs: number): void {
   const a = hudAnchors(view);
-  // the stream chips and airstrike rings stand at the towers' tilted anchors (ART-21): keyed on the tilt
+  // the airstrike rings stand at the towers' tilted anchors (ART-21): keyed on the tilt (the stream chips are drawn with the world, ART-22)
   const key = `${viewKey(view)}|${a.top},${a.bottom}|${playCamera().k}|${hudKey(state, ui, nowMs)}`;
   if (layer.key === key) return;
   const ctx = layer.ctx;

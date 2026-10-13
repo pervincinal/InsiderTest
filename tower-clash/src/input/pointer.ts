@@ -4,6 +4,7 @@ import { capacityOf, linksFrom, maxLevelOf, maxLinksOf, relaysOnward } from '../
 import type { View } from '../render/view';
 import { toLogical } from '../render/view';
 import { SWIPE_TRAIL_MS, TOWER_HIT_RADIUS, TOWER_RADIUS } from '../render/layout';
+import { towerTop } from '../render/sprites';
 
 /* ---------- generic pointer adapter ---------- */
 
@@ -108,22 +109,38 @@ export function attachPointer(canvas: HTMLCanvasElement, view: View, handlers: P
 export type HitProjection = (x: number, y: number) => { x: number; y: number; s: number };
 
 /**
- * The tower whose base is nearest to the map point (x, y) within `radius`. With the play camera's
- * `project` (ART-21) the test runs on the screen: the hit area is a circle of `radius × depth` around
- * the base where it is drawn, so a far (smaller) tower has a smaller target, like its sprite.
+ * The tower whose base is nearest to the map point (x, y) within `radius`.
+ *
+ * With the play camera's `project` (ART-21) the test runs on the screen, against what is drawn: a
+ * capsule of radius `radius × max(1, depth)` around the segment from the tower's drawn base up to its
+ * drawn roof top (`towerTop × depth` above it), so a tap on the roof of a tall far building selects it
+ * and a far tower's target never shrinks below the flat map's 44 pt (Apple HIG minimum) even though
+ * its sprite does. Where two capsules overlap, the tower whose base is nearest the tap wins.
  */
 export function hitTower(state: GameState, x: number, y: number, radius: number = TOWER_HIT_RADIUS, project?: HitProjection): Tower | null {
   let best: Tower | null = null;
-  let bestK = 1;
-  const tap = project ? project(x, y) : null;
+  if (!project) {
+    let bestD = radius;
+    for (const t of Object.values(state.towers)) {
+      const d = Math.hypot(t.x - x, t.y - y);
+      if (d <= bestD) {
+        bestD = d;
+        best = t;
+      }
+    }
+    return best;
+  }
+  const tap = project(x, y);
+  let bestBase = Infinity;
   for (const t of Object.values(state.towers)) {
-    let k: number;
-    if (tap && project) {
-      const p = project(t.x, t.y);
-      k = Math.hypot(p.x - tap.x, p.y - tap.y) / (radius * p.s);
-    } else k = Math.hypot(t.x - x, t.y - y) / radius;
-    if (k <= bestK) {
-      bestK = k;
+    const p = project(t.x, t.y);
+    const roof = p.y - towerTop(t.kind, t.level) * p.s;
+    // distance from the tap to the vertical segment roof..base at the tower's drawn column
+    const dy = tap.y > p.y ? tap.y - p.y : tap.y < roof ? roof - tap.y : 0;
+    if (Math.hypot(tap.x - p.x, dy) > radius * Math.max(1, p.s)) continue;
+    const base = Math.hypot(tap.x - p.x, tap.y - p.y);
+    if (base < bestBase) {
+      bestBase = base;
       best = t;
     }
   }
@@ -224,8 +241,8 @@ export interface GestureOptions {
   emptyHintText?(): string;
   /** Localised text for a stream into an own full tower at its top level (`hint.fullTop`, BUG-38). */
   fullTopHintText?(): string;
-  /** The play camera (ART-21): tower hit areas are screen circles of the drawn size. Absent = the flat map. */
-  project?: HitProjection;
+  /** The play camera (ART-21) while it is on: tower hit areas follow the drawn buildings (`hitTower`). Undefined = the flat map. */
+  hitProjection?(): HitProjection | undefined;
 }
 
 /** Where a drag from an own tower is right now (for the renderer's rubber-band line). */
@@ -349,7 +366,7 @@ export class PlayGestures {
     this.moved = false;
     this.downX = p.x;
     this.downY = p.y;
-    const tower = hitTower(state, p.x, p.y, TOWER_HIT_RADIUS, this.opts.project);
+    const tower = hitTower(state, p.x, p.y, TOWER_HIT_RADIUS, this.opts.hitProjection?.());
     this.downTowerId = tower ? tower.id : null;
     this.swipe = tower?.owner !== 'player';
     this.swipeX = p.x;
@@ -384,7 +401,7 @@ export class PlayGestures {
     // Hover highlight only while dragging from an own tower (the target preview).
     const src = this.downTowerId ? state.towers[this.downTowerId] : undefined;
     if (this.pointerDown && this.moved && src?.owner === 'player') {
-      const t = hitTower(state, p.x, p.y, TOWER_HIT_RADIUS, this.opts.project);
+      const t = hitTower(state, p.x, p.y, TOWER_HIT_RADIUS, this.opts.hitProjection?.());
       this.hoverTowerId = t && t.id !== src.id && connectedRoad(state, src.id, t.id) ? t.id : null;
       this.drag = { fromId: src.id, x: p.x, y: p.y };
     } else {
@@ -403,7 +420,7 @@ export class PlayGestures {
     this.clearPress();
     if (!state) return;
 
-    const target = hitTower(state, p.x, p.y, TOWER_HIT_RADIUS, this.opts.project);
+    const target = hitTower(state, p.x, p.y, TOWER_HIT_RADIUS, this.opts.hitProjection?.());
     const src = downTowerId ? state.towers[downTowerId] : undefined;
 
     // Drag from own tower onto another tower → link (blocked lane: shake + hint); the source stays selected.

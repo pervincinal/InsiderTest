@@ -364,6 +364,62 @@ export const BIOME_DUST: Readonly<Record<Biome, string>> = Object.freeze({
   twilight: '#f3ecfd',
 });
 
+/**
+ * ART-23 baked ground light (ART_DIRECTION §1 / §3 "Lighting"): the one warm key light from the
+ * upper-left laid over the plateau once per level (terrain.ts `lightPlateau`) — a broad warm wash
+ * toward the light, a cooler, darker wash toward the near / lower-right edge, and a vignette along the
+ * island's rim — plus the same split across the cliff face. Per biome, because a warm wash shows on
+ * white snow and dark ash differently: the dark grounds (volcanic, twilight) take a lighter cool side
+ * so the streams' ink outline does not sink further. `tests/render/light.test.ts` composites the
+ * extremes (`litGround`) and keeps the owner ΔE and ink-outline floors of biome.test.ts.
+ */
+export interface GroundLight {
+  /** Sun colour of the wash toward the light, and its alpha at the lit corner. */
+  warm: string;
+  warmAlpha: number;
+  /** Shade colour (blue ink: shadows are blue, §1) toward the near / lower-right edge, and its alpha there. */
+  cool: string;
+  coolAlpha: number;
+  /** Extra cool along the island's rim (the vignette), alpha at the very edge. */
+  vignette: number;
+}
+
+const GRASS_LIGHT: GroundLight = { warm: '#fff1b8', warmAlpha: 0.4, cool: '#1a3a5a', coolAlpha: 0.11, vignette: 0.07 };
+
+export const BIOME_LIGHT: Readonly<Record<Biome, GroundLight>> = Object.freeze({
+  grass: GRASS_LIGHT,
+  autumn: GRASS_LIGHT,
+  sand: { warm: '#fffbea', warmAlpha: 0.4, cool: '#8a5a2a', coolAlpha: 0.2, vignette: 0.12 },
+  snow: { warm: '#ffe2b0', warmAlpha: 0.4, cool: '#3a6a9a', coolAlpha: 0.14, vignette: 0.1 },
+  volcanic: { warm: '#ff9a5a', warmAlpha: 0.11, cool: '#140f1c', coolAlpha: 0.1, vignette: 0.08 },
+  twilight: { warm: '#ffb8d8', warmAlpha: 0.16, cool: '#2a2048', coolAlpha: 0.07, vignette: 0.05 },
+});
+
+/** `over` at `alpha` painted on `base` (both `#rrggbb`): the colour a translucent wash leaves. */
+export function composite(base: string, over: string, alpha: number): string {
+  const a = parseInt(base.slice(1), 16);
+  const b = parseInt(over.slice(1), 16);
+  const ch = (sh: number): number => Math.round(((a >> sh) & 0xff) * (1 - alpha) + ((b >> sh) & 0xff) * alpha);
+  return `#${((ch(16) << 16) | (ch(8) << 8) | ch(0)).toString(16).padStart(6, '0')}`;
+}
+
+/**
+ * The ground's extremes under the baked light: `lit` = the mid tone at the lit corner, `shade` = the
+ * mid tone at the near / lower-right rim (cool wash and vignette stacked). Everything else lies between.
+ */
+export function litGround(ground: string, light: GroundLight): { lit: string; shade: string } {
+  return { lit: composite(ground, light.warm, light.warmAlpha), shade: composite(composite(ground, light.cool, light.coolAlpha), light.cool, light.vignette) };
+}
+
+/** Rim light of a clay tone (ART-23): a thin highlight on the lit edge of a roof / flag, lighter than `lit`. */
+export function rimOf(t: Tones): string {
+  return shade(t.lit, RIM_LIFT);
+}
+export const RIM_LIFT = 0.5;
+
+/** Badge paper's lower lip (ART-23 clay pill): the paper darkened this much; ink numerals stay ≥ 4.5:1 on it. */
+export const BADGE_LIP = 0.09;
+
 const shadeCache = new Map<string, string>();
 
 /* ---------- terrain themes (shop cosmetics, ECON-5) ---------- */

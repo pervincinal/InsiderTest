@@ -5,17 +5,19 @@ import { capacityOf, isUnderFire, linksFrom } from '../sim/step';
 import type { Biome, Palette } from './palette';
 import { BIOME_DUST, biomeFor, withAlpha } from './palette';
 import type { View } from './view';
-import { applyDeviceTransform, applyTransform, bleed, bleedRect } from './view';
+import { applyDeviceTransform, applyTransform, bleed, bleedRect, hudAnchors } from './view';
 import { HUD, SOLDIER_DRAW_SCALE, SWIPE_TRAIL_MS, TANK_DRAW_SCALE } from './layout';
 import { font, roundRect } from './widgets';
 type XY = { x: number; y: number };
-import { drawHud, drawOverlays } from './hud';
+import { drawHud, drawOverlays, lessonCardLayout } from './hud';
+import type { BadgeBox } from './worldChips';
+import { badgeBox, badgeMinY, badgeScale, chipMinTop, drawWorldChips } from './worldChips';
 import { blankLayer, paintGround, paintHud } from './layers';
 import { drawSea, terrainSea } from './sea';
 import type { TerrainSpec } from './terrain';
 import { drawTerrain, drawTerrainOverlay } from './terrain';
 import type { Camera } from './camera';
-import { BADGE_MIN_SCALE, FLAT, horizonY, playCamera, proj, projAngle, projDir, standingAt } from './camera';
+import { FLAT, horizonY, playCamera, proj, projAngle, projDir, standingAt } from './camera';
 import type { TowerLook, TowerSkin } from './sprites';
 import { STRIDE_SWING, badgeY, drawBadge, drawTowerShadow, drawTowerSprite, drawUnitSprite, pushOffDistance, stridePhase, towerFootprintRadius } from './sprites';
 import type { ParticleSystem } from './particles';
@@ -105,12 +107,7 @@ export function roadPoseAt(road: Road, t: number): Pose {
   return { x: p.x + sx * k, y: p.y + sy * k, dx: sx / seg, dy: sy / seg };
 }
 
-/** Small paper chip with ink numerals for mine charges / queued sends. */
-function chip(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, text: string, stroke: string): void {
-  drawBadge(ctx, pal, x, y, text, false, { stroke, scale: 0.72 });
-}
-
-/** Blinking lamp and charge chip over every live mine (the body sits in the cached terrain); upright at the projected anchor, the lamp depth-scaled, the chip at its readable size (ART-21). */
+/** Blinking lamp over every live mine (the body sits in the cached terrain); upright at the projected anchor, depth-scaled (ART-21). The charge chip is laid out with the badges (worldChips.ts, ART-22). */
 function drawMineLights(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, nowMs: number, cam: Camera = FLAT): void {
   const mines = state.mines;
   if (mines.length === 0) return;
@@ -124,13 +121,25 @@ function drawMineLights(ctx: CanvasRenderingContext2D, pal: Palette, state: Game
     ctx.arc(p.x, p.y - 4 * p.s, 4 * p.s, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
-    chip(ctx, pal, p.x, p.y - 30 * p.s, String(m.charges), pal.mine);
   }
 }
 
 /* ---------- attack streams (rules v2 links) ---------- */
 
 const LINK_WIDTH = 10;
+/** ART-23: the stream's glow — one wide translucent stroke in the owner's lit tone under the ribbon. */
+export const LINK_GLOW_PX = 16;
+export const LINK_GLOW_ALPHA = 0.2;
+/** ART-23 stream start: a paper pulse runs down a new ribbon once, this long (wall clock). */
+export const STREAM_PULSE_MS = 380;
+const linkSeen = new WeakMap<object, number>();
+
+/** 0..1 progress of a link's one-shot start pulse (from the first frame it is drawn), ≥ 1 once done. */
+export function linkPulse(link: object, nowMs: number): number {
+  let born = linkSeen.get(link);
+  if (born === undefined) linkSeen.set(link, (born = nowMs));
+  return (nowMs - born) / STREAM_PULSE_MS;
+}
 /** Chevron pitch along the ribbon and their speed toward the target (px / s). */
 const CHEVRON_PITCH = 26;
 const CHEVRON_SPEED = 90;
@@ -214,13 +223,13 @@ export function drawLinks(ctx: CanvasRenderingContext2D, pal: Palette, state: Li
     const pulse = motion ? 0.5 + 0.5 * Math.sin(nowMs / 260 + t.x * 0.02) : 0.5;
     const r = towerFootprintRadius(t.kind, t.level) + 10 + pulse * 5;
     standingAt(ctx, cam, t.x, t.y, () => {
-      ctx.strokeStyle = withAlpha(tones.mid, 0.3 + pulse * 0.25);
+      ctx.strokeStyle = withAlpha(tones.mid, 0.42 + pulse * 0.3);
       ctx.lineWidth = 4;
       ctx.beginPath();
       ctx.ellipse(t.x, t.y + 8, r, r * 0.42, 0, 0, Math.PI * 2);
       ctx.stroke();
-      ctx.strokeStyle = withAlpha(tones.lit, 0.35 + pulse * 0.25);
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = withAlpha(tones.lit, 0.5 + pulse * 0.3);
+      ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.ellipse(t.x, t.y + 8, r - 6, (r - 6) * 0.42, 0, 0, Math.PI * 2);
       ctx.stroke();
@@ -240,8 +249,13 @@ export function drawLinks(ctx: CanvasRenderingContext2D, pal: Palette, state: Li
     const mine = l.owner === 'player';
     const tones = pal.ownerTones[l.owner];
     const body = mine ? tones.lit : tones.mid;
-    // ribbon: thin ink outline (every owner), then the translucent body
+    // ribbon: a faint wide owner-lit glow under it (ART-23: a stream reads as light on the ground,
+    // not tape), the thin ink outline (every owner), then the translucent body
     const ws = traceRibbon(ctx, road, forward, s0, s1, off, cam);
+    ctx.globalAlpha = LINK_GLOW_ALPHA;
+    ctx.strokeStyle = tones.lit;
+    ctx.lineWidth = (LINK_WIDTH + LINK_GLOW_PX) * ws;
+    ctx.stroke();
     ctx.globalAlpha = mine ? 0.6 : 0.5;
     ctx.strokeStyle = pal.ink;
     ctx.lineWidth = (LINK_WIDTH + 2) * ws;
@@ -250,6 +264,16 @@ export function drawLinks(ctx: CanvasRenderingContext2D, pal: Palette, state: Li
     ctx.strokeStyle = body;
     ctx.lineWidth = LINK_WIDTH * ws;
     ctx.stroke();
+    // ART-23 stream start: one bright pulse runs from the source to the target (STREAM_PULSE_MS)
+    const k = motion ? linkPulse(l, nowMs) : 1;
+    if (k < 1) {
+      const head = s0 + (s1 - s0) * (1 - (1 - k) * (1 - k));
+      traceRibbon(ctx, road, forward, Math.max(s0, head - 70), head, off, cam);
+      ctx.globalAlpha = 0.95 * (1 - k * 0.5);
+      ctx.strokeStyle = pal.paper;
+      ctx.lineWidth = LINK_WIDTH * 0.7 * ws;
+      ctx.stroke();
+    }
     // chevrons pointing at the target (each sized by its own depth)
     ctx.globalAlpha = mine ? 0.9 : 0.75;
     ctx.strokeStyle = pal.paper;
@@ -547,9 +571,10 @@ function standing(cam: Camera, t: Tower): TowerLook & { s: number } {
  * anchors and scaled by depth (ART-21): buildings through the PERF-4 sprite cache's draw-time scale,
  * units through their size, badges no smaller than BADGE_MIN_SCALE (24 px numerals). Sorting by map
  * y and by screen y is the same order (the camera keeps y monotonic). Units stay in map coordinates
- * for the dust (particles are projected when drawn).
+ * for the dust (particles are projected when drawn). `cardBottom`: the lesson card's bottom (logical
+ * screen y) while it is up, else null — badges and chips stay below it (ART-22).
  */
-function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, ui: PlayUi, nowMs: number, biome: Biome, dev: number, cam: Camera): void {
+function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, ui: PlayUi, nowMs: number, biome: Biome, dev: number, cam: Camera, cardBottom: number | null): void {
   const motion = motionAllowed();
   const towers = Object.values(state.towers).sort((a, b) => a.y - b.y);
 
@@ -593,25 +618,36 @@ function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState
   }
   while (ui_ < units.length) drawUnit(units[ui_++]!);
 
-  // badges on top of everything in the world
+  // badges on top of everything in the world (ART-22: below the lesson card while it is up), then the
+  // stream / mine chips laid out against them (worldChips.ts)
+  const badges = new Map<string, BadgeBox>();
   for (const t of towers) {
     const raise = ui.selectedTowerId === t.id ? 4 : 0;
     const look = standing(cam, t);
-    const by = Math.max(HUD.mapTop + 26, look.y + (badgeY(t.kind, t.level) - raise) * look.s);
+    const bs = badgeScale(look.s);
+    const by = Math.max(badgeMinY(cardBottom, bs), look.y + (badgeY(t.kind, t.level) - raise) * look.s);
     const pop = badgePop(state, t.id, t.units, nowMs, motion);
-    const by_ = isUnderFire(state, t) ? attackers.get(t.id) : undefined;
-    drawBadge(ctx, pal, look.x, by, String(t.units), t.units >= capacityOf(t), {
+    const fire = isUnderFire(state, t);
+    const by_ = fire ? attackers.get(t.id) : undefined;
+    const text = String(t.units);
+    drawBadge(ctx, pal, look.x, by, text, t.units >= capacityOf(t), {
       stroke: pal.ownerTones[t.owner].shade,
-      scale: look.s === 1 ? pop : pop * Math.max(BADGE_MIN_SCALE, look.s),
-      underFire: isUnderFire(state, t) ? (by_ ? pal.owners[by_] : pal.ink) : undefined,
+      scale: pop * bs,
+      underFire: fire ? (by_ ? pal.owners[by_] : pal.ink) : undefined,
       shake: motion ? (fx?.badgeHit(t.id, nowMs) ?? 0) : 0,
+      // ART-23: a just-captured tower's badge flashes paper-white with a halo in the new owner's lit tone
+      flash: motion ? (fx?.captureFlash(t.id, nowMs) ?? 0) : 0,
+      flashColor: pal.ownerTones[t.owner].lit,
     });
+    badges.set(t.id, badgeBox(ctx, look.x, by, text, bs, fire));
   }
+  drawWorldChips(ctx, pal, state, cam, badges, chipMinTop(cardBottom), ui.outcome === 'playing');
   if (hint && ui.limitHintText && ui.selectedTowerId) {
     const t = state.towers[ui.selectedTowerId];
     if (t) {
       const look = standing(cam, t);
-      drawHintBubble(ctx, pal, look, Math.max(HUD.mapTop + 26, look.y + (badgeY(t.kind, t.level) - 4) * look.s), ui.limitHintText, hint.alpha);
+      const by = Math.max(badgeMinY(cardBottom, badgeScale(look.s)), look.y + (badgeY(t.kind, t.level) - 4) * look.s);
+      drawHintBubble(ctx, pal, look, by, ui.limitHintText, hint.alpha);
     }
   }
 }
@@ -803,7 +839,10 @@ export function drawGame(ctx: CanvasRenderingContext2D, state: GameState, view: 
   drawMineLights(ctx, pal, state, nowMs, cam);
   drawGroundMarks(ctx, pal, state, ui, nowMs, cam);
   drawTowerShadows(ctx, pal, state, cam);
-  drawWorld(ctx, pal, state, ui, nowMs, spec.biome ?? 'grass', dev, cam);
+  // ART-22: while the lesson card is up (drawn with the HUD, moved with the top band) badges stay below it
+  const card = lessonCardLayout(ctx, state, ui);
+  const cardBottom = card ? card.rect.y + card.rect.h + hudAnchors(view).top : null;
+  drawWorld(ctx, pal, state, ui, nowMs, spec.biome ?? 'grass', dev, cam, cardBottom);
   // effects are spawned in map coordinates (particles.ts): each drawn upright at its projected point
   ui.particles?.draw(ctx, nowMs, cam.flat ? undefined : (x, y) => proj(cam, x, y));
   ctx.restore();

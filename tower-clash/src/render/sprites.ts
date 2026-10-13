@@ -1,6 +1,6 @@
 import type { Owner, TowerKind, UnitKind } from '../sim/types';
 import type { Palette, Tones } from './palette';
-import { shade } from './palette';
+import { BADGE_LIP, rimOf, shade } from './palette';
 import { TANK_RADIUS, UNIT_OUTLINE_PX } from './layout';
 import { C } from '../sim/constants';
 import { font, roundRect } from './widgets';
@@ -393,6 +393,33 @@ export function dome(ctx: CanvasRenderingContext2D, tones: Tones, x: number, bas
   ctx.stroke();
 }
 
+/**
+ * ART-23 clay light on the default cone roof (baked with the building, PERF-4): a hot spot on the lit
+ * facet, a rim light along the lit eave in the tone's own `rimOf`, and a dark occlusion line under the
+ * shaded eave where the roof overhangs the tower — a stronger lit / mid / shade split than the three
+ * flat facets alone. Not on the app icon / store art (they call `cone` directly).
+ */
+export function roofLight(ctx: CanvasRenderingContext2D, tones: Tones, x: number, base: number, apex: number, rx: number, ry: number): void {
+  ctx.fillStyle = shade(tones.lit, 0.28);
+  ctx.beginPath();
+  ctx.moveTo(x - 1, apex + 3);
+  ctx.lineTo(x - rx * 0.78, base + ry * 0.2);
+  ctx.lineTo(x - rx * 0.42, base + ry * 0.62);
+  ctx.closePath();
+  ctx.fill();
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = shade(tones.shade, -0.3);
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.ellipse(x, base + 1, rx + 1.5, ry + 1, 0, 0.12 * Math.PI, 0.45 * Math.PI);
+  ctx.stroke();
+  ctx.strokeStyle = rimOf(tones);
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.ellipse(x, base, rx, ry, 0, 0.62 * Math.PI, 0.98 * Math.PI);
+  ctx.stroke();
+}
+
 /** Cone roof, or the skin's shaped roof (dome / pagoda / onion / thatch / glass, lazy chunk), with its owner band / rivets / shingles. */
 function roof(ctx: CanvasRenderingContext2D, pal: Palette, owner: Tones, style: RoofStyle, x: number, base: number, height: number, rx: number, ry: number): void {
   if (style.band) parts().ownerBand(ctx, owner, x, base + 2, rx + 4, ry + 2);
@@ -400,6 +427,7 @@ function roof(ctx: CanvasRenderingContext2D, pal: Palette, owner: Tones, style: 
   else {
     cone(ctx, style.tones, x, base, base - height, rx, ry, style.stripes);
     if (style.shingles) parts().shingles(ctx, style.tones, x, base, height, rx, ry);
+    else if (!style.stripes) roofLight(ctx, style.tones, x, base, base - height, rx, ry);
   }
   if (style.rivets) parts().rivets(ctx, style.tones, x, base, rx, ry);
 }
@@ -422,6 +450,14 @@ export function flag(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, 
   ctx.lineTo(x + 23, top + 13 + w2);
   ctx.quadraticCurveTo(x + 12, top + 15 + w, x + 1, top + 12);
   ctx.closePath();
+  ctx.fill();
+  // ART-23: the cloth's lower fold in shade, so the flag has a lit / mid / shade split like the roof
+  ctx.fillStyle = tones.shade;
+  ctx.beginPath();
+  ctx.moveTo(x + 1, top + 8.5);
+  ctx.quadraticCurveTo(x + 12, top + 10.5 + w, x + 23, top + 9 + w2);
+  ctx.lineTo(x + 23, top + 13 + w2);
+  ctx.quadraticCurveTo(x + 12, top + 15 + w, x + 1, top + 12);
   ctx.fill();
   ctx.fillStyle = tones.lit;
   ctx.beginPath();
@@ -781,16 +817,24 @@ function drawFortress(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones,
   });
 }
 
+/** Artillery geometry per level tier (sprite units): bunker height, gun-deck height, barrel length; the barrel pivot sits ART_PIVOT_UP over the dome centre. */
+const ART_BUNKER_H = [16, 20, 24] as const;
+const ART_DECK_H = [0, 10, 14] as const;
+const ART_BARREL_LEN = [26, 30, 36] as const;
+const ART_PIVOT_UP = 6;
+/** The barrel is drawn in the sprite's own perspective: its vertical extent is foreshortened to 73 %. */
+const BARREL_FORESHORTEN = 0.73;
+
 function drawArtillery(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, x: number, y: number, level: number, o: TowerDrawOptions, p: Parts): void {
   const pulse = 1 + (o.pulse ?? 0) * 0.15;
   const k = tier(level);
   const st = pal.stoneTones;
   // bunker: wider and taller per level, with a raised gun deck from L2 and battlements at L3
   const br = [28, 32, 38][k]!;
-  const bh = [16, 20, 24][k]!;
+  const bh = ART_BUNKER_H[k];
   const dr = [0, 26, 30][k]!;
-  const dh = [0, 10, 14][k]!;
-  // dome pivot: on the bunker (L1) or on the raised gun deck (L2+)
+  const dh = ART_DECK_H[k];
+  // dome pivot: on the bunker (L1) or on the raised gun deck (L2+); keep in step with `artilleryMuzzle`
   const dy = y - bh - dh;
   p.fixed(() => {
     cylinder(ctx, st, x, y - bh, y + 2, br, br * 0.37, k === 2 ? 2 : 1);
@@ -833,16 +877,29 @@ function drawArtillery(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones
   });
   p.live(() => {
     // barrel tracks the last target; longer and heavier per level
-    barrel(ctx, pal, x, dy - 6, o.aim ?? -0.6, [26, 30, 36][k]!, [9, 10, 12][k]!);
+    barrel(ctx, pal, x, dy - ART_PIVOT_UP, o.aim ?? -0.6, ART_BARREL_LEN[k], [9, 10, 12][k]!);
     gems(ctx, pal, x + (k >= 1 ? 4 : -2), y - bh * 0.45, level, o.nowMs, o.motion);
     flag(ctx, pal, tones, x - br + 3, y - bh - [26, 30, 34][k]!, [22, 26, 28][k]!, o.nowMs, o.motion);
   });
 }
 
+/**
+ * ART-22: where the artillery barrel ends, as an offset from the tower's anchor in the sprite's own
+ * (unscaled) units, for a barrel drawn at screen angle `aim`: the pivot sits 6 px over the dome
+ * centre (bunker `bh` + gun deck `dh` per level, see `drawArtillery`) and `barrel` draws its length
+ * in the sprite's 0.73 perspective. Under the camera the muzzle is drawn at the projected anchor plus
+ * this offset × the depth scale, which is where a shell trace has to leave.
+ */
+export function artilleryMuzzle(level: number, aim: number): { dx: number; dy: number } {
+  const k = tier(level);
+  const len = ART_BARREL_LEN[k];
+  return { dx: Math.cos(aim) * len, dy: -(ART_BUNKER_H[k] + ART_DECK_H[k] + ART_PIVOT_UP) + Math.sin(aim) * len * BARREL_FORESHORTEN };
+}
+
 /** Gun barrel from the pivot (x, y) along `a` (screen radians): metal shade under mid, lit line, pivot cap. */
 export function barrel(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, a: number, len: number, bw: number): void {
   const bx = x + Math.cos(a) * len;
-  const by = y + Math.sin(a) * len * 0.73;
+  const by = y + Math.sin(a) * len * BARREL_FORESHORTEN;
   ctx.lineCap = 'round';
   ctx.strokeStyle = pal.metal.shade;
   ctx.lineWidth = bw;
@@ -1108,6 +1165,10 @@ export interface BadgeStyle {
   underFire?: string;
   /** Horizontal jolt in px (each hostile landing; 0 under reduced motion). */
   shake?: number;
+  /** ART-23 capture flash 0..1: a bright halo round the pill in `flashColor` (0 / absent = none; 0 under reduced motion). */
+  flash?: number;
+  /** Halo colour of the capture flash (the new owner's lit tone); white by default. */
+  flashColor?: string;
 }
 
 /**
@@ -1145,6 +1206,17 @@ export function drawSwordsPip(ctx: CanvasRenderingContext2D, x: number, y: numbe
 }
 
 /**
+ * Size of the pill `drawBadge` draws for `text` at `scale` (leaves the badge font set on `ctx`):
+ * under fire it widens to the left for the crossed-swords pip; the number keeps its size. The chip
+ * layout (worldChips.ts) measures badges with this so its rects are the drawn ones.
+ */
+export function badgeSize(ctx: CanvasRenderingContext2D, text: string, scale = 1, underFire = false): { w: number; h: number } {
+  ctx.font = font(26, '900');
+  const pipW = underFire ? 20 * scale : 0;
+  return { w: Math.max(50, ctx.measureText(text).width + 24) * scale + pipW, h: 36 * scale };
+}
+
+/**
  * Paper pill with an owner-coloured stroke, soft shadow and ink numerals (≥ 26 px logical so the
  * count reads at 360 px). `full` tints the paper gold when the tower is at capacity.
  */
@@ -1153,18 +1225,25 @@ export function drawBadge(ctx: CanvasRenderingContext2D, pal: Palette, x: number
   const s = style.scale ?? 1;
   const fire = style.underFire;
   x += style.shake ?? 0;
-  ctx.font = font(px, '900');
-  // under fire the pill widens to the left for the crossed-swords pip; the number keeps its size
+  const { w, h } = badgeSize(ctx, text, s, !!fire);
   const pipW = fire ? 20 * s : 0;
-  const w = Math.max(50, ctx.measureText(text).width + 24) * s + pipW;
-  const h = 36 * s;
   const r: { x: number; y: number; w: number; h: number } = { x: x - w / 2, y: y - h / 2, w, h };
   ctx.fillStyle = pal.groundShadow;
   roundRect(ctx, { x: r.x + 2, y: r.y + 5, w, h }, h / 2);
   ctx.fill();
   roundRect(ctx, r, h / 2);
-  ctx.fillStyle = fire ? pal.badgeAlert : full ? pal.badgeFull : pal.paper;
+  const paper = fire ? pal.badgeAlert : full ? pal.badgeFull : pal.paper;
+  ctx.fillStyle = paper;
   ctx.fill();
+  // ART-23 clay pill: the paper's lower lip in shade (one stroke hugging the bottom inside edge)
+  const lr = h / 2 - 2.6 * s;
+  ctx.strokeStyle = shade(paper, -BADGE_LIP);
+  ctx.lineWidth = 3 * s;
+  ctx.beginPath();
+  ctx.arc(r.x + h / 2, y, lr, 0.85 * Math.PI, 0.5 * Math.PI, true);
+  ctx.arc(r.x + w - h / 2, y, lr, 0.5 * Math.PI, 0.15 * Math.PI, true);
+  ctx.stroke();
+  roundRect(ctx, r, h / 2);
   ctx.lineWidth = fire ? 3.5 : 2.5;
   ctx.strokeStyle = fire ?? style.stroke ?? pal.ink;
   ctx.stroke();
@@ -1180,6 +1259,16 @@ export function drawBadge(ctx: CanvasRenderingContext2D, pal: Palette, x: number
   ctx.moveTo(r.x + h * 0.5, r.y + 3);
   ctx.lineTo(r.x + w - h * 0.5, r.y + 3);
   ctx.stroke();
+  const flash = style.flash ?? 0;
+  if (flash > 0) {
+    // ART-23 capture: a bright halo flashes round the pill (paper-white by default), the numerals stay on top
+    ctx.globalAlpha = flash;
+    ctx.strokeStyle = style.flashColor ?? '#ffffff';
+    ctx.lineWidth = 3 + 5 * flash;
+    roundRect(ctx, { x: r.x - 3, y: r.y - 3, w: w + 6, h: h + 6 }, h / 2 + 3);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
   ctx.fillStyle = pal.ink;
   ctx.font = font(px * s, '900');
   ctx.textAlign = 'center';

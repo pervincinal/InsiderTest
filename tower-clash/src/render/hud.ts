@@ -29,8 +29,9 @@ import type { PlayUi } from './draw';
 import { prefersReducedMotion } from './particles';
 import { reducedMotionOverride } from '../ui/motion';
 import type { BoosterKind, BoosterStatus } from '../ui/boosters';
-import { badgeY, drawVideoGlyph } from './sprites';
-import { BADGE_MIN_SCALE, playCamera, proj } from './camera';
+import { drawVideoGlyph } from './sprites';
+import { playCamera, proj } from './camera';
+import { drawStreamArrow } from './worldChips';
 import type { ToastOpts } from './economyWidgets';
 import { drawToast, drawWallet } from './economyWidgets';
 import type { HudOverlayDrawers } from './hudOverlays';
@@ -208,60 +209,6 @@ function drawStreamsPill(ctx: CanvasRenderingContext2D, ui: PlayUi, n: number): 
   ctx.fillText(String(n), r.x + 48, cy + 13);
 }
 
-/** A stroked "⇢" (shaft + chevron head) pointing right, centred on (cx, cy). */
-function drawStreamArrow(ctx: CanvasRenderingContext2D, color: string, cx: number, cy: number, len: number, width: number): void {
-  ctx.strokeStyle = color;
-  ctx.lineWidth = width;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.beginPath();
-  ctx.moveTo(cx - len / 2, cy);
-  ctx.lineTo(cx + len / 2, cy);
-  ctx.moveTo(cx + len / 2 - len * 0.4, cy - len * 0.4);
-  ctx.lineTo(cx + len / 2, cy);
-  ctx.lineTo(cx + len / 2 - len * 0.4, cy + len * 0.4);
-  ctx.stroke();
-}
-
-/**
- * Per-tower stream count (rules v2): a small "⇢n" chip left of the garrison badge of every tower
- * that currently streams through ≥ 1 link (growth paused, rules v3), in the owner's tone so enemy streams read too.
- */
-function drawStreamChips(ctx: CanvasRenderingContext2D, state: GameState, ui: PlayUi): void {
-  const pal = ui.palette;
-  const counts = new Map<string, number>();
-  for (const l of state.links) counts.set(l.from, (counts.get(l.from) ?? 0) + 1);
-  if (counts.size === 0) return;
-  ctx.save();
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  const cam = playCamera(); // next to the badge, which stands at the tower's projected anchor (ART-21); the chip keeps its size
-  for (const [id, n] of counts) {
-    const tw = state.towers[id];
-    if (!tw) continue;
-    const raise = ui.selectedTowerId === tw.id ? 4 : 0;
-    const at = proj(cam, tw.x, tw.y);
-    const by = Math.max(HUD.mapTop + 26, at.y + (badgeY(tw.kind, tw.level) - raise) * at.s);
-    const bs = at.s === 1 ? 1 : Math.max(BADGE_MIN_SCALE, at.s); // the badge's scale: the chip sits against its left end
-    const tones = pal.ownerTones[tw.owner];
-    const chip: Rect = { x: at.x - 26 * bs - 46, y: by - 11, w: 46, h: 24 };
-    ctx.fillStyle = pal.groundShadow;
-    roundRect(ctx, { x: chip.x + 1, y: chip.y + 3, w: chip.w, h: chip.h }, 12);
-    ctx.fill();
-    roundRect(ctx, chip, 12);
-    ctx.fillStyle = pal.paper;
-    ctx.fill();
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = tones.shade;
-    ctx.stroke();
-    drawStreamArrow(ctx, tones.mid, chip.x + 14, chip.y + chip.h / 2, 10, 2.5);
-    ctx.fillStyle = pal.ink;
-    ctx.font = font(16, '900');
-    ctx.fillText(String(n), chip.x + 25, chip.y + chip.h / 2 + 1);
-  }
-  ctx.restore();
-}
-
 function boosterGlyph(ctx: CanvasRenderingContext2D, kind: BoosterKind, color: string, cx: number, cy: number, s: number, outline: string): void {
   if (kind === 'overdrive') drawBoltGlyph(ctx, color, cx, cy, s, outline);
   else if (kind === 'freeze') drawSnowflakeGlyph(ctx, color, cx, cy, s);
@@ -378,6 +325,42 @@ function drawTargeting(ctx: CanvasRenderingContext2D, state: GameState, ui: Play
   ctx.fillText(text, 360, pill.y + pill.h / 2 + 1, w - 20);
 }
 
+/** The lesson card's layout (HUD layout space: the top band's frame, shift by `hudAnchors().top` for the screen). */
+export interface LessonCard {
+  rect: Rect;
+  lines: string[];
+  px: number;
+  lineH: number;
+  captionH: number;
+}
+
+/** The lesson card is up for the first seconds of a running level. */
+export const LESSON_CARD_MS = 8000;
+
+/**
+ * The lesson hint during the first LESSON_CARD_MS (a small "LESSON" caption over the lesson text,
+ * both in the UI language), or null when it is not shown. Up to three lines at 20 px; longer lessons
+ * (band finales, translations) drop to 18 px and up to five lines rather than being cut with an
+ * ellipsis. Leaves a lesson font set on `ctx`. The world clamps badges below it (ART-22, draw.ts).
+ */
+export function lessonCardLayout(ctx: CanvasRenderingContext2D, state: GameState, ui: PlayUi): LessonCard | null {
+  if (state.time >= LESSON_CARD_MS || ui.outcome !== 'playing') return null;
+  const lesson = levelLesson(ui.level);
+  ctx.font = font(20, '500');
+  let lines = wrapText(ctx, lesson, 620, 3);
+  let px = 20;
+  if (lines[lines.length - 1]?.endsWith('…')) {
+    px = 18;
+    ctx.font = font(px, '500');
+    lines = wrapText(ctx, lesson, 640, 5);
+  }
+  const lineH = px + 6;
+  const captionH = 18;
+  const h = lines.length * lineH + 18 + captionH;
+  const w = Math.min(690, Math.max(...lines.map((l) => ctx.measureText(l).width)) + 48);
+  return { rect: { x: 360 - w / 2, y: 108, w, h }, lines, px, lineH, captionH };
+}
+
 /** The two glass bands, from the screen edges to the anchored band edges (exactly `HUD.topBar` / `HUD.bottomBar` on a 9:16 screen). */
 export function hudBandRects(view: View, a: HudAnchors = hudAnchors(view)): { top: Rect; bottom: Rect } {
   const b = bleed(view);
@@ -395,8 +378,6 @@ export function drawHud(ctx: CanvasRenderingContext2D, state: GameState, view: V
   const hud = extrasOf(ui);
   const a = hudAnchors(view);
   ctx.save();
-  // stream counters sit on the world, just under the bands
-  if (ui.outcome === 'playing') drawStreamChips(ctx, state, ui);
   // glass bands, out to the screen edges (BUG-34)
   const bands = hudBandRects(view, a);
   drawGlassBand(ctx, bands.top);
@@ -442,31 +423,18 @@ export function drawHud(ctx: CanvasRenderingContext2D, state: GameState, view: V
   drawButton(ctx, pal, pb, '');
   pauseGlyph(ctx, pal.ink, pb.x + pb.w / 2, pb.y + (pb.h - 4) / 2, ui.paused);
 
-  // lesson hint during the first seconds (a small "LESSON" caption over the lesson text, both in the
-  // UI language). Up to three lines at 20 px; longer lessons (band finales, translations) drop to
-  // 18 px and up to five lines rather than being cut with an ellipsis.
-  if (state.time < 8000 && ui.outcome === 'playing') {
-    const lesson = levelLesson(ui.level);
-    ctx.font = font(20, '500');
-    let lines = wrapText(ctx, lesson, 620, 3);
-    let px = 20;
-    if (lines[lines.length - 1]?.endsWith('…')) {
-      px = 18;
-      ctx.font = font(px, '500');
-      lines = wrapText(ctx, lesson, 640, 5);
-    }
-    const lineH = px + 6;
-    const captionH = 18;
-    const h = lines.length * lineH + 18 + captionH;
-    const w = Math.min(690, Math.max(...lines.map((l) => ctx.measureText(l).width)) + 48);
-    drawCard(ctx, pal, { x: 360 - w / 2, y: 108, w, h }, { radius: 18, edge: 4 });
+  // lesson hint during the first seconds (`lessonCardLayout`)
+  const card = lessonCardLayout(ctx, state, ui);
+  if (card) {
+    const { rect, lines, px, lineH, captionH } = card;
+    drawCard(ctx, pal, rect, { radius: 18, edge: 4 });
     ctx.textAlign = 'center';
     ctx.fillStyle = pal.textDim;
     ctx.font = font(13, '500');
-    ctx.fillText(t('hud.lesson'), 360, 108 + 14, w - 24);
+    ctx.fillText(t('hud.lesson'), 360, rect.y + 14, rect.w - 24);
     ctx.fillStyle = pal.ink;
     ctx.font = font(px, '500');
-    lines.forEach((l, i) => ctx.fillText(l, 360, 108 + 20 + captionH + i * lineH));
+    lines.forEach((l, i) => ctx.fillText(l, 360, rect.y + 20 + captionH + i * lineH));
   }
   ctx.restore();
 
@@ -520,10 +488,6 @@ export function hudKey(state: GameState, ui: PlayUi, nowMs: number): string {
     if (hud.targeting) k += `|T${nowMs}`;
     if (hud.toast) k += `|toast:${hud.toast.kind}:${hud.toast.t}:${hud.toast.y ?? ''}:${hud.toast.text}`;
     if (hud.wallet && ui.outcome !== 'playing') k += `|w${hud.wallet.gold}:${hud.wallet.crystals}:${hud.pressed === HUD.wallet ? 1 : 0}`;
-  }
-  for (const l of state.links) {
-    const tw = state.towers[l.from];
-    if (tw) k += `|${l.from}:${tw.owner}:${tw.kind}:${tw.level}${ui.selectedTowerId === tw.id ? '*' : ''}`;
   }
   return k;
 }

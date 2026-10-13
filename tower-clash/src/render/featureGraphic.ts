@@ -193,12 +193,17 @@ function stream(ctx: CanvasRenderingContext2D, ax: number, ay: number, bx: numbe
   ctx.restore();
 }
 
+/** The instant of the march the soldiers are frozen at (sprites.ts `stridePhase`: the phase also depends on the soldier's id). */
+const MARCH_MS = 0;
+
 /**
  * A column of the game's clay soldiers walking from (ax, ay) towards (bx, by), `n` of them `gap`
  * apart starting `from` px along the lane, `k` × map size. Alternate soldiers step 4 px off the
- * centre line so the column reads as a crowd, not a bead string. Painted back-to-front.
+ * centre line so the column reads as a crowd, not a bead string. Painted back-to-front. ART-22: frozen
+ * mid-march (the ART-20 walk at MARCH_MS: legs in stride, forward lean, spear), each soldier's stride
+ * phase from its index + `seed`, so neither a column nor two columns are in lock-step.
  */
-function column(ctx: CanvasRenderingContext2D, owner: Owner, ax: number, ay: number, bx: number, by: number, from: number, n: number, gap: number, k: number): void {
+function column(ctx: CanvasRenderingContext2D, owner: Owner, ax: number, ay: number, bx: number, by: number, from: number, n: number, gap: number, k: number, seed = 0): void {
   const len = Math.hypot(bx - ax, by - ay);
   const dx = (bx - ax) / len;
   const dy = (by - ay) / len;
@@ -213,7 +218,7 @@ function column(ctx: CanvasRenderingContext2D, owner: Owner, ax: number, ay: num
     ctx.save();
     ctx.translate(p.x, p.y);
     ctx.scale(k, k);
-    drawUnitSprite(ctx, PAL, 0, 0, owner, 'infantry', dx, dy, p.id, 0, false);
+    drawUnitSprite(ctx, PAL, 0, 0, owner, 'infantry', dx, dy, p.id + seed, MARCH_MS, true);
     ctx.restore();
   }
 }
@@ -275,9 +280,9 @@ function drawDuel(ctx: CanvasRenderingContext2D, family: string, title: readonly
   stream(ctx, blueA.x + 34, blueA.y - 6, meet.x - 18, meet.y - 2, PLAYER, 12, false);
   stream(ctx, red.x - 40, red.y + 8, meet.x + 18, meet.y + 2, ENEMY, 12, false);
   stream(ctx, blueB.x + 30, blueB.y, red.x - 46, red.y - 22, PLAYER, 12, true);
-  column(ctx, 'player', blueB.x + 30, blueB.y, red.x - 46, red.y - 22, 30, 4, 44, 1.9);
+  column(ctx, 'player', blueB.x + 30, blueB.y, red.x - 46, red.y - 22, 30, 4, 44, 1.9, 5);
   column(ctx, 'player', blueA.x + 34, blueA.y - 6, meet.x, meet.y, 34, 5, 37, 2.1);
-  column(ctx, 'enemy1', red.x - 40, red.y + 8, meet.x, meet.y, 30, 4, 37, 2.1);
+  column(ctx, 'enemy1', red.x - 40, red.y + 8, meet.x, meet.y, 30, 4, 37, 2.1, 2);
 
   tower(ctx, ground, blueB.x, blueB.y, 1.2, PLAYER, 1);
   tower(ctx, ground, red.x, red.y, 1.45, ENEMY, 2);
