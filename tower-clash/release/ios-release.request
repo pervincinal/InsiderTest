@@ -15,5 +15,5 @@
 # The build number is config.buildNumber in tower-clash/package.json (npm run version:sync);
 # App Store Connect accepts every build number only once.
 lane=testflight
-note=build 13 (1.0.0): ART-21 perspective camera, ART-20 walking soldiers, FE-12 title fills tall phones; TestFlight only
-requested=2026-10-12T19:40:00Z
+note=build 14 (1.0.0): ART-23 lighting + combat effects, ART-22 camera polish, BUG-40/41; TestFlight only
+requested=2026-10-13T06:20:00Z

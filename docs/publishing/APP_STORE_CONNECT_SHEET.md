@@ -99,13 +99,13 @@ Answer row by row; if the questionnaire shows a row that is not listed here, ans
 
 ### 6.1 Screenshots (Skrinşotlar) — App Previews and Screenshots, "iPhone" tab
 
-Upload order = file order; drag to reorder if the browser uploads out of sequence. Every file is a Playwright capture of build 7 (`LAUNCH_CHECKLIST.md` A11); sizes are exact, all files ≤ 600 KB, PNG without alpha.
+Upload order = file order; drag to reorder if the browser uploads out of sequence. Every file is a Playwright capture of the game (`LAUNCH_CHECKLIST.md` A11; re-cut 2026-10-13, ART-19, on the build-13 look plus ART-22 / ART-23: walking soldiers, perspective play camera, title island and menu headers at the safe edges of the tall screen); sizes are exact, all files ≤ 600 KB (largest 535 KB on 6.7", 542 KB on 6.5"), PNG without alpha.
 
 | Slot (Yer) | Device size tab in App Store Connect | File (from `tower-clash/store/screenshots/`) | What it shows |
 |---|---|---|---|
 | 1 | iPhone 6.9"/6.7" display (1290×2796 accepted) | `apple-6.7/en/01.png` | Title screen — "Capture every tower" |
 | 2 | ″ | `apple-6.7/en/02.png` | Level 1 tutorial — "Tap, and the stream flows" |
-| 3 | ″ | `apple-6.7/en/03.png` | Level 5, both stream colours — "Streams keep flowing" |
+| 3 | ″ | `apple-6.7/en/03.png` | Level 5, both stream colours, soldiers walking, a capture burst — "Streams keep flowing" |
 | 4 | ″ | `apple-6.7/en/04.png` | Level 24, mines and two rivals — "Mines, rocks, two rivals" |
 | 5 | ″ | `apple-6.7/en/05.png` | Level 9 fortress — "Storm the fortress" |
 | 6 | ″ | `apple-6.7/en/06.png` | Level 45, three enemies, wall gap — "Three enemies, one crown" |

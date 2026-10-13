@@ -5,7 +5,12 @@
  *   cd tower-clash && npm run build && node store/tools/renderStoreShots.mjs [--google] [--apple] [--all] [--port=4180]
  *   cd tower-clash && node store/tools/renderStoreShots.mjs --feature-only [--feature-variant=duel|hero]
  *   Env: PW_PORT=<n> (default 4180, `--port=` wins), PW_OUTPUT=<dir> (write under <dir> instead of store/),
- *        PW_DIST=<dir> (serve that dist snapshot instead of dist/).
+ *        PW_DIST=<dir> (serve that dist snapshot instead of dist/; `--dist=<dir>` wins).
+ *   `--no-feature`: leave store/feature-graphic.png alone (a `--google` / `--all` run re-draws it otherwise).
+ *   `--compose-only`: re-caption the selected sets from the raw frames already on disk (no build, no
+ *        preview server, no capture; the IAP review frame is left as it is).
+ *   Re-cut while another job owns dist/ (QA-20: a concurrent build empties it mid-run), as for the ART-19 re-cut:
+ *     npx vite build --outDir <scratch>/dist && node store/tools/renderStoreShots.mjs --all --no-feature --dist=<scratch>/dist --port=4191
  *
  * Default (no flag) = `--google`. Output (all PNG, every file kept under 600 KB):
  *
@@ -21,7 +26,10 @@
  *                                                needed) and leaves every screenshot set alone;
  *                                                `--feature-variant=<id>` picks a candidate.
  *   Google Play accepts any 9:16 size between 320 and 3840 px, so this set may be scaled down
- *   (1080×1920 → 945×1680 → …) until every file fits the size budget.
+ *   (1080×1920 → 945×1680 → …) until every file fits the size budget. Before the whole set is
+ *   scaled, a file over budget is re-encoded at the same pixel size with fewer colour levels
+ *   (`GOOGLE_POSTERISE_BITS`, RGB kept — ART-19 re-cut 2026-10-13: the ART-20/21/23 frames carry more detail, one
+ *   frame was 617 KB at 1080×1920), so the set stays 1080×1920.
  *
  *   --apple
  *   store/screenshots/raw-apple-6.7/NN-<name>.png – 1290×2796 frames (viewport 430×932 @3x)
@@ -77,7 +85,8 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..'); // to
 /** `PW_OUTPUT=<dir>` writes every asset under that directory instead of `store/` (a scratch render to compare or cherry-pick from). */
 const STORE = process.env.PW_OUTPUT ? resolve(process.env.PW_OUTPUT) : join(ROOT, 'store');
 /** `PW_DIST=<dir>` serves that build snapshot instead of `dist/` (a parallel `npm run build` cannot rewrite it mid-run, BUG-15). */
-const DIST = process.env.PW_DIST ? resolve(process.env.PW_DIST) : join(ROOT, 'dist');
+const distArg = process.argv.slice(2).find((a) => a.startsWith('--dist='))?.slice('--dist='.length);
+const DIST = distArg ? resolve(distArg) : process.env.PW_DIST ? resolve(process.env.PW_DIST) : join(ROOT, 'dist');
 const HEADLESS_SHELL = '/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell';
 const MAX_BYTES = 600 * 1024;
 
@@ -92,6 +101,10 @@ const DO_APPLE = flag('apple') || flag('all');
 const DO_GOOGLE = flag('google') || flag('all') || !flag('apple');
 /** `--feature-only`: just the Google Play feature graphic (no build, no preview server, no screenshot sets). */
 const FEATURE_ONLY = flag('feature-only');
+/** `--no-feature`: the screenshot sets only; store/feature-graphic.png is not re-drawn. */
+const NO_FEATURE = flag('no-feature');
+/** `--compose-only`: captions from the raw frames on disk; nothing is captured. */
+const COMPOSE_ONLY = flag('compose-only');
 /** `--feature-variant=<id>`: a candidate from src/render/featureGraphic.ts FEATURE_VARIANTS (default DEFAULT_FEATURE). */
 const FEATURE_VARIANT = args.find((a) => a.startsWith('--feature-variant='))?.slice('--feature-variant='.length);
 /** The IAP review frame is taken from the Apple 6.7" set (1290×2796) when it is rendered, else from the Google set (1080×1920). */
@@ -273,10 +286,25 @@ async function startPreview() {
  * keyed by name so nothing is eval'd in the page. `st` is the live `GameState`.
  */
 const FRAME_CONDITIONS = () => {
+  // The sim's `capture` events are consumed by the renderer within the frame, so a capture is seen
+  // here as a tower whose owner changed since the previous poll (wall clock: the burst is wall-clock too).
+  const seen = { level: null, time: Infinity, owners: {}, at: -Infinity };
+  const capturedWithin = (st, ms) => {
+    if (seen.level !== st.levelId || st.time < seen.time) Object.assign(seen, { level: st.levelId, owners: {}, at: -Infinity });
+    seen.time = st.time;
+    for (const [id, t] of Object.entries(st.towers)) {
+      if (seen.owners[id] !== undefined && seen.owners[id] !== t.owner) seen.at = performance.now();
+      seen.owners[id] = t.owner;
+    }
+    return performance.now() - seen.at <= ms;
+  };
+  const marching = (st, side, n) => st.units.filter((u) => (side === 'player' ? u.owner === 'player' : u.owner !== 'player')).length >= n;
   window.__storeShotCondition = (st, key) => {
     switch (key) {
       case 'bothStreams': // a player ribbon and an enemy ribbon on their straight lanes at the same moment
         return st.links.some((l) => l.owner === 'player') && st.links.some((l) => l.owner !== 'player');
+      case 'marchCapture': // ART-20 / ART-23: soldiers walking on both streams (≥ 4 a side) within ~0.25 s of a tower changing hands (capture burst)
+        return window.__storeShotCondition(st, 'bothStreams') && marching(st, 'player', 4) && marching(st, 'enemy', 4) && capturedWithin(st, 250);
       case 'playerToKeep': // the player streams into the fortress
         return st.links.some((l) => l.owner === 'player' && l.to === 'keep');
       case 'fortressUnderFire': // …while the fortress's counter-stream keeps a player tower under fire (swords badge)
@@ -422,7 +450,7 @@ async function playToResult(page, id, seeds, fastUntilMs) {
  * `maxMs`; then freeze at ×1 (no "×10" tag in the HUD). Returns whether the condition still holds
  * after the freeze, so the frame really shows what it waited for.
  */
-async function playWhile(page, id, cond, { seed = 1, autoplay = true, speed = 10, maxMs = 90_000 } = {}) {
+async function playWhile(page, id, cond, { seed = 1, autoplay = true, speed = 10, maxMs = 90_000, polling = 50 } = {}) {
   await page.evaluate(
     ({ lv, sd, sp, ap }) => {
       window.__towerclash.setSpeed(1);
@@ -443,7 +471,7 @@ async function playWhile(page, id, cond, { seed = 1, autoplay = true, speed = 10
         return window.__storeShotCondition(st, key);
       },
       { key: cond, limit: maxMs },
-      { polling: 50, timeout: 120_000 },
+      { polling, timeout: 120_000 },
     )
     .catch(() => undefined);
   if ((await screen(page)) !== 'play') return false;
@@ -453,12 +481,15 @@ async function playWhile(page, id, cond, { seed = 1, autoplay = true, speed = 10
 }
 
 /**
- * Tap a logical (720×1280) point (same path as the e2e suite: `toClient` + a mouse click). The retired
+ * Tap a layout (720×1280) point of the current screen (same path as the e2e suite: `layoutToClient` +
+ * a mouse click). `layoutToClient`, not `toClient`: since FE-11 / FE-12 the menus' headers and the
+ * title's groups follow the safe edges of a tall phone, so on the Apple viewports (430×932, 428×926)
+ * the WEEKLY tab is not where the plain letterbox mapping puts it (identity on 9:16). The retired
  * `upgrade` (level 4 → L2) and `limitHint` (level 5 "L2 needed for 2 streams") routines that tapped
  * level 5's towers are in git history (`16d720b`) should a re-cut want them back.
  */
 async function tapAt(page, p) {
-  const c = await page.evaluate(([x, y]) => window.__towerclash.toClient(x, y), [p.x, p.y]);
+  const c = await page.evaluate(([x, y]) => window.__towerclash.layoutToClient(x, y), [p.x, p.y]);
   await page.mouse.click(c.x, c.y);
 }
 
@@ -489,11 +520,14 @@ const FRAMES = {
   },
 
   // level 5 "Around the Wall": a blue player ribbon and a coral enemy ribbon on straight lanes at the
-  // same moment, either side of the stone wall that splits the map (no roads under them — rules v3)
-  streams: (page) =>
-    withSeeds('level 5 streams', 4, (seed) =>
-      playWhile(page, 5, 'bothStreams', { seed, speed: 4, maxMs: 60_000 }),
-    ),
+  // same moment, either side of the stone wall that splits the map (no roads under them — rules v3).
+  // Preferred take (ART-19 re-cut 2026-10-13, after ART-20 / ART-23): ≥ 4 walking soldiers on each side and a capture
+  // burst (flash ring + clay chips) on screen, polled every frame at ×2; else the plain two-stream frame.
+  streams: async (page) => {
+    const hit = await withSeeds('level 5 march + capture', 8, (seed) =>
+      playWhile(page, 5, 'marchCapture', { seed, speed: 2, maxMs: 60_000, polling: 'raf' }), { required: false });
+    if (!hit) await withSeeds('level 5 streams', 4, (seed) => playWhile(page, 5, 'bothStreams', { seed, speed: 4, maxMs: 60_000 }));
+  },
 
   // level 24 "The Gauntlet" (band-3 finale, sand biome): two enemy colours (red / green barracks at the
   // top), five point mines on the lanes, two boulders beside the artillery post. Taken ≥ 12 s in so the
@@ -755,6 +789,9 @@ async function toPalette(buf) {
   return sharp(buf).png({ palette: true, colours: 256, dither: 1.0, compressionLevel: 9, effort: 10 }).toBuffer();
 }
 
+/** Google set: colour levels tried per over-budget file at the current scale (8 = untouched) before the set is scaled down. */
+const GOOGLE_POSTERISE_BITS = [8, 6];
+
 /** Google set: whole-image scale steps until every file fits (any 9:16 size ≥ 320 px is accepted). */
 async function composeScaled(page, set) {
   const sizes = [];
@@ -764,9 +801,15 @@ async function composeScaled(page, set) {
     for (let i = 0; i < shots.length; i++) {
       for (const lang of set.langs) {
         const raw = readFileSync(rawFile(set, lang, i)).toString('base64');
-        const b64 = await page.evaluate(composeInPage, { png: raw, caption: shots[i][lang], w: set.out.w, h: set.out.h, scale });
         const file = outFile(set, lang, i);
-        writeFileSync(file, recompressPng(Buffer.from(b64, 'base64')));
+        let buf;
+        for (const bits of GOOGLE_POSTERISE_BITS) {
+          const b64 = await page.evaluate(composeInPage, { png: raw, caption: shots[i][lang], w: set.out.w, h: set.out.h, scale, bits });
+          buf = recompressPng(Buffer.from(b64, 'base64'));
+          if (buf.length <= MAX_BYTES) break;
+          console.log(`[${set.id}] ${lang}/${String(i + 1).padStart(2, '0')}.png ${kb(buf.length)} at bits ${bits}, scale ${scale} > 600 KB, reducing`);
+        }
+        writeFileSync(file, buf);
         sizes.push([file, statSync(file).size]);
       }
     }
@@ -897,9 +940,9 @@ if (FEATURE_ONLY) {
   process.exit(0);
 }
 
-const server = await startPreview();
+const server = COMPOSE_ONLY ? null : await startPreview();
 const cleanup = () => {
-  if (server.exitCode === null) server.kill('SIGTERM');
+  if (server && server.exitCode === null) server.kill('SIGTERM');
 };
 process.on('exit', cleanup);
 process.on('SIGINT', () => process.exit(130));
@@ -912,10 +955,10 @@ try {
     if (DO_GOOGLE) sets.push(SETS.google);
     if (DO_APPLE) sets.push(SETS['apple-6.7'], SETS['apple-6.5']);
     for (const set of sets) {
-      for (const lang of set.langs) await captureRaw(browser, set, lang);
+      if (!COMPOSE_ONLY) for (const lang of set.langs) await captureRaw(browser, set, lang);
       await composeAll(browser, set);
     }
-    if (DO_GOOGLE) await featureGraphic(browser);
+    if (DO_GOOGLE && !NO_FEATURE && !COMPOSE_ONLY) await featureGraphic(browser);
   } finally {
     await browser.close();
   }

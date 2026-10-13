@@ -31,8 +31,9 @@ const budgetArg = args.indexOf('--budget');
  * is the sim + play screen + renderer + level metadata (≈ 67 kB after rules v2).
  * 2026-10-12 (ART-20 walking soldiers, ART-21 tilted camera, FE-12 title layout): 80 → 88 kB; the
  * renderer grew 4 kB for the stakeholder's visual pass. PERF-9 tracks getting back under 80.
+ * 2026-10-13 (ART-22 chips, ART-23 lighting + combat effects, BUG-40 ground build): 88 → 92 kB at 87.9 kB.
  */
-const DEFAULT_GZIP_BUDGET = 88 * 1024;
+const DEFAULT_GZIP_BUDGET = 92 * 1024;
 /** Package name fragments that must never appear in the eagerly loaded chunks. */
 const FORBIDDEN_STRINGS = ['purchases-capacitor', 'capacitor-community/admob', 'capacitor-community/in-app-review'];
 
