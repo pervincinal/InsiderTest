@@ -12,6 +12,12 @@ import type { Page } from '@playwright/test';
  * The median frame must stay under the budget below; the numbers are reported through test
  * annotations and stdout so the daily report can quote them.
  *
+ * QA-23 (ART-21 perspective camera, build 13): sample 1 runs under the default play camera — the test
+ * asserts it (the far shore is drawn well below where the flat letterbox would put it) — and a fourth
+ * case times the one-off ground-image build of level 40 (the camera's per-row "mode 7" warp runs once
+ * per level, in the first frame) at 4× CPU throttling: under GROUND_BUILD_BUDGET_MS, flat map reported
+ * alongside for comparison (debug hook `getGroundBuildMs`, src/debug.ts).
+ *
  * Budget: 33 ms (30 fps) is the target on a real device. The sandbox headless shell is software
  * rendered and shares CPU with the preview server, so the assertion uses 50 ms there (see
  * PERF_BUDGET_MS); CI keeps the same budget for determinism. Tighten once the render path is
@@ -19,6 +25,12 @@ import type { Page } from '@playwright/test';
  */
 
 const PERF_BUDGET_MS = 50;
+/** QA-23: level 40's ground image (map-space paint + per-row warp) at 4× CPU throttling. */
+const GROUND_BUILD_BUDGET_MS = 120;
+const GROUND_BUILD_LEVEL = 40;
+const CPU_THROTTLE = 4;
+/** src/render/camera.ts ISLAND_FAR_Y (HUD.mapTop + 12): the island's far shore, map y. */
+const ISLAND_FAR_Y = 108;
 const SAMPLE_MS = 8_000;
 const SCREEN_SAMPLE_MS = 3_000;
 
@@ -30,7 +42,27 @@ const LEVEL_IDS = readdirSync(LEVELS_DIR)
 const HIGHEST = LEVEL_IDS[LEVEL_IDS.length - 1]!;
 
 /** Optional debug hooks that other roles may add later; typed loosely so the spec compiles either way. */
-type OptionalDebug = { openShop?: () => unknown };
+type OptionalDebug = { openShop?: () => unknown; getGroundBuildMs?: (flat?: boolean) => number | null };
+
+/**
+ * How far below the flat letterbox the far shore is drawn (CSS px; 0 = the flat `?tilt=0` map): the
+ * hooks' `toClient` projects map points of the play band through the camera, a HUD-band point (y 50)
+ * is never projected and gives the letterbox origin and scale.
+ */
+function farShoreDrop(page: Page): Promise<number> {
+  return page.evaluate(
+    (farY) =>
+      new Promise<number>((resolve) =>
+        requestAnimationFrame(() => {
+          const tc = window.__towerclash;
+          const o = tc.layoutToClient(0, 50);
+          const v = tc.layoutToClient(100, 50).x - o.x;
+          resolve(tc.toClient(360, farY).y - (o.y + ((farY - 50) * v) / 100));
+        }),
+      ),
+    ISLAND_FAR_Y,
+  );
+}
 
 function median(xs: number[]): number {
   const s = [...xs].sort((a, b) => a - b);
@@ -101,6 +133,9 @@ test.describe('Tower Clash perf', () => {
     });
     expect(await page.evaluate(() => window.__towerclash.getSpeed())).toBe(10);
     const simStart = await page.evaluate(() => window.__towerclash.getState()?.time ?? -1);
+    // QA-23: the budget is measured with the ART-21 perspective camera on (the default; ?tilt=0 is the flat map)
+    const drop = await farShoreDrop(page);
+    expect(drop, 'the default perspective camera is on: the far shore is drawn below the flat letterbox (CSS px)').toBeGreaterThan(10);
 
     const samples = await sampleFrames(page, SAMPLE_MS);
     const simEnd = await page.evaluate(() => window.__towerclash.getState()?.time ?? -1);
@@ -109,13 +144,41 @@ test.describe('Tower Clash perf', () => {
     const s = stats(samples);
     const summary =
       `${describeStats(`level ${HIGHEST} x10 autoplay`, s, SAMPLE_MS)}; ` +
-      `sim ${simStart} → ${simEnd} ms (${((simEnd - simStart) / 1000).toFixed(1)} s sim), screen after: ${screenAfter}`;
+      `sim ${simStart} → ${simEnd} ms (${((simEnd - simStart) / 1000).toFixed(1)} s sim), screen after: ${screenAfter}, camera on (far shore +${drop.toFixed(0)} CSS px)`;
     report(summary);
 
     expect(samples.length, 'must have sampled a meaningful number of frames').toBeGreaterThan(60);
     expect(simEnd, 'sim must have advanced while sampling').toBeGreaterThan(simStart);
     expect(pageErrors).toEqual([]);
     expect(s.med, summary).toBeLessThanOrEqual(PERF_BUDGET_MS);
+  });
+
+  test(`level ${GROUND_BUILD_LEVEL} ground image (ART-21 per-row warp) builds in < ${GROUND_BUILD_BUDGET_MS} ms at ${CPU_THROTTLE}x CPU`, async ({ page }) => {
+    const pageErrors = await gotoTitle(page);
+    expect(await page.evaluate((id) => window.__towerclash.loadLevel(id), GROUND_BUILD_LEVEL)).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.__towerclash.getScreen())).toBe('play');
+    expect(await farShoreDrop(page), 'measured under the perspective camera').toBeGreaterThan(10);
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: CPU_THROTTLE });
+    // three fresh builds each (the hook bypasses the terrain cache with a new key; same work as the first frame of a level)
+    const build = (flat: boolean) => page.evaluate((f) => (window.__towerclash as unknown as Required<OptionalDebug>).getGroundBuildMs(f), flat);
+    const tilted: number[] = [];
+    const flat: number[] = [];
+    for (let i = 0; i < 3; i++) {
+      tilted.push((await build(false)) ?? NaN);
+      flat.push((await build(true)) ?? NaN);
+    }
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+    const fmt = (xs: number[]) => xs.map((x) => x.toFixed(1)).join(' / ');
+    const summary =
+      `level ${GROUND_BUILD_LEVEL} ground build at ${CPU_THROTTLE}x CPU: camera ${fmt(tilted)} ms (median ${median(tilted).toFixed(1)}), ` +
+      `flat ${fmt(flat)} ms (median ${median(flat).toFixed(1)})`;
+    report(summary);
+
+    expect(tilted.every(Number.isFinite), 'getGroundBuildMs answers on the play screen').toBe(true);
+    expect(await page.evaluate(() => window.__towerclash.getScreen())).toBe('play');
+    expect(pageErrors).toEqual([]);
+    expect(median(tilted), summary).toBeLessThan(GROUND_BUILD_BUDGET_MS);
   });
 
   test(`title screen idle: median frame <= ${PERF_BUDGET_MS} ms`, async ({ page }) => {

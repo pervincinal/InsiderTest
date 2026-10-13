@@ -15,6 +15,10 @@ import { grantProduct } from './economy/wallet';
 import { challengeFor, weekKeyOf, weeklyFor } from './daily/challenge';
 import { challengeDone, challengeUnlocked, previousDayKey, shownStreak, yesterdayOffered } from './ui/daily';
 import { shownWeekStreak, weeklyDone, weeklyTargetDone, weeklyUnlocked } from './ui/weekly';
+import { getTerrain } from './render/terrain';
+import { FLAT, playCamera } from './render/camera';
+import { biomeFor } from './render/palette';
+import { equippedSkin } from './economy/entitlements';
 
 /*
  * Playwright / QA surface (`window.__towerclash`, PERF-6): a lazy chunk that main.ts installs once
@@ -22,8 +26,40 @@ import { shownWeekStreak, weeklyDone, weeklyTargetDone, weeklyUnlocked } from '.
  * before the title. Every spec waits for `window.__towerclash.loadLevel` before using it.
  */
 
-export function installDebug(app: TowerClashApp): TowerClashDebug {
-  return {
+/** QA-23 hooks not (yet) declared on `TowerClashDebug` in main.ts; specs type them loosely. */
+export interface QaDebugExtras {
+  /**
+   * Build the running level's ground image once more, bypassing the terrain cache (a fresh `variant`
+   * key, same work), under the play camera (`flat`: the `?tilt=0` map) and return the wall-clock ms —
+   * the ART-21 per-row warp is a one-off cost per level. Null when no level is on screen.
+   */
+  getGroundBuildMs(flat?: boolean): number | null;
+}
+
+let groundBuilds = 0;
+
+export function installDebug(app: TowerClashApp): TowerClashDebug & QaDebugExtras {
+  const extras: QaDebugExtras = {
+    getGroundBuildMs: (flat = false) => {
+      const play = app.current === app.play ? app.play : undefined;
+      if (!play) return null;
+      const st = play.state;
+      const spec = {
+        key: `level:${st.levelId}`,
+        variant: `qa-build-${++groundBuilds}`,
+        seed: st.levelId,
+        biome: biomeFor(st.levelId),
+        theme: equippedSkin(app.save).theme,
+        obstacles: st.obstacles.map((o) => ({ kind: o.kind, points: o.points, width: o.width })),
+        mines: st.mines.map((m) => ({ x: m.x, y: m.y, charges: m.charges })),
+        towers: Object.values(st.towers).map((t) => ({ x: t.x, y: t.y })),
+      };
+      const t0 = performance.now();
+      getTerrain(app.view, app.palette(), spec, flat ? FLAT : playCamera());
+      return performance.now() - t0;
+    },
+  };
+  const dbg: TowerClashDebug = {
     getState: () => app.play?.state ?? null,
     getScreen: () => app.current.name,
     loadLevel: (id, seed) => app.startLevel(id, seed),
@@ -169,6 +205,8 @@ export function installDebug(app: TowerClashApp): TowerClashDebug {
       },
     },
   };
+  // assign into `dbg` (not a copy): its getters (`lastShare`, `storeAvailable`, …) must stay live
+  return Object.assign(dbg, extras);
 }
 
 /**
