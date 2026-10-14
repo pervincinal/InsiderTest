@@ -1,6 +1,6 @@
 import type { Command, GameState, Tower } from './sim/types';
 import { capacityOf, linksFrom, maxLinksOf, relaysOnward } from './sim/step';
-import { referencePlayerCommands } from './ai/index';
+import { aiModule } from './ui/ai';
 import type { TowerClashApp, TowerClashDebug } from './main';
 import { LEVEL_META, levelIndex } from './levels/index';
 import { fromHudSpace, hudAnchors, toClient } from './render/view';
@@ -64,7 +64,8 @@ export function installDebug(app: TowerClashApp): TowerClashDebug & QaDebugExtra
     getState: () => app.play?.state ?? null,
     getScreen: () => app.current.name,
     loadLevel: (id, seed) => app.startLevel(id, seed),
-    autoplay: () => app.withPlay((play) => play.setPlayerBot(referencePlayerCommands)),
+    // the AI chunk is in whenever a play screen exists (startLevel awaits it); no static import of src/ai, so it stays one chunk (PERF-9)
+    autoplay: () => app.withPlay((play) => play.setPlayerBot(aiModule().referencePlayerCommands)),
     setSpeed: (n) => app.setSpeed(n),
     getSpeed: () => app.play?.loop.speed ?? app.speed,
     // On the play screen a map point is drawn through the tilted camera (ART-21, `PlayScreen.fromLayout`):

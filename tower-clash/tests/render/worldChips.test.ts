@@ -16,9 +16,11 @@ import {
   badgeScale,
   chipMinTop,
   overlaps,
+  placeBadges,
   placeChips,
   streamChipRect,
 } from '../../src/render/worldChips';
+import type { BadgeWant } from '../../src/render/worldChips';
 import { LESSON_CARD_MS, lessonCardLayout } from '../../src/render/hud';
 import type { PlayUi } from '../../src/render/draw';
 import { ParticleSystem } from '../../src/render/particles';
@@ -218,18 +220,25 @@ describe('a badge that would be clamped onto its own tower goes below it (ART-24
   });
 
   for (const s of shapes) {
-    it(`level 3 foe on ${s.name}: with the card up and after it, the badge sits fully below the base, clear of the sprite`, () => {
+    it(`level 3 foe on ${s.name}: the badge sits fully below the base, clear of the sprite — unless the card still covers that spot (BUG-43), then it clamps under the card`, () => {
       const bs = badgeScale(1);
-      for (const cardBottom of [card.rect.y + card.rect.h + s.a.top, null]) {
-        const spot = badgeCentre(foe.y + lift('barracks', 1), badgeMinY(cardBottom, bs), foe.y, plinth('barracks', 1), bs);
-        expect(spot.below, `card ${cardBottom}`).toBe(true);
-        const top = spot.y - 18 * bs;
-        // the drawn plinth reaches ≈ (r × 0.42 + 8) × zoom under the anchor; the badge's top edge is below all of it
-        expect(top).toBeGreaterThan(foe.y + (towerFootprintRadius('barracks', 1) * 0.42 + 8) * WORLD_ZOOM.tower);
-        expect(top).toBeCloseTo(foe.y + plinth('barracks', 1) + BADGE_BELOW_GAP, 9);
-        // and nowhere near the roof (the sprite's top is towerTop × zoom above the base)
-        expect(top).toBeGreaterThan(foe.y - towerTop('barracks', 1) * WORLD_ZOOM.tower);
-      }
+      const natural = foe.y + lift('barracks', 1);
+      const flipped = foe.y + plinth('barracks', 1) + 18 * bs + BADGE_BELOW_GAP;
+      // card up: this two-line card reaches the flipped spot on 9:16 (no inset: the card sits lower on the map) but not on the tall phone
+      const cardBottom = card.rect.y + card.rect.h + s.a.top;
+      const minY = badgeMinY(cardBottom, bs);
+      const withCard = badgeCentre(natural, minY, foe.y, plinth('barracks', 1), bs);
+      expect(withCard.below, s.name).toBe(s.name === '430x932');
+      expect(withCard).toEqual(withCard.below ? { y: flipped, below: true } : { y: minY, below: false });
+      expect(withCard.y - 18 * bs).toBeGreaterThanOrEqual(cardBottom + 4 + CARD_CLEAR - 1e-9);
+      // card gone: below the base
+      const spot = badgeCentre(natural, badgeMinY(null, bs), foe.y, plinth('barracks', 1), bs);
+      expect(spot).toEqual({ y: flipped, below: true });
+      const top = spot.y - 18 * bs;
+      // the drawn plinth reaches ≈ (r × 0.42 + 8) × zoom under the anchor; the badge's top edge is below all of it
+      expect(top).toBeGreaterThan(foe.y + (towerFootprintRadius('barracks', 1) * 0.42 + 8) * WORLD_ZOOM.tower);
+      // and nowhere near the roof (the sprite's top is towerTop × zoom above the base)
+      expect(top).toBeGreaterThan(foe.y - towerTop('barracks', 1) * WORLD_ZOOM.tower);
     });
 
     it(`a mid-map tower (level 3 west) on ${s.name} keeps its badge above the roof`, () => {
@@ -246,6 +255,85 @@ describe('a badge that would be clamped onto its own tower goes below it (ART-24
     const minY = 200;
     expect(badgeCentre(minY - 11.9 * bs, minY, 400, 40, bs)).toEqual({ y: minY, below: false });
     expect(badgeCentre(minY - 13 * bs, minY, 400, 40, bs).below).toBe(true);
+  });
+});
+
+describe('all badges placed together (BUG-42 / BUG-43 placeBadges)', () => {
+  const bs = badgeScale(1);
+  const h = 36 * bs;
+  const w = 50 * bs;
+  const lift = (kind: 'barracks' | 'tankFactory'): number => (badgeY(kind, 1) + 18) * WORLD_ZOOM.tower - 18 * WORLD_ZOOM.badge;
+  const plinth = towerFootprintRadius('barracks', 1) * WORLD_ZOOM.tower;
+  const want = (id: string, x: number, y: number, kind: 'barracks' | 'tankFactory' = 'barracks'): BadgeWant => ({ id, x, y, bs, w, h, naturalY: y + lift(kind), plinth });
+  // a lesson card as drawn on the tall phone (the top band moved up by the inset) and on 9:16
+  const cardTall: Rect = { x: 15, y: 46, w: 690, h: 110 };
+  const card916: Rect = { x: 15, y: 108, w: 690, h: 114 };
+  const centreOf = (r: Rect): { x: number; y: number } => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
+
+  it('a tower whose badge is not clamped onto itself keeps it above the roof, whatever the others do', () => {
+    const out = placeBadges([want('a', 300, 800), want('b', 300, 1000)], null);
+    expect(out.get('a')).toEqual({ rect: centred(300, 800 + lift('barracks'), w, h), bs, side: 'above' });
+    expect(out.get('b')!.side).toBe('above');
+  });
+
+  it('level 43 green over greenfactory: the flip would land on the badge below, so the badge goes right of the tower instead', () => {
+    const green = want('green', 570, 260);
+    const factory = want('greenfactory', 570, 440, 'tankFactory');
+    const out = placeBadges([factory, green], cardTall);
+    const below = centred(570, 260 + plinth + h / 2 + BADGE_BELOW_GAP, w, h);
+    expect(overlaps(below, out.get('greenfactory')!.rect, CHIP_GAP), 'the flipped spot is taken by the factory badge').toBe(true);
+    const g = out.get('green')!;
+    expect(g.side).toBe('right');
+    expect(g.rect).toEqual({ x: 570 + plinth + BADGE_BELOW_GAP, y: 260 - h / 2, w, h });
+    expect(overlaps(g.rect, out.get('greenfactory')!.rect, CHIP_GAP)).toBe(false);
+    expect(overlaps(g.rect, { ...cardTall, h: cardTall.h + 4 }, CARD_CLEAR)).toBe(false);
+    // the same tower at the map's right edge: the right spot would leave the map, so the left one
+    const edge = placeBadges([want('greenfactory', 690, 440, 'tankFactory'), want('green', 690, 260)], cardTall).get('green')!;
+    expect(edge.side).toBe('left');
+    expect(edge.rect.x + edge.rect.w).toBeCloseTo(690 - plinth - BADGE_BELOW_GAP, 9);
+    // and with nothing in the way below, the flip
+    expect(placeBadges([green], cardTall).get('green')).toEqual({ rect: below, bs, side: 'below' });
+  });
+
+  it('a tower at the top of the map under the card (level 3 foe on 9:16): clamped under the card while every other spot is covered, below once it is gone', () => {
+    const foe = want('foe', 360, 150);
+    const up = placeBadges([foe, want('home', 360, 1150)], card916).get('foe')!;
+    expect(up.side).toBe('above');
+    expect(centreOf(up.rect).y).toBeCloseTo(badgeMinY(card916.y + card916.h, bs), 9);
+    expect(overlaps(up.rect, { ...card916, h: card916.h + 4 }, CARD_CLEAR)).toBe(false);
+    const gone = placeBadges([foe, want('home', 360, 1150)], null).get('foe')!;
+    expect(gone.side).toBe('below');
+    expect(centreOf(gone.rect).y).toBeCloseTo(150 + plinth + h / 2 + BADGE_BELOW_GAP, 9);
+  });
+
+  it('level 36 crown over the yellow fortress on 9:16 with the card up: the clamped spot is on the fortress badge, so the crown badge goes beside its tower at the clamped height', () => {
+    const crown = want('crown', 360, 180);
+    const yellow: BadgeWant = { ...want('yellow', 360, 400), naturalY: 400 + (badgeY('fortress', 1) + 18) * WORLD_ZOOM.tower - 18 * WORLD_ZOOM.badge };
+    const out = placeBadges([crown, yellow], card916);
+    const minY = badgeMinY(card916.y + card916.h, bs);
+    expect(overlaps(centred(360, minY, w, h), out.get('yellow')!.rect, CHIP_GAP), 'the clamped spot is taken').toBe(true);
+    const c = out.get('crown')!;
+    expect(c.side).toBe('right');
+    expect(c.rect).toEqual({ x: 360 + plinth + BADGE_BELOW_GAP, y: minY - h / 2, w, h });
+    expect(overlaps(c.rect, out.get('yellow')!.rect, CHIP_GAP)).toBe(false);
+    // card gone: the flip is still on the fortress badge, so beside the tower at base height
+    const later = placeBadges([crown, yellow], null).get('crown')!;
+    expect(later).toEqual({ rect: { x: 360 + plinth + BADGE_BELOW_GAP, y: 180 - h / 2, w, h }, bs, side: 'right' });
+  });
+
+  it('is deterministic in the input order and keeps every badge on the map, in the band and apart', () => {
+    const towers = [want('n', 360, 180), want('w', 150, 460), want('e', 570, 460), want('mid', 360, 400), want('s', 360, 1170)];
+    const a = placeBadges(towers, card916);
+    const b = placeBadges(towers.slice().reverse(), card916);
+    expect([...a.entries()].sort()).toEqual([...b.entries()].sort());
+    const rects = [...a.values()].map((p) => p.rect);
+    expect(noOverlaps(rects)).toBe(true);
+    for (const r of rects) {
+      expect(r.x).toBeGreaterThanOrEqual(0);
+      expect(r.x + r.w).toBeLessThanOrEqual(720);
+      expect(r.y).toBeGreaterThanOrEqual(HUD.mapTop);
+      expect(r.y + r.h).toBeLessThanOrEqual(HUD.mapBottom);
+    }
   });
 });
 

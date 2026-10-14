@@ -8,7 +8,7 @@ import { laneStalemate } from '../sim/index';
 import { TRIPLE_STREAM_LINKS } from '../economy/achievements';
 import { getOutcome } from '../sim/outcome';
 import { LEVEL_META, levelIndex } from '../levels/index';
-import { enemyCommands, isAiTick, rngsFor } from '../ai/index';
+import { aiModule } from './ai';
 import type { View } from '../render/view';
 import { applyTransform, clipToMap, hudAnchors, toHudSpace } from '../render/view';
 import { drawGame } from '../render/draw';
@@ -204,7 +204,7 @@ export class PlayScreen implements Screen {
     const modifiers = twist ? { ...twist.modifiers } : modifiersFromSave(app.save, this.continued ? CRYSTAL_SERVICES.continue.bonusInfantry : 0);
     this.loop.load(createState(level, seed, modifiers));
     resetAudioLevel();
-    const rngs = rngsFor(seed, level.enemies);
+    const rngs = aiModule().rngsFor(seed, level.enemies);
     this.playerRng = rngs.player;
     rngs.enemies.forEach((rng, owner) => this.enemyRngs.set(owner, rng));
     this.tutorial = tutorialFor(level.id, app.save.stars[String(level.id)] ?? 0);
@@ -288,11 +288,12 @@ export class PlayScreen implements Screen {
 
   /* ----- AI wiring: every C.AI_TICK_MS of sim time the loop applies these right before the tick ----- */
   private runAi(state: GameState): Command[] | undefined {
-    if (!isAiTick(state)) return undefined;
+    const ai = aiModule();
+    if (!ai.isAiTick(state)) return undefined;
     const cmds: Command[] = [];
     for (const enemy of state.enemies) {
       const rng = this.enemyRngs.get(enemy.owner);
-      if (rng) cmds.push(...enemyCommands(state, enemy, rng));
+      if (rng) cmds.push(...ai.enemyCommands(state, enemy, rng));
     }
     if (this.playerBot) cmds.push(...this.playerBot(state, this.playerRng));
     if (this.loseBot) cmds.push(...this.loseBot(state));
@@ -496,8 +497,7 @@ export class PlayScreen implements Screen {
       ctx.save();
       applyTransform(view);
       clipToMap(view);
-      const cam = playCamera();
-      drawTutorial(ctx, ui.palette, this.state, step, nowMs, (x, y) => proj(cam, x, y), !cam.flat);
+      drawTutorial(ctx, ui.palette, this.state, step, nowMs, playCamera());
       ctx.restore();
     }
   }

@@ -4,8 +4,7 @@ import type { Biome, GroundLight, Palette, TerrainTheme, Tones } from './palette
 import { BIOME_LIGHT, shade, themeFor, themedBiome, withAlpha } from './palette';
 import type { View } from './view';
 import type { Camera } from './camera';
-import { FLAT, depth, horizonY, jacY, proj, projY, unprojY } from './camera';
-import { hazeColour, paintHaze } from './sea';
+import { FLAT, depth, jacY, projY } from './camera';
 
 /*
  * Ground layer (ART_DIRECTION §3 "island"), rendered once per (level, palette, canvas resolution)
@@ -68,22 +67,23 @@ const MAX_CACHED = 4;
 export const CLIFF_DEPTH = 30;
 
 /** Key light direction (upper-left, §1), unit vector pointing *toward* the light. */
-const LIGHT_X = -0.62;
-const LIGHT_Y = -0.78;
+export const LIGHT_X = -0.62;
+export const LIGHT_Y = -0.78;
 /** Ground shadow offset per unit of object height (long, to the lower-right). */
 export const SHADOW_DX = 0.72;
 export const SHADOW_DY = 0.4;
 
-type Pt = { x: number; y: number };
+export type Pt = { x: number; y: number };
 
 /**
- * Where `render` draws (ART-21). Flat map: everything on the one canvas. Tilted camera: `render`'s
- * ctx is a map-space canvas of the ground (warped into the cache afterwards, "mode 7"), `sea` is the
- * cache in the logical frame (sea gradient, horizon haze, distant islets — under the warped ground)
- * and `up` draws a standing prop upright and depth-scaled at its projected anchor on a props canvas
- * laid over the warped ground.
+ * Where `render` draws (ART-21). Flat map: everything on the one canvas. Tilted camera (perspective.ts
+ * `renderTilted`, PERF-9 lazy chunk): `render`'s ctx is a map-space canvas of the ground (warped into
+ * the cache afterwards, "mode 7"), `sea` is the cache in the logical frame (sea gradient, horizon haze,
+ * distant islets — under the warped ground) and `up` draws a standing prop upright and depth-scaled at
+ * its projected anchor on a props canvas laid over the warped ground. The tilted-only pieces are
+ * `cam.tilt`'s painters.
  */
-interface Stage {
+export interface Stage {
   cam: Camera;
   sea: CanvasRenderingContext2D;
   /** ART-24 zoom of props / of walls and boulders (1 = design size, the title island). */
@@ -208,36 +208,10 @@ function smoothClosedPath(ctx: CanvasRenderingContext2D, pts: Pt[], dx = 0, dy =
  * depending on how its outward normal faces the key light. Call inside a clip to the outline so
  * only the inner half of the stroke shows.
  */
-function strokeBevel(ctx: CanvasRenderingContext2D, pts: Pt[], tones: Tones, width: number, batched = false): void {
+export function strokeBevel(ctx: CanvasRenderingContext2D, pts: Pt[], tones: Tones, width: number): void {
   const n = pts.length;
   ctx.lineWidth = width;
   ctx.lineCap = 'round';
-  if (batched && typeof Path2D === 'function') {
-    // BUG-40: one path per tone (two strokes instead of ~60 — 13 ms of a 4×-throttled tilted build);
-    // only where a lit run meets a shaded one does the other tone's round cap now sit on top
-    const lit = new Path2D();
-    const dark = new Path2D();
-    for (let i = 0; i < n; i++) {
-      const a = pts[i]!;
-      const b = pts[(i + 1) % n]!;
-      const c = pts[(i + 2) % n]!;
-      const m0x = (a.x + b.x) / 2;
-      const m0y = (a.y + b.y) / 2;
-      const m1x = (b.x + c.x) / 2;
-      const m1y = (b.y + c.y) / 2;
-      const len = Math.hypot(m1x - m0x, m1y - m0y) || 1;
-      const facing = ((m1y - m0y) / len) * LIGHT_X - ((m1x - m0x) / len) * LIGHT_Y;
-      const path = facing > 0.25 ? lit : facing < -0.3 ? dark : null;
-      if (!path) continue;
-      path.moveTo(m0x, m0y);
-      path.quadraticCurveTo(b.x, b.y, m1x, m1y);
-    }
-    ctx.strokeStyle = tones.lit;
-    ctx.stroke(lit);
-    ctx.strokeStyle = tones.shade;
-    ctx.stroke(dark);
-    return;
-  }
   // outward normal: the outline runs clockwise (top edge left→right), so outward = (dy, -dx)
   for (let i = 0; i < n; i++) {
     const a = pts[i]!;
@@ -266,22 +240,18 @@ function strokeBevel(ctx: CanvasRenderingContext2D, pts: Pt[], tones: Tones, wid
 /**
  * The sea under the island. Tilted camera (ART-21): the gradient and the horizon haze go on the
  * logical-frame cache (`stage.sea`) exactly like sea.ts paints the full-bleed margins (no seam at the
- * map edge); the wave bands lie on the map-space water and are warped with it (closer together in
- * the distance), none in the hazy distance.
+ * map edge); the wave bands are drawn through the camera (`tilt.waveBand`), none in the hazy distance.
  */
 function drawWater(ctx: CanvasRenderingContext2D, pal: Palette, rng: () => number, theme: TerrainTheme, stage: Stage): void {
-  const cam = stage.cam;
-  const sea = cam.flat ? ctx : stage.sea;
-  const g = sea.createLinearGradient(0, 0, 0, C.MAP_H);
+  const tilt = stage.cam.tilt;
+  const out = tilt ? stage.sea : ctx;
+  const g = out.createLinearGradient(0, 0, 0, C.MAP_H);
   g.addColorStop(0, theme.waterTop);
   g.addColorStop(1, theme.waterBottom);
-  sea.fillStyle = g;
-  sea.fillRect(0, 0, C.MAP_W, C.MAP_H);
-  const horizon = horizonY(cam);
-  if (horizon !== undefined) paintHaze(sea, theme.waterTop, horizon, 0, 0, C.MAP_W);
-  // gentle wave bands, faint. Tilted camera: drawn straight onto the cache through the camera (the
-  // map-space canvas only holds the island, BUG-40), across the screen width at their depth
-  const out = cam.flat ? ctx : sea;
+  out.fillStyle = g;
+  out.fillRect(0, 0, C.MAP_W, C.MAP_H);
+  tilt?.haze(out, theme.waterTop, 0, 0, C.MAP_W);
+  // gentle wave bands, faint
   out.strokeStyle = theme.tintAmount > 0 ? shade(theme.waterBottom, 0.35) : pal.waterLight;
   out.lineCap = 'round';
   out.globalAlpha = 0.28;
@@ -290,24 +260,15 @@ function drawWater(ctx: CanvasRenderingContext2D, pal: Palette, rng: () => numbe
     const y = 40 + band * 92 + rng() * 30;
     const amp = 3 + rng() * 4;
     const len = 70 + rng() * 40;
-    if (horizon !== undefined && projY(cam, y) < horizon) continue; // calm, hazy distance (rng already drawn)
+    if (tilt) {
+      tilt.waveBand(out, y, amp, len);
+      continue;
+    }
     out.beginPath();
-    if (cam.flat) {
-      for (let x = -20; x <= C.MAP_W + 20; x += 8) {
-        const yy = y + Math.sin((x / len) * Math.PI * 2) * amp;
-        if (x === -20) out.moveTo(x, yy);
-        else out.lineTo(x, yy);
-      }
-    } else {
-      const d = depth(cam, y);
-      const xa = Math.floor(cam.cx - (cam.cx + 20) / d);
-      const xb = cam.cx + (C.MAP_W - cam.cx + 20) / d;
-      out.lineWidth = 4 * d;
-      for (let x = xa; x <= xb; x += 8) {
-        const p = proj(cam, x, y + Math.sin((x / len) * Math.PI * 2) * amp);
-        if (x === xa) out.moveTo(p.x, p.y);
-        else out.lineTo(p.x, p.y);
-      }
+    for (let x = -20; x <= C.MAP_W + 20; x += 8) {
+      const yy = y + Math.sin((x / len) * Math.PI * 2) * amp;
+      if (x === -20) out.moveTo(x, yy);
+      else out.lineTo(x, yy);
     }
     out.stroke();
   }
@@ -466,7 +427,7 @@ export function drawDots(ctx: CanvasRenderingContext2D, colors: readonly string[
 
 /* ---------- obstacles (rules v3 §2.0b) ---------- */
 
-function tracePolyline(ctx: CanvasRenderingContext2D, pts: Pt[]): void {
+export function tracePolyline(ctx: CanvasRenderingContext2D, pts: Pt[]): void {
   ctx.beginPath();
   if (pts.length === 1) {
     // a lone point: zero-length segment so round caps make a disc of the stroke width
@@ -499,7 +460,7 @@ export function wallHeight(k: number): number {
 }
 
 /** One path holding the polyline at every vertical offset from `from` to `to` (map units): stroked once, it is a solid extruded band. */
-function traceExtruded(ctx: CanvasRenderingContext2D, pts: Pt[], from: number, to: number, step: number): void {
+export function traceExtruded(ctx: CanvasRenderingContext2D, pts: Pt[], from: number, to: number, step: number): void {
   ctx.beginPath();
   const n = Math.max(1, Math.ceil(Math.abs(to - from) / step));
   for (let i = 0; i <= n; i++) {
@@ -519,7 +480,7 @@ function traceExtruded(ctx: CanvasRenderingContext2D, pts: Pt[], from: number, t
  * light-facing edge every 16 px. Reads at 360 px width (merlons ≈ 3 px). On the flat map the side
  * face is a 4 px lip under the top face; under the tilted camera (ART-21, drawn in the ground frame)
  * the wall stands `wallHeight` px tall: the top face is lifted, the front face below it is a darker
- * two-tone band with a mortar course, so the wall reads as a standing block.
+ * two-tone band with a mortar course (perspective.ts `wallFace`), so the wall reads as a standing block.
  */
 function drawWall(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, ob: TerrainObstacle, cam: Camera = FLAT, thick = 1): void {
   const pts = ob.points;
@@ -553,29 +514,7 @@ function drawWall(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones, ob:
   ctx.strokeStyle = tones.shade;
   ctx.lineWidth = w;
   ctx.stroke();
-  if (k < 1) {
-    // front face: darker foot, one mortar course at mid height
-    traceExtruded(ctx, pts, base, base + (top - base) * 0.4, step);
-    ctx.strokeStyle = shade(tones.shade, -0.2);
-    ctx.lineWidth = w;
-    ctx.stroke();
-    ctx.save();
-    ctx.translate(0, base + (top - base) * 0.55);
-    tracePolyline(ctx, pts);
-    ctx.strokeStyle = withAlpha(shade(tones.shade, -0.35), 0.8);
-    ctx.lineWidth = w + 1;
-    ctx.globalAlpha = 0.5;
-    ctx.stroke();
-    ctx.restore();
-    // the side face again over the course, leaving only a thin line at the bottom edge of the top face's shadow side
-    ctx.save();
-    ctx.translate(0, base + (top - base) * 0.55 - 1.2 / k);
-    tracePolyline(ctx, pts);
-    ctx.strokeStyle = tones.shade;
-    ctx.lineWidth = w;
-    ctx.stroke();
-    ctx.restore();
-  }
+  cam.tilt?.wallFace(ctx, pts, tones, w, base, top, step);
   ctx.save();
   ctx.translate(0, top);
   tracePolyline(ctx, pts);
@@ -764,62 +703,6 @@ function drawObstacles(ctx: CanvasRenderingContext2D, pal: Palette, theme: Terra
   }
 }
 
-/** `a` blended toward `b` by t (0..1), both `#rrggbb`; anything else returns `b`. */
-function mixHex(a: string, b: string, t: number): string {
-  if (!/^#[0-9a-f]{6}$/i.test(a) || !/^#[0-9a-f]{6}$/i.test(b)) return b;
-  const x = parseInt(a.slice(1), 16);
-  const y = parseInt(b.slice(1), 16);
-  const ch = (sh: number): number => Math.round(((x >> sh) & 0xff) * (1 - t) + ((y >> sh) & 0xff) * t);
-  return `#${((1 << 24) | (ch(16) << 16) | (ch(8) << 8) | ch(0)).toString(16).slice(1)}`;
-}
-
-/**
- * Tilted camera (ART-21): a few low islets out in the hazy distance above the island's far shore
- * (`far`, screen logical y), smaller and paler the farther up they sit, so the sea above the island
- * reads as a horizon and not as empty margin. Logical frame; own rng (the level scatter is untouched).
- */
-function drawDistantIslets(ctx: CanvasRenderingContext2D, theme: TerrainTheme, grass: Tones, cliff: { shade: string }, seed: number, far: number): void {
-  const rng = makeRng(seed * 3301 + 17);
-  const haze = hazeColour(theme.waterTop);
-  const y0 = Math.max(8, far - 100);
-  const y1 = far - 26;
-  if (y1 <= y0) return;
-  const islets: { x: number; y: number; w: number; d: number }[] = [];
-  for (let i = 0; i < 4; i++) {
-    const d = rng(); // 0 = farthest
-    const y = y0 + d * (y1 - y0);
-    const w = (60 + rng() * 80) * (0.4 + 0.6 * d);
-    const x = ((i + 0.15 + rng() * 0.7) / 4) * C.MAP_W;
-    islets.push({ x, y, w, d });
-  }
-  islets.sort((a, b) => a.y - b.y);
-  for (const it of islets) {
-    const fade = 0.78 - it.d * 0.38; // how much of the haze tone covers the islet
-    const h = it.w * 0.2;
-    const cliffH = Math.max(2, it.w * 0.06);
-    ctx.fillStyle = withAlpha(haze, 0.55);
-    ctx.beginPath();
-    ctx.ellipse(it.x, it.y + cliffH, it.w * 0.56, Math.max(1.5, cliffH * 0.9), 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = mixHex(cliff.shade, haze, fade);
-    ctx.beginPath();
-    ctx.ellipse(it.x, it.y, it.w * 0.5, cliffH * 1.6, 0, 0, Math.PI);
-    ctx.fill();
-    ctx.fillStyle = mixHex(grass.mid, haze, fade);
-    ctx.beginPath();
-    ctx.moveTo(it.x - it.w * 0.5, it.y);
-    ctx.bezierCurveTo(it.x - it.w * 0.32, it.y - h * 1.1, it.x + it.w * 0.18, it.y - h * 1.25, it.x + it.w * 0.5, it.y);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = mixHex(grass.lit, haze, fade);
-    ctx.beginPath();
-    ctx.moveTo(it.x - it.w * 0.42, it.y - h * 0.08);
-    ctx.bezierCurveTo(it.x - it.w * 0.3, it.y - h * 0.95, it.x - it.w * 0.05, it.y - h * 1.05, it.x + it.w * 0.05, it.y - h * 0.82);
-    ctx.bezierCurveTo(it.x - it.w * 0.12, it.y - h * 0.6, it.x - it.w * 0.28, it.y - h * 0.3, it.x - it.w * 0.42, it.y - h * 0.08);
-    ctx.fill();
-  }
-}
-
 /**
  * ART-23 baked key light over the plateau (inside its clip, under the sun patches): a warm pool of
  * sunlight over the upper-left of the playfield (two nested ellipses, the clay look's stepped pools,
@@ -888,7 +771,7 @@ export function cliffDepth(k: number): number {
  * bodies) upright and depth-scaled through `stage.up`. The rng is consumed in the same order either
  * way, so a level's scatter is identical with the camera on or off.
  */
-function render(ctx: CanvasRenderingContext2D, pal: Palette, spec: TerrainSpec, stage: Stage = flatStage(ctx, spec.zoom === true)): void {
+export function render(ctx: CanvasRenderingContext2D, pal: Palette, spec: TerrainSpec, stage: Stage = flatStage(ctx, spec.zoom === true)): void {
   const cam = stage.cam;
   const rng = makeRng(spec.seed * 104729 + 7);
   const top = spec.top ?? HUD.mapTop + 12;
@@ -902,7 +785,7 @@ function render(ctx: CanvasRenderingContext2D, pal: Palette, spec: TerrainSpec, 
   const v = (px: number): number => px / nearJ;
   const cliff = cliffDepth(k);
   drawWater(ctx, pal, rng, theme, stage);
-  if (k < 1) drawDistantIslets(stage.sea, theme, biome.grass, biome.cliff, spec.seed, projY(cam, top));
+  cam.tilt?.islets(stage.sea, theme, grass, biome.cliff, spec.seed, projY(cam, top));
 
   const outline = plateauPoints(spec.seed, top, bottom);
   const light = BIOME_LIGHT[spec.biome ?? 'grass'];
@@ -1014,7 +897,8 @@ function render(ctx: CanvasRenderingContext2D, pal: Palette, spec: TerrainSpec, 
   ctx.globalAlpha = 1;
 
   // directional edge bevel (lit upper-left, shaded lower-right), inner half visible
-  strokeBevel(ctx, outline, grass, 9, !cam.flat);
+  if (cam.tilt) cam.tilt.bevel(ctx, outline, grass, 9);
+  else strokeBevel(ctx, outline, grass, 9);
 
   // obstacles (walls / rivers / boulders) under the props; ash and the twilight moor get dark boulders
   const kind = spec.biome ?? 'grass';
@@ -1063,22 +947,10 @@ function render(ctx: CanvasRenderingContext2D, pal: Palette, spec: TerrainSpec, 
     if (m.charges > 0) stage.up(m.x, m.y, (c) => drawMineBody(c, pal, m.x, m.y));
     else drawCrater(ctx, pal, m.x, m.y, mineRng);
   }
-  if (k < 1) {
-    // aerial perspective: the far side of the plateau fades a little into the horizon haze
-    const haze = hazeColour(theme.waterTop);
-    const g = ctx.createLinearGradient(0, top - 20, 0, top + AERIAL_DEPTH);
-    g.addColorStop(0, withAlpha(haze, AERIAL_ALPHA));
-    g.addColorStop(1, withAlpha(haze, 0));
-    ctx.fillStyle = g;
-    ctx.fillRect(-200, top - 40, C.MAP_W + 400, AERIAL_DEPTH + 60);
-  }
+  cam.tilt?.aerial(ctx, theme, top); // the far side of the plateau fades a little into the horizon haze
   ctx.restore();
   ctx.restore();
 }
-
-/** Aerial perspective over the far side of the plateau under a tilted camera: strength at the far shore, and how far (map px) it fades out. */
-const AERIAL_ALPHA = 0.36;
-const AERIAL_DEPTH = 520;
 
 /**
  * The cached ground image for `spec` at the current canvas resolution. Re-rendered when the
@@ -1097,8 +969,8 @@ export function getTerrain(view: View, pal: Palette, spec: TerrainSpec, cam: Cam
   const ctx = canvas.getContext('2d');
   if (ctx) {
     ctx.setTransform(pxW / C.MAP_W, 0, 0, pxH / C.MAP_H, 0, 0);
-    if (cam.flat) render(ctx, pal, spec);
-    else renderTilted(ctx, pxW, pxH, pal, spec, cam);
+    if (cam.tilt) cam.tilt.ground(ctx, pxW, pxH, pal, spec);
+    else render(ctx, pal, spec);
   }
   if (cache.size >= MAX_CACHED) {
     const first = cache.keys().next().value;
@@ -1106,156 +978,6 @@ export function getTerrain(view: View, pal: Palette, spec: TerrainSpec, cam: Cam
   }
   cache.set(key, { canvas, pxW, pxH });
   return canvas;
-}
-
-/**
- * BUG-40 (QA-23: level 40's tilted ground built in 247–275 ms at 4× CPU against a 120 ms gate; the
- * per-row warp itself was never the cost): what a build pays is allocating and rasterising the
- * transient map-space canvas, so it holds only the island (wave bands go through the camera straight
- * onto the cache), at one device px per map px (the far two thirds are drawn smaller than that anyway), and the standing props draw straight onto the
- * cache in a second, rng-identical pass instead of through a third full-size canvas. The warp runs in
- * bands of `WARP_BAND_ROWS` device rows (the depth scale changes < 0.1 % across a band) with medium
- * smoothing.
- */
-/** Device px per map px of the map-space ground canvas (capped: transient, rasterised on every level build). */
-const WARP_SOURCE_MAX_SCALE = 1;
-/**
- * Map px of the map-space canvas around the plateau box (x 26..694, y top..bottom, ±8 px outline
- * jitter): the foam line's outer half (8) on every side, the drop shadow on the water (up to 24 right,
- * ≈ 52 down at the near shore) and the cliff face (≈ 35 down) with its foam.
- */
-const WARP_MARGIN_LEFT = 12;
-const WARP_MARGIN_RIGHT = 44;
-const WARP_MARGIN_TOP = 24;
-const WARP_MARGIN_BELOW = 76;
-/** Device rows per warp `drawImage`. */
-const WARP_BAND_ROWS = 3;
-const WARP_SMOOTHING: ImageSmoothingQuality = 'low';
-
-/**
- * The transient map-space canvas, reused by back-to-back builds (level restart, next level, a resize)
- * and released `WARP_SOURCE_KEEP_MS` after the last one: allocating and dropping a few MB of backing
- * store per build was a third of a 4×-throttled build in allocation and GC.
- */
-let warpSource: HTMLCanvasElement | null = null;
-let warpRelease: ReturnType<typeof setTimeout> | undefined;
-const WARP_SOURCE_KEEP_MS = 4000;
-
-function warpCanvas(w: number, h: number): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } | null {
-  if (warpRelease !== undefined) clearTimeout(warpRelease);
-  warpRelease = setTimeout(() => {
-    warpRelease = undefined;
-    if (warpSource) warpSource.width = warpSource.height = 0; // free the backing store
-  }, WARP_SOURCE_KEEP_MS);
-  warpSource ??= document.createElement('canvas');
-  const canvas = warpSource;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return null;
-  if (canvas.width !== w || canvas.height !== h) {
-    canvas.width = w; // resizing also clears
-    canvas.height = h;
-  } else {
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, w, h);
-  }
-  ctx.globalAlpha = 1;
-  ctx.globalCompositeOperation = 'source-over';
-  return { canvas, ctx };
-}
-
-let noopCtx: CanvasRenderingContext2D | null = null;
-
-/**
- * A context that draws nothing (the props pass's ground, the ground pass's props): a plain object with
- * every 2D-context method as a no-op (a Proxy trap per call cost ≈ 10 ms of a 4×-throttled build);
- * gradients come back as a no-op gradient, `measureText` as a zero width.
- */
-function noop(): CanvasRenderingContext2D {
-  if (noopCtx) return noopCtx;
-  const out: Record<string, unknown> = {};
-  const gradient = { addColorStop: (): void => undefined };
-  const proto = typeof CanvasRenderingContext2D !== 'undefined' ? CanvasRenderingContext2D.prototype : {};
-  for (const name of Object.getOwnPropertyNames(proto)) {
-    const d = Object.getOwnPropertyDescriptor(proto, name);
-    if (d && typeof d.value === 'function') out[name] = (): undefined => undefined;
-  }
-  out.createLinearGradient = out.createRadialGradient = out.createConicGradient = (): unknown => gradient;
-  out.createPattern = (): null => null;
-  out.measureText = (): { width: number } => ({ width: 0 });
-  noopCtx = out as unknown as CanvasRenderingContext2D;
-  return noopCtx;
-}
-
-/**
- * The tilted camera's ground (ART-21), once per level: the island is painted flat on a map-space
- * canvas, then warped into the cache in bands of device rows — each band takes the map rows it shows,
- * stretched across by its depth scale about the centre column ("mode 7"; a one-off cost per level,
- * nothing per frame). The sea, haze, glitter, wave bands and islets are painted on the cache first
- * (logical frame, through the camera); the standing props last, upright and depth-scaled, from a
- * second pass of the same seeded `render` (same rng order, so the same scatter) with the ground muted.
- */
-function renderTilted(ctx: CanvasRenderingContext2D, pxW: number, pxH: number, pal: Palette, spec: TerrainSpec, cam: Camera): void {
-  const sx = pxW / C.MAP_W;
-  const sy = pxH / C.MAP_H;
-  const dev = Math.min(WARP_SOURCE_MAX_SCALE, Math.max(sx, sy));
-  const islandTop = spec.top ?? HUD.mapTop + 12;
-  const islandBottom = spec.bottom ?? HUD.mapBottom + 18;
-  const yTop = Math.max(Math.floor(unprojY(cam, -2)) - 8, islandTop - WARP_MARGIN_TOP);
-  const yBot = Math.min(Math.ceil(unprojY(cam, C.MAP_H + 2)) + 8, islandBottom + WARP_MARGIN_BELOW);
-  const xL = -WARP_MARGIN_LEFT;
-  const xR = C.MAP_W + WARP_MARGIN_RIGHT;
-  const src = warpCanvas(Math.max(1, Math.ceil((xR - xL) * dev)), Math.max(1, Math.ceil((yBot - yTop) * dev)));
-  if (!src) return;
-  const ground = src.canvas;
-  const gctx = src.ctx;
-  gctx.setTransform(dev, 0, 0, dev, -xL * dev, -yTop * dev);
-  // pass 1: the sea onto the cache, the island onto the map-space canvas, props muted
-  const prop = spec.zoom === true ? WORLD_ZOOM.prop : 1;
-  const wall = spec.zoom === true ? WORLD_ZOOM.wall : 1;
-  render(gctx, pal, spec, { cam, sea: ctx, prop, wall, up: (_x, _y, draw) => draw(noop()) });
-  // warp: device rows r .. r + n of the cache show map rows unprojY(r / sy) .. unprojY((r + n) / sy)
-  ctx.save();
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = WARP_SMOOTHING;
-  const rFrom = Math.max(0, Math.floor(projY(cam, yTop) * sy));
-  const rTo = Math.min(pxH, Math.ceil(projY(cam, yBot) * sy));
-  for (let r = rFrom; r < rTo; r += WARP_BAND_ROWS) {
-    const rows = Math.min(WARP_BAND_ROWS, rTo - r);
-    const ya = unprojY(cam, r / sy);
-    const yb = unprojY(cam, (r + rows) / sy);
-    let top = (ya - yTop) * dev;
-    let h = (yb - ya) * dev;
-    if (top < 0) {
-      h += top;
-      top = 0;
-    }
-    if (top + h > ground.height) h = ground.height - top;
-    if (!(h > 0)) continue;
-    const s = depth(cam, (ya + yb) / 2);
-    // only the source columns this band shows on the screen
-    const x0 = Math.max(xL, cam.cx - (cam.cx + 2) / s);
-    const x1 = Math.min(xR, cam.cx + (C.MAP_W - cam.cx + 2) / s);
-    if (!(x1 > x0)) continue;
-    ctx.drawImage(ground, (x0 - xL) * dev, top, (x1 - x0) * dev, h, (cam.cx + (x0 - cam.cx) * s) * sx, r, (x1 - x0) * s * sx, rows);
-  }
-  ctx.restore();
-  // pass 2: the same seeded render with the ground and sea muted — only the props, onto the cache
-  render(noop(), pal, spec, {
-    cam,
-    sea: noop(),
-    prop,
-    wall,
-    up: (x, y, draw, zoom = prop) => {
-      const p = proj(cam, x, y);
-      const s = p.s * zoom;
-      ctx.save();
-      ctx.translate(p.x - x * s, p.y - y * s);
-      ctx.scale(s, s);
-      draw(ctx);
-      ctx.restore();
-    },
-  });
 }
 
 /**
@@ -1269,14 +991,14 @@ export function drawTerrain(ctx: CanvasRenderingContext2D, view: View, pal: Pale
 
 /* ---------- animated layer: cloud shadows + water sparkles ---------- */
 
-interface Cloud {
+export interface Cloud {
   y: number;
   x0: number;
   speed: number;
   lobes: { dx: number; dy: number; rx: number; ry: number }[];
 }
 
-interface Sparkle {
+export interface Sparkle {
   x: number;
   y: number;
   len: number;
@@ -1328,9 +1050,9 @@ function ambientFor(spec: TerrainSpec): Ambient {
 /**
  * Drifting cloud shadows and twinkling water sparkles over the cached ground. Cheap (≈ 40
  * primitives), no gradients. With `motion` false everything stays put but still draws. Under a tilted
- * camera (ART-21) the sparkles and glow specks sit at their projected points (none in the hazy
- * distance) and the cloud shadows drift along their projected rows, narrowed and flattened with depth;
- * call in the logical frame.
+ * camera (ART-21, `cam.tilt`) the sparkles and glow specks sit at their projected points (none in the
+ * hazy distance) and the cloud shadows drift along their projected rows, narrowed and flattened with
+ * depth; call in the logical frame.
  */
 export function drawTerrainOverlay(
   ctx: CanvasRenderingContext2D,
@@ -1350,65 +1072,35 @@ export function drawTerrainOverlay(
     ctx.fillStyle = theme.ambient;
     ctx.fillRect(0, 0, C.MAP_W, C.MAP_H);
   }
-  const horizon = horizonY(cam);
+  const tilt = cam.tilt;
   ctx.fillStyle = theme.waterSparkle;
   for (let i = 0; i < amb.sparkles.length; i++) {
     const s = amb.sparkles[i]!;
     const tw = 0.5 + 0.5 * Math.sin(t * 1.6 + s.phase);
     if (tw < 0.15) continue;
     const x = ((s.x + t * 6 + i * 0.1) % (C.MAP_W + 20)) - 10;
-    if (cam.flat) {
-      ctx.globalAlpha = tw;
-      ctx.fillRect(x - s.len / 2, s.y, s.len, 2.5);
+    if (tilt) {
+      tilt.sparkle(ctx, x, s, tw);
       continue;
     }
-    const p = proj(cam, x, s.y);
-    if (horizon !== undefined && p.y < horizon) continue;
     ctx.globalAlpha = tw;
-    ctx.fillRect(p.x - (s.len * p.s) / 2, p.y, s.len * p.s, 2.5 * p.s);
+    ctx.fillRect(x - s.len / 2, s.y, s.len, 2.5);
   }
-  if (theme.drawGlow) theme.drawGlow(ctx, cam.flat ? amb.specks : projectedSpecks(spec, amb, cam), t); // fireflies / snow motes / neon dust (theme chunk)
+  if (theme.drawGlow) theme.drawGlow(ctx, tilt ? tilt.specks(spec.key, amb.specks) : amb.specks, t); // fireflies / snow motes / neon dust (theme chunk)
   ctx.globalAlpha = theme.cloudAlpha;
   ctx.fillStyle = pal.groundShadow;
   const span = across.right - across.left + 560;
   for (const c of amb.clouds) {
     const x = ((c.x0 + t * c.speed) % span) - 280 + across.left;
     ctx.beginPath();
-    if (cam.flat) {
+    if (tilt) tilt.cloud(ctx, x, c);
+    else {
       for (const l of c.lobes) {
         ctx.moveTo(x + l.dx + l.rx, c.y + l.dy);
         ctx.ellipse(x + l.dx, c.y + l.dy, l.rx, l.ry, 0, 0, Math.PI * 2);
-      }
-    } else {
-      // the cloud drifts across the screen along its projected row; its shadow lies on the ground
-      const s = depth(cam, c.y);
-      const cy = projY(cam, c.y);
-      const j = jacY(cam, c.y);
-      for (const l of c.lobes) {
-        const lx = x + l.dx * s;
-        const ly = cy + l.dy * j;
-        ctx.moveTo(lx + l.rx * s, ly);
-        ctx.ellipse(lx, ly, l.rx * s, l.ry * j, 0, 0, Math.PI * 2);
       }
     }
     ctx.fill();
   }
   ctx.globalAlpha = 1;
-}
-
-const speckCache = new Map<string, Sparkle[]>();
-
-/** The theme's glow specks at their projected points, size scaled with depth (static: cached per level and camera). */
-function projectedSpecks(spec: TerrainSpec, amb: Ambient, cam: Camera): Sparkle[] {
-  const key = `${spec.key}|${cam.k}`;
-  let out = speckCache.get(key);
-  if (!out) {
-    out = amb.specks.map((sp) => {
-      const p = proj(cam, sp.x, sp.y);
-      return { x: p.x, y: p.y, len: sp.len * p.s, phase: sp.phase };
-    });
-    if (speckCache.size > 8) speckCache.clear();
-    speckCache.set(key, out);
-  }
-  return out;
 }

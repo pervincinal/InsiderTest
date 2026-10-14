@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Layer, Layers } from '../../src/render/layers';
 import { blankLayer, groundKey, paintGround, resizeLayers } from '../../src/render/layers';
-import { FLAT, TILT_PERSPECTIVE, playCamera, setTilt } from '../../src/render/camera';
+import { FLAT, TILT_PERSPECTIVE, loadCamera, playCamera, setTilt } from '../../src/render/camera';
 import type { View } from '../../src/render/view';
 import type { TerrainSpec } from '../../src/render/terrain';
 import { DEFAULT_PALETTE, loadThemes, themeFor } from '../../src/render/palette';
@@ -136,12 +136,13 @@ describe('layers (PERF-3)', () => {
       expect(rec.clears).toEqual([[0, 0, 720, 1280]]);
     });
 
-    it('is keyed on the camera tilt (ART-21): the default play camera is the flat map (ART-24), ?tilt=0.72 / setTilt(0.72) the perspective one', () => {
+    it('is keyed on the camera tilt (ART-21): the default play camera is the flat map (ART-24), ?tilt=0.72 / setTilt(0.72) the perspective one', async () => {
       setTilt(undefined);
       expect(playCamera()).toBe(FLAT);
       expect(groundKey(view, DEFAULT_PALETTE, spec, SEA)).toBe(groundKey(view, DEFAULT_PALETTE, spec, SEA, FLAT));
       setTilt(TILT_PERSPECTIVE);
       try {
+        await loadCamera(); // PERF-9: the perspective camera is a lazy chunk
         const tilted = playCamera();
         expect(tilted.k).toBe(TILT_PERSPECTIVE);
         expect(groundKey(view, DEFAULT_PALETTE, spec, SEA, tilted)).not.toBe(groundKey(view, DEFAULT_PALETTE, spec, SEA, FLAT));

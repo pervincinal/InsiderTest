@@ -11,7 +11,7 @@ import { drawTerrain } from './terrain';
 import type { PlayUi } from './draw';
 import { drawHud, hudKey } from './hud';
 import type { Camera } from './camera';
-import { horizonY, playCamera } from './camera';
+import { playCamera } from './camera';
 
 /*
  * Static layers (PERF-3): two extra `<canvas>` elements stacked with the game canvas, each
@@ -119,7 +119,7 @@ export function paintGround(layer: Layer, view: View, pal: Palette, spec: Terrai
   const ctx = layer.ctx;
   ctx.save();
   logical(ctx, view, false);
-  drawSea(ctx, view, sea, horizonY(cam)); // full bleed (BUG-34): covers the whole canvas, margins included
+  drawSea(ctx, view, sea, cam); // full bleed (BUG-34): covers the whole canvas, margins included
   logical(ctx, view, true);
   drawTerrain(ctx, view, pal, spec, cam);
   ctx.restore();

@@ -9,7 +9,7 @@
  *      src/native/index.ts), so a static import sneaking in would ship RevenueCat / AdMob to
  *      every web player;
  *   2. their total gzip size stays under the budget (the whole game is a single entry chunk;
- *      the budget is generous so that content, not accidents, decides when it moves).
+ *      the budget is the measured size + ~2 kB, so that content, not accidents, decides when it moves).
  *
  * Usage:  node scripts/checkBundle.mjs [--no-build] [--budget <bytes>] [--dist <dir>]
  * Exit code 1 on any violation. The report line is also printed on success so CI logs the size.
@@ -30,10 +30,14 @@ const budgetArg = args.indexOf('--budget');
  * (PERF-2, src/levels/manifest.ts) and the menu screens a lazy chunk (PERF-1), so the entry chunk
  * is the sim + play screen + renderer + level metadata (≈ 67 kB after rules v2).
  * 2026-10-12 (ART-20 walking soldiers, ART-21 tilted camera, FE-12 title layout): 80 → 88 kB; the
- * renderer grew 4 kB for the stakeholder's visual pass. PERF-9 tracks getting back under 80.
+ * renderer grew 4 kB for the stakeholder's visual pass. PERF-9 tracked getting back under 80.
  * 2026-10-13 (ART-22 chips, ART-23 lighting + combat effects, BUG-40 ground build): 88 → 92 kB at 87.9 kB.
+ * 2026-10-14 (PERF-9): 88.4 → 79.7 kB — the perspective camera (src/render/perspective.ts: ground
+ * warp, horizon haze, islets, tutorial side bubble; only the `?tilt=` override uses it since ART-24)
+ * and the enemy AI (src/ai/*, awaited with the level chunk, src/ui/ai.ts) are lazy chunks. Budget
+ * 92 → 82 kB (the new size + 2 kB headroom).
  */
-const DEFAULT_GZIP_BUDGET = 92 * 1024;
+const DEFAULT_GZIP_BUDGET = 82 * 1024;
 /** Package name fragments that must never appear in the eagerly loaded chunks. */
 const FORBIDDEN_STRINGS = ['purchases-capacitor', 'capacitor-community/admob', 'capacitor-community/in-app-review'];
 

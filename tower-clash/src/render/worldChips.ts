@@ -61,21 +61,104 @@ export function badgeMinY(cardBottom: number | null, bs: number): number {
   return Math.max(top, cardBottom + CARD_EDGE + CARD_CLEAR + BADGE_HALF_H * bs);
 }
 
-/** Clear space (logical px) between a tower's plinth and a badge flipped below it. */
+/** Clear space (logical px) between a tower's plinth and a badge flipped below it, or beside it (BUG-42). */
 export const BADGE_BELOW_GAP = 6;
 
+/** Whether clamping a badge centre from `naturalY` down to `minY` moves it by more than a third of its height (it would sit on its own tower). */
+function clampedOntoTower(naturalY: number, minY: number, bs: number): boolean {
+  return minY - naturalY > (2 * BADGE_HALF_H * bs) / 3;
+}
+
 /**
- * ART-24: where a tower's badge centre goes. Normally above the roof (`naturalY`), clamped down to
- * `minY` (under the top HUD band / the lesson card). When that clamp would move it by more than a third
- * of the badge's height — a tower at the very top of the map, whose clamped badge sat on its own
+ * ART-24: where a lone tower's badge centre goes. Normally above the roof (`naturalY`), clamped down
+ * to `minY` (under the top HUD band / the lesson card). When that clamp would move it by more than a
+ * third of the badge's height — a tower at the very top of the map, whose clamped badge sat on its own
  * body (level 3's foe) — the badge goes below the tower instead: `plinth` (the zoomed plinth radius,
- * logical px) under the base, plus half its height and BADGE_BELOW_GAP. Chips are laid out against
- * wherever it lands (`drawWorldChips`).
+ * logical px) under the base, plus half its height and BADGE_BELOW_GAP; unless that still leaves it
+ * under the lesson card (BUG-43: a long lesson on 9:16), when it just clamps until the card goes.
+ * The renderer places all of a level's badges together with `placeBadges` (this is its first and last
+ * candidate); chips are laid out against wherever they land (`drawWorldChips`).
  */
 export function badgeCentre(naturalY: number, minY: number, baseY: number, plinth: number, bs: number): { y: number; below: boolean } {
   const half = BADGE_HALF_H * bs;
-  if (minY - naturalY <= (2 * half) / 3) return { y: Math.max(minY, naturalY), below: false };
-  return { y: baseY + plinth + half + BADGE_BELOW_GAP, below: true };
+  if (!clampedOntoTower(naturalY, minY, bs)) return { y: Math.max(minY, naturalY), below: false };
+  const below = baseY + plinth + half + BADGE_BELOW_GAP;
+  return below < minY ? { y: minY, below: false } : { y: below, below: true };
+}
+
+/** One tower's badge for `placeBadges`: its drawn base, badge scale and size, and where it would naturally sit. */
+export interface BadgeWant {
+  id: string;
+  /** The tower's drawn base (projected, logical px). */
+  x: number;
+  y: number;
+  /** The badge's scale (`badgeScale`) and size at it (sprites.ts `badgeSize`). */
+  bs: number;
+  w: number;
+  h: number;
+  /** The badge centre above the roof before any clamp (draw.ts `badgeLift` × depth). */
+  naturalY: number;
+  /** The zoomed plinth radius at the base, logical px. */
+  plinth: number;
+}
+
+/** Which candidate a badge took (`placeBadges`); 'above' is also the clamped fallback. */
+export type BadgeSide = 'above' | 'below' | 'right' | 'left';
+
+/** A placed badge: its rect, scale and side. */
+export interface BadgePlace extends BadgeBox {
+  side: BadgeSide;
+}
+
+/**
+ * BUG-42 / BUG-43: where every tower's badge goes this frame (pure; the renderer and the layout tests
+ * share it). `card` is the lesson card's rect in the logical frame while it shows (null otherwise).
+ * Badges whose above-the-roof spot is clamped by at most a third of their height stay there (first,
+ * in map order: y, then id), and are obstacles for the rest. Each remaining badge, in the same order,
+ * takes the first free spot of: below the base (`badgeCentre`'s flip), then beside the tower — right
+ * of the base at base y (its left edge BADGE_BELOW_GAP past the plinth), then left — then the clamped
+ * spot above, then (a base under the card / the top band) beside the tower at the clamped height,
+ * right then left (level 36's crown on 9:16 while the card is up, whose clamped badge sat on the
+ * fortress badge below it), and, with none free, the clamped spot anyway (never hidden behind the
+ * HUD). Free: inside the map's width and the play band, CARD_CLEAR from the card's clay edge,
+ * CHIP_GAP from every badge placed so far.
+ */
+export function placeBadges(wants: readonly BadgeWant[], card: Rect | null): Map<string, BadgePlace> {
+  const cardBottom = card ? card.y + card.h : null;
+  const block = card ? { x: card.x, y: card.y, w: card.w, h: card.h + CARD_EDGE } : null;
+  const order = wants.slice().sort((p, q) => p.y - q.y || (p.id < q.id ? -1 : p.id > q.id ? 1 : 0));
+  const out = new Map<string, BadgePlace>();
+  const taken: Rect[] = [];
+  const rest: BadgeWant[] = [];
+  const put = (b: BadgeWant, rect: Rect, side: BadgeSide): void => {
+    out.set(b.id, { rect, bs: b.bs, side });
+    taken.push(rect);
+  };
+  const at = (b: BadgeWant, x: number, cy: number): Rect => ({ x, y: cy - b.h / 2, w: b.w, h: b.h });
+  const free = (r: Rect): boolean =>
+    r.x >= 0 &&
+    r.x + r.w <= C.MAP_W &&
+    r.y + r.h / 2 >= HUD.mapTop + 26 &&
+    r.y + r.h <= HUD.mapBottom - 8 &&
+    !(block && overlaps(r, block, CARD_CLEAR)) &&
+    !taken.some((t) => overlaps(r, t, CHIP_GAP));
+  for (const b of order) {
+    const minY = badgeMinY(cardBottom, b.bs);
+    if (clampedOntoTower(b.naturalY, minY, b.bs)) rest.push(b);
+    else put(b, at(b, b.x - b.w / 2, Math.max(minY, b.naturalY)), 'above');
+  }
+  for (const b of rest) {
+    const minY = badgeMinY(cardBottom, b.bs);
+    const clamped: [Rect, BadgeSide] = [at(b, b.x - b.w / 2, Math.max(minY, b.naturalY)), 'above'];
+    const beside = (cy: number): [Rect, BadgeSide][] => [
+      [at(b, b.x + b.plinth + BADGE_BELOW_GAP, cy), 'right'],
+      [at(b, b.x - b.plinth - BADGE_BELOW_GAP - b.w, cy), 'left'],
+    ];
+    const spots: [Rect, BadgeSide][] = [[at(b, b.x - b.w / 2, b.y + b.plinth + b.h / 2 + BADGE_BELOW_GAP), 'below'], ...beside(b.y), clamped, ...(minY > b.y ? beside(minY) : [])];
+    const hit = spots.find(([r]) => free(r)) ?? clamped;
+    put(b, hit[0], hit[1]);
+  }
+  return out;
 }
 
 /** Highest screen y a chip may slide to: the top of the badge band (HUD.mapTop + 8), or under the lesson card while it is up. */

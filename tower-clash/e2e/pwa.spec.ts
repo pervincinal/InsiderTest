@@ -104,6 +104,8 @@ const EN_MENUS_CHUNK = /^\/assets\/enMenus-[^/]+\.js$/;
 const TITLE_PLAY = { x: 180, y: 640, w: 360, h: 96 };
 /** The Playwright surface itself is a lazy chunk (PERF-6): `window.__towerclash` exists offline only when it is cached. */
 const DEBUG_CHUNK = /^\/assets\/debug-[^/]+\.js$/;
+/** The enemy AI (PERF-9, src/ui/ai.ts): a lazy chunk every level start awaits, warmed by the same idle preload. */
+const AI_CHUNK = /^\/assets\/ai-[^/]+\.js$/;
 /** The first level no boot / level-1 start preloads (see the header). */
 const COLD_LEVEL = 3;
 const COLD_CHUNK = /\/assets\/003-[^/?]*\.js(\?.*)?$/;
@@ -148,11 +150,11 @@ const registrationState = (page: Page) =>
     const reg = await navigator.serviceWorker.getRegistration();
     return { installing: reg?.installing?.state ?? null, waiting: reg?.waiting?.state ?? null, active: reg?.active?.state ?? null };
   });
-/** The runtime-cached idle preloads of a claimed launch (level 1, lazy screens, debug surface) — the cache is ready for an offline level-1 start. */
+/** The runtime-cached idle preloads of a claimed launch (level 1, lazy screens, debug surface, AI) — the cache is ready for an offline level-1 start. */
 const waitForWarm = (page: Page, cacheName: string) =>
   expect
     .poll(async () => (await cachedPaths(page))[cacheName] ?? [], { timeout: 20_000 })
-    .toEqual(expect.arrayContaining([expect.stringMatching(LEVEL1_CHUNK), expect.stringMatching(MENU_CHUNK), expect.stringMatching(DEBUG_CHUNK)]));
+    .toEqual(expect.arrayContaining([expect.stringMatching(LEVEL1_CHUNK), expect.stringMatching(MENU_CHUNK), expect.stringMatching(DEBUG_CHUNK), expect.stringMatching(AI_CHUNK)]));
 /**
  * Share of a coarse sample of the game canvas that is painted (opaque and not black). The title
  * fills the whole canvas, so a booted shell reads well above 0.9; an unbooted one (entry chunk

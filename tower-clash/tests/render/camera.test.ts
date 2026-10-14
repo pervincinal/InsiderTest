@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import { BADGE_MIN_SCALE, FAR_SHORE_Y, FLAT, ISLAND_FAR_Y, TILT_DEFAULT, TILT_MIN, TILT_PERSPECTIVE, depth, horizonY, jacY, makeCamera, normaliseTilt, playCamera, proj, projAngle, projDir, projY, setTilt, unproj, unprojY } from '../../src/render/camera';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { BADGE_MIN_SCALE, FLAT, ISLAND_FAR_Y, TILT_DEFAULT, TILT_MIN, TILT_PERSPECTIVE, depth, horizonY, jacY, loadCamera, normaliseTilt, playCamera, proj, projAngle, projDir, projY, setTilt, unproj, unprojY } from '../../src/render/camera';
+import { FAR_SHORE_Y, makeCamera } from '../../src/render/perspective';
 import { HUD, TOWER_HIT_RADIUS, WORLD_ZOOM } from '../../src/render/layout';
-import { towerTop } from '../../src/render/sprites';
+import { towerFootprintRadius, towerTop } from '../../src/render/sprites';
 import { hitTower } from '../../src/input/pointer';
 import { createState } from '../../src/sim/index';
 import { makeLevel } from '../helpers';
@@ -13,6 +14,7 @@ import { makeLevel } from '../helpers';
  * `?tilt=0.72` override (TILT_PERSPECTIVE), checked here through `makeCamera`.
  */
 describe('play camera (ART-21)', () => {
+  beforeAll(() => loadCamera()); // PERF-9: the perspective camera is a lazy chunk; until it lands a tilt draws flat
   afterEach(() => setTilt(undefined));
 
   it('defaults to the flat map (ART-24); setTilt(0.72) is the perspective camera, setTilt(0) flat again, other values clamp to TILT_MIN..1', () => {
@@ -176,6 +178,45 @@ describe('play camera (ART-21)', () => {
       expect(hitTower(state, 200, 600 - roof - TOWER_HIT_RADIUS - 3, TOWER_HIT_RADIUS, project)).toBeNull();
       // without the projection (other callers): the plain base circle
       expect(hitTower(state, 200, 600 - roof * 0.95)).toBeNull();
+    });
+  });
+
+  describe('BUG-44: a base circle beats a roof capsule, a drawn body on top beats one under it', () => {
+    const project = (x: number, y: number) => proj(FLAT, x, y);
+    // level 48: the neutral court stands inside the keep's roof capsule; two barracks whose bodies overlap
+    const state = createState(
+      makeLevel({
+        towers: [
+          { id: 'court', x: 360, y: 930, owner: 'neutral', units: 5, kind: 'fortress' },
+          { id: 'home', x: 360, y: 1150, owner: 'player', units: 5, level: 3, kind: 'barracks' },
+          { id: 'p', x: 300, y: 600, owner: 'neutral', units: 5 },
+          { id: 'q', x: 330, y: 650, owner: 'neutral', units: 5 },
+        ],
+      }),
+      1,
+    );
+    const hit = (x: number, y: number) => hitTower(state, x, y, TOWER_HIT_RADIUS, project)?.id;
+
+    it("a tap in the court's base circle is the court's, even on the keep's drawn body; past it the keep", () => {
+      const roof = 1150 - towerTop('barracks', 3) * WORLD_ZOOM.tower;
+      expect(930 - roof + TOWER_HIT_RADIUS, 'the court base lies inside the keep capsule').toBeGreaterThan(0);
+      expect(hit(360, 930)).toBe('court');
+      expect(hit(380, 975)).toBe('court'); // 49 px from the court base, on the keep's body
+      expect(hit(360, 995)).toBe('home'); // 65 px below the court base: outside its circle, on the keep
+    });
+
+    it('two bodies under the tap: the one painted last (the lower base) takes it; the capsule margin goes to the nearest base', () => {
+      const plinth = towerFootprintRadius('barracks', 1) * WORLD_ZOOM.tower;
+      const roofQ = 650 - towerTop('barracks', 1) * WORLD_ZOOM.tower;
+      // (330, 549): on both bodies (30 / 0 px off the columns, under both roofs, above both bases), outside
+      // both base circles (59 / 101 px from the bases): q, painted over p, takes it although p's base is nearer
+      expect(30).toBeLessThan(plinth);
+      expect(549).toBeGreaterThan(roofQ);
+      expect(Math.hypot(30, 51)).toBeGreaterThan(TOWER_HIT_RADIUS);
+      expect(hit(330, 549)).toBe('q');
+      // (340, 530): in both capsules but on neither body (40 px off p's column, above q's roof): nearest base
+      expect(40).toBeGreaterThan(plinth);
+      expect(hit(340, 530)).toBe('p');
     });
   });
 });

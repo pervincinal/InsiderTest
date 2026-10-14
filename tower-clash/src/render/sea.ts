@@ -1,6 +1,7 @@
 import { C } from '../sim/constants';
+import type { Camera } from './camera';
 import type { Palette } from './palette';
-import { shade, themeFor, withAlpha } from './palette';
+import { shade, themeFor } from './palette';
 import type { View } from './view';
 import { bleed } from './view';
 
@@ -43,41 +44,6 @@ export function menuSea(pal: Palette): SeaColors {
   return { top: pal.waterTop, bottom: pal.waterBottom, wave: pal.waterLight };
 }
 
-/*
- * ART-21 horizon (play screen only): with the tilted camera (camera.ts) the island's far shore
- * recedes and the sea above it is the distance — it fades into a pale, hazy sky tone toward the top
- * of the screen (aerial perspective), while the near sea under the island keeps the saturated
- * gradient. `paintHaze` is shared with the terrain cache (terrain.ts) so the map rows and the
- * full-bleed margins get identical pixels and no seam shows at the map's top edge.
- */
-
-/** How far the haze colour lifts the sea's top colour toward white. */
-export const HAZE_LIFT = 0.62;
-/** Haze opacity where it is full (at and above `HAZE_FULL_Y`). */
-export const HAZE_ALPHA = 0.72;
-/** Logical y where the haze reaches full strength (clamped above, i.e. in the top margin). */
-export const HAZE_FULL_Y = 40;
-
-/** The hazy sky tone over the far sea. */
-export function hazeColour(seaTop: string): string {
-  return shade(seaTop, HAZE_LIFT);
-}
-
-/**
- * Haze over the rectangle (x0, y0, w) from y0 down to `horizonY`: full at `HAZE_FULL_Y` and above,
- * clear at `horizonY` (just past the island's far shore). Call in the logical frame.
- */
-export function paintHaze(ctx: CanvasRenderingContext2D, seaTop: string, horizonY: number, x0: number, y0: number, w: number): void {
-  if (!(horizonY > y0)) return;
-  const c = hazeColour(seaTop);
-  const g = ctx.createLinearGradient(0, horizonY, 0, Math.min(HAZE_FULL_Y, horizonY - 1));
-  g.addColorStop(0, withAlpha(c, 0));
-  g.addColorStop(0.45, withAlpha(c, HAZE_ALPHA * 0.42));
-  g.addColorStop(1, withAlpha(c, HAZE_ALPHA));
-  ctx.fillStyle = g;
-  ctx.fillRect(x0, y0, w, horizonY - y0);
-}
-
 /** Wave band spacing / first offset past a map edge (logical px), matching the terrain's 92 px bands. */
 const BAND = 92;
 const EDGE = 46;
@@ -99,11 +65,11 @@ function waveBand(ctx: CanvasRenderingContext2D, y: number, x0: number, x1: numb
 
 /**
  * Paint the sea over the whole canvas. Call with the logical transform active (`applyTransform`) and
- * no clip; the screen then draws its map content over (0,0)-(720,1280) as before. `horizonY` (play
- * screen with the tilted camera, ART-21): the haze over the far sea above that logical y, and no wave
- * bands in the top margin (the distance is calm).
+ * no clip; the screen then draws its map content over (0,0)-(720,1280) as before. `cam` (play screen
+ * with the tilted camera, ART-21): the horizon haze over the far sea (perspective.ts `paintHaze`), and
+ * no wave bands in the top margin (the distance is calm).
  */
-export function drawSea(ctx: CanvasRenderingContext2D, view: View, sea: SeaColors, horizonY?: number): void {
+export function drawSea(ctx: CanvasRenderingContext2D, view: View, sea: SeaColors, cam?: Camera): void {
   const b = bleed(view);
   const pad = 1 / (view.scale > 0 ? view.scale : 1); // one CSS px past the rounded-up last column / row
   const x0 = b.left;
@@ -118,7 +84,8 @@ export function drawSea(ctx: CanvasRenderingContext2D, view: View, sea: SeaColor
     ctx.fillStyle = g;
   }
   ctx.fillRect(x0, y0, w, h);
-  if (horizonY !== undefined) paintHaze(ctx, sea.top, horizonY, x0, y0, w);
+  const horizonY = cam?.horizonY();
+  cam?.tilt?.haze(ctx, sea.top, x0, y0, w);
   const margins = b.top < 0 || b.bottom > C.MAP_H || b.left < 0 || b.right > C.MAP_W;
   if (!margins) return; // 9:16: the map covers the canvas, nothing else shows
   if (sea.wave) {

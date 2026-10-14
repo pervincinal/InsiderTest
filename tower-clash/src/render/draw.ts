@@ -7,19 +7,20 @@ import { BIOME_DUST, biomeFor, withAlpha } from './palette';
 import type { View } from './view';
 import { applyDeviceTransform, applyTransform, bleed, bleedRect, hudAnchors } from './view';
 import { HUD, SOLDIER_DRAW_SCALE, SWIPE_TRAIL_MS, TANK_DRAW_SCALE, WORLD_ZOOM } from './layout';
+import type { Rect } from './widgets';
 import { font, roundRect } from './widgets';
 type XY = { x: number; y: number };
 import { drawHud, drawOverlays, lessonCardLayout } from './hud';
-import type { BadgeBox } from './worldChips';
-import { badgeBox, badgeCentre, badgeMinY, badgeScale, chipMinTop, drawWorldChips } from './worldChips';
+import type { BadgeWant } from './worldChips';
+import { badgeScale, chipMinTop, drawWorldChips, placeBadges } from './worldChips';
 import { blankLayer, paintGround, paintHud } from './layers';
 import { drawSea, terrainSea } from './sea';
 import type { TerrainSpec } from './terrain';
 import { drawTerrain, drawTerrainOverlay } from './terrain';
 import type { Camera } from './camera';
-import { FLAT, horizonY, playCamera, proj, projAngle, projDir, standingAt } from './camera';
+import { FLAT, playCamera, proj, projAngle, projDir, standingAt } from './camera';
 import type { TowerLook, TowerSkin } from './sprites';
-import { STRIDE_SWING, badgeY, drawBadge, drawTowerShadow, drawTowerSprite, drawUnitSprite, pushOffDistance, stridePhase, towerFootprintRadius } from './sprites';
+import { STRIDE_SWING, badgeSize, badgeY, drawBadge, drawTowerShadow, drawTowerSprite, drawUnitSprite, pushOffDistance, stridePhase, towerFootprintRadius } from './sprites';
 import type { ParticleSystem } from './particles';
 import { hostileAttackers, prefersReducedMotion } from './particles';
 
@@ -575,13 +576,9 @@ function badgeLift(t: Tower, raise: number): number {
   return (badgeY(t.kind, t.level) + 18 - raise) * WORLD_ZOOM.tower - 18 * WORLD_ZOOM.badge;
 }
 
-/**
- * A tower's badge centre (worldChips.ts `badgeCentre`): above the zoomed roof, clamped under the top HUD
- * band / the lesson card — or, when that clamp would sit it on the tower's own body, below the plinth.
- */
-function badgeSpot(t: Tower, look: { y: number; s: number }, raise: number, bs: number, cardBottom: number | null): { y: number; below: boolean } {
-  const plinth = towerFootprintRadius(t.kind, t.level) * WORLD_ZOOM.tower * look.s;
-  return badgeCentre(look.y + badgeLift(t, raise) * look.s, badgeMinY(cardBottom, bs), look.y, plinth, bs);
+/** The zoomed plinth radius of a building at depth `s`, logical px (a badge flipped below or beside it clears this). */
+function plinthOf(t: Tower, s: number): number {
+  return towerFootprintRadius(t.kind, t.level) * WORLD_ZOOM.tower * s;
 }
 
 /** Where a building stands on the screen (ART-21): its projected ground anchor and depth scale. */
@@ -595,11 +592,12 @@ function standing(cam: Camera, t: Tower): TowerLook & { s: number } {
  * anchors and scaled by depth (ART-21): buildings through the PERF-4 sprite cache's draw-time scale,
  * units through their size, badges no smaller than BADGE_MIN_SCALE (24 px numerals). Sorting by map
  * y and by screen y is the same order (the camera keeps y monotonic). Units stay in map coordinates
- * for the dust (particles are projected when drawn). `cardBottom`: the lesson card's bottom (logical
- * screen y) while it is up, else null — badges and chips stay below it (ART-22).
+ * for the dust (particles are projected when drawn). `card`: the lesson card's rect (logical screen
+ * frame) while it is up, else null — badges and chips stay clear of it (ART-22, BUG-43).
  */
-function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, ui: PlayUi, nowMs: number, biome: Biome, dev: number, cam: Camera, cardBottom: number | null): void {
+function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, ui: PlayUi, nowMs: number, biome: Biome, dev: number, cam: Camera, card: Rect | null): void {
   const motion = motionAllowed();
+  const cardBottom = card ? card.y + card.h : null;
   const towers = Object.values(state.towers).sort((a, b) => a.y - b.y);
 
   const units: UnitDraw[] = [];
@@ -649,39 +647,45 @@ function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState
   }
   while (ui_ < units.length) drawUnit(units[ui_++]!);
 
-  // badges on top of everything in the world (ART-22: below the lesson card while it is up), then the
-  // stream / mine chips laid out against them (worldChips.ts)
-  const badges = new Map<string, BadgeBox>();
+  // badges on top of everything in the world, placed together (worldChips.ts `placeBadges`: above the
+  // roof, clamped under the top band / the lesson card, or — a tower at the map's top — below or beside
+  // it, clear of the other badges and the card), then the stream / mine chips laid out against them
+  const wants: BadgeWant[] = [];
+  const fire = new Map<string, boolean>();
   for (const t of towers) {
     const raise = ui.selectedTowerId === t.id ? 4 : 0;
     const look = standing(cam, t);
     const bs = badgeScale(look.s);
-    const by = badgeSpot(t, look, raise, bs, cardBottom).y;
+    const f = isUnderFire(state, t);
+    fire.set(t.id, f);
+    const { w, h } = badgeSize(ctx, String(t.units), bs, f);
+    wants.push({ id: t.id, x: look.x, y: look.y, bs, w, h, naturalY: look.y + badgeLift(t, raise) * look.s, plinth: plinthOf(t, look.s) });
+  }
+  const badges = placeBadges(wants, card);
+  for (const t of towers) {
+    const b = badges.get(t.id)!;
     const pop = badgePop(state, t.id, t.units, nowMs, motion);
-    const fire = isUnderFire(state, t);
-    const by_ = fire ? attackers.get(t.id) : undefined;
-    const text = String(t.units);
-    drawBadge(ctx, pal, look.x, by, text, t.units >= capacityOf(t), {
+    const by_ = fire.get(t.id) ? attackers.get(t.id) : undefined;
+    drawBadge(ctx, pal, b.rect.x + b.rect.w / 2, b.rect.y + b.rect.h / 2, String(t.units), t.units >= capacityOf(t), {
       stroke: pal.ownerTones[t.owner].shade,
-      scale: pop * bs,
-      underFire: fire ? (by_ ? pal.owners[by_] : pal.ink) : undefined,
+      scale: pop * b.bs,
+      underFire: fire.get(t.id) ? (by_ ? pal.owners[by_] : pal.ink) : undefined,
       shake: motion ? (fx?.badgeHit(t.id, nowMs) ?? 0) : 0,
       // ART-23: a just-captured tower's badge flashes paper-white with a halo in the new owner's lit tone
       flash: motion ? (fx?.captureFlash(t.id, nowMs) ?? 0) : 0,
       flashColor: pal.ownerTones[t.owner].lit,
     });
-    badges.set(t.id, badgeBox(ctx, look.x, by, text, bs, fire));
   }
   drawWorldChips(ctx, pal, state, cam, badges, chipMinTop(cardBottom), ui.outcome === 'playing');
   if (hint && ui.limitHintText && ui.selectedTowerId) {
     const t = state.towers[ui.selectedTowerId];
-    if (t) {
+    const b = t && badges.get(t.id);
+    if (t && b) {
       const look = standing(cam, t);
-      const bs = badgeScale(look.s);
-      const spot = badgeSpot(t, look, 4, bs, cardBottom);
-      // a badge flipped below the tower: the bubble goes under the badge (an anchor at its bottom edge, "below" forced)
-      if (spot.below) drawHintBubble(ctx, pal, { x: look.x, y: spot.y + 18 * bs - 30 }, -Infinity, ui.limitHintText, hint.alpha);
-      else drawHintBubble(ctx, pal, look, spot.y, ui.limitHintText, hint.alpha);
+      // a badge below or beside the tower: the bubble goes under whichever of the badge and the plinth
+      // reaches lower (an anchor 30 above that edge, "below" forced)
+      if (b.side !== 'above') drawHintBubble(ctx, pal, { x: look.x, y: Math.max(b.rect.y + b.rect.h, look.y + plinthOf(t, look.s)) - 30 }, -Infinity, ui.limitHintText, hint.alpha);
+      else drawHintBubble(ctx, pal, look, b.rect.y + b.rect.h / 2, ui.limitHintText, hint.alpha);
     }
   }
 }
@@ -854,7 +858,7 @@ export function drawGame(ctx: CanvasRenderingContext2D, state: GameState, view: 
 
   ctx.save();
   applyTransform(view);
-  if (!layers) drawSea(ctx, view, sea, horizonY(cam));
+  if (!layers) drawSea(ctx, view, sea, cam);
   // the world is clipped to the map's rows; across, it spans the screen (a wide screen's side margins
   // are sea, so the drifting cloud shadows cross them instead of being cut at the map edge)
   const screen = bleed(view);
@@ -876,8 +880,7 @@ export function drawGame(ctx: CanvasRenderingContext2D, state: GameState, view: 
   drawTowerShadows(ctx, pal, state, cam);
   // ART-22: while the lesson card is up (drawn with the HUD, moved with the top band) badges stay below it
   const card = lessonCardLayout(ctx, state, ui);
-  const cardBottom = card ? card.rect.y + card.rect.h + hudAnchors(view).top : null;
-  drawWorld(ctx, pal, state, ui, nowMs, spec.biome ?? 'grass', dev, cam, cardBottom);
+  drawWorld(ctx, pal, state, ui, nowMs, spec.biome ?? 'grass', dev, cam, card ? { ...card.rect, y: card.rect.y + hudAnchors(view).top } : null);
   // effects are spawned in map coordinates (particles.ts): each drawn upright at its projected point
   ui.particles?.draw(ctx, nowMs, cam.flat ? undefined : (x, y) => proj(cam, x, y));
   ctx.restore();

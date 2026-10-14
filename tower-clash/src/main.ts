@@ -18,6 +18,8 @@ import { currentLevelIndex, loadSave, writeSave } from './ui/save';
 import type { App, NativeInfoOverride, QueuedToast, Screen, StartOptions } from './ui/screens';
 import { ResultScreen, TitleScreen, beginMapFrame, endMapFrame, handOverToasts } from './ui/screens';
 import { PlayScreen } from './ui/play';
+import { AI_CHUNK, aiLoaded, loadAi } from './ui/ai';
+import { preloadCamera } from './render/camera';
 import { applyMotionPref } from './ui/motion';
 import type { Language } from './ui/i18n';
 import { ENGLISH_MENUS_CHUNK, browserLanguages, detectLanguage, loadEnglishMenus, onLanguageChange, setLanguage, t } from './ui/i18n';
@@ -427,7 +429,9 @@ export class TowerClashApp implements App {
     whenIdle(() => {
       void this.loadLazy().catch(() => undefined);
       this.preloadLevel(LEVEL_META[currentLevelIndex(this.save, LEVEL_META)]?.id);
+      void loadAi().catch(() => undefined); // PERF-9: the enemy AI, so the first PLAY is instant
       void this.preloadCosmetics(); // equipped skins / theme, so the title and the first PLAY are already skinned
+      void preloadCamera(); // PERF-9: the `?tilt=` perspective camera chunk, when one is asked for
     });
   }
 
@@ -519,17 +523,19 @@ export class TowerClashApp implements App {
   /**
    * Start a level: at once when its chunk is in (the usual case — the current level is preloaded
    * after the first frame and the next one when a level starts), otherwise through the spinner.
-   * The cosmetic chunks the equipped skins need (PERF-5) are requested first and awaited alongside
-   * the level (bounded by `COSMETIC_WAIT_MS`), so the first frame is already skinned / themed.
-   * A navigation or another start that happened meanwhile wins; a failed download returns to the
-   * screen the player was on. Resolves true once the play screen is current.
+   * The cosmetic chunks the equipped skins need (PERF-5) and a `?tilt=` override's perspective camera
+   * (PERF-9) are requested first and awaited alongside the level (bounded by `COSMETIC_WAIT_MS`), so
+   * the first frame is already skinned / themed / tilted. The enemy AI chunk (PERF-9) is awaited like
+   * the level itself. A navigation or another start that happened meanwhile wins; a failed download
+   * returns to the screen the player was on. Resolves true once the play screen is current.
    */
   startLevel(levelId: number, seed?: number, opts?: StartOptions): Promise<boolean> {
     const seq = ++this.startSeq;
     if (levelIndex(levelId) < 0) return Promise.resolve(false);
     const cosmetics = this.preloadCosmetics(); // kicked off before the level chunk
+    const camera = preloadCamera();
     const cached = getLoadedLevel(levelId);
-    if (cached && !cosmetics) {
+    if (cached && !cosmetics && !camera && aiLoaded()) {
       this.enterLevel(cached, seed, opts);
       return Promise.resolve(true);
     }
@@ -537,7 +543,12 @@ export class TowerClashApp implements App {
     const loading = new LoadingScreen(this);
     this.go(loading);
     const levelChunk = cached ? Promise.resolve(cached) : loadLevel(levelId);
-    const start = Promise.all([levelChunk, cosmetics ? within(cosmetics, COSMETIC_WAIT_MS) : undefined]).then(
+    const start = Promise.all([
+      levelChunk,
+      loadAi(),
+      cosmetics ? within(cosmetics, COSMETIC_WAIT_MS) : undefined,
+      camera ? within(camera, COSMETIC_WAIT_MS) : undefined,
+    ]).then(
       ([level]) => {
         if (seq !== this.startSeq || this.current !== loading) return null; // superseded
         if (!level) {
@@ -550,7 +561,7 @@ export class TowerClashApp implements App {
       () => {
         if (seq === this.startSeq && this.current === loading) {
           this.current = from;
-          this.chunkFailed(levelChunkKey(levelId), from);
+          this.chunkFailed(chunkFailures(AI_CHUNK) > 0 ? AI_CHUNK : levelChunkKey(levelId), from);
           this.handOverToasts([]);
         }
         return null;

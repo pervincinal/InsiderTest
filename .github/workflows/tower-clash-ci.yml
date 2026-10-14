@@ -89,8 +89,8 @@ jobs:
 
       # Web bundle guard: the entry chunk (and its modulepreloads) must not contain the native
       # store/ads plugins (they are dynamic imports used only inside the Capacitor shells) and must
-      # stay under the 92 kB gzip budget (GDD §2.0b acceptance 3; scripts/checkBundle.mjs holds the
-      # number). `--no-build` reuses the dist/ from the step above.
+      # stay under the 82 kB gzip budget (79.7 kB after PERF-9; GDD §2.0b acceptance 3;
+      # scripts/checkBundle.mjs holds the number). `--no-build` reuses the dist/ from the step above.
       - name: Bundle check (no native plugins in the entry chunk, gzip budget)
         run: node scripts/checkBundle.mjs --no-build
 

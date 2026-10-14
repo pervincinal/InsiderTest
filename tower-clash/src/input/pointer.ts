@@ -4,7 +4,7 @@ import { capacityOf, linksFrom, maxLevelOf, maxLinksOf, relaysOnward } from '../
 import type { View } from '../render/view';
 import { toLogical } from '../render/view';
 import { SWIPE_TRAIL_MS, TOWER_HIT_RADIUS, TOWER_RADIUS, WORLD_ZOOM } from '../render/layout';
-import { towerTop } from '../render/sprites';
+import { towerFootprintRadius, towerTop } from '../render/sprites';
 
 /* ---------- generic pointer adapter ---------- */
 
@@ -115,8 +115,13 @@ export type HitProjection = (x: number, y: number) => { x: number; y: number; s:
  * the screen, against what is drawn: a capsule of radius `radius × max(1, depth)` around the segment
  * from the tower's drawn base up to its drawn roof top (`towerTop × WORLD_ZOOM.tower × depth` above it,
  * ART-24), so a tap on a building's roof selects it and a far tower's target never shrinks below the
- * flat radius (TOWER_HIT_RADIUS, 44 pt × the tower zoom) even though its sprite does. Where two
- * capsules overlap, the tower whose base is nearest the tap wins. Without `project`: the plain circle.
+ * flat radius (TOWER_HIT_RADIUS, 44 pt × the tower zoom) even though its sprite does. BUG-44: a tap
+ * inside a tower's base circle (the capsule's bottom end) is that tower's — the nearest base when it is
+ * inside several — even when it is also on a nearer building's drawn body (level 48: the court's base
+ * stands inside the keep's roof capsule). Otherwise a tap on a drawn body (the plinth's width, roof to
+ * base) goes to the building painted last there (the lowest base); otherwise — the capsule's margin
+ * around the body, e.g. a far tower's badge — to the nearest base, so a tap over a building's roof is
+ * not taken by a neighbour drawn lower. Without `project`: the plain circle.
  */
 export function hitTower(state: GameState, x: number, y: number, radius: number = TOWER_HIT_RADIUS, project?: HitProjection): Tower | null {
   let best: Tower | null = null;
@@ -133,17 +138,25 @@ export function hitTower(state: GameState, x: number, y: number, radius: number 
   }
   const tap = project(x, y);
   let bestBase = Infinity;
+  let bestY = -Infinity;
+  let bestRank = -1;
   for (const t of Object.values(state.towers)) {
     const p = project(t.x, t.y);
+    const r = radius * Math.max(1, p.s);
+    const dx = Math.abs(tap.x - p.x);
     const roof = p.y - towerTop(t.kind, t.level) * WORLD_ZOOM.tower * p.s;
     // distance from the tap to the vertical segment roof..base at the tower's drawn column
     const dy = tap.y > p.y ? tap.y - p.y : tap.y < roof ? roof - tap.y : 0;
-    if (Math.hypot(tap.x - p.x, dy) > radius * Math.max(1, p.s)) continue;
-    const base = Math.hypot(tap.x - p.x, tap.y - p.y);
-    if (base < bestBase) {
-      bestBase = base;
-      best = t;
-    }
+    if (Math.hypot(dx, dy) > r) continue;
+    const base = Math.hypot(dx, tap.y - p.y);
+    // 2: in the base circle; 1: on the drawn body (plinth width, roof..base); 0: the capsule's margin
+    const rank = base <= r ? 2 : dy === 0 && dx <= towerFootprintRadius(t.kind, t.level) * WORLD_ZOOM.tower * p.s ? 1 : 0;
+    const better = rank !== bestRank ? rank > bestRank : rank === 1 ? p.y > bestY || (p.y === bestY && base < bestBase) : base < bestBase;
+    if (!better) continue;
+    best = t;
+    bestBase = base;
+    bestY = p.y;
+    bestRank = rank;
   }
   return best;
 }
