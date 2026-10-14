@@ -270,6 +270,20 @@ jobs:
           echo "API_KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
           echo "API key installed as AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
 
+      # BUG-45 (2026-10-14): every run on a fresh runner lets Xcode's cloud signing create a new Apple
+      # Development certificate (the runner's private key dies with the runner) and Apple caps them per
+      # account — run 17 (build 16) failed in the archive with "Your account has reached the maximum
+      # number of certificates" / "No profiles for 'com.pervincinal.towerclash' were found". Nobody on
+      # this team develops with Xcode, so every DEVELOPMENT certificate is a CI leftover: revoke them
+      # through the App Store Connect API before archiving (scripts/ascCertificates.mjs; DISTRIBUTION
+      # certificates are never touched; a 403 only warns — the key then needs the Admin role).
+      - name: Revoke stale Apple Development certificates (automatic signing only)
+        if: env.SIGNING_MODE == 'automatic'
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+        run: node scripts/ascCertificates.mjs revoke-development
+
       # Optional manual-signing path: temporary keychain with the distribution certificate,
       # profile copied where both Xcode 15 and Xcode 16+ look for it.
       - name: Import certificate and profile (manual signing only)
