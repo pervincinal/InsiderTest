@@ -335,7 +335,46 @@ export const COLOR_BLIND_PALETTE: Palette = Object.freeze({
   gainText: OWNER_TONES_CB.enemy2.shade,
 });
 
-export function getPalette(colorBlind: boolean): Palette {
+/**
+ * ART-25 team-colour A/B: `?tones=vivid|royal|pastel` in the page URL swaps the owner clay for one of
+ * the alternative sets of src/render/teamTones.ts (a lazy chunk: the first call starts the download and
+ * answers the shipped palette until it lands). Anything else — no parameter, `classic`, an unknown
+ * name — is the shipped palette, so nothing changes for players.
+ */
+export type ToneSet = 'classic' | 'vivid' | 'royal' | 'pastel';
+const TONES_CHUNK = 'teamTones';
+let tonePalettes: Readonly<Record<Exclude<ToneSet, 'classic'>, readonly [Palette, Palette]>> | null = null;
+let tonesPromise: Promise<unknown> | null = null;
+let toneSearch: string | undefined;
+let toneUrl: ToneSet = 'classic';
+
+/** The `?tones=` set of the page URL (parsed once per distinct search string). */
+export function urlToneSet(): ToneSet {
+  const search = typeof location === 'undefined' ? '' : location.search;
+  if (search !== toneSearch) {
+    toneSearch = search;
+    const v = search ? new URLSearchParams(search).get('tones') : null;
+    toneUrl = v === 'vivid' || v === 'royal' || v === 'pastel' ? v : 'classic';
+  }
+  return toneUrl;
+}
+
+/** Load the alternative team colours (idempotent; a failed download is forgotten so the next call retries). */
+export function loadToneSets(): Promise<unknown> {
+  tonesPromise ??= loadChunk(TONES_CHUNK, () => import('./teamTones'))
+    .then((m) => (tonePalettes = m.TONE_PALETTES))
+    .catch((err: unknown) => {
+      tonesPromise = null;
+      throw err;
+    });
+  return tonesPromise;
+}
+
+export function getPalette(colorBlind: boolean, tones: ToneSet = urlToneSet()): Palette {
+  if (tones !== 'classic') {
+    if (tonePalettes) return tonePalettes[tones][colorBlind ? 1 : 0];
+    if (!chunkBackoff(TONES_CHUNK)) void loadToneSets().catch(() => undefined);
+  }
   return colorBlind ? COLOR_BLIND_PALETTE : DEFAULT_PALETTE;
 }
 
