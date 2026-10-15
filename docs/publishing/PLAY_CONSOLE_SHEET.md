@@ -302,10 +302,10 @@ Qeyd: menyular, işarələr, təlimat, səviyyə adları və dərslər azərbayc
 |---|---|---|---|
 | App icon (Tətbiq ikonu) | 512×512 PNG, 32-bit, ≤ 1 MB | `tower-clash/public/icons/icon-512.png` | 512×512, RGBA (every pixel opaque), 177 KB — new icon 2026-10-11 (ART-18) |
 | Feature graphic (Əsas qrafika) | 1024×500 PNG / JPEG, no alpha, ≤ 15 MB | `tower-clash/store/feature-graphic.png` — one file for every language (a translation without its own feature graphic shows this one) | 1024×500, RGB, 117 KB (the Tech Artist re-renders it on 2026-10-12, ART-19 — take the file as it is on the branch on upload day) |
-| Phone screenshots — English (Telefon skrinşotları) | 2–8, PNG / JPEG ≤ 8 MB, 9:16, each side 320–3840 px | `tower-clash/store/screenshots/en/01.png` … `08.png` — upload in file order | 8 files, 1080×1920, RGB, 367–582 KB; re-cut 2026-10-13 (ART-19, after FE-11/FE-12/ART-20/ART-21/ART-22/ART-23) |
-| Phone screenshots — Azerbaijani translation | same | `tower-clash/store/screenshots/az/01.png` … `08.png` (Azerbaijani captions *and* Azerbaijani in-game UI) | 8 files, 1080×1920, RGB, 368–591 KB; ART-19 re-cut 2026-10-13 |
-| Phone screenshots — Russian translation (§3.5) | same | `tower-clash/store/screenshots/ru/01.png` … `08.png` (Russian captions and in-game UI) | 8 files, 1080×1920, RGB, 366–586 KB; ART-19 re-cut 2026-10-13 |
-| Phone screenshots — Turkish translation (§3.6) | same | `tower-clash/store/screenshots/tr/01.png` … `08.png` (Turkish captions and in-game UI) | 8 files, 1080×1920, RGB, 361–576 KB; ART-19 re-cut 2026-10-13 |
+| Phone screenshots — English (Telefon skrinşotları) | 2–8, PNG / JPEG ≤ 8 MB, 9:16, each side 320–3840 px | `tower-clash/store/screenshots/en/01.png` … `08.png` — upload in file order | 8 files, 1080×1920, RGB, 392–518 KB; re-cut 2026-10-15 on the build-16 look (PUB-24: zoomed flat view; ART-19 re-cut of 2026-10-13 replaced) |
+| Phone screenshots — Azerbaijani translation | same | `tower-clash/store/screenshots/az/01.png` … `08.png` (Azerbaijani captions *and* Azerbaijani in-game UI) | 8 files, 1080×1920, RGB, 386–527 KB; PUB-24 re-cut 2026-10-15 |
+| Phone screenshots — Russian translation (§3.5) | same | `tower-clash/store/screenshots/ru/01.png` … `08.png` (Russian captions and in-game UI) | 8 files, 1080×1920, RGB, 392–506 KB; PUB-24 re-cut 2026-10-15 |
+| Phone screenshots — Turkish translation (§3.6) | same | `tower-clash/store/screenshots/tr/01.png` … `08.png` (Turkish captions and in-game UI) | 8 files, 1080×1920, RGB, 389–506 KB; PUB-24 re-cut 2026-10-15 |
 | 7-inch / 10-inch tablet, Chromebook, Android XR screenshots | optional | **none** — phone-only listing (G11) | |
 | Video (YouTube URL) | optional | **none** | |
 
@@ -515,24 +515,24 @@ Click path for the secret: `LAUNCH_CHECKLIST.md` G4b and §0 step 4 (AZ, steps a
 
 ### 5.4 Release name and notes (Buraxılışın adı və qeydləri)
 
-Release name: `1.0.0 (<N>)` — `1.0.0 (10)` is 10 characters (limit 50). Release notes: `RELEASE_NOTES.md` v1.0.0 "What's new", EN 496 / AZ 489 / RU 475 / TR 474 characters (limit **500 per language**). Paste this whole block into the single *Release notes* box — Play splits it by the tags:
+Release name: `1.0.0 (<N>)` — `1.0.0 (10)` is 10 characters (limit 50). Release notes: `RELEASE_NOTES.md` v1.0.0 "What's new" (rewritten 2026-10-15, PUB-23, for the final 1.0.0 look), EN 472 / AZ 467 / RU 486 / TR 461 characters (limit **500 per language**). Paste this whole block into the single *Release notes* box — Play splits it by the tags:
 
 ```
 <en-US>
-Tower Clash 1.0 with Rules v3: no more roads — a tower attacks any tower it can see in a straight line; walls, water and rocks block the shot. Sending never empties a tower, it only pauses its growth; bigger towers stream faster. Grand Campaign: 50 hand-made levels on six islands, the last ten with three enemies, walls and mines. Daily and Weekly Challenges with streaks. A "How to play" card, a tip after every defeat, eight new skins. No account, plays offline — even as an installed web app.
+The first release of Tower Clash. Tap one of your towers, tap a target, and soldiers march in a steady stream until you swipe across it. Capture every enemy tower; a full tower of yours that streams onward passes your soldiers on. 50 hand-made levels on six islands with fortresses, artillery, tanks, walls, mines and up to three enemies. Walking soldiers, island light and capture effects. Daily and Weekly Challenges with streaks. No account; the campaign plays offline.
 </en-US>
 <az-AZ>
-Tower Clash 1.0, Qaydalar v3 ilə: yollar yoxdur — qüllə düz xətlə gördüyü hər qülləyə hücum edir; divar, su və qaya xətti kəsir. Göndərmək qülləni boşaltmır, yalnız böyüməsini dayandırır; böyük qüllə daha sürətli axın verir. Böyük Kampaniya: altı adada 50 əl ilə hazırlanmış səviyyə, son onunda üç rəqib, divar və mina. Günlük və Həftəlik Çağırış, seriyalar. "Necə oynanır" kartı, hər məğlubiyyətdən sonra məsləhət, səkkiz yeni görünüş. Hesabsız, oflayn — quraşdırılmış veb tətbiq kimi də.
+Tower Clash-ın ilk buraxılışı. Öz qüllənə, sonra hədəfə toxun — əsgərlər fasiləsiz axınla yürüyür, sən barmağınla onun üstündən keçənə qədər. Bütün düşmən qüllələrini ələ keçir; irəli axın verən dolu qüllən əsgərlərini ötürür. Altı adada 50 əl ilə hazırlanmış səviyyə: qalalar, artilleriya, tanklar, divarlar, minalar və üçə qədər rəqib. Yeriyən əsgərlər, ada işığı və ələ keçirmə effektləri. Günlük və Həftəlik Çağırış, seriyalar. Hesabsız; kampaniya oflayn oynanır.
 </az-AZ>
 <ru-RU>
-Tower Clash 1.0 с правилами v3: дорог больше нет — башня атакует любую башню на прямой линии; стены, вода и скалы перекрывают линию. Отправка не опустошает башню, а лишь останавливает её рост; башни выше уровнем шлют быстрее. Большая кампания: 50 уровней ручной работы на шести островах, в последних десяти три противника, стены и мины. Ежедневный и недельный вызовы с сериями. Карточка «Как играть», совет после каждого поражения, восемь новых обликов. Без аккаунта, офлайн.
+Первый выпуск Tower Clash. Нажми на свою башню, затем на цель — солдаты идут непрерывным потоком, пока ты не проведёшь пальцем поперёк него. Захвати все вражеские башни; твоя полная башня, которая шлёт поток дальше, передаёт солдат по цепочке. 50 уровней ручной работы на шести островах: крепости, артиллерия, танки, стены, мины и до трёх противников. Шагающие солдаты, свет на островах и эффекты захвата. Ежедневный и недельный вызовы с сериями. Без аккаунта; кампания работает офлайн.
 </ru-RU>
 <tr-TR>
-Tower Clash 1.0, Kurallar v3 ile: yol yok — bir kule düz çizgide gördüğü her kuleye saldırır; duvar, su ve kaya çizgiyi keser. Göndermek kuleyi boşaltmaz, yalnızca büyümesini durdurur; büyük kuleler daha hızlı akış verir. Büyük Sefer: altı adada 50 el yapımı bölüm, son onunda üç rakip, duvar ve mayın. Günlük ve Haftalık Meydan Okuma, seriler. "Nasıl oynanır" kartı, her yenilgiden sonra ipucu, sekiz yeni görünüm. Hesapsız, çevrimdışı — yüklenmiş web uygulaması olarak da.
+Tower Clash'in ilk sürümü. Kulelerinden birine, sonra bir hedefe dokun — askerler kesintisiz bir akışla yürür, sen parmağını üzerinden geçirene kadar. Tüm düşman kulelerini ele geçir; ileri akış veren dolu kulen askerlerini aktarır. Altı adada 50 el yapımı bölüm: kaleler, topçu, tanklar, duvarlar, mayınlar ve en fazla üç rakip. Yürüyen askerler, ada ışığı ve ele geçirme efektleri. Günlük ve Haftalık Meydan Okuma, seriler. Hesapsız; sefer çevrimdışı oynanır.
 </tr-TR>
 ```
 
-The RU / TR blocks (475 / 474) are `RELEASE_NOTES.md` v1.0.0 verbatim; paste the four-language block only after the RU and TR translations of §3.5 / §3.6 are saved; if one of them is not saved yet, delete its `<ru-RU>` / `<tr-TR>` block from the box first (⚠ 11). The text opens with "Rules v3: no more roads" — written for players of the earlier web versions; true of the build, harmless for new Play users (⚠ 16, wording only).
+All four blocks are `RELEASE_NOTES.md` v1.0.0 verbatim (RU 486 / TR 461); paste the four-language block only after the RU and TR translations of §3.5 / §3.6 are saved; if one of them is not saved yet, delete its `<ru-RU>` / `<tr-TR>` block from the box first (⚠ 11). They describe the swipe that stops a stream, the supply line through a full own tower, walking soldiers and the island light — upload a build of 1.0.0 build 16 or later (the earlier builds have none of these).
 
 ### 5.5 Production (G20) — only after §4.6 is approved
 
@@ -575,7 +575,7 @@ After the release: AdMob → Apps → Tower Clash (Android) → *App settings* �
 13. **Tester engagement** — Google says it looks at whether testers used the app; the exact measure is not public. Ask testers to open the game on several days.
 14. **Production-access questionnaire** — wording, answer limits and review time are from Google's public description, not from the Console; trim or extend to what the form accepts.
 15. **"Send changes for review" vs "Save and publish"** — testing-track releases on some accounts publish with **Save and publish** on the release page instead of the Publishing overview button; either is right.
-16. **"Rules v3: no more roads"** in the release notes — accurate, but a first-time Play user never saw roads; the text is kept because it is the counted, shared "What's new" of 1.0.0 across channels. A Play-only rewrite would be a Publisher follow-up, not a blocker.
+16. **"Rules v3: no more roads"** in the release notes — **resolved 2026-10-15 (PUB-23):** the shared "What's new" of 1.0.0 was rewritten as a first-release text for the final look (§5.4); the number is kept so later references stay valid.
 
 ## 8. 1.0.1 (the next free build number when it is cut) — what changes on Play with in-app purchases
 
@@ -604,10 +604,10 @@ After the release: AdMob → Apps → Tower Clash (Android) → *App settings* �
  3979 full description EN (variant A, 1.0.1) (limit 4000; STORE_LISTING §1.1, 3984 before)
  3963 full description AZ (variant A, 1.0.1) (limit 4000; STORE_LISTING §1.2, 3955 before)
    10 release name "1.0.0 (10)"              (limit 50)
-  496 release notes EN                       (limit 500)
-  489 release notes AZ                       (limit 500)
-  475 release notes RU                       (limit 500)
-  474 release notes TR                       (limit 500; all four = RELEASE_NOTES.md v1.0.0: true)
+  472 release notes EN                       (limit 500; re-cut 2026-10-15, PUB-23 — 496 before)
+  467 release notes AZ                       (limit 500; 489 before)
+  486 release notes RU                       (limit 500; 475 before)
+  461 release notes TR                       (limit 500; 474 before; all four = RELEASE_NOTES.md v1.0.0: true)
   185 tester message AZ, line 1              (—)
    88 tester message AZ, line 2              (—)
   210 production-access answer 1             (limit not verified (⚠ 14))

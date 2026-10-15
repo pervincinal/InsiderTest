@@ -1,4 +1,4 @@
-# Tower Clash — App Store Connect paste sheet (1.0.0 — build 7 for TestFlight, build 8 for App Review)
+# Tower Clash — App Store Connect paste sheet (1.0.0 — build 8 in App Review since 2026-10-11, to be replaced by build 16: §10)
 
 Owner: Publisher. Written 2026-09-28 (PUB-12) for the stakeholder's first App Store submission, done from a browser and an iPhone — no Mac. Every field below is in the order App Store Connect shows it, with the final text ready to copy. English is the App Store language; the Azerbaijani words in parentheses are the field labels so the screens can be matched without reading the English (Azərbaycanca: mötərizədəki söz sahənin adıdır; mətnin özü ingiliscə yapışdırılır). The stakeholder's own steps around this sheet are `LAUNCH_CHECKLIST.md` §0b — since MM-12 (2026-10-09) only §1 (New App, done 2026-10-09), §4 (App Privacy, §0b step 8) and the review contact / copyright name as `ASC_REVIEW_*` secrets (§0b step 7); everything else here is uploaded by the team from `tower-clash/fastlane/` through `tower-clash/release/ios-store.request` (`docs/MOBILE.md` §3.2), so this sheet is the source those files copy (`tests/release/storeMetadata.test.ts`) and the by-hand fallback if the API refuses a field; the source texts are `STORE_LISTING.md` §2 (name, subtitle, promo, keywords, URLs), §1.1 (description), §4 / §6.4 (age rating, privacy), `RELEASE_NOTES.md` v1.0.0 ("What's New"). Character counts were produced by a script on 2026-09-28 (§9) — do not edit a text without re-counting.
 
@@ -9,7 +9,7 @@ Owner: Publisher. Written 2026-09-28 (PUB-12) for the stakeholder's first App St
 
 Fields marked **stakeholder fills** are personal values the team must not invent (`[developer …]` placeholders; no e-mail address or phone number is written anywhere in the repository).
 
-Ads in both variants: the review build must carry the real AdMob iOS ids (`ADMOB_IOS_APP_ID`, `ADMOB_IOS_INTERSTITIAL`, `ADMOB_IOS_REWARDED` — checklist MZ7, §5). Without them the build serves Google's **test** ad units ("Test Ad" placeholders) — fine for TestFlight, not for a public App Store build. Nothing on this sheet changes with the AdMob ids except the build picked in §6.2 — **1.0.0 (8)**, the first build with the real ids. Build numbers (Producer, 2026-10-03): **7** = the release candidate with Google test ads, TestFlight only; **8** = 1.0.0 with the real AdMob ids, the App Review build; **9** (2026-10-11) and **10** (2026-10-12) = further 1.0.0 builds with the iPhone fixes (BUG-33 / BUG-34 / BUG-35), for TestFlight and to replace 8 in App Review once the stakeholder has checked them; 1.0.1 (purchases) takes the next free build number when it is cut (`LAUNCH_CHECKLIST.md` §0c step 9, `RELEASE_NOTES.md` v1.0.0 "Build numbers"). Pick the 1.0.0 build the team names in the report thread.
+Ads in both variants: the review build must carry the real AdMob iOS ids (`ADMOB_IOS_APP_ID`, `ADMOB_IOS_INTERSTITIAL`, `ADMOB_IOS_REWARDED` — checklist MZ7, §5). Without them the build serves Google's **test** ad units ("Test Ad" placeholders) — fine for TestFlight, not for a public App Store build. Nothing on this sheet changes with the AdMob ids except the build picked in §6.2 — **1.0.0 (8)**, the first build with the real ids. Build numbers (Producer, 2026-10-03): **7** = the release candidate with Google test ads, TestFlight only; **8** = 1.0.0 with the real AdMob ids, the App Review build; **9** (2026-10-11) and **10** (2026-10-12) = further 1.0.0 builds with the iPhone fixes (BUG-33 / BUG-34 / BUG-35), for TestFlight and to replace 8 in App Review once the stakeholder has checked them; 1.0.1 (purchases) takes the next free build number when it is cut (`LAUNCH_CHECKLIST.md` §0c step 9, `RELEASE_NOTES.md` v1.0.0 "Build numbers"). Pick the 1.0.0 build the team names in the report thread. **2026-10-15 (PUB-23):** builds 11–16 followed on TestFlight; **build 16** (2026-10-14) is the build for the store and replaces 8 in App Review after the stakeholder's "yaxşıdır" — the swap, in both directions (8 approved or rejected first), is **§10**.
 
 ---
 
@@ -99,7 +99,7 @@ Answer row by row; if the questionnaire shows a row that is not listed here, ans
 
 ### 6.1 Screenshots (Skrinşotlar) — App Previews and Screenshots, "iPhone" tab
 
-Upload order = file order; drag to reorder if the browser uploads out of sequence. Every file is a Playwright capture of the game (`LAUNCH_CHECKLIST.md` A11; re-cut 2026-10-13, ART-19, on the build-13 look plus ART-22 / ART-23: walking soldiers, perspective play camera, title island and menu headers at the safe edges of the tall screen); sizes are exact, all files ≤ 600 KB (largest 535 KB on 6.7", 542 KB on 6.5"), PNG without alpha.
+Upload order = file order; drag to reorder if the browser uploads out of sequence. Every file is a Playwright capture of the game (`LAUNCH_CHECKLIST.md` A11; re-cut 2026-10-15, PUB-24, on the build-16 look: the ART-24 zoomed flat view (no perspective camera, no horizon islets), walking soldiers, ART-23 light and capture effects, title island and menu headers at the safe edges of the tall screen; the ART-19 frames of 2026-10-13 showed the perspective camera of build 14 and were replaced); sizes are exact, all files ≤ 600 KB (largest 578 KB on 6.7", 588 KB on 6.5"), PNG without alpha.
 
 | Slot (Yer) | Device size tab in App Store Connect | File (from `tower-clash/store/screenshots/`) | What it shows |
 |---|---|---|---|
@@ -134,7 +134,7 @@ App Previews (videos): none. "Use the same screenshots for all sizes" is not nee
 | Routing App Coverage File | — | none | — |
 | Game Center (Oyun mərkəzi) | — | **not enabled** | no leaderboards in 1.0 |
 | App Clip, iMessage | — | none | — |
-| Build (Build) → "+" | — | **1.0.0 (8)** — the first build with the real AdMob ids (`LAUNCH_CHECKLIST.md` §0c step 9); appears ≈ 15–30 min after the workflow uploads it (TestFlight → "processing" first). Build 7 serves Google test ads and stays on TestFlight | build numbers: 7 = RC with test ads (TestFlight only), 8 = 1.0.0 with real AdMob ids (this field, until a later 1.0.0 build replaces it), 9 / 10 = 1.0.0 with the iPhone fixes, 1.0.1 with IAP = the next free number when it is cut; the Producer bumps with `npm run version:sync` |
+| Build (Build) → "+" | — | **1.0.0 (16)** from the swap on (§10 — the stakeholder removes 8 from review, the team's `ios-store.request` `action=submit` `build=16` attaches and submits 16); before it **1.0.0 (8)** — the first build with the real AdMob ids (`LAUNCH_CHECKLIST.md` §0c step 9); appears ≈ 15–30 min after the workflow uploads it (TestFlight → "processing" first). Build 7 serves Google test ads and stays on TestFlight | build numbers: 7 = RC with test ads (TestFlight only), 8 = 1.0.0 with real AdMob ids (this field, until a later 1.0.0 build replaces it), 9 / 10 = 1.0.0 with the iPhone fixes, 11–16 = 1.0.0 TestFlight builds, **16 = the store build** (§10), 1.0.1 with IAP = the next free number when it is cut (1.0.2 if 1.0.0 (8) was approved before the swap, §10.3); the Producer bumps with `npm run version:sync` |
 | What's New in This Version (Bu versiyada yeniliklər) | 4000 | Not shown for the very first version. From 1.0.1 on: the EN block of the version in `RELEASE_NOTES.md` | (v1.0.0 EN block = 496 chars since 2026-10-06, re-counted 2026-10-08; ready if the field appears) |
 
 ### 6.3 Description — variant B (without in-app purchases), 3858 characters
@@ -259,4 +259,106 @@ App Store → 1.0.0 shows **Pending Developer Release** → *Release This Versio
   496 what's new EN (RELEASE_NOTES v1.0.0) (limit 4000; "eight new skins", 2026-10-06)
    45 premium_bundle description EN      (limit 45; 1.0.1)
    45 premium_bundle description AZ      (limit 45; Play translation only)
+ 2518 Cowork prompt §10.5 (AZ)          (—; 2026-10-15, PUB-23)
 ```
+
+## 10. Rəy build-inin əvəzlənməsi (build 8 → 16) — Replacing the review build (build 8 → 16)
+
+Written 2026-10-15 (PUB-23). **1.0.0 (8)** has been in App Review since 2026-10-11 with the old look (flat soldiers, no swipe-to-cut, no supply lines, the old icon); builds 9–16 went to TestFlight only. **1.0.0 (16)** (2026-10-14: walking soldiers, the zoomed flat view, lighting and effects, every fix through BUG-45) is the build meant for the store. The submission of build 8 used **"Manually release this version"** (§6.5; `tower-clash/fastlane/Fastfile` `automatic_release: false`), so even an approval never makes it public by itself — it waits at *Pending Developer Release* until someone presses *Release This Version*. Azerbaijani first (the stakeholder's steps), English mirror in §10.6.
+
+### 10.0 Nə vaxt və hansı yol (When, and which branch)
+
+**Yalnız sən build 16-nı iPhone-da yoxlayıb söhbətdə "yaxşıdır" yazandan sonra.** Əvvəlcə App Store Connect → Tower Clash: Tap & Conquer → **App Store** tabı → sol menyuda **iOS App** altında **1.0.0** — statusa bax və yolu seç:
+
+| Status (ekranda) | Mənası | Yol |
+|---|---|---|
+| **Waiting for Review** / **In Review** | 8 hələ rəydədir | **Əsas yol** — §10.1 (sən), §10.2 (komanda) |
+| **Developer Rejected** | 8 artıq rəydən çıxarılıb | §10.1-in **b** hissəsindən davam et |
+| **Pending Developer Release** | Apple 8-i təsdiqləyib; heç nə hamıya görünmür | §10.3 — **Release This Version-a basma** |
+| **Rejected** / **Metadata Rejected** | Apple 8-i rədd edib | §10.4 |
+
+### 10.1 Əsas yol — sənin addımların (a: rəydən çıxar, b: build 16-nı seç)
+
+Cowork ilə: §10.5-dəki mətni Cowork-a yapışdır. Daxil olmağı özün edirsən; parolu, kodları heç vaxt çata yazma.
+
+**a) Rəydən çıxar (Remove from Review)**
+1. https://appstoreconnect.apple.com → **Apps** → **Tower Clash: Tap & Conquer**.
+2. Yuxarıda **App Store** tabı → sol menyuda **iOS App** altında **1.0.0** (yanında sarı nöqtə və "Waiting for Review" / "In Review").
+3. Versiya səhifəsinin başında statusun çipinə ("Waiting for Review" / "In Review") klik et. Çip klik olunmursa: sol menyuda **General** → **App Review** → *Submissions* siyahısında **iOS App 1.0.0** olan göndərişi aç.
+4. Göndərişin səhifəsində sağ yuxarı küncdə **Remove from Review** (bəzi hesablarda **Cancel Submission**) → təsdiq pəncərəsində **Remove**.
+5. Səhifəni yenilə: 1.0.0-ın statusu **Developer Rejected** olur (bir neçə dəqiqə çəkə bilər). Bu, sənin özünün geri çəkdiyin deməkdir — Apple-ın rəddi deyil, hesabına heç bir qeyd düşmür. Növbədəki yer itir: build 16 üçün rəy yenidən 1–3 gün çəkəcək.
+
+**b) Build 16-nı seç**
+6. Elə 1.0.0 səhifəsində aşağı, **Build** bölməsinə get. Orada **1.0.0 (8)** sətri var → siçanı sətrin üstünə gətir → sağda qırmızı **⊖** (Remove) → klik.
+7. Bölmədə **Add Build** (və ya "+") → açılan siyahıda **1.0.0 (16)** → seç → **Done**. Siyahıda 16 yoxdursa, başqa build seçmə — söhbətdə yaz.
+8. Sağ yuxarıda **Save**. (Bu addım məcburi deyil — komandanın göndərişi build 16-nı özü də seçir —, amma ekranda nəyin gedəcəyini görmək üçün yaxşıdır.)
+
+**c) Export compliance (İxrac uyğunluğu) — yalnız soruşulsa**
+9. Build 16-da `ITSAppUsesNonExemptEncryption = false` var, ona görə adətən soruşulmur (§6.6). Soruşulsa: köhnə formada *"Does your app use encryption?"* → **No**; yeni formada *"What type of encryption algorithms does your app implement?"* → **None of the algorithms mentioned above** → **Save**. Başqa sual çıxsa — dayan, sözbəsöz söhbətə yaz.
+
+**d) Nə ETMƏMƏLİ**
+- **Add for Review**, **Submit for Review**, **Resubmit to App Review** düymələrinə **basma** — Save-dən sonra "Add for Review" görünəcək, bu normaldır. Rəyə göndərməni komandanın `ios-store.request` faylı edir (`action=submit`, `build=16`, §10.2). Əl ilə "Add for Review" basılsa, App Store Connect qaralama göndəriş yaradır və komandanın işi onu götürə bilmir (fastlane: *"A review submission already exists with items not managed by fastlane"*).
+- **Release This Version**-a basma, mətnləri / skrinşotları / qiyməti / ölkələri / App Privacy-ni dəyişmə, heç nəyi silmə (versiyanı, build-i, tətbiqi), heç nə yükləmə.
+
+10. Söhbətdə yaz: **"8-i rəydən çıxardım, 16 seçildi"** (və ya Cowork-un hesabatını yapışdır). Qalanı komandanındır; nəticə gündəlik hesabatdadır.
+
+### 10.2 Komandanın addımları — əsas yol (Team steps — main branch)
+
+1. **Before the submit commit: the store screenshots must show build 16's look (PUB-24 — done 2026-10-15: every set re-cut on the build-16 tree, zoomed flat view; the text below is kept as the reason).** The store lane uploads `store/screenshots/apple-6.7/en/01…10.png` with every `ios-store.request` (`overwrite_screenshots: true`), and the current set was cut on 2026-10-13 on the build-14 tree (ART-19) — the perspective play camera with horizon islets, which since ART-24 (build 15) is only the `?tilt=0.72` override, not what a player of build 16 sees. Re-cut every set (Apple 6.7" / 6.5", Google en/az/ru/tr, IAP review frame) on the build-16 tree with `renderStoreShots.mjs` before step 2; until then the submit would put screenshots of a view that build 16 does not show on the store page.
+2. `tower-clash/release/ios-store.request`: `action=submit`, `build=16`, `iphone65=no`, a `note` (e.g. `submit 1.0.0 (16) after the stakeholder removed build 8 from review; release stays manual`), a new `requested=$(date -u +%Y-%m-%dT%H:%M:%SZ)`. Check: `node scripts/releaseRequest.mjs ios-store release/ios-store.request` and `npx vitest run tests/release` — the test pins 1 ≤ `build` ≤ `config.buildNumber` (16 today), so `build=16` passes; the workflow refuses a build above `config.buildNumber` too. Commit (`chore:`), push, read the result with `node scripts/ciStatus.mjs <sha> --annotations` (job *App Store Connect metadata / review submission*).
+3. **Only after** the stakeholder wrote that build 8 is out of review (status *Developer Rejected*). While 1.0.0 is *Waiting for Review* / *In Review* the run cannot edit the version or open a second submission and fails — the Fastfile does not cancel a submission itself (no `reject_if_possible`), by design: the removal stays a human click.
+4. Failure messages and their meaning: *"A review submission already exists with items not managed by fastlane"* → a draft submission exists (someone pressed *Add for Review*, or the removed one left a draft): the team names the click in the report — App Review → that draft → remove the *iOS App 1.0.0* item — and requests again; *"Build number 16 does not exist"* → Apple has not finished processing, repeat later; an error that the version cannot be edited in its state → step **a** of §10.1 is not done yet.
+5. On success the run summary shows *submitted for App Review (submission state …)*; App Review takes 1–3 days; the release stays the stakeholder's *Release This Version* (§8, `LAUNCH_CHECKLIST.md` §0b step 10).
+
+### 10.3 Qol B — Apple build 8-i artıq təsdiqləyib (Pending Developer Release)
+
+**Sən:** **Release This Version**-a **basma** — o zaman köhnə görünüşlü build 8 hamıya çıxar. Heç nəyi silmə, heç nəyə basma. Söhbətdə yaz: **"8 təsdiqləndi, buraxmadım"**. Təsdiqlənmiş versiya sənin klikin olmadan heç vaxt mağazaya çıxmır.
+
+**Why 1.0.1.** Once 1.0.0 is approved, its build is fixed: build 16 cannot be attached to 1.0.0 any more, and a new submission needs a new App Store version. **Team default: the swap goes out as 1.0.1 on the next free build number (17)**, with build 16's code unchanged; 1.0.0 (8) is simply never released. What the team changes (Producer cuts, Mobile Engineer / Publisher prepare; one commit `chore:` + the request commits):
+1. `tower-clash/package.json`: `"version": "1.0.1"`, `config.buildNumber` **17** (16 stays a 1.0.0 build — App Store Connect accepts each build number once per version, and the binary carries its version). `npm run version:sync` (Android `versionName` / `versionCode`, iOS `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`), then `npm run version:check`. No code change.
+2. `docs/publishing/RELEASE_NOTES.md`: a **v1.0.1** section ("1.0.0 build 16 as 1.0.1", the EN / AZ / RU / TR "What's new" of v1.0.0 can be reused — they describe build 16). `tower-clash/fastlane/metadata/en-US/release_notes.txt` = the EN block, because App Store Connect asks for *What's New* on every version after the first (deliver skips the field on a first version); `tests/release/storeMetadata.test.ts` lists the en-US files exactly, so the test gains `release_notes.txt` in the same commit. This sheet: §6.2 *Version* `1.0.1`, *Build* `1.0.1 (17)`.
+3. `tower-clash/release/ios-release.request` (new `note`, `requested`) → **1.0.1 (17)** in TestFlight; a short stakeholder check (Settings → About shows 1.0.1 (17)) — the code is build 16's, already accepted with "yaxşıdır".
+4. `tower-clash/release/ios-store.request`: `action=submit`, `build=17`. The lane reads `"version"` from `package.json`, so deliver creates version 1.0.1 in App Store Connect, attaches build 17 and submits it, release still manual. If Apple refuses to create 1.0.1 while 1.0.0 waits at *Pending Developer Release*, the run fails with Apple's message; the team quotes it in the report and names the one click needed — never *Release This Version*.
+5. Purchases move one version on: the IAP version planned as 1.0.1 becomes **1.0.2** (`LAUNCH_CHECKLIST.md` §0d steps 7–9, this sheet's variant A notes, `PLAY_CONSOLE_SHEET.md` §8 read "1.0.2" from then on). Google Play has no release yet, so it simply starts at 1.0.1 (17).
+
+### 10.4 Qol C — Apple build 8-i rədd edib (Rejected / Metadata Rejected)
+
+**Sən:** Apple-ın məktubu §0b 7-ci addımdakı e-poçta gəlir; mətn həm də App Store Connect → sol menyu **General** → **App Review** → rədd edilmiş göndəriş → mesaj hissəsindədir. Mesajın **mətnini** (Guideline nömrəsi ilə) söhbətə yapışdır — sirr deyil — və yaz **"8 rədd edildi"**. Özün cavab yazma, **Resubmit to App Review** / **Add for Review** basma, build dəyişmə. "Remove from Review" lazım deyil — rədd edilmiş versiya artıq rəydə deyil.
+
+**Team (resolution flow):**
+1. Read the guideline and the reviewer's text; answer in the report in Azerbaijani: what Apple found, whether it applies to build 16 too, what changes.
+2. **Metadata only** (texts, screenshots, privacy URL, age rating): fix the sheet + `tower-clash/fastlane/` in one commit (tests in `tests/release` follow the sheet). **Code**: fix, then a new **1.0.0** build 17 (`config.buildNumber` 17 + `npm run version:sync` + `ios-release.request`) — the version stays 1.0.0 because nothing was approved; the stakeholder checks it like build 16.
+3. Commit `ios-store.request` `action=submit` with `build=16` (or 17). The rejected version is editable; the lane attaches the build and submits a new submission.
+4. **A question, not a defect** (e.g. "how does the shop work?"): the team writes the reply (EN, with an AZ translation for the stakeholder) in the report; the stakeholder pastes it under the reviewer's message → **Reply**. Resubmission is still the team's commit.
+5. If the run fails because the rejected submission is still open (*Unresolved Issues*), the team names the click in the report (in that submission, remove the *iOS App 1.0.0* item or cancel it) and requests again. Repeated rejections of the same guideline → the Producer decides about an appeal (App Review Board) — not for 1.0.0 by default.
+
+### 10.5 Cowork mətni — a + b (Cowork-a yapışdır)
+
+```
+Sən mənə "Tower Clash: Tap & Conquer" oyunumun App Store Connect səhifəsində bu brauzerdə kömək edirsən. Tək mənbə bu vərəqdir — əvvəlcə onun §10 bölməsini tam oxu:
+https://github.com/pervincinal/InsiderTest/blob/claude/tower-war-game-plan-weqwpb/docs/publishing/APP_STORE_CONNECT_SHEET.md
+
+Məqsəd: App Review-da gözləyən 1.0.0 (8) build-ini rəydən çıxarmaq və 1.0.0 versiyasında build 16-nı seçmək. Rəyə yenidən göndərməni sən etmirsən — onu komanda avtomatik edir.
+
+Təhlükəsizlik qaydaları — dəqiq əməl et:
+1. Daxil olmağı mən özüm edirəm. Heç vaxt parol, iki addımlı kod, bərpa kodu, API açarı və ya hər hansı sirr soruşma və yazma. Ekran bunlardan birini istəsə, dayan və hansı ekran olduğunu mənə de.
+2. Bu düymələrə HEÇ VAXT basma: "Add for Review", "Submit for Review", "Resubmit to App Review", "Release This Version", "Remove from Sale", heç bir "Delete". Mətnləri, skrinşotları, qiyməti, ölkələri və App Privacy-ni dəyişmə; heç nə yükləmə.
+3. Əvvəlcə statusu oxu: yuxarıda App Store tabı → sol menyuda iOS App → 1.0.0. Statusu mənə sözbəsöz yaz.
+   - "Waiting for Review" və ya "In Review" → 4-cü addım.
+   - "Developer Rejected" → 5-ci addım.
+   - "Pending Developer Release", "Rejected", "Metadata Rejected" və ya başqa söz → heç nəyə basma, dayan və statusu mənə yaz (bu hallar vərəqin §10.3 / §10.4 bölmələridir, onları komanda aparır).
+4. Statusun çipinə klik et (olmasa: sol menyu General → App Review → Submissions → "iOS App 1.0.0" olan göndəriş). Sağ yuxarı küncdə "Remove from Review" düyməsini tap (bəzi hesablarda "Cancel Submission"). Basmazdan ƏVVƏL mənə yaz: "Remove from Review düyməsini tapdım, basım?" və mənim "bəli" cavabımı gözlə. Sonra bas, təsdiq pəncərəsində "Remove" seç. Səhifəni yenilə: status "Developer Rejected" olmalıdır (bir neçə dəqiqə çəkə bilər).
+5. 1.0.0 səhifəsində aşağıdakı Build bölməsi: 1.0.0 (8) sətirinin üstünə gəl → sağdakı qırmızı ⊖ (Remove) → sonra "Add Build" və ya "+" → siyahıdan YALNIZ "1.0.0 (16)" seç → Done → sağ yuxarıda Save. Siyahıda 16 yoxdursa, başqa build seçmə — dayan və mənə yaz.
+6. Export compliance soruşulsa: köhnə formada "Does your app use encryption?" → No; yeni formada "What type of encryption algorithms does your app implement?" → "None of the algorithms mentioned above" → Save. Başqa sual çıxsa, dayan və onu mənə sözbəsöz yaz.
+7. Sonda qısa hesabat ver: əvvəlki status, indiki status, Build bölməsində hansı build görünür və ekranda çıxan hər xəbərdarlıq sözbəsöz. Sonra "Add for Review" düyməsi görünəcək — bu normaldır, ona basma.
+```
+
+### 10.6 English mirror (for the team and for Cowork's reference)
+
+- **When:** only after the stakeholder's "yaxşıdır" on build 16. First read 1.0.0's status (App Store tab → iOS App → 1.0.0): *Waiting for Review* / *In Review* → main branch; *Developer Rejected* → continue at step b; *Pending Developer Release* → §10.3; *Rejected* / *Metadata Rejected* → §10.4.
+- **a) Remove from Review:** App Store Connect → Apps → Tower Clash: Tap & Conquer → **App Store** tab → **iOS App 1.0.0** → click the status chip at the top (or sidebar **General → App Review → Submissions →** the *iOS App 1.0.0* submission) → top right **Remove from Review** (on some accounts **Cancel Submission**) → **Remove**. The status becomes **Developer Rejected** (the developer's own withdrawal, no mark against the account; the place in the queue is lost).
+- **b) Build 16:** the same version page → **Build** section → hover the 1.0.0 (8) row → red **⊖** → **Add Build** / "+" → **1.0.0 (16)** → **Done** → **Save**. Optional (the team's submit attaches build 16 anyway) but makes the state visible.
+- **c) Export compliance**, only if asked (build 16 carries `ITSAppUsesNonExemptEncryption = false`): old form "Does your app use encryption?" → **No**; new form "What type of encryption algorithms does your app implement?" → **None of the algorithms mentioned above**.
+- **d) Not to do:** no *Add for Review* / *Submit for Review* / *Resubmit to App Review* (a hand-made draft submission blocks the team's fastlane run), no *Release This Version*, no edits to texts, screenshots, price, countries or App Privacy, no deletions, no uploads. The stakeholder writes "8-i rəydən çıxardım, 16 seçildi"; the team then commits `ios-store.request` `action=submit build=16` (§10.2, after the PUB-24 screenshot re-cut).
+- **e) Branches:** approved first → do not release; the team ships the swap as **1.0.1 (17)** — `package.json` version + `config.buildNumber`, `npm run version:sync`, RELEASE_NOTES v1.0.1, `fastlane/metadata/en-US/release_notes.txt` + the test's file list, `ios-release.request`, then `ios-store.request` `build=17`; purchases move to 1.0.2 (§10.3). Rejected first → the stakeholder pastes Apple's message; the team fixes metadata or code (a new 1.0.0 build 17 if code), answers questions with a reply text for the stakeholder, and resubmits with `ios-store.request` (§10.4).
+- **Cowork prompt:** §10.5 is in Azerbaijani on purpose (the stakeholder reads it before pasting); it covers a + b + c only and stops on any other status.
