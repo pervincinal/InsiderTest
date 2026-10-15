@@ -11,7 +11,11 @@ import type { LevelDef, ObstacleDef, Owner, TowerDef } from '../../src/sim/types
 import type { LevelTextTranslations } from '../../src/ui/i18n';
 import { C } from '../../src/sim/constants';
 import { distPointSegment, laneClear, mineHitsOn, obstacleFromDef } from '../../src/sim/geometry';
-import type { Obstacle } from '../../src/sim/types';
+import type { Obstacle, TowerKind } from '../../src/sim/types';
+import { WORLD_ZOOM } from '../../src/render/layout';
+import { badgeY, towerFootprintRadius } from '../../src/render/sprites';
+import { badgeMinY, badgeScale, placeBadges } from '../../src/render/worldChips';
+import type { BadgeWant } from '../../src/render/worldChips';
 
 export const MAP_W = 720;
 export const MAP_H = 1280;
@@ -202,21 +206,181 @@ export function validateTowers(level: LevelDef): string[] {
   return errors;
 }
 
-export function validateSpacing(towers: TowerDef[]): string[] {
-  const errors: string[] = [];
+/** Clear ground (logical px) LV-20 asks for between two towers' drawn plinths, on top of 2 × the larger plinth radius. */
+export const TOWER_SPACING_GAP = 12;
+/** Below this multiple of a pair's `minTowerSpacing` the check warns: little room left between the two plinths. */
+export const TOWER_SPACING_WARN_FACTOR = 1.25;
+
+/** Kind / level of a tower as authored, defaults applied; null when either is not a valid value (`validateTowers` reports it). */
+function drawnAs(t: TowerDef): { kind: TowerKind; level: number } | null {
+  const kind = t.kind ?? 'barracks';
+  const level = t.level ?? 1;
+  return TOWER_KINDS.includes(kind) && [1, 2, 3].includes(level) ? { kind, level } : null;
+}
+
+/** A tower's plinth radius as the play renderer draws it (ART-24: `towerFootprintRadius` × `WORLD_ZOOM.tower`), logical px. */
+export function zoomedPlinth(kind: TowerKind, level = 1): number {
+  return towerFootprintRadius(kind, level) * WORLD_ZOOM.tower;
+}
+
+/**
+ * LV-20 (2026-10-15): the drawn minimum spacing of a tower of `kind` / `level` — two of its zoomed
+ * plinths side by side plus TOWER_SPACING_GAP. A pair needs the larger of its two values
+ * (`minTowerSpacing`), judged at the authored kinds / levels (the opening, as QA-24 checks it). Derived
+ * from the renderer, so a bigger WORLD_ZOOM or plinth re-checks every level. Today (L1 / L2 / L3):
+ * barracks 84.8 / 95.2 / 116, artillery 105.6 / 116 / 131.6, tank factory 100.4 / 110.8 / 131.6,
+ * fortress 126.4 / 131.6 px (a fortress stops at L2). Even fully upgraded every kind stays under the
+ * 150 px MIN_TOWER_DISTANCE floor (a test pins this), so the floor still decides errors and this rule
+ * mainly warns (TOWER_SPACING_WARN_FACTOR).
+ * Measured 2026-10-15 over all 50 levels: the tightest pair relative to its spacing is level 40 fort
+ * (fortress L1) – guns (artillery L1), 180 px vs 126.4 px (× 1.42, warning line 158); the closest in
+ * absolute terms level 3 home – west / east (barracks L1), 152.1 px vs 84.8 px (× 1.79). No shipped pair
+ * is under the warning line.
+ */
+export const MIN_TOWER_SPACING: Readonly<Record<TowerKind, readonly number[]>> = Object.freeze(
+  Object.fromEntries(
+    (TOWER_KINDS as TowerKind[]).map((k) => [k, Object.freeze([1, 2, 3].map((lv) => 2 * zoomedPlinth(k, lv) + TOWER_SPACING_GAP))]),
+  ) as Record<TowerKind, readonly number[]>,
+);
+
+/** Minimum centre distance for a pair of towers as authored: the larger of the two kinds' / levels' MIN_TOWER_SPACING. */
+export function minTowerSpacing(a: { kind: TowerKind; level: number }, b: { kind: TowerKind; level: number }): number {
+  return Math.max(MIN_TOWER_SPACING[a.kind][a.level - 1]!, MIN_TOWER_SPACING[b.kind][b.level - 1]!);
+}
+
+interface TowerPair {
+  a: TowerDef;
+  b: TowerDef;
+  d: number;
+  /** `minTowerSpacing` of the pair, or null when a kind / level is invalid. */
+  need: number | null;
+}
+
+/** Every pair of towers with finite coordinates, with its centre distance and drawn minimum spacing. */
+function towerPairs(towers: readonly TowerDef[]): TowerPair[] {
+  const out: TowerPair[] = [];
   for (let i = 0; i < towers.length; i++) {
     for (let j = i + 1; j < towers.length; j++) {
       const a = towers[i];
       const b = towers[j];
       if (!a || !b) continue;
       if (![a.x, a.y, b.x, b.y].every(isFiniteNumber)) continue;
-      const d = Math.hypot(a.x - b.x, a.y - b.y);
-      if (d < MIN_TOWER_DISTANCE) {
-        errors.push(`towers ${a.id} and ${b.id} are ${d.toFixed(0)} px apart (min ${MIN_TOWER_DISTANCE})`);
-      }
+      const da = drawnAs(a);
+      const db = drawnAs(b);
+      out.push({ a, b, d: Math.hypot(a.x - b.x, a.y - b.y), need: da && db ? minTowerSpacing(da, db) : null });
+    }
+  }
+  return out;
+}
+
+/**
+ * Spacing errors: every pair at least MIN_TOWER_DISTANCE apart (the authoring floor) and at least its
+ * drawn `minTowerSpacing` (LV-20: the zoomed plinths must not touch).
+ */
+export function validateSpacing(towers: TowerDef[]): string[] {
+  const errors: string[] = [];
+  for (const { a, b, d, need } of towerPairs(towers)) {
+    if (d < MIN_TOWER_DISTANCE) errors.push(`towers ${a.id} and ${b.id} are ${d.toFixed(0)} px apart (min ${MIN_TOWER_DISTANCE})`);
+    if (need !== null && d < need) {
+      errors.push(`towers ${a.id} and ${b.id} are ${d.toFixed(1)} px apart, closer than their drawn spacing ${need.toFixed(1)} px (2 × zoomed plinth + ${TOWER_SPACING_GAP})`);
     }
   }
   return errors;
+}
+
+/** Smallest centre distance between two towers of the level (px), or null with fewer than two placed towers. */
+export function minSpacing(towers: readonly TowerDef[]): number | null {
+  const pairs = towerPairs(towers);
+  return pairs.length === 0 ? null : Math.min(...pairs.map((p) => p.d));
+}
+
+/**
+ * Lowest tower centre y (logical px, flat map, no lesson card) at which a tower of `kind` / `level` still
+ * gets its badge above the roof: above it the renderer (`placeBadges`, worldChips.ts) would clamp the
+ * badge more than a third of its height down onto the building and flips it below / beside the tower
+ * instead (BUG-42). Same arithmetic as draw.ts `badgeLift` + worldChips `clampedOntoTower`; a test pins
+ * it to `badgeCentre`. L1: barracks 232.9, artillery 186.1, tank factory 214.7, fortress 225.1 px (the roof
+ * grows with the level: barracks L3 305.7). The LV-20 brief's "HUD.mapTop + badge × 1.15 + 26" (≈ y 163)
+ * left out the roof, so it caught only levels 3 and 7 of the 17 levels whose top badge flips.
+ */
+export function topBadgeMinY(kind: TowerKind, level = 1): number {
+  const bs = badgeScale(1);
+  const lift = (badgeY(kind, level) + 18) * WORLD_ZOOM.tower - 18 * WORLD_ZOOM.badge;
+  return badgeMinY(null, bs) - (2 * 18 * bs) / 3 - lift;
+}
+
+/**
+ * Non-fatal (LV-20): pairs closer than TOWER_SPACING_WARN_FACTOR × their `minTowerSpacing` — little room
+ * between the plinths, the badges will have to move beside the tower.
+ */
+export function spacingWarnings(level: LevelDef): string[] {
+  const warnings: string[] = [];
+  for (const { a, b, d, need } of towerPairs(level.towers)) {
+    if (need === null || d < need) continue;
+    const warn = need * TOWER_SPACING_WARN_FACTOR;
+    if (d < warn) {
+      warnings.push(`towers ${a.id} and ${b.id} are ${d.toFixed(1)} px apart, under ${TOWER_SPACING_WARN_FACTOR} × their drawn spacing (${warn.toFixed(1)} px): badges will have to move beside the tower`);
+    }
+  }
+  return warnings;
+}
+
+/** Where `placeBadges` puts a top tower's badge in the opening (flat map, no lesson card). */
+export interface TopBadgeNote {
+  tower: string;
+  y: number;
+  kind: TowerKind;
+  level: number;
+  /** `topBadgeMinY` of the tower, rounded up. */
+  needY: number;
+  /** 'below' = flipped under the base; 'beside' = right / left of it (the below spot was taken); judged with a two-digit badge. */
+  side: 'below' | 'beside';
+  text: string;
+}
+
+/** Badge width the notes assume: a two-digit count (sprites.ts `badgeSize`: 50 px minimum + padding) at the flat-map scale. */
+const NOTE_BADGE_W = 60;
+
+/**
+ * Informational (LV-20, not a warning — expected since ART-24): towers so near the top of the map
+ * (y < `topBadgeMinY`: the HUD band at HUD.mapTop plus the badge and the roof) that the renderer moves
+ * their badge off the roof, below the base or beside it (BUG-42). The side comes from the renderer's own
+ * `placeBadges` on the opening position with two-digit badges; a wider badge may land elsewhere.
+ */
+export function topBadgeNotes(level: LevelDef): TopBadgeNote[] {
+  const towers = placedTowers(level).flatMap((t) => {
+    const drawn = drawnAs(t);
+    return drawn ? [{ t, ...drawn }] : [];
+  });
+  const bs = badgeScale(1);
+  const wants: BadgeWant[] = towers.map(({ t, kind, level: lv }) => ({
+    id: t.id,
+    x: t.x,
+    y: t.y,
+    bs,
+    w: NOTE_BADGE_W,
+    h: 2 * 18 * bs,
+    naturalY: t.y + (badgeY(kind, lv) + 18) * WORLD_ZOOM.tower - 18 * WORLD_ZOOM.badge,
+    plinth: zoomedPlinth(kind, lv),
+  }));
+  const placed = placeBadges(wants, null);
+  const notes: TopBadgeNote[] = [];
+  for (const { t, kind, level: lv } of towers) {
+    const minY = topBadgeMinY(kind, lv);
+    if (t.y >= minY) continue;
+    const side = placed.get(t.id)?.side === 'below' ? 'below' : 'beside';
+    const needY = Math.ceil(minY);
+    notes.push({
+      tower: t.id,
+      y: t.y,
+      kind,
+      level: lv,
+      needY,
+      side,
+      text: `tower ${t.id} (y ${t.y}): a ${kind} L${lv} needs y ≥ ${needY} for its badge to sit above the roof — it moves ${side} the tower`,
+    });
+  }
+  return notes;
 }
 
 /** Towers whose coordinates are usable for geometry (the shape errors are reported by `validateTowers`). */
@@ -474,6 +638,10 @@ export interface LevelReport {
   obstacles: number;
   mines: number;
   enemies: number;
+  /** LV-20: smallest centre distance between two towers (px), null with fewer than two towers. */
+  minSpacing: number | null;
+  /** LV-20 informational: towers whose badge moves off the roof in the opening (`topBadgeNotes`); not warnings. */
+  topBadges: TopBadgeNote[];
   errors: string[];
   /** Advisory only (missing translations, towers with fewer than `MIN_ATTACK_LANES` lanes); never fails the check. */
   warnings: string[];
@@ -492,8 +660,10 @@ export function validateLevels(levels: LevelDef[]): LevelReport[] {
       obstacles: Array.isArray(level.obstacles) ? level.obstacles.length : 0,
       mines: Array.isArray(level.mines) ? level.mines.length : 0,
       enemies: Array.isArray(level.enemies) ? level.enemies.length : 0,
+      minSpacing: Array.isArray(level.towers) ? minSpacing(level.towers) : null,
+      topBadges: wellFormed ? topBadgeNotes(level) : [],
       errors: validateLevel(level),
-      warnings: wellFormed ? [...translationWarnings(level), ...laneWarnings(level)] : [],
+      warnings: wellFormed ? [...translationWarnings(level), ...laneWarnings(level), ...spacingWarnings(level)] : [],
     };
   });
   const idCount = new Map<number, number>();
@@ -525,9 +695,15 @@ export function validateLevels(levels: LevelDef[]): LevelReport[] {
   return reports;
 }
 
+/** The `badge` column: '-' when every badge sits above its roof, else where the top towers' badges go ('beside?': the side depends on the badge width). */
+function badgeCell(notes: readonly TopBadgeNote[]): string {
+  if (notes.length === 0) return '-';
+  return notes.some((n) => n.side === 'beside') ? 'beside?' : 'below';
+}
+
 /** Plain-text table of the reports; error lines follow each failing row. */
 export function formatReport(reports: LevelReport[]): string {
-  const header = ['id', 'name', 'band', 'towers', 'lanes', 'obstacles', 'mines', 'enemies', 'status'];
+  const header = ['id', 'name', 'band', 'towers', 'lanes', 'obstacles', 'mines', 'enemies', 'spacing', 'badge', 'status'];
   const rows = reports.map((r) => [
     String(r.id),
     r.name,
@@ -537,6 +713,8 @@ export function formatReport(reports: LevelReport[]): string {
     String(r.obstacles),
     String(r.mines),
     String(r.enemies),
+    r.minSpacing === null ? '-' : r.minSpacing.toFixed(0),
+    badgeCell(r.topBadges),
     r.errors.length > 0 ? `FAIL (${r.errors.length})` : r.warnings.length > 0 ? `ok (${r.warnings.length} warning(s))` : 'ok',
   ]);
   const widths = header.map((h, i) => Math.max(h.length, ...rows.map((row) => row[i]?.length ?? 0)));
@@ -550,5 +728,7 @@ export function formatReport(reports: LevelReport[]): string {
   const warned = reports.filter((r) => r.warnings.length > 0).length;
   const warnNote = warned > 0 ? ` ${warned} with warnings.` : '';
   out.push('', failed === 0 ? `${reports.length} level(s) valid.${warnNote}` : `${failed} of ${reports.length} level(s) FAILED.${warnNote}`);
+  const moved = reports.filter((r) => r.topBadges.length > 0).length;
+  if (moved > 0) out.push(`${moved} level(s) have a tower whose badge moves off the roof (expected since ART-24).`);
   return out.join('\n');
 }

@@ -30,7 +30,18 @@ radius `width / 2`, default 40) and farther than 48 px from every third tower's 
 line. Lanes are computed by `createState`; `scripts/lib/validateLevel.ts` reuses `src/sim/geometry.ts` so the check
 and the game agree. There are no bridges, barriers or waypoints; a river is a `water` polyline with gaps where the
 fords are; a "pay to pass" cost is a mine. Levels 1–4 have no obstacles; obstacles from 5, mines from 17.
-Coordinates: 720×1280 logical, keep towers ≥ 90 px from edges and ≥ 150 px apart. Streams under v3 never drain the source (each link emits at the tower's production rate: L1/L2/L3 = 1 / 1.43 / 2 units per s), so a level's difficulty is about *how many lanes* reach a tower and *how fast* the enemy grows — not about garrison sizes alone. Tower defaults: `level` 1, `kind` barracks, `units` 0.
+Coordinates: 720×1280 logical, keep towers ≥ 90 px from edges and ≥ 150 px apart. **Drawn spacing (LV-20, ART-24 zoom):** every
+pair must also be ≥ 2 × the larger zoomed plinth (`towerFootprintRadius × WORLD_ZOOM.tower` 1.3, authored kind/level)
++ 12 px — `MIN_TOWER_SPACING` L1/L2/L3: barracks 84.8/95.2/116, artillery 105.6/116/131.6, tank factory
+100.4/110.8/131.6, fortress 126.4/131.6 px (error below it; it stays under the 150 px floor even fully upgraded, so in
+practice it bites only if the zoom or the plinths grow) and the validator **warns** below 1.25 × it (fortress L1 158 px:
+badges will have to move beside the tower). Campaign minimum (2026-10-15): level 3 home–west/east 152.1 px; tightest
+against its footprint level 40 fort–guns 180 vs 126.4 px (× 1.42). A tower that stands so high that its badge cannot
+sit above the roof (`topBadgeMinY`: barracks L1 y < 233, artillery 186, tank factory 215, fortress 225; taller roofs at
+higher levels, barracks L3 306) gets its badge moved below / beside it (BUG-42) — **informational, not a warning**
+(expected since ART-24; 17 shipped levels do it with their top keep): the `badge` column shows `below`, `beside?` (the
+below spot is taken by a neighbour; the side depends on the badge width) or `-`, and a summary line counts the levels.
+Keep a new top tower's moved badge clear of its neighbours. The `spacing` column is the per-level minimum centre distance. Streams under v3 never drain the source (each link emits at the tower's production rate: L1/L2/L3 = 1 / 1.43 / 2 units per s), so a level's difficulty is about *how many lanes* reach a tower and *how fast* the enemy grows — not about garrison sizes alone. Tower defaults: `level` 1, `kind` barracks, `units` 0.
 
 Translations (`name_az/ru/tr`, `lesson_az/ru/tr`): same meaning as the English text, imperative and playful like
 `src/ui/locales/*.ts`; each must be ≤ English length + 20 % (validator error) and unique per language. Names must fit
@@ -42,7 +53,7 @@ the HUD level chip (206 px at 24 px bold — about 15 Latin / 15 Cyrillic charac
 `NNN-kebab-name.json`; `src/levels/manifest.ts` lists them in play order and is generated — after adding, renaming or re-clocking a level run `npm run levels:manifest` (`npm run levels:check` fails while it is stale). Bands (GDD §3): 1–8 barracks only, 1 enemy, first wall at 5 · 9–16 fortress/artillery · 17–24 two enemies, mines · 25–32 tank factory, rivers with fords · 33–40 three enemies · 41–50 Grand Campaign (everything mixed, no new vocabulary).
 
 ## Gates before finishing
-1. `npm run levels:check` — schema, connectivity (every tower reachable through clear lanes from the player's first tower), obstacles ≥ 75 px and mines ≥ 40 px from tower centres, ids unique, features allowed in the band; `npx tsx scripts/convertLevelsV3.ts --dry` documents the 2026-09-21 road → obstacle conversion.
+1. `npm run levels:check` — schema, spacing (150 px floor + drawn plinths, LV-20), connectivity (every tower reachable through clear lanes from the player's first tower), obstacles ≥ 75 px and mines ≥ 40 px from tower centres, ids unique, features allowed in the band; `npx tsx scripts/convertLevelsV3.ts --dry` documents the 2026-09-21 road → obstacle conversion.
 2. `npm run playtest` — reference player must win every level within 180 s; the "idle" player must lose or stall (never win). Fix the level, not the bot.
 2b. Clocks: `npx tsx scripts/reclock.ts --seeds 20 [--only a-b] --write` derives `star3`/`star2` from the reference player (GDD §3 formula + max-upgrade boundary step; levels 1 and 33 are pinned and only reported), then `npm run levels:manifest`. Run it after any bot change too.
 2c. First-time line: `npm run playtest -- --naive --seeds 5` (and `--react 8000`) — levels 1–8 ≥ 4/5 at 4 s and ≥ 3/5 at 8 s, 9–16 ≥ 3/5; before laying out any level with a rusher, apply GDD §3 "Authoring for the first-time line (rules v3)" (the rusher horizon `30 × (0.5 + 0.5 a)` s, fall time `1 + d/120 + N`, tower-in-the-way, home pocket, the contested-first-tap parity trap).
