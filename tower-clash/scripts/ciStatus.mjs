@@ -4,7 +4,7 @@
  * job — and prints each job's own conclusion, so a `continue-on-error` job that failed (the Pages
  * deploy, red on every push for 11 days behind a green workflow) can no longer hide.
  *
- * Usage:  node scripts/ciStatus.mjs [<sha>] [--allow <regex>] [--wait <seconds>] [--annotations] [--repo <owner/name>]
+ * Usage:  node scripts/ciStatus.mjs [<sha>] [--allow <regex>] [--wait <seconds>] [--annotations] [--repo <owner/name>] | --help
  *   <sha>      commit to read (default `git rev-parse HEAD`; short shas are resolved with git)
  *   --allow    jobs whose name matches this regex may be red; reported as "expected"
  *              (the release lanes while their secrets do not exist)
@@ -19,13 +19,37 @@
  * Data: `gh api repos/<repo>/commits/<sha>/check-runs` and, for each red job, the first
  * failure-level message of `…/check-runs/<id>/annotations` (one call per red job; with
  * --annotations all of them). Only `repos/*` paths are used.
+ * Required together (QA-26): tower-clash-ci.yml runs the chromium e2e as a two-shard matrix next to
+ * the check job. Once any job of a REQUIRED_TOGETHER group reports for the commit, every job of the
+ * group must report: one that is absent is "missing" (pending while other jobs still run, red once
+ * all have finished) and one that concluded `skipped` is red — otherwise a shard that never ran
+ * (matrix shrunk, job renamed, an `if:` that skipped it) would leave the e2e half-run behind a
+ * green line. Pushes that do not trigger the workflow (path filters) report none of the group, and
+ * nothing is required. `--allow` covers these like any other job.
+ * --help prints this header and the required groups (the hygiene test checks them against the
+ * workflow's job names).
  * Tests point CI_STATUS_GH at a fake gh (tests/scripts/ciStatus.test.ts); CI_STATUS_POLL_SECONDS
  * overrides the 30 s poll interval.
  */
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 
 const GREEN = new Set(['success', 'neutral', 'skipped']);
 const GENERIC = /^Process completed with exit code \d+\.?$/;
+/** QA-26: check-run names that must all report once one of them does (see the header). */
+const REQUIRED_TOGETHER = [
+  // .github/workflows/tower-clash-ci.yml: `verify` and the `e2e` matrix (`e2e (shard ${{ matrix.shard }}/2)`)
+  ['check + playtest + build + e2e', 'e2e (shard 1/2)', 'e2e (shard 2/2)'],
+];
+
+if (process.argv.includes('--help') || process.argv.includes('-h')) {
+  const src = readFileSync(new URL(import.meta.url), 'utf8');
+  const header = /\/\*\*\n([\s\S]*?)\*\//.exec(src)?.[1] ?? '';
+  console.log(header.replace(/^ \* ?/gm, '').trimEnd());
+  console.log('\nRequired together:');
+  for (const group of REQUIRED_TOGETHER) console.log(`  ${group.join(' | ')}`);
+  process.exit(0);
+}
 
 function fail(msg) {
   console.error(`ciStatus: ${msg}`);
@@ -116,11 +140,22 @@ function annotationLines(notes) {
 function snapshot() {
   const data = ghApi(`repos/${repo}/commits/${sha}/check-runs?per_page=100&filter=latest`);
   const runs = (data.check_runs ?? []).slice().sort((a, b) => a.name.localeCompare(b.name));
-  return runs.map((run) => {
+  const required = new Set(REQUIRED_TOGETHER.filter((g) => g.some((n) => runs.some((r) => r.name === n))).flat());
+  const jobs = runs.map((run) => {
     const done = run.status === 'completed';
-    const state = done ? (GREEN.has(run.conclusion) ? 'green' : allow?.test(run.name) ? 'expected' : 'red') : 'pending';
-    return { id: run.id, name: run.name, status: run.status, conclusion: run.conclusion, state };
+    const skippedRequired = run.conclusion === 'skipped' && required.has(run.name);
+    const ok = GREEN.has(run.conclusion) && !skippedRequired;
+    const state = done ? (ok ? 'green' : allow?.test(run.name) ? 'expected' : 'red') : 'pending';
+    return { id: run.id, name: run.name, status: run.status, conclusion: run.conclusion, state, note: skippedRequired ? 'required job did not run' : undefined };
   });
+  const missing = [...required].filter((n) => !runs.some((r) => r.name === n));
+  const running = jobs.some((j) => j.state === 'pending');
+  for (const name of missing) {
+    const state = running ? 'pending' : allow?.test(name) ? 'expected' : 'red';
+    const peers = REQUIRED_TOGETHER.find((g) => g.includes(name)).filter((n) => n !== name);
+    jobs.push({ id: undefined, name, status: 'missing', conclusion: 'missing', state, note: `no check run, required with ${peers.join(', ')}` });
+  }
+  return jobs.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 const deadline = Date.now() + waitSeconds * 1000;
@@ -140,12 +175,12 @@ if (jobs.length === 0) {
 console.log(`ciStatus: ${repo} @ ${short} — ${jobs.length} job(s)`);
 for (const j of jobs) {
   if (j.state === 'pending') {
-    console.log(`  ${j.name}: ${j.status}`);
+    console.log(`  ${j.name}: ${j.status === 'missing' ? 'not started' : j.status}`);
     continue;
   }
   const tag = j.state === 'expected' ? ' (expected)' : '';
-  const notes = j.state === 'green' ? [] : annotations(j.id);
-  const why = firstFailure(notes);
+  const notes = j.state === 'green' || j.id === undefined ? [] : annotations(j.id);
+  const why = j.note ?? firstFailure(notes);
   console.log(`  ${j.name}: ${j.conclusion}${tag}${why ? ` — ${why}` : ''}`);
   if (showAll) for (const line of annotationLines(notes)) console.log(line);
 }

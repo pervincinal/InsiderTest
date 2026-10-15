@@ -99,44 +99,110 @@ jobs:
       - name: Install Chromium for Playwright
         run: npx playwright install --with-deps chromium
 
-      # Default Playwright project (`chromium`, Pixel 5 metrics): smoke (title → level select →
-      # level 1: select home → rules v3 guide lines → stream that keeps the garrison → win → result;
-      # blocked-tap hint through the level 5 wall), content (every authored level loads; wall / water /
-      # rock screenshots), tutorial, stalemate hint (FE-1/FE-2: level 2 counter-stream fires it once
-      # at 8 s of sim time, never on level 1), daily / weekly, economy, lazy chunks, layers and perf
-      # (frame-time budget on the top level).
-      # QA-17: two Playwright workers (playwright.config.ts `workers: 2`, `fullyParallel: false`, so
-      # whole spec files run in parallel and each file's tests stay in order). Single-worker step
-      # times: 468 / 520 / 551 / 595 s (2026-10-05..08), growing toward the 15-minute timeout.
-      # Locally on 4 cores, 693 s with 1 worker vs 373–377 s with 2 (3 runs). Expected here: about 5–6 min.
-      # A two-shard matrix was rejected: `--shard` balances by test count, which puts content.spec.ts
-      # (53 short tests) + daily in one shard (27 % of the time) and everything else in the other (73 %).
-      - name: Browser e2e (smoke + content + economy + perf)
-        timeout-minutes: 15
-        run: npm run e2e
+      # QA-26: the default `chromium` project (151 tests) runs in the `e2e` matrix job below, two
+      # shards in parallel with this job; the two small projects stay here (they need the build
+      # above and Chromium, ≈ 4 + 4 tests) so this job keeps its "+ e2e" name, which
+      # scripts/ciStatus.mjs requires together with both shards. Both steps call Playwright directly
+      # on the dist/ built and bundle-checked above (`npm run e2e:*` would rebuild it twice more).
 
       # Android WebView emulation (`android-webview` project: Pixel 7 metrics, `; wv)` user agent,
       # touch input): safe-area layout, touch-tap flow with audio unlock, hardware back-button hook,
       # background pause. Kept as its own step so a WebView-only regression is obvious in the log.
       - name: Browser e2e (Android WebView emulation)
         timeout-minutes: 10
-        run: npm run e2e:webview
+        run: npx playwright test --project=android-webview
 
       # PWA offline path (`pwa` project, QA-8): the only project with the service worker allowed
       # (public/sw.js under a real registration, worker network emulation on): the first launch
       # precaches the shell, the second launch runs offline (title, level 1 from the cache), a cold
       # level chunk fails with the game's offline toast, and it loads once back online. This project
       # alone has `retries: 1` (BUG-16: headless-Chromium stall on a worker-routed chunk, ~1/500
-      # boots); its artefacts land in test-results/pwa. Measured ≈ 5 s locally (2026-09-26).
+      # boots); its artefacts land in test-results/pwa. Measured 46 s locally for its 4 tests (2026-10-15;
+      # WebView 29 s).
       - name: Browser e2e (PWA offline)
         timeout-minutes: 5
-        run: npm run e2e:pwa
+        run: npx playwright test --project=pwa
 
       - name: Upload Playwright report, traces and screenshots
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
+          path: |
+            tower-clash/playwright-report
+            tower-clash/test-results
+            tower-clash/e2e/__screenshots__
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # QA-26: the default Playwright project (`chromium`, Pixel 5 metrics) as a two-shard matrix, in
+  # parallel with `verify` (no `needs:`): smoke (title → level select → level 1: select home → rules
+  # v3 guide lines → stream that keeps the garrison → win → result; blocked-tap hint through the
+  # level 5 wall), content (every authored level loads; wall / water / rock screenshots), camera,
+  # tutorial, stalemate hint, daily / weekly, economy, lazy chunks, layers and perf (frame-time budget
+  # on the top level). History: one step in `verify` — 468 → 595 s on one worker (2026-10-05..08),
+  # QA-17 two workers (`workers: 2`, `fullyParallel: false`: whole spec files per worker, a file's
+  # tests in order), then 151 tests at 8.5–9.7 min (2026-10-15).
+  # `--shard=N/2` splits by test count in path order, whole files (1.47: a file goes to the shard
+  # that holds its first test). The level content suite sits in e2e/integrity/ so its 53 short
+  # tests sort after gestures430 instead of second: shard 1 = camera … gestures430 +
+  # integrity/content (7 files, 101 tests), shard 2 = layers … weeklyMilestones (16 files, 50
+  # tests), ≈ 50 / 50 of the run time (as e2e/content.spec.ts it was ≈ 40 / 60;
+  # tests/repo/hygiene.test.ts QA-26 pins the split). Each shard rebuilds dist/ from the same commit instead
+  # of downloading an artifact from `verify` — `npm run build` (≈ 20 s) is deterministic (content
+  # hashes, no time stamps) and running beside `verify` instead of after it takes the whole
+  # check + playtest + build time off the critical path. The preview still serves the
+  # e2e/tools/snapshotDist.mjs snapshot of dist/ (QA-6 / QA-20 guard), on the shard's own
+  # PW_PORT with its own PW_OUTPUT. fail-fast off: a red shard never cancels the other, so one run
+  # lists every failing test. Every shard job must report (ciStatus REQUIRED_TOGETHER).
+  # Measured 2026-10-15 locally (4 cores, idle, 2 workers): whole project 658 s (151/151) vs
+  # shard 1/2 372 s (101/101) and shard 2/2 320 s (50/50). Expected here: ≈ 1.5 min setup + 5–6 min.
+  e2e:
+    name: e2e (shard ${{ matrix.shard }}/2)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: 1
+            port: 4191
+          - shard: 2
+            port: 4192
+    env:
+      CI: true
+      PW_PORT: ${{ matrix.port }}
+      PW_OUTPUT: test-results/shard-${{ matrix.shard }}
+    defaults:
+      run:
+        working-directory: tower-clash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tower-clash/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser e2e (chromium, shard ${{ matrix.shard }}/2)
+        timeout-minutes: 15
+        run: npx playwright test --project=chromium --shard=${{ matrix.shard }}/2
+
+      - name: Upload Playwright report, traces and screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-e2e-shard-${{ matrix.shard }}
           path: |
             tower-clash/playwright-report
             tower-clash/test-results

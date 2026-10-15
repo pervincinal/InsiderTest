@@ -24,7 +24,11 @@ type Note = { annotation_level: string; message: string; title?: string };
 const ok = (id: number, name: string): Run => ({ id, name, status: 'completed', conclusion: 'success' });
 const red = (id: number, name: string): Run => ({ id, name, status: 'completed', conclusion: 'failure' });
 
-const GREEN_RUNS = [ok(1, 'check + playtest + build + e2e'), ok(2, 'build web app'), ok(3, 'debug APK')];
+const CHECK = 'check + playtest + build + e2e';
+const SHARD1 = 'e2e (shard 1/2)';
+const SHARD2 = 'e2e (shard 2/2)';
+// tower-clash-ci.yml (QA-26: the check job + the two-shard chromium e2e matrix), Pages build, Android debug
+const GREEN_RUNS = [ok(1, CHECK), ok(7, SHARD1), ok(8, SHARD2), ok(2, 'build web app'), ok(3, 'debug APK')];
 const PAGES_RED = red(4, 'deploy to GitHub Pages');
 const IOS_LANES = [red(5, 'signed archive + App Store Connect upload'), red(6, 'App Store Connect metadata / review submission')];
 const NOTES: Record<number, Note[]> = {
@@ -91,7 +95,7 @@ describe('scripts/ciStatus.mjs — CI per job, not per workflow (QA-18, BUG-26)'
     expect(r.stderr).toBe('');
     expect(r.status).toBe(0);
     for (const j of GREEN_RUNS) expect(r.stdout).toContain(`  ${j.name}: success\n`);
-    expect(r.stdout).toContain('CI: 3 job(s) green, expected-red: none (efeb5e7)');
+    expect(r.stdout).toContain('CI: 5 job(s) green, expected-red: none (efeb5e7)');
     const calls = readCalls(dir);
     expect(calls[0]).toBe(`api repos/pervincinal/InsiderTest/commits/${SHA}/check-runs?per_page=100&filter=latest`);
     expect(calls.some((c) => c.includes('/actions/'))).toBe(false); // the proxy blocks /actions/*
@@ -103,7 +107,7 @@ describe('scripts/ciStatus.mjs — CI per job, not per workflow (QA-18, BUG-26)'
     expect(r.status).toBe(1);
     expect(r.stdout).toContain(`  deploy to GitHub Pages: failure — ${PAGES_404}\n`);
     expect(r.stdout).not.toContain('second line');
-    expect(r.stdout).toContain('CI: 3 job(s) green, expected-red: none; RED: deploy to GitHub Pages (efeb5e7)');
+    expect(r.stdout).toContain('CI: 5 job(s) green, expected-red: none; RED: deploy to GitHub Pages (efeb5e7)');
   });
 
   it('red release lanes matching --allow are "expected" → exit 0 when nothing else failed', () => {
@@ -113,7 +117,7 @@ describe('scripts/ciStatus.mjs — CI per job, not per workflow (QA-18, BUG-26)'
     expect(r.stdout).toContain(`  App Store Connect metadata / review submission: failure (expected) — ${NO_SECRETS}\n`);
     expect(r.stdout).not.toContain('Process completed with exit code');
     expect(r.stdout).toContain(
-      'CI: 3 job(s) green, expected-red: App Store Connect metadata / review submission, signed archive + App Store Connect upload (efeb5e7)',
+      'CI: 5 job(s) green, expected-red: App Store Connect metadata / review submission, signed archive + App Store Connect upload (efeb5e7)',
     );
   });
 
@@ -210,7 +214,7 @@ describe('scripts/ciStatus.mjs --annotations (QA-19)', () => {
         '      failure [Register one device] Apple cannot generate the development profile …\n' +
         '              second line\n' +
         '      failure Process completed with exit code 65.\n' +
-        'CI: 3 job(s) green, expected-red: none; RED: signed archive + App Store Connect upload (efeb5e7)\n',
+        'CI: 5 job(s) green, expected-red: none; RED: signed archive + App Store Connect upload (efeb5e7)\n',
     );
     expect(r.stdout).not.toContain('Node.js 20 is deprecated');
   });
@@ -237,6 +241,69 @@ describe('scripts/ciStatus.mjs --annotations (QA-19)', () => {
     expect(plain.stdout.split('\n').filter((l) => l.startsWith('      '))).toEqual([]);
     expect(plain.stdout).not.toContain('ARCHIVE FAILED');
     expect(plain.stdout).toContain(`  signed archive + App Store Connect upload: failure — error: No profiles for 'com.pervincinal.towerclash' were found\n`);
+  });
+});
+
+/*
+ * QA-26: the chromium e2e left the check job for a two-shard matrix (`e2e (shard N/2)`). A shard
+ * that never reports — matrix shrunk to one entry, job renamed, skipped by an `if:` — would simply
+ * be absent from the check runs and the line would read green with half the e2e unrun. Once any
+ * job of the CI group reports, all three are required; `skipped` does not count as green for them.
+ */
+describe('scripts/ciStatus.mjs required job groups (QA-26)', () => {
+  const others = GREEN_RUNS.filter((r) => r.name !== SHARD2);
+
+  it('a shard with no check run after every other job finished → red "missing", exit 1, no annotation call', () => {
+    const { gh, dir } = fakeGh([others]);
+    const r = run(gh);
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain(`  ${SHARD2}: missing — no check run, required with ${CHECK}, ${SHARD1}\n`);
+    expect(r.stdout).toContain(`CI: 4 job(s) green, expected-red: none; RED: ${SHARD2} (efeb5e7)`);
+    expect(readCalls(dir).some((c) => c.includes('/annotations'))).toBe(false);
+  });
+
+  it('a missing shard while other jobs still run is "not started" (exit 2), and --wait reads it once it reports', () => {
+    const running = { ...GREEN_RUNS[0]!, status: 'in_progress', conclusion: null };
+    const r = run(fakeGh([[running, ...others.slice(1)]]).gh);
+    expect(r.status).toBe(2);
+    expect(r.stdout).toContain(`  ${SHARD2}: not started\n`);
+    expect(r.stdout).toContain(`; still running: ${CHECK}, ${SHARD2}`);
+    const waited = run(fakeGh([[running, ...others.slice(1)], [running, ...others.slice(1)], GREEN_RUNS]).gh, '--wait', '10');
+    expect(waited.status).toBe(0);
+    expect(waited.stdout).toContain(`  ${SHARD2}: success\n`);
+    expect(waited.stdout).toContain('CI: 5 job(s) green, expected-red: none (efeb5e7)');
+  });
+
+  it('a required shard concluding skipped is red (the e2e did not run), other skipped jobs stay green', () => {
+    const skipped = (r: Run): Run => ({ ...r, conclusion: 'skipped' });
+    const r = run(fakeGh([GREEN_RUNS.map((j) => (j.name === SHARD1 || j.name === 'debug APK' ? skipped(j) : j))]).gh);
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain(`  ${SHARD1}: skipped — required job did not run\n`);
+    expect(r.stdout).toContain('  debug APK: skipped\n');
+    expect(r.stdout).toContain(`; RED: ${SHARD1} (efeb5e7)`);
+  });
+
+  it('a push the CI workflow did not run for (path filters) requires none of the group', () => {
+    const r = run(fakeGh([[ok(2, 'build web app'), ok(3, 'debug APK')]]).gh);
+    expect(r.status).toBe(0);
+    expect(r.stdout).not.toContain('shard');
+    expect(r.stdout).toContain('CI: 2 job(s) green, expected-red: none (efeb5e7)');
+  });
+
+  it('--allow covers a missing required job like any other', () => {
+    const r = run(fakeGh([others]).gh, '--allow', 'shard 2/2');
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain(`  ${SHARD2}: missing (expected) — no check run`);
+    expect(r.stdout).toContain(`expected-red: ${SHARD2} (efeb5e7)`);
+  });
+
+  it('--help prints the usage and the required group without calling gh', () => {
+    const { gh, dir } = fakeGh([GREEN_RUNS]);
+    const r = run(gh, '--help');
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/^Usage: {2}node scripts\/ciStatus\.mjs /m);
+    expect(r.stdout).toContain(`Required together:\n  ${CHECK} | ${SHARD1} | ${SHARD2}\n`);
+    expect(() => readCalls(dir)).toThrow();
   });
 });
 

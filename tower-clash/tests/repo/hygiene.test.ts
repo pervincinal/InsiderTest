@@ -1,4 +1,6 @@
+import { spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { onBlock, readWorkflow, runBlocks, stepText } from '../workflowYaml';
 
@@ -29,7 +31,11 @@ describe('tower-clash/.gitignore (BUG-2)', () => {
  * `git add -A`. Scratch specs belong in the session scratchpad; everything under e2e/ is a test.
  */
 const E2E_DIR = new URL('../../e2e/', import.meta.url);
-const E2E_SPECS = readdirSync(E2E_DIR).filter((f) => f.endsWith('.spec.ts'));
+// Recursive (QA-26: the level content suite lives in e2e/integrity/), as paths relative to e2e/.
+const E2E_SPECS = readdirSync(E2E_DIR, { recursive: true })
+  .map(String)
+  .filter((f) => f.endsWith('.spec.ts'))
+  .sort();
 
 describe('tower-clash/e2e (BUG-6)', () => {
   it('holds no scratch / temporary specs', () => {
@@ -224,6 +230,82 @@ describe('tower-clash/playwright.config.ts (QA-17)', () => {
     expect(workers).toBeGreaterThanOrEqual(1);
     expect(workers).toBeLessThanOrEqual(2);
     expect(pwNumber('retries')).toBe(0);
+  });
+});
+
+/*
+ * QA-26: the chromium project (151 tests, 8.5–9.7 min as one step) runs in CI as a two-shard
+ * matrix beside the check job. Guards: every test runs exactly once (both shards, chromium nowhere
+ * else, the small projects still in `verify`), each shard builds its own dist/ before Playwright
+ * starts (the preview serves the snapshotDist.mjs copy of it), gets its own port / output dir,
+ * a red shard never cancels the other, and the check-run names the matrix produces are exactly
+ * the group scripts/ciStatus.mjs requires together (a renamed or dropped shard would otherwise
+ * vanish from the CI line instead of turning it red).
+ */
+describe('.github/workflows/tower-clash-ci.yml e2e shards (QA-26)', () => {
+  const CI = readWorkflow('tower-clash-ci.yml');
+  const job = (id: string): string => new RegExp(`\\n  ${id}:\\n([\\s\\S]*?)(?=\\n  [a-z][\\w-]*:\\n|$)`).exec(CI)?.[1] ?? '';
+  const runs = (text: string): string[] => runBlocks(text).map((b) => b.run.trim());
+
+  it('the e2e job is a fail-slow 2-shard matrix, parallel to verify, one port and output dir per shard', () => {
+    const e2e = job('e2e');
+    expect(e2e).toContain('    name: e2e (shard ${{ matrix.shard }}/2)\n');
+    expect(e2e).not.toMatch(/\n    needs:/);
+    expect(e2e).toContain('      fail-fast: false\n');
+    expect(e2e).toContain('          - shard: 1\n            port: 4191\n          - shard: 2\n            port: 4192\n');
+    expect(e2e).toContain('      PW_PORT: ${{ matrix.port }}\n');
+    expect(e2e).toContain('      PW_OUTPUT: test-results/shard-${{ matrix.shard }}\n');
+    const r = runs(e2e);
+    const shard = r.indexOf('npx playwright test --project=chromium --shard=${{ matrix.shard }}/2');
+    expect(shard).toBeGreaterThan(r.indexOf('npm run build'));
+    expect(r.indexOf('npm run build')).toBeGreaterThan(r.indexOf('npm ci'));
+    expect(r.indexOf('npm ci')).toBeGreaterThanOrEqual(0);
+    expect(e2e).toContain('name: playwright-report-e2e-shard-${{ matrix.shard }}');
+  });
+
+  it('chromium runs only in the shards; verify keeps the webview and pwa projects on its own build', () => {
+    const verify = job('verify');
+    expect(verify).toContain('    name: check + playtest + build + e2e\n');
+    const r = runs(verify);
+    expect(r.filter((x) => /playwright test|npm run e2e\b/.test(x))).toEqual([
+      'npx playwright test --project=android-webview',
+      'npx playwright test --project=pwa',
+    ]);
+    expect(r.indexOf('npx playwright test --project=android-webview')).toBeGreaterThan(r.indexOf('npm run build'));
+    expect(runs(CI).filter((x) => x.includes('--project=chromium'))).toHaveLength(1);
+  });
+
+  it('--shard=N/2 splits the chromium files with the heavy ones on both sides (content suite in e2e/integrity/)', () => {
+    // Playwright 1.47 shards whole files (fullyParallel: false) by test count in path order. Measured
+    // serial time per file on 2026-10-15 (mean of two runs, s): camera 232, shopLayout 215, content 157,
+    // gestures430 126, shareLocales 112, economy 108, smoke 92, daily 89 — the split below holds
+    // ≈ 770 / 780 s; with content.spec.ts at the top of e2e/ (second in path order) it was ≈ 590 / 950.
+    // A failure here means new tests moved the count boundary: re-measure and rebalance (QA-26).
+    const cli = fileURLToPath(new URL('../../node_modules/@playwright/test/cli.js', import.meta.url));
+    const list = (shard: string): string[] => {
+      const r = spawnSync(process.execPath, [cli, 'test', '--project=chromium', '--list', `--shard=${shard}`], {
+        cwd: fileURLToPath(new URL('../../', import.meta.url)),
+        encoding: 'utf8',
+        env: { ...process.env, CI: '' },
+      });
+      expect(r.status, r.stderr).toBe(0);
+      return [...new Set([...r.stdout.matchAll(/\[chromium\] › (\S+\.spec\.ts):\d+/g)].map((m) => m[1]!))].sort();
+    };
+    const [one, two] = [list('1/2'), list('2/2')];
+    expect(one).toEqual(expect.arrayContaining(['camera.spec.ts', 'gestures430.spec.ts', 'integrity/content.spec.ts', 'economy.spec.ts', 'daily.spec.ts']));
+    expect(two).toEqual(expect.arrayContaining(['shopLayout.spec.ts', 'shareLocales.spec.ts', 'smoke.spec.ts', 'lazy.spec.ts', 'weekly.spec.ts']));
+    // every chromium spec in exactly one shard
+    const chromium = E2E_SPECS.filter((f) => !/(webview|pwa)\.spec\.ts$/.test(f));
+    expect([...one, ...two].sort()).toEqual(chromium);
+  }, 30_000);
+
+  it('the job names the workflow produces are the group ciStatus.mjs requires together', () => {
+    const help = spawnSync(process.execPath, [new URL('../../scripts/ciStatus.mjs', import.meta.url).pathname, '--help'], { encoding: 'utf8' });
+    expect(help.status).toBe(0);
+    const group = /Required together:\n {2}(.*)\n/.exec(help.stdout)?.[1]?.split(' | ');
+    const shards = [...job('e2e').matchAll(/\n {10}- shard: (\d+)\n/g)].map((m) => `e2e (shard ${m[1]}/2)`);
+    expect(shards).toEqual(['e2e (shard 1/2)', 'e2e (shard 2/2)']);
+    expect(group).toEqual(['check + playtest + build + e2e', ...shards]);
   });
 });
 

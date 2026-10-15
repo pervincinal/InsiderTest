@@ -93,9 +93,11 @@ export default defineConfig({
    * medians unchanged (≤ 33 ms vs the 50 ms budget). Only cross-file collisions would be hazards: no two specs write the same
    * e2e/__screenshots__ name (smoke-*, content-*, look3-<feature>-*), and per-test artefacts go to
    * PW_OUTPUT. Kept at 2 for the 4-vCPU GitHub runner and the frame-time budget in perf.spec.ts.
-   * Sharding was rejected: `--shard` balances by test count in file order, so content.spec.ts's
-   * 53 short tests would give one shard content + daily (27 % of the serial time) and the other
-   * the remaining 15 files (73 %).
+   * QA-26 (2026-10-15): at 151 tests the run took 8.5–9.7 min, so CI now runs this project as a
+   * two-shard matrix (`--shard=N/2`, .github/workflows/tower-clash-ci.yml job `e2e`), two workers
+   * per shard on its own runner, PW_PORT / PW_OUTPUT per shard. `--shard` splits whole files by
+   * test count in path order; the 53-test level content suite lives in e2e/integrity/ so the split
+   * lands near 50 / 50 of the run time (camera … gestures430 + integrity/content | layers … weeklyMilestones).
    */
   workers: 2,
   fullyParallel: false,

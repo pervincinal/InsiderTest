@@ -15,6 +15,15 @@ import type { Page } from '@playwright/test';
  *
  * Levels are discovered from the filesystem (not imported from src/) for the same reason as
  * smoke.spec.ts: Node's native TS loader cannot import the JSON-backed level index.
+ *
+ * QA-26: this file lives in e2e/integrity/ on purpose. CI runs the chromium project as
+ * `--shard=N/2`, which (Playwright 1.47, `fullyParallel: false`) hands whole files to the shard
+ * holding their first test, counting tests in path order. As e2e/content.spec.ts its 53 short
+ * tests (≈ 10 % of the run time, 35 % of the test count) came second and pulled the count
+ * boundary forward: shard 1 got 5 files (≈ 40 % of the time), shard 2 the other 18 (≈ 60 %).
+ * Sorted as `integrity/` it comes right after gestures430.spec.ts, so shard 1 = camera … gestures430
+ * + this file and shard 2 = layers … weeklyMilestones, ≈ 50 / 50 of the time.
+ * tests/repo/hygiene.test.ts (QA-26) pins that split.
  */
 
 interface LevelJson {
@@ -24,7 +33,7 @@ interface LevelJson {
   obstacles?: { kind: string }[];
 }
 
-const LEVELS_DIR = new URL('../src/levels/', import.meta.url);
+const LEVELS_DIR = new URL('../../src/levels/', import.meta.url);
 const LEVEL_FILES = readdirSync(LEVELS_DIR)
   .filter((f) => /^\d{3}-.*\.json$/.test(f))
   .sort();
@@ -32,7 +41,7 @@ const LEVELS: LevelJson[] = LEVEL_FILES.map((f) => JSON.parse(readFileSync(new U
 const SCREENSHOT_IDS = [1, 5, 8, 16, 24, 32, 40, 50];
 const OBSTACLE_KINDS = ['wall', 'water', 'rock'] as const;
 
-const SHOTS = fileURLToPath(new URL('./__screenshots__/', import.meta.url));
+const SHOTS = fileURLToPath(new URL('../__screenshots__/', import.meta.url));
 const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}content-${name}.png`, scale: 'css' });
 
 const screen = (page: Page) => page.evaluate(() => window.__towerclash.getScreen());
