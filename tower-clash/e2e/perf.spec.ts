@@ -16,7 +16,7 @@ import type { Page } from '@playwright/test';
  * buildings and units; the test asserts the far shore is where the flat letterbox puts it — and a
  * fourth case times the one-off ground-image build of level 40 under the ART-21 perspective camera
  * (`?tilt=0.72`; its per-row "mode 7" warp runs once per level, in the first frame) at 4× CPU
- * throttling: under GROUND_BUILD_BUDGET_MS, the flat default reported alongside for comparison
+ * throttling: within GROUND_BUILD_MAX_RATIO × the flat default measured in the same run (+ slack), under an absolute ceiling
  * (debug hook `getGroundBuildMs`, src/debug.ts).
  *
  * Budget: 33 ms (30 fps) is the target on a real device. The sandbox headless shell is software
@@ -27,7 +27,16 @@ import type { Page } from '@playwright/test';
 
 const PERF_BUDGET_MS = 50;
 /** QA-23: level 40's ground image (map-space paint + per-row warp) at 4× CPU throttling. */
-const GROUND_BUILD_BUDGET_MS = 120;
+/*
+ * 2026-10-15 (BUG-47): the gate is now relative to the flat build measured in the same run, plus a loose
+ * absolute ceiling. On a slow or loaded host every build stretches together (an idle run read camera
+ * 161–205 / flat 41–46 ms where the day before gave 59–79 / 20 ms), so an absolute 120 ms failed without
+ * any regression. BUG-40 was 7.6× the flat build (206–275 vs 27 ms); the fix is 3.8–4×. Since ART-24 the
+ * perspective build only runs behind `?tilt=0.72`; players get the flat build.
+ */
+const GROUND_BUILD_CEILING_MS = 250;
+const GROUND_BUILD_MAX_RATIO = 6;
+const GROUND_BUILD_RATIO_SLACK_MS = 60;
 const GROUND_BUILD_LEVEL = 40;
 const CPU_THROTTLE = 4;
 /** src/render/camera.ts ISLAND_FAR_Y (HUD.mapTop + 12): the island's far shore, map y. */
@@ -155,7 +164,7 @@ test.describe('Tower Clash perf', () => {
     expect(s.med, summary).toBeLessThanOrEqual(PERF_BUDGET_MS);
   });
 
-  test(`level ${GROUND_BUILD_LEVEL} ground image (ART-21 per-row warp, ?tilt=0.72) builds in < ${GROUND_BUILD_BUDGET_MS} ms at ${CPU_THROTTLE}x CPU`, async ({ page }) => {
+  test(`level ${GROUND_BUILD_LEVEL} ground image (ART-21 per-row warp, ?tilt=0.72) builds within ${GROUND_BUILD_MAX_RATIO}× the flat build (ceiling ${GROUND_BUILD_CEILING_MS} ms) at ${CPU_THROTTLE}x CPU`, async ({ page }) => {
     // ART-24: the perspective camera is an override now; the gate keeps guarding its build, the flat default is sampled alongside
     const pageErrors = await gotoTitle(page, 'tilt=0.72');
     expect(await page.evaluate((id) => window.__towerclash.loadLevel(id), GROUND_BUILD_LEVEL)).toBe(true);
@@ -184,8 +193,8 @@ test.describe('Tower Clash perf', () => {
     expect(tilted.every(Number.isFinite), 'getGroundBuildMs answers on the play screen').toBe(true);
     expect(await page.evaluate(() => window.__towerclash.getScreen())).toBe('play');
     expect(pageErrors).toEqual([]);
-    expect(Math.min(...tilted), summary).toBeLessThan(GROUND_BUILD_BUDGET_MS);
-    expect(median(tilted), summary).toBeLessThan(GROUND_BUILD_BUDGET_MS * 1.75);
+    expect(Math.min(...tilted), summary).toBeLessThan(GROUND_BUILD_CEILING_MS);
+    expect(median(tilted), `${summary} — camera build must stay within ${GROUND_BUILD_MAX_RATIO}× the flat build (+${GROUND_BUILD_RATIO_SLACK_MS} ms)`).toBeLessThan(median(flat) * GROUND_BUILD_MAX_RATIO + GROUND_BUILD_RATIO_SLACK_MS);
   });
 
   test(`title screen idle: median frame <= ${PERF_BUDGET_MS} ms`, async ({ page }) => {
