@@ -15,5 +15,5 @@
 # The build number is config.buildNumber in tower-clash/package.json (npm run version:sync);
 # App Store Connect accepts every build number only once.
 lane=testflight
-note=build 16 (1.0.0) retry after BUG-45 (revoke CI development certificates): BUG-42/43/44, PERF-9; TestFlight only
-requested=2026-10-14T07:05:00Z
+note=build 17 (1.0.0): BUG-46 colour-blind palette, ART-26 mine chips; TestFlight only
+requested=2026-10-16T05:20:00Z
