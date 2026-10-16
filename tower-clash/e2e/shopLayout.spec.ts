@@ -49,7 +49,7 @@ const PACK_ONLY_HELMETS = new Set<string>(['helmet_bronze', 'helmet_royal']);
 const OWNED = 'helmet_knight'; // owned, not equipped → EQUIP
 const EQUIPPED = 'helmet_viking'; // owned and equipped → EQUIPPED
 // src/render/palette.ts — shopBuy.face (price buttons, both palettes), shopOwned.face (EQUIPPED: green / colour-blind light purple), BUG-22
-const FILL = { price: '#1f4bc0', equipped: '#2ec27e', equippedCB: '#c58bff' };
+const FILL = { price: '#1f4bc0', equipped: '#2ec27e', equippedCB: '#f7a0ea' };
 // ART_DIRECTION §6 readability line (BUG-22): WCAG contrast of a button label, size of a price numeral (logical px)
 const MIN_CONTRAST = 4.5;
 const MIN_NUMERAL_PX = 24;
@@ -321,33 +321,39 @@ async function checkHelmets(page: Page, opts: { store: boolean; colorBlind: bool
 }
 
 const label = (vp: { width: number; height: number }) => `${vp.width}x${vp.height}`;
+const PALETTES = [
+  { colorBlind: false, name: 'default', file: 'default' },
+  { colorBlind: true, name: 'colour-blind', file: 'cb' },
+] as const;
 
+/*
+ * BUG-48 (2026-10-16): one test per viewport × store mode × palette. Each used to boot twice (default,
+ * then colour-blind in a second context) and walk every helmet card twice under one 45 s budget: 24–26 s
+ * idle at 412×915, over 45 s at host load 12–15. Split, each test boots once and walks one palette's
+ * cards (same assertions, same evidence screenshot names); the palette is read from the seeded save at boot.
+ */
 for (const vp of VIEWPORTS) {
   test.describe(`shop layout at ${label(vp)} (QA-16 B)`, () => {
     test.use({ viewport: vp });
 
     for (const store of [true, false]) {
-      test(`${store ? 'store' : '?store=off'}: every helmet card scrolls fully into view inside the safe box, labels fit — default and colour-blind palette`, async ({ page, browser }, info) => {
-        test.setTimeout(45_000);
-        const notes: string[] = [];
-        for (const colorBlind of [false, true]) {
-          // a fresh page per palette (the palette is read from the seeded save at boot)
-          const p = colorBlind ? await (await browser.newContext({ ...info.project.use, viewport: vp })).newPage() : page;
-          const tag = `${label(vp)} ${store ? 'store' : 'no-store'} ${colorBlind ? 'colour-blind' : 'default'}`;
-          const errors = await boot(p, `/?lang=en${store ? '' : '&store=off'}`, seededSave(colorBlind));
-          expect(await p.evaluate(() => window.__towerclash.storeAvailable)).toBe(store);
-          await openSkins(p);
-          const findings = await checkHelmets(p, { store, colorBlind, tag });
+      for (const palette of PALETTES) {
+        test(`${store ? 'store' : '?store=off'}, ${palette.name} palette: every helmet card scrolls fully into view inside the safe box, labels fit`, async ({ page }, info) => {
+          test.setTimeout(30_000); // ok: 6.7–10.1 s idle per viewport / store / palette (BUG-48, 2026-10-16), ≈ 3× the slowest
+          const tag = `${label(vp)} ${store ? 'store' : 'no-store'} ${palette.name}`;
+          const errors = await boot(page, `/?lang=en${store ? '' : '&store=off'}`, seededSave(palette.colorBlind));
+          expect(await page.evaluate(() => window.__towerclash.storeAvailable)).toBe(store);
+          await openSkins(page);
+          const findings = await checkHelmets(page, { store, colorBlind: palette.colorBlind, tag });
           // evidence: the helmet rows in view (scroll to the middle helmet row)
-          await p.evaluate(() => window.__towerclash.economy.shopScroll(560));
-          await p.waitForTimeout(150);
-          await p.screenshot({ path: info.outputPath(`shop-${label(vp)}-${store ? 'store' : 'nostore'}-${colorBlind ? 'cb' : 'default'}.png`), scale: 'css' });
-          notes.push(`${tag}: ${findings.map((f) => `${f.label}=${f.button}${f.contrast === null ? '' : ` (${f.contrast}:1, ${f.px}px)`}`).join(', ')}`);
+          await page.evaluate(() => window.__towerclash.economy.shopScroll(560));
+          await page.waitForTimeout(150);
+          await page.screenshot({ path: info.outputPath(`shop-${label(vp)}-${store ? 'store' : 'nostore'}-${palette.file}.png`), scale: 'css' });
+          const note = `${tag}: ${findings.map((f) => `${f.label}=${f.button}${f.contrast === null ? '' : ` (${f.contrast}:1, ${f.px}px)`}`).join(', ')}`;
+          info.annotations.push({ type: 'shop-layout', description: note });
           expect(errors, tag).toEqual([]);
-          if (colorBlind) await p.context().close();
-        }
-        info.annotations.push({ type: 'shop-layout', description: notes.join(' | ') });
-      });
+        });
+      }
     }
   });
 }
@@ -356,7 +362,7 @@ test.describe('shop skin labels in every language at 360x640 (QA-16 B)', () => {
   test.use({ viewport: VIEWPORTS[0] });
 
   test('en / az / ru / tr: every skin card name and button label fits its card unsqueezed', async ({ browser }, info) => {
-    test.setTimeout(45_000);
+    test.setTimeout(45_000); // ok: 12.3 s idle for the four languages (2026-10-16)
     const squeezed: string[] = [];
     for (const lang of ['en', 'az', 'ru', 'tr'] as const) {
       const ctx = await browser.newContext({ ...info.project.use, viewport: VIEWPORTS[0] });

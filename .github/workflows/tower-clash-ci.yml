@@ -147,7 +147,8 @@ jobs:
   # that holds its first test). The level content suite sits in e2e/integrity/ so its 53 short
   # tests sort after gestures430 instead of second: shard 1 = camera … gestures430 +
   # integrity/content (7 files, 101 tests), shard 2 = layers … weeklyMilestones (16 files, 50
-  # tests), ≈ 50 / 50 of the run time (as e2e/content.spec.ts it was ≈ 40 / 60;
+  # tests; 56 since BUG-48 split shopLayout's helmet tests per palette, 2026-10-16, which made the
+  # file ≈ 215 → 100 s serial), ≈ 50 / 50 of the run time (as e2e/content.spec.ts it was ≈ 40 / 60;
   # tests/repo/hygiene.test.ts QA-26 pins the split). Each shard rebuilds dist/ from the same commit instead
   # of downloading an artifact from `verify` — `npm run build` (≈ 20 s) is deterministic (content
   # hashes, no time stamps) and running beside `verify` instead of after it takes the whole

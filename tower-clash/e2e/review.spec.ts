@@ -104,13 +104,13 @@ async function threeStarRunToMap(page: Page, problems: string[], expected: 'unav
 
 test.describe('rating prompt on the web (QA-16, MM-9)', () => {
   test('?review=on: a qualifying 3★ win on level 11 → normal result, reviewAsked stays false (web → unavailable), back to the map', async ({ page }) => {
-    test.setTimeout(45_000);
+    test.setTimeout(45_000); // ok: 8.0–8.4 s idle, a ×10 3★ run of level 11 (2026-10-16)
     const problems = await boot(page, '/?lang=en&review=on');
     await threeStarRunToMap(page, problems, 'unavailable');
   });
 
   test('no switch (shipped default): the same 3★ run → no crash, reviewAsked stays false, back to the map', async ({ page }) => {
-    test.setTimeout(45_000);
+    test.setTimeout(45_000); // ok: 8.0–8.4 s idle, a ×10 3★ run of level 11 (2026-10-16)
     const problems = await boot(page, '/?lang=en');
     await threeStarRunToMap(page, problems, 'disabled');
   });

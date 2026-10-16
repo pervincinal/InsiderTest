@@ -218,6 +218,59 @@ describe('tower-clash/e2e load tolerance (QA-20)', () => {
 });
 
 /*
+ * BUG-47 / BUG-48 (2026-10-16): two e2e failure modes that only showed on a loaded host.
+ * - BUG-47: perf.spec.ts gated rAF wall-clock intervals (level-50 median 66.6 ms, title 50.05 ms at host
+ *   load 9–15, never idle). The frame gates now read the page's own main-thread work per frame from CDP
+ *   `Performance.getMetrics` on the thread-CPU clock (`timeDomain: 'threadTicks'`), over the frames whose
+ *   rAF timestamps fall inside the metrics window; the wall-clock interval is only reported.
+ * - BUG-48: shopLayout.spec.ts's 412×915 helmet-card tests booted twice under their own 45 s budget
+ *   (24–26 s idle → over 45 s at load 12–15). Split per palette; a per-test budget below the suite's
+ *   must say on its line what it was measured at, so the next one is sized against a number.
+ */
+describe('tower-clash/e2e host-load independence (BUG-47, BUG-48)', () => {
+  it('perf.spec.ts gates main-thread work per frame (CDP thread-CPU metrics), never the wall-clock frame interval', () => {
+    const src = E2E_FILES.find((f) => f.name === 'perf.spec.ts')?.src ?? '';
+    expect(src).toContain("cdp.send('Performance.enable', { timeDomain: 'threadTicks' })");
+    expect(src).toContain("work: per('TaskDuration')");
+    // frames are matched to the metrics window by timestamp, not counted by a sampler that starts after it
+    expect(src).toMatch(/const lo = m0\.Timestamp! \* 1000 - nav;/);
+    expect(src).toMatch(/expect\(f\.work, summary\)\.toBeLessThanOrEqual\(FRAME_WORK_BUDGET_MS\)/);
+    // the three frame samples (level 50 x10, title, shop) all go through the work gate
+    expect([...src.matchAll(/expectFrameWork\(f, MIN_FRAMES\.(play|screen), summary\)/g)]).toHaveLength(3);
+    const code = codeLines(src).map((l) => l.line).join('\n');
+    expect(code, 'a wall-clock interval (rAF deltas) feeds an assertion').not.toMatch(/expect\([^;]*\b(deltas|med|p95)\b[^;]*\)\.toBeLessThan/);
+  });
+
+  it('a test.setTimeout below the suite timeout carries a measured `// ok:` reason on its line', () => {
+    const suite = Number(/\n {2}timeout: ([\d_]+),\n/.exec(PW_CONFIG)?.[1]?.replace(/_/g, '') ?? NaN);
+    expect(suite).toBe(90_000);
+    const offenders: string[] = [];
+    let short = 0;
+    for (const { name, src } of E2E_FILES) {
+      for (const { n, line } of codeLines(src)) {
+        for (const m of line.matchAll(/\b(?:test|testInfo|info)\.setTimeout\(([^)]*)\)/g)) {
+          const arg = m[1]!.trim();
+          const ms = /^[\d_]+$/.test(arg) ? Number(arg.replace(/_/g, '')) : NaN;
+          if (!Number.isNaN(ms) && ms >= suite) continue;
+          short++;
+          // e.g. `// ok: 6.7–10.1 s idle per palette (BUG-48, 2026-10-16)`: a duration in seconds
+          if (!/\/\/ ok: .*\d s\b/.test(line)) offenders.push(`${name}:${n} setTimeout(${arg})`);
+        }
+      }
+    }
+    expect(short, 'the scan sees the short budgets (shopLayout, shopNoStore, review, perf, ...)').toBeGreaterThanOrEqual(8);
+    expect(offenders, 'size a short budget against its measured run time: `// ok: <N s idle ...>` on the same line').toEqual([]);
+  });
+
+  it('shopLayout.spec.ts walks one palette per helmet-card test (BUG-48: no second boot inside a test)', () => {
+    const src = E2E_FILES.find((f) => f.name === 'shopLayout.spec.ts')?.src ?? '';
+    expect(src).toMatch(/for \(const palette of PALETTES\) \{/);
+    // the only extra browser context is the language sweep's, one per language
+    expect([...src.matchAll(/browser\.newContext\(/g)]).toHaveLength(1);
+  });
+});
+
+/*
  * QA-17: the chromium e2e step runs on two Playwright workers to stay well inside its 15-minute CI
  * timeout. Parallelism stays at the file level (`fullyParallel: false`: a spec's tests run in
  * order in one worker), with at most 2 workers for the 4-vCPU runner and perf.spec.ts's frame
@@ -280,6 +333,8 @@ describe('.github/workflows/tower-clash-ci.yml e2e shards (QA-26)', () => {
     // serial time per file on 2026-10-15 (mean of two runs, s): camera 232, shopLayout 215, content 157,
     // gestures430 126, shareLocales 112, economy 108, smoke 92, daily 89 — the split below holds
     // ≈ 770 / 780 s; with content.spec.ts at the top of e2e/ (second in path order) it was ≈ 590 / 950.
+    // 2026-10-16 (BUG-48): shopLayout 7 → 13 tests (101 / 56, same files per shard), ≈ 100 s serial
+    // (one boot per test instead of two), so shard 2 lost ≈ 1.5 min; re-measure before moving files.
     // A failure here means new tests moved the count boundary: re-measure and rebalance (QA-26).
     const cli = fileURLToPath(new URL('../../node_modules/@playwright/test/cli.js', import.meta.url));
     const list = (shard: string): string[] => {

@@ -215,7 +215,7 @@ async function navigate(page: Page): Promise<void> {
 }
 
 test.describe('PWA offline (QA-8)', () => {
-  test.setTimeout(60_000);
+  test.setTimeout(60_000); // ok: 6.0–12.0 s idle per test (2026-10-16); every step bounded, see the project comment in playwright.config.ts
 
   test('first launch precaches the shell; the game boots and plays level 1 offline; a cold level chunk fails with the offline toast and loads once back online; offline again the level map opens from the runtime cache', async ({ page, context }, testInfo) => {
     expect(process.env.PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS, 'worker network emulation flag (playwright.config.ts)').toBeTruthy();

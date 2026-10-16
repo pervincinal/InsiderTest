@@ -156,7 +156,7 @@ async function strings(page: Page) {
 
 test.describe('shop without a store (QA-13, App Review build 8)', () => {
   test('?store=off: two tabs opening on SKINS, no pack-only card / price / RESTORE / store line; crystal skin buys, premium grant lists EQUIP', async ({ page }) => {
-    test.setTimeout(30_000);
+    test.setTimeout(30_000); // ok: 7.5 s idle (2026-10-16)
     const errors = await boot(page, '/?lang=en&store=off');
     expect(await page.evaluate(() => window.__towerclash.storeAvailable)).toBe(false);
     const S = await strings(page);
@@ -233,7 +233,7 @@ test.describe('shop without a store (QA-13, App Review build 8)', () => {
   });
 
   test('plain URL: the store is available and the shop keeps four tabs, prices, RESTORE and the PACK ONLY card', async ({ page }) => {
-    test.setTimeout(30_000);
+    test.setTimeout(30_000); // ok: 3.2 s idle (2026-10-16)
     const errors = await boot(page, '/?lang=en');
     await expect.poll(() => page.evaluate(() => window.__towerclash.storeAvailable)).toBe(true);
     const S = await strings(page);

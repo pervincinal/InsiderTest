@@ -375,7 +375,7 @@ async function sweep(page: Page, shareFontFamily: (text: string) => string, stri
 test.describe('share card in every language (QA-14)', () => {
   for (const lang of LOCALES) {
     test(`${lang}: campaign win, campaign defeat and daily cards fit their boxes in bundled faces`, async ({ page }, info) => {
-      test.setTimeout(60_000);
+      test.setTimeout(60_000); // ok: 16.5–20.8 s idle per language (2026-10-16)
       await instrument(page);
       // every font file the browser context requests (public/sw.js does not precache nunito-latin.woff2 —
       // tests/render/fonts.test.ts — so a page request is the only way it is fetched)
