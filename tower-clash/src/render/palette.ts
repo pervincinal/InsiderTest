@@ -5,7 +5,7 @@ import { chunkBackoff, loadChunk } from '../lazyChunk';
  * Colours for everything drawn — the single source (docs/ART_DIRECTION.md §2, "Sunlit Clay
  * Islands"). Every object is moulded in three tones (lit / mid / shade) under one warm key light
  * from the upper-left; ground shadows are a translucent blue-ink multiply. Two variants: default
- * and colour-blind friendly (blue / orange / purple / teal), sharing all non-owner tokens.
+ * and colour-blind friendly (blue / orange / magenta / amber), sharing all non-owner tokens.
  */
 
 /** Three clay tones of one material. */
@@ -154,7 +154,7 @@ export interface Palette {
   toastError: ButtonInk;
   /**
    * Text of a gain on a paper card (ART-15: the upgrades "Next …" line): the owner-2 shade tone,
-   * darkened only as far as 4.5:1 on paper needs (default green 5.7:1, colour-blind purple 6.7:1).
+   * darkened only as far as 4.5:1 on paper needs (default green 5.7:1, colour-blind magenta 5.9:1).
    */
   gainText: string;
   /**
@@ -232,13 +232,20 @@ const OWNER_TONES: Record<Owner, Tones> = Object.freeze({
   enemy3: { lit: '#ffd35c', mid: '#ffb703', shade: '#d18f00' },
 });
 
-/** Blue / orange / purple / teal — distinguishable for deutan and protan vision. */
+/**
+ * Blue / orange / magenta / amber — distinguishable for deutan and protan vision. BUG-46: under the
+ * Machado 2009 dichromat simulation (tests/render/teamTones.test.ts) every team pair is ≥ ΔE 17 apart
+ * (worst: orange / amber for a deutan, which still differ in lightness) and every team ≥ ΔE 30 from
+ * the neutral grey. The purple and teal they replace sat ΔE 2.1 from the player blue and 4.1 from the
+ * grey for a protanope; an aqua still read as a pale grey there, so the third enemy is the default
+ * palette's amber (with a lighter lit tone, clear of the orange's).
+ */
 const OWNER_TONES_CB: Record<Owner, Tones> = Object.freeze({
   neutral: OWNER_TONES.neutral,
   player: OWNER_TONES.player,
   enemy1: { lit: '#ffa45c', mid: '#f97316', shade: '#c2410c' },
-  enemy2: { lit: '#c58bff', mid: '#a855f7', shade: '#7e22ce' },
-  enemy3: { lit: '#5eead4', mid: '#14b8a6', shade: '#0f766e' },
+  enemy2: { lit: '#f7a0ea', mid: '#e85fd0', shade: '#a8279a' },
+  enemy3: { lit: '#ffdc5c', mid: '#ffb703', shade: '#d18f00' },
 });
 
 const mids = (t: Record<Owner, Tones>): Record<Owner, string> => ({
@@ -327,11 +334,11 @@ export const COLOR_BLIND_PALETTE: Palette = Object.freeze({
   ...DEFAULT_PALETTE,
   owners: mids(OWNER_TONES_CB),
   ownerTones: OWNER_TONES_CB,
-  /** The colour-blind owner-2 purple is too dark for ink and too light for paper: its lit tone takes ink. */
+  /** The colour-blind owner-2 magenta is too dark for ink and too light for paper: its lit tone takes ink (7.6:1). */
   shopOwned: { face: OWNER_TONES_CB.enemy2.lit, text: '#1e2a44' },
   /** Ink on the colour-blind orange: 5.1:1 flat, 5.9:1 at a lit top (paper was 2.7:1). */
   toastError: { face: OWNER_TONES_CB.enemy1.mid, text: '#1e2a44' },
-  /** The colour-blind owner-2 shade tone as it is: 6.7:1 on paper. */
+  /** The colour-blind owner-2 shade tone as it is: 5.9:1 on paper. */
   gainText: OWNER_TONES_CB.enemy2.shade,
 });
 

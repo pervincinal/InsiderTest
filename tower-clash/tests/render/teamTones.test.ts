@@ -14,9 +14,10 @@ import type { Owner } from '../../src/sim/types';
  * paper chevrons ≥ 1.5:1 on it) — plus ΔE 38 between every team colour and every biome ground, and a
  * simulated dichromat check (Machado et al. 2009, severity 1): team pairs ≥ ΔE 15 and teams vs the
  * neutral grey ≥ ΔE 12 under deuteranopia and protanopia.
- * Grandfathered shipped values (classic only, the reason the alternatives exist): the default green on
- * the grass / autumn ground is ΔE 32.1 / 33.6, and the colour-blind purple collapses onto the player
- * blue for a protanope (ΔE 2.1; teal vs grey 4.1).
+ * Grandfathered shipped value (classic only, the reason the alternatives exist): the default green on
+ * the grass / autumn ground is ΔE 32.1 / 33.6. BUG-46 (2026-10-16) retuned the shipped colour-blind
+ * enemies (purple / teal → magenta / amber: the purple collapsed onto the player blue for a protanope,
+ * ΔE 2.1, the teal onto the grey, 4.1), so every set of both palettes now meets the dichromat floors.
  */
 
 /* WCAG contrast and CIE76 ΔE, as in biome.test.ts (copied: importing a test file would re-register its tests). */
@@ -146,8 +147,7 @@ describe('ART-25 team-colour sets: readability floors', () => {
         for (const a of TEAMS) for (const b of TEAMS) if (a < b) for (const k of ['lit', 'mid', 'shade'] as const) expect(deltaE(T[a][k], T[b][k]), `${a}/${b} ${k}`).toBeGreaterThan(30);
       });
 
-      const shippedCbGap = set === 'classic' && cb; // see the header: the colour-blind classic set fails this for a protanope
-      it.skipIf(shippedCbGap)(`simulated deutan / protan: team pairs ≥ ΔE ${CVD_PAIR_DE}, teams vs neutral ≥ ΔE ${CVD_NEUTRAL_DE}`, () => {
+      it(`simulated deutan / protan: team pairs ≥ ΔE ${CVD_PAIR_DE}, teams vs neutral ≥ ΔE ${CVD_NEUTRAL_DE}`, () => {
         for (const k of ['deutan', 'protan'] as const) {
           for (const a of TEAMS) {
             expect(deltaECvd(T[a].mid, T.neutral.mid, k), `${k} ${a}/neutral`).toBeGreaterThanOrEqual(CVD_NEUTRAL_DE);
@@ -158,9 +158,16 @@ describe('ART-25 team-colour sets: readability floors', () => {
     });
   }
 
-  it('the simulator agrees with the shipped colour-blind gap it was added for', () => {
-    expect(deltaECvd('#2f6df6', '#a855f7', 'protan')).toBeLessThan(5); // classic blue vs colour-blind purple
+  it('the simulator agrees with the colour-blind gap it was added for (BUG-46: the pre-fix purple / teal)', () => {
+    expect(deltaECvd('#2f6df6', '#a855f7', 'protan')).toBeLessThan(5); // classic blue vs the old colour-blind purple
     expect(deltaECvd('#2f6df6', '#a855f7', 'deutan')).toBeLessThan(CVD_PAIR_DE);
+    expect(deltaECvd('#14b8a6', '#a8a29e', 'protan')).toBeLessThan(5); // the old teal vs the neutral grey
+    // the retuned shipped set: the pairs that failed now clear the floors with room
+    const T = COLOR_BLIND_PALETTE.ownerTones;
+    for (const k of ['deutan', 'protan'] as const) {
+      expect(deltaECvd(T.player.mid, T.enemy2.mid, k), k).toBeGreaterThan(CVD_PAIR_DE + 10);
+      expect(deltaECvd(T.enemy3.mid, T.neutral.mid, k), k).toBeGreaterThan(CVD_NEUTRAL_DE + 15);
+    }
     expect(deltaECvd('#ffffff', '#ffffff', 'deutan')).toBeCloseTo(0, 5);
     expect(deltaECvd('#ff0000', '#00ff00', 'deutan')).toBeLessThan(deltaE('#ff0000', '#00ff00') / 3); // red / green collapse
   });

@@ -4,7 +4,6 @@ import type { Palette } from './palette';
 import type { Camera } from './camera';
 import { BADGE_MIN_SCALE, proj } from './camera';
 import { HUD, WORLD_ZOOM } from './layout';
-import { badgeSize, drawBadge } from './sprites';
 import type { Rect } from './widgets';
 import { font, roundRect } from './widgets';
 
@@ -22,6 +21,12 @@ import { font, roundRect } from './widgets';
  * stream chip whose left side is blocked tries the right of its badge the same way. Mine chips are
  * placed before stream chips, so a stream starting or stopping never moves a mine's chip.
  *
+ * ART-26: a mine chip is not a badge — a small spiked-disc mine glyph with the charge on a dark tag
+ * beside it (`drawMineChip`), and when a tower badge sits level with the mine (within one chip height
+ * above or below the mine's point, in the chip's column; level 24's side mines under the side towers'
+ * badges, level 45's mine over the guns) the chip goes beside the mine at the mine's height — right of
+ * the mine and that badge, then left — instead of stacking over the badge like a second count.
+ *
  * While the lesson card covers the top of the play band (the first 8 s, hud.ts `lessonCardLayout`),
  * badges — and so their chips — are clamped below it (`badgeMinY`), which on 9:16 is where a far
  * tower's badge used to hide (on taller phones the card sits above the far shore and nothing moves).
@@ -31,8 +36,14 @@ import { font, roundRect } from './widgets';
 
 /** Stream chip at scale 1: 46 × 24, fully rounded; its centre sits 1 px under the badge centre. */
 export const STREAM_CHIP = Object.freeze({ w: 46, h: 24, r: 12, dy: 1 });
-/** Mine charge chip: a badge pill at this fraction of the badge scale, this far (map px × depth) over the mine. */
-export const MINE_CHIP = Object.freeze({ scale: 0.72, rise: 30 });
+/**
+ * Mine charge chip (ART-26): drawn at `scale` × the badge scale, centred this far (map px × depth × the
+ * prop zoom) over the mine; at its scale it is `h` tall — a spiked-disc glyph `h` across, then the
+ * charge (`font` px, 900) on a tag `pad` px clear of the glyph and `2 × pad` short of the right end.
+ */
+export const MINE_CHIP = Object.freeze({ scale: 0.72, rise: 30, h: 36, font: 26, pad: 4 });
+/** Half width of the drawn mine body (terrain.ts `drawMineBody`, rx 15) at depth 1, before the prop zoom. */
+export const MINE_BODY_R = 15;
 /** Clear space (logical px) kept between a chip and any badge / chip. */
 export const CHIP_GAP = 3;
 /** A chip slides up at most this many of its own heights (further and it would leave its badge / mine). */
@@ -184,6 +195,44 @@ export function overlaps(a: Rect, b: Rect, gap = 0): boolean {
 export interface ChipRequest {
   rect: Rect;
   badge?: Rect;
+  /** A mine chip's mine (ART-26): its drawn point and body half width, logical px. */
+  mine?: { x: number; y: number; r: number };
+}
+
+/**
+ * The charge chip request of a live mine at map (x, y) under `cam`: centred over the zoomed body, carrying
+ * the mine for the beside rule, and its chip scale. Size: the glyph (`h` square), then the numerals and
+ * three `pad`s.
+ */
+export function mineChipRequest(ctx: CanvasRenderingContext2D, cam: Camera, x: number, y: number, charges: number): { req: ChipRequest; s: number } {
+  const p = proj(cam, x, y);
+  const s = MINE_CHIP.scale * badgeScale(p.s);
+  const k = p.s * WORLD_ZOOM.prop;
+  ctx.font = font(MINE_CHIP.font, '900');
+  const h = MINE_CHIP.h * s;
+  const w = h + (ctx.measureText(String(charges)).width + 3 * MINE_CHIP.pad) * s;
+  const cy = p.y - MINE_CHIP.rise * k;
+  return { req: { rect: { x: p.x - w / 2, y: cy - h / 2, w, h }, mine: { x: p.x, y: p.y, r: MINE_BODY_R * k } }, s };
+}
+
+/**
+ * ART-26: a mine chip's spots beside its mine, right then left, at the mine's height — only when a badge
+ * of `fixed` sits level with the mine (overlapping, CHIP_GAP counted, the chip's column from one chip
+ * height above the mine's point to one below), where the chip over the mine would stack on that badge.
+ * Each spot clears the mine body and every such badge. Empty when no badge is that close.
+ */
+export function mineBesideSpots(c: ChipRequest, fixed: readonly Rect[], gap = CHIP_GAP): Rect[] {
+  const m = c.mine;
+  const { x, w, h } = c.rect;
+  const near = m ? fixed.filter((b) => overlaps({ x, y: m.y - h, w, h: 2 * h }, b, gap)) : [];
+  const out: Rect[] = [];
+  if (m && near.length) {
+    // right of the mine body and those badges, then left of them
+    for (const sx of [Math.max(m.x + m.r, ...near.map((b) => b.x + b.w)) + gap, Math.min(m.x - m.r, ...near.map((b) => b.x)) - gap - w]) {
+      if (sx >= 0 && sx + w <= C.MAP_W) out.push({ x: sx, y: m.y - h / 2, w, h });
+    }
+  }
+  return out;
 }
 
 /**
@@ -205,7 +254,8 @@ function slideUp(r: Rect, taken: readonly Rect[], minTop: number, maxSlide: numb
 
 /**
  * Collision nudge (pure): `fixed` rects (badges) never move; each chip, in order, takes the first free
- * spot of: its preferred rect slid up by the overlap, then (stream chips) the right of its badge slid
+ * spot of: (ART-26, a mine chip with a badge level with its mine) beside the mine, right then left
+ * (`mineBesideSpots`), slid up the same way; its preferred rect slid up by the overlap, then (stream chips) the right of its badge slid
  * up the same way, then (ART-24) the right and then the left of the rect blocking it, slid up the same
  * way; with none free it keeps its preferred rect. Placed chips block later ones.
  * Returns one rect per request, in order.
@@ -215,7 +265,9 @@ export function placeChips(fixed: readonly Rect[], chips: readonly ChipRequest[]
   const out: Rect[] = [];
   for (const c of chips) {
     const maxSlide = c.rect.h * CHIP_MAX_SLIDE;
-    let placed = slideUp(c.rect, taken, minTop, maxSlide, gap);
+    let placed: Rect | null = null;
+    for (const r of mineBesideSpots(c, fixed, gap)) placed ??= slideUp(r, taken, minTop, maxSlide, gap);
+    placed ??= slideUp(c.rect, taken, minTop, maxSlide, gap);
     if (!placed && c.badge) placed = slideUp({ ...c.rect, x: c.badge.x + c.badge.w + gap }, taken, minTop, maxSlide, gap);
     if (!placed) {
       // ART-24: zoomed badges are taller than a chip can slide (a mine just above a keep put its charge
@@ -242,12 +294,6 @@ export interface BadgeBox {
   bs: number;
 }
 
-/** The rect of a badge for `text` centred on (x, y) at scale `bs` (sprites.ts `badgeSize`). */
-export function badgeBox(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, bs: number, underFire: boolean): BadgeBox {
-  const { w, h } = badgeSize(ctx, text, bs, underFire);
-  return { rect: { x: x - w / 2, y: y - h / 2, w, h }, bs };
-}
-
 /** A stroked "⇢" (shaft + chevron head) pointing right, centred on (cx, cy). */
 export function drawStreamArrow(ctx: CanvasRenderingContext2D, color: string, cx: number, cy: number, len: number, width: number): void {
   ctx.strokeStyle = color;
@@ -261,6 +307,57 @@ export function drawStreamArrow(ctx: CanvasRenderingContext2D, color: string, cx
   ctx.lineTo(cx + len / 2, cy);
   ctx.lineTo(cx + len / 2 - len * 0.4, cy + len * 0.4);
   ctx.stroke();
+}
+
+/**
+ * ART-26 mine charge chip in `r` (chip scale `s`): a spiked-disc mine glyph (two metal tones, a paper
+ * sticker rim and the red lamp) on the left end of a dark ink tag with a mine-red edge carrying the
+ * charge in paper numerals (≥ 12:1) — a different shape and polarity from a paper badge, so it never
+ * reads as a second count on a nearby tower.
+ */
+export function drawMineChip(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, s: number, text: string): void {
+  const R = r.h / 2;
+  const gx = r.x + R;
+  const gy = r.y + R;
+  const th = r.h * 0.78;
+  const tag = { x: gx, y: gy - th / 2, w: r.x + r.w - gx, h: th };
+  const tr = th * 0.3;
+  ctx.fillStyle = pal.groundShadow;
+  roundRect(ctx, { ...tag, x: tag.x + s, y: tag.y + 3 * s }, tr);
+  ctx.fill();
+  roundRect(ctx, tag, tr);
+  ctx.fillStyle = pal.ink;
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = pal.mine;
+  ctx.stroke();
+  // the glyph: eight spikes round a disc, sticker-rimmed in paper so it reads on dark ground too
+  ctx.beginPath();
+  for (let i = 0; i < 16; i++) {
+    const a = (i * Math.PI) / 8;
+    const d = i % 2 ? R * 0.6 : R - s;
+    ctx.lineTo(gx + Math.cos(a) * d, gy + Math.sin(a) * d);
+  }
+  ctx.closePath();
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 3 * s;
+  ctx.strokeStyle = pal.paper;
+  ctx.stroke();
+  ctx.fillStyle = pal.metal.shade;
+  ctx.fill();
+  ctx.fillStyle = pal.metal.mid;
+  ctx.beginPath();
+  ctx.arc(gx, gy, R * 0.64, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = pal.mine;
+  ctx.beginPath();
+  ctx.arc(gx, gy, R * 0.24, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = pal.paper;
+  ctx.font = font(MINE_CHIP.font * s, '900');
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, (r.x + 2 * R + r.x + r.w - MINE_CHIP.pad * s) / 2, gy + s);
 }
 
 /** The "→ n" chip in `r` (scale `bs`): paper pill, owner-shade stroke, owner-tone arrow, ink count. */
@@ -302,12 +399,10 @@ export function drawWorldChips(
   const draws: ((r: Rect) => void)[] = [];
   for (const m of state.mines) {
     if (m.charges <= 0) continue;
-    const p = proj(cam, m.x, m.y);
-    const s = MINE_CHIP.scale * badgeScale(p.s);
     const text = String(m.charges);
-    const box = badgeBox(ctx, p.x, p.y - MINE_CHIP.rise * p.s * WORLD_ZOOM.prop, text, s, false);
-    reqs.push({ rect: box.rect });
-    draws.push((r) => drawBadge(ctx, pal, r.x + r.w / 2, r.y + r.h / 2, text, false, { stroke: pal.mine, scale: s }));
+    const { req, s } = mineChipRequest(ctx, cam, m.x, m.y, m.charges);
+    reqs.push(req);
+    draws.push((r) => drawMineChip(ctx, pal, r, s, text));
   }
   if (streams && state.links.length) {
     const counts = new Map<string, number>();

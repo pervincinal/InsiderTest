@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Rect } from '../../src/render/widgets';
-import { BADGE_MIN_SCALE, playCamera, proj, projAngle, setTilt } from '../../src/render/camera';
+import { BADGE_MIN_SCALE, FLAT, playCamera, proj, projAngle, setTilt } from '../../src/render/camera';
 import { HUD, WORLD_ZOOM } from '../../src/render/layout';
 import { artilleryMuzzle, badgeSize, badgeY, towerFootprintRadius, towerTop } from '../../src/render/sprites';
 import { hudAnchors } from '../../src/render/view';
@@ -8,6 +8,7 @@ import {
   CARD_CLEAR,
   CHIP_GAP,
   CHIP_MAX_SLIDE,
+  MINE_BODY_R,
   MINE_CHIP,
   STREAM_CHIP,
   BADGE_BELOW_GAP,
@@ -15,6 +16,8 @@ import {
   badgeMinY,
   badgeScale,
   chipMinTop,
+  mineBesideSpots,
+  mineChipRequest,
   overlaps,
   placeBadges,
   placeChips,
@@ -137,13 +140,10 @@ describe('chip collision nudge (ART-22 placeChips)', () => {
       const { w, h } = badgeSize(ctx, n, bs);
       badges.push(centred(p.x, by, w, h));
     }
-    const m = proj(cam, 465, 330);
-    const ms = MINE_CHIP.scale * badgeScale(m.s);
-    const mineSize = badgeSize(ctx, '4', ms);
-    const mine = centred(m.x, m.y - MINE_CHIP.rise * m.s, mineSize.w, mineSize.h);
+    const mine = mineChipRequest(ctx, cam, 465, 330, 4).req;
     const green = badges[0]!;
     const want = streamChipRect(green, badgeScale(proj(cam, 570, 420).s));
-    const placed = placeChips(badges, [{ rect: mine }, { rect: want, badge: green }], chipMinTop(null));
+    const placed = placeChips(badges, [mine, { rect: want, badge: green }], chipMinTop(null));
     expect(noOverlaps([...badges, ...placed])).toBe(true);
     const s = placed[1]!;
     // still against its badge: on its left (slid up at most 1.5 heights) or on its right
@@ -151,6 +151,73 @@ describe('chip collision nudge (ART-22 placeChips)', () => {
     const right = Math.abs(s.x - (green.x + green.w + CHIP_GAP)) < 1e-9;
     expect(left || right).toBe(true);
     expect(want.y - s.y).toBeLessThanOrEqual(want.h * CHIP_MAX_SLIDE + 1e-9);
+  });
+});
+
+describe('mine chips are a mine glyph with the charge, beside the mine when a badge is level with it (ART-26)', () => {
+  const ctx = fakeCtx();
+  const bs = badgeScale(1);
+  const s = MINE_CHIP.scale * bs;
+  // draw.ts badgeLift on the flat default (not selected): the badge centre above the zoomed roof
+  const badgeAt = (x: number, y: number, kind: 'barracks' | 'artillery', level: number, n: string): Rect => {
+    const { w, h } = badgeSize(ctx, n, bs);
+    return centred(x, y + (badgeY(kind, level) + 18) * WORLD_ZOOM.tower - 18 * WORLD_ZOOM.badge, w, h);
+  };
+
+  it('the chip is a glyph square plus a numeral tag: MINE_CHIP.h tall at its scale, never the badge pill', () => {
+    const { req, s: scale } = mineChipRequest(ctx, FLAT, 150, 560, 8);
+    expect(scale).toBeCloseTo(s, 12);
+    expect(req.rect.h).toBeCloseTo(MINE_CHIP.h * s, 9);
+    expect(req.rect.w).toBeCloseTo(req.rect.h + (14 + 3 * MINE_CHIP.pad) * s, 9); // fakeCtx: 14 px per character at the 26 px font
+    expect(mineChipRequest(ctx, FLAT, 150, 560, 12).req.rect.w - req.rect.w).toBeCloseTo(14 * s, 9);
+    expect(req.rect.x + req.rect.w / 2).toBeCloseTo(150, 9);
+    expect(req.rect.y + req.rect.h / 2).toBeCloseTo(560 - MINE_CHIP.rise * WORLD_ZOOM.prop, 9);
+    expect(req.mine).toEqual({ x: 150, y: 560, r: MINE_BODY_R * WORLD_ZOOM.prop });
+  });
+
+  it('level 24 west side: the 8-charge mine under the nw tower badge goes right of that badge at the mine height, not on top of it', () => {
+    const nw = badgeAt(150, 700, 'barracks', 1, '6');
+    const { req } = mineChipRequest(ctx, FLAT, 150, 560, 8);
+    // before ART-26 the chip over the mine was free (no overlap) but stood right on the badge's top edge
+    expect(overlaps(req.rect, nw, CHIP_GAP)).toBe(false);
+    expect(nw.y - (req.rect.y + req.rect.h)).toBeLessThan(req.rect.h);
+    const spots = mineBesideSpots(req, [nw]);
+    expect(spots).toHaveLength(2);
+    const [r] = placeChips([nw], [req], chipMinTop(null));
+    expect(r).toEqual(spots[0]);
+    expect(r!.x).toBeCloseTo(nw.x + nw.w + CHIP_GAP, 9);
+    expect(r!.y + r!.h / 2).toBeCloseTo(560, 9);
+    expect(overlaps(r!, nw, CHIP_GAP)).toBe(false);
+    // the east side mirrors it, still inside the map's width
+    const ne = badgeAt(570, 700, 'barracks', 1, '6');
+    const [e] = placeChips([ne], [mineChipRequest(ctx, FLAT, 570, 560, 8).req], chipMinTop(null));
+    expect(e!.x).toBeCloseTo(ne.x + ne.w + CHIP_GAP, 9);
+    expect(e!.x + e!.w).toBeLessThanOrEqual(720);
+  });
+
+  it('level 45: the mine just over the guns badge goes beside it too; the left side when the right is off the map or taken', () => {
+    const guns = badgeAt(360, 700, 'artillery', 2, '6');
+    const { req } = mineChipRequest(ctx, FLAT, 360, 580, 6);
+    expect(guns.y).toBeGreaterThan(580); // the badge is under the mine's point, within a chip height
+    const [r] = placeChips([guns], [req], chipMinTop(null));
+    expect(r!.x).toBeCloseTo(Math.max(360 + req.mine!.r, guns.x + guns.w) + CHIP_GAP, 9);
+    // right taken by another badge: the left
+    const blocker = { x: guns.x + guns.w + 2, y: 540, w: 120, h: 80 };
+    const [l] = placeChips([guns, blocker], [req], chipMinTop(null));
+    expect(l!.x + l!.w).toBeCloseTo(Math.min(360 - req.mine!.r, guns.x) - CHIP_GAP, 9);
+    // at the map's right edge only the left spot is offered
+    const edge = mineChipRequest(ctx, FLAT, 700, 580, 6).req;
+    const edgeBadge = badgeAt(700, 700, 'artillery', 2, '6');
+    expect(mineBesideSpots(edge, [edgeBadge]).map((q) => q.x < 700)).toEqual([true]);
+  });
+
+  it('a mine with no badge level with it keeps its chip over the mine', () => {
+    const { req } = mineChipRequest(ctx, FLAT, 360, 580, 6);
+    const far = badgeAt(360, 800, 'barracks', 1, '6'); // more than a chip height under the mine
+    expect(mineBesideSpots(req, [far])).toEqual([]);
+    expect(placeChips([far], [req], chipMinTop(null))).toEqual([req.rect]);
+    const aside = badgeAt(520, 700, 'barracks', 1, '6'); // level with it but out of the chip's column
+    expect(mineBesideSpots(req, [aside])).toEqual([]);
   });
 });
 

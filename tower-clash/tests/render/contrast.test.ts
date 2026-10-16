@@ -81,7 +81,7 @@ describe('shop button colours (BUG-22)', () => {
     });
 
     it(`${name}: owned faces still read as the owner-2 colour, and never as a buy button`, () => {
-      // the face is one of the owner-2 clay tones of the palette (green / colour-blind purple)…
+      // the face is one of the owner-2 clay tones of the palette (green / colour-blind magenta)…
       expect(Object.values(pal.ownerTones.enemy2)).toContain(pal.shopOwned.face);
       // …and differs from the buy face in lightness, not only in hue (WCAG non-text 3:1)
       expect(contrast(pal.shopOwned.face, pal.shopBuy.face)).toBeGreaterThanOrEqual(3);
@@ -93,11 +93,11 @@ describe('shop button colours (BUG-22)', () => {
     });
   }
 
-  it('pinned ratios of the owned pair (default green, colour-blind light purple)', () => {
+  it('pinned ratios of the owned pair (default green, colour-blind light magenta)', () => {
     expect(DEFAULT_PALETTE.shopOwned.face).toBe('#2ec27e');
     expect(contrast(DEFAULT_PALETTE.ink, '#2ec27e')).toBeCloseTo(6.21, 2);
-    expect(COLOR_BLIND_PALETTE.shopOwned.face).toBe('#c58bff');
-    expect(contrast(COLOR_BLIND_PALETTE.ink, '#c58bff')).toBeCloseTo(5.79, 2);
+    expect(COLOR_BLIND_PALETTE.shopOwned.face).toBe('#f7a0ea');
+    expect(contrast(COLOR_BLIND_PALETTE.ink, '#f7a0ea')).toBeCloseTo(7.6, 2);
   });
 });
 
@@ -355,8 +355,8 @@ describe('active-state colours (ART-15)', () => {
     expect(contrast(COLOR_BLIND_PALETTE.ink, shade('#f97316', 0.16))).toBeCloseTo(5.92, 2);
     expect(DEFAULT_PALETTE.gainText).toBe('#19724a');
     expect(contrast('#19724a', DEFAULT_PALETTE.panel)).toBeCloseTo(5.69, 2);
-    expect(COLOR_BLIND_PALETTE.gainText).toBe('#7e22ce');
-    expect(contrast('#7e22ce', COLOR_BLIND_PALETTE.panel)).toBeCloseTo(6.71, 2);
+    expect(COLOR_BLIND_PALETTE.gainText).toBe('#a8279a');
+    expect(contrast('#a8279a', COLOR_BLIND_PALETTE.panel)).toBeCloseTo(5.9, 2);
   });
 });
 

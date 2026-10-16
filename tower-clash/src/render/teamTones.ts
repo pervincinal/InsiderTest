@@ -12,8 +12,9 @@
  *   pastel — "pastel clay": chalky, very pale lit tones and softer shade tones around clear mids
  *            (cornflower, salmon, mint, marigold; colour-blind: apricot / orchid pink / sea green).
  *
- * Every set keeps the families of the shipped palette (blue / red / green / yellow; colour-blind blue /
- * orange / purple / teal — `ownerLabel` names them), the shared neutral grey and the colour-blind
+ * Every set keeps the families of the shipped palette (blue / red / green / yellow — `ownerLabel` names
+ * them; colour-blind blue / orange / purple / teal, the shipped set's before BUG-46 moved it to
+ * magenta / amber), the shared neutral grey and the colour-blind
  * palette's player = the default player. Only the match is recoloured (`ownerTones` / `owners`): the
  * UI pairs (`shopBuy`, `shopOwned`, `toastError`, `gainText`) keep their classic values and contrast.
  * `tests/render/teamTones.test.ts` holds every set to the readability floors of biome / light /

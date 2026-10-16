@@ -7,7 +7,7 @@ import { HUD, TOWER_HIT_RADIUS, WORLD_ZOOM } from '../../src/render/layout';
 import { badgeSize, badgeY, towerFootprintRadius, towerTop } from '../../src/render/sprites';
 import { hudAnchors } from '../../src/render/view';
 import type { HudAnchors } from '../../src/render/view';
-import { MINE_CHIP, badgeScale, chipMinTop, placeBadges, placeChips, streamChipRect } from '../../src/render/worldChips';
+import { badgeScale, chipMinTop, mineChipRequest, placeBadges, placeChips, streamChipRect } from '../../src/render/worldChips';
 import type { BadgeWant, ChipRequest } from '../../src/render/worldChips';
 import { lessonCardLayout } from '../../src/render/hud';
 import type { PlayUi } from '../../src/render/draw';
@@ -121,11 +121,8 @@ function layout(state: GameState, level: LevelDef, a: HudAnchors, cam: Camera): 
   const meta: Omit<Item, 'rect'>[] = [];
   state.mines.forEach((m, i) => {
     if (m.charges <= 0) return;
-    const p = proj(cam, m.x, m.y);
-    const s = MINE_CHIP.scale * badgeScale(p.s);
-    const { w, h } = badgeSize(ctx, String(m.charges), s, false);
-    const cy = p.y - MINE_CHIP.rise * p.s * WORLD_ZOOM.prop;
-    reqs.push({ rect: { x: p.x - w / 2, y: cy - h / 2, w, h } });
+    // ART-26: the renderer's own request (glyph + tag size, the mine for the beside rule)
+    reqs.push(mineChipRequest(ctx, cam, m.x, m.y, m.charges).req);
     meta.push({ label: `mine#${i}`, kind: 'mine' });
   });
   const streaming = towers.filter((t) => t.owner !== 'neutral' && Object.values(state.roads).some((r) => r.a === t.id || r.b === t.id));
