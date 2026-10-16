@@ -3,9 +3,13 @@
  * Renders the store assets from the real game with Playwright (PUB-2, PUB-5).
  *
  *   cd tower-clash && npm run build && node store/tools/renderStoreShots.mjs [--google] [--apple] [--all] [--port=4180]
+ *        [--dist=<dir>] [--out=<dir>]
  *   cd tower-clash && node store/tools/renderStoreShots.mjs --feature-only [--feature-variant=duel|hero]
- *   Env: PW_PORT=<n> (default 4180, `--port=` wins), PW_OUTPUT=<dir> (write under <dir> instead of store/),
- *        PW_DIST=<dir> (serve that dist snapshot instead of dist/; `--dist=<dir>` wins).
+ *   `--port=<n>` (or env PW_PORT, default 4180): the port of the tool's own `vite preview`; it must be free (BUG-49, below).
+ *   `--dist=<dir>` (or env PW_DIST): serve that build snapshot. Without either, `dist/` is used only when it
+ *        holds a build (dist/index.html); otherwise the tool stops with the hint to build or pass `--dist`.
+ *   `--out=<dir>` (or env PW_OUTPUT): write every asset under <dir> instead of store/ (a scratch render to
+ *        compare or cherry-pick from; the committed store/screenshots/** stay untouched).
  *   `--no-feature`: leave store/feature-graphic.png alone (a `--google` / `--all` run re-draws it otherwise).
  *   `--compose-only`: re-caption the selected sets from the raw frames already on disk (no build, no
  *        preview server, no capture; the IAP review frame is left as it is).
@@ -66,27 +70,37 @@
  * reads `save.settings.language` at boot, `bootLanguage` in src/main.ts). The caption of each frame
  * comes from the `SHOTS[].<lang>` column.
  *
- * The script starts `vite preview` on the given port itself and kills it on exit. Chromium is the
+ * The script starts `vite preview` on the given port itself (store/tools/preview.mjs) and kills it on exit —
+ * success, error, SIGINT or SIGTERM. BUG-49 (2026-10-15: PUB-24's Google sets were served by QA's e2e
+ * preview that held the same port): it never renders from a server it did not start. Before spawning it
+ * probes the port and stops with "port P is already in use … pass a free port with --port=<n>" if
+ * anything answers; it then waits for the child's own `Local: http://localhost:P/` line (a child that
+ * exits first fails with its stderr) and compares the served /index.html byte-for-byte with
+ * <dist>/index.html ("served build is not the requested dist" on a mismatch). If the preview dies
+ * mid-run the tool stops instead of capturing from whatever answers next. Chromium is the
  * preinstalled headless shell under /opt/pw-browsers (never run `playwright install` here);
  * in other environments the default Playwright browser is used.
  */
-import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { get } from 'node:http';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 import { pngSize, recompressPng } from './pngRecompress.mjs';
+import { PreviewError, resolveDist, startPreview } from './preview.mjs';
 
 /** Optional palette encoder (see header). `null` when the module is not resolvable. */
 const sharp = await import('sharp').then((m) => m.default ?? m).catch(() => null);
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..'); // tower-clash/
-/** `PW_OUTPUT=<dir>` writes every asset under that directory instead of `store/` (a scratch render to compare or cherry-pick from). */
-const STORE = process.env.PW_OUTPUT ? resolve(process.env.PW_OUTPUT) : join(ROOT, 'store');
-/** `PW_DIST=<dir>` serves that build snapshot instead of `dist/` (a parallel `npm run build` cannot rewrite it mid-run, BUG-15). */
-const distArg = process.argv.slice(2).find((a) => a.startsWith('--dist='))?.slice('--dist='.length);
-const DIST = distArg ? resolve(distArg) : process.env.PW_DIST ? resolve(process.env.PW_DIST) : join(ROOT, 'dist');
+const argValue = (name) => process.argv.slice(2).find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
+/** `--out=<dir>` / `PW_OUTPUT=<dir>` writes every asset under that directory instead of `store/` (a scratch render to compare or cherry-pick from). */
+const outArg = argValue('out') || process.env.PW_OUTPUT;
+const STORE = outArg ? resolve(outArg) : join(ROOT, 'store');
+/**
+ * `--dist=<dir>` / `PW_DIST=<dir>` serves that build snapshot instead of `dist/` (a parallel `npm run build`
+ * cannot rewrite it mid-run, BUG-15). Resolved (and checked) only when a preview server is needed.
+ */
+const DIST_ARG = argValue('dist');
 const HEADLESS_SHELL = '/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell';
 const MAX_BYTES = 600 * 1024;
 
@@ -94,8 +108,8 @@ const MAX_BYTES = 600 * 1024;
 
 const args = process.argv.slice(2);
 const flag = (name) => args.includes(`--${name}`);
-const portArg = args.find((a) => a.startsWith('--port='));
-const PORT = portArg ? Number(portArg.slice('--port='.length)) : Number(process.env.PW_PORT) || 4180;
+const portArg = argValue('port');
+const PORT = portArg ? Number(portArg) : Number(process.env.PW_PORT) || 4180;
 const URL = `http://localhost:${PORT}/`;
 const DO_APPLE = flag('apple') || flag('all');
 const DO_GOOGLE = flag('google') || flag('all') || !flag('apple');
@@ -241,43 +255,7 @@ const kb = (n) => `${(n / 1024).toFixed(0)} KB`;
 
 /* ---------- preview server ---------- */
 
-/**
- * Readiness probe with `node:http` rather than the global `fetch`: in sandboxes that route Node's
- * fetch through an outbound proxy (`HTTPS_PROXY` set), `fetch('http://localhost:…')` fails while a
- * plain `http.get` — and Chromium — reach the preview server fine.
- */
-const httpOk = (url) =>
-  new Promise((resolve) => {
-    const req = get(url, (res) => {
-      res.resume();
-      resolve((res.statusCode ?? 500) < 400);
-    });
-    req.on('error', () => resolve(false));
-    req.setTimeout(2000, () => {
-      req.destroy();
-      resolve(false);
-    });
-  });
-
-async function startPreview() {
-  if (!existsSync(join(DIST, 'index.html'))) throw new Error(`${DIST}/index.html missing — run \`npm run build\` first`);
-  const vite = join(ROOT, 'node_modules', 'vite', 'bin', 'vite.js');
-  const child = spawn(process.execPath, [vite, 'preview', '--port', String(PORT), '--strictPort', '--outDir', DIST], {
-    cwd: ROOT,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  let log = '';
-  child.stdout.on('data', (d) => (log += d));
-  child.stderr.on('data', (d) => (log += d));
-  const deadline = Date.now() + 30_000;
-  while (Date.now() < deadline) {
-    if (child.exitCode !== null) throw new Error(`vite preview exited early:\n${log}`);
-    if (await httpOk(URL)) return child;
-    await sleep(200);
-  }
-  child.kill('SIGKILL');
-  throw new Error(`vite preview did not answer on ${URL} within 30 s:\n${log}`);
-}
+/* `startPreview()` and its BUG-49 guards live in store/tools/preview.mjs (tested hermetically by tests/release/renderStoreShotsServer.test.ts). */
 
 /* ---------- game driving ---------- */
 
@@ -940,13 +918,33 @@ if (FEATURE_ONLY) {
   process.exit(0);
 }
 
-const server = COMPOSE_ONLY ? null : await startPreview();
+/** Our own preview server (never a foreign one, BUG-49); `null` with `--compose-only`. */
+let server = null;
+if (!COMPOSE_ONLY) {
+  try {
+    const dist = resolveDist({ root: ROOT, distArg: DIST_ARG, envDist: process.env.PW_DIST });
+    server = await startPreview({ root: ROOT, dist, port: PORT });
+    console.log(`vite preview of ${dist} on ${URL} (pid ${server.child.pid}, index.html verified)`);
+  } catch (e) {
+    if (!(e instanceof PreviewError)) throw e;
+    console.error(`renderStoreShots: ${e.message}`);
+    process.exit(1);
+  }
+}
+let finished = false;
 const cleanup = () => {
-  if (server && server.exitCode === null) server.kill('SIGTERM');
+  finished = true;
+  server?.killSync();
 };
 process.on('exit', cleanup);
 process.on('SIGINT', () => process.exit(130));
 process.on('SIGTERM', () => process.exit(143));
+// a preview that dies mid-run must not leave the port to whatever starts on it next (the PUB-24 Apple pass)
+server?.child.once('exit', (code, signal) => {
+  if (finished) return;
+  console.error(`renderStoreShots: our vite preview on port ${PORT} exited mid-run (${signal ?? `code ${code}`}) — stopping:\n${server.output().slice(-2000)}`);
+  process.exit(1);
+});
 
 try {
   const browser = await chromium.launch(existsSync(HEADLESS_SHELL) ? { executablePath: HEADLESS_SHELL } : {});

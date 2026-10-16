@@ -72,7 +72,7 @@ npm run e2e        # Playwright smoke test (Chromium)
 npm run cap:sync   # copy dist/ into the android/ and ios/ Capacitor projects
 ```
 
-Store screenshots and the feature graphic are rendered from the real game: `npm run build && node store/tools/renderStoreShots.mjs` (Google Play set) or `--apple` (App Store 6.7" / 6.5" sets); `--all` renders both.
+Store screenshots and the feature graphic are rendered from the real game: `npm run build && node store/tools/renderStoreShots.mjs` (Google Play set) or `--apple` (App Store 6.7" / 6.5" sets); `--all` renders both (`--dist=<dir>` serves a scratch build, `--out=<dir>` writes outside `store/`, `--port=<n>` must be a free port — the tool refuses to render from a server it did not start).
 
 No engine, no art assets: TypeScript, HTML5 Canvas 2D and WebAudio. The simulation (`src/sim/`) is deterministic and DOM-free; rendering, input and AI sit on top of it. Design rules: [`../docs/GDD.md`](../docs/GDD.md).
 
