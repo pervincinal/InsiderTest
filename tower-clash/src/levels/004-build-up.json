@@ -4,12 +4,12 @@
   "name_az": "Güc Topla",
   "name_ru": "Накопление",
   "name_tr": "Güç Topla",
-  "lesson": "Let your tower fill up: at 25 units it upgrades itself, streams faster and can run two streams. The enemy turtles, so out-produce it instead of racing it",
-  "lesson_az": "Qoy qüllən dolsun: 25 əsgərdə özü yüksəlir, daha sürətli axıdır və iki axın apara bilir. Düşmən tısbağa kimi gizlənir: onunla yarışma, ondan çox istehsal et",
-  "lesson_ru": "Дай башне наполниться: при 25 бойцах она сама растёт, льёт быстрее и ведёт два потока. Враг сидит в обороне — не гонись, а перепроизведи его",
-  "lesson_tr": "Kulen dolsun: 25 askerde kendi kendine yükselir, daha hızlı akıtır ve iki akış sürer. Düşman kaplumbağa: yarışma, ondan çok üret",
+  "lesson": "Stop your tower's stream and let it fill up: at 25 units it upgrades itself, streams faster and runs two streams. The enemy turtles, so out-produce it",
+  "lesson_az": "Qüllənin axınını dayandır, qoy dolsun: 25 əsgərdə özü yüksəlir, daha sürətli axıdır və iki axın aparır. Düşmən tısbağa kimi gizlənir: ondan çox istehsal et",
+  "lesson_ru": "Останови поток башни и дай ей наполниться: при 25 бойцах она сама растёт, льёт быстрее и ведёт два потока. Враг сидит в обороне — перепроизведи его",
+  "lesson_tr": "Kulenin akışını durdur, dolsun: 25 askerde kendi kendine yükselir, daha hızlı akıtır ve iki akış sürer. Düşman kaplumbağa: ondan çok üret",
   "star3": 25000,
-  "star2": 135000,
+  "star2": 130000,
   "enemies": [
     {"owner": "enemy1", "personality": "turtle", "aggression": 0.3}
   ],

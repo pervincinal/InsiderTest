@@ -9,7 +9,7 @@
   "lesson_ru": "У врага две башни: сначала возьми слабый форпост, потом бей по базе всеми своими башнями — стена прячет базу от её форпоста, а не от тебя",
   "lesson_tr": "Düşmanın iki kulesi var: önce zayıf karakolu al, sonra üsse sahip olduğun her kuleden vur — duvar üssü senden değil, kendi karakolundan gizler",
   "star3": 25000,
-  "star2": 100000,
+  "star2": 95000,
   "enemies": [
     {"owner": "enemy1", "personality": "turtle", "aggression": 0.3}
   ],

@@ -9,7 +9,7 @@
   "lesson_ru": "Расстояние — это время: на длинной линии первый боец приходит поздно, так что сначала возьми передовую башню и бей базу вблизи",
   "lesson_tr": "Mesafe zamandır: uzun çizgide ilk asker geç varır, bu yüzden önce öndeki kuleyi al ve üsse yakından saldır",
   "star3": 25000,
-  "star2": 75000,
+  "star2": 65000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.1}
   ],

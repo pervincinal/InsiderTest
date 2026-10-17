@@ -23,12 +23,12 @@ export interface LevelManifestEntry extends Pick<LevelTextTranslations, 'name_az
 /** Every level in play order. */
 export const LEVEL_MANIFEST: readonly LevelManifestEntry[] = [
   { id: 1, name: 'First Taps', name_az: 'İlk Toxunuş', name_ru: 'Первые тапы', name_tr: 'İlk Dokunuş', star3: 30000, star2: 60000, load: () => import('./001-first-taps.json').then(def) },
-  { id: 2, name: 'Supply Line', name_az: 'Təchizat Xətti', name_ru: 'Снабжение', name_tr: 'İkmal Hattı', star3: 20000, star2: 75000, load: () => import('./002-supply-line.json').then(def) },
+  { id: 2, name: 'Supply Line', name_az: 'Təchizat Xətti', name_ru: 'Снабжение', name_tr: 'İkmal Hattı', star3: 20000, star2: 70000, load: () => import('./002-supply-line.json').then(def) },
   { id: 3, name: 'Free Real Estate', name_az: 'Sahibsiz Torpaq', name_ru: 'Ничейная земля', name_tr: 'Bedava Arsa', star3: 25000, star2: 60000, load: () => import('./003-free-real-estate.json').then(def) },
-  { id: 4, name: 'Build Up', name_az: 'Güc Topla', name_ru: 'Накопление', name_tr: 'Güç Topla', star3: 25000, star2: 135000, load: () => import('./004-build-up.json').then(def) },
-  { id: 5, name: 'Around the Wall', name_az: 'Divarı Dolan', name_ru: 'Обойди стену', name_tr: 'Duvarı Dolaş', star3: 30000, star2: 80000, load: () => import('./005-two-roads.json').then(def) },
-  { id: 6, name: 'Outpost First', name_az: 'Əvvəl Forpost', name_ru: 'Сначала форпост', name_tr: 'Önce Karakol', star3: 25000, star2: 100000, load: () => import('./006-outpost-first.json').then(def) },
-  { id: 7, name: 'Long March', name_az: 'Uzun Yürüş', name_ru: 'Долгий марш', name_tr: 'Uzun Yürüyüş', star3: 25000, star2: 75000, load: () => import('./007-long-march.json').then(def) },
+  { id: 4, name: 'Build Up', name_az: 'Güc Topla', name_ru: 'Накопление', name_tr: 'Güç Topla', star3: 25000, star2: 130000, load: () => import('./004-build-up.json').then(def) },
+  { id: 5, name: 'Around the Wall', name_az: 'Divarı Dolan', name_ru: 'Обойди стену', name_tr: 'Duvarı Dolaş', star3: 30000, star2: 75000, load: () => import('./005-two-roads.json').then(def) },
+  { id: 6, name: 'Outpost First', name_az: 'Əvvəl Forpost', name_ru: 'Сначала форпост', name_tr: 'Önce Karakol', star3: 25000, star2: 95000, load: () => import('./006-outpost-first.json').then(def) },
+  { id: 7, name: 'Long March', name_az: 'Uzun Yürüş', name_ru: 'Долгий марш', name_tr: 'Uzun Yürüyüş', star3: 25000, star2: 65000, load: () => import('./007-long-march.json').then(def) },
   { id: 8, name: 'Two Bases', name_az: 'İki Baza', name_ru: 'Две базы', name_tr: 'İki Üs', star3: 45000, star2: 90000, load: () => import('./008-two-bases.json').then(def) },
   { id: 9, name: 'Stone Walls', name_az: 'Daş Divarlar', name_ru: 'Каменные стены', name_tr: 'Taş Duvarlar', star3: 25000, star2: 65000, load: () => import('./009-stone-walls.json').then(def) },
   { id: 10, name: 'Hold the Line', name_az: 'Xətti Saxla', name_ru: 'Держи строй', name_tr: 'Hattı Tut', star3: 20000, star2: 70000, load: () => import('./010-hold-the-line.json').then(def) },
