@@ -4,8 +4,8 @@ import type { Page } from '@playwright/test';
 
 /*
  * Frame-cost guard on the headless shell. Three samples:
- *   1. the highest authored level with the reference player at x10 for 8 s (worst case: most
- *      towers/units on screen, sim stepping ten times per frame);
+ *   1. the highest authored level, seed PLAY_SEED, with the reference player at x5 for 8 s (worst case: most
+ *      towers/units on screen, sim stepping several ticks per frame) — every sampled frame on the play screen (QA-27);
  *   2. the title screen idle for 3 s (the first thing every player sees; must not burn CPU);
  *   3. the shop screen for 3 s (`window.__towerclash.openShop`; should a build drop the hook, the test
  *      records an annotation and skips).
@@ -41,6 +41,18 @@ import type { Page } from '@playwright/test';
  * ticks per frame when frames are further apart (capped at MAX_TICKS_PER_FRAME = 10), so level 50 costs
  * 1–2 ms more per frame on a loaded host: real work, still counted.
  *
+ * QA-27 (2026-10-17): the level-50 sample used to start at x10 on an unseeded match, and the bot wins level 50
+ * in 40–89 s sim depending on the seed (headless seeds 1–8: 88.6 / 39.6 / 71.1 / 39.55 / 39.6 / 76.35 / 70.4 /
+ * 66.55 s), i.e. 4–9 s of wall clock at x10 — the "worst case" sample ended on the result screen (BUG-47
+ * finding: sim 57–70 s, screen after: result). Now: a fixed seed (PLAY_SEED = 1, the longest of those: won at
+ * 88.6 s, peak 37 marching units at 45 s) at PLAY_SPEED = 5, started in the same evaluate as `loadLevel`, so
+ * the sample covers sim ≈ 0–40 s on an idle host (8 s × 5) and at most ≈ 60 s on a loaded one (120 frames ×
+ * the MAX_TICKS_PER_FRAME = 10 tick cap = 500 ms sim per frame) — ≥ 28 s of sim before the bot can win.
+ * `sampleFrames(…, { stayOn: 'play' })` checks the screen on every frame of the window and ends the sample at
+ * the first frame off it, the spec asserts it never left and that the screen after sampling is still `play`
+ * (tests/repo/hygiene.test.ts pins both). x5 instead of x10 costs ≈ 0.5 ms of sim per frame (≈ 0.16 ms a tick
+ * with the AI, headless) — noise next to the raster.
+ *
  * Budget: 33 ms (30 fps) is the target on a real device. The sandbox headless shell is software
  * rendered, so the assertion uses 50 ms of main-thread work per frame there (FRAME_WORK_BUDGET_MS); CI
  * keeps the same budget. Tighten once the render path is profiled on hardware.
@@ -66,6 +78,10 @@ const CPU_THROTTLE = 4;
 /** src/render/camera.ts ISLAND_FAR_Y (HUD.mapTop + 12): the island's far shore, map y. */
 const ISLAND_FAR_Y = 108;
 const SAMPLE_MS = 8_000;
+/** QA-27: level-50 match the sample replays — seed 1 is won by the bot at 88.6 s sim (`npm run playtest -- --level 50 --seed 1`). */
+const PLAY_SEED = 1;
+/** QA-27: x5 keeps the 8 s (or 120-frame) window inside the match: ≤ 60 s sim of the 88.6 s. */
+const PLAY_SPEED = 5;
 const SCREEN_SAMPLE_MS = 3_000;
 
 const LEVELS_DIR = new URL('../src/levels/', import.meta.url);
@@ -120,8 +136,16 @@ interface FrameSample {
   script: number;
   layout: number;
   style: number;
+  /** QA-27: the screen the window first saw that was not `stayOn` (the sample ends there), or null. */
+  left: string | null;
+  /** QA-27: marching units on the map while sampling a play screen (min / max over the window's frames), or null. */
+  units: { min: number; max: number } | null;
 }
 type FrameClockWindow = Window & { __qaFrames?: number[] | null };
+interface SampleOptions {
+  /** QA-27: every frame of the window must be on this screen; the sample ends at the first frame that is not. */
+  stayOn?: string;
+}
 
 /**
  * BUG-47: samples for at least `ms` wall clock and at least `minFrames` frames. A free-running rAF loop
@@ -130,7 +154,7 @@ type FrameClockWindow = Window & { __qaFrames?: number[] | null };
  * (`Timestamp` − `NavigationStart` = page time) are counted, so the work and the frames cover the same
  * window however long a CDP round trip takes on a loaded host.
  */
-async function sampleFrames(page: Page, ms: number, minFrames: number): Promise<FrameSample> {
+async function sampleFrames(page: Page, ms: number, minFrames: number, opts: SampleOptions = {}): Promise<FrameSample> {
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Performance.enable', { timeDomain: 'threadTicks' });
   const metrics = async (): Promise<Record<string, number>> =>
@@ -146,19 +170,25 @@ async function sampleFrames(page: Page, ms: number, minFrames: number): Promise<
     requestAnimationFrame(tick);
   });
   const m0 = await metrics();
-  await page.evaluate(
-    ([sampleMs, n]) =>
-      new Promise<void>((resolve) => {
+  const probe = await page.evaluate(
+    ([sampleMs, n, stayOn]) =>
+      new Promise<{ left: string | null; units: { min: number; max: number } | null }>((resolve) => {
         const w = window as FrameClockWindow;
+        const tc = window.__towerclash;
         const start = performance.now();
         const n0 = w.__qaFrames!.length;
+        let units: { min: number; max: number } | null = null;
         const wait = (): void => {
-          if (performance.now() - start >= sampleMs && w.__qaFrames!.length - n0 >= n) resolve();
+          const screen = tc.getScreen();
+          if (stayOn && screen !== stayOn) return resolve({ left: screen, units });
+          const u = screen === 'play' ? tc.getState()?.units.length : undefined;
+          if (u !== undefined) units = units ? { min: Math.min(units.min, u), max: Math.max(units.max, u) } : { min: u, max: u };
+          if (performance.now() - start >= sampleMs && w.__qaFrames!.length - n0 >= n) resolve({ left: null, units });
           else requestAnimationFrame(wait);
         };
         requestAnimationFrame(wait);
       }),
-    [ms, minFrames] as const,
+    [ms, minFrames, opts.stayOn ?? ''] as const,
   );
   const m1 = await metrics();
   const stamps = await page.evaluate(() => {
@@ -182,6 +212,8 @@ async function sampleFrames(page: Page, ms: number, minFrames: number): Promise<
     script: per('ScriptDuration'),
     layout: per('LayoutDuration'),
     style: per('RecalcStyleDuration'),
+    left: probe.left,
+    units: probe.units,
   };
 }
 
@@ -191,7 +223,9 @@ function describeSample(label: string, f: FrameSample): string {
     : 'no intervals';
   return (
     `${label}: main-thread work ${f.work.toFixed(1)} ms / frame (script ${f.script.toFixed(1)}, layout ${f.layout.toFixed(1)}, style ${f.style.toFixed(1)}; budget ${FRAME_WORK_BUDGET_MS}) ` +
-    `over ${f.frames} frames in ${f.windowMs.toFixed(0)} ms — wall-clock interval (not gated): ${wall}`
+    `over ${f.frames} frames in ${f.windowMs.toFixed(0)} ms — wall-clock interval (not gated): ${wall}` +
+    (f.units ? `; units on the map ${f.units.min}–${f.units.max}` : '') +
+    (f.left ? `; LEFT the sampled screen for "${f.left}" (sample cut short)` : '')
   );
 }
 function report(summary: string): void {
@@ -215,32 +249,43 @@ async function gotoTitle(page: Page, query = ''): Promise<string[]> {
 }
 
 test.describe('Tower Clash perf', () => {
-  test(`level ${HIGHEST} at x10 with autoplay: main-thread work <= ${FRAME_WORK_BUDGET_MS} ms per frame`, async ({ page }) => {
+  test(`level ${HIGHEST} seed ${PLAY_SEED} at x${PLAY_SPEED} with autoplay, play frames only: main-thread work <= ${FRAME_WORK_BUDGET_MS} ms per frame`, async ({ page }) => {
     test.setTimeout(60_000); // ok: 11 s idle (8 s sample + boot), 2026-10-16; the sample stretches until 120 frames on a loaded host
     const pageErrors = await gotoTitle(page);
-    expect(await page.evaluate((id) => window.__towerclash.loadLevel(id), HIGHEST)).toBe(true);
+    // QA-27: speed, seed and the bot are set in the same task as the start, so the match is the headless seed's from tick 0
+    expect(
+      await page.evaluate(
+        ([id, seed, speed]) => {
+          const tc = window.__towerclash;
+          tc.setSpeed(speed);
+          const started = tc.loadLevel(id, seed);
+          tc.autoplay();
+          return started;
+        },
+        [HIGHEST, PLAY_SEED, PLAY_SPEED] as const,
+      ),
+    ).toBe(true);
     await expect.poll(() => page.evaluate(() => window.__towerclash.getScreen())).toBe('play');
-    await page.evaluate(() => {
-      window.__towerclash.setSpeed(10);
-      window.__towerclash.autoplay();
-    });
-    expect(await page.evaluate(() => window.__towerclash.getSpeed())).toBe(10);
+    expect(await page.evaluate(() => window.__towerclash.getSpeed())).toBe(PLAY_SPEED);
     const simStart = await page.evaluate(() => window.__towerclash.getState()?.time ?? -1);
     // ART-24: the budget is measured on the default play view — the flat map with the zoomed buildings / units
     // (the ART-21 perspective camera is the ?tilt=0.72 override): the far shore is where the flat letterbox puts it
     const drop = await farShoreDrop(page);
     expect(Math.abs(drop), 'the default play view is the flat map: the far shore is not dropped (CSS px)').toBeLessThan(0.5);
 
-    const f = await sampleFrames(page, SAMPLE_MS, MIN_FRAMES.play);
+    const f = await sampleFrames(page, SAMPLE_MS, MIN_FRAMES.play, { stayOn: 'play' });
     const simEnd = await page.evaluate(() => window.__towerclash.getState()?.time ?? -1);
     const screenAfter = await page.evaluate(() => window.__towerclash.getScreen());
 
     const summary =
-      `${describeSample(`level ${HIGHEST} x10 autoplay`, f)}; ` +
+      `${describeSample(`level ${HIGHEST} seed ${PLAY_SEED} x${PLAY_SPEED} autoplay`, f)}; ` +
       `sim ${simStart} → ${simEnd} ms (${((simEnd - simStart) / 1000).toFixed(1)} s sim), screen after: ${screenAfter}, default flat view (far shore +${drop.toFixed(0)} CSS px)`;
     report(summary);
 
     expect(simEnd, 'sim must have advanced while sampling').toBeGreaterThan(simStart);
+    // QA-27: the worst case is measured on play frames only — the match may not end inside the window
+    expect(f.left, `every sampled frame is on the play screen — ${summary}`).toBeNull();
+    expect(screenAfter, `the match is still running after the sample — ${summary}`).toBe('play');
     expect(pageErrors).toEqual([]);
     expectFrameWork(f, MIN_FRAMES.play, summary);
   });
@@ -280,7 +325,7 @@ test.describe('Tower Clash perf', () => {
 
   test(`title screen idle: main-thread work <= ${FRAME_WORK_BUDGET_MS} ms per frame`, async ({ page }) => {
     const pageErrors = await gotoTitle(page);
-    const f = await sampleFrames(page, SCREEN_SAMPLE_MS, MIN_FRAMES.screen);
+    const f = await sampleFrames(page, SCREEN_SAMPLE_MS, MIN_FRAMES.screen, { stayOn: 'title' });
     const screenAfter = await page.evaluate(() => window.__towerclash.getScreen());
     const summary = `${describeSample('title idle', f)}; screen after: ${screenAfter}`;
     report(summary);
@@ -303,7 +348,7 @@ test.describe('Tower Clash perf', () => {
     await page.evaluate(() => (window.__towerclash as OptionalDebug).openShop!());
     await expect.poll(() => page.evaluate(() => window.__towerclash.getScreen())).not.toBe('title');
     const shopScreen = await page.evaluate(() => window.__towerclash.getScreen());
-    const f = await sampleFrames(page, SCREEN_SAMPLE_MS, MIN_FRAMES.screen);
+    const f = await sampleFrames(page, SCREEN_SAMPLE_MS, MIN_FRAMES.screen, { stayOn: shopScreen });
     const screenAfter = await page.evaluate(() => window.__towerclash.getScreen());
     const summary = `${describeSample(`shop (screen "${shopScreen}")`, f)}; screen after: ${screenAfter}`;
     report(summary);

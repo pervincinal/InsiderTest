@@ -241,6 +241,27 @@ describe('tower-clash/e2e host-load independence (BUG-47, BUG-48)', () => {
     expect(code, 'a wall-clock interval (rAF deltas) feeds an assertion').not.toMatch(/expect\([^;]*\b(deltas|med|p95)\b[^;]*\)\.toBeLessThan/);
   });
 
+  /*
+   * QA-27 (2026-10-17): the level-50 "worst case" sample ran at x10 on an unseeded match the bot wins in
+   * 40–89 s sim (4–9 s wall), so its tail was the result screen. It now replays a fixed seed at x5 (seed 1:
+   * won at 88.6 s sim; the window covers ≤ 60 s of it), every frame is checked to be on `play`, and the
+   * screen after the sample must still be `play`.
+   */
+  it('perf.spec.ts samples level 50 on play frames only (fixed seed, x5, stayOn play, still play after)', () => {
+    const src = E2E_FILES.find((f) => f.name === 'perf.spec.ts')?.src ?? '';
+    expect(src).toMatch(/\nconst PLAY_SEED = \d+;/);
+    const speed = Number(/\nconst PLAY_SPEED = (\d+);/.exec(src)?.[1] ?? NaN);
+    // 8 s x speed of sim must stay well inside the seed's 88.6 s win (and 120 frames x the 10-tick cap = 60 s)
+    expect(speed).toBeGreaterThan(0);
+    expect(speed).toBeLessThanOrEqual(5);
+    expect(src).toMatch(/tc\.setSpeed\(speed\);\s*const started = tc\.loadLevel\(id, seed\);\s*tc\.autoplay\(\);/);
+    expect(src).toContain("const f = await sampleFrames(page, SAMPLE_MS, MIN_FRAMES.play, { stayOn: 'play' });");
+    // the sampler ends at the first frame off the screen it guards
+    expect(src).toMatch(/if \(stayOn && screen !== stayOn\) return resolve\(\{ left: screen, units \}\);/);
+    expect(src).toContain('expect(f.left, `every sampled frame is on the play screen — ${summary}`).toBeNull();');
+    expect(src).toContain("expect(screenAfter, `the match is still running after the sample — ${summary}`).toBe('play');");
+  });
+
   it('a test.setTimeout below the suite timeout carries a measured `// ok:` reason on its line', () => {
     const suite = Number(/\n {2}timeout: ([\d_]+),\n/.exec(PW_CONFIG)?.[1]?.replace(/_/g, '') ?? NaN);
     expect(suite).toBe(90_000);
