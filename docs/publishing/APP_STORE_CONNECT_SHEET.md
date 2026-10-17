@@ -99,7 +99,7 @@ Answer row by row; if the questionnaire shows a row that is not listed here, ans
 
 ### 6.1 Screenshots (Skrinşotlar) — App Previews and Screenshots, "iPhone" tab
 
-Upload order = file order; drag to reorder if the browser uploads out of sequence. Every file is a Playwright capture of the game (`LAUNCH_CHECKLIST.md` A11; re-cut 2026-10-15, PUB-24, on the build-16 look: the ART-24 zoomed flat view (no perspective camera, no horizon islets), walking soldiers, ART-23 light and capture effects, title island and menu headers at the safe edges of the tall screen; the ART-19 frames of 2026-10-13 showed the perspective camera of build 14 and were replaced); sizes are exact, all files ≤ 600 KB (largest 578 KB on 6.7", 588 KB on 6.5"), PNG without alpha.
+Upload order = file order; drag to reorder if the browser uploads out of sequence. Every file is a Playwright capture of the game (`LAUNCH_CHECKLIST.md` A11; re-cut 2026-10-15, PUB-24, on the build-16 look: the ART-24 zoomed flat view (no perspective camera, no horizon islets), walking soldiers, ART-23 light and capture effects, title island and menu headers at the safe edges of the tall screen; the ART-19 frames of 2026-10-13 showed the perspective camera of build 14 and were replaced; frames 04 / 06 — levels 24 and 45, the two with mines — re-cut 2026-10-17, PUB-25, on build 17: ART-26 mine-glyph charge tags beside the mines instead of badge pills, the other eight frames byte-identical); sizes are exact, all files ≤ 600 KB (largest 578 KB on 6.7", 588 KB on 6.5"), PNG without alpha.
 
 | Slot (Yer) | Device size tab in App Store Connect | File (from `tower-clash/store/screenshots/`) | What it shows |
 |---|---|---|---|
