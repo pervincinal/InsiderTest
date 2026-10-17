@@ -103,6 +103,10 @@ export const enCore = {
   'tutorial.tapTower': 'Tap your tower',
   'tutorial.tapGrey': 'Now tap the grey tower — the stream keeps flowing',
   'tutorial.tapThenGrey': 'Tap your tower, then the grey tower',
-  'tutorial.stopStream': 'Swipe across the stream to stop it',
-  'tutorial.fillToUpgrade': 'Let a tower fill to {n} to upgrade it — L2 can attack 2 targets',
+  'tutorial.stopStream': 'Swipe across the stream so your tower grows',
+  'tutorial.fillToUpgrade': 'At {n} it levels up — L2 runs 2 streams',
+  'tutorial.goAround': 'Now tap the new tower, then the red one',
+  'tutorial.supplyLine': 'A full tower passes soldiers on: stream into it',
+  'tutorial.grabOther': 'Now take the other grey tower too',
+  'tutorial.stopToGrow': "Stop this tower's stream so it can grow",
 } as const;

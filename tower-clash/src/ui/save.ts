@@ -12,6 +12,8 @@ export const SAVE_VERSION = 3;
 
 import type { Language } from './i18n';
 import { isLanguage } from './i18n';
+import type { ToneSet } from '../render/palette';
+import { isToneSet } from '../render/palette';
 
 /** Reduced-motion preference: `auto` follows the OS (`prefers-reduced-motion`), `on`/`off` override it. */
 export type MotionPref = 'auto' | 'on' | 'off';
@@ -23,6 +25,11 @@ export interface Settings {
   reducedMotion: MotionPref;
   /** UI language (src/ui/i18n.ts). Absent until the first run detects it from the browser or the player picks one. */
   language?: Language;
+  /**
+   * Team-colour set (FE-14, ART-25 sets; Settings → "Team colours"). Optional, so no schema bump:
+   * absent = `classic` (the shipped palette); an unknown value is dropped on load.
+   */
+  tones?: ToneSet;
 }
 
 /** One-time purchases the player owns (ECONOMY.md §4). */
@@ -312,6 +319,7 @@ export function normalizeSave(raw: unknown): SaveData {
     if (typeof s.sound === 'boolean') out.settings.sound = s.sound;
     if (s.reducedMotion === 'auto' || s.reducedMotion === 'on' || s.reducedMotion === 'off') out.settings.reducedMotion = s.reducedMotion;
     if (isLanguage(s.language)) out.settings.language = s.language;
+    if (isToneSet(s.tones)) out.settings.tones = s.tones;
   }
   return out;
 }

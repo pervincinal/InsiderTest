@@ -68,7 +68,7 @@ export const staysPut = (): number => 0;
 export const SETTINGS = Object.freeze({
   headerH: 100,
   back: { x: 18, y: 20, w: 140, h: 60 } as Rect,
-  card: { x: 50, y: 150, w: 620, h: 750 } as Rect,
+  card: { x: 50, y: 150, w: 620, h: 844 } as Rect,
   rowH: 96,
   labelX: 86,
   /** Row controls, top to bottom. */
@@ -84,14 +84,25 @@ export const SETTINGS = Object.freeze({
   /** Language row: label line at `languageLabelY`, then a full-width picker (one segment per language, I18N). */
   languageLabelY: 600,
   language: { x: 86, y: 664, w: 548, h: 56 } as Rect,
-  reset: { x: 160, y: 800, w: 400, h: 72 } as Rect,
+  /**
+   * "Team colours" row (FE-14): a title line at `tonesLabelY` (with a swatch strip of the live set on
+   * the right), then a full-width four-way picker (classic / vivid / royal / pastel, `TONE_SETS`). It
+   * goes under the language picker, so every rect above keeps its place; the progress summary, RESET
+   * and the About card moved down (worst case, About with support id + privacy options, ends at 1260
+   * of 1280).
+   */
+  tonesLabelY: 736,
+  tones: { x: 86, y: 786, w: 548, h: 56 } as Rect,
+  /** Centre line of the stars / coins summary above RESET. */
+  summaryY: 876,
+  reset: { x: 160, y: 906, w: 400, h: 64 } as Rect,
   confirm: {
     card: { x: 90, y: 470, w: 540, h: 320 } as Rect,
     yes: { x: 130, y: 676, w: 210, h: 72 } as Rect,
     no: { x: 380, y: 676, w: 210, h: 72 } as Rect,
   },
   /** About card under the settings card: version, support id (copy), privacy options (native). */
-  about: { x: 50, y: 920, w: 620 },
+  about: { x: 50, y: 1012, w: 620 },
   aboutRowH: 62,
 });
 

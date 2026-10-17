@@ -1,5 +1,5 @@
-import type { Palette } from './palette';
-import { shade } from './palette';
+import type { Palette, ToneSet } from './palette';
+import { TONE_SETS, shade } from './palette';
 import type { View } from './view';
 import { bleedRect, hudAnchors } from './view';
 import type { Rect } from './widgets';
@@ -24,6 +24,10 @@ export interface SettingsOpts {
   colorBlind: boolean;
   reducedMotion: MotionPref;
   language: Language;
+  /** FE-14: the player's team-colour set (`settings.tones`; absent = classic) — the picker's selection. */
+  tones?: ToneSet;
+  /** The page's `?tones=` override when there is one (it wins over the setting: a dim note next to the title). */
+  toneOverride?: ToneSet | null;
   /** Reset-progress confirm card is open. */
   confirming: boolean;
   totalStars: number;
@@ -44,6 +48,41 @@ export const MOTION_SEGMENTS: readonly { key: 'settings.motionAuto' | 'common.on
 ];
 /** Picker order = `LANGUAGES` (one segment each). */
 export const LANGUAGE_SEGMENTS = LANGUAGES;
+/** FE-14 "Team colours" picker: one segment per set, `TONE_SETS` order. */
+export const TONE_SEGMENTS: readonly { key: 'settings.tonesClassic' | 'settings.tonesVivid' | 'settings.tonesRoyal' | 'settings.tonesPastel'; value: ToneSet }[] = TONE_SETS.map((value) => ({
+  key: value === 'classic' ? 'settings.tonesClassic' : value === 'vivid' ? 'settings.tonesVivid' : value === 'royal' ? 'settings.tonesRoyal' : 'settings.tonesPastel',
+  value,
+}));
+/** Label size of the team-colour segments (tests/render/contrast.test.ts fits every locale's names at it). */
+export const TONE_SEGMENT_PX = 18;
+/** Swatch strip of the "Team colours" title line: dot radius and centre step (logical px). */
+export const TONE_SWATCH = Object.freeze({ r: 12, step: 30 });
+
+/**
+ * The live set's four team colours as small clay dots (shade drop, mid body, lit highlight), the last
+ * one's right edge at `right`: what the picker's choice looks like without leaving the screen.
+ */
+function teamSwatches(ctx: CanvasRenderingContext2D, pal: Palette, right: number, cy: number): number {
+  const { r, step } = TONE_SWATCH;
+  const owners = ['player', 'enemy1', 'enemy2', 'enemy3'] as const;
+  owners.forEach((o, i) => {
+    const t = pal.ownerTones[o];
+    const x = right - r - (owners.length - 1 - i) * step;
+    ctx.fillStyle = t.shade;
+    ctx.beginPath();
+    ctx.arc(x + 1, cy + 2.5, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = t.mid;
+    ctx.beginPath();
+    ctx.arc(x, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = t.lit;
+    ctx.beginPath();
+    ctx.arc(x - r * 0.3, cy - r * 0.34, r * 0.36, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  return right - (owners.length - 1) * step - 2 * r;
+}
 
 function settingsRow(ctx: CanvasRenderingContext2D, pal: Palette, control: Rect, title: string, sub: string, separator = true): void {
   const cy = control.y + (control.h - 4) / 2;
@@ -140,17 +179,46 @@ export function drawSettings(view: View, pal: Palette, o: SettingsOpts): void {
     LANGUAGE_SEGMENTS.findIndex((l) => l.code === o.language),
     17,
   );
+  // team colours (FE-14): hairline under the language picker, title line + live swatches, full-width picker
+  ctx.fillStyle = 'rgba(30, 42, 68, 0.1)';
+  ctx.fillRect(card.x + 28, SETTINGS.tonesLabelY - 2, card.w - 56, 2);
+  const tonesCy = SETTINGS.tonesLabelY + 26;
+  let titleRight = teamSwatches(ctx, pal, card.x + card.w - 36, tonesCy) - 16;
+  ctx.textBaseline = 'middle';
+  if (o.toneOverride) {
+    // dev / A-B: the page URL decides this load; the picker still shows (and saves) the player's set
+    ctx.textAlign = 'right';
+    ctx.fillStyle = pal.textDim;
+    ctx.font = font(15, '500');
+    const note = `?tones=${o.toneOverride}`;
+    ctx.fillText(note, titleRight, tonesCy + 1);
+    titleRight -= ctx.measureText(note).width + 12;
+  }
+  ctx.textAlign = 'left';
+  ctx.fillStyle = pal.ink;
+  ctx.font = font(26);
+  ctx.fillText(t('settings.tones'), SETTINGS.labelX, tonesCy, titleRight - SETTINGS.labelX);
+  drawSegmented(
+    ctx,
+    pal,
+    SETTINGS.tones,
+    TONE_SEGMENTS.map((s) => ({ label: t(s.key) })),
+    TONE_SETS.indexOf(o.tones ?? 'classic'),
+    TONE_SEGMENT_PX,
+  );
   // progress summary + reset
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = pal.textDim;
   ctx.font = font(20, '500');
   const summary = t('settings.summary', { stars: o.totalStars, coins: o.coins });
-  ctx.fillText(summary, 360 + 12, SETTINGS.reset.y - 44);
+  ctx.fillText(summary, 360 + 12, SETTINGS.summaryY);
   const sw = ctx.measureText(summary).width;
-  drawStars(ctx, pal, 360 + 12 - sw / 2 - 22, SETTINGS.reset.y - 44, 1, 10, [1, 0, 0]);
-  drawCoin(ctx, pal, 360 + 12 + sw / 2 + 22, SETTINGS.reset.y - 44, 11);
-  drawButton(ctx, pal, SETTINGS.reset, t('settings.reset'), { fontPx: 24, border: pal.owners.enemy1, text: pal.owners.enemy1, pressed: o.pressed === SETTINGS.reset });
+  drawStars(ctx, pal, 360 + 12 - sw / 2 - 22, SETTINGS.summaryY, 1, 10, [1, 0, 0]);
+  drawCoin(ctx, pal, 360 + 12 + sw / 2 + 22, SETTINGS.summaryY, 11);
+  // the danger red is a UI token (`toastError.face` = the classic / colour-blind owner-1 mid), so a team-colour set never recolours it (FE-14)
+  const danger = pal.toastError.face;
+  drawButton(ctx, pal, SETTINGS.reset, t('settings.reset'), { fontPx: 24, border: danger, text: danger, pressed: o.pressed === SETTINGS.reset });
   drawAboutCard(ctx, pal, o);
   ctx.restore();
 
@@ -178,7 +246,7 @@ export function drawSettings(view: View, pal: Palette, o: SettingsOpts): void {
     ctx.font = font(21, '500');
     ctx.fillText(t('settings.resetLine1'), 360, c.card.y + 116, c.card.w - 40);
     ctx.fillText(t('settings.resetLine2'), 360, c.card.y + 146, c.card.w - 40);
-    drawButton(ctx, pal, c.yes, t('settings.resetYes'), { fill: pal.owners.enemy1, fontPx: 26, pressed: o.pressed === c.yes });
+    drawButton(ctx, pal, c.yes, t('settings.resetYes'), { fill: pal.toastError.face, fontPx: 26, pressed: o.pressed === c.yes });
     drawButton(ctx, pal, c.no, t('common.cancel'), { fontPx: 26, pressed: o.pressed === c.no });
   }
   if (o.toast) drawToast(ctx, pal, { ...o.toast, y: (o.toast.y ?? 1090) + a.bottom });

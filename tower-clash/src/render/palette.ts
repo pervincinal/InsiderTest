@@ -343,27 +343,50 @@ export const COLOR_BLIND_PALETTE: Palette = Object.freeze({
 });
 
 /**
- * ART-25 team-colour A/B: `?tones=vivid|royal|pastel` in the page URL swaps the owner clay for one of
- * the alternative sets of src/render/teamTones.ts (a lazy chunk: the first call starts the download and
- * answers the shipped palette until it lands). Anything else — no parameter, `classic`, an unknown
- * name — is the shipped palette, so nothing changes for players.
+ * ART-25 team-colour sets: the shipped `classic` owner clay and three alternatives of
+ * src/render/teamTones.ts (a lazy chunk: the first call for a set starts the download and answers the
+ * shipped palette until it lands). FE-14 (2026-10-17): the set is a player setting
+ * (`save.settings.tones`, Settings → "Team colours"); `?tones=classic|vivid|royal|pastel` in the page
+ * URL still overrides it for that page load (dev / A-B use). No parameter or an unknown name = no
+ * override (the setting decides; absent = `classic`).
  */
 export type ToneSet = 'classic' | 'vivid' | 'royal' | 'pastel';
+/** Picker order of the Settings "Team colours" row. */
+export const TONE_SETS: readonly ToneSet[] = Object.freeze(['classic', 'vivid', 'royal', 'pastel']);
 const TONES_CHUNK = 'teamTones';
 let tonePalettes: Readonly<Record<Exclude<ToneSet, 'classic'>, readonly [Palette, Palette]>> | null = null;
 let tonesPromise: Promise<unknown> | null = null;
 let toneSearch: string | undefined;
-let toneUrl: ToneSet = 'classic';
+let toneUrl: ToneSet | null = null;
 
-/** The `?tones=` set of the page URL (parsed once per distinct search string). */
-export function urlToneSet(): ToneSet {
+export function isToneSet(v: unknown): v is ToneSet {
+  return v === 'classic' || v === 'vivid' || v === 'royal' || v === 'pastel';
+}
+
+/** The `?tones=` set of the page URL, or null without a (known) one; parsed once per distinct search string. */
+export function urlToneOverride(): ToneSet | null {
   const search = typeof location === 'undefined' ? '' : location.search;
   if (search !== toneSearch) {
     toneSearch = search;
     const v = search ? new URLSearchParams(search).get('tones') : null;
-    toneUrl = v === 'vivid' || v === 'royal' || v === 'pastel' ? v : 'classic';
+    toneUrl = isToneSet(v) ? v : null;
   }
   return toneUrl;
+}
+
+/** The `?tones=` set of the page URL, `classic` without one. */
+export function urlToneSet(): ToneSet {
+  return urlToneOverride() ?? 'classic';
+}
+
+/** The set on screen: the URL override, else the player's setting (absent = `classic`). */
+export function activeToneSet(setting: ToneSet | undefined): ToneSet {
+  return urlToneOverride() ?? setting ?? 'classic';
+}
+
+/** True once the alternative sets are in memory (`getPalette` answers them). */
+export function toneSetsLoaded(): boolean {
+  return tonePalettes !== null;
 }
 
 /** Load the alternative team colours (idempotent; a failed download is forgotten so the next call retries). */
@@ -383,6 +406,11 @@ export function getPalette(colorBlind: boolean, tones: ToneSet = urlToneSet()): 
     if (!chunkBackoff(TONES_CHUNK)) void loadToneSets().catch(() => undefined);
   }
   return colorBlind ? COLOR_BLIND_PALETTE : DEFAULT_PALETTE;
+}
+
+/** The palette of the player's settings: colour-blind × team-colour set (`activeToneSet`: the URL override wins). */
+export function settingsPalette(s: { colorBlind: boolean; tones?: ToneSet }): Palette {
+  return getPalette(s.colorBlind, activeToneSet(s.tones));
 }
 
 /** Biome for a level id (§3 level bands). */

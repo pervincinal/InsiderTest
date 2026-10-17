@@ -17,7 +17,7 @@ import { challengeDone, challengeUnlocked, previousDayKey, shownStreak, yesterda
 import { shownWeekStreak, weeklyDone, weeklyTargetDone, weeklyUnlocked } from './ui/weekly';
 import { getTerrain } from './render/terrain';
 import { FLAT, playCamera } from './render/camera';
-import { biomeFor } from './render/palette';
+import { activeToneSet, biomeFor, toneSetsLoaded } from './render/palette';
 import { equippedSkin } from './economy/entitlements';
 
 /*
@@ -91,6 +91,12 @@ export function installDebug(app: TowerClashApp): TowerClashDebug & QaDebugExtra
       return g?.drag ? { ...g.drag, hoverTowerId: g.hoverTowerId } : null;
     },
     getLanguage: () => currentLanguage(),
+    getTones: () => ({
+      setting: app.save.settings.tones ?? 'classic',
+      active: activeToneSet(app.save.settings.tones),
+      loaded: toneSetsLoaded(),
+      player: app.palette().owners.player,
+    }),
     // English menu strings are a lazy chunk (PERF-8): fetch them first when the key is not in yet
     getText: async (key, params) => {
       if (!hasEnglish(key)) await loadEnglishMenus().catch(() => undefined);

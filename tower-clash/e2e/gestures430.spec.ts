@@ -515,13 +515,15 @@ test.describe('touch gestures on a 430×932 iPhone-class screen, DPR 3, safe ins
     expect(errors).toEqual([]);
   });
 
-  test('level 2 tutorial at 430: a step left alone gives way after 20 s; the stop step shows on the link and clears on a swipe cut', async ({ page }) => {
+  test('tutorial at 430: a step left alone gives way after 20 s (level 3); level 2 stop step shows on home → side and clears on a swipe cut', async ({ page }) => {
     test.setTimeout(90_000);
     const errors = await boot(page, null);
     const tapThenGrey = await text(page, 'tutorial.tapThenGrey');
     const stopStream = await text(page, 'tutorial.stopStream');
-    await startLevel(page, 2);
-    await expect.poll(() => hint(page), { message: 'fresh save: level 2 opens on its first step' }).toBe(tapThenGrey);
+    // level 3: its second step is gated on a capture, so the first one timing out leaves no hint
+    // (GD-5a: on level 2 the rusher holds side by then, which would gate its later steps forever)
+    await startLevel(page, 3);
+    await expect.poll(() => hint(page), { message: 'fresh save: level 3 opens on its first step' }).toBe(tapThenGrey);
     const shownAt = Date.now();
     // nobody touches the screen: the step gives way after TUTORIAL_STEP_TIMEOUT_MS of visible play (20 s)
     await expect.poll(() => hint(page), { message: 'the first step times out', timeout: 35_000, intervals: [500] }).toBeNull();
@@ -529,20 +531,30 @@ test.describe('touch gestures on a 430×932 iPhone-class screen, DPR 3, safe ins
     expect(after, `the step stayed ${after} ms`).toBeGreaterThanOrEqual(19_000);
     expect(await playerLinks(page)).toEqual([]);
 
+    await startLevel(page, 2);
+    await expect.poll(() => hint(page), { message: 'fresh save: level 2 opens on its first step' }).toBe(tapThenGrey);
     const f = new Fingers(page, await page.context().newCDPSession(page));
     const home = towerAt(2, 'home');
-    const mid = towerAt(2, 'mid');
+    const side = towerAt(2, 'side');
+    const foe = towerAt(2, 'foe');
     await f.start(home);
-    await f.slide(home, mid, 8);
+    await f.slide(home, side, 8);
     await f.end();
-    await expect.poll(() => playerLinks(page)).toEqual([{ from: 'home', to: 'mid' }]);
-    await expect.poll(() => hint(page), { message: 'the (gated) stop step shows once a stream runs into mid' }).toBe(stopStream);
-    const y = Math.round((home.y + mid.y) / 2);
-    await f.flick({ x: home.x - 160, y }, { x: home.x + 160, y }, 3);
-    await expect.poll(() => playerLinks(page), { message: 'the flick cuts' }).toEqual([]);
-    await expect.poll(() => hint(page), { message: 'the cut completes the stop step (tutorial over)' }).toBeNull();
+    await expect.poll(() => playerLinks(page)).toEqual([{ from: 'home', to: 'side' }]);
+    // GD-5a: the stop step is gated on the capture of side and on side → foe (step 2)
+    await expect.poll(() => page.evaluate(() => window.__towerclash.getState()?.towers['side']?.owner), { message: 'side falls', timeout: 20_000 }).toBe('player');
+    await f.start(side);
+    await f.slide(side, foe, 8);
+    await f.end();
+    await expect.poll(() => playerLinks(page)).toContainEqual({ from: 'side', to: 'foe' });
+    await expect.poll(() => hint(page), { message: 'the (gated) stop step shows once side is ours and streams on' }).toBe(stopStream);
+    const x = Math.round((home.x + side.x) / 2);
+    const y = Math.round((home.y + side.y) / 2);
+    await f.flick({ x, y: y - 100 }, { x, y: y + 70 }, 3);
+    await expect.poll(() => playerLinks(page), { message: 'the flick cuts home → side' }).toEqual([{ from: 'side', to: 'foe' }]);
+    await expect.poll(() => hint(page), { message: 'the cut completes the stop step' }).toBeNull();
     await page.waitForTimeout(300);
-    expect(await hint(page), 'level 2 has no further step').toBeNull();
+    expect(await hint(page), 'no further step on the side-first line').toBeNull();
     expect(errors).toEqual([]);
   });
   test('BUG-36: a drag or swipe that starts on the map and ends over a HUD button never presses it (booster, MENU, pause)', async ({ page }) => {

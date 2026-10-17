@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Owner, TowerKind } from '../../src/sim/types';
 import { COLOR_BLIND_PALETTE, DEFAULT_PALETTE } from '../../src/render/palette';
-import { DIRECT, SPRITE_CACHE_MAX, drawSprite, invalidateSprites, setSpriteCanvasFactory, spriteCacheStats } from '../../src/render/spriteCache';
+import { DIRECT, SPRITE_CACHE_MAX, drawSprite, invalidateSprites, setSpriteCanvasFactory, setSpritePalette, spriteCacheStats } from '../../src/render/spriteCache';
 import type { Parts } from '../../src/render/spriteCache';
 import { drawTowerSprite, paletteId, towerBox, towerSpriteKey, towerTop } from '../../src/render/sprites';
 
@@ -227,6 +227,23 @@ describe('drawSprite', () => {
     drawSprite(recCtx({ a: 2, b: 0, c: 0, d: 2, e: 0, f: 0 }).ctx, 'a', 0, 0, box, paint);
     expect(spriteCacheStats().size).toBe(1);
     invalidateSprites();
+    expect(spriteCacheStats().size).toBe(0);
+  });
+
+  it('empties itself when the app draws with another palette object (FE-14: colour-blind, team-colour set, chunk landing)', () => {
+    const paint = (ctx: CanvasRenderingContext2D, p: Parts): void => p.fixed(() => ctx.fillRect(0, 0, 1, 1));
+    const box = { left: 1, right: 1, top: 1, bottom: 1 };
+    const a = {};
+    const b = {};
+    setSpritePalette(a);
+    drawSprite(recCtx().ctx, 'a', 0, 0, box, paint);
+    expect(spriteCacheStats().size).toBe(1);
+    setSpritePalette(a); // the same palette every frame keeps the layers
+    expect(spriteCacheStats().size).toBe(1);
+    setSpritePalette(b);
+    expect(spriteCacheStats().size).toBe(0);
+    drawSprite(recCtx().ctx, 'b', 0, 0, box, paint);
+    setSpritePalette(a);
     expect(spriteCacheStats().size).toBe(0);
   });
 

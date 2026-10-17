@@ -1,7 +1,8 @@
 /**
  * Settings screen (M3-3 + I18N): sound, colour-blind palette, reduced motion (auto/on/off
- * override), the "How to play" card (FE-3), UI language and a two-step reset of the progress; the About card
- * shows the version, the store support id (COPY) and the ads SDK's privacy options (native).
+ * override), the "How to play" card (FE-3), UI language, the team-colour set (FE-14) and a two-step
+ * reset of the progress; the About card shows the version, the store support id (COPY) and the ads
+ * SDK's privacy options (native).
  * Every change persists immediately; BACK returns to the screen that opened it (title, or the
  * paused play screen). Loaded lazily with its drawing (PERF-1, src/ui/lazyScreens.ts).
  */
@@ -12,7 +13,8 @@ import { SETTINGS, SETTINGS_BANDS, bandToScreen, screenToBand, settingsAboutLayo
 import type { Rect } from '../render/widgets';
 import { inRect } from '../render/widgets';
 import { segmentAt } from '../render/menuWidgets';
-import { LANGUAGE_SEGMENTS, MOTION_SEGMENTS, drawSettings } from '../render/menusSettings';
+import { LANGUAGE_SEGMENTS, MOTION_SEGMENTS, TONE_SEGMENTS, drawSettings } from '../render/menusSettings';
+import { loadToneSets, urlToneOverride } from '../render/palette';
 import type { PointerPoint } from '../input/pointer';
 import { resetProgress, writeSave } from './save';
 import { applyMotionPref } from './motion';
@@ -98,6 +100,8 @@ export class SettingsScreen implements Screen {
       colorBlind: s.colorBlind,
       reducedMotion: s.reducedMotion,
       language: currentLanguage(),
+      tones: s.tones ?? 'classic',
+      toneOverride: urlToneOverride(),
       confirming: this.confirming,
       totalStars: total,
       coins: this.app.save.gold,
@@ -112,7 +116,7 @@ export class SettingsScreen implements Screen {
 
   private rects(): Rect[] {
     if (this.confirming) return [SETTINGS.confirm.yes, SETTINGS.confirm.no];
-    const list = [SETTINGS.back, SETTINGS.sound, SETTINGS.colorBlind, SETTINGS.motion, SETTINGS.howto, SETTINGS.language, SETTINGS.reset];
+    const list = [SETTINGS.back, SETTINGS.sound, SETTINGS.colorBlind, SETTINGS.motion, SETTINGS.howto, SETTINGS.language, SETTINGS.tones, SETTINGS.reset];
     if (this.about.copy) list.push(this.about.copy);
     if (this.about.privacy) list.push(this.about.privacy);
     return list;
@@ -222,6 +226,14 @@ export class SettingsScreen implements Screen {
       const seg = LANGUAGE_SEGMENTS[segmentAt(SETTINGS.language, LANGUAGE_SEGMENTS.length, p.x, p.y)];
       if (seg) this.app.setLanguage(seg.code); // persists through the app
       return;
+    } else if (hit === SETTINGS.tones) {
+      // FE-14: persist the set; a non-classic one fetches its lazy chunk now (the shipped palette shows
+      // until it lands, then the app's palette() answers the set and empties the sprite cache)
+      const seg = TONE_SEGMENTS[segmentAt(SETTINGS.tones, TONE_SEGMENTS.length, p.x, p.y)];
+      if (seg) {
+        save.settings.tones = seg.value;
+        if (seg.value !== 'classic') void loadToneSets().catch(() => undefined);
+      }
     } else if (hit === SETTINGS.reset) {
       this.confirming = true;
       return;

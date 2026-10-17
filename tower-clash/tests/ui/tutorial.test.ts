@@ -4,26 +4,68 @@ import { applyCommand } from '../../src/sim/commands';
 import { step } from '../../src/sim/step';
 import { C } from '../../src/sim/constants';
 import { getLoadedLevel, loadAllLevels } from '../../src/levels/index';
-import { TUTORIAL_STEP_TIMEOUT_MS, Tutorial, tutorialFor } from '../../src/ui/tutorial';
+import { capacityOf } from '../../src/sim/step';
+import { rngsFor, runAiTick } from '../../src/ai/index';
+import { isAiTick } from '../../src/ai/common';
+import type { Command, GameState } from '../../src/sim/types';
+import { TUTORIAL_STEP_TIMEOUT_MS, Tutorial, stepTowerId, streamMidpoint, supplyLineTarget, tutorialFor } from '../../src/ui/tutorial';
 
 await loadAllLevels();
 const stateFor = (id: number) => createState(getLoadedLevel(id)!, 1);
 
+/** English hint texts (src/ui/locales/enCore.ts). */
+const TXT = {
+  tapThenGrey: 'Tap your tower, then the grey tower',
+  goAround: 'Now tap the new tower, then the red one',
+  stopStream: 'Swipe across the stream so your tower grows',
+  supplyLine: 'A full tower passes soldiers on: stream into it',
+  grabOther: 'Now take the other grey tower too',
+  stopToGrow: "Stop this tower's stream so it can grow",
+  fillToUpgrade: `At ${C.CAPACITY[1]} it levels up — L2 runs 2 streams`,
+} as const;
+
+const link = (from: string, to: string) => ({ type: 'link', owner: 'player', from, to }) as const;
+const unlink = (from: string, to?: string) => ({ type: 'unlink', owner: 'player', from, to }) as const;
+/** A player command as the play screen issues it: the tutorial sees it first, then the sim applies it. */
+function issue(tut: Tutorial, state: GameState, cmd: Command): void {
+  tut.onCommand(cmd, state);
+  applyCommand(state, cmd);
+}
+/** Hand a tower to the player (a capture without the fight). */
+function capture(state: GameState, id: string, units = 5): void {
+  state.towers[id]!.owner = 'player';
+  state.towers[id]!.units = units;
+}
+const shown = (tut: Tutorial, state: GameState) => tut.current(state)?.text ?? null;
+
 describe('tutorialFor', () => {
-  it('exists for levels 1-3 only and is skipped once the level has a star', () => {
-    expect(tutorialFor(1, 0)).toBeInstanceOf(Tutorial);
-    expect(tutorialFor(2, 0)).toBeInstanceOf(Tutorial);
-    expect(tutorialFor(3, 0)).toBeInstanceOf(Tutorial);
-    expect(tutorialFor(4, 0)).toBeNull();
+  it('exists for levels 1-4 only and is skipped once the level has a star', () => {
+    for (const id of [1, 2, 3, 4]) expect(tutorialFor(id, 0), `level ${id}`).toBeInstanceOf(Tutorial);
+    expect(tutorialFor(5, 0)).toBeNull();
     expect(tutorialFor(1, 1)).toBeNull();
     expect(tutorialFor(3, 3)).toBeNull();
+    expect(tutorialFor(4, 1)).toBeNull();
   });
 
-  it('every step points at a tower that exists in its level', () => {
-    for (const id of [1, 2, 3]) {
+  it('every step points at a tower that exists in its level, and every stream anchor joins two of them', () => {
+    for (const id of [1, 2, 3, 4]) {
       const state = stateFor(id);
-      for (const step of tutorialFor(id, 0)!.steps) expect(state.towers[step.towerId], `level ${id}: ${step.towerId}`).toBeDefined();
+      for (const step of tutorialFor(id, 0)!.steps) {
+        const at = stepTowerId(step, state);
+        expect(state.towers[at], `level ${id}: ${at}`).toBeDefined();
+        if (step.anchor) {
+          expect(state.towers[step.anchor.from], `level ${id}: anchor ${step.anchor.from}`).toBeDefined();
+          expect(state.towers[step.anchor.to], `level ${id}: anchor ${step.anchor.to}`).toBeDefined();
+        }
+      }
     }
+  });
+
+  it('the step lists of levels 2–4 (GD-5a/b)', () => {
+    const texts = (id: number) => tutorialFor(id, 0)!.steps.map((s) => s.text);
+    expect(texts(2)).toEqual([TXT.tapThenGrey, TXT.goAround, TXT.stopStream, TXT.supplyLine]);
+    expect(texts(3)).toEqual([TXT.tapThenGrey, TXT.grabOther]);
+    expect(texts(4)).toEqual([TXT.stopToGrow, TXT.fillToUpgrade]);
   });
 });
 
@@ -46,80 +88,209 @@ describe('level 1 tutorial (rules v2: start a stream)', () => {
   });
 });
 
-describe('level 2 tutorial (rules v2: stop a stream)', () => {
-  const link = { type: 'link', owner: 'player', from: 'home', to: 'mid' } as const;
-
-  it('stop hint is gated until the home→mid stream exists, then clears on the unlink', () => {
+describe('level 2 tutorial (GD-5a: side first, the cut gated on the capture, conditional supply line)', () => {
+  /** Step 1 done by home → side, side captured, step 2 on screen. */
+  const atGoAround = () => {
     const state = stateFor(2);
     const tut = tutorialFor(2, 0)!;
-    expect(tut.current(state)?.text).toBe('Tap your tower, then the grey tower');
-    tut.onCommand(link, state);
-    expect(tut.current(state)).toBeNull(); // gated: no stream in the state yet
+    expect(shown(tut, state)).toBe(TXT.tapThenGrey);
+    expect(stepTowerId(tut.current(state)!, state)).toBe('side');
+    issue(tut, state, link('home', 'side'));
+    capture(state, 'side');
+    tut.onSelect(null, state);
+    expect(shown(tut, state)).toBe(TXT.goAround);
+    expect(stepTowerId(tut.current(state)!, state)).toBe('foe');
+    return { state, tut };
+  };
+  /** …then side → foe: step 3 (the stop) on screen. */
+  const atStop = () => {
+    const { state, tut } = atGoAround();
+    issue(tut, state, link('side', 'foe'));
+    tut.onSelect(null, state);
+    expect(shown(tut, state)).toBe(TXT.stopStream);
+    return { state, tut };
+  };
+
+  it('step 1 points at side (not mid) and only home → side completes it', () => {
+    const state = stateFor(2);
+    const tut = tutorialFor(2, 0)!;
+    tut.onCommand(link('home', 'mid'), state); // the rusher's bait
+    expect(shown(tut, state)).toBe(TXT.tapThenGrey);
+    tut.onCommand(link('home', 'side'), state);
+    expect(shown(tut, state)).toBeNull(); // step 2 gated on the capture
     expect(tut.finished).toBe(false);
-    tut.onCommand({ type: 'unlink', owner: 'player', from: 'home', to: 'mid' }, state); // unlinks while gated do not count
-    expect(tut.finished).toBe(false);
-    applyCommand(state, link);
+  });
+
+  it('the stop step stays hidden before side is captured, even with home → side streaming', () => {
+    const state = stateFor(2);
+    const tut = tutorialFor(2, 0)!;
+    issue(tut, state, link('home', 'side'));
+    expect(state.links.filter((l) => l.owner === 'player')).toHaveLength(1);
+    expect(state.towers['side']!.owner).toBe('neutral');
+    for (let i = 0; i < 100; i++) {
+      tut.onSelect(null, state);
+      tut.elapse(1000, state); // 100 s gated: hidden steps never time out
+    }
+    expect(shown(tut, state)).toBeNull();
+    // a cut now is not the lesson (that was the 7 s cut that lost 3/5 seeds): it does not count
+    tut.onCommand(unlink('home', 'side'), state);
+    capture(state, 'side');
+    tut.onSelect(null, state);
+    expect(shown(tut, state)).toBe(TXT.goAround);
+  });
+
+  it('step 2 completes on side → foe (or when foe falls), then the stop step shows on the home → side ribbon', () => {
+    const { state, tut } = atGoAround();
+    tut.onCommand(link('home', 'foe'), state); // not from side
+    expect(shown(tut, state)).toBe(TXT.goAround);
+    issue(tut, state, link('side', 'foe'));
+    const stop = tut.current(state)!;
+    expect(stop.text).toBe(TXT.stopStream);
+    expect(stepTowerId(stop, state)).toBe('side');
+    expect(stop.anchor).toEqual({ kind: 'stream', from: 'home', to: 'side' });
+    const home = state.towers['home']!;
+    const side = state.towers['side']!;
+    expect(streamMidpoint(state, stop.anchor)).toEqual({ x: (home.x + side.x) / 2, y: (home.y + side.y) / 2 });
+
+    const other = atGoAround();
+    other.state.towers['foe']!.owner = 'player';
+    other.tut.onSelect(null, other.state);
+    expect(shown(other.tut, other.state)).toBe(TXT.stopStream);
+  });
+
+  it('the stop step clears on a swipe cut of home → side, and step 4 then stays hidden without a supply line', () => {
+    const { state, tut } = atStop();
+    tut.onCommand(unlink('side', 'foe'), state); // a stream out of side, not into it
+    tut.onCommand({ type: 'unlink', owner: 'enemy1', from: 'foe', to: 'side' }, state); // not the player's
+    expect(shown(tut, state)).toBe(TXT.stopStream);
+    issue(tut, state, unlink('home', 'side'));
+    expect(shown(tut, state)).toBeNull();
+    expect(supplyLineTarget(state)).toBeNull();
+    for (let i = 0; i < 100; i++) tut.elapse(1000, state);
+    expect(tut.finished).toBe(false); // step 4 hidden: never times out, never shows
+  });
+
+  it('the stop step also clears on "all links of home" (the second tap) and when the stream ends on its own', () => {
+    const a = atStop();
+    a.tut.onCommand(unlink('home'), a.state);
+    expect(shown(a.tut, a.state)).toBeNull();
+
+    const b = atStop();
+    b.state.links = b.state.links.filter((l) => l.to !== 'side'); // targetFull ended home → side
+    b.tut.onSelect(null, b.state);
+    expect(shown(b.tut, b.state)).toBeNull(); // on step 4, hidden
+    expect(b.tut.finished).toBe(false);
+  });
+
+  it('step 4 never shows on the side-first line (follower traces, seeds 1–5, 90 s)', () => {
+    for (let seed = 1; seed <= 5; seed++) {
+      const level = getLoadedLevel(2)!;
+      const state = createState(level, seed);
+      const rngs = rngsFor(seed, level.enemies);
+      const tut = tutorialFor(2, 0)!;
+      const seen = new Set<string>();
+      let cut = false;
+      while (state.time < 90_000 && !tut.finished) {
+        const now = shown(tut, state);
+        if (now) seen.add(now);
+        if (isAiTick(state)) {
+          const own = (id: string) => state.towers[id]!.owner === 'player';
+          const has = (f: string, t: string) => state.links.some((l) => l.owner === 'player' && l.from === f && l.to === t);
+          const cmds: Command[] = [];
+          if (state.time >= 3000 && !own('side') && !has('home', 'side')) cmds.push(link('home', 'side'));
+          if (own('side') && !own('foe') && !has('side', 'foe')) cmds.push(link('side', 'foe'));
+          if (!cut && now === TXT.stopStream) {
+            cut = true;
+            cmds.push(unlink('home', 'side'));
+          }
+          const enemy = runAiTick(state, rngs.enemies);
+          for (const c of cmds) issue(tut, state, c);
+          for (const c of enemy) applyCommand(state, c);
+        }
+        step(state);
+        tut.onSelect(null, state);
+        tut.elapse(C.TICK_MS, state);
+      }
+      expect([...seen], `seed ${seed}`).toEqual([TXT.tapThenGrey, TXT.goAround, TXT.stopStream]);
+      expect(cut, `seed ${seed}: the stop step came up`).toBe(true);
+    }
+  });
+});
+
+describe('level 2 step 4: the supply line (GD-5a, rule 13)', () => {
+  /** The mid-first line at ≈ 33 s: mid ours and full, streaming onward into side; home free with units. */
+  const midFull = () => {
+    const state = stateFor(2);
+    const mid = state.towers['mid']!;
+    capture(state, 'mid');
+    mid.units = capacityOf(mid, state);
+    applyCommand(state, link('mid', 'side'));
     expect(state.links).toHaveLength(1);
-    expect(tut.current(state)?.text).toBe('Swipe across the stream to stop it');
-    tut.onCommand({ type: 'unlink', owner: 'player', from: 'home' }, state); // "all links of home" counts too
+    return state;
+  };
+
+  it('supplyLineTarget: the full own tower that relays onward, when another own tower can stream into it', () => {
+    const state = midFull();
+    expect(supplyLineTarget(state)).toBe('mid');
+    state.towers['home']!.units = 0; // no unit to send
+    expect(supplyLineTarget(state)).toBeNull();
+    state.towers['home']!.units = 5;
+    state.towers['mid']!.units -= 1; // not full
+    expect(supplyLineTarget(state)).toBeNull();
+    state.towers['mid']!.units += 1;
+    state.links = []; // full but not streaming onward
+    expect(supplyLineTarget(state)).toBeNull();
+    // home itself never counts, however full and streaming
+    const fresh = stateFor(2);
+    fresh.towers['home']!.units = capacityOf(fresh.towers['home']!, fresh);
+    capture(fresh, 'side');
+    applyCommand(fresh, link('home', 'foe'));
+    expect(supplyLineTarget(fresh)).toBeNull();
+  });
+
+  it('on the mid-first line it pre-empts the steps before it and points at mid; a relay link into mid clears it', () => {
+    const state = midFull();
+    const tut = tutorialFor(2, 0)!;
+    for (let i = 0; i < 3; i++) tut.onSelect(null, state); // steps 1–3 give way to the supply line, one per frame
+    const supply = tut.current(state)!;
+    expect(supply.text).toBe(TXT.supplyLine);
+    expect(stepTowerId(supply, state)).toBe('mid');
+    tut.onCommand(link('home', 'side'), state); // not into mid
+    expect(shown(tut, state)).toBe(TXT.supplyLine);
+    applyCommand(state, link('home', 'mid'));
+    expect(state.links.find((l) => l.from === 'home')?.relay).toBe(true);
+    tut.onSelect(null, state); // doneWhen: a player relay link exists
     expect(tut.finished).toBe(true);
   });
 
-  it('also completes when the stream ends on its own after the capture (target full)', () => {
-    const state = stateFor(2);
+  it('the link command into mid completes it as well', () => {
+    const state = midFull();
     const tut = tutorialFor(2, 0)!;
-    tut.onCommand(link, state);
-    applyCommand(state, link);
-    expect(tut.current(state)?.text).toBe('Swipe across the stream to stop it');
-    // the sim ended the supply line: mid is ours and no link remains
-    state.towers['mid']!.owner = 'player';
-    state.links = [];
-    tut.onSelect(null, state);
+    for (let i = 0; i < 3; i++) tut.onSelect(null, state);
+    expect(shown(tut, state)).toBe(TXT.supplyLine);
+    tut.onCommand(link('home', 'mid'), state);
     expect(tut.finished).toBe(true);
   });
 });
 
-describe('level 2 stop step accepts any stop of a stream into mid (BUG-33)', () => {
-  const homeMid = { type: 'link', owner: 'player', from: 'home', to: 'mid' } as const;
-  const atStop = () => {
+describe('streamMidpoint (GD-5c stream anchor)', () => {
+  const anchor = { kind: 'stream', from: 'home', to: 'side' } as const;
+  it('is null without an anchor or without that player stream', () => {
     const state = stateFor(2);
-    const tut = tutorialFor(2, 0)!;
-    tut.onCommand(homeMid, state);
-    applyCommand(state, homeMid);
-    expect(tut.current(state)?.text).toBe('Swipe across the stream to stop it');
-    return { state, tut };
-  };
-
-  it('a swipe cut of home→mid completes it', () => {
-    const { state, tut } = atStop();
-    tut.onCommand({ type: 'unlink', owner: 'player', from: 'home', to: 'mid' }, state);
-    expect(tut.finished).toBe(true);
+    expect(streamMidpoint(state, undefined)).toBeNull();
+    expect(streamMidpoint(state, anchor)).toBeNull();
+    applyCommand(state, link('home', 'mid')); // another stream
+    expect(streamMidpoint(state, anchor)).toBeNull();
+    state.towers['side']!.owner = 'enemy1';
+    state.towers['side']!.units = 5;
+    applyCommand(state, { type: 'link', owner: 'enemy1', from: 'side', to: 'home' }); // the lane, but not the player's stream
+    expect(streamMidpoint(state, { kind: 'stream', from: 'side', to: 'home' })).toBeNull();
   });
 
-  it('a cut of another player stream into mid (side→mid) completes it; streams elsewhere and foreign unlinks do not', () => {
-    const { state, tut } = atStop();
-    state.towers['side']!.owner = 'player';
-    state.towers['side']!.units = 5;
-    applyCommand(state, { type: 'link', owner: 'player', from: 'side', to: 'mid' });
-    expect(state.links.filter((l) => l.to === 'mid')).toHaveLength(2);
-    tut.onCommand({ type: 'unlink', owner: 'player', from: 'side', to: 'foe' }, state); // not into mid
-    tut.onCommand({ type: 'unlink', owner: 'enemy1', from: 'foe', to: 'mid' }, state); // not the player's
-    tut.onCommand({ type: 'unlink', owner: 'player', from: 'foe' }, state); // "all links of foe": none into mid of the player's
-    expect(tut.finished).toBe(false);
-    tut.onCommand({ type: 'unlink', owner: 'player', from: 'side', to: 'mid' }, state);
-    expect(tut.finished).toBe(true);
-  });
-
-  it('shows while any player stream runs into mid, even when home→mid is gone', () => {
-    const { state, tut } = atStop();
-    state.towers['side']!.owner = 'player';
-    state.towers['side']!.units = 5;
-    applyCommand(state, { type: 'link', owner: 'player', from: 'side', to: 'mid' });
-    state.links = state.links.filter((l) => l.from !== 'home');
-    expect(tut.current(state)?.text).toBe('Swipe across the stream to stop it');
-    state.links = [];
-    expect(tut.current(state)).toBeNull(); // gated again (mid still neutral: not done)
-    expect(tut.finished).toBe(false);
+  it('is the lane midpoint while the stream runs', () => {
+    const state = stateFor(2);
+    applyCommand(state, link('home', 'side'));
+    expect(streamMidpoint(state, anchor)).toEqual({ x: 495, y: 1110 }); // (360, 1120) ↔ (630, 1100)
   });
 });
 
@@ -145,18 +316,17 @@ describe('tutorial step timeout (BUG-33: no overlay softlock)', () => {
   it('only visible time counts: a gated step does not time out, and one huge frame counts at most 250 ms', () => {
     const state = stateFor(2);
     const tut = tutorialFor(2, 0)!;
-    const homeMid = { type: 'link', owner: 'player', from: 'home', to: 'mid' } as const;
-    tut.onCommand(homeMid, state); // step 1 done; step 2 gated on the link
+    issue(tut, state, link('home', 'side')); // step 1 done; step 2 gated on the capture
     for (let i = 0; i < 100; i++) tut.elapse(1000, state); // 100 s gated
     expect(tut.finished).toBe(false);
-    applyCommand(state, homeMid);
-    expect(tut.current(state)?.text).toBe('Swipe across the stream to stop it');
+    capture(state, 'side');
+    expect(shown(tut, state)).toBe(TXT.goAround);
     tut.elapse(60_000, state); // a stalled frame / background return
-    expect(tut.current(state)).not.toBeNull();
+    expect(shown(tut, state)).toBe(TXT.goAround);
     for (let i = 0; i < 78; i++) tut.elapse(250, state); // 79 × 250 = 19.75 s with the one above
-    expect(tut.finished).toBe(false);
+    expect(shown(tut, state)).toBe(TXT.goAround);
     tut.elapse(250, state);
-    expect(tut.finished).toBe(true);
+    expect(shown(tut, state)).toBe(TXT.stopStream); // timed out: the stop step (home → side still runs) is next
   });
 
   it('a completed step resets the clock for the next', () => {
@@ -170,18 +340,110 @@ describe('tutorial step timeout (BUG-33: no overlay softlock)', () => {
   });
 });
 
-describe('level 3 tutorial (rules v2: auto-upgrade)', () => {
-  it('mentions the L1 capacity and completes when a player tower reaches level 2 by filling up', () => {
+describe('level 3 tutorial (GD-5b: take both free neutrals)', () => {
+  it('step 1 points at east and completes on a link from home into east or west', () => {
+    for (const first of ['east', 'west']) {
+      const state = stateFor(3);
+      const tut = tutorialFor(3, 0)!;
+      expect(shown(tut, state)).toBe(TXT.tapThenGrey);
+      expect(stepTowerId(tut.current(state)!, state)).toBe('east');
+      tut.onCommand(link('home', 'foe'), state); // not a grey tower
+      expect(shown(tut, state)).toBe(TXT.tapThenGrey);
+      issue(tut, state, link('home', first));
+      expect(shown(tut, state), `${first}: step 2 waits for the capture`).toBeNull();
+      expect(tut.finished).toBe(false);
+    }
+  });
+
+  it('step 2 targets whichever grey tower is left and completes on a link into it', () => {
+    for (const [first, other] of [
+      ['east', 'west'],
+      ['west', 'east'],
+    ] as const) {
+      const state = stateFor(3);
+      const tut = tutorialFor(3, 0)!;
+      issue(tut, state, link('home', first));
+      capture(state, first);
+      const grab = tut.current(state)!;
+      expect(grab.text).toBe(TXT.grabOther);
+      expect(stepTowerId(grab, state), `${first} taken`).toBe(other);
+      tut.onCommand(link('home', first), state); // into the one already taken
+      tut.onCommand(link('home', 'foe'), state);
+      expect(shown(tut, state)).toBe(TXT.grabOther);
+      tut.onCommand(link(first, other), state); // from any own tower
+      expect(tut.finished, `${first} → ${other}`).toBe(true);
+    }
+  });
+
+  it('step 2 also completes when no grey tower is left (the enemy took the other one)', () => {
     const state = stateFor(3);
     const tut = tutorialFor(3, 0)!;
-    expect(tut.current(state)?.text).toBe(`Let a tower fill to ${C.CAPACITY[1]} to upgrade it — L2 can attack 2 targets`);
-    expect(C.CAPACITY[1]).toBe(25);
-    tut.onSelect('home', state);
-    expect(tut.finished).toBe(false); // selecting is not the lesson
+    issue(tut, state, link('home', 'east'));
+    capture(state, 'east');
+    expect(shown(tut, state)).toBe(TXT.grabOther);
+    state.towers['west']!.owner = 'enemy1';
+    tut.onSelect(null, state);
+    expect(tut.finished).toBe(true);
+  });
+});
+
+describe('level 4 tutorial (GD-5b: stop the stream so home fills to 25)', () => {
+  /** home → outpost streaming, outpost captured: step 1 on screen. */
+  const atStop = () => {
+    const state = stateFor(4);
+    const tut = tutorialFor(4, 0)!;
+    expect(shown(tut, state)).toBeNull(); // gated on the outpost capture
+    issue(tut, state, link('home', 'outpost'));
+    tut.onSelect(null, state);
+    expect(shown(tut, state)).toBeNull(); // still neutral
+    tut.onCommand(unlink('home', 'outpost'), state); // a cut before the capture is not the lesson
+    capture(state, 'outpost');
+    tut.onSelect(null, state);
+    const stop = tut.current(state)!;
+    expect(stop.text).toBe(TXT.stopToGrow);
+    expect(stepTowerId(stop, state)).toBe('home');
+    return { state, tut };
+  };
+
+  it('stopToGrow completes on an unlink from home (a swipe cut or the second tap), not on other unlinks', () => {
+    const { state, tut } = atStop();
+    tut.onCommand(unlink('outpost'), state);
+    tut.onCommand({ type: 'unlink', owner: 'enemy1', from: 'home' }, state);
+    expect(shown(tut, state)).toBe(TXT.stopToGrow);
+    issue(tut, state, unlink('home', 'outpost'));
+    expect(shown(tut, state)).toBe(TXT.fillToUpgrade);
+    expect(TXT.fillToUpgrade).toContain('25');
+
+    const b = atStop();
+    issue(b.tut, b.state, unlink('home')); // "all links of home"
+    expect(shown(b.tut, b.state)).toBe(TXT.fillToUpgrade);
+  });
+
+  it('stopToGrow also gives way when home levels up anyway or its stream ends on its own', () => {
+    const a = atStop();
+    a.state.towers['home']!.level = 2;
+    a.tut.onSelect(null, a.state);
+    expect(a.tut.finished).toBe(false);
+    a.tut.onSelect(null, a.state); // next frame: fillToUpgrade's doneWhen holds too
+    expect(a.tut.finished).toBe(true);
+
+    const b = atStop();
+    b.state.links = []; // targetFull ended home → outpost
+    b.tut.onSelect(null, b.state);
+    expect(shown(b.tut, b.state)).toBe(TXT.fillToUpgrade);
+  });
+
+  it('fillToUpgrade is hidden while home streams and completes when a player tower reaches level 2 by filling up', () => {
+    const { state, tut } = atStop();
+    issue(tut, state, unlink('home', 'outpost'));
+    expect(shown(tut, state)).toBe(TXT.fillToUpgrade);
+    issue(tut, state, link('home', 'mid'));
+    expect(shown(tut, state)).toBeNull(); // streaming again: hidden (and not timing out)
+    issue(tut, state, unlink('home', 'mid'));
+    expect(shown(tut, state)).toBe(TXT.fillToUpgrade);
     const home = state.towers['home']!;
     home.units = C.CAPACITY[1] - 1;
-    step(state); // production tops it up → auto-upgrade
-    for (let i = 0; i < 40 && home.level < 2; i++) step(state);
+    for (let i = 0; i < 40 && home.level < 2; i++) step(state); // production tops it up → auto-upgrade
     expect(home.level).toBe(2);
     tut.onSelect(null, state);
     expect(tut.finished).toBe(true);

@@ -72,15 +72,16 @@ class Finger {
 }
 
 test.describe('touch drag-to-link and swipe-to-cut (BUG-33)', () => {
-  test('level 2: drag home → mid links, a swipe across the stream cuts it live, the tutorial stop hint clears', async ({ page }) => {
+  test('level 2: drag home → side links, a swipe across the stream cuts it live, the tutorial stop hint clears', async ({ page }) => {
     const pageErrors: string[] = [];
     page.on('pageerror', (err) => pageErrors.push(String(err)));
     await page.goto('/');
     await page.waitForFunction(() => typeof window.__towerclash?.getTutorialHint === 'function');
     expect(await screen(page)).toBe('title');
     const tapThenGrey = await text(page, 'tutorial.tapThenGrey');
+    const goAround = await text(page, 'tutorial.goAround');
     const stopStream = await text(page, 'tutorial.stopStream');
-    expect(stopStream).toBe('Swipe across the stream to stop it');
+    expect(stopStream).toBe('Swipe across the stream so your tower grows');
 
     expect(await page.evaluate((seed) => window.__towerclash.loadLevel(2, seed), SEED)).toBe(true);
     await expect.poll(() => screen(page)).toBe('play');
@@ -90,43 +91,58 @@ test.describe('touch drag-to-link and swipe-to-cut (BUG-33)', () => {
     const cdp = await page.context().newCDPSession(page);
     const finger = new Finger(page, cdp);
     const home = towerAt('home');
-    const mid = towerAt('mid');
-    expect(home.x).toBe(mid.x); // the home → mid lane is vertical: the swipe below runs straight across it
+    const side = towerAt('side');
+    const foe = towerAt('foe');
+    expect(Math.abs(home.y - side.y)).toBeLessThan(40); // the home → side lane is near-horizontal: the swipe below runs straight across it
 
-    // (i) drag own tower → neutral tower: one player stream home → mid
+    // (i) drag own tower → neutral tower: one player stream home → side
     await finger.start(home);
-    await finger.slide(home, mid, 10);
+    await finger.slide(home, side, 10);
     await finger.end();
-    await expect.poll(() => playerLinks(page), { message: 'the drag home → mid opens a stream' }).toEqual([{ from: 'home', to: 'mid' }]);
-    await expect.poll(() => hint(page), { message: 'the link completes step 1; the stop step shows' }).toBe(stopStream);
+    await expect.poll(() => playerLinks(page), { message: 'the drag home → side opens a stream' }).toEqual([{ from: 'home', to: 'side' }]);
+    // GD-5a: the stop step waits for the capture and for side → foe (tutorial step 2)
+    await expect.poll(() => hint(page), { message: 'the link completes step 1; step 2 waits for the capture' }).toBeNull();
+    await expect.poll(() => page.evaluate(() => window.__towerclash.getState()?.towers['side']?.owner), { message: 'side falls', timeout: 20_000 }).toBe('player');
+    await expect.poll(() => hint(page)).toBe(goAround);
+    await finger.start(side);
+    await finger.slide(side, foe, 10);
+    await finger.end();
+    await expect.poll(() => playerLinks(page)).toEqual([
+      { from: 'home', to: 'side' },
+      { from: 'side', to: 'foe' },
+    ]);
+    await expect.poll(() => hint(page), { message: 'side → foe completes step 2; the stop step shows' }).toBe(stopStream);
 
     // a drag along the stream from the own tower again is still "link" (a no-op on an existing stream), never a cut
     await finger.start(home);
-    await finger.slide(home, { x: home.x + 4, y: (home.y + mid.y) / 2 }, 6);
+    await finger.slide(home, { x: (home.x + side.x) / 2, y: (home.y + side.y) / 2 - 4 }, 6);
     await finger.end();
     await page.waitForTimeout(200); // two sim ticks: an unlink would have landed
-    expect(await playerLinks(page), 'a drag from an own tower never cuts').toEqual([{ from: 'home', to: 'mid' }]);
+    expect(await playerLinks(page), 'a drag from an own tower never cuts').toEqual([
+      { from: 'home', to: 'side' },
+      { from: 'side', to: 'foe' },
+    ]);
 
-    // (ii) swipe from empty ground across the stream: cut while the finger is still down
-    const y = Math.round((home.y + mid.y) / 2);
-    const left = { x: home.x - 160, y };
-    const right = { x: home.x + 160, y };
-    await finger.start(left);
-    await finger.slide(left, right, 8);
-    await expect.poll(() => playerLinks(page), { message: 'the swipe cuts the stream live, before the finger lifts' }).toEqual([]);
+    // (ii) swipe from empty ground across home → side (clear of side → foe): cut while the finger is still down
+    const x = Math.round((home.x + side.x) / 2);
+    const top = { x, y: Math.round((home.y + side.y) / 2) - 100 };
+    const bottom = { x, y: Math.round((home.y + side.y) / 2) + 70 };
+    await finger.start(top);
+    await finger.slide(top, bottom, 8);
+    await expect.poll(() => playerLinks(page), { message: 'the swipe cuts the stream live, before the finger lifts' }).toEqual([{ from: 'side', to: 'foe' }]);
     // (iii) the tutorial's stop step accepted the cut
-    await expect.poll(() => hint(page), { message: 'the swipe-cut completes the stop step (tutorial over)' }).toBeNull();
+    await expect.poll(() => hint(page), { message: 'the swipe-cut completes the stop step' }).toBeNull();
     await finger.end();
     await page.waitForTimeout(300);
-    expect(await playerLinks(page), 'nothing re-linked on touchEnd').toEqual([]);
-    expect(await hint(page), 'level 2 has no further step').toBeNull();
+    expect(await playerLinks(page), 'nothing re-linked on touchEnd').toEqual([{ from: 'side', to: 'foe' }]);
+    expect(await hint(page), 'no further step on the side-first line').toBeNull();
     expect(await screen(page)).toBe('play');
 
     // and the finger can open the stream again right after (the swipe left no half-pressed state)
     await finger.start(home);
-    await finger.slide(home, mid, 10);
+    await finger.slide(home, side, 10);
     await finger.end();
-    await expect.poll(() => playerLinks(page), { message: 're-link after the cut' }).toEqual([{ from: 'home', to: 'mid' }]);
+    await expect.poll(() => playerLinks(page), { message: 're-link after the cut' }).toContainEqual({ from: 'home', to: 'side' });
 
     expect(pageErrors).toEqual([]);
   });

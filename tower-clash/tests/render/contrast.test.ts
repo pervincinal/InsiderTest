@@ -6,7 +6,7 @@ import { drawShop } from '../../src/render/menusShop';
 import { LEVEL_MAP, SETTINGS, SHOP, SHOP_TABS, settingsAboutLayout, shopBuyRect, shopConvertSegRect, shopPackRect, shopRowBuyRect, shopRowRect, shopSkinRect } from '../../src/render/menuLayout';
 import type { View } from '../../src/render/view';
 import type { SettingsOpts } from '../../src/render/menusSettings';
-import { drawSettings } from '../../src/render/menusSettings';
+import { TONE_SEGMENT_PX, drawSettings } from '../../src/render/menusSettings';
 import type { DailyCardOpts, LevelSelectOpts } from '../../src/render/menusLevels';
 import { COUNTDOWN_INSET, countdownPillRect, drawLevelSelect } from '../../src/render/menusLevels';
 import { TOAST, drawToast } from '../../src/render/economyWidgets';
@@ -19,6 +19,7 @@ import { tr } from '../../src/ui/locales/tr';
 import { ACHIEVEMENTS } from '../../src/economy/catalog';
 import { achievementName } from '../../src/ui/catalogText';
 import { ADVANCES, ADVANCE_CHARS } from './fontAdvances';
+import { TONE_PALETTES } from '../../src/render/teamTones';
 
 // the menus draw English menu strings that the app registers with its lazy chunks; these tests
 // import the drawing modules directly, so they register the whole English dictionary themselves
@@ -416,13 +417,17 @@ describe('active-state controls through a recording canvas (ART-15)', () => {
       const out: Drawn[] = [];
       const faces = new Set<string>();
       const fills = new Set<string>();
-      drawSettings(recordingView(recordingCtx(out, faces, fills)), pal, settingsOpts({ soundOn: true, colorBlind: true, reducedMotion: 'on', language: 'tr' }));
+      drawSettings(recordingView(recordingCtx(out, faces, fills)), pal, settingsOpts({ soundOn: true, colorBlind: true, reducedMotion: 'on', language: 'tr', tones: 'royal' }));
       const motion = out.filter((d) => inside(d, SETTINGS.motion));
       expect(motion).toHaveLength(3);
       expect(motion.map((d) => d.fill)).toEqual([pal.textDim, pal.shopBuy.text, pal.textDim]);
       const lang = out.filter((d) => inside(d, SETTINGS.language));
       expect(lang).toHaveLength(4);
       expect(lang.map((d) => d.fill)).toEqual([pal.textDim, pal.textDim, pal.textDim, pal.shopBuy.text]);
+      // FE-14 team colours: the saved set is the selected segment
+      const tones = out.filter((d) => inside(d, SETTINGS.tones));
+      expect(tones.map((d) => d.text)).toEqual(['Classic', 'Vivid', 'Royal', 'Pastel']);
+      expect(tones.map((d) => d.fill)).toEqual([pal.textDim, pal.textDim, pal.shopBuy.text, pal.textDim]);
       for (const toggle of [SETTINGS.sound, SETTINGS.colorBlind]) {
         const label = out.filter((d) => inside(d, toggle));
         expect(label).toHaveLength(1);
@@ -880,6 +885,58 @@ const TIGHT = new Set([
 ]);
 /** L10N-3: smallest word size of any line here (was 12 px, the helper's floor; AZ/RU/TR weekly hit 13–14 px). */
 const WORD_FLOOR_PX = 16;
+
+/**
+ * FE-14 "Team colours" row, measured with the game's fonts like ART-17 / L10N-3: the four set names
+ * keep TONE_SEGMENT_PX in every locale with ≥ 5 % slack in their segment (so the canvas never squeezes
+ * them through maxWidth), and the title keeps its 26 px on its line beside the swatches — also with the
+ * dev `?tones=` note there.
+ */
+describe('FE-14 team-colour sets leave the settings UI pairs alone', () => {
+  it('RESET PROGRESS keeps the classic danger red (border + label) under every set and both palettes', () => {
+    for (const [set, pair] of Object.entries(TONE_PALETTES)) {
+      pair.forEach((pal, i) => {
+        const base = i === 0 ? DEFAULT_PALETTE : COLOR_BLIND_PALETTE;
+        const out: Drawn[] = [];
+        drawSettings(recordingView(recordingCtx(out, new Set<string>())), pal, settingsOpts());
+        const reset = out.filter((d) => inside(d, SETTINGS.reset));
+        expect(reset.map((d) => d.fill), `${set} cb=${i}`).toEqual([base.toastError.face]);
+        expect(pal.toastError).toEqual(base.toastError);
+      });
+    }
+  });
+});
+
+describe('FE-14 team-colour row locale fit', () => {
+  it('set names at full size with ≥ 5 % slack, the title inside its room, in every locale', async () => {
+    registerDictionary('az', az);
+    registerDictionary('ru', ru);
+    registerDictionary('tr', tr);
+    try {
+      for (const lang of ['en', 'az', 'ru', 'tr'] as const) {
+        await setLanguage(lang);
+        for (const toneOverride of [null, 'pastel'] as const) {
+          const key = `${lang}${toneOverride ? ' +override' : ''}`;
+          const out: Drawn[] = [];
+          drawSettings(recordingView(recordingCtx(out, new Set<string>(), undefined, fontMeasure)), DEFAULT_PALETTE, settingsOpts({ language: lang, tones: 'vivid', toneOverride }));
+          const names = out.filter((d) => inside(d, SETTINGS.tones));
+          expect(names.map((d) => d.text), key).toEqual(['settings.tonesClassic', 'settings.tonesVivid', 'settings.tonesRoyal', 'settings.tonesPastel'].map((k) => t(k as never)));
+          for (const d of names) {
+            expect(d.px, `${key}: "${d.text}"`).toBe(TONE_SEGMENT_PX);
+            expect(fontMeasure(d.text, d.font), `${key}: "${d.text}"`).toBeLessThanOrEqual(d.maxW! * 0.95);
+          }
+          const title = out.find((d) => d.text === t('settings.tones'));
+          expect(title, key).toBeDefined();
+          expect(title!.px, key).toBe(26);
+          expect(fontMeasure(title!.text, title!.font), key).toBeLessThanOrEqual(title!.maxW! * 0.95);
+          expect(out.some((d) => d.text === '?tones=pastel'), key).toBe(toneOverride !== null);
+        }
+      }
+    } finally {
+      await setLanguage('en');
+    }
+  });
+});
 
 describe('ART-17 locale fit at 360 px (720 logical)', () => {
   it('numbers 24 px in every locale, every line inside its room, < 5 % slack only on the known tight lines', async () => {

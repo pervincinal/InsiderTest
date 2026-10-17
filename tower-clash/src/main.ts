@@ -3,7 +3,8 @@ import { LEVEL_META, getLoadedLevel, levelChunkKey, levelIndex, loadLevel } from
 import { chunkFailures, chunkRecoverable, loadChunk, reloadOnce } from './lazyChunk';
 import { warmWorkerCache } from './swWarm';
 import type { Palette } from './render/palette';
-import { getPalette } from './render/palette';
+import { settingsPalette } from './render/palette';
+import { setSpritePalette } from './render/spriteCache';
 import type { View } from './render/view';
 import { createView, insetProbe, refreshSafeInsets, resize } from './render/view';
 import { blankLayer, createLayers } from './render/layers';
@@ -104,6 +105,12 @@ export interface TowerClashDebug {
   getDrag(): { fromId: string; x: number; y: number; hoverTowerId: string | null } | null;
   /** Current UI language code and a translation lookup (I18N e2e). */
   getLanguage(): string;
+  /**
+   * FE-14 team colours: the saved set (`settings.tones`, absent = classic), the set on screen (the
+   * `?tones=` override wins), whether the lazy chunk of the alternatives is in, and the player's mid
+   * colour of the palette drawn now.
+   */
+  getTones(): { setting: string; active: string; loaded: boolean; player: string };
   /**
    * `t(key, params)`: with params the string is formatted (plural forms included, L10N-2), without them the raw template.
    * Async since PERF-8: an English menu string may first have to arrive with its lazy chunk (`page.evaluate` awaits it).
@@ -334,8 +341,16 @@ export class TowerClashApp implements App {
     requestAnimationFrame((t) => this.frame(t));
   }
 
+  /**
+   * The palette everything draws with this frame (title island, menus, shop previews, play world,
+   * HUD): colour-blind × team-colour set (FE-14: the URL `?tones=` override, else `settings.tones`). A
+   * non-classic set answers the shipped palette until its lazy chunk lands (`getPalette` starts the
+   * download); any change of the answer empties the sprite cache (`setSpritePalette`).
+   */
   palette(): Palette {
-    return getPalette(this.save.settings.colorBlind);
+    const pal = settingsPalette(this.save.settings);
+    setSpritePalette(pal);
+    return pal;
   }
 
   go(screen: Screen): void {

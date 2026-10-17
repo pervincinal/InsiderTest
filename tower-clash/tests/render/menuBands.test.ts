@@ -325,6 +325,23 @@ describe('drawn positions (FE-11)', () => {
 });
 
 describe('taps follow the drawn positions (FE-11)', () => {
+  it('settings (FE-14): a team-colour segment where it is drawn saves the set, on 9:16 and on a tall phone', () => {
+    const seg = (i: number) => ({ x: SETTINGS.tones.x + 4 + ((SETTINGS.tones.w - 8) / 4) * (i + 0.5), y: SETTINGS.tones.y + SETTINGS.tones.h / 2 });
+    for (const view of [nineBySixteen(), proMax()]) {
+      save = defaultSave();
+      const s = shell(view, save);
+      const settings = new SettingsScreen(s.app, () => s.backs++);
+      expect(save.settings.tones).toBeUndefined();
+      tapDrawn(settings, view, seg(1));
+      expect(save.settings.tones).toBe('vivid');
+      tapDrawn(settings, view, seg(3));
+      expect(save.settings.tones).toBe('pastel');
+      tapDrawn(settings, view, seg(0));
+      expect(save.settings.tones).toBe('classic');
+      expect(save.settings.colorBlind).toBe(false);
+    }
+  });
+
   it('settings: the colour-blind toggle where it is drawn; its 9:16 position is another row now', () => {
     const view = proMax();
     const s = shell(view, save);

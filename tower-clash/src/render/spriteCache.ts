@@ -79,6 +79,19 @@ export function invalidateSprites(): void {
   cache.clear();
 }
 
+let paletteKey: object | null = null;
+
+/**
+ * The palette the app draws with this frame (FE-14). A different object than last time — the
+ * colour-blind toggle, another team-colour set, its lazy chunk landing — empties the cache: the keys
+ * carry the palette, so the old layers would otherwise only age out of the LRU.
+ */
+export function setSpritePalette(pal: object): void {
+  if (pal === paletteKey) return;
+  if (paletteKey !== null) cache.clear();
+  paletteKey = pal;
+}
+
 /** Entries held and bakes done so far (tests, debug overlay). */
 export function spriteCacheStats(): { size: number; bakes: number } {
   return { size: cache.size, bakes: bakesTotal };
