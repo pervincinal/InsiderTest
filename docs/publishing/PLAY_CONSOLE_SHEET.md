@@ -532,7 +532,7 @@ Tower Clash'in ilk sürümü. Kulelerinden birine, sonra bir hedefe dokun — as
 </tr-TR>
 ```
 
-All four blocks are `RELEASE_NOTES.md` v1.0.0 verbatim (RU 486 / TR 461); paste the four-language block only after the RU and TR translations of §3.5 / §3.6 are saved; if one of them is not saved yet, delete its `<ru-RU>` / `<tr-TR>` block from the box first (⚠ 11). They describe the swipe that stops a stream, the supply line through a full own tower, walking soldiers and the island light — upload a build of 1.0.0 build 16 or later (the earlier builds have none of these).
+All four blocks are `RELEASE_NOTES.md` v1.0.0 verbatim (RU 486 / TR 461); paste the four-language block only after the RU and TR translations of §3.5 / §3.6 are saved; if one of them is not saved yet, delete its `<ru-RU>` / `<tr-TR>` block from the box first (⚠ 11). They describe the swipe that stops a stream, the supply line through a full own tower, walking soldiers and the island light — upload a build of 1.0.0 build 16 or later (the earlier builds have none of these). Re-checked 2026-10-18 for build 18 (PUB-26): unchanged and still true (team colours and the level 2–4 tutorial are not named; counts re-run, EN 472 / AZ 467 / RU 486 / TR 461).
 
 ### 5.5 Production (G20) — only after §4.6 is approved
 
