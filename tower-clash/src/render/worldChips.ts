@@ -1,9 +1,10 @@
-import type { GameState } from '../sim/types';
+import type { GameState, Tower } from '../sim/types';
 import { C } from '../sim/constants';
 import type { Palette } from './palette';
 import type { Camera } from './camera';
 import { BADGE_MIN_SCALE, proj } from './camera';
-import { HUD, WORLD_ZOOM } from './layout';
+import { HUD, TOWER_RADIUS, WORLD_ZOOM } from './layout';
+import { towerFootprintRadius, towerTop } from './sprites';
 import type { Rect } from './widgets';
 import { font, roundRect } from './widgets';
 
@@ -382,27 +383,32 @@ function drawStreamChip(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, bs
 }
 
 /**
- * Mine charge chips and (while `streams`) the stream chips of every streaming tower, laid out against
- * `badges` (this frame's badge rects by tower id) and drawn over them. `minTop`: no chip slides above
- * this screen y (the top band, or the lesson card while it is up).
+ * One world chip of the frame: a live mine's charge chip (`n` charges, chip scale `s`) or a streaming
+ * tower's "→ n" chip (`tower`, `n` streams, its badge's scale `s`), with its request for `placeChips`.
  */
-export function drawWorldChips(
-  ctx: CanvasRenderingContext2D,
-  pal: Palette,
-  state: GameState,
-  cam: Camera,
-  badges: ReadonlyMap<string, BadgeBox>,
-  minTop: number,
-  streams: boolean,
-): void {
-  const reqs: ChipRequest[] = [];
-  const draws: ((r: Rect) => void)[] = [];
+export interface ChipSpec {
+  kind: 'mine' | 'stream';
+  req: ChipRequest;
+  s: number;
+  n: number;
+  tower?: string;
+}
+
+/** A chip where `placeChips` put it this frame. */
+export interface PlacedChip extends ChipSpec {
+  rect: Rect;
+}
+
+/**
+ * The frame's chip requests (pure apart from measuring): every live mine's charge chip, then (while
+ * `streams`) a stream chip for every streaming tower with a badge in `badges`, far to near, then by id.
+ */
+export function worldChipSpecs(ctx: CanvasRenderingContext2D, state: GameState, cam: Camera, badges: ReadonlyMap<string, BadgeBox>, streams: boolean): ChipSpec[] {
+  const out: ChipSpec[] = [];
   for (const m of state.mines) {
     if (m.charges <= 0) continue;
-    const text = String(m.charges);
     const { req, s } = mineChipRequest(ctx, cam, m.x, m.y, m.charges);
-    reqs.push(req);
-    draws.push((r) => drawMineChip(ctx, pal, r, s, text));
+    out.push({ kind: 'mine', req, s, n: m.charges });
   }
   if (streams && state.links.length) {
     const counts = new Map<string, number>();
@@ -412,17 +418,84 @@ export function drawWorldChips(
     ids.sort((a, b) => state.towers[a]!.y - state.towers[b]!.y || (a < b ? -1 : a > b ? 1 : 0));
     for (const id of ids) {
       const b = badges.get(id)!;
-      const n = counts.get(id)!;
-      const tones = pal.ownerTones[state.towers[id]!.owner];
-      reqs.push({ rect: streamChipRect(b.rect, b.bs), badge: b.rect });
-      draws.push((r) => drawStreamChip(ctx, pal, r, b.bs, n, tones));
+      out.push({ kind: 'stream', req: { rect: streamChipRect(b.rect, b.bs), badge: b.rect }, s: b.bs, n: counts.get(id)!, tower: id });
     }
   }
-  if (reqs.length === 0) return;
+  return out;
+}
+
+/** `specs` laid out against `badges` (`placeChips`); `minTop`: no chip slides above this screen y (the top band, or the lesson card while it is up). */
+export function layoutWorldChips(badges: ReadonlyMap<string, BadgeBox>, specs: readonly ChipSpec[], minTop: number): PlacedChip[] {
+  if (specs.length === 0) return [];
   const fixed: Rect[] = [];
   for (const b of badges.values()) fixed.push(b.rect);
-  const placed = placeChips(fixed, reqs, minTop);
+  const placed = placeChips(
+    fixed,
+    specs.map((c) => c.req),
+    minTop,
+  );
+  return specs.map((c, i) => ({ ...c, rect: placed[i]! }));
+}
+
+/** Draw the frame's placed chips (`layoutWorldChips`) over the badges. */
+export function drawWorldChips(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, chips: readonly PlacedChip[]): void {
+  if (chips.length === 0) return;
   ctx.save();
-  placed.forEach((r, i) => draws[i]!(r));
+  for (const c of chips) {
+    if (c.kind === 'mine') drawMineChip(ctx, pal, c.rect, c.s, String(c.n));
+    else drawStreamChip(ctx, pal, c.rect, c.s, c.n, pal.ownerTones[state.towers[c.tower!]!.owner]);
+  }
   ctx.restore();
+}
+
+/*
+ * GD-5c / GD-5d: what stands on the world this frame, for the overlays drawn over it (the tutorial
+ * bubble, the select hint) to keep clear of: every tower's placed badge, every chip, and every tower's
+ * drawn body. draw.ts lays it out once per frame (`worldLayout`) and leaves it here.
+ */
+
+/** The world's badges, chips and drawn bodies of one frame (logical frame, projected). */
+export interface WorldLayout {
+  badges: ReadonlyMap<string, BadgePlace>;
+  chips: readonly PlacedChip[];
+  /** Each tower's drawn body (`towerBodyRect`). */
+  bodies: ReadonlyMap<string, Rect>;
+}
+
+/**
+ * A tower's drawn body standing at projected `p` (depth `s`), as a rect: the zoomed plinth's width (at
+ * least TOWER_RADIUS, the round tower's), from the roof apex (`towerTop`) down to the plinth's front
+ * edge (sprites.ts `plinth`: its ellipse, 0.4 × r deep, sits 2 px under the anchor). Flags and smoke
+ * may poke out of it.
+ */
+export function towerBodyRect(kind: Tower['kind'], level: number, p: { x: number; y: number; s: number }): Rect {
+  const z = WORLD_ZOOM.tower * p.s;
+  const r = towerFootprintRadius(kind, level);
+  const half = Math.max(r, TOWER_RADIUS) * z;
+  const top = p.y - towerTop(kind, level) * z;
+  return { x: p.x - half, y: top, w: 2 * half, h: p.y + (2 + 0.42 * r) * z - top };
+}
+
+/** draw.ts `selectionRing` at rest (r 54, before its 4 px pulse; the 9 px gold line, centred 10 px under the anchor): what the selected tower adds round its base. */
+const SELECT_RING = Object.freeze({ r: 54, dy: 10, line: 4.5 });
+
+/** The selected tower's drawn footprint: its body (`towerBodyRect`) and the selection ring round its base. */
+export function selectedFootprint(body: Rect, p: { x: number; y: number; s: number }): Rect {
+  const z = WORLD_ZOOM.tower * p.s;
+  const rx = (SELECT_RING.r + SELECT_RING.line) * z;
+  const bottom = p.y + (SELECT_RING.dy + SELECT_RING.r * 0.42 + SELECT_RING.line) * z;
+  const x = Math.min(body.x, p.x - rx);
+  return { x, y: body.y, w: Math.max(body.x + body.w, p.x + rx) - x, h: Math.max(body.y + body.h, bottom) - body.y };
+}
+
+let frameLayout: { state: GameState; time: number; layout: WorldLayout } | null = null;
+
+/** Keep `layout` as the world layout of the frame being drawn for `state`. */
+export function setFrameWorldLayout(state: GameState, layout: WorldLayout): void {
+  frameLayout = { state, time: state.time, layout };
+}
+
+/** The world layout last drawn for `state` at its current time, or null (another state, or not drawn yet). */
+export function frameWorldLayout(state: GameState): WorldLayout | null {
+  return frameLayout && frameLayout.state === state && frameLayout.time === state.time ? frameLayout.layout : null;
 }

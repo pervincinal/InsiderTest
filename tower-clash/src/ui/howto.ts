@@ -1,6 +1,6 @@
 /**
- * "How to play" card (FE-3): the five rules of v3 on one card, each an icon and one sentence
- * (`howto.1` … `howto.5`). Reached from the settings screen and from the pause menu; CLOSE, BACK,
+ * "How to play" card (FE-3): the six rules of v3 on one card, each an icon and one sentence
+ * (`howto.1` … `howto.6`; GD-5f added the swipe to `howto.2` and the supply line as `howto.6`). Reached from the settings screen and from the pause menu; CLOSE, BACK,
  * ESC / Enter and the platform back button return to whoever opened it (`back`). No state of its
  * own beyond the pressed button. Loaded lazily with its drawing (PERF-1, src/ui/lazyScreens.ts).
  */
@@ -17,6 +17,8 @@ import type { App, Screen } from './screens';
 export class HowToScreen implements Screen {
   readonly name = 'howto' as const;
   private pressed: Rect | null = null;
+  /** Wrapped line count of each rule at the last draw, before the 3-line cut (e2e: `getHowtoLines`). */
+  lines: readonly number[] = [];
 
   constructor(
     private readonly app: App,
@@ -24,7 +26,7 @@ export class HowToScreen implements Screen {
   ) {}
 
   draw(view: View, nowMs: number): void {
-    drawHowTo(view, this.app.palette(), { nowMs, pressed: this.pressed });
+    this.lines = drawHowTo(view, this.app.palette(), { nowMs, pressed: this.pressed });
   }
 
   /**

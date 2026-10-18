@@ -20,7 +20,9 @@ import type { App, NativeInfoOverride, QueuedToast, Screen, StartOptions } from 
 import { ResultScreen, TitleScreen, beginMapFrame, endMapFrame, handOverToasts } from './ui/screens';
 import { PlayScreen } from './ui/play';
 import { AI_CHUNK, aiLoaded, loadAi } from './ui/ai';
+import { preloadTutorialSteps } from './ui/tutorialChunk';
 import { preloadCamera } from './render/camera';
+import { preloadTutorialBubble } from './render/tutorialDraw';
 import { applyMotionPref } from './ui/motion';
 import type { Language } from './ui/i18n';
 import { ENGLISH_MENUS_CHUNK, browserLanguages, detectLanguage, loadEnglishMenus, onLanguageChange, setLanguage, t } from './ui/i18n';
@@ -101,6 +103,8 @@ export interface TowerClashDebug {
   getTutorialHint(): string | null;
   /** Text of the link-limit refusal bubble while it is on screen (rules v2), or null. */
   getLimitHint(): string | null;
+  /** On the "How to play" card: each rule's wrapped line count at the last frame, before the 3-line cut (GD-5f); else null. */
+  getHowtoLines(): readonly number[] | null;
   /** The drag preview from an own tower while the finger is down and past the drag threshold (BUG-35), or null. */
   getDrag(): { fromId: string; x: number; y: number; hoverTowerId: string | null } | null;
   /** Current UI language code and a translation lookup (I18N e2e). */
@@ -455,9 +459,15 @@ export class TowerClashApp implements App {
     return preloadCosmetics(equippedSkin(this.save));
   }
 
-  /** Fetch a level chunk in the background (no-op for unknown ids; errors are swallowed, `startLevel` retries). */
+  /**
+   * Fetch a level chunk in the background (no-op for unknown ids; errors are swallowed, `startLevel` retries),
+   * and on a first play of levels 2–4 their tutorial steps (PERF-10).
+   */
   private preloadLevel(id: number | undefined): void {
-    if (id !== undefined) void loadLevel(id).catch(() => undefined);
+    if (id === undefined) return;
+    void loadLevel(id).catch(() => undefined);
+    void preloadTutorialSteps(id, this.save.stars[String(id)] ?? 0);
+    void preloadTutorialBubble(id, this.save.stars[String(id)] ?? 0); // GD-5c: the tutorial bubble's placement chunk
   }
 
   openSettings(from: Screen): void {
@@ -540,7 +550,8 @@ export class TowerClashApp implements App {
    * after the first frame and the next one when a level starts), otherwise through the spinner.
    * The cosmetic chunks the equipped skins need (PERF-5) and a `?tilt=` override's perspective camera
    * (PERF-9) are requested first and awaited alongside the level (bounded by `COSMETIC_WAIT_MS`), so
-   * the first frame is already skinned / themed / tilted. The enemy AI chunk (PERF-9) is awaited like
+   * the first frame is already skinned / themed / tilted; so are a first play's level 2–4 tutorial steps
+   * (PERF-10: late or failed, the tutorial shows once they land). The enemy AI chunk (PERF-9) is awaited like
    * the level itself. A navigation or another start that happened meanwhile wins; a failed download
    * returns to the screen the player was on. Resolves true once the play screen is current.
    */
@@ -549,8 +560,10 @@ export class TowerClashApp implements App {
     if (levelIndex(levelId) < 0) return Promise.resolve(false);
     const cosmetics = this.preloadCosmetics(); // kicked off before the level chunk
     const camera = preloadCamera();
+    const tutorial = preloadTutorialSteps(levelId, this.save.stars[String(levelId)] ?? 0);
+    void preloadTutorialBubble(levelId, this.save.stars[String(levelId)] ?? 0); // GD-5c: not awaited (until it lands the bubble waits a frame)
     const cached = getLoadedLevel(levelId);
-    if (cached && !cosmetics && !camera && aiLoaded()) {
+    if (cached && !cosmetics && !camera && !tutorial && aiLoaded()) {
       this.enterLevel(cached, seed, opts);
       return Promise.resolve(true);
     }
@@ -563,6 +576,7 @@ export class TowerClashApp implements App {
       loadAi(),
       cosmetics ? within(cosmetics, COSMETIC_WAIT_MS) : undefined,
       camera ? within(camera, COSMETIC_WAIT_MS) : undefined,
+      tutorial ? within(tutorial, COSMETIC_WAIT_MS) : undefined,
     ]).then(
       ([level]) => {
         if (seq !== this.startSeq || this.current !== loading) return null; // superseded

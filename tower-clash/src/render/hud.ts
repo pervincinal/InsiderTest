@@ -30,8 +30,10 @@ import { prefersReducedMotion } from './particles';
 import { reducedMotionOverride } from '../ui/motion';
 import type { BoosterKind, BoosterStatus } from '../ui/boosters';
 import { drawVideoGlyph } from './sprites';
+import type { Camera } from './camera';
 import { playCamera, proj } from './camera';
-import { drawStreamArrow } from './worldChips';
+import type { WorldLayout } from './worldChips';
+import { drawStreamArrow, frameWorldLayout, selectedFootprint } from './worldChips';
 import type { ToastOpts } from './economyWidgets';
 import { drawToast, drawWallet } from './economyWidgets';
 import type { HudOverlayDrawers } from './hudOverlays';
@@ -361,6 +363,48 @@ export function lessonCardLayout(ctx: CanvasRenderingContext2D, state: GameState
   return { rect: { x: 360 - w / 2, y: 108, w, h }, lines, px, lineH, captionH };
 }
 
+/** The select hint pill's height, and the gap above it / below the top band or the lesson card's clay edge when it moves up (GD-5d). */
+export const SELECT_HINT = Object.freeze({ h: 38, y: 1128, gap: 10 });
+
+/**
+ * Where the select hint pill goes (pure; `textW`: its measured text at 19 px): centred just above the
+ * bottom band, unless that spot touches one of `avoid` (the selected tower's drawn footprint and its
+ * badge, `selectHintAvoid`; on 360 × 640 the home towers of levels 1–5 stand there) — then at the top
+ * of the map band, under the top HUD band or, while it is up, the lesson card (`card`, logical frame).
+ */
+export function selectHintRect(textW: number, a: HudAnchors, card: Rect | null, avoid: readonly Rect[]): Rect {
+  const w = Math.min(700, textW + 40);
+  const low = { x: 360 - w / 2, y: SELECT_HINT.y + a.bottom, w, h: SELECT_HINT.h };
+  if (!avoid.some((r) => r.x < low.x + low.w && low.x < r.x + r.w && r.y < low.y + low.h && low.y < r.y + r.h)) return low;
+  // the card's clay edge is 4 px under its rect
+  return { ...low, y: card ? card.y + card.h + 4 + SELECT_HINT.gap : Math.max(0, HUD.mapTop + a.top) + SELECT_HINT.gap };
+}
+
+/** What the select hint keeps clear of: the selected tower's drawn footprint (body + selection ring) and its badge, as `layout` (default: this frame's world layout) has them. */
+export function selectHintAvoid(state: GameState, selectedId: string, cam: Camera = playCamera(), layout: WorldLayout | null = frameWorldLayout(state)): Rect[] {
+  const tw = state.towers[selectedId];
+  const body = layout?.bodies.get(selectedId);
+  if (!layout || !tw || !body) return [];
+  const out = [selectedFootprint(body, proj(cam, tw.x, tw.y))];
+  const badge = layout.badges.get(selectedId);
+  if (badge) out.push(badge.rect);
+  return out;
+}
+
+/** The select hint pill for the `selectedId` tower (`selectHintRect` against `layout`, default this frame's; sets the hint font on `ctx` to measure it). `card`: the lesson card in the logical frame, or null. */
+export function selectHintPill(ctx: CanvasRenderingContext2D, state: GameState, selectedId: string, a: HudAnchors, card: Rect | null, cam: Camera = playCamera(), layout: WorldLayout | null = frameWorldLayout(state)): Rect {
+  ctx.font = font(19, '500');
+  return selectHintRect(ctx.measureText(t('hud.selectHint')).width, a, card, selectHintAvoid(state, selectedId, cam, layout));
+}
+
+/** Whether `drawHud` shows the select hint this frame: a tower selected while playing, and no airstrike targeting under way. */
+export function selectHintShown(ui: PlayUi): boolean {
+  return ui.selectedTowerId !== null && ui.outcome === 'playing' && !(extrasOf(ui)?.targeting && !ui.paused);
+}
+
+/** Whether `pill` (`selectHintPill`) moved up from its spot over the bottom band (GD-5d). */
+export const selectHintMoved = (pill: Rect, a: HudAnchors): boolean => pill.y !== SELECT_HINT.y + a.bottom;
+
 /** The two glass bands, from the screen edges to the anchored band edges (exactly `HUD.topBar` / `HUD.bottomBar` on a 9:16 screen). */
 export function hudBandRects(view: View, a: HudAnchors = hudAnchors(view)): { top: Rect; bottom: Rect } {
   const b = bleed(view);
@@ -453,12 +497,12 @@ export function drawHud(ctx: CanvasRenderingContext2D, state: GameState, view: V
   ctx.restore();
 
   if (hud?.targeting && ui.outcome === 'playing' && !ui.paused) drawTargeting(ctx, state, ui, nowMs, a.bottom);
-  // selection hint (just above the bottom band)
+  // selection hint: just above the bottom band, or at the top of the map band when the selected tower stands there (GD-5d)
   else if (ui.selectedTowerId && ui.outcome === 'playing') {
     ctx.font = font(19, '500');
     const text = t('hud.selectHint');
-    const w = Math.min(700, ctx.measureText(text).width + 40);
-    const pill: Rect = { x: 360 - w / 2, y: 1128 + a.bottom, w, h: 38 };
+    const pill = selectHintPill(ctx, state, ui.selectedTowerId, a, card ? { ...card.rect, y: card.rect.y + a.top } : null);
+    const w = pill.w;
     drawPill(ctx, pill, pal.paper);
     ctx.fillStyle = pal.ink;
     ctx.textAlign = 'center';
@@ -480,6 +524,8 @@ export function hudKey(state: GameState, ui: PlayUi, nowMs: number): string {
   let k =
     `${currentLanguage()}|${ui.palette.owners.enemy1}|${ui.level.id}|${hud?.challenge?.twist ?? ''}|${formatTime(clockOf(ui, state))}|${ui.speed}|` +
     `${hud?.muted ? 1 : 0}${ui.paused ? 1 : 0}${state.time < 8000 ? 1 : 0}${ui.selectedTowerId ? 1 : 0}|${ui.outcome}|${hud?.streams ?? 0}|${ui.coinsTotal}|${hud?.pressedBooster ?? ''}`;
+  // GD-5d: the select hint's spot follows the selected tower's footprint and badge
+  if (ui.selectedTowerId) for (const r of selectHintAvoid(state, ui.selectedTowerId)) k += `|s${Math.round(r.x)},${Math.round(r.y)},${Math.round(r.w)},${Math.round(r.h)}`;
   if (hud) {
     for (const b of hud.boosters) {
       k += `|${b.kind}${b.affordable ? 1 : 0}${b.active ? 1 : 0}${b.adOffer ? 1 : 0}:${b.charges}:${b.cost}`;

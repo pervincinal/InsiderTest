@@ -8,12 +8,14 @@ import { capacityOf } from '../../src/sim/step';
 import { rngsFor, runAiTick } from '../../src/ai/index';
 import { isAiTick } from '../../src/ai/common';
 import type { Command, GameState } from '../../src/sim/types';
-import { TUTORIAL_STEP_TIMEOUT_MS, Tutorial, stepTowerId, streamMidpoint, supplyLineTarget, tutorialFor } from '../../src/ui/tutorial';
+import { TUTORIAL_STEP_TIMEOUT_MS, Tutorial, stepTowerId, streamMidpoint, tutorialFor } from '../../src/ui/tutorial';
+// PERF-10: levels 2–4 are the lazy steps chunk (tests/setup.ts registers it, as the level start does in the game)
+import { supplyLineTarget } from '../../src/ui/tutorialSteps';
 
 await loadAllLevels();
 const stateFor = (id: number) => createState(getLoadedLevel(id)!, 1);
 
-/** English hint texts (src/ui/locales/enCore.ts). */
+/** English hint texts (src/ui/locales/enTutorial.ts). */
 const TXT = {
   tapThenGrey: 'Tap your tower, then the grey tower',
   goAround: 'Now tap the new tower, then the red one',

@@ -13,7 +13,7 @@ import { t } from '../ui/i18n';
 
 /*
  * "How to play" card drawing (FE-3). Loaded lazily with `HowToScreen` (PERF-1); the hit rectangles
- * are `HOWTO` in menuLayout.ts. Five rows: an icon drawn with the game's own sprite / primitive
+ * are `HOWTO` in menuLayout.ts. Six rows: an icon drawn with the game's own sprite / primitive
  * helpers (mini towers at `ICON_SCALE`, straight ribbons like draw.ts drawLinks, a wall block) and
  * one sentence wrapped into the text column. Reads its options only.
  */
@@ -23,8 +23,8 @@ export interface HowToOpts {
   pressed?: Rect | null;
 }
 
-/** Translation keys of the five rules, in row order. */
-export const HOWTO_KEYS: readonly TranslationKey[] = ['howto.1', 'howto.2', 'howto.3', 'howto.4', 'howto.5'];
+/** Translation keys of the six rules, in row order. */
+export const HOWTO_KEYS: readonly TranslationKey[] = ['howto.1', 'howto.2', 'howto.3', 'howto.4', 'howto.5', 'howto.6'];
 
 /**
  * Mini towers are the real sprites under a uniform scale; one scale for every icon so the sprite
@@ -175,7 +175,7 @@ function clashPuff(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: nu
   crossMark(ctx, pal.owners.enemy1, x, y, r * 0.3);
 }
 
-/* ---------- the five icons ---------- */
+/* ---------- the six icons ---------- */
 
 /** 1. Line of sight: a clear straight line to one tower; a wall blocks the line to another. */
 function iconLine(ctx: CanvasRenderingContext2D, pal: Palette, b: Rect, nowMs: number): void {
@@ -264,10 +264,26 @@ function iconFire(ctx: CanvasRenderingContext2D, pal: Palette, b: Rect, nowMs: n
   drawSwordsPip(ctx, cx + 30, cy + 30, 7, pal.owners.enemy1, pal.ink);
 }
 
-const ICONS: readonly ((ctx: CanvasRenderingContext2D, pal: Palette, b: Rect, nowMs: number) => void)[] = [iconLine, iconKeep, iconLevels, iconCancel, iconFire];
+/** 6. Supply line (GD-5f, rule 13): a stream into an own full tower (badge 25) that streams onward passes the soldiers on. */
+function iconRelay(ctx: CanvasRenderingContext2D, pal: Palette, b: Rect, nowMs: number): void {
+  const cx = b.x + b.w / 2;
+  const cy = b.y + b.h / 2;
+  const src = { x: cx - 38, y: cy + 46 };
+  const full = { x: cx + 2, y: cy + 18 };
+  const foe = { x: cx + 38, y: cy - 8 };
+  ribbon(ctx, pal, src.x + 12, src.y - 10, full.x - 12, full.y - 4, 'player');
+  ribbon(ctx, pal, full.x + 12, full.y - 10, foe.x - 12, foe.y - 2, 'player');
+  miniTower(ctx, pal, foe.x, foe.y, 'enemy1', 1, nowMs);
+  miniTower(ctx, pal, full.x, full.y, 'player', 1, nowMs, '25');
+  miniTower(ctx, pal, src.x, src.y, 'player', 1, nowMs);
+}
 
-export function drawHowTo(view: View, pal: Palette, o: HowToOpts): void {
+const ICONS: readonly ((ctx: CanvasRenderingContext2D, pal: Palette, b: Rect, nowMs: number) => void)[] = [iconLine, iconKeep, iconLevels, iconCancel, iconFire, iconRelay];
+
+/** Draw the card; returns each rule's wrapped line count before the `HOWTO.maxLines` cut (e2e fit check, GD-5f). */
+export function drawHowTo(view: View, pal: Palette, o: HowToOpts): number[] {
   const ctx = beginFrame(view, pal);
+  const counts: number[] = [];
   drawWater(ctx, pal, o.nowMs, 0);
   // FE-11: on a tall screen the header sits on the top safe-area edge (a.top ≤ 0) and CLOSE on the
   // bottom one (a.bottom ≥ 0); the card stretches between them and its rows spread over the extra room
@@ -302,7 +318,10 @@ export function drawHowTo(view: View, pal: Palette, o: HowToOpts): void {
     ctx.fillStyle = pal.ink;
     ctx.font = font(HOWTO.textPx, '500');
     ctx.textAlign = 'left';
-    const lines = wrapText(ctx, t(HOWTO_KEYS[i]!), HOWTO.text.w, HOWTO.maxLines);
+    const text = t(HOWTO_KEYS[i]!);
+    const all = wrapText(ctx, text, HOWTO.text.w, Infinity);
+    counts.push(all.length);
+    const lines = all.length <= HOWTO.maxLines ? all : wrapText(ctx, text, HOWTO.text.w, HOWTO.maxLines);
     const y0 = row.y + row.h / 2 - ((lines.length - 1) * HOWTO.lineH) / 2;
     lines.forEach((line, k) => ctx.fillText(line, HOWTO.text.x, y0 + k * HOWTO.lineH, HOWTO.text.w));
     ctx.restore();
@@ -327,4 +346,5 @@ export function drawHowTo(view: View, pal: Palette, o: HowToOpts): void {
   drawExtrudedText(ctx, title, 360, 50, fitFontPx(ctx, title, 40, 380), { face: pal.paper, side: shade(pal.owners.player, -0.25), outline: pal.ink, depth: 4 });
   ctx.restore();
   ctx.restore();
+  return counts;
 }

@@ -40,10 +40,11 @@ export const enMenus = {
 
   'howto.title': 'HOW TO PLAY',
   'howto.1': 'Tap your tower, then a tower in a straight line. Walls, water, rocks and towers block it.',
-  'howto.2': 'A stream never empties your tower — it only stops it growing.',
+  'howto.2': 'A stream never empties your tower — it only stops it growing. Swipe across a stream to stop it.',
   'howto.3': 'Let a tower fill to level up: bigger towers stream faster and run more streams (1/2/3).',
   'howto.4': 'Equal streams on one lane cancel. Stop yours and hit from another side, or use two lanes.',
   'howto.5': 'A tower under fire cannot recruit — answer every red stream.',
+  'howto.6': 'Stream into your own full tower and it passes your soldiers on — a supply line.',
   'howto.close': 'GOT IT',
 
   'result.tip': 'Tip',
@@ -71,7 +72,7 @@ export const enMenus = {
   'settings.motionSub': 'Auto follows the system setting',
   'settings.motionAuto': 'AUTO',
   'settings.howto': 'How to play',
-  'settings.howtoSub': 'The five rules on one card',
+  'settings.howtoSub': 'The six rules on one card',
   'settings.language': 'Language',
   'settings.languageSub': 'Menus, hints and messages',
   'settings.tones': 'Team colours',

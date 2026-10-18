@@ -4,15 +4,15 @@ import { roadIdFor } from '../sim/create';
 import { capacityOf, isUnderFire, linksFrom } from '../sim/step';
 import type { Biome, Palette } from './palette';
 import { BIOME_DUST, biomeFor, withAlpha } from './palette';
-import type { View } from './view';
+import type { HudAnchors, View } from './view';
 import { applyDeviceTransform, applyTransform, bleed, bleedRect, hudAnchors } from './view';
 import { HUD, SOLDIER_DRAW_SCALE, SWIPE_TRAIL_MS, TANK_DRAW_SCALE, WORLD_ZOOM } from './layout';
 import type { Rect } from './widgets';
 import { font, roundRect } from './widgets';
 type XY = { x: number; y: number };
-import { drawHud, drawOverlays, lessonCardLayout } from './hud';
-import type { BadgeWant } from './worldChips';
-import { badgeScale, chipMinTop, drawWorldChips, placeBadges } from './worldChips';
+import { drawHud, drawOverlays, lessonCardLayout, selectHintMoved, selectHintPill, selectHintShown } from './hud';
+import type { BadgeWant, WorldLayout } from './worldChips';
+import { badgeScale, chipMinTop, drawWorldChips, layoutWorldChips, placeBadges, setFrameWorldLayout, towerBodyRect, worldChipSpecs } from './worldChips';
 import { blankLayer, paintGround, paintHud } from './layers';
 import { drawSea, terrainSea } from './sea';
 import type { TerrainSpec } from './terrain';
@@ -50,9 +50,10 @@ export interface PlayUi {
    * Refused gesture (link limit, or a tap on a tower with no clear lane — rules v3 §2.0b): the
    * selected tower shakes briefly and a paper hint bubble shows `limitHintText` until `until`
    * (same clock as `nowMs`). The play screen sets a fresh object per refusal; the text is already
-   * localised by the UI.
+   * localised by the UI. A confirmation (GD-5f `hint.supplyLine`) names the tower it stands over
+   * (`towerId`) and does not shake.
    */
-  limitHint?: { until: number };
+  limitHint?: { until: number; towerId?: string };
   limitHintText?: string;
   /**
    * Swipe-to-cut slash trail (BUG-33), oldest point first; `t` is on the same clock as `nowMs`. The
@@ -588,6 +589,48 @@ function standing(cam: Camera, t: Tower): TowerLook & { s: number } {
 }
 
 /**
+ * The frame's world layout (pure apart from measuring; GD-5c): every tower's badge placed together
+ * (worldChips.ts `placeBadges`: above the roof, clamped under the top band / the lesson card `card`, or
+ * — a tower at the map's top — below or beside it, clear of the other badges and the card; the
+ * `selectedId` tower's badge rides 4 px higher with its raised building), the mine / stream chips
+ * (`streams`) laid out against them, and every tower's drawn body. `fire`: which badges are under fire.
+ */
+export function worldLayout(ctx: CanvasRenderingContext2D, state: GameState, cam: Camera, selectedId: string | null, card: Rect | null, streams: boolean): WorldLayout & { fire: ReadonlyMap<string, boolean> } {
+  const wants: BadgeWant[] = [];
+  const fire = new Map<string, boolean>();
+  const bodies = new Map<string, Rect>();
+  for (const id in state.towers) {
+    const t = state.towers[id]!;
+    const raise = selectedId === t.id ? 4 : 0;
+    const look = standing(cam, t);
+    const bs = badgeScale(look.s);
+    const f = isUnderFire(state, t);
+    fire.set(t.id, f);
+    const { w, h } = badgeSize(ctx, String(t.units), bs, f);
+    wants.push({ id: t.id, x: look.x, y: look.y, bs, w, h, naturalY: look.y + badgeLift(t, raise) * look.s, plinth: plinthOf(t, look.s) });
+    bodies.set(t.id, towerBodyRect(t.kind, t.level, look));
+  }
+  const badges = placeBadges(wants, card);
+  const chips = layoutWorldChips(badges, worldChipSpecs(ctx, state, cam, badges, streams), chipMinTop(card ? card.y + card.h : null));
+  return { badges, chips, bodies, fire };
+}
+
+/**
+ * The play frame's world layout with the select hint (GD-5d; `hint`: shown this frame): `worldLayout`
+ * under the lesson card `card`, and when the selected tower stands where the hint would sit over the
+ * bottom band, the hint at the top of the map band — a card the badges clear like the lesson card
+ * (laid out again under both). `hint` is the pill drawn (null when not shown).
+ */
+export function playLayout(ctx: CanvasRenderingContext2D, state: GameState, cam: Camera, selectedId: string | null, card: Rect | null, a: HudAnchors, streams: boolean, hint: boolean): { layout: ReturnType<typeof worldLayout>; hint: Rect | null } {
+  const layout = worldLayout(ctx, state, cam, selectedId, card, streams);
+  if (!selectedId || !hint) return { layout, hint: null };
+  const pill = selectHintPill(ctx, state, selectedId, a, card, cam, layout);
+  if (!selectHintMoved(pill, a)) return { layout, hint: pill };
+  const top = card ? { x: Math.min(card.x, pill.x), y: card.y, w: Math.max(card.x + card.w, pill.x + pill.w) - Math.min(card.x, pill.x), h: pill.y + pill.h - card.y } : pill;
+  return { layout: worldLayout(ctx, state, cam, selectedId, top, streams), hint: pill };
+}
+
+/**
  * Units, buildings, badges and the refusal bubble, upright in the logical frame at their projected
  * anchors and scaled by depth (ART-21): buildings through the PERF-4 sprite cache's draw-time scale,
  * units through their size, badges no smaller than BADGE_MIN_SCALE (24 px numerals). Sorting by map
@@ -595,9 +638,8 @@ function standing(cam: Camera, t: Tower): TowerLook & { s: number } {
  * for the dust (particles are projected when drawn). `card`: the lesson card's rect (logical screen
  * frame) while it is up, else null — badges and chips stay clear of it (ART-22, BUG-43).
  */
-function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, ui: PlayUi, nowMs: number, biome: Biome, dev: number, cam: Camera, card: Rect | null): void {
+function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, ui: PlayUi, nowMs: number, biome: Biome, dev: number, cam: Camera, card: Rect | null, a: HudAnchors): void {
   const motion = motionAllowed();
-  const cardBottom = card ? card.y + card.h : null;
   const towers = Object.values(state.towers).sort((a, b) => a.y - b.y);
 
   const units: UnitDraw[] = [];
@@ -621,7 +663,7 @@ function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState
   fx?.landings(state, attackers, pal, nowMs);
   for (const t of towers) {
     while (ui_ < units.length && units[ui_]!.y <= t.y + 4) drawUnit(units[ui_++]!);
-    const shake = hint && ui.selectedTowerId === t.id && motion ? snapToDevice(hint.shake, dev) : 0;
+    const shake = hint && !ui.limitHint?.towerId && ui.selectedTowerId === t.id && motion ? snapToDevice(hint.shake, dev) : 0;
     if (shake) ctx.translate(shake, 0);
     const aim = fx?.aimOf(t.id);
     const look = standing(cam, t);
@@ -647,21 +689,11 @@ function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState
   }
   while (ui_ < units.length) drawUnit(units[ui_++]!);
 
-  // badges on top of everything in the world, placed together (worldChips.ts `placeBadges`: above the
-  // roof, clamped under the top band / the lesson card, or — a tower at the map's top — below or beside
-  // it, clear of the other badges and the card), then the stream / mine chips laid out against them
-  const wants: BadgeWant[] = [];
-  const fire = new Map<string, boolean>();
-  for (const t of towers) {
-    const raise = ui.selectedTowerId === t.id ? 4 : 0;
-    const look = standing(cam, t);
-    const bs = badgeScale(look.s);
-    const f = isUnderFire(state, t);
-    fire.set(t.id, f);
-    const { w, h } = badgeSize(ctx, String(t.units), bs, f);
-    wants.push({ id: t.id, x: look.x, y: look.y, bs, w, h, naturalY: look.y + badgeLift(t, raise) * look.s, plinth: plinthOf(t, look.s) });
-  }
-  const badges = placeBadges(wants, card);
+  // badges on top of everything in the world, placed together, then the stream / mine chips laid out
+  // against them (`worldLayout`); kept for the overlays drawn over the world this frame (GD-5c / GD-5d)
+  const { layout } = playLayout(ctx, state, cam, ui.selectedTowerId, card, a, ui.outcome === 'playing', selectHintShown(ui));
+  setFrameWorldLayout(state, layout);
+  const { badges, fire } = layout;
   for (const t of towers) {
     const b = badges.get(t.id)!;
     const pop = badgePop(state, t.id, t.units, nowMs, motion);
@@ -676,9 +708,10 @@ function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState
       flashColor: pal.ownerTones[t.owner].lit,
     });
   }
-  drawWorldChips(ctx, pal, state, cam, badges, chipMinTop(cardBottom), ui.outcome === 'playing');
-  if (hint && ui.limitHintText && ui.selectedTowerId) {
-    const t = state.towers[ui.selectedTowerId];
+  drawWorldChips(ctx, pal, state, layout.chips);
+  const hintAt = ui.limitHint?.towerId ?? ui.selectedTowerId;
+  if (hint && ui.limitHintText && hintAt) {
+    const t = state.towers[hintAt];
     const b = t && badges.get(t.id);
     if (t && b) {
       const look = standing(cam, t);
@@ -880,7 +913,8 @@ export function drawGame(ctx: CanvasRenderingContext2D, state: GameState, view: 
   drawTowerShadows(ctx, pal, state, cam);
   // ART-22: while the lesson card is up (drawn with the HUD, moved with the top band) badges stay below it
   const card = lessonCardLayout(ctx, state, ui);
-  drawWorld(ctx, pal, state, ui, nowMs, spec.biome ?? 'grass', dev, cam, card ? { ...card.rect, y: card.rect.y + hudAnchors(view).top } : null);
+  const anchors = hudAnchors(view);
+  drawWorld(ctx, pal, state, ui, nowMs, spec.biome ?? 'grass', dev, cam, card ? { ...card.rect, y: card.rect.y + anchors.top } : null, anchors);
   // effects are spawned in map coordinates (particles.ts): each drawn upright at its projected point
   ui.particles?.draw(ctx, nowMs, cam.flat ? undefined : (x, y) => proj(cam, x, y));
   ctx.restore();

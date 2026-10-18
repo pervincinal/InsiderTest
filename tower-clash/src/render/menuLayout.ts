@@ -240,15 +240,16 @@ export function settingsAboutLayout(hasSupportId: boolean, hasPrivacy: boolean):
 /* ---------- "How to play" card (FE-3) ---------- */
 
 /**
- * One card, no scrolling: glass header (BACK · title), five rule rows (icon box left, one wrapped
- * sentence right) and a CLOSE button. Everything fits 720×1280, so it fits 360×640 at DPR 1 too.
+ * One card, no scrolling: glass header (BACK · title), six rule rows (icon box left, one wrapped
+ * sentence right; GD-5f added the supply line) and a CLOSE button. Everything fits 720×1280, so it
+ * fits 360×640 at DPR 1 too.
  */
 export const HOWTO = Object.freeze({
   headerH: 100,
   back: { x: 18, y: 20, w: 140, h: 60 } as Rect,
   card: { x: 40, y: 124, w: 640, h: 1032 } as Rect,
-  rows: 5,
-  row: { x: 60, y0: 150, w: 600, h: 176 },
+  rows: 6,
+  row: { x: 60, y0: 150, w: 600, h: 148 },
   /** Icon box inside a row (left) and the text column (right). */
   icon: { x: 68, w: 120, h: 120 },
   text: { x: 204, w: 448 },

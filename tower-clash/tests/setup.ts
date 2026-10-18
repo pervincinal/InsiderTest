@@ -8,8 +8,14 @@ import * as ai from '../src/ai/index';
 import { registerAi } from '../src/ui/ai';
 import { registerEnglish } from '../src/ui/i18n';
 import { enMenus } from '../src/ui/locales/enMenus';
+import { registerTutorialSteps } from '../src/ui/tutorial';
+import { LATE_STEPS, enTutorial } from '../src/ui/tutorialSteps';
 
 registerEnglish(enMenus);
 // PERF-9: the enemy AI is a lazy chunk the game loads before a level starts (src/ui/ai.ts); tests
 // build play screens directly
 registerAi(ai);
+// PERF-10: the level 2–4 tutorial steps and their English hints are a lazy chunk the level start loads
+// (src/ui/tutorialChunk.ts); tests build tutorials and play screens directly
+registerEnglish(enTutorial);
+registerTutorialSteps(LATE_STEPS);

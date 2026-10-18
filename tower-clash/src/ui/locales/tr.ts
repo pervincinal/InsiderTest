@@ -78,6 +78,7 @@ export const tr: Dictionary = {
   'hint.empty': 'Asker yok — kale büyüsün',
   'hint.fullTop': 'Dolu — kule en üst seviyede',
   'hint.stalemate': 'Açmaz — akışı durdur, başka yönden vur',
+  'hint.supplyLine': 'İkmal hattı: dolu kule askerleri aktarır',
 
   'pause.title': 'DURAKLATILDI',
   'pause.subtitle': 'Bölüm {n} · {time}',
@@ -90,10 +91,11 @@ export const tr: Dictionary = {
 
   'howto.title': 'NASIL OYNANIR',
   'howto.1': 'Kulene, sonra düz hattaki bir kuleye dokun. Duvar, su, kaya ve kuleler hattı kapatır.',
-  'howto.2': 'Akış kuleni asla boşaltmaz — yalnızca büyümesini durdurur.',
+  'howto.2': 'Akış kuleni asla boşaltmaz — yalnızca büyümesini durdurur. Durdurmak için parmağını akışın üstünden geçir.',
   'howto.3': 'Kule dolsun ki seviye atlasın: büyük kule daha hızlı ve daha çok akış verir (1/2/3).',
   'howto.4': 'Aynı hatta eşit akışlar birbirini siler. Durdur, başka yönden vur ya da iki hattan kuşat.',
   'howto.5': 'Ateş altındaki kule asker toplamaz — her kırmızı akışa cevap ver.',
+  'howto.6': 'Kendi dolu kulene akıt — askerlerini ileri aktarır: bu bir ikmal hattıdır.',
   'howto.close': 'ANLADIM',
 
   'result.victory': 'ZAFER',
@@ -133,7 +135,7 @@ export const tr: Dictionary = {
   'settings.motionSub': 'Otomatik sistem ayarını izler',
   'settings.motionAuto': 'OTO',
   'settings.howto': 'Nasıl oynanır',
-  'settings.howtoSub': 'Beş kural tek kartta',
+  'settings.howtoSub': 'Altı kural tek kartta',
   'settings.language': 'Dil',
   'settings.languageSub': 'Menüler, ipuçları ve mesajlar',
   'settings.tones': 'Takım renkleri',

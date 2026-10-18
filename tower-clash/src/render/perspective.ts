@@ -1,15 +1,11 @@
 import { C } from '../sim/constants';
-import type { GameState, Tower } from '../sim/types';
-import { ARROW_H, PAD_X } from '../ui/tutorial';
 import type { Camera, Projected } from './camera';
 import { ISLAND_FAR_Y } from './camera';
 import { HUD, WORLD_ZOOM } from './layout';
 import type { Palette, TerrainTheme, Tones } from './palette';
 import { shade, withAlpha } from './palette';
-import { badgeY } from './sprites';
 import type { Cloud, Pt, Sparkle, Stage, TerrainSpec } from './terrain';
 import { LIGHT_X, LIGHT_Y, makeRng, render, strokeBevel, traceExtruded, tracePolyline } from './terrain';
-import { roundRect } from './widgets';
 
 /*
  * PERF-9: the ART-21 perspective play camera as a lazy chunk. Since ART-24 the default play view is
@@ -77,11 +73,6 @@ export interface TiltPainters {
   specks(key: string, specks: readonly Sparkle[]): Sparkle[];
   /** A cloud shadow's lobes along its projected row (adds to the current path). */
   cloud(ctx: CanvasRenderingContext2D, x: number, c: Cloud): void;
-  /**
-   * The tutorial hint beside its tower when the bubble above it (`above`) would cover another tower;
-   * false when it does not, or no side has room (the caller draws the bubble above).
-   */
-  tutorialSide(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, tower: Tower, text: string, at: { x: number; y: number; k: number; bob: number }, above: Box): boolean;
 }
 
 /** The perspective camera with far-edge scale `k` (0 < k < 1). */
@@ -294,7 +285,6 @@ function painters(cam: Camera, horizon: number): TiltPainters {
         ctx.ellipse(lx, ly, l.rx * s, l.ry * j, 0, 0, Math.PI * 2);
       }
     },
-    tutorialSide: (ctx, pal, state, tower, text, at, above) => tutorialSide(ctx, pal, state, tower, text, at, above, cam),
   };
 }
 
@@ -496,101 +486,4 @@ function renderTilted(ctx: CanvasRenderingContext2D, pxW: number, pxH: number, p
       ctx.restore();
     },
   });
-}
-
-/* ---------- the tutorial's side bubble (ART-21) ---------- */
-
-const LINE_H = 30;
-const SIDE_PAD_Y = 12;
-const SIDE_MIN_W = 180;
-/** The side bubble stays inside the play band, with a margin. */
-const HUD_TOP_GAP = HUD.mapTop + 8;
-const HUD_BOTTOM_GAP = HUD.mapBottom - 8;
-
-function overlaps(a: Box, b: Box): boolean {
-  return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
-}
-
-/** Greedy word wrap of `text` into lines no wider than `maxW` at the current font. */
-function wrap(ctx: CanvasRenderingContext2D, text: string, maxW: number): string[] {
-  const lines: string[] = [];
-  let line = '';
-  for (const word of text.split(' ')) {
-    const next = line ? `${line} ${word}` : word;
-    if (line && ctx.measureText(next).width > maxW) {
-      lines.push(line);
-      line = word;
-    } else line = next;
-  }
-  if (line) lines.push(line);
-  return lines;
-}
-
-/**
- * The hint bubble beside a tower (ART-21): on the side with more room, wrapped to fit it, vertically
- * centred on the tower's body (`cy`, `half` = its half width) and kept inside the play band; null when
- * no side has room or the bubble would cover another tower there too.
- */
-function sideBubble(ctx: CanvasRenderingContext2D, text: string, x: number, cy: number, half: number, others: Box[]): { rect: Box; lines: string[]; right: boolean; tipX: number; cy: number } | null {
-  const gap = 6;
-  const leftRoom = x - half - gap - ARROW_H - 12 - 12;
-  const rightRoom = C.MAP_W - 12 - (x + half + gap + ARROW_H + 12);
-  const right = rightRoom >= leftRoom;
-  const room = Math.min(C.MAP_W - 24, right ? rightRoom : leftRoom);
-  if (room < SIDE_MIN_W) return null;
-  const lines = wrap(ctx, text, room - PAD_X * 2);
-  const textW = Math.max(...lines.map((l) => ctx.measureText(l).width));
-  const w = Math.min(room, textW + PAD_X * 2);
-  const h = lines.length * LINE_H + SIDE_PAD_Y * 2;
-  const tipX = right ? x + half + gap : x - half - gap;
-  const bx = right ? tipX + ARROW_H + 12 : tipX - ARROW_H - 12 - w;
-  const by = Math.max(HUD_TOP_GAP, Math.min(cy - h / 2, HUD_BOTTOM_GAP - h));
-  const rect = { x: bx, y: by, w, h };
-  if (others.some((o) => overlaps(o, rect))) return null;
-  return { rect, lines, right, tipX, cy };
-}
-
-/**
- * Under the camera towers sit closer together on the screen: when the bubble above the tower would
- * cover another tower, it moves beside the tower instead — to the roomier side, text wrapped, the
- * arrow pointing sideways at the tower's body. Expects the hint font and `pal.star` fill to be set.
- */
-function tutorialSide(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, tower: Tower, text: string, at: { x: number; y: number; k: number; bob: number }, above: Box, cam: Camera): boolean {
-  const others: Box[] = [];
-  for (const id in state.towers) {
-    if (id === tower.id) continue;
-    const o = state.towers[id]!;
-    const p = cam.proj(o.x, o.y);
-    others.push({ x: p.x - 44 * p.s, y: p.y + (badgeY(o.kind, o.level) - 20) * p.s, w: 88 * p.s, h: (20 - badgeY(o.kind, o.level)) * p.s });
-  }
-  if (!others.some((o) => overlaps(o, above))) return false;
-  const side = sideBubble(ctx, text, at.x, at.y - 46 * at.k, 44 * at.k, others);
-  if (!side) return false;
-  // horizontal arrow at the tower's body, the bubble beyond it
-  const dir = side.right ? 1 : -1;
-  const tip = side.tipX + dir * at.bob;
-  const base = tip + dir * ARROW_H;
-  const cy = side.cy;
-  ctx.beginPath();
-  ctx.moveTo(tip, cy);
-  ctx.lineTo(base, cy - 20);
-  ctx.lineTo(base, cy - 7);
-  ctx.lineTo(base + dir * 12, cy - 7);
-  ctx.lineTo(base + dir * 12, cy + 7);
-  ctx.lineTo(base, cy + 7);
-  ctx.lineTo(base, cy + 20);
-  ctx.closePath();
-  ctx.fill();
-  const r = side.rect;
-  roundRect(ctx, r, 14);
-  ctx.fillStyle = pal.panel;
-  ctx.fill();
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = pal.star;
-  ctx.stroke();
-  ctx.fillStyle = pal.text;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  side.lines.forEach((line, i) => ctx.fillText(line, r.x + r.w / 2, r.y + SIDE_PAD_Y + LINE_H * (i + 0.5) + 1, r.w - PAD_X));
-  return true;
 }

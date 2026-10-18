@@ -8,6 +8,7 @@ import { tr } from '../../src/ui/locales/tr';
 import { BOOSTER_KINDS } from '../../src/ui/boosters';
 import { TWISTS } from '../../src/daily/challenge';
 import { LEVEL_MANIFEST } from '../../src/levels/manifest';
+import { LEVEL_NAMES } from '../../src/levels/names';
 
 /*
  * Every translation key the code asks for exists in all four dictionaries — independent of the
@@ -78,8 +79,11 @@ describe('translation keys used by src/', () => {
 });
 
 describe('level text in every language (I18N-2)', () => {
-  it('all levels ship name_az / name_ru / name_tr (the map and the daily card show them)', () => {
-    const missing = LEVEL_MANIFEST.filter((l) => !(l.name_az && l.name_ru && l.name_tr)).map((l) => l.id);
+  it('all levels ship name_az / name_ru / name_tr (the map and the daily card show them; src/levels/names.ts, PERF-10)', () => {
+    const missing = LEVEL_MANIFEST.filter((l) => {
+      const n = LEVEL_NAMES[l.id];
+      return !(n?.name_az && n.name_ru && n.name_tr);
+    }).map((l) => l.id);
     expect(missing).toEqual([]);
   });
 });

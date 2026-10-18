@@ -5,6 +5,8 @@
  */
 import { C } from '../sim/constants';
 import { LEVEL_META, getLevelMeta } from '../levels/index';
+import type { LevelMeta } from '../levels/index';
+import { LEVEL_NAMES } from '../levels/names';
 import { levelName, t } from './i18n';
 import type { View } from '../render/view';
 import { hudAnchors } from '../render/view';
@@ -27,6 +29,8 @@ import type { SaveData } from './save';
 /* ---------- Level select: winding path map ---------- */
 
 const BACK = LEVEL_MAP.back;
+/** A level's name in the UI language: the metadata carries English only, the translations are ../levels/names.ts (PERF-10). */
+const metaName = (meta: LevelMeta): string => levelName({ ...meta, ...LEVEL_NAMES[meta.id] });
 const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
 
@@ -151,7 +155,7 @@ export class LevelSelectScreen implements Screen {
     return {
       unlocked: challengeUnlocked(save),
       unlockLevel: UNLOCK_AFTER_LEVEL,
-      levelName: meta ? levelName(meta) : String(ch.levelId),
+      levelName: meta ? metaName(meta) : String(ch.levelId),
       twist: t(`daily.twist.${ch.twist.id}`),
       gold: goldReward(3),
       crystals: REWARD.crystals,
@@ -162,7 +166,7 @@ export class LevelSelectScreen implements Screen {
       countdown,
       tab: cardTab,
       weekly: this.weeklyCard(now),
-      yesterday: y ? { levelName: yMeta ? levelName(yMeta) : String(y.levelId), twist: t(`daily.twist.${y.twist.id}`) } : null,
+      yesterday: y ? { levelName: yMeta ? metaName(yMeta) : String(y.levelId), twist: t(`daily.twist.${y.twist.id}`) } : null,
     };
   }
 
@@ -182,7 +186,7 @@ export class LevelSelectScreen implements Screen {
     return {
       unlocked: weeklyUnlocked(save),
       unlockLevel: WEEKLY_UNLOCK_AFTER_LEVEL,
-      levelName: meta ? levelName(meta) : String(w.levelId),
+      levelName: meta ? metaName(meta) : String(w.levelId),
       twist: t(`daily.twist.${w.twist.id}`),
       gold: WEEKLY_REWARD.gold,
       crystals: WEEKLY_REWARD.crystals,
@@ -225,7 +229,7 @@ export class LevelSelectScreen implements Screen {
     drawLevelSelect(view, this.app.palette(), {
       nodes: LEVEL_META.map((level, i) => ({
         id: level.id,
-        name: levelName(level),
+        name: metaName(level),
         stars: this.app.save.stars[String(level.id)] ?? 0,
         unlocked: isLevelUnlocked(this.app.save, LEVEL_META, i),
       })),

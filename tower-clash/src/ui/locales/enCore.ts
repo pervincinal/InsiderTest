@@ -54,6 +54,7 @@ export const enCore = {
   'hint.empty': 'No soldiers — let the tower grow',
   'hint.fullTop': 'Full — this tower is at its top level',
   'hint.stalemate': 'Stalemate — stop the stream and hit from another side',
+  'hint.supplyLine': 'Supply line: your full tower passes soldiers on',
 
   'pause.title': 'PAUSED',
   'pause.subtitle': 'Level {n} · {time}',
@@ -102,11 +103,5 @@ export const enCore = {
 
   'tutorial.tapTower': 'Tap your tower',
   'tutorial.tapGrey': 'Now tap the grey tower — the stream keeps flowing',
-  'tutorial.tapThenGrey': 'Tap your tower, then the grey tower',
-  'tutorial.stopStream': 'Swipe across the stream so your tower grows',
-  'tutorial.fillToUpgrade': 'At {n} it levels up — L2 runs 2 streams',
-  'tutorial.goAround': 'Now tap the new tower, then the red one',
-  'tutorial.supplyLine': 'A full tower passes soldiers on: stream into it',
-  'tutorial.grabOther': 'Now take the other grey tower too',
-  'tutorial.stopToGrow': "Stop this tower's stream so it can grow",
+  // the level 2–4 hints arrive with their steps: ./enTutorial.ts (PERF-10)
 } as const;

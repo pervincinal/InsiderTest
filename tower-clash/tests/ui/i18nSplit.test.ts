@@ -3,6 +3,7 @@ import { dirname, join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { enCore } from '../../src/ui/locales/enCore';
 import { enMenus } from '../../src/ui/locales/enMenus';
+import { enTutorial } from '../../src/ui/locales/enTutorial';
 import { en } from '../../src/ui/locales/en';
 
 /*
@@ -85,8 +86,11 @@ const eager = graph(join(SRC, 'main.ts'));
 describe('English split (PERF-8)', () => {
   it('the parts are disjoint and together are the whole dictionary', () => {
     const core = Object.keys(enCore);
+    // PERF-10: the level 2–4 tutorial hints are a third part (tests/ui/tutorialChunk.test.ts guards it)
+    const tutorial = Object.keys(enTutorial);
     expect(core.filter((k) => MENU_KEYS.has(k))).toEqual([]);
-    expect(Object.keys(en).sort()).toEqual([...core, ...MENU_KEYS].sort());
+    expect(tutorial.filter((k) => MENU_KEYS.has(k) || k in enCore)).toEqual([]);
+    expect(Object.keys(en).sort()).toEqual([...core, ...MENU_KEYS, ...tutorial].sort());
     // both parts are real (a regression that moves everything to one side fails here)
     expect(core.length).toBeGreaterThan(50);
     expect(MENU_KEYS.size).toBeGreaterThan(100);

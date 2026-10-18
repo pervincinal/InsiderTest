@@ -9,6 +9,7 @@ import { ResultScreen, lastShareRecord } from './ui/screens';
 import { lastReviewResult } from './native/review';
 import type { TranslationKey } from './ui/i18n';
 import { currentLanguage, hasEnglish, loadEnglishMenus, t } from './ui/i18n';
+import { loadTutorialSteps } from './ui/tutorialChunk';
 import { configureFakeStore } from './economy/providers/fakeStore';
 import { getStore } from './economy/store';
 import { grantProduct } from './economy/wallet';
@@ -86,6 +87,8 @@ export function installDebug(app: TowerClashApp): TowerClashDebug & QaDebugExtra
     getAnchors: () => hudAnchors(app.view),
     getTutorialHint: () => (app.current === app.play ? (app.play?.tutorialStep()?.text ?? null) : null),
     getLimitHint: () => (app.current === app.play && app.play?.gestures.limitHint ? app.play.gestures.limitHintText : null),
+    // HowToScreen is in the lazy screens chunk: read its `lines` structurally (no static import of the chunk)
+    getHowtoLines: () => (app.current.name === 'howto' ? [...((app.current as unknown as { lines?: readonly number[] }).lines ?? [])] : null),
     getDrag: () => {
       const g = app.current === app.play ? app.play?.gestures : undefined;
       return g?.drag ? { ...g.drag, hoverTowerId: g.hoverTowerId } : null;
@@ -97,9 +100,10 @@ export function installDebug(app: TowerClashApp): TowerClashDebug & QaDebugExtra
       loaded: toneSetsLoaded(),
       player: app.palette().owners.player,
     }),
-    // English menu strings are a lazy chunk (PERF-8): fetch them first when the key is not in yet
+    // English menu strings (PERF-8) and the level 2–4 tutorial hints (PERF-10) are lazy chunks: fetch the
+    // one that holds the key first when it is not in yet
     getText: async (key, params) => {
-      if (!hasEnglish(key)) await loadEnglishMenus().catch(() => undefined);
+      if (!hasEnglish(key)) await (key.startsWith('tutorial.') ? loadTutorialSteps() : loadEnglishMenus()).catch(() => undefined);
       return t(key as TranslationKey, params);
     },
     getToast: () => app.current.toast?.opts(performance.now())?.text ?? null,

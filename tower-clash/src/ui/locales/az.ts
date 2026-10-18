@@ -78,6 +78,7 @@ export const az: Dictionary = {
   'hint.empty': 'Əsgər yoxdur — qoy qüllə böyüsün',
   'hint.fullTop': 'Doludur — qüllə ən yüksək səviyyədədir',
   'hint.stalemate': 'Axın ilişib — dayandır və başqa tərəfdən vur',
+  'hint.supplyLine': 'Təchizat xətti: dolu qüllə əsgərləri irəli ötürür',
 
   'pause.title': 'FASİLƏ',
   'pause.subtitle': 'Səviyyə {n} · {time}',
@@ -90,10 +91,11 @@ export const az: Dictionary = {
 
   'howto.title': 'NECƏ OYNANIR',
   'howto.1': 'Öz qüllənə, sonra düz xətdəki qülləyə toxun. Divar, su, daş və qüllələr xətti bağlayır.',
-  'howto.2': 'Axın qülləni heç vaxt boşaltmır — yalnız böyüməsini dayandırır.',
+  'howto.2': 'Axın qülləni heç vaxt boşaltmır — yalnız böyüməsini dayandırır. Dayandırmaq üçün barmağınla axını kəs.',
   'howto.3': 'Qüllə dolsun ki, səviyyə artsın: böyük qüllə daha sürətli və daha çox axın verir (1/2/3).',
   'howto.4': 'Bir yolda bərabər axınlar bir-birini yox edir: dayandır, başqa tərəfdən ya iki yoldan vur.',
   'howto.5': 'Atəş altındakı qüllə əsgər toplamır — hər qırmızı axına cavab ver.',
+  'howto.6': 'Öz dolu qüllənə axıt — o, əsgərlərini irəli ötürəcək: bu, təchizat xəttidir.',
   'howto.close': 'ANLADIM',
 
   'result.victory': 'QƏLƏBƏ',
@@ -133,7 +135,7 @@ export const az: Dictionary = {
   'settings.motionSub': 'Avto: sistem ayarına uyğun',
   'settings.motionAuto': 'AVTO',
   'settings.howto': 'Necə oynanır',
-  'settings.howtoSub': 'Beş qayda bir kartda',
+  'settings.howtoSub': 'Altı qayda bir kartda',
   'settings.language': 'Dil',
   'settings.languageSub': 'Menyular, ipucları və mesajlar',
   'settings.tones': 'Komanda rəngləri',

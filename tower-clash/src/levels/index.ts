@@ -1,6 +1,7 @@
 /**
- * Level access (PERF-2). The eager bundle only carries `LEVEL_META` (id, name + translated names, star clocks) for the
- * level select, result screen and lock logic; a level's towers/roads arrive through `loadLevel`,
+ * Level access (PERF-2). The eager bundle only carries `LEVEL_META` (id, English name, star clocks) for the
+ * level select, result screen and lock logic — the translated names are ./names.ts, imported by the lazy
+ * level map only (PERF-10); a level's towers/roads arrive through `loadLevel`,
  * one small chunk per level (see the generated manifest.ts). Loaded levels are cached, so the
  * play screen can be built synchronously from `getLoadedLevel` once a level is in.
  */
@@ -12,15 +13,7 @@ import type { LevelManifestEntry } from './manifest';
 export type LevelMeta = Omit<LevelManifestEntry, 'load'>;
 
 /** Every level in play order — metadata only. `npm run levels:manifest` regenerates it from the JSON. */
-export const LEVEL_META: readonly LevelMeta[] = LEVEL_MANIFEST.map(({ id, name, name_az, name_ru, name_tr, star3, star2 }) => ({
-  id,
-  name,
-  name_az,
-  name_ru,
-  name_tr,
-  star3,
-  star2,
-}));
+export const LEVEL_META: readonly LevelMeta[] = LEVEL_MANIFEST.map(({ id, name, star3, star2 }) => ({ id, name, star3, star2 }));
 
 /** Position of a level in play order, -1 when unknown. */
 export function levelIndex(id: number): number {

@@ -38,6 +38,10 @@ const LEVEL15_CHUNK = /\/assets\/015-[^/?]*\.js(\?.*)?$/;
 const OVERLAYS_CHUNK = /\/assets\/hudOverlays-[^/?]*\.js(\?.*)?$/;
 // PERF-8: the English strings only the lazy screens / cards draw (src/ui/locales/enMenus.ts), loaded beside them
 const EN_MENUS_CHUNK = /\/assets\/enMenus-[^/?]*\.js(\?.*)?$/;
+// PERF-10: the level 2–4 tutorial steps + their English hints (src/ui/tutorialSteps.ts), loaded with a first play of those levels
+const TUTORIAL_CHUNK = /\/assets\/tutorialSteps-[^/?]*\.js(\?.*)?$/;
+// PERF-9: the enemy AI chunk, warmed by the idle preload after the first frame
+const AI_CHUNK = /\/assets\/ai-[^/?]*\.js(\?.*)?$/;
 // src/render/layout.ts — RESULT.retry
 const RESULT_RETRY = { x: 275, y: 780, w: 170, h: 72 };
 // src/render/palette.ts — DEFAULT_THEME.waterTop (#3fb6de): what the ground layer's top corner shows without the
@@ -292,6 +296,57 @@ test.describe('lazy chunks under a failing network', () => {
     expect(fetched, 'exactly one fetch, no `?r=` re-fetch').toHaveLength(1);
     expect(fetched[0]!.url).not.toContain('?r=');
     expect(warmedAt, 'the chunk landed before the result screen opened').toBeLessThan(resultAt);
+    expect(errors).toEqual([]);
+  });
+
+  test('tutorialSteps chunk (PERF-10): not fetched at boot or for level 5; a first play of level 2 fetches it before its first frame and shows its hint', async ({ page }) => {
+    const requests: string[] = [];
+    let aiAt = 0;
+    page.on('request', (r) => {
+      if (TUTORIAL_CHUNK.test(r.url())) requests.push(r.url());
+      if (AI_CHUNK.test(r.url()) && !aiAt) aiAt = Date.now();
+    });
+    const errors = await boot(page);
+    // the idle preload after the first frame (current level 1: its level chunk, the AI) has run
+    await expect.poll(() => aiAt, { message: 'idle preload ran (AI chunk requested)', timeout: 10_000 }).toBeGreaterThan(0);
+    await page.waitForTimeout(300); // ok: the same whenIdle callback issues every preload; a short grace for the last one
+    expect(requests, 'no tutorialSteps request on the title').toEqual([]);
+    // a level without a tutorial (and its next-level preload, 6) does not need the chunk either
+    expect(await page.evaluate(() => window.__towerclash.loadLevel(5, 1))).toBe(true);
+    await expect.poll(() => simTime(page)).toBeGreaterThan(200);
+    expect(requests, 'no tutorialSteps request for level 5').toEqual([]);
+    // first play of level 2: the chunk is requested by the start, before the play screen exists
+    const start = page.evaluate(() => window.__towerclash.loadLevel(2, 1));
+    await page.waitForFunction(() => window.__towerclash.getState()?.levelId === 2);
+    expect(requests.length, 'tutorialSteps requested by the level 2 start').toBe(1);
+    expect(await start).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.__towerclash.getTutorialHint())).toBe(await text(page, 'tutorial.tapThenGrey'));
+    expect(await text(page, 'tutorial.tapThenGrey')).not.toBe('tutorial.tapThenGrey');
+    expect(requests, 'fetched once').toHaveLength(1);
+    expect(errors).toEqual([]);
+  });
+
+  test('tutorialSteps chunk (PERF-10): a failed download starts level 3 without its tutorial, no throw; the tutorial comes up once the chunk lands', async ({ page }) => {
+    const aborted: string[] = [];
+    await page.route(TUTORIAL_CHUNK, (route) => {
+      aborted.push(route.request().url());
+      void route.abort('failed');
+    });
+    const errors = await boot(page);
+    expect(await page.evaluate(() => window.__towerclash.loadLevel(3, 1)), 'the level starts anyway (the tutorial is not load-bearing)').toBe(true);
+    await expect.poll(() => screen(page)).toBe('play');
+    expect(aborted.length).toBeGreaterThanOrEqual(1);
+    await expect.poll(() => simTime(page)).toBeGreaterThan(200);
+    expect(await page.evaluate(() => window.__towerclash.getTutorialHint()), 'no tutorial while the chunk is missing').toBeNull();
+    // network back: the play screen retries after the src/lazyChunk.ts back-off (3 s), under `?r=` (module map, BUG-8)
+    await page.evaluate(() => window.__towerclash.setSpeed(0.2)); // keep step 1 (tap your tower, then a grey one) relevant
+    const fetched = page.waitForResponse((r) => TUTORIAL_CHUNK.test(r.url()) && r.url().includes('?r='), { timeout: 15_000 });
+    await page.unroute(TUTORIAL_CHUNK);
+    expect((await fetched).ok()).toBe(true);
+    await expect
+      .poll(() => page.evaluate(() => window.__towerclash.getTutorialHint()), { message: 'the tutorial shows once the chunk is in', timeout: 5_000 })
+      .toBe(await text(page, 'tutorial.tapThenGrey'));
+    expect(await screen(page)).toBe('play');
     expect(errors).toEqual([]);
   });
 });

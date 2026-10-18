@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { LEVEL_META, getLoadedLevel, levelIndex, loadAllLevels, loadLevel } from '../../src/levels/index';
 import { checkManifest } from '../../scripts/lib/levelManifest';
+import { LEVEL_NAMES } from '../../src/levels/names';
 import {
   FIRST_MINE_LEVEL,
   FIRST_OBSTACLE_LEVEL,
@@ -103,7 +104,9 @@ describe('shipped levels', () => {
     for (const level of LEVELS) {
       const meta = LEVEL_META[levelIndex(level.id)]!;
       const { name_az, name_ru, name_tr } = level as AuthoredLevel;
-      expect(meta).toEqual({ id: level.id, name: level.name, name_az, name_ru, name_tr, star3: level.star3, star2: level.star2 });
+      expect(meta).toEqual({ id: level.id, name: level.name, star3: level.star3, star2: level.star2 });
+      // the translated names are src/levels/names.ts (lazy level map only, PERF-10)
+      expect(LEVEL_NAMES[level.id]).toEqual({ name_az, name_ru, name_tr });
     }
   });
 

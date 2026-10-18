@@ -243,6 +243,8 @@ const TRAIL_MAX = 48;
 const DRAG_THRESHOLD = 14; // logical px before a press counts as a drag
 /** How long a refusal (shake + hint bubble: link limit or blocked lane) stays on screen. */
 export const LIMIT_HINT_MS = 900;
+/** How long a confirmation in the same bubble (`notify`, GD-5f `hint.supplyLine`) stays on screen. */
+export const NOTICE_HINT_MS = 2600;
 
 export interface GestureOptions {
   getState(): GameState | null;
@@ -324,9 +326,10 @@ export class PlayGestures {
   drag: DragPreview | null = null;
   /**
    * Refusal for the renderer (`PlayUi.limitHint` / `limitHintText`): a fresh object per refusal
-   * (the renderer keys its shake on the object identity), null once it expired.
+   * (the renderer keys its shake on the object identity), null once it expired. A confirmation
+   * (`notify`) carries the tower it stands over (`towerId`) and does not shake.
    */
-  limitHint: { until: number } | null = null;
+  limitHint: { until: number; towerId?: string } | null = null;
   limitHintText = '';
   /**
    * Swipe-to-cut slash trail for the renderer (`PlayUi.swipeTrail`), oldest first. Points older than
@@ -494,6 +497,12 @@ export class PlayGestures {
     }
     this.hoverTowerId = null;
     this.clearPress();
+  }
+
+  /** Show `text` in the hint bubble over `towerId` for `ms` (a confirmation: no shake, no refusal sound). */
+  notify(text: string, towerId: string, nowMs: number, ms = NOTICE_HINT_MS): void {
+    this.limitHint = { until: nowMs + ms, towerId };
+    this.limitHintText = text;
   }
 
   /** Call once per frame so the refusal hint expires and the swipe trail fades. */

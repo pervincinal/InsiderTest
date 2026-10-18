@@ -25,7 +25,10 @@ import { starsFor, writeSave } from './save';
 import type { App, Screen, StartOptions } from './screens';
 import { ResultScreen, Toast } from './screens';
 import type { Tutorial, TutorialStep } from './tutorial';
-import { drawTutorial, tutorialFor } from './tutorial';
+import { tutorialFor } from './tutorial';
+import { drawTutorial } from '../render/tutorialDraw';
+import { TUTORIAL_CHUNK, loadTutorialSteps, needsTutorialSteps, tutorialStepsLoaded } from './tutorialChunk';
+import { chunkBackoff } from '../lazyChunk';
 import type { BoosterKind, BoosterWallet } from './boosters';
 import { BOOSTER_KINDS, allBoosterStatus, boosterStatus, canUseBooster } from './boosters';
 import { modifiersFromSave } from './upgrades';
@@ -145,7 +148,14 @@ export class PlayScreen implements Screen {
   private finishedHandled = false;
   private nowMs = 0;
   private earnings: ResultEarnings = { stars: 0, gold: 0, crystals: 0, notes: [], replayCapped: false };
-  private readonly tutorial: Tutorial | null;
+  private tutorial: Tutorial | null;
+  /** PERF-10: a first play of levels 2–4 whose tutorial-steps chunk was not in at the start (`lateTutorial`). */
+  private tutorialLate: boolean;
+  private tutorialLoading = false;
+  /** GD-5f: `hint.supplyLine` was shown this match (or the tutorial's supply-line step taught that link). */
+  private supplyHintDone = false;
+  /** BUG-50 / BUG-51: the last tutorial step whose `select` was applied. */
+  private selectedFor: TutorialStep | null = null;
   /** Airstrike targeting mode (M3-1): the next tap on an enemy tower fires, anywhere else cancels. */
   targeting = false;
   private pressedBooster: BoosterKind | null = null;
@@ -207,7 +217,9 @@ export class PlayScreen implements Screen {
     const rngs = aiModule().rngsFor(seed, level.enemies);
     this.playerRng = rngs.player;
     rngs.enemies.forEach((rng, owner) => this.enemyRngs.set(owner, rng));
-    this.tutorial = tutorialFor(level.id, app.save.stars[String(level.id)] ?? 0);
+    const stars = app.save.stars[String(level.id)] ?? 0;
+    this.tutorial = tutorialFor(level.id, stars);
+    this.tutorialLate = this.tutorial === null && needsTutorialSteps(level.id, stars);
     this.stalemate = new StalemateWatch(level.id !== 1); // the first tutorial level teaches one stream, no hint there
     this.gestures = new PlayGestures({
       getState: () => (this.loop.finished ? null : this.loop.state),
@@ -221,7 +233,10 @@ export class PlayScreen implements Screen {
         return (x, y) => proj(cam, x, y);
       },
       onCommand: (cmd) => {
+        const step = this.tutorialStep();
         this.tutorial?.onCommand(cmd, this.state);
+        // GD-5f: the link that completes the supply-line step raises no `hint.supplyLine` (the step was the lesson)
+        if (step?.supplyLine && cmd.type === 'link' && this.tutorialStep() !== step) this.supplyHintDone = true;
         this.loop.enqueue(cmd);
       },
     });
@@ -339,6 +354,7 @@ export class PlayScreen implements Screen {
         if (ev.owner === 'player') {
           playSfx('send'); // one tick per stream started (manual or autoplay)
           if (linksFrom(this.state, ev.from).length >= TRIPLE_STREAM_LINKS) m.tripleStream = true;
+          this.confirmSupplyLine(ev.from, ev.to);
         }
       } else if (ev.type === 'unlinked') {
         if (ev.owner === 'player' && ev.reason === 'manual') playSfx('button'); // auto-ends (target full, source empty / lost) stay silent
@@ -349,12 +365,51 @@ export class PlayScreen implements Screen {
     onSimEvents(events, this.state);
   }
 
+  /**
+   * GD-5f (GDD §3.11 b): the first player supply line of the match — a link the sim made a relay
+   * (rule 13) — is confirmed once in the hint bubble over the full tower it runs into. Not while the
+   * tutorial's supply-line step (level 2) is on screen: that step already asks for it.
+   */
+  private confirmSupplyLine(from: string, to: string): void {
+    if (this.supplyHintDone || !this.state.links.some((l) => l.owner === 'player' && l.from === from && l.to === to && l.relay)) return;
+    this.supplyHintDone = true;
+    if (!this.tutorialStep()?.supplyLine) this.gestures.notify(t('hint.supplyLine'), to, this.nowMs);
+  }
+
+  /**
+   * BUG-50 / BUG-51: a step's `select` sets the selection its instruction assumes, once — the first frame
+   * the step is on screen while no press is under way (a press keeps the selection it started with).
+   */
+  private applyStepSelection(): void {
+    const step = this.tutorialStep();
+    if (!step?.select || step === this.selectedFor || this.press !== null) return;
+    this.selectedFor = step;
+    const id = step.select(this.state);
+    this.gestures.selectedTowerId = id !== null && this.state.towers[id]?.owner === 'player' ? id : null;
+  }
+
+  /** PERF-10: the level 2–4 steps arrived after the start (late or failed chunk): the tutorial begins now. */
+  private lateTutorial(): void {
+    if (tutorialStepsLoaded()) {
+      this.tutorialLate = false;
+      this.tutorial = tutorialFor(this.level.id, 0);
+    } else if (!this.tutorialLoading && !chunkBackoff(TUTORIAL_CHUNK)) {
+      this.tutorialLoading = true;
+      const done = (): void => {
+        this.tutorialLoading = false;
+      };
+      loadTutorialSteps().then(done, done);
+    }
+  }
+
   update(dtMs: number, nowMs: number): void {
     this.nowMs = nowMs;
     this.gestures.tick(nowMs);
+    if (this.tutorialLate) this.lateTutorial();
     this.tutorial?.onSelect(this.gestures.selectedTowerId, this.state);
     // a step on screen for TUTORIAL_STEP_TIMEOUT_MS without completion gives way (BUG-33: no overlay softlock)
     if (!this.loop.paused && !this.loop.finished) this.tutorial?.elapse(dtMs, this.state);
+    this.applyStepSelection();
     if (this.loop.advance(dtMs) > 0) {
       this.ring.record(this.snapshot()); // the ring clones at most once per interval
       if (this.stalemate.check(this.state)) {
@@ -497,7 +552,8 @@ export class PlayScreen implements Screen {
       ctx.save();
       applyTransform(view);
       clipToMap(view);
-      drawTutorial(ctx, ui.palette, this.state, step, nowMs, playCamera());
+      // GD-5c: the bubble keeps clear of every badge, chip and tower body of this frame (render/tutorialBubble.ts)
+      drawTutorial(ctx, this.state, view, ui, step, nowMs, playCamera());
       ctx.restore();
     }
   }

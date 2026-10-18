@@ -6,16 +6,18 @@
  * achievements, upgrade tracks) are the `skin.*` / `achievement.*` / `upgrade.name.*` keys,
  * keyed by catalog id. IAP product titles stay English (the stores show their own).
  *
- * The texts live in two files (PERF-8): ./enCore.ts — the strings the eager bundle draws — and
- * ./enMenus.ts — the strings only the lazy screens / cards draw, shipped in a lazy chunk. Add a key
- * to enCore.ts when eagerly loaded code uses it, otherwise to enMenus.ts (tests/ui/i18nSplit.test.ts
- * tells which). Only types may be imported from this module by src/ — the value pulls in both parts.
+ * The texts live in three files (PERF-8, PERF-10): ./enCore.ts — the strings the eager bundle draws —,
+ * ./enMenus.ts — the strings only the lazy screens / cards draw, shipped in a lazy chunk — and
+ * ./enTutorial.ts — the level 2–4 tutorial hints, shipped inside the lazy tutorial-steps chunk. Add a
+ * key to enCore.ts when eagerly loaded code uses it, otherwise to enMenus.ts (tests/ui/i18nSplit.test.ts
+ * tells which). Only types may be imported from this module by src/ — the value pulls in every part.
  */
 import { enCore } from './enCore';
 import { enMenus } from './enMenus';
+import { enTutorial } from './enTutorial';
 
-export const en = { ...enCore, ...enMenus } as const;
+export const en = { ...enCore, ...enMenus, ...enTutorial } as const;
 
-export type TranslationKey = keyof typeof enCore | keyof typeof enMenus;
+export type TranslationKey = keyof typeof enCore | keyof typeof enMenus | keyof typeof enTutorial;
 /** A complete translation: every English key, no more, no less. */
 export type Dictionary = Readonly<Record<TranslationKey, string>>;

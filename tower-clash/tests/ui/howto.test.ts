@@ -23,8 +23,9 @@ import { makeLevel } from '../helpers';
 
 /*
  * FE-3 "How to play" card: geometry (one card, no scrolling, inside the map at 720×1280 and
- * therefore inside 360×640 at DPR 1), the locale keys in all four dictionaries (each rule ≤ 90
- * characters so it wraps to ≤ 2 lines of the 448 px text column at 22 px), and the screen
+ * therefore inside 360×640 at DPR 1), the locale keys in all four dictionaries (each rule ≤ 120
+ * characters so it wraps to ≤ 3 lines of the 448 px text column at 22 px — GD-5f's six rules; the
+ * real wrap with the game's fonts at 360×640 in every locale is e2e/howto.spec.ts), and the screen
  * transitions: settings row → card → settings; pause button → card → paused game; ESC closes.
  */
 
@@ -43,9 +44,9 @@ describe('how-to card layout (menuLayout.ts HOWTO)', () => {
   const last = rows[HOWTO.rows - 1]!;
   const textCol: Rect = { x: HOWTO.text.x, y: rows[0]!.y, w: HOWTO.text.w, h: last.y + last.h - rows[0]!.y };
 
-  it('five rows, their icons, the text column and CLOSE sit inside the card; the card inside the map under the header', () => {
-    expect(HOWTO.rows).toBe(5);
-    expect(HOWTO_KEYS).toHaveLength(5);
+  it('six rows (GD-5f: the supply line), their icons, the text column and CLOSE sit inside the card; the card inside the map under the header', () => {
+    expect(HOWTO.rows).toBe(6);
+    expect(HOWTO_KEYS).toEqual(['howto.1', 'howto.2', 'howto.3', 'howto.4', 'howto.5', 'howto.6']);
     expect(inside(HOWTO.card, MAP, 20)).toBe(true);
     expect(HOWTO.card.y).toBeGreaterThanOrEqual(HOWTO.headerH + 20);
     expect(inside(HOWTO.back, { x: 0, y: 0, w: MAP.w, h: HOWTO.headerH })).toBe(true);
@@ -102,19 +103,30 @@ describe('entry points (layout.ts SETTINGS.howto, PAUSE.howto)', () => {
 
 describe('locale keys', () => {
   const dicts: Record<string, Record<string, string>> = { en, az, ru, tr };
-  const keys = ['howto.title', 'howto.1', 'howto.2', 'howto.3', 'howto.4', 'howto.5', 'howto.close', 'settings.howto', 'settings.howtoSub', 'pause.howto'];
+  const keys = ['howto.title', 'howto.1', 'howto.2', 'howto.3', 'howto.4', 'howto.5', 'howto.6', 'howto.close', 'settings.howto', 'settings.howtoSub', 'pause.howto'];
 
   for (const [code, dict] of Object.entries(dicts)) {
-    it(`${code}: every key present, each rule ≤ 90 characters with no unbreakable long word`, () => {
+    it(`${code}: every key present, each rule ≤ 120 characters with no unbreakable long word`, () => {
       for (const k of keys) expect(typeof dict[k] === 'string' && dict[k]!.trim().length > 0, k).toBe(true);
       for (const k of HOWTO_KEYS) {
         const s = dict[k]!;
-        expect(s.length, `${code} ${k}: ${s.length} chars`).toBeLessThanOrEqual(90);
+        expect(s.length, `${code} ${k}: ${s.length} chars`).toBeLessThanOrEqual(120);
         for (const word of s.split(/\s+/)) expect(word.length, `${code} ${k}: "${word}"`).toBeLessThanOrEqual(22);
       }
       expect(dict['howto.title']).toBe(dict['pause.howto']);
     });
   }
+
+  it('GD-5f: howto.2 ends with the swipe, howto.6 is the supply line — the backlog wording in all four languages', () => {
+    expect(en['howto.2']).toBe('A stream never empties your tower — it only stops it growing. Swipe across a stream to stop it.');
+    expect(az['howto.2']).toBe('Axın qülləni heç vaxt boşaltmır — yalnız böyüməsini dayandırır. Dayandırmaq üçün barmağınla axını kəs.');
+    expect(ru['howto.2']).toBe('Поток никогда не опустошает башню — он лишь останавливает её рост. Проведи поперёк потока, чтобы его остановить.');
+    expect(tr['howto.2']).toBe('Akış kuleni asla boşaltmaz — yalnızca büyümesini durdurur. Durdurmak için parmağını akışın üstünden geçir.');
+    expect(en['howto.6']).toBe('Stream into your own full tower and it passes your soldiers on — a supply line.');
+    expect(az['howto.6']).toBe('Öz dolu qüllənə axıt — o, əsgərlərini irəli ötürəcək: bu, təchizat xəttidir.');
+    expect(ru['howto.6']).toBe('Направь поток в свою полную башню — она передаст бойцов дальше: это линия снабжения.');
+    expect(tr['howto.6']).toBe('Kendi dolu kulene akıt — askerlerini ileri aktarır: bu bir ikmal hattıdır.');
+  });
 
   it('the four titles differ (translated, not copied)', () => {
     expect(new Set([en['howto.title'], az['howto.title'], ru['howto.title'], tr['howto.title']]).size).toBe(4);
