@@ -1,7 +1,9 @@
 import { existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig, devices } from '@playwright/test';
+import { acquireRunLock, releaseRunLock } from './e2e/tools/runLock';
 
 /**
  * Locally the sandbox ships Chromium 1194 under /opt/pw-browsers while @playwright/test 1.47.2
@@ -30,6 +32,23 @@ const DEFAULT_PORT = 4173;
 const PORT = process.env.PW_PORT ? Number(process.env.PW_PORT) : DEFAULT_PORT;
 if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65_535) throw new Error(`PW_PORT must be a TCP port, got ${String(process.env.PW_PORT)}`);
 const OUTPUT_DIR = process.env.PW_OUTPUT || 'test-results';
+
+/**
+ * QA-28: one run per output directory. Day 32's chromium, pwa and WebView runs were started in
+ * parallel without `PW_OUTPUT`, all wrote to test-results/, and each run's "clear output" step deleted
+ * the others' artefacts mid-run (three tests died with `ENOENT … .playwright-artifacts-N/….zip`). The
+ * runner process (not the test workers, which load this file too and carry TEST_WORKER_INDEX) takes a
+ * lock on the resolved output directory right here — before "clear output", which a globalSetup would
+ * run after — and fails fast, naming PW_OUTPUT, while another live Playwright run holds it. The lock
+ * lives under the OS temp dir (e2e/tools/runLock.ts: exclusive create, released on exit, a stale one
+ * from a killed run is taken over once its pid is dead), so CI's one-run-per-checkout jobs only ever
+ * meet their own lock.
+ */
+if (process.env.TEST_WORKER_INDEX === undefined) {
+  const outputDir = path.resolve(fileURLToPath(new URL('.', import.meta.url)), OUTPUT_DIR);
+  acquireRunLock(outputDir);
+  process.once('exit', () => releaseRunLock(outputDir));
+}
 
 /**
  * QA-6: the preview serves a snapshot of dist/, never dist/ itself. Agents share one checkout and a
@@ -62,10 +81,16 @@ process.env.PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS ??= '1';
  * is not — another agent's `npm run build` empties dist/ and rewrites it over a few seconds, and a
  * snapshot taken inside that window served 404 for `/` to the whole run (2026-10-11: 36/36 failed in
  * boot). The 40 s of attempts fit the webServer's 60 s start budget.
+ *
+ * QA-28: `PW_DIST` (default `dist`) names the build the snapshot is taken from, so an agent can build
+ * into its own folder (`npx tsc --noEmit && npx vite build --outDir <scratch>/dist --emptyOutDir`) and
+ * test it without rewriting the shared dist/ another run may be snapshotting. The snapshot itself
+ * stays keyed by port, as above.
  */
+const DIST_DIR = process.env.PW_DIST || 'dist';
 const PREVIEW_COMMAND = [
-  `test -d dist || { echo 'e2e: no dist/ — run npm run build first' >&2; exit 1; }`,
-  `node e2e/tools/snapshotDist.mjs dist "${DIST_SNAPSHOT}" --attempts 20 --delay-ms 2000`,
+  `test -d "${DIST_DIR}" || { echo 'e2e: no ${DIST_DIR}/ — run npm run build first (or point PW_DIST at a build)' >&2; exit 1; }`,
+  `node e2e/tools/snapshotDist.mjs "${DIST_DIR}" "${DIST_SNAPSHOT}" --attempts 20 --delay-ms 2000`,
   `npm run preview -- --outDir "${DIST_SNAPSHOT}" --port ${PORT} --strictPort`,
 ].join(' && ');
 

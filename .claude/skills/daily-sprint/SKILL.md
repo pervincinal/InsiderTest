@@ -31,6 +31,7 @@ If `npm run check` is red at the start of the day, fixing it is the first backlo
 cd tower-clash && npm run check && npm run playtest
 ```
 Fix regressions (or revert the offending change). QA runs `npm run e2e` when UI changed.
+Playwright runs in this step (chromium, WebView, PWA): every Playwright invocation gets its own `PW_PORT` and `PW_OUTPUT`, parallel ones included — e.g. `PW_PORT=4195 PW_OUTPUT=<scratchpad>/pw-pwa npx playwright test --project=pwa`; a second run on an output directory another live run holds fails fast naming `PW_OUTPUT` (QA-28 run lock). To test a build without rewriting the shared `dist/`, build into the scratchpad (`npx vite build --outDir <scratchpad>/dist --emptyOutDir`) and pass `PW_DIST=<scratchpad>/dist`.
 
 ## 4. Close the day
 1. Update `docs/BACKLOG.md`: move done items to "Done (with date)", add bugs and icebox ideas.

@@ -212,8 +212,47 @@ describe('tower-clash/e2e load tolerance (QA-20)', () => {
   });
 
   it('the preview serves a dist snapshot checked for completeness, never a bare cp of dist/', () => {
-    expect(PW_CONFIG).toMatch(/node e2e\/tools\/snapshotDist\.mjs dist "\$\{DIST_SNAPSHOT\}" --attempts \d+ --delay-ms \d+/);
+    // QA-28: the source build is `PW_DIST` (default dist/), so an agent can test its own scratch build
+    expect(PW_CONFIG).toMatch(/\nconst DIST_DIR = process\.env\.PW_DIST \|\| 'dist';\n/);
+    expect(PW_CONFIG).toMatch(/node e2e\/tools\/snapshotDist\.mjs "\$\{DIST_DIR\}" "\$\{DIST_SNAPSHOT\}" --attempts \d+ --delay-ms \d+/);
     expect(PW_CONFIG).not.toMatch(/cp -R dist\//);
+  });
+});
+
+/*
+ * QA-28 (2026-10-18): Day 32's chromium, pwa and WebView runs started in parallel without PW_OUTPUT all
+ * wrote to test-results/; each run's "clear output" step deleted the others' artefacts and three tests died
+ * with `ENOENT … .playwright-artifacts-N/….zip`. The config takes e2e/tools/runLock.ts's lock on the
+ * resolved output directory in the runner process (workers carry TEST_WORKER_INDEX) at load time — before
+ * "clear output", which a globalSetup would only run after — and a second live run on the same directory
+ * fails fast naming PW_OUTPUT. The lock sits outside the output dir (the clear would delete it), is taken
+ * with an exclusive create, released on exit, and a stale one is taken over (tests/scripts/runLock.test.ts).
+ */
+describe('tower-clash/playwright.config.ts run lock (QA-28)', () => {
+  it('the runner takes the output-dir lock before defineConfig, and only the runner', () => {
+    expect(PW_CONFIG).toMatch(/\nimport \{ acquireRunLock, releaseRunLock \} from '\.\/e2e\/tools\/runLock';\n/);
+    const guard = /\nif \(process\.env\.TEST_WORKER_INDEX === undefined\) \{\n([\s\S]*?)\n\}\n/.exec(PW_CONFIG)?.[1] ?? '';
+    expect(guard).toMatch(/const outputDir = path\.resolve\(fileURLToPath\(new URL\('\.', import\.meta\.url\)\), OUTPUT_DIR\);/);
+    expect(guard).toMatch(/\n {2}acquireRunLock\(outputDir\);/);
+    expect(guard).toMatch(/process\.once\('exit', \(\) => releaseRunLock\(outputDir\)\);/);
+    expect(PW_CONFIG.indexOf('acquireRunLock(outputDir)')).toBeGreaterThan(PW_CONFIG.indexOf("const OUTPUT_DIR = process.env.PW_OUTPUT || 'test-results';"));
+    expect(PW_CONFIG.indexOf('acquireRunLock(outputDir)')).toBeLessThan(PW_CONFIG.indexOf('export default defineConfig('));
+    // no globalSetup / globalTeardown marker: it would run after "clear output" and live inside the cleared dir
+    expect(PW_CONFIG).not.toMatch(/\bglobal(Setup|Teardown):/);
+  });
+
+  it('the lock lives outside the output dir, is exclusive, names PW_OUTPUT, and ignores dead or recycled pids', () => {
+    const src = readFileSync(new URL('../../e2e/tools/runLock.ts', import.meta.url), 'utf8');
+    expect(src).toMatch(/export const DEFAULT_LOCK_DIR = path\.join\(os\.tmpdir\(\), 'tower-clash-e2e', 'locks'\);/);
+    expect(src).toContain("openSync(file, 'wx')");
+    expect(src).toMatch(/PW_OUTPUT=<scratch>\/pw-<name> PW_PORT=<free port>/);
+    expect(src).toMatch(/if \(owner && isLive\(owner\.pid\)\) throw new Error\(lockedMessage\(outputDir, owner, file\)\);/);
+    expect(src).toMatch(/\/playwright\/i\.test\(readFileSync\(cmdline, 'utf8'\)\)/);
+  });
+
+  it('the daily sprint verification step gives every Playwright invocation its own PW_PORT and PW_OUTPUT', () => {
+    const skill = readFileSync(new URL('../../../.claude/skills/daily-sprint/SKILL.md', import.meta.url), 'utf8');
+    expect(skill).toMatch(/every Playwright invocation gets its own `PW_PORT` and `PW_OUTPUT`, parallel ones included/);
   });
 });
 

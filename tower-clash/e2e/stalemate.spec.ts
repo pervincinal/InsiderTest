@@ -77,6 +77,9 @@ function towerAt(levelId: number, towerId: string): { x: number; y: number } {
   return { x: tower.x, y: tower.y };
 }
 
+/** Empty ground on level 2 (no tower within 150 px; the same point as tutorial.spec.ts): a tap there deselects. */
+const EMPTY = { x: 150, y: 560 };
+
 /** Touch-tap a logical (720×1280) point (the chromium project is a Pixel 5 with hasTouch). */
 async function tap(page: Page, p: { x: number; y: number }): Promise<void> {
   const c = await page.evaluate(([x, y]) => window.__towerclash.toClient(x, y), [p.x, p.y] as const);
@@ -182,8 +185,18 @@ test.describe('stalemate hint (FE-1 / FE-2)', () => {
     const pre = await probe(page);
     expect(pre.time, 'back at ×1 with sim time still well before the 12 s attack').toBeLessThan(ATTACK_AT_MS - 1000);
     expect(pre.links.some((l) => l.owner === 'enemy1' && l.to === 'home'), 'no attack on home before its 12 s tick').toBe(false);
+    // QA-28: the sample that sees the attack drops the sim to ×0.1 in the same frame, so the four taps of the
+    // reaction (≈ 1–3 s of wall clock on a loaded host) cost ≈ 0.1–0.3 s of the 1.9 s reaction window, not all of it
     await expect
-      .poll(async () => (await probe(page)).links.some((l) => l.owner === 'enemy1' && l.to === 'home'), { message: 'the rusher attacks home', timeout: 20_000, intervals: [25] })
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const on = (window.__towerclash.getState()?.links ?? []).some((l) => l.owner === 'enemy1' && l.to === 'home');
+            if (on) window.__towerclash.setSpeed(0.1);
+            return on;
+          }),
+        { message: 'the rusher attacks home', timeout: 20_000, intervals: [25] },
+      )
       .toBe(true);
     const attack = await probe(page);
     const enemyAttack = attack.links.find((l) => l.owner === 'enemy1' && l.to === 'home')!;
@@ -192,7 +205,11 @@ test.describe('stalemate hint (FE-1 / FE-2)', () => {
     expect(attack.towers['side']?.owner, 'the opening took side').toBe('player');
     expect(attack.toast, 'no stalemate toast so far: every unit of home → side landed').not.toBe(hint);
 
-    // home is still selected: a tap on side unlinks (one link per L1 barracks), the next tap on mid links home → mid against mid → home
+    // BUG-53: since the BUG-50 fix the tutorial's level-2 step 2 clears home's selection once side is taken, so
+    // select home explicitly (empty ground first: a tap on an already selected home would drop it). Then a tap
+    // on side unlinks (one link per L1 barracks), the next tap on mid links home → mid against mid → home
+    await tap(page, EMPTY);
+    await tap(page, towerAt(2, 'home'));
     await tap(page, towerAt(2, 'side'));
     await expect.poll(async () => playerLinks(await probe(page))).toEqual([]);
     await tap(page, towerAt(2, 'mid'));

@@ -21,6 +21,12 @@ import type { Page } from '@playwright/test';
  * Every run is `loadLevel(id, SEED)` so the sim is reproducible; the only wall-clock-dependent part is
  * when a tap lands, and every assertion is an immediate consequence of that tap or of the sim alone
  * (a capture, the level-4 fill, mid filling up on the mid-first line; waits run the sim at ×3–×10).
+ * Where the outcome depends on when a tap lands — a race with the rusher for a contested grey tower (level 2
+ * mid-first bait, both level-3 links) — the taps run at ×0.1 (`tapAtSlowSpeed`, `runToSimTime`; a capture
+ * poll drops to ×0.1 in the frame that sees it) and the sim window the race allows is asserted (QA-28).
+ * The uncontested lines stay at ×1: level 2 side and level 4 outpost are never the rusher's / turtle's
+ * (headless, opening link at 0.2–10 s), and home's link into them runs ≥ 20 s past the capture, so the
+ * stop / cut taps that follow have seconds of slack; level 1 only asserts what a tap does at once.
  * Hint texts are read through `getText(key)` (src/ui/locales/en.ts) — never the
  * level's lesson text (src/levels/*.json), which the Level Designer owns. Level JSON is only used for
  * tower coordinates. Nothing is imported from src/ (see smoke.spec.ts for why).
@@ -86,9 +92,20 @@ const playerMaxLevel = (page: Page) =>
       .reduce((m, t) => Math.max(m, t.level), 0),
   );
 const stars = (page: Page, id: number) => page.evaluate((lid) => window.__towerclash.economy.getSave().stars[String(lid)] ?? 0, id);
-/** The hint and a tower's owner read in one frame (no capture can land between the two reads). */
+/**
+ * The hint, a tower's owner and the sim time read in one frame (no capture can land between the reads).
+ * QA-28: the sample that first sees the tower as the player's also drops the sim to ×`SLOW` in that same
+ * frame, so the sim does not run on at the poll's ×3 while the test reacts (the round trip is seconds under load).
+ */
 const hintAndOwner = (page: Page, id: string) =>
-  page.evaluate((tid) => ({ hint: window.__towerclash.getTutorialHint(), owner: window.__towerclash.getState()?.towers[tid]?.owner ?? null }), id);
+  page.evaluate(
+    ([tid, slow]) => {
+      const owner = window.__towerclash.getState()?.towers[tid]?.owner ?? null;
+      if (owner === 'player') window.__towerclash.setSpeed(slow);
+      return { hint: window.__towerclash.getTutorialHint(), owner, time: window.__towerclash.getState()?.time ?? -1 };
+    },
+    [id, SLOW] as const,
+  );
 const relayLinks = (page: Page) =>
   page.evaluate(() =>
     (window.__towerclash.getState()?.links ?? []).filter((l) => l.owner === 'player' && l.relay).map((l) => ({ from: l.from, to: l.to })),
@@ -99,24 +116,61 @@ const setSpeed = async (page: Page, n: number): Promise<void> => {
 };
 
 /**
- * Until `id` is the player's, every sample must show no hint (or `allowed`): a gated step stays hidden
- * before the capture. Runs the sim at ×`speed` meanwhile and returns to ×1.
+ * QA-28: the debug surface's slowest speed. A tap whose outcome depends on *when* it lands (a race for a
+ * contested tower) is made at ×0.1, where a second of wall clock — a slow `evaluate` + `touchscreen.tap`
+ * round trip on a loaded host — moves the sim by 100 ms instead of 1 000.
  */
-async function waitForCapture(page: Page, id: string, speed: number, allowed: string | null = null): Promise<void> {
+const SLOW = 0.1;
+
+/**
+ * Run the sim to `ms` and hold it there nearly still: ×1 to `ms − 600`, then ×`SLOW` (the 600 ms absorb
+ * the switch's round trip), polling until `ms`. Returns with ×`SLOW` on; follow with `tapAtSlowSpeed`.
+ */
+async function runToSimTime(page: Page, ms: number): Promise<void> {
+  await expect.poll(() => simTime(page), { timeout: 10_000, intervals: [50] }).toBeGreaterThanOrEqual(ms - 600);
+  await setSpeed(page, SLOW);
+  await expect.poll(() => simTime(page), { timeout: 15_000, intervals: [100] }).toBeGreaterThanOrEqual(ms);
+}
+
+/**
+ * Tap `points` in order at ×`SLOW`, wait for `settled` (the poll proving the taps took effect) still at
+ * ×`SLOW`, then return to ×1. Returns the sim time when the taps began and when `settled` passed, so the
+ * caller can assert the window its race allows.
+ */
+async function tapAtSlowSpeed(page: Page, points: { x: number; y: number }[], settled: () => Promise<void>): Promise<{ from: number; to: number }> {
+  await setSpeed(page, SLOW);
+  const from = await simTime(page);
+  for (const p of points) await tap(page, p);
+  await settled();
+  const to = await simTime(page);
+  await setSpeed(page, 1);
+  return { from, to };
+}
+
+/**
+ * Until `id` is the player's, every sample must show no hint (or `allowed`): a gated step stays hidden
+ * before the capture. Runs the sim at ×`speed` meanwhile; the sample that sees the capture drops to
+ * ×`SLOW` in the same frame (QA-28), then the sim goes to ×`then` (default 1). Returns the sim time of
+ * that sample (≤ one poll interval × `speed` after the capture).
+ */
+async function waitForCapture(page: Page, id: string, speed: number, allowed: string | null = null, then = 1): Promise<number> {
   await setSpeed(page, speed);
   const seen = new Set<string | null>();
+  let capturedAt = -1;
   await expect
     .poll(
       async () => {
         const s = await hintAndOwner(page, id);
         if (s.owner !== 'player') seen.add(s.hint);
+        else capturedAt = s.time;
         return s.owner;
       },
       { message: `${id} is captured`, timeout: 30_000, intervals: [100] },
     )
     .toBe('player');
-  await setSpeed(page, 1);
+  await setSpeed(page, then);
   expect([...seen].filter((h) => h !== null && h !== allowed), `no hint before ${id} is ours`).toEqual([]);
+  return capturedAt;
 }
 
 /** Load a level with the fixed seed and wait until it is really running (sim time advancing). */
@@ -189,7 +243,8 @@ test.describe('tutorial levels 1–4 (LV-5 / checklist R1, GD-5a/b)', () => {
     await waitForCapture(page, 'side', 3);
 
     await expect.poll(() => hint(page), { message: 'side is ours: go around by it' }).toBe(T['tutorial.goAround']);
-    await tap(page, EMPTY); // drop home's selection (a tap on side now would cut home → side)
+    // BUG-50: the real player's path — no tap on empty ground first. The step clears home's selection
+    // (left from step 1), so this tap selects side instead of cutting home → side
     await tap(page, towerAt(2, 'side'));
     await tap(page, towerAt(2, 'foe'));
     await expect.poll(() => hint(page), { message: 'side → foe completes step 2; the stop step shows' }).toBe(T['tutorial.stopStream']);
@@ -198,7 +253,7 @@ test.describe('tutorial levels 1–4 (LV-5 / checklist R1, GD-5a/b)', () => {
       { from: 'side', to: 'foe' },
     ]);
 
-    await tap(page, EMPTY);
+    // the stop step comes up with nothing selected (BUG-50): select home, then the second tap on the target unlinks
     await tap(page, towerAt(2, 'home'));
     await tap(page, towerAt(2, 'side')); // the second tap on the target unlinks home → side
     await expect.poll(() => hint(page), { message: 'the cut completes the stop step' }).toBeNull();
@@ -223,15 +278,16 @@ test.describe('tutorial levels 1–4 (LV-5 / checklist R1, GD-5a/b)', () => {
     await expect.poll(() => hint(page)).toBe(T['tutorial.tapThenGrey']);
     // the naive line's first tap time (3 s): a tap in the rusher's first second on mid can freeze into
     // a 0/1 stalemate there (GDD §3.11 "common cause"); from 3 s on seed 1 takes mid at 10–15 s
-    await expect.poll(() => simTime(page), { timeout: 10_000 }).toBeGreaterThanOrEqual(3_200);
-    // the taps land at ×0.1 so the link forms at sim ≈ 3.2–3.6 s whatever the host's load: a tap that
-    // lands after ≈ 5 s loses the race for mid to the rusher (Day 32: failed once in the full suite)
-    await setSpeed(page, 0.1);
-    await tap(page, towerAt(2, 'home'));
-    await tap(page, towerAt(2, 'mid')); // the bait: step 1 (side) stays
-    await expect.poll(() => playerLinks(page)).toEqual([{ from: 'home', to: 'mid' }]);
-    expect(await simTime(page), 'the bait link formed before the rusher contests mid').toBeLessThan(4_000);
-    await setSpeed(page, 1);
+    // the taps land at ×0.1 so the link forms at sim ≈ 3.2–3.6 s whatever the host's load. Headless seed 1
+    // (QA-28 probe, link at T): 3 000–3 900 ms → mid ours at 10.0–10.9 s and never the rusher's; 4 000 → the
+    // rusher's at 9.95 s first; 4 100–4 400 → never ours (Day 32: failed once in the full suite; QA-28: the
+    // poll-then-switch of Day 32 still formed it at 4 450 under load 25 — now ×0.1 from 2 600 on)
+    await runToSimTime(page, 3_200);
+    const bait = await tapAtSlowSpeed(page, [towerAt(2, 'home'), towerAt(2, 'mid')], () =>
+      expect.poll(() => playerLinks(page)).toEqual([{ from: 'home', to: 'mid' }]),
+    ); // the bait: step 1 (side) stays
+    expect(bait.from, 'the bait taps start at the naive line first-tap time (earlier ones stall on mid)').toBeGreaterThanOrEqual(3_000);
+    expect(bait.to, 'the bait link formed before the rusher contests mid').toBeLessThan(4_000);
     expect(await hint(page)).toBe(T['tutorial.tapThenGrey']);
     // step 1 may stay up (20 s timeout) until mid falls; after that only the supply line could show
     await waitForCapture(page, 'mid', 3, T['tutorial.tapThenGrey']);
@@ -261,20 +317,27 @@ test.describe('tutorial levels 1–4 (LV-5 / checklist R1, GD-5a/b)', () => {
   test('level 3: take both greys — home → east, then the step points at the grey tower left', async ({ page }) => {
     const pageErrors = await boot(page);
     const T = await hintTexts(page);
+    // QA-28: both links race the rusher (headless seed 1, link at T): home → east at ≤ 5 000 ms → east ours at
+    // 4.5–9.3 s; from 5 500 on mostly never. east → west ≤ 4 s after the east capture → west ours (by 30 s at
+    // worst); ≥ 6 s after → never. So the level starts at ×0.1 and both tap sequences run at ×0.1.
+    await setSpeed(page, SLOW);
     await startLevel(page, 3);
     await expect.poll(() => hint(page), { message: 'level 3 opens on tap-then-grey' }).toBe(T['tutorial.tapThenGrey']);
-    await tap(page, towerAt(3, 'home'));
-    await tap(page, towerAt(3, 'east'));
-    await expect.poll(() => playerLinks(page)).toEqual([{ from: 'home', to: 'east' }]);
+    const opening = await tapAtSlowSpeed(page, [towerAt(3, 'home'), towerAt(3, 'east')], () =>
+      expect.poll(() => playerLinks(page)).toEqual([{ from: 'home', to: 'east' }]),
+    );
+    expect(opening.to, 'home → east formed before the rusher contests east').toBeLessThan(5_000);
     await expect.poll(() => hint(page), { message: 'home → east completes step 1; step 2 waits for the capture' }).toBeNull();
-    await waitForCapture(page, 'east', 3);
+    const capturedAt = await waitForCapture(page, 'east', 3, null, SLOW);
     await expect.poll(() => hint(page), { message: 'east is ours: take the other grey tower' }).toBe(T['tutorial.grabOther']);
     expect(await tower(page, 'west')).toMatchObject({ owner: 'neutral' });
-    // home (L1) already runs its one stream: east, just taken, opens the second
-    await tap(page, EMPTY);
-    await tap(page, towerAt(3, 'east'));
-    await tap(page, towerAt(3, 'west'));
-    await expect.poll(() => playerLinks(page)).toContainEqual({ from: 'east', to: 'west' });
+    // home (L1) already runs its one stream: east, just taken, opens the second. BUG-51: the real player's
+    // path — one tap on the ringed tower; the step selected east (a tap on west from home was the limit refusal)
+    const second = await tapAtSlowSpeed(page, [towerAt(3, 'west')], async () => {
+      expect(await limitHint(page), 'no "L2 needed" refusal').toBeNull();
+      await expect.poll(() => playerLinks(page)).toContainEqual({ from: 'east', to: 'west' });
+    });
+    expect(second.to - capturedAt, 'east → west formed within 3 s of the east capture (the rusher takes west later)').toBeLessThan(3_000);
     await expect.poll(() => hint(page), { message: 'the link into west completes step 2 (tutorial over)' }).toBeNull();
     await setSpeed(page, 3);
     await expect.poll(async () => (await tower(page, 'west'))?.owner, { message: 'both greys taken', timeout: 20_000 }).toBe('player');

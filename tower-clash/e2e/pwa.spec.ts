@@ -39,6 +39,9 @@ import { expectToast, recordToasts, toastMark, toastsSeen } from './helpers/toas
  *     `install`, i.e. "opened once, then offline" must boot). The idle preloads that follow the
  *     claim (level-1 chunk, lazy screens — src/main.ts `preloadLazy`) land in the runtime cache
  *     through the cache-first handler; step 1 waits for them so step 2 can start level 1 offline.
+ *     BUG-52: step 1 forces the race on one of them, the AI chunk: requested page-direct before the
+ *     claim, completed after it (two routes hold it), so only src/swWarm.ts's PerformanceObserver can
+ *     warm it; asserted from its Resource Timing entry, and the worker fetches it exactly once.
  *  2. offline: reload → the title renders from the cache, `navigator.onLine` is false, level 1
  *     starts from the cached chunk and the sim advances; a reload while still offline boots again;
  *     a level whose chunk was never fetched (level 3 — level 2 is preloaded when level 1 starts, so
@@ -66,7 +69,10 @@ import { expectToast, recordToasts, toastMark, toastsSeen } from './helpers/toas
  *    true upgrade path (old registration → byte-different script → install / activate / claim)
  *    rather than a hand-seeded cache; the seeded-cache variant (unregister, reload) only shows
  *    that `caches.delete` works. Note `controllerchange` fires at the start of activation (before
- *    the handler runs), so the test polls `caches.keys()` instead of waiting for that event. Then,
+ *    the handler runs), so the test waits on the new worker's `statechange` to `activated` instead
+ *    (QA-28: polling Cache Storage during the activation re-created the deleted old cache, empty;
+ *    see `cachedPaths`). The v4 player is a returning one — two launches, so the second launch's
+ *    idle preloads all reach the v4 runtime cache through the worker (BUG-52). Then,
  *    offline right away: the shell and the entry chunk come from the new cache with no second
  *    launch, and level 1 plays — the runtime entries of the old cache (level 1, lazy screens, debug
  *    surface) were carried into the new cache by `activate` before the old one was deleted (BUG-19:
@@ -130,13 +136,59 @@ const levelId = (page: Page) => page.evaluate(() => window.__towerclash.getState
 const text = (page: Page, key: string) => page.evaluate((k) => window.__towerclash.getText(k), key);
 const onLine = (page: Page) => page.evaluate(() => navigator.onLine);
 const controlled = (page: Page) => page.evaluate(() => navigator.serviceWorker.controller !== null);
-/** Every Cache Storage cache and the pathnames it holds. */
+/**
+ * Every Cache Storage cache and the pathnames it holds. Never call it while a worker may be deleting a
+ * cache (an `activate` in progress): `caches.open` creates the cache it does not find, so a key listed
+ * by `caches.keys()` and deleted by the worker before the `open` comes back as a new, empty cache that
+ * nothing ever deletes again (QA-28: the upgrade test polled this during activation and, under load,
+ * re-created `towerclash-v4` — empty, listed after v5 — then timed out on `[v4, v5]` for 20 s). Wait
+ * for the worker to be `activated` first (`updateToActivated`), or read the names with `cacheNames`.
+ */
 const cachedPaths = (page: Page) =>
   page.evaluate(async () => {
     const out: Record<string, string[]> = {};
     for (const key of await caches.keys()) out[key] = (await (await caches.open(key)).keys()).map((r) => new URL(r.url).pathname);
     return out;
   });
+/** Cache Storage names only — read-only, safe at any time (no `caches.open`). */
+const cacheNames = (page: Page) => page.evaluate(async () => (await caches.keys()).sort());
+/**
+ * Pathnames the current document loaded (Resource Timing, `resource` entries): exactly this page's own
+ * requests, whether the worker answered them or the network did. A `page.on('request')` listener set up
+ * before a navigation also records the previous document's stragglers — its idle preloads still in
+ * flight under load (QA-28: old-hash chunks of the step-1 page counted against the new deploy).
+ */
+const loadedPaths = (page: Page) => page.evaluate(() => performance.getEntriesByType('resource').map((e) => new URL(e.name).pathname));
+/**
+ * QA-28: `registration.update()`, then wait on the new worker's own `statechange` events until it is
+ * `activated` — the state a worker enters only once its `activate` handler's `waitUntil` (carry-over,
+ * old-cache delete, `clients.claim`) has settled, so nothing deletes a cache after this resolves.
+ * Rejects when the update installs no new worker (byte-identical sw.js), when the new worker turns
+ * `redundant` (install or activate failed), or after `timeoutMs`. Resolves with the ms it took.
+ */
+const updateToActivated = (page: Page, timeoutMs: number) =>
+  page.evaluate(async (ms) => {
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (!reg) throw new Error('no registration');
+    const before = reg.active;
+    const t0 = performance.now();
+    await reg.update();
+    const next = reg.installing ?? reg.waiting ?? (reg.active !== before ? reg.active : null);
+    if (!next) throw new Error('registration.update() installed no new worker (sw.js byte-identical?)');
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`the new worker is still '${next.state}' ${ms} ms after update()`)), ms);
+      const check = () => {
+        if (next.state === 'activated') resolve();
+        else if (next.state === 'redundant') reject(new Error('the new worker turned redundant (install or activate failed)'));
+        else return;
+        clearTimeout(timer);
+        next.removeEventListener('statechange', check);
+      };
+      next.addEventListener('statechange', check);
+      check();
+    });
+    return Math.round(performance.now() - t0);
+  }, timeoutMs);
 /** What the served index.html loads before any game code runs: `<script type="module" src>` + `<link rel="modulepreload">` pathnames. */
 const shellModules = (page: Page) =>
   page.evaluate(() =>
@@ -215,7 +267,7 @@ async function navigate(page: Page): Promise<void> {
 }
 
 test.describe('PWA offline (QA-8)', () => {
-  test.setTimeout(60_000); // ok: 6.0–12.0 s idle per test (2026-10-16); every step bounded, see the project comment in playwright.config.ts
+  test.setTimeout(60_000); // ok: 5.9–12.1 s idle per test, 7.0–25.6 s at host load 20–25 (2026-10-18, QA-28); every step bounded, see the project comment in playwright.config.ts
 
   test('first launch precaches the shell; the game boots and plays level 1 offline; a cold level chunk fails with the offline toast and loads once back online; offline again the level map opens from the runtime cache', async ({ page, context }, testInfo) => {
     expect(process.env.PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS, 'worker network emulation flag (playwright.config.ts)').toBeTruthy();
@@ -229,6 +281,32 @@ test.describe('PWA offline (QA-8)', () => {
     await recordToasts(page);
 
     let cacheName = '';
+    /*
+     * BUG-52, made deterministic: the AI chunk's idle preload starts before the claim (the worker's
+     * install is held on one PRECACHE fetch until the page has asked for the chunk) and completes after
+     * it (the page's direct request is held until the page is controlled), so the claim's warm-up
+     * cannot list it; only src/swWarm.ts's PerformanceObserver gets it into the cache (`waitForWarm`).
+     */
+    const isAiChunk = (url: URL) => AI_CHUNK.test(url.pathname);
+    const isHeldPrecache = (url: URL) => url.pathname === '/icons/icon-512.png';
+    let aiAsked = () => {};
+    const aiRequested = new Promise<void>((resolve) => (aiAsked = resolve));
+    const aiFetches = { page: 0, worker: 0 };
+    await page.addInitScript(() => navigator.serviceWorker?.addEventListener('controllerchange', () => ((window as unknown as { __bug52ClaimAt?: number }).__bug52ClaimAt ??= performance.now())));
+    await context.route(isAiChunk, async (route) => {
+      if (route.request().serviceWorker()) {
+        aiFetches.worker++;
+        return route.fallback();
+      }
+      aiFetches.page++;
+      aiAsked();
+      await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, { timeout: 20_000 }).catch(() => undefined);
+      await route.fallback();
+    });
+    await context.route(isHeldPrecache, async (route) => {
+      if (route.request().serviceWorker()) await Promise.race([aiRequested, new Promise((resolve) => setTimeout(resolve, 15_000))]);
+      await route.fallback();
+    });
     await test.step('1. first launch: the worker registers and precaches the shell and the entry chunk', async () => {
       await navigate(page);
       expect(await swReady(page, 20_000)).toBe(new URL('/', page.url()).href);
@@ -244,6 +322,19 @@ test.describe('PWA offline (QA-8)', () => {
       for (const p of modules) expect(caches[cacheName], `entry chunk / modulepreload ${p} precached at install (BUG-18)`).toContain(p);
       // the idle preloads go through the claimed page's worker into the runtime cache
       await waitForWarm(page, cacheName);
+      // BUG-52: the AI chunk was a pre-claim page-direct load that completed after the claim, and it was
+      // warmed through the worker exactly once
+      const ai = await page.evaluate((source) => {
+        const entry = performance.getEntriesByType('resource').find((e) => new RegExp(source).test(new URL(e.name).pathname)) as PerformanceResourceTiming | undefined;
+        return { workerStart: entry?.workerStart ?? -1, responseEnd: entry?.responseEnd ?? -1, claimAt: (window as unknown as { __bug52ClaimAt?: number }).__bug52ClaimAt ?? -1 };
+      }, AI_CHUNK.source);
+      expect(ai.workerStart, 'the AI preload was not worker-served').toBe(0);
+      expect(ai.claimAt, 'controllerchange seen').toBeGreaterThan(0);
+      expect(ai.responseEnd, 'the AI preload completed after the claim (BUG-52 case)').toBeGreaterThan(ai.claimAt);
+      expect(aiFetches.page, 'page-direct AI chunk requests').toBeGreaterThanOrEqual(1);
+      expect(aiFetches.worker, 'worker network requests for the AI chunk (the warm-up, once)').toBe(1);
+      await context.unroute(isAiChunk);
+      await context.unroute(isHeldPrecache);
       // FE-8: an English install never downloads the Russian-only Latin Nunito face (nor does the claim warm-up)
       expect(await page.evaluate(() => document.documentElement.lang)).toBe('en');
       expect((await cachedPaths(page))[cacheName]).not.toContain(NUNITO_LATIN);
@@ -364,6 +455,11 @@ test.describe('PWA offline (QA-8)', () => {
       modules = await shellModules(page);
       expect(modules).toEqual(expect.arrayContaining([expect.stringMatching(ENTRY_CHUNK)]));
       expect(Object.keys(await cachedPaths(page))).toEqual([OLD_CACHE_NAME]);
+      // QA-28: a returning v4 player — the second launch is controlled from its first request, so every idle
+      // preload goes through the worker. (A first launch can miss preloads that are in flight at the claim:
+      // BUG-52, caught by the first test of this file; here it is only the precondition.)
+      await navigate(page);
+      expect(await controlled(page)).toBe(true);
       await waitForWarm(page, OLD_CACHE_NAME);
       warm = ((await cachedPaths(page))[OLD_CACHE_NAME] ?? []).filter((p) => p.startsWith('/assets/'));
       expect(warm).toEqual(expect.arrayContaining([expect.stringMatching(LEVEL1_CHUNK), expect.stringMatching(MENU_CHUNK), expect.stringMatching(DEBUG_CHUNK)]));
@@ -372,17 +468,16 @@ test.describe('PWA offline (QA-8)', () => {
 
     await test.step(`2. update: the real ${CACHE_VERSION} worker installs, activates (deleting ${OLD_CACHE_NAME}) and claims the page`, async () => {
       await context.unroute(isWorkerScript);
-      // what the browser does on the next navigation of an installed PWA: re-fetch sw.js, install it when byte-different
-      await page.evaluate(async () => {
-        const reg = await navigator.serviceWorker.getRegistration();
-        if (!reg) throw new Error('no registration');
-        await reg.update();
-      });
-      // `controllerchange` fires before the activate handler runs, so the cleanup is observed through Cache Storage itself
-      await expect.poll(async () => Object.keys(await cachedPaths(page)).sort(), { timeout: 20_000 }).toEqual([CACHE_NAME]);
-      await expect.poll(() => registrationState(page), { timeout: 20_000 }).toEqual({ installing: null, waiting: null, active: 'activated' });
+      const servedBeforeUpdate = oldWorkerServed;
+      // what the browser does on the next navigation of an installed PWA: re-fetch sw.js, install it when byte-different.
+      // QA-28: `controllerchange` fires before the activate handler runs, and polling Cache Storage meanwhile re-creates
+      // the old cache (see cachedPaths), so the wait is on the new worker's own state: `activated` = the handler settled
+      const ms = await updateToActivated(page, 20_000);
+      test.info().annotations.push({ type: 'update → activated', description: `${ms} ms` });
+      expect(await cacheNames(page), `${OLD_CACHE_NAME} deleted by activate`).toEqual([CACHE_NAME]);
+      expect(await registrationState(page)).toEqual({ installing: null, waiting: null, active: 'activated' });
       expect(await controlled(page)).toBe(true);
-      expect(oldWorkerServed, 'the update fetched the real sw.js, not the routed one').toBe(1);
+      expect(oldWorkerServed, 'the update fetched the real sw.js, not the routed one').toBe(servedBeforeUpdate);
       const fresh = (await cachedPaths(page))[CACHE_NAME] ?? [];
       for (const p of PRECACHE) expect(fresh, `precached ${p}`).toContain(p);
       for (const p of modules) expect(fresh, `entry chunk / modulepreload ${p} precached at install`).toContain(p);
@@ -434,7 +529,7 @@ test.describe('PWA offline (QA-8)', () => {
     const assetRequests = (paths: string[]) => paths.filter((p) => p.startsWith('/assets/'));
 
     let oldEntry = '';
-    await test.step('1. first launch on the current build', async () => {
+    await test.step('1. first and second launch on the current build', async () => {
       await navigate(page);
       expect(await swReady(page, 20_000)).toBe(new URL('/', page.url()).href);
       await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, { timeout: 20_000 });
@@ -442,6 +537,10 @@ test.describe('PWA offline (QA-8)', () => {
       oldEntry = modules.find((p) => ENTRY_CHUNK.test(p)) ?? '';
       expect(oldEntry).toMatch(ENTRY_CHUNK);
       expect((await cachedPaths(page))[CACHE_NAME]).toContain(oldEntry);
+      // QA-28: a returning player — the second launch is controlled from its first request, so its idle preloads
+      // all reach the runtime cache (a first launch's preloads in flight at the claim are BUG-52, the first test's)
+      await navigate(page);
+      expect(await controlled(page)).toBe(true);
       await waitForWarm(page, CACHE_NAME);
       expect(pageErrors).toEqual([]);
     });
@@ -460,20 +559,21 @@ test.describe('PWA offline (QA-8)', () => {
         const real = await route.fetch({ url: new URL(url.pathname.replace(`${DEPLOY_MARK}.js`, '.js'), url).href });
         await route.fulfill({ response: real, body: rehash(await real.text()), headers: { ...real.headers(), 'content-type': 'text/javascript' } });
       });
-      const requested: string[] = [];
-      page.on('request', (r) => requested.push(new URL(r.url()).pathname));
       await navigate(page);
       expect(await controlled(page)).toBe(true);
       expect(served.index, 'the worker fetched the new index.html from the network (network-first navigation)').toBeGreaterThanOrEqual(1);
       expect(await shellModules(page)).toEqual([newEntry]);
+      // QA-28: this document's own loads (Resource Timing), not a listener that also sees the step-1 page's stragglers
+      const requested = await loadedPaths(page);
       expect(requested).toContain(newEntry);
       expect(requested).not.toContain(oldEntry);
       expect(assetRequests(requested).filter((p) => !p.endsWith(`${DEPLOY_MARK}.js`)), 'no old-hash chunk requested on the new build').toEqual([]);
       expect(served.chunks).toContain(newEntry);
-      // the worker stored the new shell and cached the new chunks (entry + idle preloads) on first use
-      const shell = await page.evaluate(async (name) => (await (await caches.open(name)).match('./index.html'))?.text() ?? '', CACHE_NAME);
-      expect(shell).toContain(newEntry.slice(1));
-      expect(shell).not.toContain(oldEntry.slice(1));
+      // the worker stored the new shell (its `cache.put` is not awaited before the page gets the response, so poll)
+      // and cached the new chunks (entry + idle preloads) on first use
+      const cachedShell = () => page.evaluate(async (name) => (await (await caches.open(name)).match('./index.html'))?.text() ?? '', CACHE_NAME);
+      await expect.poll(cachedShell, { message: 'the new index.html is the cached shell', timeout: 15_000 }).toContain(newEntry.slice(1));
+      expect(await cachedShell()).not.toContain(oldEntry.slice(1));
       await expect
         .poll(async () => (await cachedPaths(page))[CACHE_NAME] ?? [], { timeout: 20_000 })
         .toEqual(
@@ -490,6 +590,8 @@ test.describe('PWA offline (QA-8)', () => {
 
     await test.step('3. offline: the launch boots the NEW shell from the cache and level 1 plays', async () => {
       await goOffline(context);
+      // a listener is sound here: the previous document (step 2) loaded new-hash files only, so a straggler of it
+      // cannot add an old-hash path, and unlike Resource Timing it also records an attempt that failed offline
       const requested: string[] = [];
       const fromWorker: string[] = [];
       page.on('request', (r) => requested.push(new URL(r.url()).pathname));
