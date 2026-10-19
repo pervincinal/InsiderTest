@@ -8,6 +8,7 @@
  * purpose, and a tower that lost all its links is re-linked only after another full reaction delay
  * (the human notices, then reacts). The rng is unused, so a run is a pure function of (level, seed,
  * reactMs, firstMs). Pure and importable from tests; the table and the summary live in scripts/playtest.ts.
+ * GD-6h: `NaiveOptions.follow` (`--follow`) turns it into the literal card follower of GDD §3.12 item 12 (a).
  */
 import { C, linksFrom, maxLinksOf } from '../../src/sim/index';
 import type { Command, GameState, LevelDef, Rng, Tower } from '../../src/sim/index';
@@ -21,11 +22,87 @@ export const NAIVE_FIRST_MS = 3000;
 /** A level "holds" for the naive line when it wins at least this share of its seeds (informational, no gate). */
 export const NAIVE_WIN_RATE = 0.5;
 
+/**
+ * GD-6h — the literal card follower (GDD §3.12 item 12 (a)): the naive line, except that
+ * - `prio`: a tower with a free link opens it on the first tower of this list (in order) that it has a
+ *   lane to, does not own and does not already stream to — the player who does what the lesson card
+ *   names first; with no such tower it falls back to `naiveTarget`;
+ * - `hold`: these towers open no link before L2 (the player lets them fill first) unless they were
+ *   already streaming once (a captured tower, a re-link after a loss);
+ * - `noprioFrom`: these towers ignore `prio` and play the plain naive line.
+ * Tower ids are the level's; `validateFollowSpec` rejects ids the level does not have.
+ */
+export interface FollowSpec {
+  prio: readonly string[];
+  hold: readonly string[];
+  noprioFrom: readonly string[];
+}
+
+const FOLLOW_KEYS = ['prio', 'hold', 'noprioFrom'] as const;
+
+/** Parse `prio=a,b,c;hold=home;noprioFrom=x` (any subset of the keys, each once, at least one id each; spaces ignored). */
+export function parseFollowSpec(spec: string): FollowSpec {
+  const out: { prio: string[]; hold: string[]; noprioFrom: string[] } = { prio: [], hold: [], noprioFrom: [] };
+  const seen = new Set<string>();
+  const parts = spec
+    .split(';')
+    .map((p) => p.trim())
+    .filter((p) => p !== '');
+  if (parts.length === 0) throw new Error(`bad --follow "${spec}" (prio=a,b[;hold=c][;noprioFrom=d])`);
+  for (const part of parts) {
+    const eq = part.indexOf('=');
+    const key = (eq < 0 ? part : part.slice(0, eq)).trim();
+    if (!(FOLLOW_KEYS as readonly string[]).includes(key)) throw new Error(`bad --follow "${spec}": unknown key "${key}" (${FOLLOW_KEYS.join(' | ')})`);
+    if (seen.has(key)) throw new Error(`bad --follow "${spec}": "${key}" given twice`);
+    seen.add(key);
+    const ids = eq < 0 ? [] : part.slice(eq + 1).split(',').map((s) => s.trim()).filter((s) => s !== '');
+    if (ids.length === 0) throw new Error(`bad --follow "${spec}": "${key}" needs at least one tower id`);
+    if (new Set(ids).size !== ids.length) throw new Error(`bad --follow "${spec}": "${key}" repeats a tower id`);
+    out[key as (typeof FOLLOW_KEYS)[number]] = ids;
+  }
+  return out;
+}
+
+/** Canonical text of a spec (keys in `prio; hold; noprioFrom` order, empty keys left out) for headers. */
+export function formatFollowSpec(spec: FollowSpec): string {
+  return FOLLOW_KEYS.filter((k) => spec[k].length > 0)
+    .map((k) => `${k}=${spec[k].join(',')}`)
+    .join(';');
+}
+
+/** Throw when the spec names a tower id the level does not have (a typo would silently play the naive line). */
+export function validateFollowSpec(spec: FollowSpec, level: Pick<LevelDef, 'id' | 'towers'>): void {
+  const ids = new Set(level.towers.map((t) => t.id));
+  for (const k of FOLLOW_KEYS) {
+    for (const id of spec[k]) {
+      if (!ids.has(id)) throw new Error(`--follow ${k}=${id}: level ${level.id} has no tower "${id}" (towers: ${[...ids].join(', ')})`);
+    }
+  }
+}
+
+/** The follower's target from `from`: the first `prio` tower it has a lane to, does not own and does not stream to yet. */
+export function followTarget(state: GameState, from: Tower, prio: readonly string[]): Tower | undefined {
+  const already = new Set(linksFrom(state, from.id).map((l) => l.to));
+  const lanes = new Set<string>();
+  for (const id in state.roads) {
+    const road = state.roads[id]!;
+    if (road.a === from.id) lanes.add(road.b);
+    else if (road.b === from.id) lanes.add(road.a);
+  }
+  for (const id of prio) {
+    const t = state.towers[id];
+    if (t && lanes.has(id) && !already.has(id) && t.owner !== from.owner) return t;
+  }
+  return undefined;
+}
+
 export interface NaiveOptions {
   /** Reaction delay, ms (default `NAIVE_REACT_MS`). Must be a positive multiple of `C.TICK_MS`. */
   reactMs?: number;
   /** First action, ms (default `NAIVE_FIRST_MS`). */
   firstMs?: number;
+  /** GD-6h: play the literal card follower instead of the plain naive line. */
+  follow?: FollowSpec;
 }
 
 interface Memory {
@@ -84,6 +161,9 @@ export function makeNaivePlayer(options: NaiveOptions = {}): NonNullable<PlayerB
   const firstMs = options.firstMs ?? NAIVE_FIRST_MS;
   if (!Number.isInteger(reactMs) || reactMs < C.TICK_MS || reactMs % C.TICK_MS !== 0) throw new Error(`naive: bad reactMs ${String(reactMs)} (a positive multiple of ${C.TICK_MS})`);
   if (!Number.isInteger(firstMs) || firstMs < 0) throw new Error(`naive: bad firstMs ${String(firstMs)}`);
+  const prio = options.follow?.prio ?? [];
+  const hold = new Set(options.follow?.hold ?? []);
+  const noprio = new Set(options.follow?.noprioFrom ?? []);
   let mem: Memory | undefined;
 
   return (state: GameState, _rng: Rng): Command[] => {
@@ -109,13 +189,14 @@ export function makeNaivePlayer(options: NaiveOptions = {}): NonNullable<PlayerB
     own.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     const out: Command[] = [];
     for (const t of own) {
+      if (hold.has(t.id) && t.level < 2 && !mem.everLinked.has(t.id)) continue; // follower: let it fill to L2 first
       const links = linksFrom(state, t.id).length;
       if (links >= maxLinksOf(t)) continue;
       if (links === 0) {
         const lost = mem.lostAt.get(t.id);
         if (lost !== undefined && state.time - lost < reactMs) continue; // noticed the loss; reacts one delay later
       }
-      const target = naiveTarget(state, t);
+      const target = (prio.length > 0 && !noprio.has(t.id) ? followTarget(state, t, prio) : undefined) ?? naiveTarget(state, t);
       if (target) out.push({ type: 'link', owner: 'player', from: t.id, to: target.id });
     }
     return out;
@@ -140,6 +221,8 @@ export interface NaiveRow {
   /** `holds` and the median win time is within the level's `star2` clock. */
   withinStar2: boolean;
   ticks: number;
+  /** GD-6h: the card follower's spec when the row is a follower run (never gated). */
+  follow?: FollowSpec;
 }
 
 function medianOf(values: readonly number[]): number | undefined {
@@ -149,9 +232,10 @@ function medianOf(values: readonly number[]): number | undefined {
   return sorted.length % 2 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
 }
 
-/** The naive line on one level over seeds 1..k with the given reaction delay, no Commander upgrades. */
-export function runNaive(level: LevelDef, k: number, reactMs: number = NAIVE_REACT_MS): NaiveRow {
+/** The naive line (or, with `follow`, the literal card follower) on one level over seeds 1..k with the given reaction delay, no Commander upgrades. */
+export function runNaive(level: LevelDef, k: number, reactMs: number = NAIVE_REACT_MS, follow?: FollowSpec): NaiveRow {
   if (!Number.isInteger(k) || k < 1) throw new Error(`naive: bad seed count ${String(k)}`);
+  if (follow) validateFollowSpec(follow, level);
   const seeds = Array.from({ length: k }, (_, i) => i + 1);
   const results: RunResult[] = [];
   const stars: (0 | 1 | 2 | 3)[] = [];
@@ -160,7 +244,7 @@ export function runNaive(level: LevelDef, k: number, reactMs: number = NAIVE_REA
   const losers: number[] = [];
   let ticks = 0;
   for (const seed of seeds) {
-    const r = runHeadless(level, seed, makeNaivePlayer({ reactMs }));
+    const r = runHeadless(level, seed, makeNaivePlayer({ reactMs, follow }));
     results.push(r);
     ticks += r.ticks;
     const s = starsFor(level, r);
@@ -185,6 +269,7 @@ export function runNaive(level: LevelDef, k: number, reactMs: number = NAIVE_REA
     holds,
     withinStar2: holds && medianMs !== undefined && medianMs <= level.star2,
     ticks,
+    ...(follow ? { follow } : {}),
   };
 }
 
@@ -243,11 +328,12 @@ export function parseNaiveGate(spec: string): NaiveGateRange {
  * a level of the range missing from `rows` is a failure too (0 wins of 0) so a partial run cannot pass.
  * Throws when a row's reaction is not the default: the thresholds are calibrated for `NAIVE_REACT_MS`.
  */
-export function naiveGate(rows: readonly Pick<NaiveRow, 'level' | 'reactMs' | 'wins' | 'seeds' | 'losers'>[], range: NaiveGateRange): NaiveGateFailure[] {
+export function naiveGate(rows: readonly Pick<NaiveRow, 'level' | 'reactMs' | 'wins' | 'seeds' | 'losers' | 'follow'>[], range: NaiveGateRange): NaiveGateFailure[] {
   if (range.from < 1 || range.to < range.from || range.to > NAIVE_GATE_LAST) throw new Error(`naive gate: bad range ${range.from}-${range.to} (1 <= a <= b <= ${NAIVE_GATE_LAST})`);
   const byId = new Map<number, (typeof rows)[number]>();
   for (const r of rows) {
     if (r.reactMs !== NAIVE_REACT_MS) throw new Error(`naive gate: level ${r.level.id} ran at react ${r.reactMs} ms; the gate is defined at ${NAIVE_REACT_MS} ms`);
+    if (r.follow) throw new Error(`naive gate: level ${r.level.id} ran the card follower; the gate is the plain naive line's`);
     byId.set(r.level.id, r);
   }
   const failures: NaiveGateFailure[] = [];

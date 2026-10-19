@@ -61,7 +61,8 @@ jobs:
       # informational: star3 sits at 0.9 × the bot's median by design). The key
       # is the ISO week's Monday (`%u` = 1..7, Monday = 1; `-0 days` is valid GNU date): GNU
       # `'monday this week'` would resolve to the *next* Monday on Tue–Sun and skip the current week.
-      # Measured 4.0 s locally (2026-09-21).
+      # Measured 4.0 s locally (2026-09-21); 9.8 s on 2026-10-19 (K = 3: 6.0 s). Keep K = 5: at K = 3 the
+      # 80 % rule demands 3/3 and one lost seed fails the week (QA-29: 2027-03-29 lvl 50 lean 2/3, 4/5 at K = 5).
       - name: Weekly challenge gate (26 weeks x 5 seeds)
         run: npm run playtest -- --weekly "$(date -u -d "-$(( $(date -u +%u) - 1 )) days" +%F)" --weeks 26 --seeds 5
 

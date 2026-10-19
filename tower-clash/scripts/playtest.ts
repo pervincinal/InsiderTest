@@ -4,6 +4,7 @@
  * `npm run playtest -- --weekly YYYY-MM-DD(Monday) [--weeks N] [--seeds K] [--no-twist] [--naive [--react MS]]`
  * `npm run playtest -- --twist <plain|lean|fastFeet|thinWalls|reinforced> [--seeds K] [--pool a-b]`
  * `npm run playtest -- --naive [--seeds K] [--react MS] [--gate a-b]`
+ * `npm run playtest -- --naive --level N --follow "prio=a,b;hold=c;noprioFrom=d" [--seeds K] [--react MS]` (or `--prefer a,b [--hold c]`)
  * Headless balance run: for every level (or one), simulate (a) the reference player vs the enemies and
  * (b) an idle player vs the enemies, 50 ms ticks, AI every 500 ms, up to 180 s of sim time.
  *
@@ -37,6 +38,10 @@
  * `--daily … --naive` / `--weekly … --naive` (QA-7): the same naive line on each day's / week's challenge
  * (its level, fixed seed and twist, K seeds from the fixed one): one row per day / week with wins/K, the
  * median win time and whether the line holds (≥ 50 % wins). Informational, no gate (exit 0).
+ * `--naive --level N --follow SPEC` (GD-6h, GDD §3.12 item 12 (a)): the literal card follower — the naive
+ * line, but free links go first to the `prio` towers in order, `hold` towers wait for L2, `noprioFrom`
+ * towers play plain naive. The naive row plus a "rule (a)" line: the follower must win the level's naive
+ * gate share (levels 1–16, at 4 s) and keep its median within `star2`. Informational (exit 0).
  * The flag rules live in scripts/lib/playtestArgs.ts (unit-tested); rng streams come from `rngsFor`,
  * exactly as the game client derives them.
  */
@@ -51,8 +56,8 @@ import { maxedModifiers } from '../src/economy/maxUpgrades';
 import { DAILY_WIN_RATE, TWIST_WIN_RATE, WEEKLY_WIN_RATE, dailyPlan, inPool, runDaily, runTwist, runWeekly, twistById, weeklyPlan } from './lib/daily';
 import type { DailyRow, PoolRange, TwistRow, WeeklyRow } from './lib/daily';
 import type { Twist } from '../src/daily/challenge';
-import { NAIVE_GATE_LAST, NAIVE_WIN_RATE, makeNaivePlayer, naiveGate, naiveGateMinWins, naiveGateRate, runNaive } from './lib/naivePlayer';
-import type { NaiveGateRange, NaiveRow } from './lib/naivePlayer';
+import { NAIVE_GATE_LAST, NAIVE_REACT_MS, NAIVE_WIN_RATE, formatFollowSpec, makeNaivePlayer, naiveGate, naiveGateMinWins, naiveGateRate, runNaive } from './lib/naivePlayer';
+import type { FollowSpec, NaiveGateRange, NaiveRow } from './lib/naivePlayer';
 import { parseArgs } from './lib/playtestArgs';
 import type { Upgrades } from './lib/playtestArgs';
 
@@ -487,15 +492,19 @@ async function runTwistMode(twistId: Twist['id'], k: number, pool: Readonly<Pool
  * With `--gate a-b` (CI, levels 1–NAIVE_GATE_LAST, default reaction only): every level of the range
  * must win ≥ `naiveGateRate(id)` of its seeds (80 % for 1–8 = 4/5, 60 % for 9–16 = 3/5 at K = 5;
  * `naiveGate` in scripts/lib/naivePlayer.ts). Returns the number of failed levels (0 without a gate).
+ *
+ * With `follow` (GD-6h, never with a gate): the literal card follower instead of the naive line, same
+ * row, plus the GDD §3.12 (a) verdict per level — wins ≥ the naive gate share and median ≤ `star2`.
  */
-async function runNaiveMode(levels: LevelDef[], k: number, reactMs: number, gate: NaiveGateRange | undefined): Promise<number> {
+async function runNaiveMode(levels: LevelDef[], k: number, reactMs: number, gate: NaiveGateRange | undefined, follow?: FollowSpec): Promise<number> {
   const header = `${pad('lvl', 4)} ${pad('name', 20)} ${pad('wins', 6)} ${pad('3*/2*/1*/0*', 12)} ${pad('median', 8)} ${pad('worst', 8)} ${pad('star2', 8)} ${pad('holds', 6)} ${pad('star2?', 7)} ${pad('gate', 6)} losing seeds`;
   const gateNote = gate
     ? `gate lvl ${gate.from}-${gate.to}: wins/K >= ${Math.round(naiveGateRate(gate.from)! * 100)}%` +
       (naiveGateRate(gate.to) !== naiveGateRate(gate.from) ? ` (lvl 1-8) / >= ${Math.round(naiveGateRate(gate.to)! * 100)}% (lvl 9-${NAIVE_GATE_LAST})` : '')
     : 'no gate';
+  const line = follow ? `card follower [${formatFollowSpec(follow)}]` : 'naive';
   console.log(
-    `playtest naive  react=${reactMs}ms  seeds=1..${k}  upgrades=none  max=${fmtTime(MAX_MS)}  informational: holds = wins/K >= ${Math.round(NAIVE_WIN_RATE * 100)}%, star2? = holds and median <= star2 (${gateNote})`,
+    `playtest ${line}  react=${reactMs}ms  seeds=1..${k}  upgrades=none  max=${fmtTime(MAX_MS)}  informational: holds = wins/K >= ${Math.round(NAIVE_WIN_RATE * 100)}%, star2? = holds and median <= star2 (${gateNote})`,
   );
   console.log(header);
   console.log('-'.repeat(header.length));
@@ -503,7 +512,7 @@ async function runNaiveMode(levels: LevelDef[], k: number, reactMs: number, gate
   let totalTicks = 0;
   const t0 = performance.now();
   for (const level of levels) {
-    const row = runNaive(level, k, reactMs);
+    const row = runNaive(level, k, reactMs, follow);
     rows.push(row);
     totalTicks += row.ticks;
     const medianT = row.medianMs === undefined ? '-' : fmtTime(row.medianMs);
@@ -520,8 +529,20 @@ async function runNaiveMode(levels: LevelDef[], k: number, reactMs: number, gate
   const held = rows.filter((r) => r.holds);
   const within = rows.filter((r) => r.withinStar2);
   const totalWins = rows.reduce((n, r) => n + r.wins, 0);
-  console.log(`naive: ${held.length}/${rows.length} levels won at >= ${Math.round(NAIVE_WIN_RATE * 100)} %, ${within.length} within star2 (react ${reactMs} ms, all seeds ${totalWins}/${rows.length * k})`);
-  const tutorialMiss = rows.filter((r) => r.level.id <= TUTORIAL_BAND_LAST && !r.holds);
+  console.log(`${follow ? 'follower' : 'naive'}: ${held.length}/${rows.length} levels won at >= ${Math.round(NAIVE_WIN_RATE * 100)} %, ${within.length} within star2 (react ${reactMs} ms, all seeds ${totalWins}/${rows.length * k})`);
+  if (follow) {
+    // GDD §3.12 item 12 (a): a card rewrite's literal follower holds the naive gate and the star2 median at 4 s
+    for (const r of rows) {
+      const rate = naiveGateRate(r.level.id);
+      const need = rate === undefined ? undefined : naiveGateMinWins(rate, k);
+      const share = need === undefined ? `no gate past ${NAIVE_GATE_LAST}` : `${r.wins}/${k} ${r.wins >= need ? '>=' : '<'} ${need}/${k} (${Math.round(rate! * 100)}%)`;
+      const med = r.medianMs === undefined ? 'no win' : `${fmtTime(r.medianMs)} ${r.medianMs <= r.level.star2 ? '<=' : '>'} star2 ${fmtTime(r.level.star2)}`;
+      const ok = (need === undefined || r.wins >= need) && r.medianMs !== undefined && r.medianMs <= r.level.star2;
+      const note = reactMs === NAIVE_REACT_MS ? '' : ` (rule (a) is defined at ${NAIVE_REACT_MS} ms; this run is ${reactMs} ms)`;
+      console.log(`  rule (a) lvl ${r.level.id} ${r.level.name}: gate share ${share}, median ${med} -> ${ok ? 'ok' : 'NO'}${note}`);
+    }
+  }
+  const tutorialMiss = follow ? [] : rows.filter((r) => r.level.id <= TUTORIAL_BAND_LAST && !r.holds);
   for (const r of tutorialMiss) console.log(`  tutorial band: lvl ${r.level.id} ${r.level.name} ${r.wins}/${k} (lost ${r.losers.join(',')}) — level/design item`);
   let failed = 0;
   if (gate) {
@@ -599,7 +620,7 @@ async function main(): Promise<void> {
     return;
   }
   if (args.naive) {
-    const failed = await runNaiveMode(await selectLevels(args.level), args.seeds ?? 5, args.reactMs, args.gate);
+    const failed = await runNaiveMode(await selectLevels(args.level), args.seeds ?? 5, args.reactMs, args.gate, args.follow);
     if (failed > 0) process.exit(1);
     return;
   }

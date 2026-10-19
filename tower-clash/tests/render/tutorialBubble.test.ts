@@ -16,7 +16,7 @@ import { hudAnchors } from '../../src/render/view';
 import type { HudAnchors } from '../../src/render/view';
 import type { PlayUi } from '../../src/render/draw';
 import { playLayout, worldLayout } from '../../src/render/draw';
-import { SELECT_HINT, lessonCardLayout, selectHintAvoid } from '../../src/render/hud';
+import { SELECT_HINT, lessonCardLayout, selectHintAvoid, selectHintMoved, selectHintPill } from '../../src/render/hud';
 import { selectedFootprint, setFrameWorldLayout } from '../../src/render/worldChips';
 import { TUTORIAL_BUBBLE, tutorialBand, tutorialLayout } from '../../src/render/tutorialBubble';
 import type { TutorialLayout } from '../../src/render/tutorialBubble';
@@ -45,7 +45,9 @@ import { ADVANCES, ADVANCE_CHARS, ADVANCE_ERROR } from './fontAdvances';
  *            map's width; every line fits the bubble's text slot (no squeeze).
  *   hint     the select hint never overlaps the selected tower's footprint (body + ring) or badge; on
  *            360 × 640 it moves to the top of the map band for the homes of levels 1–5, on 430 × 932 it
- *            stays where it was.
+ *            stays where it was. GD-6g: levels 1–10 × every own tower selected (level 8's homeW / homeE)
+ *            × both screens × card up / gone × four languages — the homes of 6–10 move it too on
+ *            360 × 640, and a moved hint clears every badge and chip.
  * The perspective camera (`?tilt=0.72`) uses the same placement: it must lay every case out without
  * throwing (its clearances are reported with GD5C_TABLE=1, not asserted).
  */
@@ -328,6 +330,78 @@ describe('GD-5d: the select hint never sits on the selected tower', () => {
       }
     }
     if (process.env.GD5C_TABLE) console.log(`select hint moved up in ${moved} of the cases`);
+    expect(bad, bad.slice(0, 15).join('\n')).toEqual([]);
+  });
+
+  it('GD-6g: levels 1–10, every own tower selected, both screens, card up and gone, four languages: the hint clears the selected tower, a moved hint every badge and chip, and the drawn pill is the laid-out one', async () => {
+    const levels = (await loadAllLevels()).filter((l) => l.id <= 10);
+    const bad: string[] = [];
+    let cases = 0;
+    let moved = 0;
+    let worstSel = { px: Infinity, where: '' };
+    let worstWorld = { px: Infinity, where: '' };
+    let worstBody = { px: Infinity, where: '' };
+    const homes = new Set<string>();
+    const textW: string[] = [];
+    for (const lang of LANGS) {
+      await setLanguage(lang);
+      ctx.font = font(19, '500');
+      textW.push(`${lang} ${ctx.measureText(t('hud.selectHint')).width.toFixed(0)}`);
+      for (const level of levels) {
+        for (const shape of SHAPES) {
+          const a = anchorsOf(shape);
+          for (const time of [0, 10_000]) {
+            const state = { ...createState(level, 1), time };
+            for (const t0 of Object.values(state.towers).filter((tw) => tw.owner === 'player')) {
+              const ui = { outcome: 'playing', level } as unknown as PlayUi;
+              const lc = lessonCardLayout(ctx, state, ui);
+              const card = lc ? { ...lc.rect, y: lc.rect.y + a.top } : null;
+              const { layout, hint } = playLayout(ctx, state, FLAT, t0.id, card, a, true, true);
+              const pill = hint!;
+              cases++;
+              const where = `L${level.id} ${shape.name} ${lang} t=${time / 1000}s sel=${t0.id}`;
+              // drawHud measures the pill again against the frame's final layout: it must be the one the badges were laid out round
+              const drawn = selectHintPill(ctx, state, t0.id, a, card, FLAT, layout);
+              if (drawn.x !== pill.x || drawn.y !== pill.y || drawn.w !== pill.w) bad.push(`${where}: drawn pill ${JSON.stringify(drawn)} ≠ laid-out ${JSON.stringify(pill)}`);
+              if (pill.x < 0 || pill.x + pill.w > C.MAP_W) bad.push(`${where}: pill outside the map width`);
+              for (const r of selectHintAvoid(state, t0.id, FLAT, layout)) {
+                const px = clearance(pill, r);
+                if (px < 0) bad.push(`${where}: on the selected tower (${px.toFixed(1)})`);
+                if (px < worstSel.px) worstSel = { px, where };
+              }
+              // GD-6 (f): every home of 6–10 (both of level 8's) stands under the low spot on 360 × 640
+              if (level.id >= 6 && shape.name === '360x640') {
+                homes.add(`${level.id}:${t0.id}`);
+                if (!selectHintMoved(pill, a)) bad.push(`${where}: not moved`);
+              }
+              if (!selectHintMoved(pill, a)) continue;
+              moved++;
+              const top = card ? card.y + card.h + 4 + SELECT_HINT.gap : Math.max(0, HUD.mapTop + a.top) + SELECT_HINT.gap;
+              if (pill.y !== top) bad.push(`${where}: moved hint at y ${pill.y}, not ${top}`);
+              const world = [...[...layout.badges].map(([id, b]) => ({ label: `badge ${id}`, rect: b.rect })), ...layout.chips.map((c) => ({ label: `${c.kind} chip ${c.tower ?? ''}`, rect: c.rect }))];
+              for (const w of world) {
+                const px = clearance(pill, w.rect);
+                if (px < 0) bad.push(`${where}: moved hint on ${w.label} (${px.toFixed(1)})`);
+                if (px < worstWorld.px) worstWorld = { px, where: `${where} ${w.label}` };
+              }
+              // reported, not asserted: how close the moved pill comes to a drawn tower body (the far towers stand under the top band)
+              for (const [id, b] of layout.bodies) {
+                const px = clearance(pill, b);
+                if (px < worstBody.px) worstBody = { px, where: `${where} body ${id}` };
+              }
+            }
+          }
+        }
+      }
+    }
+    await setLanguage('en');
+    if (process.env.GD5C_TABLE) {
+      console.log(`GD-6g: ${cases} cases, hint moved in ${moved}; hint text at 19 px (pill = text + 40, ≤ 700): ${textW.join(', ')}`);
+      console.log(`closest: selected ${worstSel.px.toFixed(1)} px (${worstSel.where}); moved hint / badge or chip ${worstWorld.px.toFixed(1)} px (${worstWorld.where}); moved hint / body ${worstBody.px.toFixed(1)} px (${worstBody.where})`);
+    }
+    // own towers at start: one home on every level but 8 (homeW, homeE) → 11 × 2 shapes × 2 times × 4 languages
+    expect(cases).toBe(11 * 2 * 2 * 4);
+    expect([...homes].sort()).toEqual(['10:home', '6:home', '7:home', '8:homeE', '8:homeW', '9:home']);
     expect(bad, bad.slice(0, 15).join('\n')).toEqual([]);
   });
 

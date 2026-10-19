@@ -8,14 +8,16 @@
  * line on each day's / week's challenge, informational, no gate) — it cannot be combined with `--twist`.
  * `--gate a-b` belongs to the campaign naive run only (the CI gate is defined per level, not per day);
  * `--react MS` to any naive run; `--pool a-b` to `--twist`; `--no-twist` to `--daily` / `--weekly`.
+ * GD-6h: `--follow "prio=a,b;hold=c;noprioFrom=d"` (or the shorthands `--prefer a,b` / `--hold c`) turns
+ * the campaign naive run of one level (`--level N`) into the literal card follower; never with `--gate`.
  */
 import { C } from '../../src/sim/index';
 import { TWISTS, isMondayKey } from '../../src/daily/challenge';
 import type { Twist } from '../../src/daily/challenge';
 import { DEFAULT_POOL, parsePool, twistById } from './daily';
 import type { PoolRange } from './daily';
-import { NAIVE_REACT_MS, parseNaiveGate } from './naivePlayer';
-import type { NaiveGateRange } from './naivePlayer';
+import { NAIVE_REACT_MS, parseFollowSpec, parseNaiveGate } from './naivePlayer';
+import type { FollowSpec, NaiveGateRange } from './naivePlayer';
 
 export const DEFAULT_SEED = 1;
 
@@ -46,6 +48,8 @@ export interface Args {
   reactMs: number;
   /** `--gate a-b`: campaign naive gate over level ids a..b (1–NAIVE_GATE_LAST); undefined = informational. */
   gate?: NaiveGateRange;
+  /** `--follow SPEC` / `--prefer a,b` / `--hold c` (GD-6h): the literal card follower on `--level N`; undefined = the plain naive line. */
+  follow?: FollowSpec;
 }
 
 export function parseArgs(argv: readonly string[]): Args {
@@ -63,6 +67,9 @@ export function parseArgs(argv: readonly string[]): Args {
   let naive = false;
   let reactMs = NAIVE_REACT_MS;
   let gateSpec: string | undefined;
+  let followSpec: string | undefined;
+  let prefer: string | undefined;
+  let holdIds: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
     const next = argv[i + 1];
@@ -92,6 +99,12 @@ export function parseArgs(argv: readonly string[]): Args {
     else if (arg.startsWith('--react=')) reactMs = Number(arg.slice('--react='.length));
     else if (arg === '--gate' && next !== undefined) gateSpec = next;
     else if (arg.startsWith('--gate=')) gateSpec = arg.slice('--gate='.length);
+    else if (arg === '--follow' && next !== undefined) followSpec = next;
+    else if (arg.startsWith('--follow=')) followSpec = arg.slice('--follow='.length);
+    else if (arg === '--prefer' && next !== undefined) prefer = next;
+    else if (arg.startsWith('--prefer=')) prefer = arg.slice('--prefer='.length);
+    else if (arg === '--hold' && next !== undefined) holdIds = next;
+    else if (arg.startsWith('--hold=')) holdIds = arg.slice('--hold='.length);
   }
   if (level !== undefined && !Number.isInteger(level)) throw new Error(`bad --level ${String(level)}`);
   if (!Number.isInteger(seed)) throw new Error(`bad --seed ${String(seed)}`);
@@ -121,5 +134,17 @@ export function parseArgs(argv: readonly string[]): Args {
   if (gate && challengeNaive) throw new Error(`--gate only applies to the campaign naive run, not to --naive with ${daily !== undefined ? '--daily' : '--weekly'} (informational, no gate)`);
   if (gate && reactMs !== NAIVE_REACT_MS) throw new Error(`--gate is defined at the default reaction (${NAIVE_REACT_MS} ms); drop --react`);
   if (gate && level !== undefined && (level < gate.from || level > gate.to)) throw new Error(`--level ${level} is outside --gate ${gate.from}-${gate.to}`);
-  return { level, seed, seeds, upgrades, daily, days, twist, twistId: twistDef?.id, pool, weekly, weeks, naive, reactMs, gate };
+  // GD-6h: the card follower — `--follow` or its shorthands, the naive campaign run of one level, informational
+  if (followSpec !== undefined && (prefer !== undefined || holdIds !== undefined)) throw new Error('--follow and --prefer / --hold are two spellings of one spec; use one');
+  const shorthand = [prefer !== undefined ? `prio=${prefer}` : '', holdIds !== undefined ? `hold=${holdIds}` : ''].filter((p) => p !== '').join(';');
+  const followText = followSpec ?? (shorthand === '' ? undefined : shorthand);
+  const follow = followText === undefined ? undefined : parseFollowSpec(followText);
+  if (follow) {
+    const flag = followSpec !== undefined ? '--follow' : '--prefer / --hold';
+    if (!naive) throw new Error(`${flag} only applies to --naive`);
+    if (challengeNaive) throw new Error(`${flag} does not apply to --naive with ${daily !== undefined ? '--daily' : '--weekly'} (tower ids are per level)`);
+    if (gate) throw new Error(`${flag} is informational and does not combine with --gate (the gate is the plain naive line's)`);
+    if (level === undefined) throw new Error(`${flag} needs --level N (tower ids are per level)`);
+  }
+  return { level, seed, seeds, upgrades, daily, days, twist, twistId: twistDef?.id, pool, weekly, weeks, naive, reactMs, gate, ...(follow ? { follow } : {}) };
 }
