@@ -209,7 +209,7 @@ HOW IT PLAYS
 • Enemy streams are drawn as straight ribbons in their colour, so you always see where the next attack comes from — and where to answer it.
 
 50 HAND-MADE LEVELS
-• Levels 1–3 teach the basics with a short built-in tutorial; every later level opens with a one-line lesson.
+• Levels 1–4 teach the basics with a short built-in tutorial; every later level opens with a one-line lesson.
 • Fortresses (from level 9) shrug off half of every attack — bring more than you think.
 • Artillery (from level 12) shoots down soldiers that walk into its range — approach from the right side.
 • Two enemies at once from level 17, three from level 33 — and they fight each other too.
@@ -263,7 +263,7 @@ NECƏ OYNANIR
 • Düşmən axınları düz lentlərlə öz rəngində çəkilir — növbəti hücumun haradan gəldiyini və hara cavab verəcəyini həmişə görürsən.
 
 50 ƏL İLƏ HAZIRLANMIŞ SƏVİYYƏ
-• 1–3-cü səviyyələr qısa daxili təlimatla əsasları öyrədir; sonrakı hər səviyyə bir cümləlik dərslə başlayır.
+• 1–4-cü səviyyələr qısa daxili təlimatla əsasları öyrədir; sonrakı hər səviyyə bir cümləlik dərslə başlayır.
 • Qalalar (9-cu səviyyədən) hər hücumun yarısını dəf edir — düşündüyündən çox əsgər apar.
 • Top qüllələri (12-ci səviyyədən) mənzilinə girən əsgərləri vurur — düzgün tərəfdən yaxınlaş.
 • 17-ci səviyyədən eyni anda iki, 33-cü səviyyədən üç rəqib — onlar bir-biri ilə də vuruşur.
@@ -302,10 +302,10 @@ Qeyd: menyular, işarələr, təlimat, səviyyə adları və dərslər azərbayc
 |---|---|---|---|
 | App icon (Tətbiq ikonu) | 512×512 PNG, 32-bit, ≤ 1 MB | `tower-clash/public/icons/icon-512.png` | 512×512, RGBA (every pixel opaque), 177 KB — new icon 2026-10-11 (ART-18) |
 | Feature graphic (Əsas qrafika) | 1024×500 PNG / JPEG, no alpha, ≤ 15 MB | `tower-clash/store/feature-graphic.png` — one file for every language (a translation without its own feature graphic shows this one) | 1024×500, RGB, 117 KB (the Tech Artist re-renders it on 2026-10-12, ART-19 — take the file as it is on the branch on upload day) |
-| Phone screenshots — English (Telefon skrinşotları) | 2–8, PNG / JPEG ≤ 8 MB, 9:16, each side 320–3840 px | `tower-clash/store/screenshots/en/01.png` … `08.png` — upload in file order | 8 files, 1080×1920, RGB, 392–518 KB; re-cut 2026-10-15 on the build-16 look (PUB-24: zoomed flat view; ART-19 re-cut of 2026-10-13 replaced); 04 / 06 re-cut 2026-10-17 (PUB-25: ART-26 mine-glyph tags beside the mines, build 17), other frames unchanged |
-| Phone screenshots — Azerbaijani translation | same | `tower-clash/store/screenshots/az/01.png` … `08.png` (Azerbaijani captions *and* Azerbaijani in-game UI) | 8 files, 1080×1920, RGB, 386–527 KB; PUB-24 re-cut 2026-10-15; 04 / 06 re-cut 2026-10-17 (PUB-25, ART-26 mine tags) |
-| Phone screenshots — Russian translation (§3.5) | same | `tower-clash/store/screenshots/ru/01.png` … `08.png` (Russian captions and in-game UI) | 8 files, 1080×1920, RGB, 392–506 KB; PUB-24 re-cut 2026-10-15; 04 / 06 re-cut 2026-10-17 (PUB-25, ART-26 mine tags) |
-| Phone screenshots — Turkish translation (§3.6) | same | `tower-clash/store/screenshots/tr/01.png` … `08.png` (Turkish captions and in-game UI) | 8 files, 1080×1920, RGB, 389–506 KB; PUB-24 re-cut 2026-10-15; 04 / 06 re-cut 2026-10-17 (PUB-25, ART-26 mine tags) |
+| Phone screenshots — English (Telefon skrinşotları) | 2–8, PNG / JPEG ≤ 8 MB, 9:16, each side 320–3840 px | `tower-clash/store/screenshots/en/01.png` … `08.png` — upload in file order | 8 files, 1080×1920, RGB, 392–518 KB; re-cut 2026-10-15 on the build-16 look (PUB-24: zoomed flat view; ART-19 re-cut of 2026-10-13 replaced); 04 / 06 re-cut 2026-10-17 (PUB-25: ART-26 mine-glyph tags beside the mines, build 17); 02 / 07 re-cut 2026-10-19 (PUB-28, build 19: the level-1 bubble beside the home tower, the level-9 result card "2 under 01:00"), other frames unchanged |
+| Phone screenshots — Azerbaijani translation | same | `tower-clash/store/screenshots/az/01.png` … `08.png` (Azerbaijani captions *and* Azerbaijani in-game UI) | 8 files, 1080×1920, RGB, 386–527 KB; PUB-24 re-cut 2026-10-15; 04 / 06 re-cut 2026-10-17 (PUB-25, ART-26 mine tags); 02 / 07 re-cut 2026-10-19 (PUB-28, build 19) |
+| Phone screenshots — Russian translation (§3.5) | same | `tower-clash/store/screenshots/ru/01.png` … `08.png` (Russian captions and in-game UI) | 8 files, 1080×1920, RGB, 392–506 KB; PUB-24 re-cut 2026-10-15; 04 / 06 re-cut 2026-10-17 (PUB-25, ART-26 mine tags); 02 / 07 re-cut 2026-10-19 (PUB-28, build 19) |
+| Phone screenshots — Turkish translation (§3.6) | same | `tower-clash/store/screenshots/tr/01.png` … `08.png` (Turkish captions and in-game UI) | 8 files, 1080×1920, RGB, 389–506 KB; PUB-24 re-cut 2026-10-15; 04 / 06 re-cut 2026-10-17 (PUB-25, ART-26 mine tags); 02 / 07 re-cut 2026-10-19 (PUB-28, build 19) |
 | 7-inch / 10-inch tablet, Chromebook, Android XR screenshots | optional | **none** — phone-only listing (G11) | |
 | Video (YouTube URL) | optional | **none** | |
 
@@ -334,7 +334,7 @@ Tower Clash — стратегия в реальном времени для о�
 • Вражеские потоки видны как прямые ленты их цвета: всегда ясно, откуда идёт следующая атака и куда бить в ответ.
 
 50 УРОВНЕЙ РУЧНОЙ РАБОТЫ
-• Уровни 1–3 учат основам в коротком встроенном обучении; каждый следующий уровень начинается с урока в одну строку.
+• Уровни 1–4 учат основам в коротком встроенном обучении; каждый следующий уровень начинается с урока в одну строку.
 • Крепости (с 9-го уровня) отражают половину любой атаки — бери солдат с запасом.
 • Артиллерия (с 12-го уровня) расстреливает солдат, вошедших в зону огня, — заходи с правильной стороны.
 • С 17-го уровня против тебя сразу два соперника, с 33-го — три, и они воюют ещё и друг с другом.
@@ -390,7 +390,7 @@ NASIL OYNANIR
 • Düşman akışları kendi renklerinde düz şeritler olarak çizilir: bir sonraki saldırının nereden geldiğini ve nereye karşılık vereceğini hep görürsün.
 
 50 EL YAPIMI BÖLÜM
-• 1–3. bölümler kısa bir eğitimle temelleri öğretir; sonraki her bölüm tek cümlelik bir dersle açılır.
+• 1–4. bölümler kısa bir eğitimle temelleri öğretir; sonraki her bölüm tek cümlelik bir dersle açılır.
 • Kaleler (9. bölümden itibaren) her saldırının yarısını savuşturur — sandığından fazla asker götür.
 • Toplar (12. bölümden itibaren) menzillerine giren askerleri vurur — doğru taraftan yaklaş.
 • 17. bölümden itibaren aynı anda iki, 33. bölümden itibaren üç rakip — üstelik birbirleriyle de savaşırlar.
@@ -588,7 +588,7 @@ After the release: AdMob → Apps → Tower Clash (Android) → *App settings* �
 | Products, payments profile, license testers | MZ1, MZ5, MZ6, MZ13 (Android halves) — `STORE_LISTING.md` §6.1 ids, `LAUNCH_CHECKLIST.md` §6 |
 | Secrets | `RC_ANDROID_KEY` |
 
-## 9. Character counts (2026-10-12, PUB-22; first run 2026-10-11; `[...s].length` code points, script in the Publisher's scratch; texts read from this file, `APP_STORE_CONNECT_SHEET.md`, `STORE_LISTING.md`, `RELEASE_NOTES.md` and `tower-clash/fastlane/metadata/en-US/description.txt`)
+## 9. Character counts (2026-10-12, PUB-22; first run 2026-10-11; the four full descriptions re-run 2026-10-19, PUB-27 — "Levels 1–3" → "1–4", a same-length digit swap, all four unchanged; `[...s].length` code points, script in the Publisher's scratch; texts read from this file, `APP_STORE_CONNECT_SHEET.md`, `STORE_LISTING.md`, `RELEASE_NOTES.md` and `tower-clash/fastlane/metadata/en-US/description.txt`)
 
 ```
    11 app name EN / AZ / RU / TR             (limit 30)

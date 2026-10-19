@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
+import { tutorialFor } from '../../src/ui/tutorial';
 
 /*
  * MM-12: the App Store listing that tower-clash-ios-store.yml uploads with fastlane deliver.
@@ -144,6 +145,15 @@ describe('fastlane/metadata = APP_STORE_CONNECT_SHEET.md variant B', () => {
     // The copyright keeps the sheet's placeholder; the Fastfile fills it from the review contact.
     expect(meta('copyright.txt')).toBe('© 2026 [developer name]');
     expect(readFileSync(join(ROOT, 'fastlane/Fastfile'), 'utf8')).toContain("COPYRIGHT_PLACEHOLDER = '[developer name]'");
+  });
+
+  it('names the tutorial levels the build has (PUB-27: levels 1–4 since GD-5b, build 18)', () => {
+    // tests/setup.ts registers the lazy level 2–4 steps, so tutorialFor() sees every level the game teaches
+    const taught = Array.from({ length: 10 }, (_, i) => i + 1).filter((id) => tutorialFor(id, 0) !== null);
+    expect(taught).toEqual([1, 2, 3, 4]);
+    const sentence = `• Levels 1–${taught.length} teach the basics with a short built-in tutorial; every later level opens with a one-line lesson.`;
+    expect(meta('en-US/description.txt')).toContain(sentence);
+    expect(SHEET_B.description).toContain(sentence);
   });
 
   it('sets the categories of sheet §2: Games › Strategy, Casual; no secondary category', () => {

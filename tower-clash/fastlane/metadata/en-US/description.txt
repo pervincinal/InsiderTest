@@ -8,7 +8,7 @@ HOW IT PLAYS
 • Enemy streams are drawn as straight ribbons in their colour, so you always see where the next attack comes from — and where to answer it.
 
 50 HAND-MADE LEVELS
-• Levels 1–3 teach the basics with a short built-in tutorial; every later level opens with a one-line lesson.
+• Levels 1–4 teach the basics with a short built-in tutorial; every later level opens with a one-line lesson.
 • Fortresses (from level 9) shrug off half of every attack — bring more than you think.
 • Artillery (from level 12) shoots down soldiers that walk into its range — approach from the right side.
 • Two enemies at once from level 17, three from level 33 — and they fight each other too.
