@@ -10,6 +10,10 @@
  * `--react MS` to any naive run; `--pool a-b` to `--twist`; `--no-twist` to `--daily` / `--weekly`.
  * GD-6h: `--follow "prio=a,b;hold=c;noprioFrom=d"` (or the shorthands `--prefer a,b` / `--hold c`) turns
  * the campaign naive run of one level (`--level N`) into the literal card follower; never with `--gate`.
+ * GD-7f: `--tie asc|desc|both` picks the naive line's id order on an exact target tie (campaign `--naive`
+ * only, with or without `--follow`): `asc` (default) is today's line, `desc` the reversed one, `both`
+ * prints an extra `tie desc` row per level; with `--gate` only `asc` (today's CI step) or `both` (a level
+ * fails when either order is under its share) — `--gate --tie desc` would drop the gated line and is refused.
  */
 import { C } from '../../src/sim/index';
 import { TWISTS, isMondayKey } from '../../src/daily/challenge';
@@ -17,11 +21,20 @@ import type { Twist } from '../../src/daily/challenge';
 import { DEFAULT_POOL, parsePool, twistById } from './daily';
 import type { PoolRange } from './daily';
 import { NAIVE_REACT_MS, parseFollowSpec, parseNaiveGate } from './naivePlayer';
-import type { FollowSpec, NaiveGateRange } from './naivePlayer';
+import type { FollowSpec, NaiveGateRange, NaiveTie } from './naivePlayer';
 
 export const DEFAULT_SEED = 1;
 
 export type Upgrades = 'none' | 'max';
+
+/** GD-7f `--tie`: one tie order, or `both` (the `asc` row plus an extra `tie desc` row per level). */
+export type TieMode = NaiveTie | 'both';
+const TIE_MODES: readonly TieMode[] = ['asc', 'desc', 'both'];
+
+/** The tie orders a `--tie` mode runs, in print order (`asc` first). */
+export function tiesOf(mode: TieMode): NaiveTie[] {
+  return mode === 'both' ? ['asc', 'desc'] : [mode];
+}
 
 export interface Args {
   level?: number;
@@ -50,6 +63,8 @@ export interface Args {
   gate?: NaiveGateRange;
   /** `--follow SPEC` / `--prefer a,b` / `--hold c` (GD-6h): the literal card follower on `--level N`; undefined = the plain naive line. */
   follow?: FollowSpec;
+  /** `--tie desc|both` (GD-7f): naive tie order(s); absent = `asc`, today's line (`--tie asc` leaves it absent too). */
+  tie?: Exclude<TieMode, 'asc'>;
 }
 
 export function parseArgs(argv: readonly string[]): Args {
@@ -70,6 +85,7 @@ export function parseArgs(argv: readonly string[]): Args {
   let followSpec: string | undefined;
   let prefer: string | undefined;
   let holdIds: string | undefined;
+  let tieSpec: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
     const next = argv[i + 1];
@@ -105,6 +121,8 @@ export function parseArgs(argv: readonly string[]): Args {
     else if (arg.startsWith('--prefer=')) prefer = arg.slice('--prefer='.length);
     else if (arg === '--hold' && next !== undefined) holdIds = next;
     else if (arg.startsWith('--hold=')) holdIds = arg.slice('--hold='.length);
+    else if (arg === '--tie' && next !== undefined) tieSpec = next;
+    else if (arg.startsWith('--tie=')) tieSpec = arg.slice('--tie='.length);
   }
   if (level !== undefined && !Number.isInteger(level)) throw new Error(`bad --level ${String(level)}`);
   if (!Number.isInteger(seed)) throw new Error(`bad --seed ${String(seed)}`);
@@ -146,5 +164,11 @@ export function parseArgs(argv: readonly string[]): Args {
     if (gate) throw new Error(`${flag} is informational and does not combine with --gate (the gate is the plain naive line's)`);
     if (level === undefined) throw new Error(`${flag} needs --level N (tower ids are per level)`);
   }
-  return { level, seed, seeds, upgrades, daily, days, twist, twistId: twistDef?.id, pool, weekly, weeks, naive, reactMs, gate, ...(follow ? { follow } : {}) };
+  // GD-7f: the reversed tie order — a campaign naive switch; the gate keeps the asc line and may add desc
+  if (tieSpec !== undefined && !(TIE_MODES as readonly string[]).includes(tieSpec)) throw new Error(`bad --tie ${tieSpec} (${TIE_MODES.join('|')})`);
+  const tie = (tieSpec ?? 'asc') as TieMode;
+  if (tieSpec !== undefined && !naive) throw new Error('--tie only applies to --naive');
+  if (tieSpec !== undefined && challengeNaive) throw new Error(`--tie only applies to the campaign naive run, not to --naive with ${daily !== undefined ? '--daily' : '--weekly'}`);
+  if (gate && tie === 'desc') throw new Error('--gate --tie desc would not gate the asc line; use --tie both (a level fails when either order is under its share)');
+  return { level, seed, seeds, upgrades, daily, days, twist, twistId: twistDef?.id, pool, weekly, weeks, naive, reactMs, gate, ...(follow ? { follow } : {}), ...(tie !== 'asc' ? { tie } : {}) };
 }

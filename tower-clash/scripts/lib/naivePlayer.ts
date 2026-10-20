@@ -9,6 +9,8 @@
  * (the human notices, then reacts). The rng is unused, so a run is a pure function of (level, seed,
  * reactMs, firstMs). Pure and importable from tests; the table and the summary live in scripts/playtest.ts.
  * GD-6h: `NaiveOptions.follow` (`--follow`) turns it into the literal card follower of GDD §3.12 item 12 (a).
+ * GD-7f: `NaiveOptions.tie` (`--tie desc`) reverses the id tie-break of `naiveTarget` (GDD §3.12 (i) (c),
+ * §3.13 (f)) — the same line started from the other side of a mirror pair; `asc` (default) is the gated line.
  */
 import { C, linksFrom, maxLinksOf } from '../../src/sim/index';
 import type { Command, GameState, LevelDef, Rng, Tower } from '../../src/sim/index';
@@ -23,50 +25,94 @@ export const NAIVE_FIRST_MS = 3000;
 export const NAIVE_WIN_RATE = 0.5;
 
 /**
+ * GD-7f — the last key of `naiveTarget` on an exact tie of (neutral-first, lane length): `asc` takes the
+ * smaller id (the gated line since QA-3; `e…` / `east` / `ne` / `se` sort first, so it always starts east
+ * on a mirror pair), `desc` the larger one (the west start). Nothing else of the line changes.
+ */
+export type NaiveTie = 'asc' | 'desc';
+export const NAIVE_TIES: readonly NaiveTie[] = Object.freeze(['asc', 'desc'] as const);
+
+/** Throw unless `tie` is `asc` or `desc`. */
+export function checkNaiveTie(tie: string): NaiveTie {
+  if (tie !== 'asc' && tie !== 'desc') throw new Error(`naive: bad tie order "${tie}" (asc | desc)`);
+  return tie;
+}
+
+/**
  * GD-6h — the literal card follower (GDD §3.12 item 12 (a)): the naive line, except that
  * - `prio`: a tower with a free link opens it on the first tower of this list (in order) that it has a
  *   lane to, does not own and does not already stream to — the player who does what the lesson card
  *   names first; with no such tower it falls back to `naiveTarget`;
  * - `hold`: these towers open no link before L2 (the player lets them fill first) unless they were
  *   already streaming once (a captured tower, a re-link after a loss);
- * - `noprioFrom`: these towers ignore `prio` and play the plain naive line.
+ * - `noprioFrom`: these towers ignore `prio` and play the plain naive line;
+ * - `after` (GD-7f, `after=guns:3,outpost:4`): the `prio` tower `id` is eligible only once the player owns
+ *   at least `k` towers (counted at the reaction) — the card's "with five towers take the guns"; before
+ *   that the source skips it and tries the next `prio` tower, then the plain naive target (which may still
+ *   be that tower: `after` gates the card's instruction, not the naive line). Every `after` id must be in `prio`.
  * Tower ids are the level's; `validateFollowSpec` rejects ids the level does not have.
  */
 export interface FollowSpec {
   prio: readonly string[];
   hold: readonly string[];
   noprioFrom: readonly string[];
+  /** GD-7f: own-tower count from which a `prio` tower is eligible, in spec order. */
+  after: readonly FollowAfter[];
 }
 
-const FOLLOW_KEYS = ['prio', 'hold', 'noprioFrom'] as const;
+export interface FollowAfter {
+  id: string;
+  /** Fewest own towers (≥ 1) at the reaction for `id` to be a `prio` target. */
+  k: number;
+}
 
-/** Parse `prio=a,b,c;hold=home;noprioFrom=x` (any subset of the keys, each once, at least one id each; spaces ignored). */
+const FOLLOW_KEYS = ['prio', 'hold', 'noprioFrom', 'after'] as const;
+type FollowIdKey = Exclude<(typeof FOLLOW_KEYS)[number], 'after'>;
+
+/** The tower ids a spec key names (`after` → its ids). */
+function followIds(spec: FollowSpec, key: (typeof FOLLOW_KEYS)[number]): readonly string[] {
+  return key === 'after' ? spec.after.map((a) => a.id) : spec[key];
+}
+
+/** Parse `prio=a,b,c;hold=home;noprioFrom=x;after=b:3` (any subset of the keys, each once, at least one id each; spaces ignored). */
 export function parseFollowSpec(spec: string): FollowSpec {
-  const out: { prio: string[]; hold: string[]; noprioFrom: string[] } = { prio: [], hold: [], noprioFrom: [] };
+  const out: { prio: string[]; hold: string[]; noprioFrom: string[]; after: FollowAfter[] } = { prio: [], hold: [], noprioFrom: [], after: [] };
   const seen = new Set<string>();
   const parts = spec
     .split(';')
     .map((p) => p.trim())
     .filter((p) => p !== '');
-  if (parts.length === 0) throw new Error(`bad --follow "${spec}" (prio=a,b[;hold=c][;noprioFrom=d])`);
+  if (parts.length === 0) throw new Error(`bad --follow "${spec}" (prio=a,b[;hold=c][;noprioFrom=d][;after=b:k])`);
   for (const part of parts) {
     const eq = part.indexOf('=');
     const key = (eq < 0 ? part : part.slice(0, eq)).trim();
     if (!(FOLLOW_KEYS as readonly string[]).includes(key)) throw new Error(`bad --follow "${spec}": unknown key "${key}" (${FOLLOW_KEYS.join(' | ')})`);
     if (seen.has(key)) throw new Error(`bad --follow "${spec}": "${key}" given twice`);
     seen.add(key);
-    const ids = eq < 0 ? [] : part.slice(eq + 1).split(',').map((s) => s.trim()).filter((s) => s !== '');
-    if (ids.length === 0) throw new Error(`bad --follow "${spec}": "${key}" needs at least one tower id`);
-    if (new Set(ids).size !== ids.length) throw new Error(`bad --follow "${spec}": "${key}" repeats a tower id`);
-    out[key as (typeof FOLLOW_KEYS)[number]] = ids;
+    const items = eq < 0 ? [] : part.slice(eq + 1).split(',').map((s) => s.trim()).filter((s) => s !== '');
+    if (items.length === 0) throw new Error(`bad --follow "${spec}": "${key}" needs at least one tower id`);
+    if (key === 'after') {
+      for (const item of items) {
+        const m = /^([^:\s]+)\s*:\s*(\d+)$/.exec(item);
+        if (!m || Number(m[2]) < 1) throw new Error(`bad --follow "${spec}": after "${item}" is not id:k (k >= 1 own towers)`);
+        out.after.push({ id: m[1]!, k: Number(m[2]) });
+      }
+      if (new Set(out.after.map((a) => a.id)).size !== out.after.length) throw new Error(`bad --follow "${spec}": "after" repeats a tower id`);
+      continue;
+    }
+    if (new Set(items).size !== items.length) throw new Error(`bad --follow "${spec}": "${key}" repeats a tower id`);
+    out[key as FollowIdKey] = items;
+  }
+  for (const a of out.after) {
+    if (!out.prio.includes(a.id)) throw new Error(`bad --follow "${spec}": after=${a.id}:${a.k} gates a prio target, but "${a.id}" is not in prio`);
   }
   return out;
 }
 
-/** Canonical text of a spec (keys in `prio; hold; noprioFrom` order, empty keys left out) for headers. */
+/** Canonical text of a spec (keys in `prio; hold; noprioFrom; after` order, empty keys left out) for headers. */
 export function formatFollowSpec(spec: FollowSpec): string {
-  return FOLLOW_KEYS.filter((k) => spec[k].length > 0)
-    .map((k) => `${k}=${spec[k].join(',')}`)
+  return FOLLOW_KEYS.filter((k) => followIds(spec, k).length > 0)
+    .map((k) => `${k}=${k === 'after' ? spec.after.map((a) => `${a.id}:${a.k}`).join(',') : spec[k].join(',')}`)
     .join(';');
 }
 
@@ -74,14 +120,17 @@ export function formatFollowSpec(spec: FollowSpec): string {
 export function validateFollowSpec(spec: FollowSpec, level: Pick<LevelDef, 'id' | 'towers'>): void {
   const ids = new Set(level.towers.map((t) => t.id));
   for (const k of FOLLOW_KEYS) {
-    for (const id of spec[k]) {
+    for (const id of followIds(spec, k)) {
       if (!ids.has(id)) throw new Error(`--follow ${k}=${id}: level ${level.id} has no tower "${id}" (towers: ${[...ids].join(', ')})`);
     }
   }
 }
 
-/** The follower's target from `from`: the first `prio` tower it has a lane to, does not own and does not stream to yet. */
-export function followTarget(state: GameState, from: Tower, prio: readonly string[]): Tower | undefined {
+/**
+ * The follower's target from `from`: the first `prio` tower it has a lane to, does not own, does not
+ * stream to yet and — when `after` names it with k — only while `from`'s owner holds at least k towers.
+ */
+export function followTarget(state: GameState, from: Tower, prio: readonly string[], after: readonly FollowAfter[] = []): Tower | undefined {
   const already = new Set(linksFrom(state, from.id).map((l) => l.to));
   const lanes = new Set<string>();
   for (const id in state.roads) {
@@ -89,8 +138,12 @@ export function followTarget(state: GameState, from: Tower, prio: readonly strin
     if (road.a === from.id) lanes.add(road.b);
     else if (road.b === from.id) lanes.add(road.a);
   }
+  let owned = 0;
+  if (after.length > 0) for (const id in state.towers) if (state.towers[id]!.owner === from.owner) owned++;
   for (const id of prio) {
     const t = state.towers[id];
+    const minOwn = after.find((a) => a.id === id)?.k;
+    if (minOwn !== undefined && owned < minOwn) continue;
     if (t && lanes.has(id) && !already.has(id) && t.owner !== from.owner) return t;
   }
   return undefined;
@@ -103,6 +156,8 @@ export interface NaiveOptions {
   firstMs?: number;
   /** GD-6h: play the literal card follower instead of the plain naive line. */
   follow?: FollowSpec;
+  /** GD-7f: id order on an exact tie of `naiveTarget`'s key (default `asc`, the gated line). */
+  tie?: NaiveTie;
 }
 
 interface Memory {
@@ -133,10 +188,11 @@ function dist(a: Tower, b: Tower): number {
 
 /**
  * The tower a naive player would stream to from `from`: the nearest connected tower not owned by the
- * player, neutral before enemy, ties by lane length then id; `undefined` when every lane leads home or
- * every candidate is already streamed to from `from`.
+ * player, neutral before enemy, ties by lane length then id (smaller first; `tie = 'desc'`, GD-7f: larger
+ * first); `undefined` when every lane leads home or every candidate is already streamed to from `from`.
  */
-export function naiveTarget(state: GameState, from: Tower): Tower | undefined {
+export function naiveTarget(state: GameState, from: Tower, tie: NaiveTie = 'asc'): Tower | undefined {
+  const desc = tie === 'desc';
   const already = new Set(linksFrom(state, from.id).map((l) => l.to));
   let best: Tower | undefined;
   let bestKey: [number, number, string] | undefined;
@@ -147,7 +203,7 @@ export function naiveTarget(state: GameState, from: Tower): Tower | undefined {
     const other = state.towers[otherId];
     if (!other || other.owner === from.owner) continue;
     const key: [number, number, string] = [other.owner === 'neutral' ? 0 : 1, dist(from, other), other.id];
-    if (bestKey === undefined || key[0] < bestKey[0] || (key[0] === bestKey[0] && (key[1] < bestKey[1] || (key[1] === bestKey[1] && key[2] < bestKey[2])))) {
+    if (bestKey === undefined || key[0] < bestKey[0] || (key[0] === bestKey[0] && (key[1] < bestKey[1] || (key[1] === bestKey[1] && (desc ? key[2] > bestKey[2] : key[2] < bestKey[2]))))) {
       best = other;
       bestKey = key;
     }
@@ -161,7 +217,9 @@ export function makeNaivePlayer(options: NaiveOptions = {}): NonNullable<PlayerB
   const firstMs = options.firstMs ?? NAIVE_FIRST_MS;
   if (!Number.isInteger(reactMs) || reactMs < C.TICK_MS || reactMs % C.TICK_MS !== 0) throw new Error(`naive: bad reactMs ${String(reactMs)} (a positive multiple of ${C.TICK_MS})`);
   if (!Number.isInteger(firstMs) || firstMs < 0) throw new Error(`naive: bad firstMs ${String(firstMs)}`);
+  const tie = checkNaiveTie(options.tie ?? 'asc');
   const prio = options.follow?.prio ?? [];
+  const after = options.follow?.after ?? [];
   const hold = new Set(options.follow?.hold ?? []);
   const noprio = new Set(options.follow?.noprioFrom ?? []);
   let mem: Memory | undefined;
@@ -196,7 +254,7 @@ export function makeNaivePlayer(options: NaiveOptions = {}): NonNullable<PlayerB
         const lost = mem.lostAt.get(t.id);
         if (lost !== undefined && state.time - lost < reactMs) continue; // noticed the loss; reacts one delay later
       }
-      const target = (prio.length > 0 && !noprio.has(t.id) ? followTarget(state, t, prio) : undefined) ?? naiveTarget(state, t);
+      const target = (prio.length > 0 && !noprio.has(t.id) ? followTarget(state, t, prio, after) : undefined) ?? naiveTarget(state, t, tie);
       if (target) out.push({ type: 'link', owner: 'player', from: t.id, to: target.id });
     }
     return out;
@@ -223,6 +281,8 @@ export interface NaiveRow {
   ticks: number;
   /** GD-6h: the card follower's spec when the row is a follower run (never gated). */
   follow?: FollowSpec;
+  /** GD-7f: `desc` when the row ran the reversed tie order; absent on the default `asc` line. */
+  tie?: NaiveTie;
 }
 
 function medianOf(values: readonly number[]): number | undefined {
@@ -232,9 +292,13 @@ function medianOf(values: readonly number[]): number | undefined {
   return sorted.length % 2 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
 }
 
-/** The naive line (or, with `follow`, the literal card follower) on one level over seeds 1..k with the given reaction delay, no Commander upgrades. */
-export function runNaive(level: LevelDef, k: number, reactMs: number = NAIVE_REACT_MS, follow?: FollowSpec): NaiveRow {
+/**
+ * The naive line (or, with `follow`, the literal card follower) on one level over seeds 1..k with the
+ * given reaction delay, no Commander upgrades; `tie` (GD-7f) picks the id order on an exact target tie.
+ */
+export function runNaive(level: LevelDef, k: number, reactMs: number = NAIVE_REACT_MS, follow?: FollowSpec, tie: NaiveTie = 'asc'): NaiveRow {
   if (!Number.isInteger(k) || k < 1) throw new Error(`naive: bad seed count ${String(k)}`);
+  checkNaiveTie(tie);
   if (follow) validateFollowSpec(follow, level);
   const seeds = Array.from({ length: k }, (_, i) => i + 1);
   const results: RunResult[] = [];
@@ -244,7 +308,7 @@ export function runNaive(level: LevelDef, k: number, reactMs: number = NAIVE_REA
   const losers: number[] = [];
   let ticks = 0;
   for (const seed of seeds) {
-    const r = runHeadless(level, seed, makeNaivePlayer({ reactMs, follow }));
+    const r = runHeadless(level, seed, makeNaivePlayer({ reactMs, follow, tie }));
     results.push(r);
     ticks += r.ticks;
     const s = starsFor(level, r);
@@ -270,6 +334,7 @@ export function runNaive(level: LevelDef, k: number, reactMs: number = NAIVE_REA
     withinStar2: holds && medianMs !== undefined && medianMs <= level.star2,
     ticks,
     ...(follow ? { follow } : {}),
+    ...(tie === 'desc' ? { tie } : {}),
   };
 }
 
@@ -309,6 +374,8 @@ export interface NaiveGateFailure {
   minWins: number;
   rate: number;
   losers: number[];
+  /** GD-7f: `desc` when the failing row is the reversed-tie line; absent for the default `asc` line. */
+  tie?: NaiveTie;
 }
 
 /** Parse `a-b` (1 ≤ a ≤ b ≤ `NAIVE_GATE_LAST`) for `--gate`. */
@@ -327,23 +394,34 @@ export function parseNaiveGate(spec: string): NaiveGateRange {
  * win at least `naiveGateRate(id)` of its seeds. Returns one failure per level under its threshold;
  * a level of the range missing from `rows` is a failure too (0 wins of 0) so a partial run cannot pass.
  * Throws when a row's reaction is not the default: the thresholds are calibrated for `NAIVE_REACT_MS`.
+ * GD-7f: `ties` names the tie orders the run gates (default `['asc']`, today's CI line; `--tie both` →
+ * `['asc', 'desc']`): a level fails when **either** order's row is under its share or missing, one
+ * failure per (level, order) in id order, `asc` first. Rows of an order outside `ties` are ignored.
  */
-export function naiveGate(rows: readonly Pick<NaiveRow, 'level' | 'reactMs' | 'wins' | 'seeds' | 'losers' | 'follow'>[], range: NaiveGateRange): NaiveGateFailure[] {
+export function naiveGate(
+  rows: readonly Pick<NaiveRow, 'level' | 'reactMs' | 'wins' | 'seeds' | 'losers' | 'follow' | 'tie'>[],
+  range: NaiveGateRange,
+  ties: readonly NaiveTie[] = ['asc'],
+): NaiveGateFailure[] {
   if (range.from < 1 || range.to < range.from || range.to > NAIVE_GATE_LAST) throw new Error(`naive gate: bad range ${range.from}-${range.to} (1 <= a <= b <= ${NAIVE_GATE_LAST})`);
-  const byId = new Map<number, (typeof rows)[number]>();
+  if (ties.length === 0 || new Set(ties).size !== ties.length) throw new Error(`naive gate: bad tie orders [${ties.join(', ')}]`);
+  for (const t of ties) checkNaiveTie(t);
+  const byKey = new Map<string, (typeof rows)[number]>();
   for (const r of rows) {
     if (r.reactMs !== NAIVE_REACT_MS) throw new Error(`naive gate: level ${r.level.id} ran at react ${r.reactMs} ms; the gate is defined at ${NAIVE_REACT_MS} ms`);
     if (r.follow) throw new Error(`naive gate: level ${r.level.id} ran the card follower; the gate is the plain naive line's`);
-    byId.set(r.level.id, r);
+    byKey.set(`${r.level.id}:${r.tie ?? 'asc'}`, r);
   }
   const failures: NaiveGateFailure[] = [];
   for (let id = range.from; id <= range.to; id++) {
     const rate = naiveGateRate(id)!;
-    const row = byId.get(id);
-    const k = row?.seeds.length ?? 0;
-    const minWins = row ? naiveGateMinWins(rate, k) : 1;
-    const wins = row?.wins ?? 0;
-    if (wins < minWins) failures.push({ levelId: id, name: row?.level.name ?? '(not run)', wins, k, minWins, rate, losers: row?.losers ?? [] });
+    for (const tie of ties) {
+      const row = byKey.get(`${id}:${tie}`);
+      const k = row?.seeds.length ?? 0;
+      const minWins = row ? naiveGateMinWins(rate, k) : 1;
+      const wins = row?.wins ?? 0;
+      if (wins < minWins) failures.push({ levelId: id, name: row?.level.name ?? '(not run)', wins, k, minWins, rate, losers: row?.losers ?? [], ...(tie === 'desc' ? { tie } : {}) });
+    }
   }
   return failures;
 }

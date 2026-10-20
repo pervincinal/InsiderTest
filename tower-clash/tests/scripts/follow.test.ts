@@ -44,9 +44,9 @@ function firstReaction(level = small, follow?: ReturnType<typeof parseFollowSpec
 describe('card follower spec (GD-6h)', () => {
   it('parses prio / hold / noprioFrom in any order, ignores spaces, and formats canonically', () => {
     const spec = parseFollowSpec(' hold = home ; prio=west, east,outpost;noprioFrom=x ');
-    expect(spec).toEqual({ prio: ['west', 'east', 'outpost'], hold: ['home'], noprioFrom: ['x'] });
+    expect(spec).toEqual({ prio: ['west', 'east', 'outpost'], hold: ['home'], noprioFrom: ['x'], after: [] });
     expect(formatFollowSpec(spec)).toBe('prio=west,east,outpost;hold=home;noprioFrom=x');
-    expect(parseFollowSpec('prio=fwd')).toEqual({ prio: ['fwd'], hold: [], noprioFrom: [] });
+    expect(parseFollowSpec('prio=fwd')).toEqual({ prio: ['fwd'], hold: [], noprioFrom: [], after: [] });
     expect(formatFollowSpec(parseFollowSpec('hold=home;'))).toBe('hold=home');
   });
 
@@ -63,7 +63,7 @@ describe('card follower spec (GD-6h)', () => {
 
   it('--follow and the --prefer / --hold shorthands parse to the same spec, on a one-level naive run only', () => {
     const long = parseArgs(['--naive', '--level', '6', '--follow', 'prio=west,east,outpost;hold=home', '--seeds', '20']);
-    expect(long.follow).toEqual({ prio: ['west', 'east', 'outpost'], hold: ['home'], noprioFrom: [] });
+    expect(long.follow).toEqual({ prio: ['west', 'east', 'outpost'], hold: ['home'], noprioFrom: [], after: [] });
     expect(long).toMatchObject({ naive: true, level: 6, seeds: 20, gate: undefined });
     expect(parseArgs(['--naive', '--level=6', '--prefer=west,east,outpost', '--hold', 'home']).follow).toEqual(long.follow);
     expect(parseArgs(['--naive', '--level', '7', '--prefer', 'fwd', '--react', '8000'])).toMatchObject({ follow: { prio: ['fwd'] }, reactMs: 8000 });
@@ -115,5 +115,53 @@ describe('card follower line (GD-6h)', () => {
     const level7 = (await loadLevel(7))!;
     expect(firstReaction(level7).cmds).toEqual([{ type: 'link', owner: 'player', from: 'home', to: 'se' }]);
     expect(firstReaction(level7, parseFollowSpec('prio=fwd')).cmds).toEqual([{ type: 'link', owner: 'player', from: 'home', to: 'fwd' }]);
+  });
+});
+
+describe('card follower `after=id:k` (GD-7f (3))', () => {
+  it('parses id:k pairs, formats them canonically, and needs every after id in prio', () => {
+    const spec = parseFollowSpec('prio=east,camp,guns,keep; after=camp:5, guns : 5,keep:7');
+    expect(spec.after).toEqual([
+      { id: 'camp', k: 5 },
+      { id: 'guns', k: 5 },
+      { id: 'keep', k: 7 },
+    ]);
+    expect(formatFollowSpec(spec)).toBe('prio=east,camp,guns,keep;after=camp:5,guns:5,keep:7');
+    expect(formatFollowSpec(parseFollowSpec('after=f:2;prio=f;hold=p'))).toBe('prio=f;hold=p;after=f:2');
+    expect(() => parseFollowSpec('prio=f;after=f')).toThrow(/after "f" is not id:k/);
+    expect(() => parseFollowSpec('prio=f;after=f:0')).toThrow(/after "f:0" is not id:k/);
+    expect(() => parseFollowSpec('prio=f;after=f:x')).toThrow(/is not id:k/);
+    expect(() => parseFollowSpec('prio=f;after=f:2,f:3')).toThrow(/"after" repeats a tower id/);
+    expect(() => parseFollowSpec('prio=f;after=n:2')).toThrow(/"n" is not in prio/);
+    expect(() => parseFollowSpec('after=f:2')).toThrow(/"f" is not in prio/);
+    expect(() => parseFollowSpec('prio=f;after=')).toThrow(/"after" needs at least one tower id/);
+    expect(parseArgs(['--naive', '--level', '13', '--follow', 'prio=guns,outpost;after=guns:3,outpost:4']).follow?.after).toEqual([
+      { id: 'guns', k: 3 },
+      { id: 'outpost', k: 4 },
+    ]);
+  });
+
+  it('a gated prio tower is skipped until the player owns k towers (counted at the reaction)', () => {
+    // the player owns 1 tower: f (k = 2) is not eligible, the source falls through to the next prio tower, then to naive
+    expect(firstReaction(small, parseFollowSpec('prio=f;after=f:2')).cmds).toEqual([{ type: 'link', owner: 'player', from: 'p', to: 'n' }]);
+    expect(firstReaction(small, parseFollowSpec('prio=f,e;after=f:2')).cmds).toEqual([{ type: 'link', owner: 'player', from: 'p', to: 'e' }]);
+    expect(firstReaction(small, parseFollowSpec('prio=f;after=f:1')).cmds).toEqual([{ type: 'link', owner: 'player', from: 'p', to: 'f' }]);
+    // own n too (2 towers): f is eligible from both sources
+    const two = firstReaction(small, parseFollowSpec('prio=f;after=f:2'), (s) => (s.towers['n']!.owner = 'player')).cmds;
+    expect(two).toEqual([
+      { type: 'link', owner: 'player', from: 'n', to: 'f' },
+      { type: 'link', owner: 'player', from: 'p', to: 'f' },
+    ]);
+    // `after` gates the card's instruction, not the naive line: a gated tower that is also the nearest is still taken
+    expect(firstReaction(small, parseFollowSpec('prio=n;after=n:3')).cmds).toEqual([{ type: 'link', owner: 'player', from: 'p', to: 'n' }]);
+    const state = createState(small, 1, DEFAULT_MODIFIERS);
+    expect(followTarget(state, state.towers['p']!, ['f'], [{ id: 'f', k: 2 }])).toBeUndefined();
+    expect(followTarget(state, state.towers['p']!, ['f'], [])?.id).toBe('f');
+  });
+
+  it('without after the follower is unchanged; after ids are validated against the level', () => {
+    const spec = parseFollowSpec('prio=f');
+    expect(runNaive(small, 2, 4000, spec).results).toEqual(runNaive(small, 2, 4000, { ...spec, after: [{ id: 'f', k: 1 }] }).results);
+    expect(() => runNaive(small, 1, 4000, { prio: ['f'], hold: [], noprioFrom: [], after: [{ id: 'guns', k: 3 }] })).toThrow(/after=guns: level 999 has no tower "guns"/);
   });
 });
