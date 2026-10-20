@@ -56,6 +56,8 @@ export function supplyLineTarget(state: GameState): string | null {
 
 /** GD-5b level 3: the grey tower still to take (`west` until only `east` is left neutral). */
 const otherGrey = (state: GameState): string => (ownerIs(state, 'west', 'neutral') ? 'west' : 'east');
+/** GD-7h level 3, west first: west is ours and home's one L1 stream still feeds it. */
+const homeFeedsWest = (state: GameState): boolean => hasLink(state, 'home', 'west') && ownerIs(state, 'west', 'player');
 
 /*
  * GDD §3 "first-time line" 11 (GD-5): a step never asks for an action the level's naive line or
@@ -66,7 +68,9 @@ const otherGrey = (state: GameState): string => (ownerIs(state, 'west', 'neutral
  *            onward (the mid-first line, ≈ 33–35 s), stream into it: a supply line (rule 13). That last
  *            step is hidden otherwise and hidden steps never time out, so on the side-first line it
  *            simply never shows; when it comes up first it also clears the steps before it.
- *   level 3  take both free neutrals (`east`, then whichever grey tower is left).
+ *   level 3  take both free neutrals (`east`, then whichever grey tower is left). West first (GD-7h, see
+ *            the table): three one-tap steps after the west capture — west → east, stop home → west,
+ *            home → east — which the east-first line never sees.
  *   level 4  stop home's stream once the outpost is ours so home can grow, then the auto-upgrade at
  *            25 (L2 runs two streams).
  */
@@ -112,8 +116,32 @@ export const LATE_STEPS: Readonly<Record<number, () => TutorialStep[]>> = {
       doneWhen: (s) => s.links.some((l) => l.owner === 'player' && l.relay),
     }),
   ],
+  /*
+   * GD-7h (frontend fallback; no layout fixes it): a first tap home → west loses 20/20 on the naive line —
+   * the 0.3 rusher keeps `east` (falls 11.45 s, 152 px from home) and home's one L1 stream stays locked
+   * into west. The west-first player is steered instead:
+   *   - step 1 completes only on home → east; while home → west runs it is hidden (no tap helps before
+   *     west falls: a tap on east is the L1 refusal, and cutting home → west before the capture, then
+   *     home → east, loses — seeds 1–20: cut at 4 s 0/20, at 5 s 11/20), and the west capture (≈ 7.3 s)
+   *     hands over to step 2 at once;
+   *   - step 2 (unchanged, BUG-51 selects west): one tap on east makes west → east;
+   *   - steps 3–4, west line only: stop home → west (home selected, ring on west: the tap on west, the
+   *     stream's target, cuts it, as does the swipe) and then home → east (home still selected: one
+   *     tap on east). West → east alone leaves home's only stream locked into west for good.
+   * Trace (tests/ui/tutorialWestFirst.test.ts: west tap at 3 s, the bubbles obeyed from T on, one tap per
+   * bubble 250 ms after it comes up, then the naive line), seeds 1–20: T = 7.5–10.1 s 20/20, T = 10.2 s
+   * 7/20 (the cut must land by ≈ 10.45 s; 500 ms a tap: 20/20 to T = 9.8 s); west → east alone (the table
+   * before GD-7h): T = 8 s 20/20, 9 s 5/20, 10 s 0/20. Steps 3–4 settle at once on the east-first line
+   * (home → west never ran there; that line stays 20/20).
+   */
   3: () => [
-    step('tutorial.tapThenGrey', { towerId: 'east', onCommand: (cmd) => isLink(cmd, 'home', 'east') || isLink(cmd, 'home', 'west') }),
+    step('tutorial.tapThenGrey', {
+      towerId: 'east',
+      showWhen: (s) => !hasLink(s, 'home', 'west'),
+      onCommand: (cmd) => isLink(cmd, 'home', 'east'),
+      // west first: the capture of west hands over to step 2 (pointing at east)
+      doneWhen: (s) => ownerIs(s, 'west', 'player'),
+    }),
     step('tutorial.grabOther', {
       towerId: otherGrey,
       // BUG-51: home's one L1 stream is busy (a tap on the other grey was the link-limit refusal): the grey
@@ -122,6 +150,27 @@ export const LATE_STEPS: Readonly<Record<number, () => TutorialStep[]>> = {
       showWhen: (s) => (ownerIs(s, 'west', 'player') && ownerIs(s, 'east', 'neutral')) || (ownerIs(s, 'east', 'player') && ownerIs(s, 'west', 'neutral')),
       onCommand: (cmd, s) => isLinkInto(cmd, otherGrey(s)),
       doneWhen: (s) => !ownerIs(s, 'west', 'neutral') && !ownerIs(s, 'east', 'neutral'),
+    }),
+    // GD-7h, west line: free home's one stream. The ring is on west, the tap target: a ribbon anchor on
+    // home → west (GD-5c) finds no clear bubble spot above home on the 430×932 / 360×640 screens
+    step('tutorial.stopStream', {
+      towerId: 'west',
+      // home selected, so the tap on west (the second tap on the target) cuts it as well as the swipe
+      select: () => 'home',
+      showWhen: homeFeedsWest,
+      onCommand: (cmd) => cmd.type === 'unlink' && cmd.owner === 'player' && cmd.from === 'home' && (cmd.to === undefined || cmd.to === 'west'),
+      // nothing to stop: the east-first line (settles the frame after step 2), or the stream / west is gone
+      doneWhen: (s) => !homeFeedsWest(s),
+    }),
+    // GD-7h, west line: home, free again, streams into east too
+    step('tutorial.tapThenGrey', {
+      towerId: 'east',
+      select: () => 'home',
+      // hidden until the cut lands (the command reaches the sim a tick after the step saw it)
+      showWhen: (s) => !hasLinkFrom(s, 'home') && !ownerIs(s, 'east', 'player'),
+      onCommand: (cmd) => isLink(cmd, 'home', 'east'),
+      // east is ours, or home streams elsewhere (the east-first line: home → east still runs)
+      doneWhen: (s) => ownerIs(s, 'east', 'player') || (hasLinkFrom(s, 'home') && !hasLink(s, 'home', 'west')),
     }),
   ],
   4: () => [

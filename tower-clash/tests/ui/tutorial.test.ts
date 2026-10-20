@@ -66,7 +66,8 @@ describe('tutorialFor', () => {
   it('the step lists of levels 2–4 (GD-5a/b)', () => {
     const texts = (id: number) => tutorialFor(id, 0)!.steps.map((s) => s.text);
     expect(texts(2)).toEqual([TXT.tapThenGrey, TXT.goAround, TXT.stopStream, TXT.supplyLine]);
-    expect(texts(3)).toEqual([TXT.tapThenGrey, TXT.grabOther]);
+    // GD-7h: steps 3–4 only come up on the west-first line
+    expect(texts(3)).toEqual([TXT.tapThenGrey, TXT.grabOther, TXT.stopStream, TXT.tapThenGrey]);
     expect(texts(4)).toEqual([TXT.stopToGrow, TXT.fillToUpgrade]);
   });
 });
@@ -342,19 +343,37 @@ describe('tutorial step timeout (BUG-33: no overlay softlock)', () => {
   });
 });
 
-describe('level 3 tutorial (GD-5b: take both free neutrals)', () => {
-  it('step 1 points at east and completes on a link from home into east or west', () => {
-    for (const first of ['east', 'west']) {
-      const state = stateFor(3);
-      const tut = tutorialFor(3, 0)!;
-      expect(shown(tut, state)).toBe(TXT.tapThenGrey);
-      expect(stepTowerId(tut.current(state)!, state)).toBe('east');
-      tut.onCommand(link('home', 'foe'), state); // not a grey tower
-      expect(shown(tut, state)).toBe(TXT.tapThenGrey);
-      issue(tut, state, link('home', first));
-      expect(shown(tut, state), `${first}: step 2 waits for the capture`).toBeNull();
-      expect(tut.finished).toBe(false);
-    }
+describe('level 3 tutorial (GD-5b: take both free neutrals; GD-7h: the west-first line)', () => {
+  it('step 1 points at east and completes only on home → east', () => {
+    const state = stateFor(3);
+    const tut = tutorialFor(3, 0)!;
+    expect(shown(tut, state)).toBe(TXT.tapThenGrey);
+    expect(stepTowerId(tut.current(state)!, state)).toBe('east');
+    tut.onCommand(link('home', 'foe'), state); // not a grey tower
+    expect(shown(tut, state)).toBe(TXT.tapThenGrey);
+    issue(tut, state, link('home', 'east'));
+    expect(shown(tut, state), 'step 2 waits for the capture').toBeNull();
+    tut.onSelect('home', state);
+    expect(tut.finished).toBe(false);
+  });
+
+  it('GD-7h: home → west does not complete step 1 — it hides while that stream runs, and the west capture hands over to step 2 on east', () => {
+    const state = stateFor(3);
+    const tut = tutorialFor(3, 0)!;
+    issue(tut, state, link('home', 'west'));
+    tut.onSelect('home', state);
+    expect(shown(tut, state), 'no bubble while home → west takes west (a tap on east is the L1 refusal)').toBeNull();
+    // the player cuts it before the capture: step 1 is back, and home → east completes it
+    issue(tut, state, unlink('home', 'west'));
+    tut.onSelect('home', state);
+    expect(shown(tut, state)).toBe(TXT.tapThenGrey);
+    issue(tut, state, link('home', 'west'));
+    capture(state, 'west');
+    tut.onSelect('home', state);
+    const grab = tut.current(state)!;
+    expect(grab.text).toBe(TXT.grabOther);
+    expect(stepTowerId(grab, state)).toBe('east');
+    expect(grab.select?.(state), 'BUG-51: west, just taken, has the free slot').toBe('west');
   });
 
   it('step 2 targets whichever grey tower is left and completes on a link into it', () => {
@@ -366,15 +385,87 @@ describe('level 3 tutorial (GD-5b: take both free neutrals)', () => {
       const tut = tutorialFor(3, 0)!;
       issue(tut, state, link('home', first));
       capture(state, first);
+      tut.onSelect(null, state);
       const grab = tut.current(state)!;
       expect(grab.text).toBe(TXT.grabOther);
       expect(stepTowerId(grab, state), `${first} taken`).toBe(other);
       tut.onCommand(link('home', first), state); // into the one already taken
       tut.onCommand(link('home', 'foe'), state);
       expect(shown(tut, state)).toBe(TXT.grabOther);
-      tut.onCommand(link(first, other), state); // from any own tower
-      expect(tut.finished, `${first} → ${other}`).toBe(true);
+      issue(tut, state, link(first, other)); // from any own tower
+      expect(shown(tut, state), `${first} → ${other}`).not.toBe(TXT.grabOther);
     }
+  });
+
+  it('east first: steps 3–4 settle without showing — the tutorial ends two frames after the link into west', () => {
+    const state = stateFor(3);
+    const tut = tutorialFor(3, 0)!;
+    issue(tut, state, link('home', 'east'));
+    capture(state, 'east');
+    tut.onSelect(null, state);
+    issue(tut, state, link('east', 'west'));
+    expect(shown(tut, state), 'no step 3: home → west never ran').toBeNull();
+    tut.onSelect(null, state);
+    expect(shown(tut, state), 'no step 4: home → east still runs').toBeNull();
+    tut.onSelect(null, state);
+    expect(tut.finished).toBe(true);
+  });
+
+  it('GD-7h, west first: step 3 stops home → west (ring on west, home selected), step 4 then asks home → east', () => {
+    const state = stateFor(3);
+    const tut = tutorialFor(3, 0)!;
+    issue(tut, state, link('home', 'west'));
+    capture(state, 'west');
+    tut.onSelect(null, state);
+    issue(tut, state, link('west', 'east'));
+    const stop = tut.current(state)!;
+    expect(stop.text).toBe(TXT.stopStream);
+    expect(stepTowerId(stop, state), 'the ring on west, the tap target (no ribbon anchor: GD-5c finds no bubble spot there)').toBe('west');
+    expect(stop.anchor).toBeUndefined();
+    expect(stop.select?.(state), 'the tap on west (the target) cuts, as the swipe does').toBe('home');
+    tut.onCommand(unlink('west', 'east'), state); // not home's stream
+    tut.onCommand(link('home', 'east'), state); // not a stop
+    expect(shown(tut, state)).toBe(TXT.stopStream);
+    tut.onCommand(unlink('home', 'west'), state); // seen before the sim applies it
+    tut.onSelect('home', state);
+    expect(shown(tut, state), 'step 4 waits until the cut reaches the sim').toBeNull();
+    expect(tut.finished).toBe(false);
+    applyCommand(state, unlink('home', 'west'));
+    tut.onSelect('home', state);
+    const again = tut.current(state)!;
+    expect(again.text).toBe(TXT.tapThenGrey);
+    expect(stepTowerId(again, state)).toBe('east');
+    expect(again.select?.(state)).toBe('home');
+    tut.onCommand(link('west', 'east'), state);
+    expect(shown(tut, state)).toBe(TXT.tapThenGrey);
+    issue(tut, state, link('home', 'east'));
+    expect(tut.finished).toBe(true);
+  });
+
+  it('GD-7h: step 3 also accepts "all links of home" and gives way when the stream or west is gone; step 4 when east is ours', () => {
+    const setUp = () => {
+      const state = stateFor(3);
+      const tut = tutorialFor(3, 0)!;
+      issue(tut, state, link('home', 'west'));
+      capture(state, 'west');
+      tut.onSelect(null, state);
+      issue(tut, state, link('west', 'east'));
+      expect(shown(tut, state)).toBe(TXT.stopStream);
+      return { state, tut };
+    };
+    const a = setUp();
+    issue(a.tut, a.state, unlink('home'));
+    a.tut.onSelect(null, a.state);
+    expect(shown(a.tut, a.state)).toBe(TXT.tapThenGrey);
+    capture(a.state, 'east');
+    a.tut.onSelect(null, a.state);
+    expect(a.tut.finished, 'east is ours: step 4 is moot').toBe(true);
+
+    const b = setUp();
+    b.state.towers['west']!.owner = 'enemy1';
+    b.tut.onSelect(null, b.state);
+    expect(shown(b.tut, b.state), 'west lost: nothing to stop, and home still streams into it').toBeNull();
+    expect(b.tut.finished).toBe(false);
   });
 
   it('step 2 also completes when no grey tower is left (the enemy took the other one)', () => {
@@ -382,8 +473,11 @@ describe('level 3 tutorial (GD-5b: take both free neutrals)', () => {
     const tut = tutorialFor(3, 0)!;
     issue(tut, state, link('home', 'east'));
     capture(state, 'east');
+    tut.onSelect(null, state);
     expect(shown(tut, state)).toBe(TXT.grabOther);
     state.towers['west']!.owner = 'enemy1';
+    tut.onSelect(null, state);
+    tut.onSelect(null, state);
     tut.onSelect(null, state);
     expect(tut.finished).toBe(true);
   });

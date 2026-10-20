@@ -12,7 +12,10 @@ import type { Page } from '@playwright/test';
  *            swipe.spec.ts) → no supply-line step on that line. Mid first: the supply-line step comes
  *            up on mid once it is full and streams onward, and a relay link into it clears it.
  *   level 3  take both greys: home → east, then (gated on the capture) "now take the other grey tower
- *            too" pointing at west → cleared by the link into it
+ *            too" pointing at west → cleared by the link into it. West first (GD-7h): home → west completes
+ *            nothing; at the west capture "take the other grey tower" on east (west → east), "swipe across
+ *            the stream" on home → west (cut by the tap on west), "tap your tower, then the grey tower" on
+ *            east (home → east) — one tap each — and east is ours
  *   level 4  stop → fill → L2: (gated on the outpost capture) "stop this tower's stream so it can grow"
  *            → cleared by the unlink → "at 25 it levels up" → cleared when home auto-upgrades to L2,
  *            after which it runs two streams
@@ -341,6 +344,50 @@ test.describe('tutorial levels 1–4 (LV-5 / checklist R1, GD-5a/b)', () => {
     await expect.poll(() => hint(page), { message: 'the link into west completes step 2 (tutorial over)' }).toBeNull();
     await setSpeed(page, 3);
     await expect.poll(async () => (await tower(page, 'west'))?.owner, { message: 'both greys taken', timeout: 20_000 }).toBe('player');
+    await setSpeed(page, 1);
+    expect(await hint(page), 'level 3 has no further step').toBeNull();
+    expect(pageErrors).toEqual([]);
+  });
+
+  test('level 3, west first (GD-7h): home → west, then at the capture one tap each — east, west, east — and east is ours', async ({ page }) => {
+    const pageErrors = await boot(page);
+    const T = await hintTexts(page);
+    // GD-7h (tests/ui/tutorialWestFirst.test.ts): a west start loses unless home → west is cut and east gets
+    // west → east and home → east by ≈ 10.45 s; the west capture comes ≈ 4.3 s after the tap (7.3–7.6 s here).
+    // The race taps run at ×0.1 (QA-28), so the three answers land at sim ≈ 7.4–8 s
+    await startLevel(page, 3);
+    await expect.poll(() => hint(page), { message: 'level 3 opens on tap-then-grey' }).toBe(T['tutorial.tapThenGrey']);
+    await runToSimTime(page, 3_200);
+    const opening = await tapAtSlowSpeed(page, [towerAt(3, 'home'), towerAt(3, 'west')], () =>
+      expect.poll(() => playerLinks(page)).toEqual([{ from: 'home', to: 'west' }]),
+    );
+    expect(opening.from, 'the west tap at the naive line first-tap time').toBeGreaterThanOrEqual(3_200);
+    await expect.poll(() => hint(page), { message: 'home → west does not complete step 1; nothing is asked while it takes west' }).toBeNull();
+    await waitForCapture(page, 'west', 3, null, SLOW);
+    await expect.poll(() => hint(page), { message: 'west is ours: take the other grey tower (east)' }).toBe(T['tutorial.grabOther']);
+    expect(await tower(page, 'east')).toMatchObject({ owner: 'neutral' });
+    // the step selected west (BUG-51): one tap on the ringed east makes west → east
+    await tapAtSlowSpeed(page, [towerAt(3, 'east')], async () => {
+      await expect.poll(() => playerLinks(page)).toContainEqual({ from: 'west', to: 'east' });
+      await expect.poll(() => hint(page), { message: 'then stop home → west' }).toBe(T['tutorial.stopStream']);
+    });
+    expect(await limitHint(page), 'no "L2 needed" refusal').toBeNull();
+    // the stop step selected home: the tap on west, the stream's target, cuts it
+    await tapAtSlowSpeed(page, [towerAt(3, 'west')], async () => {
+      await expect.poll(() => playerLinks(page)).not.toContainEqual({ from: 'home', to: 'west' });
+      await expect.poll(() => hint(page), { message: 'home is free: tap your tower, then the grey tower' }).toBe(T['tutorial.tapThenGrey']);
+    });
+    // home is still selected: one tap on east
+    const answer = await tapAtSlowSpeed(page, [towerAt(3, 'east')], async () => {
+      expect(await limitHint(page), 'home is free again: no refusal').toBeNull();
+      await expect.poll(() => playerLinks(page)).toContainEqual({ from: 'home', to: 'east' });
+    });
+    expect(answer.to, "the tutorial's three answers landed by 10 s (the cut must by ≈ 10.45 s)").toBeLessThanOrEqual(10_000);
+    await expect.poll(() => hint(page), { message: 'home → east completes the last step (tutorial over)' }).toBeNull();
+    // the win line: west → east and home → east take east (headless seed 1, these answers at 7.5–10 s: by ≈ 15 s)
+    await setSpeed(page, 3);
+    await expect.poll(async () => (await tower(page, 'east'))?.owner, { message: 'east is ours', timeout: 20_000, intervals: [100] }).toBe('player');
+    expect(await simTime(page), 'east taken by 30 s').toBeLessThanOrEqual(30_000);
     await setSpeed(page, 1);
     expect(await hint(page), 'level 3 has no further step').toBeNull();
     expect(pageErrors).toEqual([]);

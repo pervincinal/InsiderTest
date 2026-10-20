@@ -19,7 +19,8 @@ import { t } from '../../src/ui/i18n';
  *     tap side → tap foe makes side → foe and home → side keeps flowing;
  *   level 2 "swipe across the stream" — no selection, so a stray tap on side does not cut;
  *   level 3 "now take the other grey tower too" — home's one L1 stream is busy (a tap on west was the
- *     link-limit refusal): east, just taken, is selected, one tap on west makes east → west;
+ *     link-limit refusal): east, just taken, is selected, one tap on west makes east → west; west first
+ *     (GD-7h) west is selected for the tap on east, then home for the cut (a tap on west) and home → east;
  *   level 4 "stop this tower's stream" — home is selected, so a tap on its target stops the stream.
  */
 
@@ -144,18 +145,35 @@ describe('tutorial steps set the selection their instruction assumes (BUG-50 / B
     expect(play.tutorialStep(), 'the link into west completes the step').toBeNull();
   });
 
-  it('level 3, west first: the step selects west and one tap on east makes west → east', () => {
+  it('GD-7h, level 3, west first: after the west capture three one-tap steps — east (west → east), west (cut home → west), east (home → east)', () => {
     const play = start(3);
+    frame(play);
     tap(play, 'home');
     tap(play, 'west');
     frame(play);
+    expect(playerLinks(play)).toEqual(['home->west']);
+    expect(play.tutorialStep(), 'home → west does not complete step 1; nothing is asked while it takes west').toBeNull();
     capture(play, 'west');
     frame(play);
     expect(play.tutorialStep()?.text).toBe(t('tutorial.grabOther'));
     expect(play.gestures.selectedTowerId).toBe('west');
     tap(play, 'east');
     frame(play);
-    expect(sentLinks()).toContain('link:west->east');
+    expect(play.tutorialStep()?.text).toBe(t('tutorial.stopStream'));
+    expect(play.gestures.selectedTowerId, 'the stop step selects home: the tap on its target cuts').toBe('home');
+    tap(play, 'west');
+    frame(play);
+    frame(play);
+    expect(playerLinks(play)).toEqual(['west->east']);
+    expect(play.tutorialStep()?.text).toBe(t('tutorial.tapThenGrey'));
+    expect(play.gestures.selectedTowerId).toBe('home');
+    tap(play, 'east');
+    expect(play.gestures.limitHint, 'home is free again: no "L2 needed" refusal').toBeNull();
+    frame(play);
+    expect(sentLinks()).toEqual(['link:home->west', 'link:west->east', 'unlink:home->west', 'link:home->east']);
+    expect(playerLinks(play)).toEqual(['west->east', 'home->east']);
+    frame(play);
+    expect(play.tutorialStep(), 'the tutorial is over').toBeNull();
   });
 
   it('level 4: "stop this tower\'s stream" selects home — a tap on its target stops the stream', () => {

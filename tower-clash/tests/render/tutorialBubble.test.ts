@@ -149,6 +149,14 @@ function scenarios(level: LevelDef, i: number): { label: string; state: GameStat
         with_('east ours, home → east', (s) => (capture(s, 'east'), link(s, 'home', 'east'))),
         with_('west ours, home → west', (s) => (capture(s, 'west'), link(s, 'home', 'west'))),
       ];
+    case '3.3':
+      // GD-7h, west first: stop home → west (the ring on west), before and after west → east
+      return [
+        with_('west ours, home → west', (s) => (capture(s, 'west'), link(s, 'home', 'west'))),
+        with_('west ours, home → west, west → east', (s) => (capture(s, 'west'), link(s, 'home', 'west'), link(s, 'west', 'east'))),
+      ];
+    case '3.4':
+      return [with_('west ours, west → east, home free', (s) => (capture(s, 'west'), link(s, 'west', 'east')))];
     case '4.1':
       return [with_('outpost ours, home → outpost', (s) => (capture(s, 'outpost'), link(s, 'home', 'outpost'))), with_('outpost ours, home → mid', (s) => (capture(s, 'outpost'), link(s, 'home', 'mid')))];
     case '4.2':
@@ -254,8 +262,8 @@ describe('GD-5c: the tutorial bubble never covers a tower, levels 1–4', () => 
   afterAll(() => void setLanguage(lang));
 
   it('covers every step of levels 1–4 on both screens, in four languages, card up and gone, with and without a selection', () => {
-    // steps: L1 2 + L2 4 + L3 2 + L4 2 = 10; scenarios: 1 + 1 + 1 + 2 + 2 + 1 + 1 + 4 + 2 + 2 = 17; × 2 shapes × 4 languages × 2 times × 2 selections
-    expect(flat.cases).toBe(17 * 2 * 4 * 2 * 2);
+    // steps: L1 2 + L2 4 + L3 4 + L4 2 = 12; scenarios: 1 + 1 + 1 + 2 + 2 + 1 + 1 + 4 + 2 + 1 + 2 + 2 = 20; × 2 shapes × 4 languages × 2 times × 2 selections
+    expect(flat.cases).toBe(20 * 2 * 4 * 2 * 2);
     if (process.env.GD5C_TABLE) console.log(`sides taken (flat): ${JSON.stringify(Object.fromEntries(flat.sides))}`);
   });
 
