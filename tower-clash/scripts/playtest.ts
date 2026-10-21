@@ -3,7 +3,7 @@
  * `npm run playtest -- --daily YYYY-MM-DD [--days N] [--seeds K] [--no-twist] [--naive [--react MS]]`
  * `npm run playtest -- --weekly YYYY-MM-DD(Monday) [--weeks N] [--seeds K] [--no-twist] [--naive [--react MS]]`
  * `npm run playtest -- --twist <plain|lean|fastFeet|thinWalls|reinforced> [--seeds K] [--pool a-b]`
- * `npm run playtest -- --naive [--seeds K] [--react MS] [--gate a-b] [--tie asc|desc|both]`
+ * `npm run playtest -- --naive [--seeds K] [--react MS] [--gate a-b] [--tie asc|desc|both] [--tie-exempt a[,b]]`
  * `npm run playtest -- --naive --level N --follow "prio=a,b;hold=c;noprioFrom=d" [--seeds K] [--react MS]` (or `--prefer a,b [--hold c]`)
  * Headless balance run: for every level (or one), simulate (a) the reference player vs the enemies and
  * (b) an idle player vs the enemies, 50 ms ticks, AI every 500 ms, up to 180 s of sim time.
@@ -47,6 +47,8 @@
  * every mirror pair. `desc` prints only that line, `both` one extra `tie desc` row per level under the
  * default row; `asc` (default) is today's output byte for byte. With `--gate a-b --tie both` a level fails
  * when either order is under its share; `reclock.ts`'s star2 floor stays on the `asc` median.
+ * `--tie-exempt a[,b]` (QA-30, with `--gate … --tie both`): those levels' `tie desc` rows print `exempt`
+ * and leave the gate (ids must be in `NAIVE_TIE_EXEMPT`: levels cured by a tutorial steer); `asc` stays gated.
  * The flag rules live in scripts/lib/playtestArgs.ts (unit-tested); rng streams come from `rngsFor`,
  * exactly as the game client derives them.
  */
@@ -61,7 +63,7 @@ import { maxedModifiers } from '../src/economy/maxUpgrades';
 import { DAILY_WIN_RATE, TWIST_WIN_RATE, WEEKLY_WIN_RATE, dailyPlan, inPool, runDaily, runTwist, runWeekly, twistById, weeklyPlan } from './lib/daily';
 import type { DailyRow, PoolRange, TwistRow, WeeklyRow } from './lib/daily';
 import type { Twist } from '../src/daily/challenge';
-import { NAIVE_GATE_LAST, NAIVE_REACT_MS, NAIVE_WIN_RATE, formatFollowSpec, makeNaivePlayer, naiveGate, naiveGateMinWins, naiveGateRate, runNaive } from './lib/naivePlayer';
+import { NAIVE_GATE_LAST, NAIVE_REACT_MS, NAIVE_TIE_EXEMPT, NAIVE_WIN_RATE, formatFollowSpec, makeNaivePlayer, naiveGate, naiveGateMinWins, naiveGateRate, runNaive } from './lib/naivePlayer';
 import type { FollowSpec, NaiveGateRange, NaiveRow, NaiveTie } from './lib/naivePlayer';
 import { parseArgs, tiesOf } from './lib/playtestArgs';
 import type { TieMode, Upgrades } from './lib/playtestArgs';
@@ -505,7 +507,7 @@ async function runTwistMode(twistId: Twist['id'], k: number, pool: Readonly<Pool
  * row labelled `tie desc`, one summary line per order, and a gate (if any) over both orders — a level
  * fails when either is under its share. `asc` prints exactly what it printed before GD-7f.
  */
-async function runNaiveMode(levels: LevelDef[], k: number, reactMs: number, gate: NaiveGateRange | undefined, follow?: FollowSpec, tie: TieMode = 'asc'): Promise<number> {
+async function runNaiveMode(levels: LevelDef[], k: number, reactMs: number, gate: NaiveGateRange | undefined, follow?: FollowSpec, tie: TieMode = 'asc', tieExempt: readonly number[] = []): Promise<number> {
   const ties = tiesOf(tie);
   const tieLabel = (t: NaiveTie | undefined): string => (t === 'desc' ? ' tie desc' : '');
   const header = `${pad('lvl', 4)} ${pad('name', 20)} ${pad('wins', 6)} ${pad('3*/2*/1*/0*', 12)} ${pad('median', 8)} ${pad('worst', 8)} ${pad('star2', 8)} ${pad('holds', 6)} ${pad('star2?', 7)} ${pad('gate', 6)} losing seeds`;
@@ -532,7 +534,8 @@ async function runNaiveMode(levels: LevelDef[], k: number, reactMs: number, gate
       const worst = row.worstMs === undefined ? '-' : fmtTime(row.worstMs);
       const losers = row.losers.length ? row.losers.join(',') : '-';
       const gated = gate !== undefined && level.id >= gate.from && level.id <= gate.to;
-      const gateCol = gated ? (row.wins >= naiveGateMinWins(naiveGateRate(level.id)!, k) ? 'ok' : 'FAIL') : '-';
+      const exempt = gated && t === 'desc' && tieExempt.includes(level.id); // QA-30: tutorial-cured, not gated
+      const gateCol = exempt ? 'exempt' : gated ? (row.wins >= naiveGateMinWins(naiveGateRate(level.id)!, k) ? 'ok' : 'FAIL') : '-';
       const name = tie === 'both' && t === 'desc' ? '  tie desc' : level.name; // GD-7f: the extra row sits under the level's own
       console.log(
         `${pad(String(level.id), 4)} ${pad(name, 20)} ${pad(`${row.wins}/${k}`, 6)} ${pad(fmtStarCounts(row.starCounts), 12)} ${pad(medianT, 8)} ${pad(worst, 8)} ${pad(fmtTime(level.star2), 8)} ${pad(row.holds ? 'yes' : 'NO', 6)} ${pad(row.withinStar2 ? 'yes' : 'no', 7)} ${pad(gateCol, 6)} ${losers}`,
@@ -566,12 +569,20 @@ async function runNaiveMode(levels: LevelDef[], k: number, reactMs: number, gate
   for (const r of tutorialMiss) console.log(`  tutorial band${tieLabel(r.tie)}: lvl ${r.level.id} ${r.level.name} ${r.wins}/${k} (lost ${r.losers.join(',')}) — level/design item${r.tie === 'desc' ? ' (reversed-tie start)' : ''}`);
   let failed = 0;
   if (gate) {
-    const failures = naiveGate(rows, gate, ties);
+    const failures = naiveGate(rows, gate, ties, tieExempt);
     for (const f of failures) {
       console.log(`  FAIL lvl ${f.levelId} ${f.name}${f.tie === 'desc' ? ' [tie desc]' : ''}: ${f.wins}/${f.k} < ${Math.round(f.rate * 100)}% (need ${f.minWins}/${f.k}${f.losers.length ? `, lost ${f.losers.join(',')}` : ''}) — level/design item for the Level Designer`);
     }
+    // QA-30: say what the exemption hides, and when it has become dead weight
+    for (const id of tieExempt) {
+      const r = rows.find((x) => x.level.id === id && x.tie === 'desc');
+      if (!r) continue;
+      const passes = r.wins >= naiveGateMinWins(naiveGateRate(id)!, k);
+      console.log(`  exempt lvl ${id} ${r.level.name} [tie desc]: ${r.wins}/${k} — ${NAIVE_TIE_EXEMPT[id]}${passes ? '; now passes: drop it from --tie-exempt' : '; not gated'}`);
+    }
     failed = new Set(failures.map((f) => f.levelId)).size; // GD-7f: a level failing in both orders counts once
-    const byOrder = tie === 'both' ? ` (asc ${failures.filter((f) => f.tie === undefined).length}, tie desc ${failures.filter((f) => f.tie === 'desc').length})` : '';
+    const exemptNote = tieExempt.length ? `, tie desc exempt ${tieExempt.join(',')}` : '';
+    const byOrder = tie === 'both' ? ` (asc ${failures.filter((f) => f.tie === undefined).length}, tie desc ${failures.filter((f) => f.tie === 'desc').length}${exemptNote})` : '';
     console.log(`naive gate lvl ${gate.from}-${gate.to}: ${failed} failed level(s)${byOrder}`);
   }
   console.log(`perf: ${totalTicks} ticks in ${elapsed.toFixed(2)}s = ${Math.round(totalTicks / Math.max(elapsed, 1e-6))} ticks/s`);
@@ -641,7 +652,7 @@ async function main(): Promise<void> {
     return;
   }
   if (args.naive) {
-    const failed = await runNaiveMode(await selectLevels(args.level), args.seeds ?? 5, args.reactMs, args.gate, args.follow, args.tie ?? 'asc');
+    const failed = await runNaiveMode(await selectLevels(args.level), args.seeds ?? 5, args.reactMs, args.gate, args.follow, args.tie ?? 'asc', args.tieExempt);
     if (failed > 0) process.exit(1);
     return;
   }

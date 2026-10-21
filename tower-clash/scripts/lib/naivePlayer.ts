@@ -350,6 +350,28 @@ export const NAIVE_GATE_BANDS: readonly Readonly<{ from: number; to: number; rat
 /** Last level id with a naive gate threshold. */
 export const NAIVE_GATE_LAST = 16;
 
+/**
+ * QA-30: levels whose reversed-tie start (`tie desc`) is cured by the tutorial, not by the layout —
+ * the naive model never reads a tutorial step, so its `desc` row keeps losing there by construction.
+ * `--tie-exempt` may name only these ids (each with the backlog item that decided the cure); the gate
+ * still checks their `asc` row. A future level cured by a tutorial steer goes here with its item id.
+ */
+export const NAIVE_TIE_EXEMPT: Readonly<Record<number, string>> = Object.freeze({
+  3: 'GD-7h: the west first tap is answered by tutorial steps 1–3 (step 1 completes only on home → east), no layout reaches the bar',
+});
+
+/** Parse `--tie-exempt a[,b…]`: unique ids from `NAIVE_TIE_EXEMPT`, ascending. */
+export function parseTieExempt(spec: string): number[] {
+  const parts = spec.split(',').map((p) => p.trim());
+  const ids = parts.map(Number);
+  if (parts.some((p) => !/^\d+$/.test(p)) || new Set(ids).size !== ids.length) throw new Error(`bad --tie-exempt ${spec} (unique level ids, e.g. 3)`);
+  const unknown = ids.filter((id) => NAIVE_TIE_EXEMPT[id] === undefined);
+  if (unknown.length) {
+    throw new Error(`--tie-exempt ${unknown.join(',')}: not in NAIVE_TIE_EXEMPT (scripts/lib/naivePlayer.ts: ${Object.keys(NAIVE_TIE_EXEMPT).join(', ')}) — add the level there with the item that cures it by tutorial`);
+  }
+  return [...ids].sort((a, b) => a - b);
+}
+
 /** The naive gate's minimum win share for a level, or undefined past `NAIVE_GATE_LAST`. */
 export function naiveGateRate(levelId: number): number | undefined {
   return NAIVE_GATE_BANDS.find((b) => levelId >= b.from && levelId <= b.to)?.rate;
@@ -397,15 +419,20 @@ export function parseNaiveGate(spec: string): NaiveGateRange {
  * GD-7f: `ties` names the tie orders the run gates (default `['asc']`, today's CI line; `--tie both` →
  * `['asc', 'desc']`): a level fails when **either** order's row is under its share or missing, one
  * failure per (level, order) in id order, `asc` first. Rows of an order outside `ties` are ignored.
+ * QA-30: `descExempt` (ids of `NAIVE_TIE_EXEMPT`, needs `desc` in `ties`) skips those levels' `desc`
+ * row only; their `asc` row is gated as any other.
  */
 export function naiveGate(
   rows: readonly Pick<NaiveRow, 'level' | 'reactMs' | 'wins' | 'seeds' | 'losers' | 'follow' | 'tie'>[],
   range: NaiveGateRange,
   ties: readonly NaiveTie[] = ['asc'],
+  descExempt: readonly number[] = [],
 ): NaiveGateFailure[] {
   if (range.from < 1 || range.to < range.from || range.to > NAIVE_GATE_LAST) throw new Error(`naive gate: bad range ${range.from}-${range.to} (1 <= a <= b <= ${NAIVE_GATE_LAST})`);
   if (ties.length === 0 || new Set(ties).size !== ties.length) throw new Error(`naive gate: bad tie orders [${ties.join(', ')}]`);
   for (const t of ties) checkNaiveTie(t);
+  if (descExempt.length && !ties.includes('desc')) throw new Error('naive gate: a tie desc exemption needs the desc order in the gate');
+  for (const id of descExempt) if (NAIVE_TIE_EXEMPT[id] === undefined) throw new Error(`naive gate: level ${id} is not in NAIVE_TIE_EXEMPT`);
   const byKey = new Map<string, (typeof rows)[number]>();
   for (const r of rows) {
     if (r.reactMs !== NAIVE_REACT_MS) throw new Error(`naive gate: level ${r.level.id} ran at react ${r.reactMs} ms; the gate is defined at ${NAIVE_REACT_MS} ms`);
@@ -416,6 +443,7 @@ export function naiveGate(
   for (let id = range.from; id <= range.to; id++) {
     const rate = naiveGateRate(id)!;
     for (const tie of ties) {
+      if (tie === 'desc' && descExempt.includes(id)) continue;
       const row = byKey.get(`${id}:${tie}`);
       const k = row?.seeds.length ?? 0;
       const minWins = row ? naiveGateMinWins(rate, k) : 1;

@@ -3,6 +3,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { onBlock, readWorkflow, runBlocks, stepText } from '../workflowYaml';
+import { NAIVE_TIE_EXEMPT } from '../../scripts/lib/naivePlayer';
 
 /*
  * Repository hygiene guards (QA). Regression test for BUG-2: the Android/iOS workflows write
@@ -395,6 +396,8 @@ describe('.github/workflows/tower-clash-ci.yml e2e shards (QA-26)', () => {
     // ≈ 770 / 780 s; with content.spec.ts at the top of e2e/ (second in path order) it was ≈ 590 / 950.
     // 2026-10-16 (BUG-48): shopLayout 7 → 13 tests (101 / 56, same files per shard), ≈ 100 s serial
     // (one boot per test instead of two), so shard 2 lost ≈ 1.5 min; re-measure before moving files.
+    // 2026-10-21 (QA-30, 169 tests: + howto in shard 1, + tones / tutorial / lazy cases in shard 2):
+    // 105 / 64 tests, wall 372 / 375 s locally (2 workers per shard), CI 297 / 338 s — no move needed.
     // A failure here means new tests moved the count boundary: re-measure and rebalance (QA-26).
     const cli = fileURLToPath(new URL('../../node_modules/@playwright/test/cli.js', import.meta.url));
     const list = (shard: string): string[] => {
@@ -422,6 +425,45 @@ describe('.github/workflows/tower-clash-ci.yml e2e shards (QA-26)', () => {
     expect(shards).toEqual(['e2e (shard 1/2)', 'e2e (shard 2/2)']);
     expect(group).toEqual(['check + playtest + build + e2e', ...shards]);
   });
+});
+
+/*
+ * QA-30: "Naive human gate" gates both GD-7f tie orders on levels 1–16 (`--tie both`; LV-22 fixed
+ * level 5's west start on 2026-10-21) with level 3's `tie desc` row exempt (`--tie-exempt 3`): GD-7h
+ * cured that start with the tutorial steer, which the naive model never reads. The exempt ids in the
+ * step must be exactly NAIVE_TIE_EXEMPT (scripts/lib/naivePlayer.ts, each with its item id) — a future
+ * level cured by a tutorial goes into that registry with its item id and onto the step in one change.
+ */
+describe('.github/workflows/tower-clash-ci.yml naive human gate (QA-3, QA-30)', () => {
+  const CI = readWorkflow('tower-clash-ci.yml');
+  const NAME = 'Naive human gate (levels 1-16 x 5 seeds)';
+  const GATE = 'npm run playtest -- --naive --seeds 5 --gate 1-16 --tie both --tie-exempt 3';
+
+  it('gates 1-16 in both tie orders, exempting exactly the NAIVE_TIE_EXEMPT levels from tie desc', () => {
+    expect(runBlocks(CI).filter((b) => b.step === NAME).map((b) => b.run)).toEqual([`${GATE}\n`]);
+    const step = stepText(CI, NAME);
+    expect(step).not.toMatch(/continue-on-error|\n\s+shell:/);
+    const exempt = /--tie-exempt (\S+)/.exec(GATE)![1]!.split(',').map(Number);
+    expect(exempt).toEqual(Object.keys(NAIVE_TIE_EXEMPT).map(Number));
+    for (const id of exempt) expect(NAIVE_TIE_EXEMPT[id]).toMatch(/^[A-Z]+-\d+[a-z]?: /); // the item id that cured it
+  });
+
+  it('the runner wires --tie-exempt: level 3 seed 1 passes exempt, fails on its tie desc row without', () => {
+    const tsx = fileURLToPath(new URL('../../node_modules/tsx/dist/cli.mjs', import.meta.url));
+    const run = (...extra: string[]) =>
+      spawnSync(process.execPath, [tsx, 'scripts/playtest.ts', '--naive', '--level', '3', '--seeds', '1', '--gate', '3-3', '--tie', 'both', ...extra], {
+        cwd: fileURLToPath(new URL('../../', import.meta.url)),
+        encoding: 'utf8',
+      });
+    const exempt = run('--tie-exempt', '3');
+    expect(exempt.status, exempt.stdout + exempt.stderr).toBe(0);
+    expect(exempt.stdout).toMatch(/\n  exempt lvl 3 Free Real Estate \[tie desc\]: 0\/1 — GD-7h: .*; not gated\n/);
+    expect(exempt.stdout).toContain('naive gate lvl 3-3: 0 failed level(s) (asc 0, tie desc 0, tie desc exempt 3)');
+    // if this turns 0, level 3's reversed start recovered: drop 3 from NAIVE_TIE_EXEMPT and the CI step
+    const plain = run();
+    expect(plain.status, plain.stdout).toBe(1);
+    expect(plain.stdout).toContain('FAIL lvl 3 Free Real Estate [tie desc]: 0/1');
+  }, 30_000);
 });
 
 /*

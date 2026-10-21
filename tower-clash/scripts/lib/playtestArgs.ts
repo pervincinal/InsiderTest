@@ -14,13 +14,15 @@
  * only, with or without `--follow`): `asc` (default) is today's line, `desc` the reversed one, `both`
  * prints an extra `tie desc` row per level; with `--gate` only `asc` (today's CI step) or `both` (a level
  * fails when either order is under its share) — `--gate --tie desc` would drop the gated line and is refused.
+ * QA-30: `--tie-exempt a[,b]` (only with `--gate … --tie both`, ids inside the gate range and in
+ * `NAIVE_TIE_EXEMPT`) skips those levels' `tie desc` row in the gate — levels cured by a tutorial steer.
  */
 import { C } from '../../src/sim/index';
 import { TWISTS, isMondayKey } from '../../src/daily/challenge';
 import type { Twist } from '../../src/daily/challenge';
 import { DEFAULT_POOL, parsePool, twistById } from './daily';
 import type { PoolRange } from './daily';
-import { NAIVE_REACT_MS, parseFollowSpec, parseNaiveGate } from './naivePlayer';
+import { NAIVE_REACT_MS, parseFollowSpec, parseNaiveGate, parseTieExempt } from './naivePlayer';
 import type { FollowSpec, NaiveGateRange, NaiveTie } from './naivePlayer';
 
 export const DEFAULT_SEED = 1;
@@ -65,6 +67,8 @@ export interface Args {
   follow?: FollowSpec;
   /** `--tie desc|both` (GD-7f): naive tie order(s); absent = `asc`, today's line (`--tie asc` leaves it absent too). */
   tie?: Exclude<TieMode, 'asc'>;
+  /** `--tie-exempt a[,b]` (QA-30): gate levels whose `tie desc` row is not gated (`NAIVE_TIE_EXEMPT`); absent = none. */
+  tieExempt?: number[];
 }
 
 export function parseArgs(argv: readonly string[]): Args {
@@ -86,6 +90,7 @@ export function parseArgs(argv: readonly string[]): Args {
   let prefer: string | undefined;
   let holdIds: string | undefined;
   let tieSpec: string | undefined;
+  let tieExemptSpec: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
     const next = argv[i + 1];
@@ -123,6 +128,8 @@ export function parseArgs(argv: readonly string[]): Args {
     else if (arg.startsWith('--hold=')) holdIds = arg.slice('--hold='.length);
     else if (arg === '--tie' && next !== undefined) tieSpec = next;
     else if (arg.startsWith('--tie=')) tieSpec = arg.slice('--tie='.length);
+    else if (arg === '--tie-exempt' && next !== undefined) tieExemptSpec = next;
+    else if (arg.startsWith('--tie-exempt=')) tieExemptSpec = arg.slice('--tie-exempt='.length);
   }
   if (level !== undefined && !Number.isInteger(level)) throw new Error(`bad --level ${String(level)}`);
   if (!Number.isInteger(seed)) throw new Error(`bad --seed ${String(seed)}`);
@@ -170,5 +177,10 @@ export function parseArgs(argv: readonly string[]): Args {
   if (tieSpec !== undefined && !naive) throw new Error('--tie only applies to --naive');
   if (tieSpec !== undefined && challengeNaive) throw new Error(`--tie only applies to the campaign naive run, not to --naive with ${daily !== undefined ? '--daily' : '--weekly'}`);
   if (gate && tie === 'desc') throw new Error('--gate --tie desc would not gate the asc line; use --tie both (a level fails when either order is under its share)');
-  return { level, seed, seeds, upgrades, daily, days, twist, twistId: twistDef?.id, pool, weekly, weeks, naive, reactMs, gate, ...(follow ? { follow } : {}), ...(tie !== 'asc' ? { tie } : {}) };
+  // QA-30: a tutorial-cured level's reversed-tie row leaves the gate; its asc row stays gated
+  const tieExempt = tieExemptSpec === undefined ? undefined : parseTieExempt(tieExemptSpec);
+  if (tieExempt && !(gate && tie === 'both')) throw new Error('--tie-exempt only applies to --naive --gate a-b --tie both (it exempts a level\'s tie desc row from the gate)');
+  const outside = tieExempt && gate ? tieExempt.filter((id) => id < gate.from || id > gate.to) : [];
+  if (gate && outside.length) throw new Error(`--tie-exempt ${outside.join(',')} is outside --gate ${gate.from}-${gate.to}`);
+  return { level, seed, seeds, upgrades, daily, days, twist, twistId: twistDef?.id, pool, weekly, weeks, naive, reactMs, gate, ...(follow ? { follow } : {}), ...(tie !== 'asc' ? { tie } : {}), ...(tieExempt ? { tieExempt } : {}) };
 }

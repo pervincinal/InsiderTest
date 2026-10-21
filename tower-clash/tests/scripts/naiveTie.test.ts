@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { loadLevel } from '../../src/levels/index';
 import { DEFAULT_MODIFIERS, createState } from '../../src/sim/index';
 import { Rng } from '../../src/sim/rng';
-import { NAIVE_FIRST_MS, NAIVE_REACT_MS, NAIVE_TIES, makeNaivePlayer, naiveGate, naiveTarget, runNaive } from '../../scripts/lib/naivePlayer';
+import { NAIVE_FIRST_MS, NAIVE_REACT_MS, NAIVE_TIES, NAIVE_TIE_EXEMPT, makeNaivePlayer, naiveGate, naiveTarget, parseTieExempt, runNaive } from '../../scripts/lib/naivePlayer';
 import type { NaiveRow, NaiveTie } from '../../scripts/lib/naivePlayer';
 import { parseArgs, tiesOf } from '../../scripts/lib/playtestArgs';
 import { makeLevel } from '../helpers';
@@ -113,6 +113,34 @@ describe('naive gate over both tie orders (GD-7f (2))', () => {
     expect(naiveGate([row(1, 5)], { from: 1, to: 1 }, ['asc', 'desc'])).toEqual([{ levelId: 1, name: '(not run)', wins: 0, k: 0, minWins: 1, rate: 0.8, losers: [], tie: 'desc' }]);
     expect(() => naiveGate([row(1, 5)], { from: 1, to: 1 }, [])).toThrow(/bad tie orders/);
     expect(() => naiveGate([row(1, 5)], { from: 1, to: 1 }, ['asc', 'asc'])).toThrow(/bad tie orders/);
+  });
+
+  it('QA-30: a NAIVE_TIE_EXEMPT level leaves only its desc row out of the gate', () => {
+    expect(Object.keys(NAIVE_TIE_EXEMPT).map(Number)).toEqual([3]);
+    expect(NAIVE_TIE_EXEMPT[3]).toMatch(/^GD-7h: /);
+    const rows = [row(3, 5), row(3, 0, 'desc'), row(4, 5), row(4, 0, 'desc')];
+    expect(naiveGate(rows, { from: 3, to: 4 }, ['asc', 'desc'], [3]).map((f) => [f.levelId, f.tie ?? 'asc'])).toEqual([[4, 'desc']]);
+    // the asc row of an exempt level is still gated, and a missing desc row is not a failure once exempt
+    expect(naiveGate([row(3, 3), row(3, 0, 'desc')], { from: 3, to: 3 }, ['asc', 'desc'], [3]).map((f) => f.tie ?? 'asc')).toEqual(['asc']);
+    expect(naiveGate([row(3, 5)], { from: 3, to: 3 }, ['asc', 'desc'], [3])).toEqual([]);
+    expect(() => naiveGate(rows, { from: 3, to: 4 }, ['asc'], [3])).toThrow(/needs the desc order/);
+    expect(() => naiveGate(rows, { from: 3, to: 4 }, ['asc', 'desc'], [4])).toThrow(/level 4 is not in NAIVE_TIE_EXEMPT/);
+  });
+});
+
+describe('--tie-exempt on the command line (QA-30)', () => {
+  it('parses registry ids with --gate … --tie both; refuses everything else', () => {
+    expect(parseArgs(['--naive', '--gate', '1-16', '--tie', 'both', '--tie-exempt', '3']).tieExempt).toEqual([3]);
+    expect(parseArgs(['--naive', '--gate=1-16', '--tie=both', '--tie-exempt=3']).tieExempt).toEqual([3]);
+    expect(parseArgs(['--naive', '--gate', '1-16', '--tie', 'both']).tieExempt).toBeUndefined();
+    expect(parseTieExempt('3')).toEqual([3]);
+    expect(() => parseTieExempt('3,3')).toThrow(/bad --tie-exempt/);
+    expect(() => parseTieExempt('x')).toThrow(/bad --tie-exempt/);
+    expect(() => parseTieExempt('5')).toThrow(/--tie-exempt 5: not in NAIVE_TIE_EXEMPT/);
+    expect(() => parseArgs(['--naive', '--tie-exempt', '3'])).toThrow(/only applies to --naive --gate a-b --tie both/);
+    expect(() => parseArgs(['--naive', '--gate', '1-16', '--tie-exempt', '3'])).toThrow(/only applies to --naive --gate a-b --tie both/);
+    expect(() => parseArgs(['--naive', '--tie', 'both', '--tie-exempt', '3'])).toThrow(/only applies to --naive --gate a-b --tie both/);
+    expect(() => parseArgs(['--naive', '--gate', '4-16', '--tie', 'both', '--tie-exempt', '3'])).toThrow('--tie-exempt 3 is outside --gate 4-16');
   });
 });
 

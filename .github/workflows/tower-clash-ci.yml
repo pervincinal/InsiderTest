@@ -82,8 +82,15 @@ jobs:
       # < 3/5 at the default 4000 ms reaction (levels 17–50 stay informational). A failed row is a
       # level/design item for the Level Designer, traced with the losing seed before filing. Measured
       # 13 s locally (2026-09-25, all 50 levels; the gate reads the first 16 rows).
+      # QA-30 (2026-10-21, after LV-22 fixed level 5's west start): `--tie both` gates both tie orders
+      # (GD-7f: `tie desc` = the larger id on an exact tie of the naive target key, the other side of
+      # every mirror pair); a level fails when either order is under its share. `--tie-exempt 3` takes
+      # only level 3's `tie desc` row out of the gate (its `asc` row stays gated): GD-7h cured that start
+      # with the tutorial steer, which the naive model never reads (0/5 by construction). Exempt ids must
+      # be in NAIVE_TIE_EXEMPT (scripts/lib/naivePlayer.ts) with their item id; the runner prints
+      # "now passes: drop it" when an exempt row recovers. Measured locally: 16.6 s asc only, 20–25 s both.
       - name: Naive human gate (levels 1-16 x 5 seeds)
-        run: npm run playtest -- --naive --seeds 5 --gate 1-16
+        run: npm run playtest -- --naive --seeds 5 --gate 1-16 --tie both --tie-exempt 3
 
       - name: Build
         run: npm run build
@@ -100,7 +107,7 @@ jobs:
       - name: Install Chromium for Playwright
         run: npx playwright install --with-deps chromium
 
-      # QA-26: the default `chromium` project (151 tests) runs in the `e2e` matrix job below, two
+      # QA-26: the default `chromium` project (151 tests; 169 on 2026-10-21) runs in the `e2e` matrix job below, two
       # shards in parallel with this job; the two small projects stay here (they need the build
       # above and Chromium, ≈ 4 + 4 tests) so this job keeps its "+ e2e" name, which
       # scripts/ciStatus.mjs requires together with both shards. Both steps call Playwright directly
@@ -159,6 +166,9 @@ jobs:
   # lists every failing test. Every shard job must report (ciStatus REQUIRED_TOGETHER).
   # Measured 2026-10-15 locally (4 cores, idle, 2 workers): whole project 658 s (151/151) vs
   # shard 1/2 372 s (101/101) and shard 2/2 320 s (50/50). Expected here: ≈ 1.5 min setup + 5–6 min.
+  # QA-30 (2026-10-21, 169 tests after Days 32–35: tones, howto, tutorial and lazy cases): same split
+  # by files, shard 1 = 8 files / 105 tests 372 s, shard 2 = 17 files / 64 tests 375 s locally (CI at
+  # 9289456: 297 / 338 s); +1 % / +14 %, under the 20 % rebalance bar, no file moved.
   e2e:
     name: e2e (shard ${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
