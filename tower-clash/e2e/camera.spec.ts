@@ -510,13 +510,13 @@ const SOLDIER_BOX = { left: -18, right: 18, top: -44, bottom: 10 };
 const CONTROL_GROUND = { x: 255, y: 1128 };
 
 interface BoxDiff {
-  /** Device px whose colour changed by more than PIXEL_DELTA in some channel between the two frames. */
+  /** Device px whose colour changed by more than PIXEL_DELTA in some channel between two consecutive frames (largest pair). */
   soldier: number;
   control: number;
   /** Ink-dark device px (luma < 90) in each box on the first frame: the soldier's outline / eyes are in his box. */
   soldierDark: number;
   controlDark: number;
-  /** Wall-clock ms between the two frames read. */
+  /** Smallest wall-clock gap between two consecutive frames read (≥ 80). */
   gapMs: number;
 }
 const PIXEL_DELTA = 32;
@@ -574,7 +574,7 @@ async function soldierPaused(page: Page): Promise<{ soldier: XY; control: XY }> 
   return at;
 }
 
-/** Compare the soldier box and the control box on two painted frames at least 80 ms apart (device px of the game canvas). */
+/** Compare the soldier box and the control box over four consecutive painted frames ≥ 80 ms apart (device px of the game canvas): the largest change of any pair. */
 function boxDiff(page: Page, at: { soldier: XY; control: XY }): Promise<BoxDiff> {
   return page.evaluate(
     ([soldier, control, box, delta]) =>
@@ -604,17 +604,37 @@ function boxDiff(page: Page, at: { soldier: XY; control: XY }): Promise<BoxDiff>
           for (let i = 0; i < a.length; i += 4) if (0.299 * a[i]! + 0.587 * a[i + 1]! + 0.114 * a[i + 2]! < 90) n++;
           return n;
         };
+        // Four frames ≥ 80 ms apart (≈ 0.6 of a stride at STRIDE_RAD_PER_MS): the pose change between
+        // two frames depends on where in the stride they fall (near a turning point two frames 80 ms
+        // apart differ by a few px only — CI 2026-10-21 read 35 against the 40 floor), so the soldier
+        // figure is the largest change over the consecutive pairs and the control the largest too.
         requestAnimationFrame((t1) => {
-          const s1 = grab(soldier);
-          const c1 = grab(control);
+          let sPrev = grab(soldier);
+          let cPrev = grab(control);
+          const dark0 = { s: dark(sPrev), c: dark(cPrev) };
+          let tPrev = t1;
+          let soldierMax = 0;
+          let controlMax = 0;
+          let gapMin = Infinity;
+          let pairs = 0;
           const next = (t: number): void => {
-            if (t - t1 < 80) {
+            if (t - tPrev < 80) {
               requestAnimationFrame(next);
               return;
             }
             const s2 = grab(soldier);
             const c2 = grab(control);
-            resolve({ soldier: changed(s1, s2), control: changed(c1, c2), soldierDark: dark(s1), controlDark: dark(c1), gapMs: t - t1 });
+            soldierMax = Math.max(soldierMax, changed(sPrev, s2));
+            controlMax = Math.max(controlMax, changed(cPrev, c2));
+            gapMin = Math.min(gapMin, t - tPrev);
+            sPrev = s2;
+            cPrev = c2;
+            tPrev = t;
+            if (++pairs < 4) {
+              requestAnimationFrame(next);
+              return;
+            }
+            resolve({ soldier: soldierMax, control: controlMax, soldierDark: dark0.s, controlDark: dark0.c, gapMs: gapMin });
           };
           requestAnimationFrame(next);
         });
