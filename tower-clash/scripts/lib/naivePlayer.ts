@@ -453,3 +453,75 @@ export function naiveGate(
   }
   return failures;
 }
+
+/** GD-8f (GDD §3.14 (a)): the clock half's slack over the naive line on 17–50 — one clock step. */
+export const RULE_A_CLOCK_STEP_MS = 5000;
+/** GD-8f (GDD §3.14 (a)): the win half on 17–50 (no naive gate there) — ≥ 80 % of the seeds, both tie orders. */
+export const RULE_A_LATE_WIN_RATE = 0.8;
+
+export interface RuleAVerdict {
+  ok: boolean;
+  /** Fewest wins of the row's K seeds the win half needs. */
+  minWins: number;
+  /** `star2` (1–16, or 17–50 when the naive line does not hold), `naive` (17–50: max(star2, naive median + 5 s)), `none` (17–50 `tie desc`: wins only). */
+  bar: 'star2' | 'naive' | 'none';
+  /** The clock bar in ms (undefined when `bar` is `none`). */
+  barMs: number | undefined;
+  /** The verdict text between `lvl N name: ` and ` -> ok|NO`. */
+  text: string;
+}
+
+function secs(ms: number): string {
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+/**
+ * The `--follow` rule (a) verdict for one follower row (GD-6h; GD-8f).
+ * Levels 1–`NAIVE_GATE_LAST` (GDD §3.12 item 12 (a)), unchanged: wins ≥ the level's naive gate share and
+ * median ≤ `star2`, on every tie order. Levels past it (GDD §3.14 (a), no `star2` floor): wins ≥ 80 % of
+ * the seeds on every tie order; the clock half only on the `asc` row: median ≤ bar = max(`star2`, the
+ * plain naive `asc` median at the same K and reaction + 5 s) when that naive row holds (≥ 50 %), else
+ * `star2`. `naive` must be that plain naive `asc` row of the same level, K and reaction — required for
+ * an `asc` follower row past `NAIVE_GATE_LAST`, ignored otherwise.
+ */
+export function ruleA(
+  follower: Pick<NaiveRow, 'level' | 'reactMs' | 'wins' | 'seeds' | 'medianMs' | 'tie'>,
+  naive?: Pick<NaiveRow, 'level' | 'reactMs' | 'wins' | 'seeds' | 'medianMs' | 'holds' | 'follow' | 'tie'>,
+): RuleAVerdict {
+  const { level, wins } = follower;
+  const k = follower.seeds.length;
+  const gateRate = naiveGateRate(level.id);
+  if (gateRate !== undefined) {
+    const minWins = naiveGateMinWins(gateRate, k);
+    const share = `${wins}/${k} ${wins >= minWins ? '>=' : '<'} ${minWins}/${k} (${Math.round(gateRate * 100)}%)`;
+    const med = follower.medianMs === undefined ? 'no win' : `${secs(follower.medianMs)} ${follower.medianMs <= level.star2 ? '<=' : '>'} star2 ${secs(level.star2)}`;
+    const ok = wins >= minWins && follower.medianMs !== undefined && follower.medianMs <= level.star2;
+    return { ok, minWins, bar: 'star2', barMs: level.star2, text: `gate share ${share}, median ${med}` };
+  }
+  const minWins = naiveGateMinWins(RULE_A_LATE_WIN_RATE, k);
+  const winsOk = wins >= minWins;
+  const share = `wins ${wins}/${k} ${winsOk ? '>=' : '<'} ${minWins}/${k} (${Math.round(RULE_A_LATE_WIN_RATE * 100)}%)`;
+  if (follower.tie === 'desc') {
+    return { ok: winsOk, minWins, bar: 'none', barMs: undefined, text: `${share}, clock not judged on tie desc (GDD §3.14: the bar reads asc)` };
+  }
+  if (!naive) throw new Error(`rule (a): level ${level.id} is past ${NAIVE_GATE_LAST}; its clock bar needs the plain naive asc row`);
+  if (naive.level.id !== level.id || naive.follow || (naive.tie ?? 'asc') !== 'asc' || naive.reactMs !== follower.reactMs || naive.seeds.length !== k) {
+    throw new Error(`rule (a): level ${level.id} needs the plain naive asc row of the same level, K = ${k} and react ${follower.reactMs} ms`);
+  }
+  const naiveWins = `naive ${naive.wins}/${k}`;
+  let barMs: number;
+  let barText: string;
+  let bar: RuleAVerdict['bar'];
+  if (naive.holds && naive.medianMs !== undefined) {
+    barMs = Math.max(level.star2, naive.medianMs + RULE_A_CLOCK_STEP_MS);
+    bar = 'naive';
+    barText = `bar ${secs(barMs)} = max(star2 ${secs(level.star2)}, naive ${secs(naive.medianMs)} + ${RULE_A_CLOCK_STEP_MS / 1000}s)`;
+  } else {
+    barMs = level.star2;
+    bar = 'star2';
+    barText = `bar ${secs(barMs)} = star2 (${naiveWins} < ${Math.round(NAIVE_WIN_RATE * 100)}%: the naive line does not hold)`;
+  }
+  const med = follower.medianMs === undefined ? 'no win' : `${secs(follower.medianMs)} ${follower.medianMs <= barMs ? '<=' : '>'} ${barText}`;
+  const ok = winsOk && follower.medianMs !== undefined && follower.medianMs <= barMs;
+  return { ok, minWins, bar, barMs, text: `${share}, median ${med === 'no win' ? `no win (${barText})` : med} (GDD §3.14)` };
+}

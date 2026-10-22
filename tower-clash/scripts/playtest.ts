@@ -40,8 +40,11 @@
  * median win time and whether the line holds (≥ 50 % wins). Informational, no gate (exit 0).
  * `--naive --level N --follow SPEC` (GD-6h, GDD §3.12 item 12 (a)): the literal card follower — the naive
  * line, but free links go first to the `prio` towers in order, `hold` towers wait for L2, `noprioFrom`
- * towers play plain naive. The naive row plus a "rule (a)" line: the follower must win the level's naive
- * gate share (levels 1–16, at 4 s) and keep its median within `star2`. Informational (exit 0).
+ * towers play plain naive. The naive row plus a "rule (a)" line (`ruleA`): on levels 1–16 the follower must
+ * win the level's naive gate share (at 4 s) and keep its median within `star2`; past 16 (GD-8f, GDD §3.14
+ * (a)) it must win ≥ 80 % and keep its `asc` median ≤ max(`star2`, plain naive `asc` median + 5 s) — the
+ * runner also runs that plain naive row (same K and reaction, printed as `naive (bar)`); a naive line
+ * under 50 % leaves the bar at `star2`; a `tie desc` row is judged on wins only. Informational (exit 0).
  * `--naive --tie desc|both` (GD-7f, GDD §3.12 (i) (c), §3.13 (f)): the naive line with the id tie-break of
  * its target reversed (larger id first on an exact (neutral-first, lane length) tie) — the other side of
  * every mirror pair. `desc` prints only that line, `both` one extra `tie desc` row per level under the
@@ -63,7 +66,7 @@ import { maxedModifiers } from '../src/economy/maxUpgrades';
 import { DAILY_WIN_RATE, TWIST_WIN_RATE, WEEKLY_WIN_RATE, dailyPlan, inPool, runDaily, runTwist, runWeekly, twistById, weeklyPlan } from './lib/daily';
 import type { DailyRow, PoolRange, TwistRow, WeeklyRow } from './lib/daily';
 import type { Twist } from '../src/daily/challenge';
-import { NAIVE_GATE_LAST, NAIVE_REACT_MS, NAIVE_TIE_EXEMPT, NAIVE_WIN_RATE, formatFollowSpec, makeNaivePlayer, naiveGate, naiveGateMinWins, naiveGateRate, runNaive } from './lib/naivePlayer';
+import { NAIVE_GATE_LAST, NAIVE_REACT_MS, NAIVE_TIE_EXEMPT, NAIVE_WIN_RATE, formatFollowSpec, makeNaivePlayer, naiveGate, naiveGateMinWins, naiveGateRate, ruleA, runNaive } from './lib/naivePlayer';
 import type { FollowSpec, NaiveGateRange, NaiveRow, NaiveTie } from './lib/naivePlayer';
 import { parseArgs, tiesOf } from './lib/playtestArgs';
 import type { TieMode, Upgrades } from './lib/playtestArgs';
@@ -501,7 +504,9 @@ async function runTwistMode(twistId: Twist['id'], k: number, pool: Readonly<Pool
  * `naiveGate` in scripts/lib/naivePlayer.ts). Returns the number of failed levels (0 without a gate).
  *
  * With `follow` (GD-6h, never with a gate): the literal card follower instead of the naive line, same
- * row, plus the GDD §3.12 (a) verdict per level — wins ≥ the naive gate share and median ≤ `star2`.
+ * row, plus the GDD §3.12 (a) verdict per level — wins ≥ the naive gate share and median ≤ `star2` on
+ * 1–16; past 16 (GD-8f, §3.14 (a)) wins ≥ 80 % and the `asc` median ≤ max(`star2`, naive `asc` median
+ * + 5 s), with the plain naive `asc` row run alongside (row `naive (bar)`, not counted in the summary).
  *
  * With `tie` (GD-7f) `desc`: the reversed id tie-break instead; `both`: each level's default row, then a
  * row labelled `tie desc`, one summary line per order, and a gate (if any) over both orders — a level
@@ -523,23 +528,35 @@ async function runNaiveMode(levels: LevelDef[], k: number, reactMs: number, gate
   console.log(header);
   console.log('-'.repeat(header.length));
   const rows: NaiveRow[] = [];
+  const barRows = new Map<number, NaiveRow>(); // GD-8f: the plain naive asc row behind a follower's §3.14 clock bar
   let totalTicks = 0;
   const t0 = performance.now();
+  const printRow = (level: LevelDef, row: NaiveRow, name: string, gateCol: string): void => {
+    const medianT = row.medianMs === undefined ? '-' : fmtTime(row.medianMs);
+    const worst = row.worstMs === undefined ? '-' : fmtTime(row.worstMs);
+    const losers = row.losers.length ? row.losers.join(',') : '-';
+    console.log(
+      `${pad(String(level.id), 4)} ${pad(name, 20)} ${pad(`${row.wins}/${k}`, 6)} ${pad(fmtStarCounts(row.starCounts), 12)} ${pad(medianT, 8)} ${pad(worst, 8)} ${pad(fmtTime(level.star2), 8)} ${pad(row.holds ? 'yes' : 'NO', 6)} ${pad(row.withinStar2 ? 'yes' : 'no', 7)} ${pad(gateCol, 6)} ${losers}`,
+    );
+  };
   for (const level of levels) {
     for (const t of ties) {
       const row = runNaive(level, k, reactMs, follow, t);
       rows.push(row);
       totalTicks += row.ticks;
-      const medianT = row.medianMs === undefined ? '-' : fmtTime(row.medianMs);
-      const worst = row.worstMs === undefined ? '-' : fmtTime(row.worstMs);
-      const losers = row.losers.length ? row.losers.join(',') : '-';
       const gated = gate !== undefined && level.id >= gate.from && level.id <= gate.to;
       const exempt = gated && t === 'desc' && tieExempt.includes(level.id); // QA-30: tutorial-cured, not gated
       const gateCol = exempt ? 'exempt' : gated ? (row.wins >= naiveGateMinWins(naiveGateRate(level.id)!, k) ? 'ok' : 'FAIL') : '-';
       const name = tie === 'both' && t === 'desc' ? '  tie desc' : level.name; // GD-7f: the extra row sits under the level's own
-      console.log(
-        `${pad(String(level.id), 4)} ${pad(name, 20)} ${pad(`${row.wins}/${k}`, 6)} ${pad(fmtStarCounts(row.starCounts), 12)} ${pad(medianT, 8)} ${pad(worst, 8)} ${pad(fmtTime(level.star2), 8)} ${pad(row.holds ? 'yes' : 'NO', 6)} ${pad(row.withinStar2 ? 'yes' : 'no', 7)} ${pad(gateCol, 6)} ${losers}`,
-      );
+      printRow(level, row, name, gateCol);
+    }
+    // GD-8f (GDD §3.14 (a)): past the naive gate the follower's asc median is judged against
+    // max(star2, the plain naive asc median of this run + 5 s) — run that row too (same K and reaction)
+    if (follow && level.id > NAIVE_GATE_LAST && ties.includes('asc')) {
+      const naiveRow = runNaive(level, k, reactMs, undefined, 'asc');
+      barRows.set(level.id, naiveRow);
+      totalTicks += naiveRow.ticks;
+      printRow(level, naiveRow, '  naive (bar)', '-');
     }
   }
   const elapsed = (performance.now() - t0) / 1000;
@@ -555,14 +572,11 @@ async function runNaiveMode(levels: LevelDef[], k: number, reactMs: number, gate
   }
   if (follow) {
     // GDD §3.12 item 12 (a): a card rewrite's literal follower holds the naive gate and the star2 median at 4 s
+    // (levels 1–16); GD-8f / GDD §3.14 (a): past 16, wins >= 80 % and the asc median within the naive-based bar
     for (const r of rows) {
-      const rate = naiveGateRate(r.level.id);
-      const need = rate === undefined ? undefined : naiveGateMinWins(rate, k);
-      const share = need === undefined ? `no gate past ${NAIVE_GATE_LAST}` : `${r.wins}/${k} ${r.wins >= need ? '>=' : '<'} ${need}/${k} (${Math.round(rate! * 100)}%)`;
-      const med = r.medianMs === undefined ? 'no win' : `${fmtTime(r.medianMs)} ${r.medianMs <= r.level.star2 ? '<=' : '>'} star2 ${fmtTime(r.level.star2)}`;
-      const ok = (need === undefined || r.wins >= need) && r.medianMs !== undefined && r.medianMs <= r.level.star2;
+      const { ok, text } = ruleA(r, barRows.get(r.level.id));
       const note = reactMs === NAIVE_REACT_MS ? '' : ` (rule (a) is defined at ${NAIVE_REACT_MS} ms; this run is ${reactMs} ms)`;
-      console.log(`  rule (a)${tieLabel(r.tie)} lvl ${r.level.id} ${r.level.name}: gate share ${share}, median ${med} -> ${ok ? 'ok' : 'NO'}${note}`);
+      console.log(`  rule (a)${tieLabel(r.tie)} lvl ${r.level.id} ${r.level.name}: ${text} -> ${ok ? 'ok' : 'NO'}${note}`);
     }
   }
   const tutorialMiss = follow ? [] : rows.filter((r) => r.level.id <= TUTORIAL_BAND_LAST && !r.holds);

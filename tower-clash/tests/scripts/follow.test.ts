@@ -4,12 +4,14 @@ import { DEFAULT_MODIFIERS, createState } from '../../src/sim/index';
 import { Rng } from '../../src/sim/rng';
 import {
   NAIVE_FIRST_MS,
+  RULE_A_CLOCK_STEP_MS,
   followTarget,
   formatFollowSpec,
   makeNaivePlayer,
   naiveGate,
   naiveTarget,
   parseFollowSpec,
+  ruleA,
   runNaive,
 } from '../../scripts/lib/naivePlayer';
 import { parseArgs } from '../../scripts/lib/playtestArgs';
@@ -164,4 +166,88 @@ describe('card follower `after=id:k` (GD-7f (3))', () => {
     expect(runNaive(small, 2, 4000, spec).results).toEqual(runNaive(small, 2, 4000, { ...spec, after: [{ id: 'f', k: 1 }] }).results);
     expect(() => runNaive(small, 1, 4000, { prio: ['f'], hold: [], noprioFrom: [], after: [{ id: 'guns', k: 3 }] })).toThrow(/after=guns: level 999 has no tower "guns"/);
   });
+});
+
+describe('rule (a) verdict: GDD §3.12 item 12 (a) on 1–16, the §3.14 clock bar past 16 (GD-8f)', () => {
+  const lvl = (id: number, star2: number) => makeLevel({ id, name: `L${id}`, star2 });
+  // a row of K seeds with `wins` wins and the given median (only the fields `ruleA` reads)
+  const row = (id: number, star2: number, wins: number, medianMs: number | undefined, extra: { k?: number; reactMs?: number; tie?: 'desc'; follow?: ReturnType<typeof parseFollowSpec> } = {}) => {
+    const k = extra.k ?? 20;
+    return {
+      level: lvl(id, star2),
+      reactMs: extra.reactMs ?? 4000,
+      wins,
+      seeds: Array.from({ length: k }, (_, i) => i + 1),
+      medianMs,
+      holds: wins / k >= 0.5,
+      ...(extra.tie ? { tie: extra.tie } : {}),
+      ...(extra.follow ? { follow: extra.follow } : {}),
+    };
+  };
+
+  it('levels 1–16 keep the gate share + star2 bar, text unchanged, on both tie orders, no naive row needed', () => {
+    expect(ruleA(row(13, 80_000, 20, 71_900))).toEqual({ ok: true, minWins: 12, bar: 'star2', barMs: 80_000, text: 'gate share 20/20 >= 12/20 (60%), median 71.9s <= star2 80.0s' });
+    expect(ruleA(row(7, 65_000, 5, 135_000))).toMatchObject({ ok: false, text: 'gate share 5/20 < 16/20 (80%), median 135.0s > star2 65.0s' });
+    expect(ruleA(row(6, 95_000, 0, undefined, { k: 10 }))).toMatchObject({ ok: false, text: 'gate share 0/10 < 8/10 (80%), median no win' });
+    // the desc row is judged on the clock too on 1–16 (as before GD-8f)
+    expect(ruleA(row(16, 60_000, 20, 61_000, { tie: 'desc' }))).toMatchObject({ ok: false, bar: 'star2' });
+  });
+
+  it('past 16 the asc median is judged against max(star2, naive median + 5 s) when the naive line holds (GD-8f acceptance numbers)', () => {
+    expect(RULE_A_CLOCK_STEP_MS).toBe(5000);
+    const naive18 = row(18, 60_000, 20, 66_800);
+    expect(ruleA(row(18, 60_000, 20, 61_700), naive18)).toEqual({
+      ok: true,
+      minWins: 16,
+      bar: 'naive',
+      barMs: 71_800,
+      text: 'wins 20/20 >= 16/20 (80%), median 61.7s <= bar 71.8s = max(star2 60.0s, naive 66.8s + 5s) (GDD §3.14)',
+    });
+    expect(ruleA(row(18, 60_000, 19, 85_500), naive18)).toMatchObject({ ok: false, barMs: 71_800, text: expect.stringContaining('median 85.5s > bar 71.8s') });
+    expect(ruleA(row(17, 50_000, 20, 63_600), row(17, 50_000, 20, 54_400))).toMatchObject({ ok: false, barMs: 59_400 });
+    expect(ruleA(row(20, 50_000, 20, 49_300), row(20, 50_000, 20, 49_300))).toMatchObject({ ok: true, barMs: 54_300 });
+    // the naive line within star2 by more than a step: the bar is star2 itself (22: 63.4 + 5 < 70)
+    expect(ruleA(row(22, 70_000, 20, 65_100), row(22, 70_000, 20, 63_400))).toMatchObject({ ok: true, bar: 'naive', barMs: 70_000, text: expect.stringContaining('bar 70.0s = max(star2 70.0s, naive 63.4s + 5s)') });
+    // exactly on the bar passes
+    expect(ruleA(row(24, 60_000, 20, 71_700), row(24, 60_000, 20, 66_700)).ok).toBe(true);
+    expect(ruleA(row(24, 60_000, 20, 77_200), row(24, 60_000, 20, 66_700))).toMatchObject({ ok: false, barMs: 71_700 });
+  });
+
+  it('past 16: a naive line under 50 % leaves the bar at star2; the win half is 80 % on both orders; desc is judged on wins only', () => {
+    expect(ruleA(row(23, 75_000, 18, 82_300), row(23, 75_000, 7, 86_800))).toEqual({
+      ok: false,
+      minWins: 16,
+      bar: 'star2',
+      barMs: 75_000,
+      text: 'wins 18/20 >= 16/20 (80%), median 82.3s > bar 75.0s = star2 (naive 7/20 < 50%: the naive line does not hold) (GDD §3.14)',
+    });
+    expect(ruleA(row(23, 75_000, 20, 74_000), row(23, 75_000, 7, 86_800)).ok).toBe(true);
+    // fast but under 80 %: NO, whatever the clock (before GD-8f there was no win half past 16)
+    expect(ruleA(row(30, 90_000, 15, 40_000), row(30, 90_000, 20, 60_000))).toMatchObject({ ok: false, minWins: 16, text: expect.stringMatching(/^wins 15\/20 < 16\/20 \(80%\)/) });
+    expect(ruleA(row(30, 90_000, 0, undefined), row(30, 90_000, 20, 60_000))).toMatchObject({ ok: false, text: expect.stringContaining('median no win (bar 90.0s = max(star2 90.0s, naive 60.0s + 5s))') });
+    // tie desc: wins only, no naive row needed, a slow median does not fail it
+    expect(ruleA(row(18, 60_000, 20, 120_000, { tie: 'desc' }))).toEqual({ ok: true, minWins: 16, bar: 'none', barMs: undefined, text: 'wins 20/20 >= 16/20 (80%), clock not judged on tie desc (GDD §3.14: the bar reads asc)' });
+    expect(ruleA(row(18, 60_000, 3, 50_000, { k: 5, tie: 'desc' }))).toMatchObject({ ok: false, minWins: 4 });
+  });
+
+  it('past 16 the asc verdict needs the plain naive asc row of the same level, K and reaction', () => {
+    const f = row(18, 60_000, 20, 61_700);
+    expect(() => ruleA(f)).toThrow(/needs the plain naive asc row/);
+    expect(() => ruleA(f, row(19, 60_000, 20, 66_800))).toThrow(/same level, K = 20 and react 4000 ms/);
+    expect(() => ruleA(f, row(18, 60_000, 10, 66_800, { k: 10 }))).toThrow(/same level/);
+    expect(() => ruleA(f, row(18, 60_000, 20, 66_800, { reactMs: 8000 }))).toThrow(/same level/);
+    expect(() => ruleA(f, row(18, 60_000, 20, 66_800, { tie: 'desc' }))).toThrow(/same level/);
+    expect(() => ruleA(f, row(18, 60_000, 20, 66_800, { follow: parseFollowSpec('prio=e1') }))).toThrow(/same level/);
+  });
+
+  it('level 18 at 20 seeds (GD-8f acceptance, real sim): prio=e1,e2 -> NO (85.5 > 71.8), prio=w1,e1,w2 -> ok (61.7 <= 71.8)', async () => {
+    const level18 = (await loadLevel(18))!;
+    const naive = runNaive(level18, 20);
+    expect(naive.medianMs).toBe(66_775); // prints 66.8s; the bar is 71.775 s ("71.8s")
+    expect(ruleA(runNaive(level18, 20, 4000, parseFollowSpec('prio=e1,e2')), naive)).toMatchObject({ ok: false, bar: 'naive' });
+    const good = ruleA(runNaive(level18, 20, 4000, parseFollowSpec('prio=w1,e1,w2')), naive);
+    expect(good).toMatchObject({ ok: true, bar: 'naive' });
+    expect(good.barMs).toBe(Math.max(level18.star2, naive.medianMs! + 5000));
+    expect(good.text).toMatch(/median 61\.7s <= bar 71\.8s = max\(star2 60\.0s, naive 66\.8s \+ 5s\)/);
+  }, 60_000);
 });
