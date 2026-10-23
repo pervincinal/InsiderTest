@@ -56,6 +56,21 @@ import type { Page } from '@playwright/test';
  * Budget: 33 ms (30 fps) is the target on a real device. The sandbox headless shell is software
  * rendered, so the assertion uses 50 ms of main-thread work per frame there (FRAME_WORK_BUDGET_MS); CI
  * keeps the same budget. Tighten once the render path is profiled on hardware.
+ *
+ * BUG-55 (2026-10-23): the thread-CPU measure is load-independent but not host-speed-independent — about
+ * 90 % of a title frame is the software raster / commit, which scales with the host's raster speed. Same
+ * code, title idle: CI run 101 26.0 ms, Day 32's container 27.6, Day 37's (restarted) container 47–52
+ * (3 of 4 runs red alone; script 2.3 ms of it), Day 38's 39.0. So each worker first measures a fixed,
+ * code-independent calibration workload with the same CDP measure (`calibrateHost`: a 1080 × 1920
+ * canvas repainted every frame — sea gradient, two drawImage of a pre-painted island layer, shadowed
+ * shapes, radial gradients, a little text; nothing from src/) → `calibMs` per frame. Every frame
+ * sample's budget is FRAME_WORK_BUDGET_MS × factor, factor = max(1, calibMs / CALIBRATION_REF_MS):
+ * a host as fast as CI (or faster) keeps the absolute 50 ms. A factor above HOST_FACTOR_CEILING (2.5)
+ * is not a valid measurement: the sample is skipped with an annotation, never passed. On CI
+ * (`process.env.CI`) the factor is forced to 1 — the absolute 50 ms stays authoritative there; the
+ * calibration is still measured and printed so CI's own calibMs can re-derive the reference.
+ * Every `[perf]` line carries the calibration, the reference and the factor. Changing the calibration
+ * workload changes calibMs: re-derive CALIBRATION_REF_MS (below) in the same change.
  */
 
 /** BUG-47: main-thread work per frame, thread-CPU ms, mean over the sample — the old wall-clock interval budget's number. */
@@ -83,6 +98,17 @@ const PLAY_SEED = 1;
 /** QA-27: x5 keeps the 8 s (or 120-frame) window inside the match: ≤ 60 s sim of the 88.6 s. */
 const PLAY_SPEED = 5;
 const SCREEN_SAMPLE_MS = 3_000;
+/**
+ * BUG-55: calibration work per frame (calibrateHost) on a host whose raster speed matches CI's. Not measured
+ * on CI yet: derived 2026-10-23 on the Day 38 container as REF = local calibMs × (CI title / local title)
+ * = 21.6 × 26.0 / 37.3 = 15.06 → 15 (local: calib 20.8–21.8 ms over 3 workers, title idle
+ * 37.0–39.0 ms over 4 runs; CI run 101 title 26.0 ms), so CI's ratio is ≈ 1.0 and this container's factor ≈ 1.44.
+ * Re-derive from the first CI log's `calib` (CALIBRATION_REF_MS = CI calibMs) if it reads more than ≈ 10 % off.
+ */
+const CALIBRATION_REF_MS = 15;
+/** BUG-55: a host slower than this × the reference is not a valid perf measurement (skip, never pass). */
+const HOST_FACTOR_CEILING = 2.5;
+const CALIBRATION_SAMPLE_MS = 2_000;
 
 const LEVELS_DIR = new URL('../src/levels/', import.meta.url);
 const LEVEL_IDS = readdirSync(LEVELS_DIR)
@@ -217,26 +243,139 @@ async function sampleFrames(page: Page, ms: number, minFrames: number, opts: Sam
   };
 }
 
-function describeSample(label: string, f: FrameSample): string {
+/**
+ * BUG-55: the fixed calibration workload — a 1080 × 1920 canvas shown full-viewport and repainted on
+ * every frame, close to a title frame's raster (sea, ground layer, shadowed shapes, gradients, text).
+ * Nothing here comes from src/, so a game change never moves it; `window.__towerclash` is a stub so
+ * `sampleFrames` can guard the "screen".
+ */
+const CALIBRATION_PAGE = `<!doctype html><html><head><style>html,body{margin:0;height:100%;overflow:hidden;background:#000}
+canvas{display:block;width:100vw;height:100vh}</style></head><body><canvas id="c" width="1080" height="1920"></canvas><script>
+window.__towerclash = { getScreen: () => 'calibration', getState: () => null };
+const W = 1080, H = 1920, ctx = document.getElementById('c').getContext('2d');
+const layer = document.createElement('canvas');
+layer.width = W; layer.height = H;
+const l = layer.getContext('2d');
+const isle = l.createRadialGradient(540, 980, 60, 540, 980, 560);
+isle.addColorStop(0, '#9bd36a'); isle.addColorStop(0.7, '#6fb24a'); isle.addColorStop(1, '#e8d49a');
+l.fillStyle = isle;
+l.beginPath(); l.ellipse(540, 980, 500, 760, 0, 0, Math.PI * 2); l.fill();
+for (let i = 0; i < 60; i++) {
+  l.fillStyle = 'hsl(' + ((i * 37) % 360) + ',45%,' + (30 + (i % 5) * 8) + '%)';
+  l.beginPath(); l.ellipse(160 + ((i * 97) % 760), 360 + ((i * 151) % 1200), 30 + (i % 7) * 6, 18 + (i % 5) * 5, i, 0, Math.PI * 2); l.fill();
+}
+const sea = ctx.createLinearGradient(0, 0, 0, H);
+sea.addColorStop(0, '#2a8fd8'); sea.addColorStop(1, '#0d4f8f');
+const draw = (t) => {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = sea; ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 0.35; ctx.drawImage(layer, 8 * Math.sin(t / 700), 14); ctx.globalAlpha = 1;
+  ctx.drawImage(layer, 0, 0);
+  for (let i = 0; i < 16; i++) {
+    const x = 140 + ((i * 211) % 800), y = 420 + ((i * 173) % 1100) + 6 * Math.sin(t / 500 + i);
+    const g = ctx.createRadialGradient(x - 10, y - 12, 4, x, y, 46);
+    g.addColorStop(0, '#fff'); g.addColorStop(1, i % 2 ? '#d94a3a' : '#3a6fd9');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 46, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.35)'; ctx.shadowBlur = 18; ctx.shadowOffsetY = 10;
+  for (let i = 0; i < 6; i++) {
+    ctx.fillStyle = i % 2 ? '#ffd23f' : '#fff7e6';
+    ctx.beginPath(); ctx.roundRect(150 + (i % 2) * 400, 1300 + Math.floor(i / 2) * 150, 380, 120, 36); ctx.fill();
+  }
+  ctx.fillStyle = '#fff7e6'; ctx.font = 'bold 150px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText('TOWER', 540, 560 + 8 * Math.sin(t / 900)); ctx.fillText('CLASH', 540, 720 + 8 * Math.sin(t / 900 + 0.8));
+  ctx.restore();
+  ctx.fillStyle = '#1b2a3a'; ctx.font = '48px sans-serif'; ctx.textAlign = 'center';
+  for (let i = 0; i < 6; i++) ctx.fillText('BUTTON ' + i, 340 + (i % 2) * 400, 1372 + Math.floor(i / 2) * 150);
+  requestAnimationFrame(draw);
+};
+requestAnimationFrame(draw);
+</script></body></html>`;
+
+/** BUG-55: this worker's host calibration (measured once, by the first test that needs it). */
+interface HostCalibration {
+  /** Main-thread work per frame of CALIBRATION_PAGE, ms (thread CPU, same measure as the gates). */
+  calibMs: number;
+  frames: number;
+  /** calibMs / CALIBRATION_REF_MS, before the CI rule and the floor of 1. */
+  ratio: number;
+  /** The budget multiplier: 1 on CI, else max(1, ratio). */
+  factor: number;
+  ci: boolean;
+}
+let hostCalibration: HostCalibration | null = null;
+
+/** BUG-55: the budget factor for a measured ratio; CI keeps the absolute budget (factor 1). */
+function hostFactor(ratio: number, ci: boolean): number {
+  return ci ? 1 : Math.max(1, ratio);
+}
+
+/** BUG-55: measures CALIBRATION_PAGE on `page` (before it navigates to the game) once per worker. */
+async function calibrateHost(page: Page): Promise<HostCalibration> {
+  if (hostCalibration) return hostCalibration;
+  await page.setContent(CALIBRATION_PAGE);
+  // warm-up: the layer paint and the first frames' allocation are not part of the per-frame cost
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        let n = 0;
+        const f = (): void => void (++n >= 10 ? resolve() : requestAnimationFrame(f));
+        requestAnimationFrame(f);
+      }),
+  );
+  const s = await sampleFrames(page, CALIBRATION_SAMPLE_MS, MIN_FRAMES.screen, { stayOn: 'calibration' });
+  expect(s.frames, 'the calibration sample must hold a meaningful number of frames').toBeGreaterThanOrEqual(MIN_FRAMES.screen);
+  expect(s.work, 'the calibration page must have done measurable work').toBeGreaterThan(0);
+  const ci = !!process.env.CI;
+  const ratio = s.work / CALIBRATION_REF_MS;
+  hostCalibration = { calibMs: s.work, frames: s.frames, ratio, factor: hostFactor(ratio, ci), ci };
+  return hostCalibration;
+}
+
+function describeHost(h: HostCalibration): string {
+  return (
+    `host calib ${h.calibMs.toFixed(1)} ms / frame over ${h.frames} frames, ref ${CALIBRATION_REF_MS} → ratio ${h.ratio.toFixed(2)}, ` +
+    `factor ${h.factor.toFixed(2)}${h.ci ? ' (CI: forced to 1)' : ''}, ceiling ${HOST_FACTOR_CEILING}`
+  );
+}
+function frameBudget(h: HostCalibration): number {
+  return FRAME_WORK_BUDGET_MS * h.factor;
+}
+/** BUG-55: a host slower than HOST_FACTOR_CEILING × the reference is not a valid measurement — skip with the numbers, never pass. */
+function skipIfHostTooSlow(h: HostCalibration): void {
+  if (h.factor <= HOST_FACTOR_CEILING) return;
+  const why = `host too slow for a perf measurement (factor ${h.factor.toFixed(2)} > ${HOST_FACTOR_CEILING}) — ${describeHost(h)}`;
+  test.info().annotations.push({ type: 'skipped-reason', description: why });
+  console.log(`[perf] ${why}`);
+  test.skip(true, why);
+}
+
+function describeSample(label: string, f: FrameSample, h: HostCalibration): string {
   const wall = f.deltas.length
     ? `median ${median(f.deltas).toFixed(1)} ms, p95 ${percentile(f.deltas, 95).toFixed(1)} ms, max ${Math.max(...f.deltas).toFixed(1)} ms`
     : 'no intervals';
   return (
-    `${label}: main-thread work ${f.work.toFixed(1)} ms / frame (script ${f.script.toFixed(1)}, layout ${f.layout.toFixed(1)}, style ${f.style.toFixed(1)}; budget ${FRAME_WORK_BUDGET_MS}) ` +
+    `${label}: main-thread work ${f.work.toFixed(1)} ms / frame (script ${f.script.toFixed(1)}, layout ${f.layout.toFixed(1)}, style ${f.style.toFixed(1)}; budget ${frameBudget(h).toFixed(1)} = ${FRAME_WORK_BUDGET_MS} × ${h.factor.toFixed(2)}) ` +
     `over ${f.frames} frames in ${f.windowMs.toFixed(0)} ms — wall-clock interval (not gated): ${wall}` +
     (f.units ? `; units on the map ${f.units.min}–${f.units.max}` : '') +
     (f.left ? `; LEFT the sampled screen for "${f.left}" (sample cut short)` : '')
   );
 }
-function report(summary: string): void {
-  console.log(`[perf] ${summary}`);
-  test.info().annotations.push({ type: 'perf', description: summary });
+/** Every `[perf]` line ends with the host calibration (BUG-55). */
+function report(summary: string, h: HostCalibration): string {
+  const line = `${summary}; ${describeHost(h)}`;
+  console.log(`[perf] ${line}`);
+  test.info().annotations.push({ type: 'perf', description: line });
+  return line;
 }
-/** The sample is well-formed (enough frames inside the metrics window, measurable work) and within the budget. */
-function expectFrameWork(f: FrameSample, minFrames: number, summary: string): void {
+/** The sample is well-formed (enough frames inside the metrics window, measurable work) and within the host-scaled budget. */
+function expectFrameWork(f: FrameSample, minFrames: number, summary: string, h: HostCalibration): void {
   expect(f.frames, `must have sampled a meaningful number of frames — ${summary}`).toBeGreaterThanOrEqual(minFrames);
   expect(f.work, `the main thread must have done measurable work — ${summary}`).toBeGreaterThan(0);
-  expect(f.work, summary).toBeLessThanOrEqual(FRAME_WORK_BUDGET_MS);
+  const budget = frameBudget(h);
+  expect(budget, `BUG-55: the budget is ${FRAME_WORK_BUDGET_MS} ms × a factor in [1, ${HOST_FACTOR_CEILING}]`).toBeLessThanOrEqual(FRAME_WORK_BUDGET_MS * HOST_FACTOR_CEILING);
+  expect(f.work, summary).toBeLessThanOrEqual(budget);
 }
 
 async function gotoTitle(page: Page, query = ''): Promise<string[]> {
@@ -250,7 +389,9 @@ async function gotoTitle(page: Page, query = ''): Promise<string[]> {
 
 test.describe('Tower Clash perf', () => {
   test(`level ${HIGHEST} seed ${PLAY_SEED} at x${PLAY_SPEED} with autoplay, play frames only: main-thread work <= ${FRAME_WORK_BUDGET_MS} ms per frame`, async ({ page }) => {
-    test.setTimeout(60_000); // ok: 11 s idle (8 s sample + boot), 2026-10-16; the sample stretches until 120 frames on a loaded host
+    test.setTimeout(60_000); // ok: 13 s idle (2 s calibration + 8 s sample + boot), 2026-10-23; the sample stretches until 120 frames on a loaded host
+    const host = await calibrateHost(page);
+    skipIfHostTooSlow(host);
     const pageErrors = await gotoTitle(page);
     // QA-27: speed, seed and the bot are set in the same task as the start, so the match is the headless seed's from tick 0
     expect(
@@ -278,20 +419,21 @@ test.describe('Tower Clash perf', () => {
     const screenAfter = await page.evaluate(() => window.__towerclash.getScreen());
 
     const summary =
-      `${describeSample(`level ${HIGHEST} seed ${PLAY_SEED} x${PLAY_SPEED} autoplay`, f)}; ` +
+      `${describeSample(`level ${HIGHEST} seed ${PLAY_SEED} x${PLAY_SPEED} autoplay`, f, host)}; ` +
       `sim ${simStart} → ${simEnd} ms (${((simEnd - simStart) / 1000).toFixed(1)} s sim), screen after: ${screenAfter}, default flat view (far shore +${drop.toFixed(0)} CSS px)`;
-    report(summary);
+    report(summary, host);
 
     expect(simEnd, 'sim must have advanced while sampling').toBeGreaterThan(simStart);
     // QA-27: the worst case is measured on play frames only — the match may not end inside the window
     expect(f.left, `every sampled frame is on the play screen — ${summary}`).toBeNull();
     expect(screenAfter, `the match is still running after the sample — ${summary}`).toBe('play');
     expect(pageErrors).toEqual([]);
-    expectFrameWork(f, MIN_FRAMES.play, summary);
+    expectFrameWork(f, MIN_FRAMES.play, summary, host);
   });
 
   test(`level ${GROUND_BUILD_LEVEL} ground image (ART-21 per-row warp, ?tilt=0.72) builds within ${GROUND_BUILD_MAX_RATIO}× the flat build (ceiling ${GROUND_BUILD_CEILING_MS} ms) at ${CPU_THROTTLE}x CPU`, async ({ page }) => {
     // ART-24: the perspective camera is an override now; the gate keeps guarding its build, the flat default is sampled alongside
+    const host = await calibrateHost(page); // printed only: this gate is relative to the flat build of the same run
     const pageErrors = await gotoTitle(page, 'tilt=0.72');
     expect(await page.evaluate((id) => window.__towerclash.loadLevel(id), GROUND_BUILD_LEVEL)).toBe(true);
     await expect.poll(() => page.evaluate(() => window.__towerclash.getScreen())).toBe('play');
@@ -314,7 +456,7 @@ test.describe('Tower Clash perf', () => {
     const summary =
       `level ${GROUND_BUILD_LEVEL} ground build at ${CPU_THROTTLE}x CPU: camera ${fmt(tilted)} ms (best ${Math.min(...tilted).toFixed(1)}, median ${median(tilted).toFixed(1)}), ` +
       `flat ${fmt(flat)} ms (median ${median(flat).toFixed(1)})`;
-    report(summary);
+    report(summary, host);
 
     expect(tilted.every(Number.isFinite), 'getGroundBuildMs answers on the play screen').toBe(true);
     expect(await page.evaluate(() => window.__towerclash.getScreen())).toBe('play');
@@ -324,22 +466,26 @@ test.describe('Tower Clash perf', () => {
   });
 
   test(`title screen idle: main-thread work <= ${FRAME_WORK_BUDGET_MS} ms per frame`, async ({ page }) => {
+    const host = await calibrateHost(page);
+    skipIfHostTooSlow(host);
     const pageErrors = await gotoTitle(page);
     const f = await sampleFrames(page, SCREEN_SAMPLE_MS, MIN_FRAMES.screen, { stayOn: 'title' });
     const screenAfter = await page.evaluate(() => window.__towerclash.getScreen());
-    const summary = `${describeSample('title idle', f)}; screen after: ${screenAfter}`;
-    report(summary);
+    const summary = `${describeSample('title idle', f, host)}; screen after: ${screenAfter}`;
+    report(summary, host);
 
     expect(screenAfter, 'nothing may navigate away from the title on its own').toBe('title');
     expect(pageErrors).toEqual([]);
-    expectFrameWork(f, MIN_FRAMES.screen, summary);
+    expectFrameWork(f, MIN_FRAMES.screen, summary, host);
   });
 
   test(`shop screen: main-thread work <= ${FRAME_WORK_BUDGET_MS} ms per frame`, async ({ page }) => {
+    const host = await calibrateHost(page);
+    skipIfHostTooSlow(host);
     const pageErrors = await gotoTitle(page);
     const hasOpenShop = await page.evaluate(() => typeof (window.__towerclash as OptionalDebug).openShop === 'function');
     if (!hasOpenShop) {
-      const why = 'window.__towerclash.openShop is not exposed yet (economy UI in progress) — shop perf not measured';
+      const why = `window.__towerclash.openShop is not exposed yet (economy UI in progress) — shop perf not measured; ${describeHost(host)}`;
       test.info().annotations.push({ type: 'skipped-reason', description: why });
       console.log(`[perf] ${why}`);
       test.skip(true, why);
@@ -350,11 +496,11 @@ test.describe('Tower Clash perf', () => {
     const shopScreen = await page.evaluate(() => window.__towerclash.getScreen());
     const f = await sampleFrames(page, SCREEN_SAMPLE_MS, MIN_FRAMES.screen, { stayOn: shopScreen });
     const screenAfter = await page.evaluate(() => window.__towerclash.getScreen());
-    const summary = `${describeSample(`shop (screen "${shopScreen}")`, f)}; screen after: ${screenAfter}`;
-    report(summary);
+    const summary = `${describeSample(`shop (screen "${shopScreen}")`, f, host)}; screen after: ${screenAfter}`;
+    report(summary, host);
 
     expect(screenAfter, 'the shop must stay open while idle').toBe(shopScreen);
     expect(pageErrors).toEqual([]);
-    expectFrameWork(f, MIN_FRAMES.screen, summary);
+    expectFrameWork(f, MIN_FRAMES.screen, summary, host);
   });
 });

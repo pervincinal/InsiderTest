@@ -274,9 +274,9 @@ describe('tower-clash/e2e host-load independence (BUG-47, BUG-48)', () => {
     expect(src).toContain("work: per('TaskDuration')");
     // frames are matched to the metrics window by timestamp, not counted by a sampler that starts after it
     expect(src).toMatch(/const lo = m0\.Timestamp! \* 1000 - nav;/);
-    expect(src).toMatch(/expect\(f\.work, summary\)\.toBeLessThanOrEqual\(FRAME_WORK_BUDGET_MS\)/);
+    expect(src).toMatch(/expect\(f\.work, summary\)\.toBeLessThanOrEqual\(budget\)/);
     // the three frame samples (level 50 x10, title, shop) all go through the work gate
-    expect([...src.matchAll(/expectFrameWork\(f, MIN_FRAMES\.(play|screen), summary\)/g)]).toHaveLength(3);
+    expect([...src.matchAll(/expectFrameWork\(f, MIN_FRAMES\.(play|screen), summary, host\)/g)]).toHaveLength(3);
     const code = codeLines(src).map((l) => l.line).join('\n');
     expect(code, 'a wall-clock interval (rAF deltas) feeds an assertion').not.toMatch(/expect\([^;]*\b(deltas|med|p95)\b[^;]*\)\.toBeLessThan/);
   });
@@ -300,6 +300,34 @@ describe('tower-clash/e2e host-load independence (BUG-47, BUG-48)', () => {
     expect(src).toMatch(/if \(stayOn && screen !== stayOn\) return resolve\(\{ left: screen, units \}\);/);
     expect(src).toContain('expect(f.left, `every sampled frame is on the play screen — ${summary}`).toBeNull();');
     expect(src).toContain("expect(screenAfter, `the match is still running after the sample — ${summary}`).toBe('play');");
+  });
+
+  /*
+   * BUG-55 (2026-10-23): the thread-CPU work per frame scales with the host's raster speed (title idle, same
+   * code: CI 26.0 ms, Day 37's container 47–52, Day 38's 37–39). Each worker measures a fixed calibration
+   * page with the same CDP measure and scales the 50 ms budget by max(1, calib / CALIBRATION_REF_MS) —
+   * forced to 1 on CI, where the absolute 50 ms stays authoritative — and a factor above 2.5 skips the
+   * sample with an annotation instead of passing it.
+   */
+  it('perf.spec.ts scales the frame budget by a host calibration: 50 ms floor, 2.5x ceiling (skip), factor 1 on CI (BUG-55)', () => {
+    const src = E2E_FILES.find((f) => f.name === 'perf.spec.ts')?.src ?? '';
+    expect(src).toMatch(/\nconst FRAME_WORK_BUDGET_MS = 50;/);
+    expect(src).toMatch(/\nconst HOST_FACTOR_CEILING = 2\.5;/);
+    const ref = Number(/\nconst CALIBRATION_REF_MS = ([\d.]+);/.exec(src)?.[1] ?? NaN);
+    expect(ref, 'a measured, positive calibration reference').toBeGreaterThan(0);
+    // CI: the factor is forced to 1; elsewhere it never lowers the budget
+    expect(src).toContain('const ci = !!process.env.CI;');
+    expect(src).toMatch(/function hostFactor\(ratio: number, ci: boolean\): number \{\s*return ci \? 1 : Math\.max\(1, ratio\);\s*\}/);
+    expect(src).toMatch(/function frameBudget\(h: HostCalibration\): number \{\s*return FRAME_WORK_BUDGET_MS \* h\.factor;\s*\}/);
+    // over the ceiling: skip with an annotation (never a pass), and the gate double-checks the budget's range
+    expect(src).toMatch(/if \(h\.factor <= HOST_FACTOR_CEILING\) return;[\s\S]{0,400}?annotations\.push\(\{ type: 'skipped-reason'[\s\S]{0,120}?test\.skip\(true, why\);/);
+    expect(src).toContain('.toBeLessThanOrEqual(FRAME_WORK_BUDGET_MS * HOST_FACTOR_CEILING);');
+    // every frame test calibrates first and checks the ceiling before it samples; every [perf] line carries the calibration
+    expect([...src.matchAll(/const host = await calibrateHost\(page\);\n\s*skipIfHostTooSlow\(host\);/g)]).toHaveLength(3);
+    expect(src).toMatch(/const line = `\$\{summary\}; \$\{describeHost\(h\)\}`;\s*console\.log\(`\[perf\] \$\{line\}`\);/);
+    expect([...src.matchAll(/report\(summary, host\);/g)]).toHaveLength(4);
+    // the calibration workload is code-independent: the spec imports nothing from src/
+    expect(src).not.toMatch(/from '\.\.\/src\//);
   });
 
   it('a test.setTimeout below the suite timeout carries a measured `// ok:` reason on its line', () => {
