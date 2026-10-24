@@ -99,13 +99,13 @@ const PLAY_SEED = 1;
 const PLAY_SPEED = 5;
 const SCREEN_SAMPLE_MS = 3_000;
 /**
- * BUG-55: calibration work per frame (calibrateHost) on a host whose raster speed matches CI's. Not measured
- * on CI yet: derived 2026-10-23 on the Day 38 container as REF = local calibMs × (CI title / local title)
- * = 21.6 × 26.0 / 37.3 = 15.06 → 15 (local: calib 20.8–21.8 ms over 3 workers, title idle
- * 37.0–39.0 ms over 4 runs; CI run 101 title 26.0 ms), so CI's ratio is ≈ 1.0 and this container's factor ≈ 1.44.
- * Re-derive from the first CI log's `calib` (CALIBRATION_REF_MS = CI calibMs) if it reads more than ≈ 10 % off.
+ * BUG-55: calibration work per frame (calibrateHost) on a host whose raster speed matches CI's. Measured on CI
+ * 2026-10-23 (run 104, shard 2, `b131e49`): calib 20.0 ms / frame over 99 frames (title idle 28.8, level 50
+ * 23.1, shop 26.1 ms) — so REF = 20 and CI's ratio is 1.0. The first estimate (15, derived locally as
+ * calib × CI title / local title) read ratio 1.33 on CI; QA-31 corrected it. Re-derive from a CI log's
+ * `calib` whenever the calibration page or CI's runner image changes (ubuntu-latest → Ubuntu 26 is due).
  */
-const CALIBRATION_REF_MS = 15;
+const CALIBRATION_REF_MS = 20;
 /** BUG-55: a host slower than this × the reference is not a valid perf measurement (skip, never pass). */
 const HOST_FACTOR_CEILING = 2.5;
 const CALIBRATION_SAMPLE_MS = 2_000;
