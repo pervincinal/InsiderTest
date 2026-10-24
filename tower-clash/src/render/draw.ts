@@ -626,8 +626,14 @@ export function playLayout(ctx: CanvasRenderingContext2D, state: GameState, cam:
   if (!selectedId || !hint) return { layout, hint: null };
   const pill = selectHintPill(ctx, state, selectedId, a, card, cam, layout);
   if (!selectHintMoved(pill, a)) return { layout, hint: pill };
-  const top = card ? { x: Math.min(card.x, pill.x), y: card.y, w: Math.max(card.x + card.w, pill.x + pill.w) - Math.min(card.x, pill.x), h: pill.y + pill.h - card.y } : pill;
-  return { layout: worldLayout(ctx, state, cam, selectedId, top, streams), hint: pill };
+  return { layout: worldLayout(ctx, state, cam, selectedId, selectHintBlock(card, pill), streams), hint: pill };
+}
+
+/** The block the badges clear while the select hint `pill` sits at the top of the map band (GD-5d): the lesson card `card` and the pill under it as one rect, or the pill alone. */
+export function selectHintBlock(card: Rect | null, pill: Rect): Rect {
+  if (!card) return pill;
+  const x = Math.min(card.x, pill.x);
+  return { x, y: card.y, w: Math.max(card.x + card.w, pill.x + pill.w) - x, h: pill.y + pill.h - card.y };
 }
 
 /**

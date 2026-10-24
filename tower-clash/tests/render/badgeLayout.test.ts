@@ -11,6 +11,8 @@ import { badgeScale, chipMinTop, mineChipRequest, placeBadges, placeChips, strea
 import type { BadgeWant, ChipRequest } from '../../src/render/worldChips';
 import { lessonCardLayout } from '../../src/render/hud';
 import type { PlayUi } from '../../src/render/draw';
+import { playLayout, selectHintBlock } from '../../src/render/draw';
+import { selectHintMoved } from '../../src/render/hud';
 import { hitTower } from '../../src/input/pointer';
 import { loadAllLevels } from '../../src/levels/index';
 import { createState } from '../../src/sim/create';
@@ -33,7 +35,15 @@ import { ADVANCES, ADVANCE_CHARS, ADVANCE_ERROR } from './fontAdvances';
  * Chips: every live mine's charge chip, and a stream chip for every tower that can stream (player and
  * enemy towers with a lane) — the worst case of the first seconds, when every side has its links up.
  * Text is measured with the game's fonts (fontAdvances.ts, Chromium ±1.8 %, widened by that error).
+ *
+ * BUG-56 (2026-10-24): also with each home selected (its badge rides 4 px higher, and where the select
+ * hint moves up under the lesson card — GD-5d, draw.ts `playLayout` — the badges clear card + hint),
+ * card up and gone, in all four languages; and every badge and chip rect lies inside the map's width
+ * less IN_FRAME (level 37 on 360 × 640 put both top enemy badges beside their barracks, off the frame).
  */
+
+/** worldChips.ts `IN_FRAME`: the clear margin a badge / chip keeps from the map's left and right edges. */
+const MARGIN = 4;
 
 const SHAPES = [
   // iPhone 17 Pro Max class: 430 × 932 CSS px, Dynamic Island / home indicator insets, DPR 3 (the layout is in logical px; DPR only sharpens it)
@@ -80,8 +90,8 @@ function measuringCtx(): CanvasRenderingContext2D {
   });
 }
 
-/** draw.ts `badgeLift` (not selected: raise 0) — the badge centre's offset above the anchor at depth 1. */
-const badgeLift = (t: Tower): number => (badgeY(t.kind, t.level) + 18) * WORLD_ZOOM.tower - 18 * WORLD_ZOOM.badge;
+/** draw.ts `badgeLift` (`raise` 4 for the selected tower) — the badge centre's offset above the anchor at depth 1. */
+const badgeLift = (t: Tower, raise: number): number => (badgeY(t.kind, t.level) + 18 - raise) * WORLD_ZOOM.tower - 18 * WORLD_ZOOM.badge;
 
 interface Item {
   label: string;
@@ -94,17 +104,23 @@ interface Item {
 interface Layout {
   badges: Item[];
   chips: Item[];
-  /** The lesson card in the logical frame (with its clay edge), or null once it is gone. */
+  /** The lesson card in the logical frame (with its clay edge) — and the select hint under it when it moved up — or null with neither. */
   card: Rect | null;
 }
 
-/** The badge + chip rects draw.ts would lay out for `state` under `cam`, with the lesson card as `lessonCardLayout` gives it. */
-function layout(state: GameState, level: LevelDef, a: HudAnchors, cam: Camera): Layout {
+/**
+ * The badge + chip rects draw.ts would lay out for `state` under `cam` with `sel` selected, with the
+ * lesson card as `lessonCardLayout` gives it and, when the select hint moves up (`playLayout`), card + hint.
+ */
+function layout(state: GameState, level: LevelDef, a: HudAnchors, cam: Camera, sel: string | null): Layout {
   const ctx = measuringCtx();
   const ui = { outcome: 'playing', level } as unknown as PlayUi;
   const lc = lessonCardLayout(ctx, state, ui);
   // draw.ts: the card's rect moved with the top band; `placeBadges` adds the clay edge and CARD_CLEAR itself
-  const cardRect = lc ? { ...lc.rect, y: lc.rect.y + a.top } : null;
+  const lessonRect = lc ? { ...lc.rect, y: lc.rect.y + a.top } : null;
+  // GD-5d: the renderer's own pill for this selection; moved up, the badges clear card + pill as one block
+  const pill = sel ? playLayout(ctx, state, cam, sel, lessonRect, a, true, true).hint : null;
+  const cardRect = pill && selectHintMoved(pill, a) ? selectHintBlock(lessonRect, pill) : lessonRect;
   const card = cardRect ? { ...cardRect, h: cardRect.h + 4 } : null;
   const towers = Object.values(state.towers).sort((p, q) => p.y - q.y || (p.id < q.id ? -1 : 1));
   // draw.ts's badge loop (not selected: raise 0): measured width incl. the under-fire pip, natural spot above the roof, zoomed plinth
@@ -112,7 +128,7 @@ function layout(state: GameState, level: LevelDef, a: HudAnchors, cam: Camera): 
     const p = proj(cam, t.x, t.y);
     const bs = badgeScale(p.s);
     const { w, h } = badgeSize(ctx, String(t.units), bs, isUnderFire(state, t));
-    return { id: t.id, x: p.x, y: p.y, bs, w, h, naturalY: p.y + badgeLift(t) * p.s, plinth: towerFootprintRadius(t.kind, t.level) * WORLD_ZOOM.tower * p.s };
+    return { id: t.id, x: p.x, y: p.y, bs, w, h, naturalY: p.y + badgeLift(t, sel === t.id ? 4 : 0) * p.s, plinth: towerFootprintRadius(t.kind, t.level) * WORLD_ZOOM.tower * p.s };
   });
   const boxes = placeBadges(wants, cardRect);
   const badges: Item[] = towers.map((t) => ({ label: `badge ${t.id}`, rect: boxes.get(t.id)!.rect, owner: t.id, kind: 'badge' }));
@@ -182,13 +198,13 @@ function survey(cam: Camera): Finding[] {
     const state = createState(level, 1);
     for (const shape of SHAPES) {
       const a = anchorsOf(shape);
-      const moments: { when: string; time: number; lang: Language }[] = [
-        ...LANGS.map((lang) => ({ when: `t=0 ${lang}`, time: 0, lang })),
-        { when: 't=10s', time: 10_000, lang: 'en' as Language },
-      ];
+      // BUG-56: nothing selected, or a home (every own tower at the start: level 8 has two), card up / gone, every language
+      const sels = [null, ...Object.values(state.towers).filter((t) => t.owner === 'player').map((t) => t.id)];
+      const moments: { when: string; time: number; lang: Language; sel: string | null }[] = [];
+      for (const sel of sels) for (const time of [0, 10_000]) for (const lang of LANGS) moments.push({ when: `t=${time / 1000}${time ? 's' : ''} ${lang}${sel ? ` sel=${sel}` : ''}`, time, lang, sel });
       for (const m of moments) {
         void setLanguage(m.lang);
-        const L = layout({ ...state, time: m.time }, level, a, cam);
+        const L = layout({ ...state, time: m.time }, level, a, cam, m.sel);
         const base = { level: level.id, screen: shape.name, when: m.when };
         const all = [...L.badges, ...L.chips];
         for (let i = 0; i < all.length; i++) {
@@ -205,11 +221,14 @@ function survey(cam: Camera): Finding[] {
         for (const b of L.badges) {
           const r = b.rect;
           out.push({ ...base, check: 'badge in band', pair: b.label, px: Math.max(HUD.mapTop - r.y, r.y + r.h - HUD.mapBottom) });
-          out.push({ ...base, check: 'badge in map x', pair: b.label, px: Math.max(-r.x, r.x + r.w - C.MAP_W) });
-          if (L.card) out.push({ ...base, check: 'badge/card', pair: `${b.label} x lesson card`, px: depthOf(r, L.card) });
+          out.push({ ...base, check: 'badge in map x', pair: b.label, px: Math.max(MARGIN - r.x, r.x + r.w - (C.MAP_W - MARGIN)) });
+          if (L.card) out.push({ ...base, check: 'badge/card', pair: `${b.label} x lesson card / hint`, px: depthOf(r, L.card) });
         }
         for (const c of L.chips) {
-          if (L.card) out.push({ ...base, check: 'chip/card', pair: `${c.label} x lesson card`, px: depthOf(c.rect, L.card) });
+          const r = c.rect;
+          out.push({ ...base, check: 'chip in band', pair: c.label, px: Math.max(HUD.mapTop - r.y, r.y + r.h - HUD.mapBottom) });
+          out.push({ ...base, check: 'chip in map x', pair: c.label, px: Math.max(MARGIN - r.x, r.x + r.w - (C.MAP_W - MARGIN)) });
+          if (L.card) out.push({ ...base, check: 'chip/card', pair: `${c.label} x lesson card / hint`, px: depthOf(r, L.card) });
         }
       }
     }
@@ -245,7 +264,7 @@ function grouped(rows: readonly Finding[]): Group[] {
 function table(rows: readonly Finding[], n = 15): string {
   const groups = grouped(rows);
   const lines = groups.slice(0, n).map((g) => {
-    const whens = [...g.whens].join(',').replace('t=0 en,t=0 az,t=0 ru,t=0 tr', 't=0 all langs');
+    const whens = [...g.whens].join(',').replace(/t=(\S+) en( sel=\S+)?,t=\1 az\2,t=\1 ru\2,t=\1 tr\2/g, 't=$1 all langs$2');
     return `${String(g.level).padStart(5)} | ${g.check.padEnd(14)} | ${g.pair.padEnd(36)} | ${g.px.toFixed(1).padStart(6)} | ${[...g.screens].join(',').padEnd(15)} | ${whens}`;
   });
   if (groups.length > n) lines.push(`  ... ${groups.length - n} more`);
@@ -263,13 +282,15 @@ describe('QA-24: badges, chips and tap targets after the ART-24 zoom, every leve
   });
   afterAll(() => void setLanguage(lang));
 
-  it('covers every level on both screens, with the card up and gone', () => {
+  it('covers every level on both screens, with the card up and gone, nothing or a home selected, in every language', () => {
     expect(LEVELS.length).toBe(50);
     expect(new Set(rows.map((r) => r.level)).size).toBe(50);
     expect(new Set(rows.map((r) => r.screen))).toEqual(new Set(SHAPES.map((s) => s.name)));
+    const whens = new Set(rows.map((r) => r.when));
+    for (const w of ['t=0 tr', 't=10s ru', 't=0 az sel=home', 't=10s tr sel=home', 't=0 en sel=homeW', 't=10s ru sel=homeE']) expect(whens.has(w), w).toBe(true);
   });
 
-  for (const check of ['badge/badge', 'chip/other', 'badge in band', 'badge in map x', 'badge/card', 'chip/card'] as const) {
+  for (const check of ['badge/badge', 'chip/other', 'badge in band', 'badge in map x', 'badge/card', 'chip in band', 'chip in map x', 'chip/card'] as const) {
     it(`${check}: no level fails`, () => {
       const bad = rows.filter((f) => f.check === check && f.px > 0);
       const msg = bad.length ? `\n${table(bad, process.env.QA24_TABLE ? 999 : 15)}` : '';

@@ -49,6 +49,15 @@ export const MINE_BODY_R = 15;
 export const CHIP_GAP = 3;
 /** A chip slides up at most this many of its own heights (further and it would leave its badge / mine). */
 export const CHIP_MAX_SLIDE = 1.5;
+/**
+ * BUG-56: clear margin (logical px) every badge and chip keeps from the map's left and right edges —
+ * the visible frame on a 9:16 screen (stroke and shadow included). A candidate spot leaving it is skipped.
+ */
+export const IN_FRAME = 4;
+/** Whether `r` lies inside the map's width less IN_FRAME on both sides. */
+export const inFrameX = (r: Rect): boolean => r.x >= IN_FRAME && r.x + r.w <= C.MAP_W - IN_FRAME;
+/** `x` for a rect `w` wide slid horizontally to lie inside the map's width less IN_FRAME. */
+const slideInX = (x: number, w: number): number => Math.min(Math.max(x, IN_FRAME), C.MAP_W - IN_FRAME - w);
 /** Clear space (logical px) between the lesson card's bottom edge and a clamped badge's top. */
 export const CARD_CLEAR = 6;
 /** The lesson card's clay bottom edge (`drawCard` edge) below its rect. */
@@ -132,8 +141,9 @@ export interface BadgePlace extends BadgeBox {
  * spot above, then (a base under the card / the top band) beside the tower at the clamped height,
  * right then left (level 36's crown on 9:16 while the card is up, whose clamped badge sat on the
  * fortress badge below it), and, with none free, the clamped spot anyway (never hidden behind the
- * HUD). Free: inside the map's width and the play band, CARD_CLEAR from the card's clay edge,
- * CHIP_GAP from every badge placed so far.
+ * HUD), slid sideways into the frame. Free: inside the map's width less IN_FRAME (BUG-56: a beside spot
+ * off the frame is skipped) and the play band, CARD_CLEAR from the card's clay edge, CHIP_GAP from
+ * every badge placed so far.
  */
 export function placeBadges(wants: readonly BadgeWant[], card: Rect | null): Map<string, BadgePlace> {
   const cardBottom = card ? card.y + card.h : null;
@@ -148,8 +158,7 @@ export function placeBadges(wants: readonly BadgeWant[], card: Rect | null): Map
   };
   const at = (b: BadgeWant, x: number, cy: number): Rect => ({ x, y: cy - b.h / 2, w: b.w, h: b.h });
   const free = (r: Rect): boolean =>
-    r.x >= 0 &&
-    r.x + r.w <= C.MAP_W &&
+    inFrameX(r) &&
     r.y + r.h / 2 >= HUD.mapTop + 26 &&
     r.y + r.h <= HUD.mapBottom - 8 &&
     !(block && overlaps(r, block, CARD_CLEAR)) &&
@@ -157,11 +166,11 @@ export function placeBadges(wants: readonly BadgeWant[], card: Rect | null): Map
   for (const b of order) {
     const minY = badgeMinY(cardBottom, b.bs);
     if (clampedOntoTower(b.naturalY, minY, b.bs)) rest.push(b);
-    else put(b, at(b, b.x - b.w / 2, Math.max(minY, b.naturalY)), 'above');
+    else put(b, at(b, slideInX(b.x - b.w / 2, b.w), Math.max(minY, b.naturalY)), 'above');
   }
   for (const b of rest) {
     const minY = badgeMinY(cardBottom, b.bs);
-    const clamped: [Rect, BadgeSide] = [at(b, b.x - b.w / 2, Math.max(minY, b.naturalY)), 'above'];
+    const clamped: [Rect, BadgeSide] = [at(b, slideInX(b.x - b.w / 2, b.w), Math.max(minY, b.naturalY)), 'above'];
     const beside = (cy: number): [Rect, BadgeSide][] => [
       [at(b, b.x + b.plinth + BADGE_BELOW_GAP, cy), 'right'],
       [at(b, b.x - b.plinth - BADGE_BELOW_GAP - b.w, cy), 'left'],
@@ -230,7 +239,7 @@ export function mineBesideSpots(c: ChipRequest, fixed: readonly Rect[], gap = CH
   if (m && near.length) {
     // right of the mine body and those badges, then left of them
     for (const sx of [Math.max(m.x + m.r, ...near.map((b) => b.x + b.w)) + gap, Math.min(m.x - m.r, ...near.map((b) => b.x)) - gap - w]) {
-      if (sx >= 0 && sx + w <= C.MAP_W) out.push({ x: sx, y: m.y - h / 2, w, h });
+      if (sx >= IN_FRAME && sx + w <= C.MAP_W - IN_FRAME) out.push({ x: sx, y: m.y - h / 2, w, h });
     }
   }
   return out;
@@ -238,9 +247,13 @@ export function mineBesideSpots(c: ChipRequest, fixed: readonly Rect[], gap = CH
 
 /**
  * Slide `r` up over whatever it overlaps (the highest such rect, again and again) until it is free.
- * Null when that takes more than `maxSlide` or would put it above `minTop`.
+ * Null when that takes more than `maxSlide` or would put it above `minTop`. BUG-56: a spot off the
+ * frame's width is no candidate (null), and one starting above `minTop` (under the lesson card / the
+ * moved select hint) starts at `minTop` instead.
  */
-function slideUp(r: Rect, taken: readonly Rect[], minTop: number, maxSlide: number, gap: number): Rect | null {
+function slideUp(r0: Rect, taken: readonly Rect[], minTop: number, maxSlide: number, gap: number): Rect | null {
+  if (!inFrameX(r0)) return null;
+  const r = r0.y < minTop ? { ...r0, y: minTop } : r0;
   let y = r.y;
   for (let i = 0; i <= taken.length; i++) {
     const cur = { x: r.x, y, w: r.w, h: r.h };
@@ -254,12 +267,34 @@ function slideUp(r: Rect, taken: readonly Rect[], minTop: number, maxSlide: numb
 }
 
 /**
+ * BUG-56: slide `r` down under whatever it overlaps (the lowest such rect, again and again) until it is
+ * free; null when that takes more than `maxSlide`, leaves the play band or the frame's width.
+ */
+function slideDown(r: Rect, taken: readonly Rect[], maxSlide: number, gap: number): Rect | null {
+  if (!inFrameX(r)) return null;
+  let y = r.y;
+  for (let i = 0; i <= taken.length; i++) {
+    const cur = { x: r.x, y, w: r.w, h: r.h };
+    if (cur.y + cur.h > HUD.mapBottom) return null;
+    let hit: Rect | undefined;
+    for (const t of taken) if (overlaps(cur, t, gap) && (!hit || t.y + t.h > hit.y + hit.h)) hit = t;
+    if (!hit) return cur;
+    y = hit.y + hit.h + gap;
+    if (y - r.y > maxSlide) return null;
+  }
+  return null;
+}
+
+/**
  * Collision nudge (pure): `fixed` rects (badges) never move; each chip, in order, takes the first free
  * spot of: (ART-26, a mine chip with a badge level with its mine) beside the mine, right then left
- * (`mineBesideSpots`), slid up the same way; its preferred rect slid up by the overlap, then (stream chips) the right of its badge slid
- * up the same way, then (ART-24) the right and then the left of the rect blocking it, slid up the same
- * way; with none free it keeps its preferred rect. Placed chips block later ones.
- * Returns one rect per request, in order.
+ * (`mineBesideSpots`), slid up the same way; its preferred rect slid up by the overlap, then (stream
+ * chips) the right of its badge slid up the same way, then (BUG-56) under its badge, slid down the
+ * same way, then (ART-24) the right and then the left of the rect blocking it, slid up the same way;
+ * with none free it keeps its preferred rect, moved into the frame and under `minTop`. Every spot lies inside the map's width less
+ * IN_FRAME and no higher than `minTop` (level 37 on 360 × 640 with the select hint moved up: the far
+ * barracks' badges stood beside their towers at the frame's edges, their stream chips past them).
+ * Placed chips block later ones. Returns one rect per request, in order.
  */
 export function placeChips(fixed: readonly Rect[], chips: readonly ChipRequest[], minTop: number, gap = CHIP_GAP): Rect[] {
   const taken: Rect[] = fixed.slice();
@@ -270,19 +305,18 @@ export function placeChips(fixed: readonly Rect[], chips: readonly ChipRequest[]
     for (const r of mineBesideSpots(c, fixed, gap)) placed ??= slideUp(r, taken, minTop, maxSlide, gap);
     placed ??= slideUp(c.rect, taken, minTop, maxSlide, gap);
     if (!placed && c.badge) placed = slideUp({ ...c.rect, x: c.badge.x + c.badge.w + gap }, taken, minTop, maxSlide, gap);
+    // BUG-56: a stream chip with no room level with its badge goes under it (not beside a neighbour's badge, where it reads as that one's)
+    if (!placed && c.badge) placed = slideDown({ ...c.rect, x: c.badge.x + (c.badge.w - c.rect.w) / 2, y: c.badge.y + c.badge.h + gap }, taken, maxSlide, gap);
     if (!placed) {
       // ART-24: zoomed badges are taller than a chip can slide (a mine just above a keep put its charge
       // chip on the keep's count, levels 40 / 50): beside whatever blocks it, right then left
       const block = taken.find((t) => overlaps(c.rect, t, gap));
       if (block) {
-        // only spots on the map's width (a chip never leaves the screen)
-        for (const x of [block.x + block.w + gap, block.x - gap - c.rect.w]) {
-          if (placed || x < 0 || x + c.rect.w > C.MAP_W) continue;
-          placed = slideUp({ ...c.rect, x }, taken, minTop, maxSlide, gap);
-        }
+        // only spots inside the frame (a chip never leaves the screen; `slideUp` skips the others)
+        for (const x of [block.x + block.w + gap, block.x - gap - c.rect.w]) placed ??= slideUp({ ...c.rect, x }, taken, minTop, maxSlide, gap);
       }
     }
-    const r = placed ?? c.rect;
+    const r = placed ?? { ...c.rect, x: slideInX(c.rect.x, c.rect.w), y: Math.max(c.rect.y, minTop) };
     out.push(r);
     taken.push(r);
   }
