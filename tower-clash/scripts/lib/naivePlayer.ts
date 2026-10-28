@@ -12,7 +12,7 @@
  * GD-7f: `NaiveOptions.tie` (`--tie desc`) reverses the id tie-break of `naiveTarget` (GDD §3.12 (i) (c),
  * §3.13 (f)) — the same line started from the other side of a mirror pair; `asc` (default) is the gated line.
  */
-import { C, linksFrom, maxLinksOf } from '../../src/sim/index';
+import { C, linksFrom, maxLevelOf, maxLinksOf } from '../../src/sim/index';
 import type { Command, GameState, LevelDef, Rng, Tower } from '../../src/sim/index';
 import { runHeadless, starsFor } from '../../src/ai/headless';
 import type { PlayerBot, RunResult } from '../../src/ai/headless';
@@ -44,7 +44,8 @@ export function checkNaiveTie(tie: string): NaiveTie {
  *   lane to, does not own and does not already stream to — the player who does what the lesson card
  *   names first; with no such tower it falls back to `naiveTarget`;
  * - `hold`: these towers open no link before L2 (the player lets them fill first) unless they were
- *   already streaming once (a captured tower, a re-link after a loss);
+ *   already streaming once (a captured tower, a re-link after a loss); `hold=home@3` (GD-11g) waits
+ *   for L3 instead — the card's "let your home grow to level 3" (`hold=x` is `hold=x@2`);
  * - `noprioFrom`: these towers ignore `prio` and play the plain naive line;
  * - `after` (GD-7f, `after=guns:3,outpost:4`): the `prio` tower `id` is eligible only once the player owns
  *   at least `k` towers (counted at the reaction) — the card's "with five towers take the guns"; before
@@ -55,9 +56,23 @@ export function checkNaiveTie(tie: string): NaiveTie {
 export interface FollowSpec {
   prio: readonly string[];
   hold: readonly string[];
+  /**
+   * GD-11g: `hold` id → the level it waits for, only for ids held past the default (`hold=home@3`);
+   * absent when every `hold` id waits for `FOLLOW_HOLD_LEVEL` (L2).
+   */
+  holdLevel?: Readonly<Record<string, number>>;
   noprioFrom: readonly string[];
   /** GD-7f: own-tower count from which a `prio` tower is eligible, in spec order. */
   after: readonly FollowAfter[];
+}
+
+/** GD-11g: the level a `hold` tower waits for when the spec gives no `@N` (`hold=x` = `hold=x@2`). */
+export const FOLLOW_HOLD_LEVEL = 2;
+
+/** GD-11g: the level `from` waits for before its first link under `spec` (0 = not held). */
+export function followHoldLevel(spec: Pick<FollowSpec, 'hold' | 'holdLevel'> | undefined, id: string): number {
+  if (!spec || !spec.hold.includes(id)) return 0;
+  return spec.holdLevel && Object.hasOwn(spec.holdLevel, id) ? spec.holdLevel[id]! : FOLLOW_HOLD_LEVEL;
 }
 
 export interface FollowAfter {
@@ -74,15 +89,18 @@ function followIds(spec: FollowSpec, key: (typeof FOLLOW_KEYS)[number]): readonl
   return key === 'after' ? spec.after.map((a) => a.id) : spec[key];
 }
 
-/** Parse `prio=a,b,c;hold=home;noprioFrom=x;after=b:3` (any subset of the keys, each once, at least one id each; spaces ignored). */
+/**
+ * Parse `prio=a,b,c;hold=home@3,x;noprioFrom=x;after=b:3` (any subset of the keys, each once, at least one id
+ * each; spaces ignored). A `hold` id may carry `@N` (GD-11g, 2 ≤ N ≤ `C.MAX_LEVEL`): the level it waits for; `@2` is the default.
+ */
 export function parseFollowSpec(spec: string): FollowSpec {
-  const out: { prio: string[]; hold: string[]; noprioFrom: string[]; after: FollowAfter[] } = { prio: [], hold: [], noprioFrom: [], after: [] };
+  const out: { prio: string[]; hold: string[]; holdLevel?: Record<string, number>; noprioFrom: string[]; after: FollowAfter[] } = { prio: [], hold: [], noprioFrom: [], after: [] };
   const seen = new Set<string>();
   const parts = spec
     .split(';')
     .map((p) => p.trim())
     .filter((p) => p !== '');
-  if (parts.length === 0) throw new Error(`bad --follow "${spec}" (prio=a,b[;hold=c][;noprioFrom=d][;after=b:k])`);
+  if (parts.length === 0) throw new Error(`bad --follow "${spec}" (prio=a,b[;hold=c[@N]][;noprioFrom=d][;after=b:k])`);
   for (const part of parts) {
     const eq = part.indexOf('=');
     const key = (eq < 0 ? part : part.slice(0, eq)).trim();
@@ -100,6 +118,21 @@ export function parseFollowSpec(spec: string): FollowSpec {
       if (new Set(out.after.map((a) => a.id)).size !== out.after.length) throw new Error(`bad --follow "${spec}": "after" repeats a tower id`);
       continue;
     }
+    if (key === 'hold') {
+      const ids: string[] = [];
+      const levels: Record<string, number> = {};
+      for (const item of items) {
+        const m = /^([^@\s]+)(?:\s*@\s*(\d+))?$/.exec(item);
+        const lvl = m?.[2] === undefined ? FOLLOW_HOLD_LEVEL : Number(m[2]);
+        if (!m || lvl < FOLLOW_HOLD_LEVEL || lvl > C.MAX_LEVEL) throw new Error(`bad --follow "${spec}": hold "${item}" is not id or id@N (${FOLLOW_HOLD_LEVEL} <= N <= ${C.MAX_LEVEL}, the level it waits for)`);
+        ids.push(m[1]!);
+        if (lvl !== FOLLOW_HOLD_LEVEL) levels[m[1]!] = lvl;
+      }
+      if (new Set(ids).size !== ids.length) throw new Error(`bad --follow "${spec}": "hold" repeats a tower id`);
+      out.hold = ids;
+      if (Object.keys(levels).length > 0) out.holdLevel = levels;
+      continue;
+    }
     if (new Set(items).size !== items.length) throw new Error(`bad --follow "${spec}": "${key}" repeats a tower id`);
     out[key as FollowIdKey] = items;
   }
@@ -109,20 +142,35 @@ export function parseFollowSpec(spec: string): FollowSpec {
   return out;
 }
 
-/** Canonical text of a spec (keys in `prio; hold; noprioFrom; after` order, empty keys left out) for headers. */
+/**
+ * Canonical text of a spec (keys in `prio; hold; noprioFrom; after` order, empty keys left out) for headers;
+ * a `hold` id carries `@N` only past the default L2 (`hold=home@3,x`), so a spec without `@` prints as before GD-11g.
+ */
 export function formatFollowSpec(spec: FollowSpec): string {
+  const holdText = (id: string): string => {
+    const lvl = followHoldLevel(spec, id);
+    return lvl === FOLLOW_HOLD_LEVEL ? id : `${id}@${lvl}`;
+  };
   return FOLLOW_KEYS.filter((k) => followIds(spec, k).length > 0)
-    .map((k) => `${k}=${k === 'after' ? spec.after.map((a) => `${a.id}:${a.k}`).join(',') : spec[k].join(',')}`)
+    .map((k) => `${k}=${k === 'after' ? spec.after.map((a) => `${a.id}:${a.k}`).join(',') : k === 'hold' ? spec.hold.map(holdText).join(',') : spec[k].join(',')}`)
     .join(';');
 }
 
-/** Throw when the spec names a tower id the level does not have (a typo would silently play the naive line). */
+/**
+ * Throw when the spec names a tower id the level does not have (a typo would silently play the naive line),
+ * or holds a tower for a level its kind never reaches (GD-11g: `fortress@3` would never link).
+ */
 export function validateFollowSpec(spec: FollowSpec, level: Pick<LevelDef, 'id' | 'towers'>): void {
   const ids = new Set(level.towers.map((t) => t.id));
   for (const k of FOLLOW_KEYS) {
     for (const id of followIds(spec, k)) {
       if (!ids.has(id)) throw new Error(`--follow ${k}=${id}: level ${level.id} has no tower "${id}" (towers: ${[...ids].join(', ')})`);
     }
+  }
+  for (const t of level.towers) {
+    const lvl = followHoldLevel(spec, t.id);
+    const max = maxLevelOf({ kind: t.kind ?? 'barracks' });
+    if (lvl > max) throw new Error(`--follow hold=${t.id}@${lvl}: level ${level.id}'s "${t.id}" is a ${t.kind ?? 'barracks'} (max L${max}); it would never link`);
   }
 }
 
@@ -220,7 +268,7 @@ export function makeNaivePlayer(options: NaiveOptions = {}): NonNullable<PlayerB
   const tie = checkNaiveTie(options.tie ?? 'asc');
   const prio = options.follow?.prio ?? [];
   const after = options.follow?.after ?? [];
-  const hold = new Set(options.follow?.hold ?? []);
+  const hold = new Map((options.follow?.hold ?? []).map((id) => [id, followHoldLevel(options.follow, id)]));
   const noprio = new Set(options.follow?.noprioFrom ?? []);
   let mem: Memory | undefined;
 
@@ -247,7 +295,7 @@ export function makeNaivePlayer(options: NaiveOptions = {}): NonNullable<PlayerB
     own.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     const out: Command[] = [];
     for (const t of own) {
-      if (hold.has(t.id) && t.level < 2 && !mem.everLinked.has(t.id)) continue; // follower: let it fill to L2 first
+      if (t.level < (hold.get(t.id) ?? 0) && !mem.everLinked.has(t.id)) continue; // follower: let it fill to L2 (or its @N) first
       const links = linksFrom(state, t.id).length;
       if (links >= maxLinksOf(t)) continue;
       if (links === 0) {

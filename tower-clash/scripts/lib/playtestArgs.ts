@@ -8,7 +8,7 @@
  * line on each day's / week's challenge, informational, no gate) — it cannot be combined with `--twist`.
  * `--gate a-b` belongs to the campaign naive run only (the CI gate is defined per level, not per day);
  * `--react MS` to any naive run; `--pool a-b` to `--twist`; `--no-twist` to `--daily` / `--weekly`.
- * GD-6h: `--follow "prio=a,b;hold=c;noprioFrom=d"` (or the shorthands `--prefer a,b` / `--hold c`) turns
+ * GD-6h: `--follow "prio=a,b;hold=c[@N];noprioFrom=d"` (or the shorthands `--prefer a,b` / `--hold c[@N]`) turns
  * the campaign naive run of one level (`--level N`) into the literal card follower; never with `--gate`.
  * GD-7f: `--tie asc|desc|both` picks the naive line's id order on an exact target tie (campaign `--naive`
  * only, with or without `--follow`): `asc` (default) is today's line, `desc` the reversed one, `both`

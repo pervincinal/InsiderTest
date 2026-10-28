@@ -4,7 +4,7 @@
  * `npm run playtest -- --weekly YYYY-MM-DD(Monday) [--weeks N] [--seeds K] [--no-twist] [--naive [--react MS]]`
  * `npm run playtest -- --twist <plain|lean|fastFeet|thinWalls|reinforced> [--seeds K] [--pool a-b]`
  * `npm run playtest -- --naive [--seeds K] [--react MS] [--gate a-b] [--tie asc|desc|both] [--tie-exempt a[,b]]`
- * `npm run playtest -- --naive --level N --follow "prio=a,b;hold=c;noprioFrom=d" [--seeds K] [--react MS]` (or `--prefer a,b [--hold c]`)
+ * `npm run playtest -- --naive --level N --follow "prio=a,b;hold=c[@N];noprioFrom=d" [--seeds K] [--react MS]` (or `--prefer a,b [--hold c[@N]]`)
  * Headless balance run: for every level (or one), simulate (a) the reference player vs the enemies and
  * (b) an idle player vs the enemies, 50 ms ticks, AI every 500 ms, up to 180 s of sim time.
  *
@@ -39,8 +39,8 @@
  * (its level, fixed seed and twist, K seeds from the fixed one): one row per day / week with wins/K, the
  * median win time and whether the line holds (≥ 50 % wins). Informational, no gate (exit 0).
  * `--naive --level N --follow SPEC` (GD-6h, GDD §3.12 item 12 (a)): the literal card follower — the naive
- * line, but free links go first to the `prio` towers in order, `hold` towers wait for L2, `noprioFrom`
- * towers play plain naive. The naive row plus a "rule (a)" line (`ruleA`): on levels 1–16 the follower must
+ * line, but free links go first to the `prio` towers in order, `hold` towers wait for L2 (`hold=c@3`, GD-11g:
+ * for L3), `noprioFrom` towers play plain naive. The naive row plus a "rule (a)" line (`ruleA`): on levels 1–16 the follower must
  * win the level's naive gate share (at 4 s) and keep its median within `star2`; past 16 (GD-8f, GDD §3.14
  * (a)) it must win ≥ 80 % and keep its `asc` median ≤ max(`star2`, plain naive `asc` median + 5 s) — the
  * runner also runs that plain naive row (same K and reaction, printed as `naive (bar)`); a naive line
