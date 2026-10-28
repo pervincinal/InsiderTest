@@ -111,7 +111,7 @@ describe('fastlane/metadata = APP_STORE_CONNECT_SHEET.md variant B', () => {
     expect(codePoints(SHEET_B.subtitle)).toBe(19);
     expect(codePoints(SHEET_B.promotional)).toBe(133);
     expect(codePoints(SHEET_B.keywords)).toBe(96);
-    expect(codePoints(SHEET_B.description)).toBe(3858); // 3863 until 2026-10-12 (PUB-22: swipe sentence)
+    expect(codePoints(SHEET_B.description)).toBe(3855); // 3858 until 2026-10-28 (PUB-34: "a short lesson"), 3863 until 2026-10-12 (PUB-22: swipe sentence)
     expect(codePoints(SHEET_B.reviewNotes)).toBe(1202);
     expect(codePoints(SHEET_B.copyright)).toBe(23);
   });
@@ -147,13 +147,15 @@ describe('fastlane/metadata = APP_STORE_CONNECT_SHEET.md variant B', () => {
     expect(readFileSync(join(ROOT, 'fastlane/Fastfile'), 'utf8')).toContain("COPYRIGHT_PLACEHOLDER = '[developer name]'");
   });
 
-  it('names the tutorial levels the build has (PUB-27: levels 1–4 since GD-5b, build 18)', () => {
+  it('names the tutorial levels the build has (PUB-27: levels 1–4 since GD-5b, build 18) and a short lesson (PUB-34)', () => {
     // tests/setup.ts registers the lazy level 2–4 steps, so tutorialFor() sees every level the game teaches
     const taught = Array.from({ length: 10 }, (_, i) => i + 1).filter((id) => tutorialFor(id, 0) !== null);
     expect(taught).toEqual([1, 2, 3, 4]);
-    const sentence = `• Levels 1–${taught.length} teach the basics with a short built-in tutorial; every later level opens with a one-line lesson.`;
+    const sentence = `• Levels 1–${taught.length} teach the basics with a short built-in tutorial; every later level opens with a short lesson.`;
     expect(meta('en-US/description.txt')).toContain(sentence);
     expect(SHEET_B.description).toContain(sentence);
+    // PUB-34: the cards are 2–3 lines, so no copy may call them one-line again
+    expect(meta('en-US/description.txt')).not.toMatch(/one-line lesson/);
   });
 
   it('sets the categories of sheet §2: Games › Strategy, Casual; no secondary category', () => {
