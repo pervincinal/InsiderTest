@@ -15,5 +15,5 @@
 # The build number is config.buildNumber in tower-clash/package.json (npm run version:sync);
 # App Store Connect accepts every build number only once.
 lane=testflight
-note=build 24 (1.0.0): GD-10 lesson cards 33-40; TestFlight only
-requested=2026-10-24T06:10:00Z
+note=build 25 (1.0.0): GD-11 lesson cards 41-50; TestFlight only
+requested=2026-10-28T05:10:00Z
