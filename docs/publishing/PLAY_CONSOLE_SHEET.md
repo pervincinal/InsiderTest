@@ -194,9 +194,9 @@ Why: the AdMob SDK merges the `com.google.android.gms.permission.AD_ID` permissi
 |---|---|---|---|
 | App name (Ad) | 30 | `Tower Clash` | 11 |
 | Short description (Qısa təsvir) | 80 | `Capture every tower. One-thumb real-time strategy, 50 levels, plays offline.` | 76 |
-| Full description (Tam təsvir) | 4000 | the block below — `STORE_LISTING.md` §1.1 with the four §2.1 variant-B substitutions; identical to `APP_STORE_CONNECT_SHEET.md` §6.3 | 3858 |
+| Full description (Tam təsvir) | 4000 | the block below — `STORE_LISTING.md` §1.1 with the four §2.1 variant-B substitutions; identical to `APP_STORE_CONNECT_SHEET.md` §6.3 | 3855 |
 
-Full description EN — variant B (no purchases in 1.0.0), 3858 characters (2026-10-12, PUB-22: the stream now stops with a swipe across it — BUG-33 — instead of "until you tap the target again"; tapping the target again still works but is no longer named):
+Full description EN — variant B (no purchases in 1.0.0), 3855 characters (2026-10-12, PUB-22: the stream now stops with a swipe across it — BUG-33 — instead of "until you tap the target again"; tapping the target again still works but is no longer named; 2026-10-28, PUB-34: "a one-line lesson" → "a short lesson", 3858 → 3855):
 
 ```
 Tower Clash is a one-thumb real-time strategy game: tap one of your towers, tap a target, and a stream of soldiers starts marching — and keeps marching until you stop it. Reinforce friendly towers, overwhelm hostile ones, and when a garrison hits zero the tower is yours. Capture every enemy tower to win.
@@ -209,7 +209,7 @@ HOW IT PLAYS
 • Enemy streams are drawn as straight ribbons in their colour, so you always see where the next attack comes from — and where to answer it.
 
 50 HAND-MADE LEVELS
-• Levels 1–4 teach the basics with a short built-in tutorial; every later level opens with a one-line lesson.
+• Levels 1–4 teach the basics with a short built-in tutorial; every later level opens with a short lesson.
 • Fortresses (from level 9) shrug off half of every attack — bring more than you think.
 • Artillery (from level 12) shoots down soldiers that walk into its range — approach from the right side.
 • Two enemies at once from level 17, three from level 33 — and they fight each other too.
@@ -248,9 +248,9 @@ Menus, hints, the tutorial, level names and lessons are in English, Azerbaijani,
 |---|---|---|---|
 | App name (Ad) | 30 | `Tower Clash` | 11 |
 | Short description (Qısa təsvir) | 80 | `Bütün qüllələri tut. Bir barmaqla real vaxt strategiya, 50 səviyyə, oflayn.` | 75 |
-| Full description (Tam təsvir) | 4000 | the block below — `STORE_LISTING.md` §1.2 with the four §2.1 variant-B substitutions | 3833 |
+| Full description (Tam təsvir) | 4000 | the block below — `STORE_LISTING.md` §1.2 with the four §2.1 variant-B substitutions | 3825 |
 
-Full description AZ — variant B, 3833 characters (2026-10-12, PUB-22: the same swipe sentence as EN):
+Full description AZ — variant B, 3825 characters (2026-10-12, PUB-22: the same swipe sentence as EN; 2026-10-28, PUB-34: "bir cümləlik dərslə" → "qısa dərslə", 3833 → 3825):
 
 ```
 Tower Clash bir barmaqla oynanan real vaxt strategiya oyunudur: öz qüllənə toxun, hədəfə toxun — əsgər axını yola düşür və sən dayandırana qədər davam edir. Dost qüllələri gücləndir, düşmən qüllələrini sıxışdır; qarnizon sıfıra düşəndə qüllə sənindir. Qalib gəlmək üçün bütün düşmən qüllələrini tut.
@@ -263,7 +263,7 @@ NECƏ OYNANIR
 • Düşmən axınları düz lentlərlə öz rəngində çəkilir — növbəti hücumun haradan gəldiyini və hara cavab verəcəyini həmişə görürsən.
 
 50 ƏL İLƏ HAZIRLANMIŞ SƏVİYYƏ
-• 1–4-cü səviyyələr qısa daxili təlimatla əsasları öyrədir; sonrakı hər səviyyə bir cümləlik dərslə başlayır.
+• 1–4-cü səviyyələr qısa daxili təlimatla əsasları öyrədir; sonrakı hər səviyyə qısa dərslə başlayır.
 • Qalalar (9-cu səviyyədən) hər hücumun yarısını dəf edir — düşündüyündən çox əsgər apar.
 • Top qüllələri (12-ci səviyyədən) mənzilinə girən əsgərləri vurur — düzgün tərəfdən yaxınlaş.
 • 17-ci səviyyədən eyni anda iki, 33-cü səviyyədən üç rəqib — onlar bir-biri ilə də vuruşur.
@@ -319,9 +319,9 @@ Written 2026-10-12 (PUB-22) from the variant-B EN text of §3.2 — the same fac
 |---|---|---|---|
 | App name (Ad) | 30 | `Tower Clash` | 11 |
 | Short description (Qısa təsvir) | 80 | `Захвати все башни. Стратегия в реальном времени одним пальцем: 50 уровней офлайн` | 80 |
-| Full description (Tam təsvir) | 4000 | the block below | 3976 |
+| Full description (Tam təsvir) | 4000 | the block below | 3972 |
 
-Full description RU — variant B (no purchases in 1.0.0), 3976 characters:
+Full description RU — variant B (no purchases in 1.0.0), 3972 characters (2026-10-28, PUB-34: "с урока в одну строку" → "с короткого урока", 3976 → 3972):
 
 ```
 Tower Clash — стратегия в реальном времени для одного пальца: нажми на свою башню, затем на цель — и туда двинется поток солдат, который не прервётся, пока ты его не остановишь. Подкрепляй свои башни, задавливай чужие: как только гарнизон падает до нуля, башня твоя. Захвати все вражеские башни, чтобы победить.
@@ -334,7 +334,7 @@ Tower Clash — стратегия в реальном времени для о�
 • Вражеские потоки видны как прямые ленты их цвета: всегда ясно, откуда идёт следующая атака и куда бить в ответ.
 
 50 УРОВНЕЙ РУЧНОЙ РАБОТЫ
-• Уровни 1–4 учат основам в коротком встроенном обучении; каждый следующий уровень начинается с урока в одну строку.
+• Уровни 1–4 учат основам в коротком встроенном обучении; каждый следующий уровень начинается с короткого урока.
 • Крепости (с 9-го уровня) отражают половину любой атаки — бери солдат с запасом.
 • Артиллерия (с 12-го уровня) расстреливает солдат, вошедших в зону огня, — заходи с правильной стороны.
 • С 17-го уровня против тебя сразу два соперника, с 33-го — три, и они воюют ещё и друг с другом.
@@ -375,9 +375,9 @@ Written 2026-10-12 (PUB-22) from the variant-B EN text of §3.2 — the same fac
 |---|---|---|---|
 | App name (Ad) | 30 | `Tower Clash` | 11 |
 | Short description (Qısa təsvir) | 80 | `Tüm kuleleri fethet. Tek parmakla gerçek zamanlı strateji, 50 bölüm, çevrimdışı.` | 80 |
-| Full description (Tam təsvir) | 4000 | the block below | 3959 |
+| Full description (Tam təsvir) | 4000 | the block below | 3951 |
 
-Full description TR — variant B (no purchases in 1.0.0), 3959 characters:
+Full description TR — variant B (no purchases in 1.0.0), 3951 characters (2026-10-28, PUB-34: "tek cümlelik bir dersle" → "kısa bir dersle", 3959 → 3951):
 
 ```
 Tower Clash, tek parmakla oynanan gerçek zamanlı bir strateji oyunu: kulelerinden birine dokun, bir hedefe dokun — asker akışı yola çıkar ve sen durdurana kadar sürer. Dost kuleleri güçlendir, düşman kulelerini bunalt; garnizon sıfıra indiğinde kule senindir. Kazanmak için bütün düşman kulelerini ele geçir.
@@ -390,7 +390,7 @@ NASIL OYNANIR
 • Düşman akışları kendi renklerinde düz şeritler olarak çizilir: bir sonraki saldırının nereden geldiğini ve nereye karşılık vereceğini hep görürsün.
 
 50 EL YAPIMI BÖLÜM
-• 1–4. bölümler kısa bir eğitimle temelleri öğretir; sonraki her bölüm tek cümlelik bir dersle açılır.
+• 1–4. bölümler kısa bir eğitimle temelleri öğretir; sonraki her bölüm kısa bir dersle açılır.
 • Kaleler (9. bölümden itibaren) her saldırının yarısını savuşturur — sandığından fazla asker götür.
 • Toplar (12. bölümden itibaren) menzillerine giren askerleri vurur — doğru taraftan yaklaş.
 • 17. bölümden itibaren aynı anda iki, 33. bölümden itibaren üç rakip — üstelik birbirleriyle de savaşırlar.
@@ -583,12 +583,12 @@ After the release: AdMob → Apps → Tower Clash (Android) → *App settings* �
 |---|---|
 | Content rating (§2.4) | re-open the questionnaire → **Digital purchases: Yes** → "random items / loot boxes": **No** → expected interactive element **In-Game Purchases** (rating itself unchanged) |
 | Data safety (§2.7) | add **Financial info → Purchase history**: collected Yes, shared Yes, ephemeral No, **Optional**, purposes App functionality; Fraud prevention, security and compliance (RevenueCat); add **App functionality** to Device or other IDs (RevenueCat's anonymous app-user id); deletion question per §6.3 (B.7 e-mail path) |
-| Store listing (§3.2 / §3.3) | variant A texts — `STORE_LISTING.md` §1.1 / §1.2 verbatim (EN 3979 / AZ 3963 since 2026-10-12); Play adds the **In-app purchases** label by itself |
-| Store listing RU / TR (§3.5 / §3.6) | no variant A exists yet: before 1.0.1 the Publisher writes the RU / TR wording of the four `STORE_LISTING.md` §2.1 substitutions (purchases named, "Nothing to buy in this version" removed) and re-counts — RU is at 3976 of 4000, so its purchase lines must replace, not add |
+| Store listing (§3.2 / §3.3) | variant A texts — `STORE_LISTING.md` §1.1 / §1.2 verbatim (EN 3976 / AZ 3955 since 2026-10-28, PUB-34; 3979 / 3963 from 2026-10-12); Play adds the **In-app purchases** label by itself |
+| Store listing RU / TR (§3.5 / §3.6) | no variant A exists yet: before 1.0.1 the Publisher writes the RU / TR wording of the four `STORE_LISTING.md` §2.1 substitutions (purchases named, "Nothing to buy in this version" removed) and re-counts — RU is at 3972 of 4000, so its purchase lines must replace, not add |
 | Products, payments profile, license testers | MZ1, MZ5, MZ6, MZ13 (Android halves) — `STORE_LISTING.md` §6.1 ids, `LAUNCH_CHECKLIST.md` §6 |
 | Secrets | `RC_ANDROID_KEY` |
 
-## 9. Character counts (2026-10-12, PUB-22; first run 2026-10-11; the four full descriptions re-run 2026-10-19, PUB-27 — "Levels 1–3" → "1–4", a same-length digit swap, all four unchanged; `[...s].length` code points, script in the Publisher's scratch; texts read from this file, `APP_STORE_CONNECT_SHEET.md`, `STORE_LISTING.md`, `RELEASE_NOTES.md` and `tower-clash/fastlane/metadata/en-US/description.txt`)
+## 9. Character counts (2026-10-12, PUB-22; first run 2026-10-11; the four full descriptions re-run 2026-10-19, PUB-27 — "Levels 1–3" → "1–4", a same-length digit swap, all four unchanged; re-run 2026-10-28, PUB-34 — "a one-line lesson" → "a short lesson" in all four (EN −3, AZ −8, RU −4, TR −8); `[...s].length` code points, script in the Publisher's scratch; texts read from this file, `APP_STORE_CONNECT_SHEET.md`, `STORE_LISTING.md`, `RELEASE_NOTES.md` and `tower-clash/fastlane/metadata/en-US/description.txt`)
 
 ```
    11 app name EN / AZ / RU / TR             (limit 30)
@@ -597,12 +597,12 @@ After the release: AdMob → Apps → Tower Clash (Android) → *App settings* �
    75 short description AZ                   (limit 80)
    80 short description RU                   (limit 80)
    80 short description TR                   (limit 80)
- 3858 full description EN (variant B)        (limit 4000; = APP_STORE_CONNECT_SHEET §6.3 and fastlane description.txt: true; 3863 before the swipe sentence)
- 3833 full description AZ (variant B)        (limit 4000; 3825 before)
- 3976 full description RU (variant B)        (limit 4000)
- 3959 full description TR (variant B)        (limit 4000)
- 3979 full description EN (variant A, 1.0.1) (limit 4000; STORE_LISTING §1.1, 3984 before)
- 3963 full description AZ (variant A, 1.0.1) (limit 4000; STORE_LISTING §1.2, 3955 before)
+ 3855 full description EN (variant B)        (limit 4000; = APP_STORE_CONNECT_SHEET §6.3 and fastlane description.txt: true; 3858 before PUB-34, 3863 before the swipe sentence)
+ 3825 full description AZ (variant B)        (limit 4000; 3833 before PUB-34, 3825 before the swipe sentence)
+ 3972 full description RU (variant B)        (limit 4000; 3976 before PUB-34)
+ 3951 full description TR (variant B)        (limit 4000; 3959 before PUB-34)
+ 3976 full description EN (variant A, 1.0.1) (limit 4000; STORE_LISTING §1.1, 3979 before PUB-34, 3984 before the swipe sentence)
+ 3955 full description AZ (variant A, 1.0.1) (limit 4000; STORE_LISTING §1.2, 3963 before PUB-34, 3955 before the swipe sentence)
    10 release name "1.0.0 (10)"              (limit 50)
   472 release notes EN                       (limit 500; re-cut 2026-10-15, PUB-23 — 496 before)
   467 release notes AZ                       (limit 500; 489 before)

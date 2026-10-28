@@ -26,11 +26,13 @@ What must NOT be claimed: leaderboards, multiplayer, cloud save, more than 50 le
 
 **Status 2026-10-19 (PUB-27 — build 19: tutorial bubbles off the towers and the tutorial's own selection GD-5c/d, BUG-50/51; How to Play with six rules and a one-time supply-line hint GD-5f; lesson cards of 6–10 and the 2★ clocks of 9 / 10 GD-6; web offline cache BUG-52).** (1) "Levels 1–3 teach the basics…" → **"Levels 1–4 teach the basics…"** (level 4 has tutorial steps since GD-5b, build 18) in §1.1 / §1.2, `APP_STORE_CONNECT_SHEET.md` §6.3, `PLAY_CONSOLE_SHEET.md` §3.2 / §3.3 / §3.5 / §3.6 (RU "Уровни 1–4", TR "1–4. bölümler") and `tower-clash/fastlane/metadata/en-US/description.txt` — a same-length digit swap; re-counted (code points): EN 3979 / AZ 3963 (A), 3858 / 3833 (B), RU 3976 / TR 3959 (B, Play) — **unchanged**. `tests/release/storeMetadata.test.ts` now pins the sentence to the levels `tutorialFor()` actually teaches (1–4), so a fifth tutorial level fails the release tests until the text follows. (2) Everything else checked against build 19 (BACKLOG "Done" 2026-10-18): "every later level opens with a one-line lesson" holds (6–10 reworded, still one lesson each); "Plays offline" holds (BUG-52 fixed the web / PWA first-launch cache; the store apps carry their files in the bundle and register no service worker); no listing text names How to Play, the lesson wording or a 2★ time; "What's new" EN 472 / AZ 467 / RU 486 / TR 461 unchanged and still true. (3) **Screenshots: build 19 changes frame 07** — the level-9 result card in every set reads "3 stars under 00:25 · 2 under 01:05", build 19 draws 01:00 (GD-6f: level 9 `star2` 65 → 60 s) — and possibly frame 02 (level 1's "Tap your tower" bubble sits against the red tower's base; GD-5c now keeps bubbles ≥ 3 px off every drawn body). Frames 02 / 07 were re-cut in every set on the build-19 tree on 2026-10-19 (PUB-28, §1.3; `APP_STORE_CONNECT_SHEET.md` §10.2 step 1) — the new 02 shows the bubble beside the home tower, 07 reads "2 under 01:00". Privacy / data forms unchanged (no new stored value, no network call).
 
+**Status 2026-10-28 (PUB-34 — "a short lesson").** The lesson cards were never one line (2–3 lines at the card's 20 px size, before build 24 too, and 50's has two sentences), so "every later level opens with a one-line lesson" became **"every later level opens with a short lesson"** in §1.1, and the same claim in the other languages: §1.2 "bir cümləlik dərslə" → **"qısa dərslə"**, `PLAY_CONSOLE_SHEET.md` §3.5 RU "с урока в одну строку" → **"с короткого урока"**, §3.6 TR "tek cümlelik bir dersle" → **"kısa bir dersle"**; also `APP_STORE_CONNECT_SHEET.md` §6.3, `PLAY_CONSOLE_SHEET.md` §3.2 / §3.3 and `tower-clash/fastlane/metadata/en-US/description.txt` (the only fastlane locale; `tests/release/storeMetadata.test.ts` pins the sentence and the variant-B length). Re-counted (code points, limit 4000): EN **3976** / AZ **3955** (A), EN **3855** / AZ **3825** (B), RU **3972** / TR **3951** (B, Play) — was 3979 / 3963, 3858 / 3833, 3976 / 3959. No other field changed (short descriptions, promotional texts, keywords, subtitle, "What's new"). The historical v0.2.0 notes in `RELEASE_NOTES.md` ("a one-line lesson") stay as written.
+
 ---
 
 ## 1. Google Play
 
-Paste-ready Play Console order (PUB-21, 2026-10-11): `PLAY_CONSOLE_SHEET.md` — 1.0.0 goes to Play **without in-app purchases**, so it uses the variant-B long descriptions of §2.1 (EN 3858 / AZ 3833), no Purchase-history row in Data safety and "digital purchases: No" in IARC; the texts below are variant A (1.0.1). **Russian and Turkish** (PUB-22, 2026-10-12): the RU and TR short and full descriptions exist only in that sheet, §3.5 / §3.6 (variant B — short RU 80 / TR 80, full RU 3976 / TR 3959 code points), together with the `ru/` / `tr/` screenshot sets and the `<ru-RU>` / `<tr-TR>` release notes (sheet §3.4, §5.4); they are written from the variant-B EN text with the same facts, so a change to §1.1 / §2.1 must be carried into them by hand and re-counted (sheet §9). On the same day the stream-stop sentence of §1.1 / §1.2 became "keeps flowing until you swipe across it" / "və sən barmağınla onun üstündən keçənə qədər davam edir" (BUG-33 swipe-to-cut; tapping the target again still works) — §1.1 / §1.2 now EN 3979 / AZ 3963, variant B EN 3858 / AZ 3833.
+Paste-ready Play Console order (PUB-21, 2026-10-11): `PLAY_CONSOLE_SHEET.md` — 1.0.0 goes to Play **without in-app purchases**, so it uses the variant-B long descriptions of §2.1 (EN 3855 / AZ 3825 since 2026-10-28, PUB-34), no Purchase-history row in Data safety and "digital purchases: No" in IARC; the texts below are variant A (1.0.1). **Russian and Turkish** (PUB-22, 2026-10-12): the RU and TR short and full descriptions exist only in that sheet, §3.5 / §3.6 (variant B — short RU 80 / TR 80, full RU 3972 / TR 3951 code points since 2026-10-28, PUB-34; 3976 / 3959 before), together with the `ru/` / `tr/` screenshot sets and the `<ru-RU>` / `<tr-TR>` release notes (sheet §3.4, §5.4); they are written from the variant-B EN text with the same facts, so a change to §1.1 / §2.1 must be carried into them by hand and re-counted (sheet §9). On the same day the stream-stop sentence of §1.1 / §1.2 became "keeps flowing until you swipe across it" / "və sən barmağınla onun üstündən keçənə qədər davam edir" (BUG-33 swipe-to-cut; tapping the target again still works) — §1.1 / §1.2 now EN 3979 / AZ 3963, variant B EN 3858 / AZ 3833.
 
 | Field | Limit | EN | AZ |
 |---|---|---|---|
@@ -56,7 +58,7 @@ HOW IT PLAYS
 • Enemy streams are drawn as straight ribbons in their colour, so you always see where the next attack comes from — and where to answer it.
 
 50 HAND-MADE LEVELS
-• Levels 1–4 teach the basics with a short built-in tutorial; every later level opens with a one-line lesson.
+• Levels 1–4 teach the basics with a short built-in tutorial; every later level opens with a short lesson.
 • Fortresses (from level 9) shrug off half of every attack — bring more than you think.
 • Artillery (from level 12) shoots down soldiers that walk into its range — approach from the right side.
 • Two enemies at once from level 17, three from level 33 — and they fight each other too.
@@ -102,7 +104,7 @@ NECƏ OYNANIR
 • Düşmən axınları düz lentlərlə öz rəngində çəkilir — növbəti hücumun haradan gəldiyini və hara cavab verəcəyini həmişə görürsən.
 
 50 ƏL İLƏ HAZIRLANMIŞ SƏVİYYƏ
-• 1–4-cü səviyyələr qısa daxili təlimatla əsasları öyrədir; sonrakı hər səviyyə bir cümləlik dərslə başlayır.
+• 1–4-cü səviyyələr qısa daxili təlimatla əsasları öyrədir; sonrakı hər səviyyə qısa dərslə başlayır.
 • Qalalar (9-cu səviyyədən) hər hücumun yarısını dəf edir — düşündüyündən çox əsgər apar.
 • Top qüllələri (12-ci səviyyədən) mənzilinə girən əsgərləri vurur — düzgün tərəfdən yaxınlaş.
 • 17-ci səviyyədən eyni anda iki, 33-cü səviyyədən üç rəqib — onlar bir-biri ilə də vuruşur.
@@ -207,7 +209,7 @@ HONEST BY DESIGN
 | Copyright | — | `© 2026 [developer name]` (stakeholder fills the name) | — |
 | In-App Purchases (automatic) | — | App Store shows an "In-App Purchases" line with the products from §6.1 once they are attached to the version; nothing to type in the description. **1.0.0 default: no products attached (variant B)** | — |
 
-Description (≤ 4000): variant A reuses §1.1 (EN) and §1.2 (AZ) verbatim — they are under the limit and contain no Google-specific wording. **Variant B (1.0.0 default, no in-app purchases)** applies the four substitutions of §2.1 (EN 3858 / AZ 3833 since 2026-10-12, 3863 / 3825 from 2026-10-03; the full EN block is pasted in `APP_STORE_CONNECT_SHEET.md` §6.3).
+Description (≤ 4000): variant A reuses §1.1 (EN) and §1.2 (AZ) verbatim — they are under the limit and contain no Google-specific wording. **Variant B (1.0.0 default, no in-app purchases)** applies the four substitutions of §2.1 (EN 3855 / AZ 3825 since 2026-10-28, PUB-34; 3858 / 3833 from 2026-10-12, 3863 / 3825 from 2026-10-03; the full EN block is pasted in `APP_STORE_CONNECT_SHEET.md` §6.3).
 
 ### 2.1 Variant B — the same texts without purchase claims (for a build made without `RC_IOS_KEY`)
 
@@ -220,7 +222,7 @@ What the native build shows without a RevenueCat key (`src/economy/store.ts` →
 | 3 | `• Optional purchases only: crystal packs, a Starter Pack, Remove Ads and a Premium Bundle. No subscriptions, no loot boxes.` → `• Nothing to buy in this version: gold and crystals are earned by playing. No subscriptions, no loot boxes.` | `• Yalnız könüllü alışlar: kristal paketləri, Başlanğıc paketi, Reklamları sil və Premium paket. Abunəlik yoxdur, loot box yoxdur.` → `• Bu versiyada alınası heç nə yoxdur: qızıl və kristal oyunla qazanılır. Abunəlik yoxdur, loot box yoxdur.` |
 | 4 | `… Rewarded videos are always your choice. One purchase removes the between-level ads for good.` → `… Rewarded videos are always your choice.` | `… Mükafatlı videolar həmişə sənin seçimindir. Bir alış səviyyələr arası reklamları həmişəlik silir.` → `… Mükafatlı videolar həmişə sənin seçimindir.` |
 
-Counts after the substitutions (re-run 2026-10-12, code points): EN **3858**, AZ **3833** (2026-10-03: 3863 / 3825, before the swipe sentence; 2026-09-28, with the booster crate: 3881 / 3847); promotional text B EN 133 / AZ 134. Keywords, subtitle, name and the screenshot set are unchanged (frame 10 shows the Upgrades tab with gold prices, no IAP). Ads stay in the texts because the build serves ads either way — with the real AdMob iOS ids from MZ7 in the review build (without them it would show Google "Test Ad" placeholders, acceptable on TestFlight only). Google Play: the same substitutions apply if the first Play release is also made without `RC_ANDROID_KEY`; §1.4 remains the wording for a build without ads *and* purchases.
+Counts after the substitutions (re-run 2026-10-28, PUB-34, code points): EN **3855**, AZ **3825** (2026-10-12: 3858 / 3833, before "a short lesson"; 2026-10-03: 3863 / 3825, before the swipe sentence; 2026-09-28, with the booster crate: 3881 / 3847); promotional text B EN 133 / AZ 134. Keywords, subtitle, name and the screenshot set are unchanged (frame 10 shows the Upgrades tab with gold prices, no IAP). Ads stay in the texts because the build serves ads either way — with the real AdMob iOS ids from MZ7 in the review build (without them it would show Google "Test Ad" placeholders, acceptable on TestFlight only). Google Play: the same substitutions apply if the first Play release is also made without `RC_ANDROID_KEY`; §1.4 remains the wording for a build without ads *and* purchases.
 
 What's New (≤ 4000): use the EN block of the relevant version from `RELEASE_NOTES.md`.
 
@@ -292,7 +294,7 @@ console.log("subtitle AZ", c("Bütün qüllələri tut"));
 console.log("keywords EN", c("tower,war,strategy,rts,capture,conquer,castle,army,offline,tap,casual,defense,attack,soldiers"));
 '
 ```
-Results on 2026-09-21 (after 40 → 50; the digit swap keeps every length): 76 / 75 / 150 / 158 / 19 / 93. IAP names and descriptions in §6.1 were counted the same way (≤ 30 / ≤ 45). Full descriptions §1.1 / §1.2 on 2026-09-21, after the Grand Campaign and Weekly Challenge bullets: **3981 / 3947** (limit 4000; 2026-09-20 they were 3665 / 3650); on 2026-09-27, after "SIX ISLANDS": **3984 / 3955**; on 2026-10-12, after the swipe sentence (PUB-22): **3979 / 3963** (code points, `node -e "[...s].length"`).
+Results on 2026-09-21 (after 40 → 50; the digit swap keeps every length): 76 / 75 / 150 / 158 / 19 / 93. IAP names and descriptions in §6.1 were counted the same way (≤ 30 / ≤ 45). Full descriptions §1.1 / §1.2 on 2026-09-21, after the Grand Campaign and Weekly Challenge bullets: **3981 / 3947** (limit 4000; 2026-09-20 they were 3665 / 3650); on 2026-09-27, after "SIX ISLANDS": **3984 / 3955**; on 2026-10-12, after the swipe sentence (PUB-22): **3979 / 3963**; on 2026-10-28, after "a short lesson" (PUB-34): **3976 / 3955** (code points, `node -e "[...s].length"`).
 
 ---
 
