@@ -54,6 +54,32 @@ describe('tower-clash/e2e (BUG-6)', () => {
 });
 
 /*
+ * QA-32: the lesson card rule (≤ 3 lines at 20 px, wrap width 620 px) is e2e/lessonFit.spec.ts. Until
+ * then the GD-5…GD-11 reviews measured the cards by hand with scratch tools that re-implemented the
+ * wrap. The spec must lay the cards out with the game's own code — hud.ts `lessonCardLayout` (and
+ * widgets.ts `font`, i18n.ts `levelLesson`) bundled from src/ — not with a wrap of its own, and must
+ * cover all four lesson fields.
+ */
+describe('tower-clash/e2e/lessonFit.spec.ts (QA-32)', () => {
+  const src = readFileSync(new URL('lessonFit.spec.ts', E2E_DIR), 'utf8');
+
+  it('reuses the game card layout instead of re-implementing the wrap', () => {
+    expect(src).toContain("export { lessonCardLayout } from './src/render/hud';");
+    expect(src).toContain("export { font } from './src/render/widgets';");
+    expect(src).toContain("export { levelLesson, setLanguage } from './src/ui/i18n';");
+    expect(src).toMatch(/L\.lessonCardLayout\(ctx, state, ui\)/);
+    expect(src).not.toMatch(/function wrap|const wrap\b|\.split\(\/\\s\+\/\)[\s\S]{0,80}measureText/);
+  });
+
+  it('sweeps every level in the four languages at the full card size', () => {
+    expect(src).toContain("const LANGS = ['en', 'az', 'ru', 'tr'] as const;");
+    expect(src).toContain('expect(rows).toHaveLength(LEVELS.length * LANGS.length);');
+    expect(src).toMatch(/const CARD_PX = 20;\nconst CARD_MAX_LINES = 3;\nconst CARD_TEXT_W = 620;\n/);
+    expect(src).toContain("test.use({ viewport: { width: 360, height: 640 } });");
+  });
+});
+
+/*
  * Regression test for BUG-16: `e2e/weekly.spec.ts` "RETRY / restart after the Monday rollover" sat on
  * `keyboard.press('r')` until the 90 s test timeout — the renderer's main thread stopped answering
  * input, `evaluate` and its own network events on a level-chunk `import()` routed through
@@ -426,6 +452,7 @@ describe('.github/workflows/tower-clash-ci.yml e2e shards (QA-26)', () => {
     // (one boot per test instead of two), so shard 2 lost ≈ 1.5 min; re-measure before moving files.
     // 2026-10-21 (QA-30, 169 tests: + howto in shard 1, + tones / tutorial / lazy cases in shard 2):
     // 105 / 64 tests, wall 372 / 375 s locally (2 workers per shard), CI 297 / 338 s — no move needed.
+    // 2026-10-29 (QA-32): + lessonFit.spec.ts (1 test, ≈ 3 s: 200 lesson cards on one page) in shard 2.
     // A failure here means new tests moved the count boundary: re-measure and rebalance (QA-26).
     const cli = fileURLToPath(new URL('../../node_modules/@playwright/test/cli.js', import.meta.url));
     const list = (shard: string): string[] => {
@@ -439,7 +466,7 @@ describe('.github/workflows/tower-clash-ci.yml e2e shards (QA-26)', () => {
     };
     const [one, two] = [list('1/2'), list('2/2')];
     expect(one).toEqual(expect.arrayContaining(['camera.spec.ts', 'gestures430.spec.ts', 'integrity/content.spec.ts', 'economy.spec.ts', 'daily.spec.ts']));
-    expect(two).toEqual(expect.arrayContaining(['shopLayout.spec.ts', 'shareLocales.spec.ts', 'smoke.spec.ts', 'lazy.spec.ts', 'weekly.spec.ts']));
+    expect(two).toEqual(expect.arrayContaining(['shopLayout.spec.ts', 'shareLocales.spec.ts', 'smoke.spec.ts', 'lazy.spec.ts', 'weekly.spec.ts', 'lessonFit.spec.ts']));
     // every chromium spec in exactly one shard
     const chromium = E2E_SPECS.filter((f) => !/(webview|pwa)\.spec\.ts$/.test(f));
     expect([...one, ...two].sort()).toEqual(chromium);
