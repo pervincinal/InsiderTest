@@ -11,8 +11,7 @@ import { badgeScale, chipMinTop, mineChipRequest, placeBadges, placeChips, strea
 import type { BadgeWant, ChipRequest } from '../../src/render/worldChips';
 import { lessonCardLayout } from '../../src/render/hud';
 import type { PlayUi } from '../../src/render/draw';
-import { playLayout, selectHintBlock } from '../../src/render/draw';
-import { selectHintMoved } from '../../src/render/hud';
+import { playLayout } from '../../src/render/draw';
 import { hitTower } from '../../src/input/pointer';
 import { loadAllLevels } from '../../src/levels/index';
 import { createState } from '../../src/sim/create';
@@ -40,6 +39,8 @@ import { ADVANCES, ADVANCE_CHARS, ADVANCE_ERROR } from './fontAdvances';
  * hint moves up under the lesson card — GD-5d, draw.ts `playLayout` — the badges clear card + hint),
  * card up and gone, in all four languages; and every badge and chip rect lies inside the map's width
  * less IN_FRAME (level 37 on 360 × 640 put both top enemy badges beside their barracks, off the frame).
+ * BUG-57 (2026-10-29): where the hint sits between the rows of towers instead, the badges and chips are
+ * laid out round it (`playLayout`'s `avoid`) and every one keeps clear of it (checked as badge/card, chip/card).
  */
 
 /** worldChips.ts `IN_FRAME`: the clear margin a badge / chip keeps from the map's left and right edges. */
@@ -106,11 +107,14 @@ interface Layout {
   chips: Item[];
   /** The lesson card in the logical frame (with its clay edge) — and the select hint under it when it moved up — or null with neither. */
   card: Rect | null;
+  /** BUG-57: the select hint between the rows of towers (the badges and chips keep clear of it), or null. */
+  hint: Rect | null;
 }
 
 /**
  * The badge + chip rects draw.ts would lay out for `state` under `cam` with `sel` selected, with the
- * lesson card as `lessonCardLayout` gives it and, when the select hint moves up (`playLayout`), card + hint.
+ * lesson card as `lessonCardLayout` gives it and, when the select hint moves up (`playLayout`), card + hint
+ * (or, BUG-57, the hint between the rows as a rect to keep clear of).
  */
 function layout(state: GameState, level: LevelDef, a: HudAnchors, cam: Camera, sel: string | null): Layout {
   const ctx = measuringCtx();
@@ -118,9 +122,11 @@ function layout(state: GameState, level: LevelDef, a: HudAnchors, cam: Camera, s
   const lc = lessonCardLayout(ctx, state, ui);
   // draw.ts: the card's rect moved with the top band; `placeBadges` adds the clay edge and CARD_CLEAR itself
   const lessonRect = lc ? { ...lc.rect, y: lc.rect.y + a.top } : null;
-  // GD-5d: the renderer's own pill for this selection; moved up, the badges clear card + pill as one block
-  const pill = sel ? playLayout(ctx, state, cam, sel, lessonRect, a, true, true).hint : null;
-  const cardRect = pill && selectHintMoved(pill, a) ? selectHintBlock(lessonRect, pill) : lessonRect;
+  // GD-5d / BUG-57: the renderer's own pill for this selection; at the top of the map band the badges clear
+  // card + pill as one block (`block`), between the rows of towers they keep clear of the pill (`avoid`)
+  const placed = sel ? playLayout(ctx, state, cam, sel, lessonRect, a, true, true) : null;
+  const cardRect = placed ? placed.block : lessonRect;
+  const avoid = placed?.avoid ?? null;
   const card = cardRect ? { ...cardRect, h: cardRect.h + 4 } : null;
   const towers = Object.values(state.towers).sort((p, q) => p.y - q.y || (p.id < q.id ? -1 : 1));
   // draw.ts's badge loop (not selected: raise 0): measured width incl. the under-fire pip, natural spot above the roof, zoomed plinth
@@ -130,7 +136,7 @@ function layout(state: GameState, level: LevelDef, a: HudAnchors, cam: Camera, s
     const { w, h } = badgeSize(ctx, String(t.units), bs, isUnderFire(state, t));
     return { id: t.id, x: p.x, y: p.y, bs, w, h, naturalY: p.y + badgeLift(t, sel === t.id ? 4 : 0) * p.s, plinth: towerFootprintRadius(t.kind, t.level) * WORLD_ZOOM.tower * p.s };
   });
-  const boxes = placeBadges(wants, cardRect);
+  const boxes = placeBadges(wants, cardRect, avoid);
   const badges: Item[] = towers.map((t) => ({ label: `badge ${t.id}`, rect: boxes.get(t.id)!.rect, owner: t.id, kind: 'badge' }));
   // drawWorldChips: mine chips first, then stream chips far to near, then by id
   const reqs: ChipRequest[] = [];
@@ -147,12 +153,12 @@ function layout(state: GameState, level: LevelDef, a: HudAnchors, cam: Camera, s
     reqs.push({ rect: streamChipRect(b.rect, b.bs), badge: b.rect });
     meta.push({ label: `chip ${t.id}`, owner: t.id, kind: 'stream' });
   }
-  const placed = placeChips(
-    badges.map((b) => b.rect),
+  const chipRects = placeChips(
+    [...badges.map((b) => b.rect), ...(avoid ? [avoid] : [])],
     reqs,
     chipMinTop(cardRect ? cardRect.y + cardRect.h : null),
   );
-  return { badges, chips: placed.map((rect, i) => ({ ...meta[i]!, rect })), card };
+  return { badges, chips: chipRects.map((rect, i) => ({ ...meta[i]!, rect })), card, hint: avoid };
 }
 
 /**
@@ -223,12 +229,14 @@ function survey(cam: Camera): Finding[] {
           out.push({ ...base, check: 'badge in band', pair: b.label, px: Math.max(HUD.mapTop - r.y, r.y + r.h - HUD.mapBottom) });
           out.push({ ...base, check: 'badge in map x', pair: b.label, px: Math.max(MARGIN - r.x, r.x + r.w - (C.MAP_W - MARGIN)) });
           if (L.card) out.push({ ...base, check: 'badge/card', pair: `${b.label} x lesson card / hint`, px: depthOf(r, L.card) });
+          if (L.hint) out.push({ ...base, check: 'badge/card', pair: `${b.label} x select hint`, px: depthOf(r, L.hint) });
         }
         for (const c of L.chips) {
           const r = c.rect;
           out.push({ ...base, check: 'chip in band', pair: c.label, px: Math.max(HUD.mapTop - r.y, r.y + r.h - HUD.mapBottom) });
           out.push({ ...base, check: 'chip in map x', pair: c.label, px: Math.max(MARGIN - r.x, r.x + r.w - (C.MAP_W - MARGIN)) });
           if (L.card) out.push({ ...base, check: 'chip/card', pair: `${c.label} x lesson card / hint`, px: depthOf(r, L.card) });
+          if (L.hint) out.push({ ...base, check: 'chip/card', pair: `${c.label} x select hint`, px: depthOf(r, L.hint) });
         }
       }
     }

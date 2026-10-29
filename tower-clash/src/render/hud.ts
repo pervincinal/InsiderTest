@@ -33,7 +33,7 @@ import { drawVideoGlyph } from './sprites';
 import type { Camera } from './camera';
 import { playCamera, proj } from './camera';
 import type { WorldLayout } from './worldChips';
-import { drawStreamArrow, frameWorldLayout, selectedFootprint } from './worldChips';
+import { drawStreamArrow, frameWorldLayout, overlaps, selectedFootprint } from './worldChips';
 import type { ToastOpts } from './economyWidgets';
 import { drawToast, drawWallet } from './economyWidgets';
 import type { HudOverlayDrawers } from './hudOverlays';
@@ -363,21 +363,98 @@ export function lessonCardLayout(ctx: CanvasRenderingContext2D, state: GameState
   return { rect: { x: 360 - w / 2, y: 108, w, h }, lines, px, lineH, captionH };
 }
 
-/** The select hint pill's height, and the gap above it / below the top band or the lesson card's clay edge when it moves up (GD-5d). */
-export const SELECT_HINT = Object.freeze({ h: 38, y: 1128, gap: 10 });
+/**
+ * The select hint pill's height, the gap above it / below the top band or the lesson card's clay edge
+ * when it moves up (GD-5d), the clear space it keeps from every tower body, ring, badge and chip, and
+ * the room it leaves above and below the tower a tutorial step points at (BUG-57: the bubble's arrow
+ * tip gap 8 + reach 54 + bob 8 + a one-line bubble 56 + 3, render/tutorialBubble.ts TUTORIAL_BUBBLE).
+ */
+export const SELECT_HINT = Object.freeze({ h: 38, y: 1128, gap: 10, clear: 3, tutorialRoom: 130 });
+
+/** The select hint's measured text width at its 19 px font (leaves that font set on `ctx`). */
+export function selectHintTextW(ctx: CanvasRenderingContext2D): number {
+  ctx.font = font(19, '500');
+  return ctx.measureText(t('hud.selectHint')).width;
+}
 
 /**
- * Where the select hint pill goes (pure; `textW`: its measured text at 19 px): centred just above the
- * bottom band, unless that spot touches one of `avoid` (the selected tower's drawn footprint and its
- * badge, `selectHintAvoid`; on 360 × 640 the home towers of levels 1–5 stand there) — then at the top
- * of the map band, under the top HUD band or, while it is up, the lesson card (`card`, logical frame).
+ * The select hint's two home spots for its measured text `textW` (pure): `low` centred just above the
+ * bottom band, `top` at the top of the map band, under the top HUD band or, while it is up, the lesson
+ * card (`card`, logical frame; its clay edge is 4 px under its rect).
  */
-export function selectHintRect(textW: number, a: HudAnchors, card: Rect | null, avoid: readonly Rect[]): Rect {
+export function selectHintSpots(textW: number, a: HudAnchors, card: Rect | null): { low: Rect; top: Rect } {
   const w = Math.min(700, textW + 40);
   const low = { x: 360 - w / 2, y: SELECT_HINT.y + a.bottom, w, h: SELECT_HINT.h };
-  if (!avoid.some((r) => r.x < low.x + low.w && low.x < r.x + r.w && r.y < low.y + low.h && low.y < r.y + r.h)) return low;
-  // the card's clay edge is 4 px under its rect
-  return { ...low, y: card ? card.y + card.h + 4 + SELECT_HINT.gap : Math.max(0, HUD.mapTop + a.top) + SELECT_HINT.gap };
+  return { low, top: { ...low, y: card ? card.y + card.h + 4 + SELECT_HINT.gap : Math.max(0, HUD.mapTop + a.top) + SELECT_HINT.gap } };
+}
+
+/**
+ * The select hint without a laid-out frame (pure; GD-5d): the low spot unless it touches one of `avoid`
+ * (the selected tower's footprint and badge, `selectHintAvoid`), then the top spot. The play frame
+ * places it with draw.ts `playLayout` (BUG-57) and `selectHintPill` returns that one.
+ */
+export function selectHintRect(textW: number, a: HudAnchors, card: Rect | null, avoid: readonly Rect[]): Rect {
+  const { low, top } = selectHintSpots(textW, a, card);
+  return avoid.some((r) => overlaps(r, low)) ? top : low;
+}
+
+/** What the select hint keeps clear of in one layout (`selectHintObstacles`). */
+export interface HintObstacles {
+  /** What no other placement moves: every tower's drawn body (the selected one's with its selection ring) and the selected tower's badge. */
+  fixed: Rect[];
+  /** Every other tower's badge. */
+  badges: Rect[];
+  /** Every stream / mine chip (`selectHintScore` counts them at 1 %: covered only when nothing else is clear). */
+  chips: Rect[];
+  /** The selected tower's footprint and badge (`selectHintAvoid`): never covered. */
+  own: Rect[];
+}
+
+/** BUG-57: what the select hint keeps SELECT_HINT.clear from in `layout` (`HintObstacles`). */
+export function selectHintObstacles(state: GameState, selectedId: string, cam: Camera, layout: WorldLayout): HintObstacles {
+  const own = selectHintAvoid(state, selectedId, cam, layout);
+  const fixed = [...own];
+  for (const [id, body] of layout.bodies) if (id !== selectedId) fixed.push(body);
+  const badges: Rect[] = [];
+  for (const [id, b] of layout.badges) if (id !== selectedId) badges.push(b.rect);
+  return { fixed, badges, chips: layout.chips.map((c) => c.rect), own };
+}
+
+/** BUG-57: how much of `obs` a select hint at `r` covers (`selectHintCover`; chips at 1 % of their area); 0 = clear, Infinity = on the selected tower. */
+export function selectHintScore(r: Rect, obs: HintObstacles): number {
+  if (obs.own.some((o) => overlaps(r, o))) return Infinity;
+  return selectHintCover(r, obs.fixed) + selectHintCover(r, obs.badges) + selectHintCover(r, obs.chips) / 100;
+}
+
+/** BUG-57: how much of `obstacles` lies within SELECT_HINT.clear of `r` (summed overlap area, logical px²; 0 = clear). */
+export function selectHintCover(r: Rect, obstacles: readonly Rect[]): number {
+  const g = SELECT_HINT.clear;
+  let sum = 0;
+  for (const o of obstacles) {
+    const ox = Math.min(r.x + r.w + g, o.x + o.w) - Math.max(r.x - g, o.x);
+    const oy = Math.min(r.y + r.h + g, o.y + o.h) - Math.max(r.y - g, o.y);
+    if (ox > 1e-6 && oy > 1e-6) sum += ox * oy;
+  }
+  return sum;
+}
+
+/**
+ * BUG-57: spots for the select hint `w` wide with y in `y0`…`y1`, rows from the top down and on a row
+ * the column nearest the centre first. Rows start at `y0`, `y1`, or SELECT_HINT.clear under or over one
+ * of `obstacles`; columns are centred or SELECT_HINT.clear beside an obstacle of the row, inside the
+ * map's width less 4 px — so the first spot of the band clear of `obstacles` is among them.
+ */
+export function* selectHintScan(w: number, y0: number, y1: number, obstacles: readonly Rect[]): Generator<Rect> {
+  const g = SELECT_HINT.clear;
+  const h = SELECT_HINT.h;
+  const cx = 360 - w / 2;
+  const edges = obstacles.flatMap((o) => [Math.ceil(o.y + o.h + g), Math.floor(o.y - g - h)]);
+  const ys = [...new Set([y0, y1, ...edges])].filter((y) => y >= y0 && y <= y1).sort((p, q) => p - q);
+  for (const y of ys) {
+    const row = obstacles.filter((o) => o.y < y + h + g && y - g < o.y + o.h);
+    const xs = [...new Set([cx, ...row.flatMap((o) => [Math.ceil(o.x + o.w + g), Math.floor(o.x - g - w)])])].filter((x) => x >= 4 && x + w <= C.MAP_W - 4);
+    for (const x of xs.sort((p, q) => Math.abs(p - cx) - Math.abs(q - cx))) yield { x, y, w, h };
+  }
 }
 
 /** What the select hint keeps clear of: the selected tower's drawn footprint (body + selection ring) and its badge, as `layout` (default: this frame's world layout) has them. */
@@ -391,10 +468,15 @@ export function selectHintAvoid(state: GameState, selectedId: string, cam: Camer
   return out;
 }
 
-/** The select hint pill for the `selectedId` tower (`selectHintRect` against `layout`, default this frame's; sets the hint font on `ctx` to measure it). `card`: the lesson card in the logical frame, or null. */
+/**
+ * The select hint pill for the `selectedId` tower: the one `layout` (default this frame's) was laid out
+ * with (draw.ts `playLayout`, BUG-57), else `selectHintRect` against it. Sets the hint font on `ctx`.
+ * `card`: the lesson card in the logical frame, or null.
+ */
 export function selectHintPill(ctx: CanvasRenderingContext2D, state: GameState, selectedId: string, a: HudAnchors, card: Rect | null, cam: Camera = playCamera(), layout: WorldLayout | null = frameWorldLayout(state)): Rect {
-  ctx.font = font(19, '500');
-  return selectHintRect(ctx.measureText(t('hud.selectHint')).width, a, card, selectHintAvoid(state, selectedId, cam, layout));
+  const textW = selectHintTextW(ctx);
+  if (layout?.hint?.id === selectedId) return layout.hint.rect;
+  return selectHintRect(textW, a, card, selectHintAvoid(state, selectedId, cam, layout));
 }
 
 /** Whether `drawHud` shows the select hint this frame: a tower selected while playing, and no airstrike targeting under way. */
@@ -497,16 +579,16 @@ export function drawHud(ctx: CanvasRenderingContext2D, state: GameState, view: V
   ctx.restore();
 
   if (hud?.targeting && ui.outcome === 'playing' && !ui.paused) drawTargeting(ctx, state, ui, nowMs, a.bottom);
-  // selection hint: just above the bottom band, or at the top of the map band when the selected tower stands there (GD-5d)
+  // selection hint: just above the bottom band, or where this frame's layout moved it off the towers (GD-5d, BUG-57)
   else if (ui.selectedTowerId && ui.outcome === 'playing') {
-    ctx.font = font(19, '500');
     const text = t('hud.selectHint');
     const pill = selectHintPill(ctx, state, ui.selectedTowerId, a, card ? { ...card.rect, y: card.rect.y + a.top } : null);
     const w = pill.w;
     drawPill(ctx, pill, pal.paper);
+    ctx.font = font(19, '500');
     ctx.fillStyle = pal.ink;
     ctx.textAlign = 'center';
-    ctx.fillText(text, 360, pill.y + pill.h / 2 + 1, w - 20);
+    ctx.fillText(text, pill.x + w / 2, pill.y + pill.h / 2 + 1, w - 20);
   }
   // transient status while playing (free charge added, "not in the daily challenge"); overlays draw their own.
   // It sits over the bottom band, so it moves with it.
@@ -524,8 +606,10 @@ export function hudKey(state: GameState, ui: PlayUi, nowMs: number): string {
   let k =
     `${currentLanguage()}|${ui.palette.owners.enemy1}|${ui.level.id}|${hud?.challenge?.twist ?? ''}|${formatTime(clockOf(ui, state))}|${ui.speed}|` +
     `${hud?.muted ? 1 : 0}${ui.paused ? 1 : 0}${state.time < 8000 ? 1 : 0}${ui.selectedTowerId ? 1 : 0}|${ui.outcome}|${hud?.streams ?? 0}|${ui.coinsTotal}|${hud?.pressedBooster ?? ''}`;
-  // GD-5d: the select hint's spot follows the selected tower's footprint and badge
-  if (ui.selectedTowerId) for (const r of selectHintAvoid(state, ui.selectedTowerId)) k += `|s${Math.round(r.x)},${Math.round(r.y)},${Math.round(r.w)},${Math.round(r.h)}`;
+  // GD-5d / BUG-57: the select hint's spot, as this frame's world layout placed it (draw.ts `playLayout`)
+  const hint = ui.selectedTowerId ? frameWorldLayout(state)?.hint : undefined;
+  if (hint?.id === ui.selectedTowerId) k += `|s${Math.round(hint.rect.x)},${Math.round(hint.rect.y)}`;
+  else if (ui.selectedTowerId) for (const r of selectHintAvoid(state, ui.selectedTowerId)) k += `|s${Math.round(r.x)},${Math.round(r.y)},${Math.round(r.w)},${Math.round(r.h)}`;
   if (hud) {
     for (const b of hud.boosters) {
       k += `|${b.kind}${b.affordable ? 1 : 0}${b.active ? 1 : 0}${b.adOffer ? 1 : 0}:${b.charges}:${b.cost}`;

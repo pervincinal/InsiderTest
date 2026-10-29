@@ -144,8 +144,12 @@ export interface BadgePlace extends BadgeBox {
  * HUD), slid sideways into the frame. Free: inside the map's width less IN_FRAME (BUG-56: a beside spot
  * off the frame is skipped) and the play band, CARD_CLEAR from the card's clay edge, CHIP_GAP from
  * every badge placed so far.
+ *
+ * BUG-57: `avoid` — the select hint pill placed between the rows of towers (draw.ts `playLayout`) — is
+ * kept CARD_CLEAR from as well, with no clamp under it: a badge whose spot above touches it is placed
+ * with the rest, lifted over the pill first (side 'above'), then the candidates above.
  */
-export function placeBadges(wants: readonly BadgeWant[], card: Rect | null): Map<string, BadgePlace> {
+export function placeBadges(wants: readonly BadgeWant[], card: Rect | null, avoid: Rect | null = null): Map<string, BadgePlace> {
   const cardBottom = card ? card.y + card.h : null;
   const block = card ? { x: card.x, y: card.y, w: card.w, h: card.h + CARD_EDGE } : null;
   const order = wants.slice().sort((p, q) => p.y - q.y || (p.id < q.id ? -1 : p.id > q.id ? 1 : 0));
@@ -162,20 +166,26 @@ export function placeBadges(wants: readonly BadgeWant[], card: Rect | null): Map
     r.y + r.h / 2 >= HUD.mapTop + 26 &&
     r.y + r.h <= HUD.mapBottom - 8 &&
     !(block && overlaps(r, block, CARD_CLEAR)) &&
+    !(avoid && overlaps(r, avoid, CARD_CLEAR)) &&
     !taken.some((t) => overlaps(r, t, CHIP_GAP));
+  const above = (b: BadgeWant): Rect => at(b, slideInX(b.x - b.w / 2, b.w), Math.max(badgeMinY(cardBottom, b.bs), b.naturalY));
   for (const b of order) {
     const minY = badgeMinY(cardBottom, b.bs);
-    if (clampedOntoTower(b.naturalY, minY, b.bs)) rest.push(b);
-    else put(b, at(b, slideInX(b.x - b.w / 2, b.w), Math.max(minY, b.naturalY)), 'above');
+    if (clampedOntoTower(b.naturalY, minY, b.bs) || (avoid && overlaps(above(b), avoid, CARD_CLEAR))) rest.push(b);
+    else put(b, above(b), 'above');
   }
   for (const b of rest) {
     const minY = badgeMinY(cardBottom, b.bs);
-    const clamped: [Rect, BadgeSide] = [at(b, slideInX(b.x - b.w / 2, b.w), Math.max(minY, b.naturalY)), 'above'];
+    const clamped: [Rect, BadgeSide] = [above(b), 'above'];
     const beside = (cy: number): [Rect, BadgeSide][] => [
       [at(b, b.x + b.plinth + BADGE_BELOW_GAP, cy), 'right'],
       [at(b, b.x - b.plinth - BADGE_BELOW_GAP - b.w, cy), 'left'],
     ];
-    const spots: [Rect, BadgeSide][] = [[at(b, b.x - b.w / 2, b.y + b.plinth + b.h / 2 + BADGE_BELOW_GAP), 'below'], ...beside(b.y), clamped, ...(minY > b.y ? beside(minY) : [])];
+    // BUG-57: a badge the hint displaced goes over it, else (after below / beside) under it
+    const moved = avoid && overlaps(clamped[0], avoid, CARD_CLEAR);
+    const lifted: [Rect, BadgeSide][] = moved ? [[{ ...clamped[0], y: avoid.y - CARD_CLEAR - b.h }, 'above']] : [];
+    const dropped: [Rect, BadgeSide][] = moved ? [[{ ...clamped[0], y: avoid.y + avoid.h + CARD_CLEAR }, 'above']] : [];
+    const spots: [Rect, BadgeSide][] = [...lifted, [at(b, b.x - b.w / 2, b.y + b.plinth + b.h / 2 + BADGE_BELOW_GAP), 'below'], ...beside(b.y), ...dropped, clamped, ...(minY > b.y ? beside(minY) : [])];
     const hit = spots.find(([r]) => free(r)) ?? clamped;
     put(b, hit[0], hit[1]);
   }
@@ -316,6 +326,8 @@ export function placeChips(fixed: readonly Rect[], chips: readonly ChipRequest[]
         for (const x of [block.x + block.w + gap, block.x - gap - c.rect.w]) placed ??= slideUp({ ...c.rect, x }, taken, minTop, maxSlide, gap);
       }
     }
+    // BUG-57: still blocked (a mine chip under the select hint, the badges round it lifted over it): slid down under what blocks it
+    placed ??= slideDown(c.rect, taken, maxSlide, gap);
     const r = placed ?? { ...c.rect, x: slideInX(c.rect.x, c.rect.w), y: Math.max(c.rect.y, minTop) };
     out.push(r);
     taken.push(r);
@@ -458,11 +470,12 @@ export function worldChipSpecs(ctx: CanvasRenderingContext2D, state: GameState, 
   return out;
 }
 
-/** `specs` laid out against `badges` (`placeChips`); `minTop`: no chip slides above this screen y (the top band, or the lesson card while it is up). */
-export function layoutWorldChips(badges: ReadonlyMap<string, BadgeBox>, specs: readonly ChipSpec[], minTop: number): PlacedChip[] {
+/** `specs` laid out against `badges` (`placeChips`); `minTop`: no chip slides above this screen y (the top band, or the lesson card while it is up); `avoid`: the select hint between the rows (BUG-57), kept clear like a badge. */
+export function layoutWorldChips(badges: ReadonlyMap<string, BadgeBox>, specs: readonly ChipSpec[], minTop: number, avoid: Rect | null = null): PlacedChip[] {
   if (specs.length === 0) return [];
   const fixed: Rect[] = [];
   for (const b of badges.values()) fixed.push(b.rect);
+  if (avoid) fixed.push(avoid);
   const placed = placeChips(
     fixed,
     specs.map((c) => c.req),
@@ -494,6 +507,8 @@ export interface WorldLayout {
   chips: readonly PlacedChip[];
   /** Each tower's drawn body (`towerBodyRect`). */
   bodies: ReadonlyMap<string, Rect>;
+  /** The select hint pill this layout was laid out with, for the `id` tower selected (draw.ts `playLayout`, BUG-57); absent when not shown. */
+  hint?: { id: string; rect: Rect };
 }
 
 /**

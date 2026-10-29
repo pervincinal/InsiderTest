@@ -10,9 +10,9 @@ import { HUD, SOLDIER_DRAW_SCALE, SWIPE_TRAIL_MS, TANK_DRAW_SCALE, WORLD_ZOOM } 
 import type { Rect } from './widgets';
 import { font, roundRect } from './widgets';
 type XY = { x: number; y: number };
-import { drawHud, drawOverlays, lessonCardLayout, selectHintMoved, selectHintPill, selectHintShown } from './hud';
+import { SELECT_HINT, drawHud, drawOverlays, lessonCardLayout, selectHintCover, selectHintObstacles, selectHintScan, selectHintScore, selectHintShown, selectHintSpots, selectHintTextW } from './hud';
 import type { BadgeWant, WorldLayout } from './worldChips';
-import { badgeScale, chipMinTop, drawWorldChips, layoutWorldChips, placeBadges, setFrameWorldLayout, towerBodyRect, worldChipSpecs } from './worldChips';
+import { CARD_CLEAR, badgeScale, chipMinTop, drawWorldChips, layoutWorldChips, overlaps, placeBadges, setFrameWorldLayout, towerBodyRect, worldChipSpecs } from './worldChips';
 import { blankLayer, paintGround, paintHud } from './layers';
 import { drawSea, terrainSea } from './sea';
 import type { TerrainSpec } from './terrain';
@@ -60,6 +60,8 @@ export interface PlayUi {
    * input layer drops points older than `SWIPE_TRAIL_MS`; the renderer fades them over that span.
    */
   swipeTrail?: readonly { x: number; y: number; t: number }[];
+  /** The tower the first-play tutorial's step on screen points at (GD-5c), or none: the select hint leaves its bubble room (BUG-57, `playLayout`). */
+  tutorialTowerId?: string | null;
 }
 
 /**
@@ -595,7 +597,7 @@ function standing(cam: Camera, t: Tower): TowerLook & { s: number } {
  * `selectedId` tower's badge rides 4 px higher with its raised building), the mine / stream chips
  * (`streams`) laid out against them, and every tower's drawn body. `fire`: which badges are under fire.
  */
-export function worldLayout(ctx: CanvasRenderingContext2D, state: GameState, cam: Camera, selectedId: string | null, card: Rect | null, streams: boolean): WorldLayout & { fire: ReadonlyMap<string, boolean> } {
+export function worldLayout(ctx: CanvasRenderingContext2D, state: GameState, cam: Camera, selectedId: string | null, card: Rect | null, streams: boolean, avoid: Rect | null = null): WorldLayout & { fire: ReadonlyMap<string, boolean> } {
   const wants: BadgeWant[] = [];
   const fire = new Map<string, boolean>();
   const bodies = new Map<string, Rect>();
@@ -610,24 +612,91 @@ export function worldLayout(ctx: CanvasRenderingContext2D, state: GameState, cam
     wants.push({ id: t.id, x: look.x, y: look.y, bs, w, h, naturalY: look.y + badgeLift(t, raise) * look.s, plinth: plinthOf(t, look.s) });
     bodies.set(t.id, towerBodyRect(t.kind, t.level, look));
   }
-  const badges = placeBadges(wants, card);
-  const chips = layoutWorldChips(badges, worldChipSpecs(ctx, state, cam, badges, streams), chipMinTop(card ? card.y + card.h : null));
+  const badges = placeBadges(wants, card, avoid);
+  const chips = layoutWorldChips(badges, worldChipSpecs(ctx, state, cam, badges, streams), chipMinTop(card ? card.y + card.h : null), avoid);
   return { badges, chips, bodies, fire };
 }
 
 /**
  * The play frame's world layout with the select hint (GD-5d; `hint`: shown this frame): `worldLayout`
- * under the lesson card `card`, and when the selected tower stands where the hint would sit over the
- * bottom band, the hint at the top of the map band — a card the badges clear like the lesson card
- * (laid out again under both). `hint` is the pill drawn (null when not shown).
+ * under the lesson card `card`, and the hint where it covers no tower (BUG-57: SELECT_HINT.clear from
+ * every drawn body, the selection ring, every badge and chip — `selectHintObstacles`), first clear of:
+ * (1) its spot over the bottom band; (2) the top of the map band under the HUD / card — a card the
+ * badges clear like the lesson card (laid out again under both, `block`); (3) from there (up to
+ * CARD_CLEAR under the card / band) down, slid sideways or between the rows of towers
+ * (`selectHintScan`): the first spot clear of the world as laid out under the card, else the first
+ * spot clear of the bodies where the badges and chips laid out round it (`avoid`) clear it too (at most
+ * HINT_RELAYOUTS tries) — with a tutorial step on screen pointing at `focus`, a spot that also leaves
+ * its bubble room (`tutorialRoom`) first; (4) none clear: the one covering the least
+ * (`selectHintScore`: chips count 1 %), never the selected tower. `hint` is the pill drawn (null when
+ * not shown); the layout keeps it (`WorldLayout.hint`, read by `drawHud`); `block` / `avoid` are what
+ * `placeBadges` cleared.
  */
-export function playLayout(ctx: CanvasRenderingContext2D, state: GameState, cam: Camera, selectedId: string | null, card: Rect | null, a: HudAnchors, streams: boolean, hint: boolean): { layout: ReturnType<typeof worldLayout>; hint: Rect | null } {
+export function playLayout(ctx: CanvasRenderingContext2D, state: GameState, cam: Camera, selectedId: string | null, card: Rect | null, a: HudAnchors, streams: boolean, hint: boolean, focus: string | null = null): PlayLayout {
   const layout = worldLayout(ctx, state, cam, selectedId, card, streams);
-  if (!selectedId || !hint) return { layout, hint: null };
-  const pill = selectHintPill(ctx, state, selectedId, a, card, cam, layout);
-  if (!selectHintMoved(pill, a)) return { layout, hint: pill };
-  return { layout: worldLayout(ctx, state, cam, selectedId, selectHintBlock(card, pill), streams), hint: pill };
+  if (!selectedId || !hint) return { layout, hint: null, block: card, avoid: null };
+  const keep = (L: WorldFrame, pill: Rect, block: Rect | null, avoid: Rect | null = null): PlayLayout => ({ layout: { ...L, hint: { id: selectedId, rect: pill } }, hint: pill, block, avoid });
+  const { low, top } = selectHintSpots(selectHintTextW(ctx), a, card);
+  const obs = selectHintObstacles(state, selectedId, cam, layout);
+  // (1) over the bottom band
+  if (selectHintScore(low, obs) === 0) return keep(layout, low, card);
+  // (2) under the HUD / card, the badges under both
+  const block = selectHintBlock(card, top);
+  const under = worldLayout(ctx, state, cam, selectedId, block, streams);
+  let best = { out: keep(under, top, block), score: selectHintScore(top, selectHintObstacles(state, selectedId, cam, under)) };
+  if (best.score === 0) return best.out;
+  // (3) between the rows: clear of the world as it is, then clear of the bodies with the badges and chips
+  // laid out round it; a spot in the tutorial bubble's room only when no other is clear
+  const y0 = top.y - SELECT_HINT.gap + CARD_CLEAR;
+  const room = focus ? tutorialRoom(layout, focus) : [];
+  let crowded: PlayLayout | null = null;
+  for (const r of selectHintScan(low.w, y0, low.y, [...obs.fixed, ...obs.badges, ...obs.chips, ...room])) {
+    const score = selectHintScore(r, obs);
+    if (score === 0 && selectHintCover(r, room) === 0) return keep(layout, r, card);
+    if (score === 0) crowded ??= keep(layout, r, card);
+    else if (score < best.score) best = { out: keep(layout, r, card), score };
+  }
+  let tries = 0;
+  for (const r of selectHintScan(low.w, y0, low.y, [...obs.fixed, ...room])) {
+    if (selectHintCover(r, obs.fixed) > 0 || obs.own.some((o) => overlaps(r, o))) continue;
+    if (crowded && selectHintCover(r, room) > 0) continue;
+    const L = worldLayout(ctx, state, cam, selectedId, card, streams, r);
+    const score = selectHintScore(r, selectHintObstacles(state, selectedId, cam, L));
+    if (score === 0 && selectHintCover(r, room) === 0) return keep(L, r, card, r);
+    if (score === 0) crowded ??= keep(L, r, card, r);
+    else if (score < best.score) best = { out: keep(L, r, card, r), score };
+    if (++tries >= HINT_RELAYOUTS) break;
+  }
+  // (4) the least covering
+  return crowded ?? best.out;
 }
+
+/**
+ * BUG-57: the room a first-play tutorial bubble pointing at tower `id` needs (render/tutorialBubble.ts
+ * places it above, beside or below the tower's body and badge): that span across the map, widened by
+ * SELECT_HINT.tutorialRoom above and below (a one-line bubble and its arrow). Empty without the tower.
+ */
+function tutorialRoom(layout: WorldLayout, id: string): Rect[] {
+  const body = layout.bodies.get(id);
+  if (!body) return [];
+  const badge = layout.badges.get(id)?.rect ?? body;
+  const y0 = Math.min(body.y, badge.y) - SELECT_HINT.tutorialRoom;
+  return [{ x: 0, y: y0, w: C.MAP_W, h: Math.max(body.y + body.h, badge.y + badge.h) + SELECT_HINT.tutorialRoom - y0 }];
+}
+
+/** The world layout of a play frame (`worldLayout`). */
+type WorldFrame = ReturnType<typeof worldLayout>;
+
+/** `playLayout`'s result: the frame's world layout (keeping the pill), the pill (null when not shown), and the card / hint `placeBadges` cleared (`block`: clamped under; `avoid`: kept clear of, BUG-57). */
+export interface PlayLayout {
+  layout: WorldFrame;
+  hint: Rect | null;
+  block: Rect | null;
+  avoid: Rect | null;
+}
+
+/** BUG-57: how many spots between the rows `playLayout` lays the badges out round before it settles for the least covering one. */
+export const HINT_RELAYOUTS = 12;
 
 /** The block the badges clear while the select hint `pill` sits at the top of the map band (GD-5d): the lesson card `card` and the pill under it as one rect, or the pill alone. */
 export function selectHintBlock(card: Rect | null, pill: Rect): Rect {
@@ -697,7 +766,7 @@ function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState
 
   // badges on top of everything in the world, placed together, then the stream / mine chips laid out
   // against them (`worldLayout`); kept for the overlays drawn over the world this frame (GD-5c / GD-5d)
-  const { layout } = playLayout(ctx, state, cam, ui.selectedTowerId, card, a, ui.outcome === 'playing', selectHintShown(ui));
+  const { layout } = playLayout(ctx, state, cam, ui.selectedTowerId, card, a, ui.outcome === 'playing', selectHintShown(ui), ui.tutorialTowerId ?? null);
   setFrameWorldLayout(state, layout);
   const { badges, fire } = layout;
   for (const t of towers) {

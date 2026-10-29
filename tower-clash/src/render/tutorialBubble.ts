@@ -409,7 +409,7 @@ export function drawTutorialBubble(ctx: CanvasRenderingContext2D, state: GameSta
   const kept = frameWorldLayout(state);
   const { layout, hint } = kept
     ? { layout: kept, hint: shown && ui.selectedTowerId ? selectHintPill(ctx, state, ui.selectedTowerId, a, card, cam, kept) : null }
-    : playLayout(ctx, state, cam, ui.selectedTowerId, card, a, ui.outcome === 'playing', shown);
+    : playLayout(ctx, state, cam, ui.selectedTowerId, card, a, ui.outcome === 'playing', shown, typeof step.towerId === 'function' ? step.towerId(state) : step.towerId);
   const L = tutorialLayout(ctx, state, step, layout, card, hint, a, cam, ui.selectedTowerId);
   if (!L) return;
   const pulse = (Math.sin(nowMs / 220) + 1) / 2; // 0..1

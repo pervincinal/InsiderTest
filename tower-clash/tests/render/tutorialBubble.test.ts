@@ -17,7 +17,7 @@ import type { HudAnchors } from '../../src/render/view';
 import type { PlayUi } from '../../src/render/draw';
 import { playLayout, worldLayout } from '../../src/render/draw';
 import { SELECT_HINT, lessonCardLayout, selectHintAvoid, selectHintMoved, selectHintPill } from '../../src/render/hud';
-import { selectedFootprint, setFrameWorldLayout } from '../../src/render/worldChips';
+import { CARD_CLEAR, selectedFootprint, setFrameWorldLayout } from '../../src/render/worldChips';
 import { TUTORIAL_BUBBLE, tutorialBand, tutorialLayout } from '../../src/render/tutorialBubble';
 import type { TutorialLayout } from '../../src/render/tutorialBubble';
 import { loadAllLevels } from '../../src/levels/index';
@@ -28,7 +28,7 @@ import type { GameState, LevelDef } from '../../src/sim/types';
 import { currentLanguage, setLanguage, t } from '../../src/ui/i18n';
 import type { Language } from '../../src/ui/i18n';
 import type { TutorialStep } from '../../src/ui/tutorial';
-import { tutorialFor } from '../../src/ui/tutorial';
+import { stepTowerId, tutorialFor } from '../../src/ui/tutorial';
 import { ADVANCES, ADVANCE_CHARS, ADVANCE_ERROR } from './fontAdvances';
 
 /*
@@ -44,10 +44,12 @@ import { ADVANCES, ADVANCE_CHARS, ADVANCE_ERROR } from './fontAdvances';
  *            from the select hint; they stay inside the play band (under the HUD / lesson card) and the
  *            map's width; every line fits the bubble's text slot (no squeeze).
  *   hint     the select hint never overlaps the selected tower's footprint (body + ring) or badge; on
- *            360 × 640 it moves to the top of the map band for the homes of levels 1–5, on 430 × 932 it
- *            stays where it was. GD-6g: levels 1–10 × every own tower selected (level 8's homeW / homeE)
+ *            360 × 640 it moves up off the homes of levels 1–5, on 430 × 932 it stays where it was (but
+ *            for levels 3 and 5). GD-6g: levels 1–10 × every own tower selected (level 8's homeW / homeE)
  *            × both screens × card up / gone × four languages — the homes of 6–10 move it too on
- *            360 × 640, and a moved hint clears every badge and chip.
+ *            360 × 640, and a moved hint clears every badge and chip. BUG-57: where it goes (never on
+ *            any tower) is guarded for every level by tests/render/selectHint.test.ts; with a step on
+ *            screen the renderer passes the step's tower, and the hint leaves the bubble room round it.
  * The perspective camera (`?tilt=0.72`) uses the same placement: it must lay every case out without
  * throwing (its clearances are reported with GD5C_TABLE=1, not asserted).
  */
@@ -180,7 +182,8 @@ function lay(state: GameState, level: LevelDef, step: TutorialStep, a: HudAnchor
   const ui = { outcome: 'playing', level, selectedTowerId: sel } as unknown as PlayUi;
   const lc = lessonCardLayout(ctx, state, ui);
   const card = lc ? { ...lc.rect, y: lc.rect.y + a.top } : null;
-  const { layout, hint } = playLayout(ctx, state, cam, sel, card, a, true, sel !== null);
+  // BUG-57: the renderer passes the step's tower (play.ts `tutorialTowerId`): the hint leaves its bubble room
+  const { layout, hint } = playLayout(ctx, state, cam, sel, card, a, true, sel !== null, stepTowerId(step, state));
   setFrameWorldLayout(state, layout);
   const L = tutorialLayout(ctx, state, step, layout, card, hint, a, cam, sel);
   expect(L, `${level.id}: tutorial layout`).not.toBeNull();
@@ -298,7 +301,7 @@ describe('GD-5d: the select hint never sits on the selected tower', () => {
     return { pill: hint!, avoid: selectHintAvoid(state, sel, FLAT, layout), world };
   };
 
-  it('levels 1–5, home selected: on 360 × 640 the hint moves to the top of the map band; on 430 × 932 it stays above the bottom band', async () => {
+  it('levels 1–5, home selected: on 360 × 640 the hint moves up off the home; on 430 × 932 it stays above the bottom band', async () => {
     for (const lang of LANGS) {
       await setLanguage(lang);
       expect(t('hud.selectHint').startsWith('hud.')).toBe(false);
@@ -307,10 +310,17 @@ describe('GD-5d: the select hint never sits on the selected tower', () => {
           const a = anchorsOf(shape);
           const { pill, avoid } = hintFor(level, { ...createState(level, 1), time: 10_000 }, 'home', a);
           for (const r of avoid) expect(clearance(pill, r), `L${level.id} ${shape.name} ${lang}`).toBeGreaterThanOrEqual(0);
-          if (shape.name === '360x640') expect(pill.y, `L${level.id} ${lang}: moved up`).toBe(HUD.mapTop + SELECT_HINT.gap);
-          // 430 × 932: unchanged, but for level 3 (home at y 1150): its selection ring reaches 8 px under the pill, so the rule moves it too
-          else if (level.id !== 3) expect(pill.y, `L${level.id} ${lang}: unchanged`).toBe(SELECT_HINT.y + a.bottom);
-          else expect(pill.y, `L${level.id} ${lang}: moved up`).toBe(Math.max(0, HUD.mapTop + a.top) + SELECT_HINT.gap);
+          // BUG-57: up to the top of the map band, or — where that covers a far tower (levels 2–5) — between the rows (tests/render/selectHint.test.ts)
+          const up = (): void => {
+            expect(selectHintMoved(pill, a), `L${level.id} ${shape.name} ${lang}: moved up`).toBe(true);
+            expect(pill.y + pill.h, `L${level.id} ${shape.name} ${lang}: over the home`).toBeLessThan(avoid[0]!.y);
+            expect(pill.y, `L${level.id} ${shape.name} ${lang}: under the top band`).toBeGreaterThanOrEqual(Math.max(0, HUD.mapTop + a.top));
+          };
+          if (shape.name === '360x640') up();
+          // 430 × 932: unchanged, but for level 3 (home at y 1150: its selection ring reaches 8 px under the pill) and,
+          // with BUG-57's 3 px clearance, level 5 (home at y 1140: the ring ends 2 px over it), so the rule moves it too
+          else if (level.id !== 3 && level.id !== 5) expect(pill.y, `L${level.id} ${lang}: unchanged`).toBe(SELECT_HINT.y + a.bottom);
+          else up();
         }
       }
     }
@@ -384,15 +394,16 @@ describe('GD-5d: the select hint never sits on the selected tower', () => {
               }
               if (!selectHintMoved(pill, a)) continue;
               moved++;
-              const top = card ? card.y + card.h + 4 + SELECT_HINT.gap : Math.max(0, HUD.mapTop + a.top) + SELECT_HINT.gap;
-              if (pill.y !== top) bad.push(`${where}: moved hint at y ${pill.y}, not ${top}`);
+              // BUG-57: at the top of the map band, or lower where that covers a tower — never over the card / top band
+              const bandTop = card ? card.y + card.h + 4 : Math.max(0, HUD.mapTop + a.top);
+              if (pill.y < bandTop + CARD_CLEAR) bad.push(`${where}: moved hint at y ${pill.y}, over ${bandTop + CARD_CLEAR}`);
               const world = [...[...layout.badges].map(([id, b]) => ({ label: `badge ${id}`, rect: b.rect })), ...layout.chips.map((c) => ({ label: `${c.kind} chip ${c.tower ?? ''}`, rect: c.rect }))];
               for (const w of world) {
                 const px = clearance(pill, w.rect);
                 if (px < 0) bad.push(`${where}: moved hint on ${w.label} (${px.toFixed(1)})`);
                 if (px < worstWorld.px) worstWorld = { px, where: `${where} ${w.label}` };
               }
-              // reported, not asserted: how close the moved pill comes to a drawn tower body (the far towers stand under the top band)
+              // reported here: how close the moved pill comes to a drawn tower body (asserted ≥ 3 px by tests/render/selectHint.test.ts, BUG-57)
               for (const [id, b] of layout.bodies) {
                 const px = clearance(pill, b);
                 if (px < worstBody.px) worstBody = { px, where: `${where} body ${id}` };
@@ -421,15 +432,21 @@ describe('GD-5d: the select hint never sits on the selected tower', () => {
     const lc = lessonCardLayout(ctx, state, ui)!;
     const card = { ...lc.rect, y: lc.rect.y + a.top };
     const { pill } = hintFor(level, state, 'home', a);
-    expect(pill.y).toBe(card.y + card.h + 4 + SELECT_HINT.gap);
+    // BUG-57: level 2's foe stands under the card's top spot, so the hint goes under the foe's row
+    expect(pill.y).toBeGreaterThanOrEqual(card.y + card.h + 4 + CARD_CLEAR);
+    expect(pill.y).toBeLessThan(SELECT_HINT.y);
   });
 
-  it('a selected tower away from the hint keeps it above the bottom band (level 2, mid)', () => {
+  it('a selected tower away from the hint keeps it above the bottom band (level 2, mid; 430 × 932) — unless another tower stands there (360 × 640: home, BUG-57)', () => {
     const level = LEVELS[1]!;
+    const tall = anchorsOf(SHAPES[0]);
     const a = anchorsOf(SHAPES[1]);
     const state = { ...createState(level, 1), time: 10_000 };
     capture(state, 'mid');
-    expect(hintFor(level, state, 'mid', a).pill.y).toBe(SELECT_HINT.y);
+    expect(hintFor(level, state, 'mid', tall).pill.y).toBe(SELECT_HINT.y + tall.bottom);
+    const small = hintFor(level, state, 'mid', a).pill;
+    expect(selectHintMoved(small, a)).toBe(true);
+    expect(clearance(small, worldLayout(ctx, state, FLAT, 'mid', null, true).bodies.get('home')!)).toBeGreaterThanOrEqual(3);
     // the footprint grows round the base with the selection ring
     const layout = worldLayout(ctx, state, FLAT, 'mid', null, true);
     const tw = state.towers['home']!;

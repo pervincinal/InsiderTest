@@ -25,7 +25,7 @@ import { starsFor, writeSave } from './save';
 import type { App, Screen, StartOptions } from './screens';
 import { ResultScreen, Toast } from './screens';
 import type { Tutorial, TutorialStep } from './tutorial';
-import { tutorialFor } from './tutorial';
+import { stepTowerId, tutorialFor } from './tutorial';
 import { drawTutorial } from '../render/tutorialDraw';
 import { TUTORIAL_CHUNK, loadTutorialSteps, needsTutorialSteps, tutorialStepsLoaded } from './tutorialChunk';
 import { chunkBackoff } from '../lazyChunk';
@@ -544,6 +544,8 @@ export class PlayScreen implements Screen {
   draw(view: View, nowMs: number): void {
     const ui = this.buildUi();
     const step = this.tutorialStep();
+    // BUG-57: the select hint leaves the bubble room round the step's tower
+    if (step) ui.tutorialTowerId = stepTowerId(step, this.state);
     // the tutorial bubble paints over the HUD, so those frames keep the single-canvas path
     drawGame(view.ctx, this.state, view, ui, nowMs, !step);
     this.effects.length = 0; // legacy flat ring/puff list: particles.ts renders these now
