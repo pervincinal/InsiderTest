@@ -1,0 +1,181 @@
+---
+name: gstack-build-playability-review
+description: "Use when a prototype or build exists and you need to know: is this worth playing? Not QA (use /game-qa for bugs), not feel (use /feel-pass for responsiveness), not code (use /gameplay-implementation-review). This evaluates the EXPERIENCE: does the loop close, does the session hold, does the player want to come back."
+---
+
+<!-- Third-party skill: gstack-game (MIT), https://github.com/fagemx/gstack-game/tree/main/skills/build-playability-review — copied 2026-10-29. The upstream shell preamble (session files, telemetry under ~/.gstack, the gstack-config binary, routing boilerplate) was removed; the review body and references are unmodified. See .claude/skills/THIRD_PARTY.md -->
+
+## Load references first
+
+Read every file under this skill's `references/` before reviewing — the scoring rubrics are explicit formulas, never intuition:
+- `references/gotchas.md`
+- `references/scoring.md`
+
+Write the review's output into the file the Producer names (default `docs/reviews/<date>-build-playability-review.md`); do not create files under `~/.gstack`.
+
+# /build-playability-review: Is This Worth Playing?
+
+You are a **playability judge**. Not QA (you don't find bugs), not a feel doctor (you don't measure milliseconds), not a code reviewer. You evaluate one thing: **does this build create a player experience worth having?**
+
+**Hard rules:**
+- Evaluate at the BUILD's stage, not at launch quality. Placeholder art is fine. Missing audio is fine. The question is whether the EXPERIENCE works, not the production value.
+- You cannot do this review from code or documents alone. You need a playable build, video, or detailed play session description.
+- Focus on the PLAYER's experience minute by minute, not feature completeness.
+
+---
+
+## Phase 0: Context
+
+> **[Re-ground]** Playability review for `[game/build]` on `[branch]`.
+>
+> Build stage: [prototype / alpha / beta / vertical slice]
+> Hypothesis from slice plan: [if exists — what was this build supposed to test?]
+> Feel pass result: [if exists — alive/breathing/flat/muddy/dead]
+>
+> How should I access this build?
+> A) I can run it (provide command)
+> B) Here's a video / screenshots
+> C) I'll describe the play session to you
+> D) Read the implementation and infer the experience
+
+**STOP.** Wait for access method. Option D is the weakest signal — flag this.
+
+---
+
+## Phase 1: Session Walkthrough
+
+Walk through the build minute by minute as a first-time player. Track:
+
+```
+Time    What Happens          Player Feeling      Flag
+─────   ─────────────         ──────────────      ────
+0:00    [open/start]          [curious/confused]   [OK/⚠️/🔴]
+0:30    [first action]        [engaged/lost]       [OK/⚠️/🔴]
+1:00    [first loop]          [...]                [...]
+...
+X:XX    [session ends]        [why?]               [...]
+```
+
+At each minute mark, note:
+- What the player is DOING (action, not feature)
+- What the player is FEELING (use player-experience emotion vocabulary if available)
+- Whether this is working (OK), concerning (⚠️), or broken (🔴)
+
+---
+
+## Phase 2: Score
+
+Apply the 6-dimension rubric from `references/scoring.md`. Each dimension with cited evidence.
+
+**STOP.** Present full scorecard.
+
+---
+
+## Phase 3: Forcing Questions
+
+Apply from `references/gotchas.md`. At minimum Q1 (stranger test).
+
+**STOP** after each.
+
+---
+
+## Phase 4: Hypothesis Validation
+
+If a slice plan exists, answer:
+
+> **Was the hypothesis validated?**
+>
+> Hypothesis: "[from slice plan]"
+>
+> Result:
+> - **VALIDATED** — the build proved the hypothesis true. [evidence]
+> - **INVALIDATED** — the build proved the hypothesis false. [evidence + what we learned]
+> - **INCONCLUSIVE** — the build couldn't test the hypothesis cleanly. [why — missing elements? too noisy?]
+
+This is the most important output for the team. The score tells you how good the build is. The hypothesis result tells you what to do NEXT.
+
+---
+
+## Action Triage
+
+### AUTO
+- Flag dead time >5s in the session timeline
+- Flag loops that don't close (action → reward but no spend)
+- Flag missing failure state (can't lose = no tension)
+
+### ASK
+- Whether placeholder quality affects the evaluation
+- Whether a specific moment was intentional design or oversight
+- Whether to re-evaluate after a specific fix
+
+### ESCALATE
+- No playable build, no video, no play description — can't review
+- Feel pass scored DEAD — playability review is premature, fix feel first
+- Build crashes within first minute — this is a /game-debug issue, not playability
+
+---
+
+## Important Rules
+
+- **Experience, not features.** "Combat works" is a feature statement. "Player can fight 3 enemies, feels tense, earns gold, buys upgrade, feels stronger" is an experience statement.
+- **Stage-appropriate.** Don't penalize prototypes for placeholder art. DO penalize prototypes for broken core loops.
+- **Hypothesis first.** If a slice plan exists, the #1 question is "was the hypothesis tested?" not "is the build good?"
+- **Minute-by-minute.** Always produce a session timeline. Abstract judgments without timeline evidence are not useful.
+
+## Regression Delta (if prior playability review exists)
+
+If a prior playability artifact was found in Artifact Discovery, compare:
+
+```
+Playability Delta:
+  Dimension          Prior    Current  Change
+  Loop Closure:      _/2      _/2      +_
+  Session Viability: _/2      _/2      +_
+  Onboarding:        _/2      _/2      +_
+  Failure Recovery:  _/2      _/2      +_
+  Retention Signal:  _/2      _/2      +_
+  Peak Moment:       _/2      _/2      +_
+  TOTAL:             _/12     _/12     +_
+  Verdict:           [old] →  [new]
+```
+
+**⚠️ If current < prior: WARN** — the build may have regressed.
+
+## Completion Summary
+
+```
+/build-playability-review complete
+
+Game: [name]
+Build: [version]
+Score: _/12 — [PLAY-READY / ALMOST / NOT YET / TECH DEMO]
+Delta from prior: [+N / first run / N/A]
+Hypothesis: [VALIDATED / INVALIDATED / INCONCLUSIVE]
+
+Top blocker: [one thing]
+
+Status: DONE / DONE_WITH_CONCERNS / BLOCKED
+
+Next Step:
+  PRIMARY: /game-qa — playable, now test systematically
+  (if softlock found): /game-debug — investigate the blocker
+  (if ALMOST): fix blocker, then re-run /build-playability-review
+  (if NOT YET or TECH DEMO): /feel-pass or /implementation-handoff — rework needed
+```
+
+## Save Artifact
+
+```bash
+_DATETIME=$(date +%Y%m%d-%H%M%S)
+echo "Saving to: $_PROJECTS_DIR/${_USER}-${_BRANCH}-playability-${_DATETIME}.md"
+```
+
+Write to `$_PROJECTS_DIR/{user}-{branch}-playability-{datetime}.md`. Supersedes prior.
+
+Discoverable by: /game-qa, /game-ship, /game-retro
+
+## Review Log
+
+```bash
+[ -n "$_GG_BIN" ] && "$_GG_BIN/gstack-review-log" '{"skill":"build-playability-review","timestamp":"TIMESTAMP","status":"STATUS","score":N,"verdict":"VERDICT","hypothesis_result":"RESULT","commit":"COMMIT"}' 2>/dev/null || true
+```
