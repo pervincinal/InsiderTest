@@ -48,7 +48,9 @@ Translations (`name_az/ru/tr`, `lesson_az/ru/tr`): same meaning as the English t
 the HUD level chip (206 px at 24 px bold — about 15 Latin / 15 Cyrillic characters); the lesson banner wraps at 620 px
 (3 lines at 20 px, then 5 lines at 18 px); the card rule is now a test — `e2e/lessonFit.spec.ts` (QA-32) lays out every
 level's card in all four languages with the game's own `lessonCardLayout` and fails on the 18 px fallback, a 4th line or a
-line past 620 px, so a shipped lesson must fit 3 lines at 20 px. The UI reads them through `levelName()` / `levelLesson()` in `src/ui/i18n.ts`
+line past 620 px, and on a 20 px card that needs a 4th line when re-wrapped at 620 − 12 = 608 px with the game's `wrapText`
+(`CARD_WRAP_MARGIN`, QA-33: other renderers measure a few px wider, CI's Chromium and iOS WebKit, and wrap as if narrower; the
+table's `@608` column) — so a shipped lesson must fit 3 lines at 20 px, with room to spare. The UI reads them through `levelName()` / `levelLesson()` in `src/ui/i18n.ts`
 (English fallback); the manifest carries the translated names, so run `npm run levels:manifest` after editing them.
 
 ## Naming & order

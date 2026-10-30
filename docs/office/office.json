@@ -1,6 +1,6 @@
 {
   "board": {
-    "title": "Lövhə · 30 oktyabr, gün 42",
+    "title": "Lövhə · 30 oktyabr, gün 42 (axşam sprinti)",
     "stats": [
       {
         "b": "build 26",
@@ -11,11 +11,11 @@
         "s": "səviyyə bot ilə keçir"
       },
       {
-        "b": "1 884",
+        "b": "1959",
         "s": "unit test, e2e 171 + 4 + 4"
       },
       {
-        "b": "11 / 29",
+        "b": "21 / 29",
         "s": "audit P1 bağlanıb, P0 2/2"
       },
       {
@@ -23,7 +23,7 @@
         "s": "rəyin gözlənilir"
       }
     ],
-    "footer": "Mənbə: <code>.claude/agents/*.md</code> rol faylları, <code>docs/BACKLOG.md</code> və son hesabatlar (gün 39–42). Statuslar 30 oktyabr vəziyyətidir."
+    "footer": "Mənbə: <code>.claude/agents/*.md</code> rol faylları, <code>docs/BACKLOG.md</code> və son hesabatlar (gün 40–42). Statuslar 30 oktyabr axşam vəziyyətidir."
   },
   "team": [
     {
@@ -42,11 +42,11 @@
         "build nömrəsi, commit və push"
       ],
       "recent": [
-        "Gün 42: audit günü 1 — yeddi agent, build 26, bundle büdcəsi 82 → 84 kB qərarı",
-        "Gün 41: beş skill auditini bir siyahıya yığdı (96 tapıntı), P0-ı özü təkrar ölçdü",
-        "Gün 40: üç itirilmiş günü bir sprintdə bağladı, kart dövrəsi 1–50 tamamlandı"
+        "Axşam: dayandırılan beş işi təzə agentlərə verdi, 11 köhnəlmiş e2e gözləntisini özü düzəltdi, zəncir iki dəfə keçdi",
+        "Gün 42 günorta: audit günü 1 — yeddi agent, build 26, bundle büdcəsi 82 → 84 kB qərarı",
+        "Gün 41: beş skill auditini bir siyahıya yığdı (96 tapıntı), P0-ı özü təkrar ölçdü"
       ],
-      "status": "Bu gün işlədi · sabah audit günü 2"
+      "status": "Bu gün iki sprint · sabah audit günü 3"
     },
     {
       "id": "game-designer",
@@ -62,11 +62,11 @@
         "GD-x baxışları"
       ],
       "recent": [
-        "Balans auditi: 5,6 / 10, P0 tutum yüksəlişini tapdı (4-cü səviyyə 20/20 → 4/20)",
-        "GD-12: zolaq cədvəlini səviyyə fayllarına görə yoxladı, altı sətirdən beşini düzəltdi",
-        "2★ döşəməsi təklifi: 34 səviyyədən 16-sının saatı artardı (sənin qərarın)"
+        "Axşam: GDD-də dərs kartının oyunu saxlaması (§4) və pat kartı / geri çəkilmə (§2.4) qaydaları",
+        "GDD zolaq cədvəli: 27 / 32 evi 24 əsgərlə başlayır (AUD-B12)",
+        "Kiçik qeyd: 3-cü səviyyənin 4-cü dərslik addımı boş duran oyunçuda eyni mətnlə çıxır — baxılacaq"
       ],
-      "status": "Bu gün gözlədi · sabah pat çıxışı və kart dayanması"
+      "status": "Bu gün iki qayda yazdı · sabah F5 (ilk əsgər)"
     },
     {
       "id": "gameplay-engineer",
@@ -85,7 +85,7 @@
         "Yan təsir: \"nazik divarlar\" bükülməsi də eyni qaydaya keçdi",
         "Sabah: ilk əsgərin 1 s gecikməsi (AUD-F5) dizaynerin təsdiqi ilə"
       ],
-      "status": "Bu gün işlədi"
+      "status": "Bu gün işlədi · sabah F5"
     },
     {
       "id": "frontend-engineer",
@@ -102,11 +102,11 @@
         "src/main.ts"
       ],
       "recent": [
-        "Bu gün iki nəfər: hər düymə ≥ 44 pt, sürükləmə həddi 10 pt, MENU pauza kartını açır, kristal xərcinə təsdiq",
-        "Korlanmış save ehtiyat açarda qalır, yeni versiyanın save-i yalnız oxunur",
-        "Dünən BUG-57: seçim işarəsi 50 səviyyədən 46-sında qalaları örtürdü — düzəldildi"
+        "Axşam: mətn ≥ 22 px + \"Mətn ölçüsü\" 100 / 125 / 150 %; kart oyunu ilk toxunuşa qədər saxlayır; pat kartı; qələbə anının 600 ms fasiləsi",
+        "Axşam: bundle 85,0 → 83,4 kB — satınalma və gündəlik kodu tənbəl chunk-lara köçdü; 82 üçün namizədlər ölçüldü",
+        "Günorta: hər düymə ≥ 44 pt, sürükləmə həddi 10 pt, MENU pauza kartını açır, kristal xərcinə təsdiq, save ehtiyatı"
       ],
-      "status": "Bu gün işlədi · sabah mətn ölçüləri və qələbə anı"
+      "status": "Bu gün üç nəfər işlədi · sabah F3 və PERF-11"
     },
     {
       "id": "ai-engineer",
@@ -121,11 +121,11 @@
         "istinad oyunçusu, sadə oyunçu modeli"
       ],
       "recent": [
-        "AI / səviyyə auditi: düşmənlər oyunçuya nadir hücum edir (son zolaqda erkən axınların 7 %-i), bir-birini bəsləyir",
-        "Bir səhifəlik insan playtest protokolu yazdı (sənin üçün)",
-        "33-cü səviyyədə üçüncü kralın 9 s-də ölməsini tapdı — level dizayneri düzəltdi"
+        "Axşam: düşmən yaddaşı — 20 s qarşılıqlı duruşdan sonra düşmən o xətti buraxır (28 / 39 / 42 / 47-də sakit duruş ≤ 20 s), bot 1000/1000 dəyişməz",
+        "Tapdı: boş duran oyunçu 28 / 38 / 39 / 42-də hələ çıxarılmır — səbəb hücum üfüqüdür, AUD-A12 (P2)",
+        "Dünən: AI / səviyyə auditi, bir səhifəlik insan playtest protokolu"
       ],
-      "status": "Gözləyir: AI dəyişiklikləri insan playtest-indən sonra"
+      "status": "Bu gün işlədi · AUD-A12 playtest-dən sonra"
     },
     {
       "id": "level-designer",
@@ -140,11 +140,11 @@
         "dərs kartları (EN / AZ / RU / TR)"
       ],
       "recent": [
-        "Bu gün: 33-də sarı kral 6 → 11 əsgər, 20 px yuxarı — 50/50 toxumda 30 s sağ qalır",
-        "Dünən: 27-nin kartı 4 sətirdən 3-ə, 47 və 49-un RU kartları CI üçün qısaldıldı",
-        "Gün 40: 41–50-nin on kartı yenidən yazıldı — kart dövrəsi 1–50 bağlandı"
+        "Axşam: 3-cü səviyyə qərb üçün yenidən düzüldü (ev 18, düşmən 7) — sadə oyunçu hər iki sırada 20/20, istisna silindi",
+        "Axşam: 23 / 27 / 32 — ilk dəfə oynayan xətti 6 / 6 / 4 → 19 / 20 / 14 (20-dən), bot 100/100, saatlar eyni; 7 kart qısaldıldı",
+        "Günorta: 33-də sarı kral 6 → 11 əsgər, 20 px yuxarı — 50/50 toxumda 30 s sağ qalır"
       ],
-      "status": "Bu gün işlədi · sabah 3 və 23 / 27 / 32 layoutu"
+      "status": "Bu gün iki sprint · sabah kart qeydləri"
     },
     {
       "id": "qa-engineer",
@@ -161,11 +161,11 @@
         "Bugs bölməsi"
       ],
       "recent": [
-        "Bu gün: komandir pillə qapısı — köhnə qaydada 12 pillədən 4-ü düşürdü, indi CI addımıdır",
-        "QA auditi 77 / 100: real telefon yoxlaması yoxdur (P0), save sınağında 50 ulduz → 0 tapdı",
-        "Dünən: 200 dərs kartı üçün sığma qoruyucusu, 27-ni tutdu"
+        "Axşam: kart qoruyucusuna 12 px ehtiyat (CI-nin Chromium-u fərqli ölçürdü), e2e şəkilləri izlənən qovluğu kirlətmir, istisnasız sadə-oyunçu qapısı",
+        "Günorta: komandir pillə qapısı — köhnə qaydada 12 pillədən 4-ü düşürdü, indi CI addımıdır",
+        "QA auditi 77 / 100: real telefon yoxlaması yoxdur (P0)"
       ],
-      "status": "Bu gün işlədi · sabah WebKit testi"
+      "status": "Bu gün iki sprint · sabah WebKit (Q5) və performans qapısı (Q8)"
     },
     {
       "id": "tech-artist",
@@ -181,11 +181,11 @@
         "docs/ART_DIRECTION.md"
       ],
       "recent": [
-        "Hiss / audio auditi 8 / 14 (\"yastı\"): vurulanda səs yoxdur, mina adi ölüm kimidir, musiqi yoxdur",
-        "Musiqi təklifi: 0 eager bayt, üç qatlı sintez loop",
-        "Gün 39: BUG-56 nişanlar və çiplər ekranın içində qalır"
+        "Axşam: vurulanda taxta tıqqıltısı + yüngül vibrasiya (qüllə başına 250 ms), mina partlayışı (parıltı, halqa, qığılcım, 2 px silkələnmə, öz səsi), konfeti ekranda — +194 B",
+        "Hiss / audio auditi 8 / 14 (\"yastı\"): indi 10 / 14 gözlənilir — musiqi hələ yoxdur",
+        "Musiqi təklifi: 0 eager bayt, üç qatlı sintez loop (AUD-F6, sabah)"
       ],
-      "status": "Sabah: zərbə səsi + vibrasiya, mina partlayışı, qələbə anı"
+      "status": "Bu gün işlədi · sabah F3 və F6 (musiqi)"
     },
     {
       "id": "mobile-engineer",
@@ -203,11 +203,11 @@
         "docs/MOBILE.md"
       ],
       "recent": [
-        "Bu gün: proqresin native nüsxəsi (@capacitor/preferences), yeniləmə / reinstall üçün TF-00 və TF-17b",
+        "Günorta: proqresin native nüsxəsi (@capacitor/preferences), TF-00 və TF-17b",
         "Capacitor proksisində real səhv tapdı: `await` heç bitmirdi — cihazda bərpa işləməyəcəkdi",
-        "Build 26 arxivi Apple-ın müqavilə tələbinə görə dayandı — sənin təsdiqini gözləyir"
+        "Build 26 arxivi Apple-ın müqavilə tələbinə görə dayandı — sənin təsdiqini gözləyir; vibrasiya cihazda yoxlanmalı"
       ],
-      "status": "Bu gün işlədi · build 26 sorğusu təkrarlanacaq"
+      "status": "Gözləyir: build 26 sorğusu müqavilədən sonra"
     },
     {
       "id": "publisher",
@@ -223,11 +223,11 @@
         "fastlane/"
       ],
       "recent": [
-        "Bu gün: build 26 planı və 20 dəqiqəlik \"ağır nasazlıq\" alt-planı (sənin üçün)",
+        "Günorta: build 26 planı və 20 dəqiqəlik \"ağır nasazlıq\" alt-planı (sənin üçün)",
         "Tapdı: mağaza kadrları düymə yerdəyişməsindən sonra köhnəlib — göndərməzdən əvvəl yenidən çəkilməli (PUB-37)",
-        "Gün 40: mağaza mətnində \"bir sətirlik dərs\" → \"qısa dərs\""
+        "Build 27 qeydlərinə axşam işləri əlavə olunacaq"
       ],
-      "status": "Bu gün işlədi"
+      "status": "Bu gün işlədi · PUB-37 göndərməzdən əvvəl"
     },
     {
       "id": "monetization-designer",
@@ -242,11 +242,11 @@
         "alış kataloqu, reklam qaydaları"
       ],
       "recent": [
-        "Reklam sayğacı qaydası dəyişdi: yalnız qələbələr sayılır, məğlubiyyət seriyasında reklam yoxdur",
-        "Növbədə: 27 və 32 üçün bir zolaqda iki keçid (AUD-B3), qızılın gec xərci (AUD-B8)",
+        "Axşam: hər öyrənmə səviyyəsinə (23 / 27 / 32) öz keçidi — kampaniyada 6 → 9-a qədər keçid; nəticə ekranına bağlandı",
+        "Reklam sayğacı qaydası: yalnız qələbələr sayılır, məğlubiyyət seriyasında reklam yoxdur",
         "Alışlar (IAP) 1.0.1-ə qədər gözləyir — hesablar səndədir"
       ],
-      "status": "Gözləyir: keçid qaydası, qızıl xərci"
+      "status": "Bu gün işlədi · AUD-B8 növbədə"
     },
     {
       "id": "stakeholder",
@@ -265,7 +265,7 @@
       "recent": [
         "Bu gün: Apple yenilənmiş Program License Agreement-i təsdiqini istəyir — qəbul edilməyincə build yüklənmir",
         "Build 26 gələndə: planın başındakı 20 dəqiqəlik alt-plan",
-        "Dörd qərar gözləyir: 2★ döşəməsi, tutum yüksəlişi, musiqi, mağaza kadrları (defaultlar var)"
+        "İki yeni default: \"FREE\" əvəzinə video işarəsi qalır; dərs kartı 20 px-də qalır"
       ],
       "status": "Səndə: Apple müqaviləsi + cihaz yoxlaması"
     }
@@ -307,8 +307,8 @@
       ]
     },
     {
-      "title": "Audit günü 2",
-      "note": "sabah, build 27",
+      "title": "Audit günü 2 — bağlandı (30 oktyabr, axşam)",
+      "note": "hamısı build 27-də",
       "items": [
         {
           "id": "AUD-U2 / Q7",
@@ -317,37 +317,8 @@
             "frontend-engineer",
             "tech-artist"
           ],
-          "day": "gün 43",
-          "t": "Mətn minimumu (bu gün 5,5–13 px) və \"Mətn ölçüsü\" ayarı 100 / 125 / 150 %, qoruyucu test."
-        },
-        {
-          "id": "AUD-F1",
-          "p": "p1",
-          "own": [
-            "tech-artist",
-            "mobile-engineer"
-          ],
-          "day": "gün 43",
-          "t": "Vurulanda səs və yüngül vibrasiya (bu gün heç biri yoxdur)."
-        },
-        {
-          "id": "AUD-F2",
-          "p": "p1",
-          "own": [
-            "tech-artist"
-          ],
-          "day": "gün 43",
-          "t": "Mina partlayışına öz effekti və səsi (bu gün adi ölümlə eynidir)."
-        },
-        {
-          "id": "AUD-F4",
-          "p": "p1",
-          "own": [
-            "frontend-engineer",
-            "tech-artist"
-          ],
-          "day": "gün 43",
-          "t": "Qələbə / məğlubiyyət kartından əvvəl 600 ms fasilə — son tutma görünsün; konfeti ekranda."
+          "day": "bağlı",
+          "t": "Mətn ≥ 22 px, \"Mətn ölçüsü\" 100 / 125 / 150 % (save-də qalır); nişanlar 13 → 15, STREAMS 7 → 11, ipucu 9,5 → 11 CSS px."
         },
         {
           "id": "AUD-B11",
@@ -356,8 +327,8 @@
             "game-designer",
             "frontend-engineer"
           ],
-          "day": "gün 43",
-          "t": "Dərs kartı açıq olanda oyun ilk toxunuşa qədər dayansın (düşmən 0,0 s-də başlayır, kart 8 s qalır)."
+          "day": "bağlı",
+          "t": "Dərs kartı açıq olanda oyun ilk toxunuşa qədər dayanır; kart 250 ms-də sönür."
         },
         {
           "id": "AUD-B2 / A11",
@@ -367,8 +338,27 @@
             "frontend-engineer",
             "ai-engineer"
           ],
-          "day": "gün 43",
-          "t": "Pat vəziyyəti insan üçün bitsin: 45 s tutma olmayanda \"Yenidən / davam\" kartı, geri çəkilmə məğlubiyyət sayılır; düşmən qalxanları 20 s-dən sonra düşür."
+          "day": "bağlı",
+          "t": "45 s tutma olmayanda \"Heç nə dəyişmir\" kartı (Davam / Yenidən / Geri çəkil); düşmən 20 s duruşdan sonra xətti buraxır."
+        },
+        {
+          "id": "AUD-F4",
+          "p": "p1",
+          "own": [
+            "frontend-engineer",
+            "tech-artist"
+          ],
+          "day": "bağlı",
+          "t": "Nəticə kartından əvvəl 600 ms — son tutma görünür; konfeti ekranın içində başlayır."
+        },
+        {
+          "id": "AUD-F1 / F2",
+          "p": "p1",
+          "own": [
+            "tech-artist"
+          ],
+          "day": "bağlı",
+          "t": "Vurulanda səs + vibrasiya; mina partlayışının öz effekti və səsi."
         },
         {
           "id": "AUD-B9",
@@ -376,8 +366,8 @@
           "own": [
             "level-designer"
           ],
-          "day": "gün 43",
-          "t": "3-cü səviyyə qərbdən başlayanda 0/20 — layout yenidən; sonra tutorial istisnası silinir."
+          "day": "bağlı",
+          "t": "3-cü səviyyə qərb üçün yenidən: ev 18, düşmən 7 — sadə oyunçu hər iki sırada 20/20, istisna silindi."
         },
         {
           "id": "AUD-B12",
@@ -385,23 +375,34 @@
           "own": [
             "level-designer"
           ],
-          "day": "gün 43",
-          "t": "23 / 27 / 32 öyrənmə səviyyələrinə yazılmış layout rıçaqları (sadə oyunçu 7 / 6 / 4 ÷ 20); 100 toxum və bütün bükülmələrlə ölçü."
+          "day": "bağlı",
+          "t": "23 / 27 / 32: ilk dəfə oynayan xətti 6 / 6 / 4 → 19 / 20 / 14 (20-dən); bot 100/100."
         },
         {
           "id": "AUD-B3",
           "p": "p1",
           "own": [
-            "monetization-designer"
+            "monetization-designer",
+            "frontend-engineer"
           ],
-          "day": "gün 43",
-          "t": "Hər öyrənmə səviyyəsinə bir keçid (27 və 32 bir zolaqda bir keçidi paylaşır)."
+          "day": "bağlı",
+          "t": "Hər öyrənmə səviyyəsinə öz keçidi (6 → 9-a qədər)."
+        },
+        {
+          "id": "QA-33",
+          "p": "p2",
+          "own": [
+            "qa-engineer",
+            "level-designer"
+          ],
+          "day": "bağlı",
+          "t": "Kart qoruyucusuna 12 px ehtiyat; 7 kart qısaldıldı."
         }
       ]
     },
     {
       "title": "Audit günü 3",
-      "note": "o biri gün",
+      "note": "sabah, build 27",
       "items": [
         {
           "id": "AUD-F6",
@@ -410,7 +411,7 @@
             "tech-artist",
             "frontend-engineer"
           ],
-          "day": "gün 44",
+          "day": "gün 43",
           "t": "Audio kanalları (SFX / UI / Musiqi) + limiter + ducking; 0 eager baytlıq sintez musiqi loop; Musiqi / Effektlər ayarları."
         },
         {
@@ -420,7 +421,7 @@
             "tech-artist",
             "frontend-engineer"
           ],
-          "day": "gün 44",
+          "day": "gün 43",
           "t": "Freeze və Overdrive busterləri dünyada görünsün (buz / qızıl halqalar), öz səsləri olsun."
         },
         {
@@ -430,7 +431,7 @@
             "gameplay-engineer",
             "game-designer"
           ],
-          "day": "gün 44",
+          "day": "gün 43",
           "t": "Yeni axında ilk əsgər dərhal çıxsın (bu gün 1 035 ms gecikir) — sim dəyişikliyi, tam playtest."
         },
         {
@@ -440,7 +441,7 @@
             "qa-engineer",
             "mobile-engineer"
           ],
-          "day": "gün 44",
+          "day": "gün 43",
           "t": "CI-də WebKit (iPhone mühərriki) Playwright layihəsi; simulator tətbiqini bir dəfə açmaq."
         },
         {
@@ -450,7 +451,7 @@
             "qa-engineer",
             "mobile-engineer"
           ],
-          "day": "gün 44",
+          "day": "gün 43",
           "t": "Nisbi performans qapısı + ekranda kadr-vaxtı göstəricisi (TF-13 üçün)."
         },
         {
@@ -461,8 +462,17 @@
             "publisher",
             "frontend-engineer"
           ],
-          "day": "gün 44",
+          "day": "gün 43",
           "t": "Telemetriya: cihazda opt-in `level_end` hadisəsi (cəhd, nəticə, vaxt, ulduz) — 9 qərar \"telemetriya gələnə qədər\" gözləyir."
+        },
+        {
+          "id": "PERF-11",
+          "p": "p2",
+          "own": [
+            "frontend-engineer"
+          ],
+          "day": "gün 43",
+          "t": "Eager bundle 83,4 kB → 82-nin altına (nəticə ekranı 2,0 kB, mağaza boot-u 1,3 kB namizəddir); sonra büdcə 84 → 82."
         }
       ]
     },
@@ -492,6 +502,15 @@
           "t": "17–50-də 2★ döşəməsi (16 səviyyənin saatı 5–30 s artır) — iqtisadiyyat §6 yenidən hesablanandan sonra."
         },
         {
+          "id": "AUD-A12",
+          "p": "p2",
+          "own": [
+            "ai-engineer"
+          ],
+          "day": "playtest sonra",
+          "t": "Boş duran oyunçu 28 / 38 / 39 / 42-də çıxarılmır — düşmənin hücum üfüqü bir xətdən evə hücumu sığdırmır."
+        },
+        {
           "id": "AUD-A3…A9",
           "p": "p2",
           "own": [
@@ -515,25 +534,6 @@
           ],
           "day": "göndərməzdən əvvəl",
           "t": "Mağaza kadrları build 26-dan köhnəlib (düymələr yerini dəyişdi) — 01–07 və 09 yenidən çəkilməli."
-        },
-        {
-          "id": "QA-33",
-          "p": "p2",
-          "own": [
-            "qa-engineer",
-            "level-designer"
-          ],
-          "day": "gün 43–44",
-          "t": "Kart qoruyucusuna 12 px ehtiyat; altı sıx kart (11 EN, 14 RU, 18 EN, 45 RU, 48 EN/TR) qısaldılmalı."
-        },
-        {
-          "id": "PERF-11",
-          "p": "p2",
-          "own": [
-            "frontend-engineer"
-          ],
-          "day": "gün 44",
-          "t": "Eager bundle 82,3 kB — bütün audit işləri saxlanmaqla 82-nin altına; sonra büdcə 84 → 82."
         },
         {
           "id": "PUB-9",
