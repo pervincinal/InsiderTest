@@ -1,0 +1,621 @@
+{
+  "board": {
+    "title": "Lövhə · 30 oktyabr, gün 42",
+    "stats": [
+      {
+        "b": "build 26",
+        "s": "hazırdır, Apple müqaviləsini gözləyir"
+      },
+      {
+        "b": "50 / 50",
+        "s": "səviyyə bot ilə keçir"
+      },
+      {
+        "b": "1 884",
+        "s": "unit test, e2e 171 + 4 + 4"
+      },
+      {
+        "b": "11 / 29",
+        "s": "audit P1 bağlanıb, P0 2/2"
+      },
+      {
+        "b": "17 gün",
+        "s": "rəyin gözlənilir"
+      }
+    ],
+    "footer": "Mənbə: <code>.claude/agents/*.md</code> rol faylları, <code>docs/BACKLOG.md</code> və son hesabatlar (gün 39–42). Statuslar 30 oktyabr vəziyyətidir."
+  },
+  "team": [
+    {
+      "id": "producer",
+      "name": "Prodüser",
+      "role": "Komanda rəhbəri",
+      "color": "#1f8fc2",
+      "tag": "rəhbər",
+      "cls": "lead",
+      "lead": true,
+      "does": "Hər səhər 08:02-də sprinti başladır: branch-ı sinxronlaşdırır, backlog-dan 3–6 iş seçir, rol agentlərini paralel işə salır, nəticələri birləşdirir, bütün yoxlamaları (check, playtest, e2e, CI) keçirir və sənə Azərbaycanca gündəlik hesabat yazır.",
+      "owns": [
+        "docs/BACKLOG.md",
+        "reports/",
+        "docs/PLAN.md",
+        "build nömrəsi, commit və push"
+      ],
+      "recent": [
+        "Gün 42: audit günü 1 — yeddi agent, build 26, bundle büdcəsi 82 → 84 kB qərarı",
+        "Gün 41: beş skill auditini bir siyahıya yığdı (96 tapıntı), P0-ı özü təkrar ölçdü",
+        "Gün 40: üç itirilmiş günü bir sprintdə bağladı, kart dövrəsi 1–50 tamamlandı"
+      ],
+      "status": "Bu gün işlədi · sabah audit günü 2"
+    },
+    {
+      "id": "game-designer",
+      "name": "Oyun dizayneri",
+      "role": "Qaydalar və balans",
+      "color": "#7c5cbf",
+      "tag": "işlədi",
+      "cls": "",
+      "does": "GDD-ni (qaydalar sənədi), balans sabitlərini və səviyyə zolaqlarını yazır. Hər dərs kartını \"karta hərfi əməl edən\" simulyasiya oyunçusu ilə yoxlayır və keçməyənləri yenidən yazmaq üçün level dizaynerinə dəqiq mətn verir.",
+      "owns": [
+        "docs/GDD.md",
+        "balans sabitləri, 2★ / 3★ saat qaydaları",
+        "GD-x baxışları"
+      ],
+      "recent": [
+        "Balans auditi: 5,6 / 10, P0 tutum yüksəlişini tapdı (4-cü səviyyə 20/20 → 4/20)",
+        "GD-12: zolaq cədvəlini səviyyə fayllarına görə yoxladı, altı sətirdən beşini düzəltdi",
+        "2★ döşəməsi təklifi: 34 səviyyədən 16-sının saatı artardı (sənin qərarın)"
+      ],
+      "status": "Bu gün gözlədi · sabah pat çıxışı və kart dayanması"
+    },
+    {
+      "id": "gameplay-engineer",
+      "name": "Gameplay mühəndisi",
+      "role": "Simulyasiya",
+      "color": "#2f9e5c",
+      "tag": "işlədi",
+      "cls": "",
+      "does": "Oyunun deterministik qaydalarını yazır: qüllələr, axınlar, tutma, yüksəlmə, minalar, toplar. Hər qayda rəqəmlə test olunur; simulyasiyada DOM, saat və təsadüf yoxdur, ona görə eyni toxum həmişə eyni oyunu verir.",
+      "owns": [
+        "tower-clash/src/sim/",
+        "tests/sim/"
+      ],
+      "recent": [
+        "AUD-B1 (P0): tutum çarpanı artıq 25 / 50 yüksəlmə həddini dəyişmir, yalnız üst tavanı böyüdür — 16 yeni test",
+        "Yan təsir: \"nazik divarlar\" bükülməsi də eyni qaydaya keçdi",
+        "Sabah: ilk əsgərin 1 s gecikməsi (AUD-F5) dizaynerin təsdiqi ilə"
+      ],
+      "status": "Bu gün işlədi"
+    },
+    {
+      "id": "frontend-engineer",
+      "name": "Frontend mühəndisi",
+      "role": "Ekranlar və toxunuş",
+      "color": "#e0702e",
+      "tag": "işlədi",
+      "cls": "",
+      "does": "Oyunçunun gördüyü və toxunduğu hər şey: canvas çəkimi, HUD, menyular, nişanlar, toxunuş jestləri, save/yükləmə, PWA. Hər dəyişiklik 360×640 və 430×932 ekranlarda kadrlarla və qoruyucu testlərlə yoxlanır.",
+      "owns": [
+        "src/render/",
+        "src/ui/",
+        "src/input/",
+        "src/main.ts"
+      ],
+      "recent": [
+        "Bu gün iki nəfər: hər düymə ≥ 44 pt, sürükləmə həddi 10 pt, MENU pauza kartını açır, kristal xərcinə təsdiq",
+        "Korlanmış save ehtiyat açarda qalır, yeni versiyanın save-i yalnız oxunur",
+        "Dünən BUG-57: seçim işarəsi 50 səviyyədən 46-sında qalaları örtürdü — düzəldildi"
+      ],
+      "status": "Bu gün işlədi · sabah mətn ölçüləri və qələbə anı"
+    },
+    {
+      "id": "ai-engineer",
+      "name": "AI mühəndisi",
+      "role": "Düşmən və bot",
+      "color": "#c9453d",
+      "tag": "gözləyir",
+      "cls": "wait",
+      "does": "Düşmən şəxsiyyətlərini (hücumçu, tısbağa, fürsətçi), çətinlik artımını və istinad botunu yazır. Bot hər səviyyəni udmalıdır — bu, \"səviyyə keçilə bilər\" sübutudur; sadə oyunçu xətti isə ilk dəfə oynayanı modelləşdirir.",
+      "owns": [
+        "tower-clash/src/ai/",
+        "istinad oyunçusu, sadə oyunçu modeli"
+      ],
+      "recent": [
+        "AI / səviyyə auditi: düşmənlər oyunçuya nadir hücum edir (son zolaqda erkən axınların 7 %-i), bir-birini bəsləyir",
+        "Bir səhifəlik insan playtest protokolu yazdı (sənin üçün)",
+        "33-cü səviyyədə üçüncü kralın 9 s-də ölməsini tapdı — level dizayneri düzəltdi"
+      ],
+      "status": "Gözləyir: AI dəyişiklikləri insan playtest-indən sonra"
+    },
+    {
+      "id": "level-designer",
+      "name": "Level dizayneri",
+      "role": "50 səviyyə",
+      "color": "#b8860b",
+      "tag": "işlədi",
+      "cls": "",
+      "does": "Səviyyə fayllarını (qalalar, yollar, divarlar, minalar, saatlar) və dərs kartlarını dörd dildə yazır. Hər kart ≤ 3 sətir sığmalı və hərfi əməl edən oyunçu ilə qazanmalıdır; hər dəyişiklik playtest qapılarından keçir.",
+      "owns": [
+        "tower-clash/src/levels/*.json",
+        "dərs kartları (EN / AZ / RU / TR)"
+      ],
+      "recent": [
+        "Bu gün: 33-də sarı kral 6 → 11 əsgər, 20 px yuxarı — 50/50 toxumda 30 s sağ qalır",
+        "Dünən: 27-nin kartı 4 sətirdən 3-ə, 47 və 49-un RU kartları CI üçün qısaldıldı",
+        "Gün 40: 41–50-nin on kartı yenidən yazıldı — kart dövrəsi 1–50 bağlandı"
+      ],
+      "status": "Bu gün işlədi · sabah 3 və 23 / 27 / 32 layoutu"
+    },
+    {
+      "id": "qa-engineer",
+      "name": "QA mühəndisi",
+      "role": "Testlər və CI",
+      "color": "#2a7f9e",
+      "tag": "işlədi",
+      "cls": "",
+      "does": "Unit testləri, Playwright e2e dəstini və CI-ı saxlayır; hər səhvi təkrar istehsal edib reqressiya testi yazır. Bir tapıntı test olmadan bağlanmır: kart sığması, nişan düzümü, kadr vaxtı, save sınağı — hamısı avtomatdır.",
+      "owns": [
+        "tower-clash/tests/",
+        "tower-clash/e2e/",
+        ".github/workflows/",
+        "Bugs bölməsi"
+      ],
+      "recent": [
+        "Bu gün: komandir pillə qapısı — köhnə qaydada 12 pillədən 4-ü düşürdü, indi CI addımıdır",
+        "QA auditi 77 / 100: real telefon yoxlaması yoxdur (P0), save sınağında 50 ulduz → 0 tapdı",
+        "Dünən: 200 dərs kartı üçün sığma qoruyucusu, 27-ni tutdu"
+      ],
+      "status": "Bu gün işlədi · sabah WebKit testi"
+    },
+    {
+      "id": "tech-artist",
+      "name": "Tech artist",
+      "role": "Görünüş və səs",
+      "color": "#d4536b",
+      "tag": "gözləyir",
+      "cls": "wait",
+      "does": "Vizual üslubu (palitra, qalaların və əsgərlərin çəkimi, zərrəciklər, ekran effektləri) və WebAudio ilə sintez olunan səsləri yaradır. Rəng-korluğu palitrası və \"az hərəkət\" rejimi onun qoruyucularındandır.",
+      "owns": [
+        "src/render/ effektlər, palitra",
+        "src/audio/",
+        "docs/ART_DIRECTION.md"
+      ],
+      "recent": [
+        "Hiss / audio auditi 8 / 14 (\"yastı\"): vurulanda səs yoxdur, mina adi ölüm kimidir, musiqi yoxdur",
+        "Musiqi təklifi: 0 eager bayt, üç qatlı sintez loop",
+        "Gün 39: BUG-56 nişanlar və çiplər ekranın içində qalır"
+      ],
+      "status": "Sabah: zərbə səsi + vibrasiya, mina partlayışı, qələbə anı"
+    },
+    {
+      "id": "mobile-engineer",
+      "name": "Mobil mühəndis",
+      "role": "iOS və Android",
+      "color": "#4a6fa5",
+      "tag": "işlədi",
+      "cls": "",
+      "does": "Capacitor qabığını, Android / iOS layihələrini, CI build-lərini (APK, imzalı iOS arxivi, TestFlight yükləməsi) və cihaz test planını saxlayır. Açarlar və parollar heç vaxt çatda olmur — onları yalnız sən GitHub-a qoyursan.",
+      "owns": [
+        "capacitor.config.ts",
+        "android/",
+        "ios/",
+        "release/*.request",
+        "docs/MOBILE.md"
+      ],
+      "recent": [
+        "Bu gün: proqresin native nüsxəsi (@capacitor/preferences), yeniləmə / reinstall üçün TF-00 və TF-17b",
+        "Capacitor proksisində real səhv tapdı: `await` heç bitmirdi — cihazda bərpa işləməyəcəkdi",
+        "Build 26 arxivi Apple-ın müqavilə tələbinə görə dayandı — sənin təsdiqini gözləyir"
+      ],
+      "status": "Bu gün işlədi · build 26 sorğusu təkrarlanacaq"
+    },
+    {
+      "id": "publisher",
+      "name": "Publisher",
+      "role": "Mağaza və buraxılış",
+      "color": "#6b8e23",
+      "tag": "işlədi",
+      "cls": "",
+      "does": "App Store və Google Play mətnlərini (4 dildə), kadrları, məxfilik siyasətini, buraxılış qeydlərini, TestFlight test planını və buraxılış siyahısını yazır. Hər iddianı kodla yoxlayır; səndən heç nə istəmir, lazım olanı siyahıya status ilə yazır.",
+      "owns": [
+        "docs/publishing/",
+        "tower-clash/store/",
+        "fastlane/"
+      ],
+      "recent": [
+        "Bu gün: build 26 planı və 20 dəqiqəlik \"ağır nasazlıq\" alt-planı (sənin üçün)",
+        "Tapdı: mağaza kadrları düymə yerdəyişməsindən sonra köhnəlib — göndərməzdən əvvəl yenidən çəkilməli (PUB-37)",
+        "Gün 40: mağaza mətnində \"bir sətirlik dərs\" → \"qısa dərs\""
+      ],
+      "status": "Bu gün işlədi"
+    },
+    {
+      "id": "monetization-designer",
+      "name": "Monetizasiya dizayneri",
+      "role": "İqtisadiyyat",
+      "color": "#8c7a3e",
+      "tag": "gözləyir",
+      "cls": "wait",
+      "does": "İki valyutanı (qızıl + kristal), alış kataloqunu, reklam strategiyasını və qazanc / xərc modelini ECONOMY.md-də saxlayır. Prinsip: enerji yoxdur, təkrar pulsuzdur, heç bir səviyyə yüksəliş tələb etmir.",
+      "owns": [
+        "docs/ECONOMY.md",
+        "alış kataloqu, reklam qaydaları"
+      ],
+      "recent": [
+        "Reklam sayğacı qaydası dəyişdi: yalnız qələbələr sayılır, məğlubiyyət seriyasında reklam yoxdur",
+        "Növbədə: 27 və 32 üçün bir zolaqda iki keçid (AUD-B3), qızılın gec xərci (AUD-B8)",
+        "Alışlar (IAP) 1.0.1-ə qədər gözləyir — hesablar səndədir"
+      ],
+      "status": "Gözləyir: keçid qaydası, qızıl xərci"
+    },
+    {
+      "id": "stakeholder",
+      "name": "Pərvin",
+      "role": "Stakeholder (sən)",
+      "color": "#1e2a33",
+      "tag": "səndə",
+      "cls": "you",
+      "you": true,
+      "does": "Hesabatları oxuyursan, TestFlight-da oynayıb \"yaxşıdır\" və ya iradlarını yazırsan, Apple / Google hesablarını və açarları idarə edirsən. Komanda heç nəyi sənsiz buraxmır: \"Release\" düyməsi yalnız səndədir.",
+      "owns": [
+        "Apple Developer və App Store Connect hesabı",
+        "iPhone-da TestFlight yoxlaması",
+        "qərarlar (defaultlar hesabatda)"
+      ],
+      "recent": [
+        "Bu gün: Apple yenilənmiş Program License Agreement-i təsdiqini istəyir — qəbul edilməyincə build yüklənmir",
+        "Build 26 gələndə: planın başındakı 20 dəqiqəlik alt-plan",
+        "Dörd qərar gözləyir: 2★ döşəməsi, tutum yüksəlişi, musiqi, mağaza kadrları (defaultlar var)"
+      ],
+      "status": "Səndə: Apple müqaviləsi + cihaz yoxlaması"
+    }
+  ],
+  "backlog": [
+    {
+      "title": "Səndə",
+      "note": "yalnız sən edə bilərsən",
+      "items": [
+        {
+          "id": "MM-15",
+          "p": "you",
+          "own": [
+            "stakeholder",
+            "mobile-engineer"
+          ],
+          "day": "bu gün",
+          "t": "Apple: yenilənmiş Program License Agreement-i qəbul et (developer.apple.com → Agreements). Qəbul edilməyincə heç bir build TestFlight-a yüklənmir; build 26 hazırdır."
+        },
+        {
+          "id": "AUD-Q1 / A2",
+          "p": "p0",
+          "own": [
+            "stakeholder",
+            "producer"
+          ],
+          "day": "build 26 gələndə",
+          "t": "Real telefonda heç vaxt yoxlama olmayıb: planın başındakı 20 dəqiqəlik \"ağır nasazlıq\" alt-planı və bir səhifəlik playtest protokolu. Nəticə yazılana qədər App Review-a göndərilmir."
+        },
+        {
+          "id": "Qərarlar",
+          "p": "you",
+          "own": [
+            "stakeholder"
+          ],
+          "day": "istənilən vaxt",
+          "t": "Dörd qərar (defaultlar var): 2★ döşəməsi 1.0-a girsin (bəli), tutum yüksəlişi qalsın (bəli), musiqi (bəli), mağaza kadrları göndərməzdən əvvəl yenidən çəkilsin."
+        }
+      ]
+    },
+    {
+      "title": "Audit günü 2",
+      "note": "sabah, build 27",
+      "items": [
+        {
+          "id": "AUD-U2 / Q7",
+          "p": "p1",
+          "own": [
+            "frontend-engineer",
+            "tech-artist"
+          ],
+          "day": "gün 43",
+          "t": "Mətn minimumu (bu gün 5,5–13 px) və \"Mətn ölçüsü\" ayarı 100 / 125 / 150 %, qoruyucu test."
+        },
+        {
+          "id": "AUD-F1",
+          "p": "p1",
+          "own": [
+            "tech-artist",
+            "mobile-engineer"
+          ],
+          "day": "gün 43",
+          "t": "Vurulanda səs və yüngül vibrasiya (bu gün heç biri yoxdur)."
+        },
+        {
+          "id": "AUD-F2",
+          "p": "p1",
+          "own": [
+            "tech-artist"
+          ],
+          "day": "gün 43",
+          "t": "Mina partlayışına öz effekti və səsi (bu gün adi ölümlə eynidir)."
+        },
+        {
+          "id": "AUD-F4",
+          "p": "p1",
+          "own": [
+            "frontend-engineer",
+            "tech-artist"
+          ],
+          "day": "gün 43",
+          "t": "Qələbə / məğlubiyyət kartından əvvəl 600 ms fasilə — son tutma görünsün; konfeti ekranda."
+        },
+        {
+          "id": "AUD-B11",
+          "p": "p1",
+          "own": [
+            "game-designer",
+            "frontend-engineer"
+          ],
+          "day": "gün 43",
+          "t": "Dərs kartı açıq olanda oyun ilk toxunuşa qədər dayansın (düşmən 0,0 s-də başlayır, kart 8 s qalır)."
+        },
+        {
+          "id": "AUD-B2 / A11",
+          "p": "p1",
+          "own": [
+            "game-designer",
+            "frontend-engineer",
+            "ai-engineer"
+          ],
+          "day": "gün 43",
+          "t": "Pat vəziyyəti insan üçün bitsin: 45 s tutma olmayanda \"Yenidən / davam\" kartı, geri çəkilmə məğlubiyyət sayılır; düşmən qalxanları 20 s-dən sonra düşür."
+        },
+        {
+          "id": "AUD-B9",
+          "p": "p1",
+          "own": [
+            "level-designer"
+          ],
+          "day": "gün 43",
+          "t": "3-cü səviyyə qərbdən başlayanda 0/20 — layout yenidən; sonra tutorial istisnası silinir."
+        },
+        {
+          "id": "AUD-B12",
+          "p": "p1",
+          "own": [
+            "level-designer"
+          ],
+          "day": "gün 43",
+          "t": "23 / 27 / 32 öyrənmə səviyyələrinə yazılmış layout rıçaqları (sadə oyunçu 7 / 6 / 4 ÷ 20); 100 toxum və bütün bükülmələrlə ölçü."
+        },
+        {
+          "id": "AUD-B3",
+          "p": "p1",
+          "own": [
+            "monetization-designer"
+          ],
+          "day": "gün 43",
+          "t": "Hər öyrənmə səviyyəsinə bir keçid (27 və 32 bir zolaqda bir keçidi paylaşır)."
+        }
+      ]
+    },
+    {
+      "title": "Audit günü 3",
+      "note": "o biri gün",
+      "items": [
+        {
+          "id": "AUD-F6",
+          "p": "p1",
+          "own": [
+            "tech-artist",
+            "frontend-engineer"
+          ],
+          "day": "gün 44",
+          "t": "Audio kanalları (SFX / UI / Musiqi) + limiter + ducking; 0 eager baytlıq sintez musiqi loop; Musiqi / Effektlər ayarları."
+        },
+        {
+          "id": "AUD-F3",
+          "p": "p1",
+          "own": [
+            "tech-artist",
+            "frontend-engineer"
+          ],
+          "day": "gün 44",
+          "t": "Freeze və Overdrive busterləri dünyada görünsün (buz / qızıl halqalar), öz səsləri olsun."
+        },
+        {
+          "id": "AUD-F5",
+          "p": "p1",
+          "own": [
+            "gameplay-engineer",
+            "game-designer"
+          ],
+          "day": "gün 44",
+          "t": "Yeni axında ilk əsgər dərhal çıxsın (bu gün 1 035 ms gecikir) — sim dəyişikliyi, tam playtest."
+        },
+        {
+          "id": "AUD-Q5",
+          "p": "p1",
+          "own": [
+            "qa-engineer",
+            "mobile-engineer"
+          ],
+          "day": "gün 44",
+          "t": "CI-də WebKit (iPhone mühərriki) Playwright layihəsi; simulator tətbiqini bir dəfə açmaq."
+        },
+        {
+          "id": "AUD-Q8",
+          "p": "p1",
+          "own": [
+            "qa-engineer",
+            "mobile-engineer"
+          ],
+          "day": "gün 44",
+          "t": "Nisbi performans qapısı + ekranda kadr-vaxtı göstəricisi (TF-13 üçün)."
+        },
+        {
+          "id": "AUD-B6",
+          "p": "p1",
+          "own": [
+            "producer",
+            "publisher",
+            "frontend-engineer"
+          ],
+          "day": "gün 44",
+          "t": "Telemetriya: cihazda opt-in `level_end` hadisəsi (cəhd, nəticə, vaxt, ulduz) — 9 qərar \"telemetriya gələnə qədər\" gözləyir."
+        }
+      ]
+    },
+    {
+      "title": "Sənin playtest-indən sonra",
+      "note": "insan məlumatı lazımdır",
+      "items": [
+        {
+          "id": "AUD-B4 / A13",
+          "p": "p1",
+          "own": [
+            "game-designer",
+            "level-designer"
+          ],
+          "day": "playtest sonra",
+          "t": "3★ saatları insan vaxtlarından (bot 1 000 oyunda 71 dəfə 3★ alır); 180 kristalı qapayır."
+        },
+        {
+          "id": "AUD-B5",
+          "p": "p1",
+          "own": [
+            "game-designer",
+            "level-designer",
+            "monetization-designer"
+          ],
+          "day": "playtest sonra",
+          "t": "17–50-də 2★ döşəməsi (16 səviyyənin saatı 5–30 s artır) — iqtisadiyyat §6 yenidən hesablanandan sonra."
+        },
+        {
+          "id": "AUD-A3…A9",
+          "p": "p2",
+          "own": [
+            "ai-engineer",
+            "level-designer"
+          ],
+          "day": "playtest sonra",
+          "t": "Düşmən AI: oyunçuya hücum, bir-birini bəsləməmək, lent titrəməsi, fürsətçi, gözləməyin pulsuz olması, tərs çətinlik — hər biri 34+ səviyyənin yenidən saatlanması deməkdir."
+        }
+      ]
+    },
+    {
+      "title": "Buraxılışdan əvvəl",
+      "note": "App Store-a göndərməzdən əvvəl",
+      "items": [
+        {
+          "id": "PUB-37",
+          "p": "p1",
+          "own": [
+            "publisher"
+          ],
+          "day": "göndərməzdən əvvəl",
+          "t": "Mağaza kadrları build 26-dan köhnəlib (düymələr yerini dəyişdi) — 01–07 və 09 yenidən çəkilməli."
+        },
+        {
+          "id": "QA-33",
+          "p": "p2",
+          "own": [
+            "qa-engineer",
+            "level-designer"
+          ],
+          "day": "gün 43–44",
+          "t": "Kart qoruyucusuna 12 px ehtiyat; altı sıx kart (11 EN, 14 RU, 18 EN, 45 RU, 48 EN/TR) qısaldılmalı."
+        },
+        {
+          "id": "PERF-11",
+          "p": "p2",
+          "own": [
+            "frontend-engineer"
+          ],
+          "day": "gün 44",
+          "t": "Eager bundle 82,3 kB — bütün audit işləri saxlanmaqla 82-nin altına; sonra büdcə 84 → 82."
+        },
+        {
+          "id": "PUB-9",
+          "p": "p2",
+          "own": [
+            "stakeholder"
+          ],
+          "day": "buraxılışda",
+          "t": "`tower-clash-v1.0.0` teqi GitHub-dan (bu mühit teq push edə bilmir)."
+        }
+      ]
+    },
+    {
+      "title": "Hesablar gələndə",
+      "note": "sənin hesabların / telefonun lazımdır",
+      "items": [
+        {
+          "id": "ECON-1",
+          "p": "p2",
+          "own": [
+            "mobile-engineer",
+            "publisher",
+            "stakeholder"
+          ],
+          "day": "1.0.1",
+          "t": "Real RevenueCat + AdMob açarları (GitHub secret kimi sən qoyursan), cihazda sandbox alışı, məhsullar App Store Connect / Play-də."
+        },
+        {
+          "id": "ECON-8",
+          "p": "p2",
+          "own": [
+            "stakeholder"
+          ],
+          "day": "1.0.1",
+          "t": "`app-ads.txt` üçün domen kökü lazımdır — sənin qərarın."
+        },
+        {
+          "id": "QA-2 / MM-1",
+          "p": "p2",
+          "own": [
+            "qa-engineer",
+            "mobile-engineer",
+            "stakeholder"
+          ],
+          "day": "telefon gələndə",
+          "t": "Android APK-nı real telefonda yoxlamaq (Play hesabı və Android telefon yoxdur)."
+        }
+      ]
+    },
+    {
+      "title": "Buraxılışdan sonra",
+      "note": "telemetriya ilə",
+      "items": [
+        {
+          "id": "LV-11",
+          "p": "p2",
+          "own": [
+            "game-designer"
+          ],
+          "day": "1.0 sonra",
+          "t": "Həftəlik 3★ hədəfi: insanların 3★ nisbətinə baxıb hədəfi 1,1 × star3 etmək (5 %-dən az çatırsa)."
+        },
+        {
+          "id": "MM-4 / M3-5",
+          "p": "p2",
+          "own": [
+            "mobile-engineer",
+            "qa-engineer"
+          ],
+          "day": "1.0 sonra",
+          "t": "Cihazda yaddaş (üç canvas qatı) və 400 əsgərdə 60 fps ölçüsü."
+        },
+        {
+          "id": "P2 / P3",
+          "p": "p2",
+          "own": [
+            "producer"
+          ],
+          "day": "planlaşdırılmayıb",
+          "t": "65 tapıntı beş hesabatda: UX U6–U27, balans B8 / B10 / B13–B20, hiss F7–F19, QA Q10–Q19, AI A10 / A12 / A14–A15."
+        }
+      ]
+    }
+  ]
+}

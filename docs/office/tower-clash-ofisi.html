@@ -1,0 +1,209 @@
+<title>Tower Clash Ofisi</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&family=Nunito:wght@400;600;700&display=swap">
+<style>
+  /* Layout: a top-down studio floor (desks on a grid, producer's desk in the middle, a whiteboard on the wall),
+     a detail card beside it on wide screens and as a bottom sheet on phones. Palette from the game's own island:
+     sea blue accent, sand paper, slate ink. Faces are the game's (Fredoka display, Nunito body). */
+  :root {
+    --bg: #eef3f6; --floor: #dfe7ec; --floor-line: #cfd9e0; --paper: #fffdf7; --paper-edge: #e4dccb;
+    --ink: #1e2a33; --ink-2: #51606b; --accent: #1f8fc2; --accent-ink: #0d5f87; --amber: #d98b0f; --green: #2f9e5c; --red: #c9453d;
+    --desk: #c9a471; --desk-edge: #a7844f; --chair: #44535e; --shadow: 0 10px 30px rgba(30, 42, 51, .12);
+    --display: 'Fredoka', 'Nunito', system-ui, sans-serif; --body: 'Nunito', system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #121a21; --floor: #1b2630; --floor-line: #26343f; --paper: #1f2a34; --paper-edge: #30404d;
+    --ink: #e8eef2; --ink-2: #a2b1bc; --accent: #4fb3e0; --accent-ink: #9bd6f0; --amber: #f0a832; --green: #4fc27a; --red: #e26a62;
+    --desk: #8a6d44; --desk-edge: #5f4a2d; --chair: #6d7f8c; --shadow: 0 10px 30px rgba(0, 0, 0, .4); color-scheme: dark } }
+  :root[data-theme="dark"] {
+    --bg: #121a21; --floor: #1b2630; --floor-line: #26343f; --paper: #1f2a34; --paper-edge: #30404d;
+    --ink: #e8eef2; --ink-2: #a2b1bc; --accent: #4fb3e0; --accent-ink: #9bd6f0; --amber: #f0a832; --green: #4fc27a; --red: #e26a62;
+    --desk: #8a6d44; --desk-edge: #5f4a2d; --chair: #6d7f8c; --shadow: 0 10px 30px rgba(0, 0, 0, .4); color-scheme: dark }
+  * { box-sizing: border-box }
+  body { background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.45;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 18px 40px }
+  h1, h2, h3 { font-family: var(--display); font-weight: 700; margin: 0; text-wrap: balance }
+  .wrap { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start }
+  .wrap.nocard { grid-template-columns: minmax(0, 1fr) }
+  @media (max-width: 860px) { .wrap { grid-template-columns: minmax(0, 1fr) } }
+  header { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px }
+  header h1 { font-size: clamp(26px, 4vw, 36px); color: var(--accent-ink) }
+  header p { margin: 0; color: var(--ink-2); font-size: 14px }
+
+  /* Whiteboard */
+  .board { background: var(--paper); border: 1px solid var(--paper-edge); border-radius: 10px; padding: 12px 14px; display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px 16px; box-shadow: var(--shadow) }
+  .board h2 { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); grid-column: 1 / -1 }
+  .stat b { display: block; font-family: var(--display); font-size: 22px; font-variant-numeric: tabular-nums; color: var(--ink) }
+  .stat span { font-size: 12px; color: var(--ink-2) }
+
+  /* Floor */
+  .floor { margin-top: 16px; background: var(--floor); border-radius: 14px; padding: 18px; position: relative;
+    background-image: linear-gradient(var(--floor-line) 1px, transparent 1px), linear-gradient(90deg, var(--floor-line) 1px, transparent 1px);
+    background-size: 40px 40px; }
+  .floor::before { content: "Tower Clash studiyası · 11 agent + 1 stakeholder"; position: absolute; top: -10px; left: 18px; font-family: var(--display); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; background: var(--accent); color: #fff; padding: 2px 10px; border-radius: 999px }
+  .desks { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px }
+  @media (max-width: 640px) { .desks { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px } }
+  .desk { appearance: none; border: 0; background: transparent; padding: 0; cursor: pointer; text-align: left; font: inherit; color: inherit; border-radius: 12px; outline-offset: 4px }
+  .desk:focus-visible { outline: 3px solid var(--accent) }
+  .desk .top { position: relative; aspect-ratio: 4 / 3; max-width: 100%; border-radius: 12px; background: var(--desk); border-bottom: 6px solid var(--desk-edge); display: grid; place-items: center; transition: transform .15s ease, box-shadow .15s ease }
+  .desk:hover .top, .desk[aria-pressed="true"] .top { transform: translateY(-3px); box-shadow: var(--shadow) }
+  .desk[aria-pressed="true"] .top { outline: 3px solid var(--accent) }
+  .desk svg { width: 64%; height: auto; display: block }
+  .desk .name { margin-top: 8px; font-family: var(--display); font-weight: 700; font-size: 15px; line-height: 1.15 }
+  .desk .role { font-size: 12px; color: var(--ink-2) }
+  .pill { position: absolute; top: 8px; right: 8px; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; padding: 2px 8px; border-radius: 999px; color: #fff; background: var(--green) }
+  .pill.wait { background: var(--amber) } .pill.you { background: var(--red) } .pill.lead { background: var(--accent) }
+  .producer .top { background: linear-gradient(180deg, var(--desk), var(--desk-edge)); }
+  @media (prefers-reduced-motion: reduce) { .desk .top { transition: none } }
+
+  /* Detail card */
+  .card:not(.open) { display: none }
+  .card { position: sticky; top: calc(12px + env(safe-area-inset-top, 0px)); background: var(--paper); border: 1px solid var(--paper-edge); border-radius: 12px; padding: 16px 18px; box-shadow: var(--shadow); min-width: 0 }
+  .card h2 { font-size: 22px; color: var(--accent-ink) }
+  .card .sub { color: var(--ink-2); font-size: 13px; margin: 2px 0 12px }
+  .card h3 { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); margin-top: 14px }
+  .card p { margin: 6px 0 0; font-size: 14.5px }
+  .card ul { margin: 6px 0 0; padding-left: 18px; font-size: 14px }
+  .card li + li { margin-top: 4px }
+  .card code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; background: var(--floor); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere }
+  .status { display: inline-block; margin-top: 10px; font-size: 12.5px; font-weight: 700; padding: 3px 10px; border-radius: 999px; color: #fff; background: var(--green) }
+  .status.wait { background: var(--amber) } .status.you { background: var(--red) } .status.lead { background: var(--accent) }
+  .hint { font-size: 13px; color: var(--ink-2); margin-top: 12px }
+  @media (max-width: 860px) {
+    .card { position: fixed; left: 0; right: 0; bottom: 0; top: auto; border-radius: 16px 16px 0 0; max-height: 70vh; overflow: auto; z-index: 20;
+      padding-left: max(18px, env(safe-area-inset-left, 0px)); padding-right: max(18px, env(safe-area-inset-right, 0px)); padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateY(105%); transition: transform .2s ease }
+    .card.open { transform: none; display: block }
+  }
+  .close { position: absolute; top: 10px; right: 10px; width: 34px; height: 34px; border: 0; border-radius: 50%; background: var(--floor); color: var(--ink); font: 700 20px/1 var(--display); cursor: pointer; display: grid; place-items: center }
+  .close:hover { background: var(--floor-line) } .close:focus-visible { outline: 2px solid var(--accent) }
+  .card h2 { padding-right: 40px }
+  /* Backlog */
+  .backlog { grid-column: 1; margin-top: 8px; min-width: 0 }
+  .backlog h2 { font-size: 22px; color: var(--accent-ink) }
+  .backlog .lede { color: var(--ink-2); font-size: 14px; margin: 4px 0 14px }
+  .group { background: var(--paper); border: 1px solid var(--paper-edge); border-radius: 12px; padding: 12px 14px; margin-top: 12px; min-width: 0 }
+  .group h3 { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline }
+  .group h3 small { font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--ink-2) }
+  .items { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px }
+  .item { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; align-items: start; padding: 8px 10px; border-radius: 8px; border-left: 4px solid var(--floor-line); background: transparent; transition: background .15s ease }
+  .item.p0 { border-left-color: var(--red) } .item.p1 { border-left-color: var(--amber) } .item.p2 { border-left-color: var(--accent) } .item.you { border-left-color: var(--red) }
+  .item.mine { background: var(--floor) }
+  .item.dim { opacity: .45 }
+  .item .id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--ink-2); padding-top: 2px; white-space: nowrap }
+  .item .txt { font-size: 14px; min-width: 0 }
+  .item .meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px }
+  .chip { font-size: 11.5px; font-weight: 700; padding: 1px 8px; border-radius: 999px; background: var(--floor); color: var(--ink-2); border: 0; font-family: inherit; cursor: pointer }
+  .chip.day { background: transparent; border: 1px solid var(--floor-line) }
+  .chip:focus-visible { outline: 2px solid var(--accent) }
+  .filter { font-size: 13px; color: var(--ink-2); margin-top: 10px; display: none } .filter.on { display: block }
+  .filter button { border: 0; background: var(--floor); color: var(--ink); font: inherit; font-size: 12.5px; font-weight: 700; padding: 3px 10px; border-radius: 999px; cursor: pointer; margin-left: 6px }
+  @media (max-width: 860px) { .backlog { padding-bottom: 20px } }
+  footer { grid-column: 1 / -1; color: var(--ink-2); font-size: 12.5px; margin-top: 8px }
+</style>
+
+<div class="wrap nocard" id="wrap">
+  <header>
+    <h1>Tower Clash Ofisi</h1>
+    <p>Masaya toxun: agentin nə iş gördüyü, nəyə cavabdeh olduğu və son işləri. Hər gün 08:02 Bakı vaxtı sprint başlayır.</p>
+  </header>
+
+  <section>
+    <div class="board" aria-label="Lövhə">
+      <h2>Lövhə · 30 oktyabr, gün 42</h2>
+      <div class="stat"><b>build 26</b><span>hazırdır, Apple müqaviləsini gözləyir</span></div>
+      <div class="stat"><b>50 / 50</b><span>səviyyə bot ilə keçir</span></div>
+      <div class="stat"><b>1 884</b><span>unit test, e2e 171 + 4 + 4</span></div>
+      <div class="stat"><b>11 / 29</b><span>audit P1 bağlanıb, P0 2/2</span></div>
+      <div class="stat"><b>17 gün</b><span>rəyin gözlənilir</span></div>
+    </div>
+
+    <div class="floor">
+      <div class="desks" id="desks"></div>
+    </div>
+  </section>
+
+  <aside class="card" id="card" aria-live="polite" role="dialog" aria-label="İşçi hesabatı">
+    <button class="close" id="close" type="button" aria-label="Bağla" title="Bağla">×</button>
+    <h2 id="cName">Ofisə xoş gəlmisən</h2>
+    <p class="sub" id="cRole">Bir masaya toxun.</p>
+    <div id="cBody">
+      <p>On bir agent bir komanda kimi işləyir: prodüser günü planlayır, hər rol öz qovluğuna cavabdehdir, QA hər şeyi yoxlayır, publisher mağazaya hazırlayır. Sənin masan da buradadır.</p>
+    </div>
+  </aside>
+
+  <section class="backlog" id="backlog">
+    <h2>Backlog · açıq işlər</h2>
+    <p class="lede">Prioritet: <b style="color:var(--red)">P0</b> buraxılışı bloklayır · <b style="color:var(--amber)">P1</b> 1.0-dan əvvəl · <b style="color:var(--accent)">P2</b> 1.0.1. Sahibin adına toxun — masası açılır; masaya toxunanda onun işləri işıqlanır. 65 P2 / P3 tapıntı hesabatlarda gözləyir.</p>
+    <div class="filter" id="filter">Göstərilir: <b id="filterName"></b><button type="button" id="filterOff">Hamısını göstər</button></div>
+    <div id="groups"></div>
+  </section>
+
+  <footer>Mənbə: <code>.claude/agents/*.md</code> rol faylları, <code>docs/BACKLOG.md</code> və son hesabatlar (gün 39–42). Statuslar 30 oktyabr vəziyyətidir.</footer>
+</div>
+
+<script>
+  const TEAM = [{"id":"producer","name":"Prodüser","role":"Komanda rəhbəri","color":"#1f8fc2","tag":"rəhbər","cls":"lead","lead":true,"does":"Hər səhər 08:02-də sprinti başladır: branch-ı sinxronlaşdırır, backlog-dan 3–6 iş seçir, rol agentlərini paralel işə salır, nəticələri birləşdirir, bütün yoxlamaları (check, playtest, e2e, CI) keçirir və sənə Azərbaycanca gündəlik hesabat yazır.","owns":["docs/BACKLOG.md","reports/","docs/PLAN.md","build nömrəsi, commit və push"],"recent":["Gün 42: audit günü 1 — yeddi agent, build 26, bundle büdcəsi 82 → 84 kB qərarı","Gün 41: beş skill auditini bir siyahıya yığdı (96 tapıntı), P0-ı özü təkrar ölçdü","Gün 40: üç itirilmiş günü bir sprintdə bağladı, kart dövrəsi 1–50 tamamlandı"],"status":"Bu gün işlədi · sabah audit günü 2"},{"id":"game-designer","name":"Oyun dizayneri","role":"Qaydalar və balans","color":"#7c5cbf","tag":"işlədi","cls":"","does":"GDD-ni (qaydalar sənədi), balans sabitlərini və səviyyə zolaqlarını yazır. Hər dərs kartını \"karta hərfi əməl edən\" simulyasiya oyunçusu ilə yoxlayır və keçməyənləri yenidən yazmaq üçün level dizaynerinə dəqiq mətn verir.","owns":["docs/GDD.md","balans sabitləri, 2★ / 3★ saat qaydaları","GD-x baxışları"],"recent":["Balans auditi: 5,6 / 10, P0 tutum yüksəlişini tapdı (4-cü səviyyə 20/20 → 4/20)","GD-12: zolaq cədvəlini səviyyə fayllarına görə yoxladı, altı sətirdən beşini düzəltdi","2★ döşəməsi təklifi: 34 səviyyədən 16-sının saatı artardı (sənin qərarın)"],"status":"Bu gün gözlədi · sabah pat çıxışı və kart dayanması"},{"id":"gameplay-engineer","name":"Gameplay mühəndisi","role":"Simulyasiya","color":"#2f9e5c","tag":"işlədi","cls":"","does":"Oyunun deterministik qaydalarını yazır: qüllələr, axınlar, tutma, yüksəlmə, minalar, toplar. Hər qayda rəqəmlə test olunur; simulyasiyada DOM, saat və təsadüf yoxdur, ona görə eyni toxum həmişə eyni oyunu verir.","owns":["tower-clash/src/sim/","tests/sim/"],"recent":["AUD-B1 (P0): tutum çarpanı artıq 25 / 50 yüksəlmə həddini dəyişmir, yalnız üst tavanı böyüdür — 16 yeni test","Yan təsir: \"nazik divarlar\" bükülməsi də eyni qaydaya keçdi","Sabah: ilk əsgərin 1 s gecikməsi (AUD-F5) dizaynerin təsdiqi ilə"],"status":"Bu gün işlədi"},{"id":"frontend-engineer","name":"Frontend mühəndisi","role":"Ekranlar və toxunuş","color":"#e0702e","tag":"işlədi","cls":"","does":"Oyunçunun gördüyü və toxunduğu hər şey: canvas çəkimi, HUD, menyular, nişanlar, toxunuş jestləri, save/yükləmə, PWA. Hər dəyişiklik 360×640 və 430×932 ekranlarda kadrlarla və qoruyucu testlərlə yoxlanır.","owns":["src/render/","src/ui/","src/input/","src/main.ts"],"recent":["Bu gün iki nəfər: hər düymə ≥ 44 pt, sürükləmə həddi 10 pt, MENU pauza kartını açır, kristal xərcinə təsdiq","Korlanmış save ehtiyat açarda qalır, yeni versiyanın save-i yalnız oxunur","Dünən BUG-57: seçim işarəsi 50 səviyyədən 46-sında qalaları örtürdü — düzəldildi"],"status":"Bu gün işlədi · sabah mətn ölçüləri və qələbə anı"},{"id":"ai-engineer","name":"AI mühəndisi","role":"Düşmən və bot","color":"#c9453d","tag":"gözləyir","cls":"wait","does":"Düşmən şəxsiyyətlərini (hücumçu, tısbağa, fürsətçi), çətinlik artımını və istinad botunu yazır. Bot hər səviyyəni udmalıdır — bu, \"səviyyə keçilə bilər\" sübutudur; sadə oyunçu xətti isə ilk dəfə oynayanı modelləşdirir.","owns":["tower-clash/src/ai/","istinad oyunçusu, sadə oyunçu modeli"],"recent":["AI / səviyyə auditi: düşmənlər oyunçuya nadir hücum edir (son zolaqda erkən axınların 7 %-i), bir-birini bəsləyir","Bir səhifəlik insan playtest protokolu yazdı (sənin üçün)","33-cü səviyyədə üçüncü kralın 9 s-də ölməsini tapdı — level dizayneri düzəltdi"],"status":"Gözləyir: AI dəyişiklikləri insan playtest-indən sonra"},{"id":"level-designer","name":"Level dizayneri","role":"50 səviyyə","color":"#b8860b","tag":"işlədi","cls":"","does":"Səviyyə fayllarını (qalalar, yollar, divarlar, minalar, saatlar) və dərs kartlarını dörd dildə yazır. Hər kart ≤ 3 sətir sığmalı və hərfi əməl edən oyunçu ilə qazanmalıdır; hər dəyişiklik playtest qapılarından keçir.","owns":["tower-clash/src/levels/*.json","dərs kartları (EN / AZ / RU / TR)"],"recent":["Bu gün: 33-də sarı kral 6 → 11 əsgər, 20 px yuxarı — 50/50 toxumda 30 s sağ qalır","Dünən: 27-nin kartı 4 sətirdən 3-ə, 47 və 49-un RU kartları CI üçün qısaldıldı","Gün 40: 41–50-nin on kartı yenidən yazıldı — kart dövrəsi 1–50 bağlandı"],"status":"Bu gün işlədi · sabah 3 və 23 / 27 / 32 layoutu"},{"id":"qa-engineer","name":"QA mühəndisi","role":"Testlər və CI","color":"#2a7f9e","tag":"işlədi","cls":"","does":"Unit testləri, Playwright e2e dəstini və CI-ı saxlayır; hər səhvi təkrar istehsal edib reqressiya testi yazır. Bir tapıntı test olmadan bağlanmır: kart sığması, nişan düzümü, kadr vaxtı, save sınağı — hamısı avtomatdır.","owns":["tower-clash/tests/","tower-clash/e2e/",".github/workflows/","Bugs bölməsi"],"recent":["Bu gün: komandir pillə qapısı — köhnə qaydada 12 pillədən 4-ü düşürdü, indi CI addımıdır","QA auditi 77 / 100: real telefon yoxlaması yoxdur (P0), save sınağında 50 ulduz → 0 tapdı","Dünən: 200 dərs kartı üçün sığma qoruyucusu, 27-ni tutdu"],"status":"Bu gün işlədi · sabah WebKit testi"},{"id":"tech-artist","name":"Tech artist","role":"Görünüş və səs","color":"#d4536b","tag":"gözləyir","cls":"wait","does":"Vizual üslubu (palitra, qalaların və əsgərlərin çəkimi, zərrəciklər, ekran effektləri) və WebAudio ilə sintez olunan səsləri yaradır. Rəng-korluğu palitrası və \"az hərəkət\" rejimi onun qoruyucularındandır.","owns":["src/render/ effektlər, palitra","src/audio/","docs/ART_DIRECTION.md"],"recent":["Hiss / audio auditi 8 / 14 (\"yastı\"): vurulanda səs yoxdur, mina adi ölüm kimidir, musiqi yoxdur","Musiqi təklifi: 0 eager bayt, üç qatlı sintez loop","Gün 39: BUG-56 nişanlar və çiplər ekranın içində qalır"],"status":"Sabah: zərbə səsi + vibrasiya, mina partlayışı, qələbə anı"},{"id":"mobile-engineer","name":"Mobil mühəndis","role":"iOS və Android","color":"#4a6fa5","tag":"işlədi","cls":"","does":"Capacitor qabığını, Android / iOS layihələrini, CI build-lərini (APK, imzalı iOS arxivi, TestFlight yükləməsi) və cihaz test planını saxlayır. Açarlar və parollar heç vaxt çatda olmur — onları yalnız sən GitHub-a qoyursan.","owns":["capacitor.config.ts","android/","ios/","release/*.request","docs/MOBILE.md"],"recent":["Bu gün: proqresin native nüsxəsi (@capacitor/preferences), yeniləmə / reinstall üçün TF-00 və TF-17b","Capacitor proksisində real səhv tapdı: `await` heç bitmirdi — cihazda bərpa işləməyəcəkdi","Build 26 arxivi Apple-ın müqavilə tələbinə görə dayandı — sənin təsdiqini gözləyir"],"status":"Bu gün işlədi · build 26 sorğusu təkrarlanacaq"},{"id":"publisher","name":"Publisher","role":"Mağaza və buraxılış","color":"#6b8e23","tag":"işlədi","cls":"","does":"App Store və Google Play mətnlərini (4 dildə), kadrları, məxfilik siyasətini, buraxılış qeydlərini, TestFlight test planını və buraxılış siyahısını yazır. Hər iddianı kodla yoxlayır; səndən heç nə istəmir, lazım olanı siyahıya status ilə yazır.","owns":["docs/publishing/","tower-clash/store/","fastlane/"],"recent":["Bu gün: build 26 planı və 20 dəqiqəlik \"ağır nasazlıq\" alt-planı (sənin üçün)","Tapdı: mağaza kadrları düymə yerdəyişməsindən sonra köhnəlib — göndərməzdən əvvəl yenidən çəkilməli (PUB-37)","Gün 40: mağaza mətnində \"bir sətirlik dərs\" → \"qısa dərs\""],"status":"Bu gün işlədi"},{"id":"monetization-designer","name":"Monetizasiya dizayneri","role":"İqtisadiyyat","color":"#8c7a3e","tag":"gözləyir","cls":"wait","does":"İki valyutanı (qızıl + kristal), alış kataloqunu, reklam strategiyasını və qazanc / xərc modelini ECONOMY.md-də saxlayır. Prinsip: enerji yoxdur, təkrar pulsuzdur, heç bir səviyyə yüksəliş tələb etmir.","owns":["docs/ECONOMY.md","alış kataloqu, reklam qaydaları"],"recent":["Reklam sayğacı qaydası dəyişdi: yalnız qələbələr sayılır, məğlubiyyət seriyasında reklam yoxdur","Növbədə: 27 və 32 üçün bir zolaqda iki keçid (AUD-B3), qızılın gec xərci (AUD-B8)","Alışlar (IAP) 1.0.1-ə qədər gözləyir — hesablar səndədir"],"status":"Gözləyir: keçid qaydası, qızıl xərci"},{"id":"stakeholder","name":"Pərvin","role":"Stakeholder (sən)","color":"#1e2a33","tag":"səndə","cls":"you","you":true,"does":"Hesabatları oxuyursan, TestFlight-da oynayıb \"yaxşıdır\" və ya iradlarını yazırsan, Apple / Google hesablarını və açarları idarə edirsən. Komanda heç nəyi sənsiz buraxmır: \"Release\" düyməsi yalnız səndədir.","owns":["Apple Developer və App Store Connect hesabı","iPhone-da TestFlight yoxlaması","qərarlar (defaultlar hesabatda)"],"recent":["Bu gün: Apple yenilənmiş Program License Agreement-i təsdiqini istəyir — qəbul edilməyincə build yüklənmir","Build 26 gələndə: planın başındakı 20 dəqiqəlik alt-plan","Dörd qərar gözləyir: 2★ döşəməsi, tutum yüksəlişi, musiqi, mağaza kadrları (defaultlar var)"],"status":"Səndə: Apple müqaviləsi + cihaz yoxlaması"}];
+
+  const desks = document.getElementById('desks');
+  const card = document.getElementById('card');
+  const cName = document.getElementById('cName'), cRole = document.getElementById('cRole'), cBody = document.getElementById('cBody');
+
+  function avatar(m) {
+    const initials = m.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+    return `<svg viewBox="0 0 120 90" aria-hidden="true">
+      <rect x="8" y="58" width="104" height="22" rx="6" fill="rgba(0,0,0,.18)"/>
+      <rect x="14" y="20" width="30" height="20" rx="3" fill="#0f1c26"/><rect x="17" y="23" width="24" height="14" rx="2" fill="${m.color}" opacity=".85"/>
+      <rect x="24" y="40" width="10" height="6" fill="#0f1c26"/>
+      <circle cx="78" cy="30" r="14" fill="#f4d3b0"/>
+      <path d="M62 26c0-12 32-12 32 0v-2c0-4-5-8-16-8s-16 4-16 8z" fill="#2d2118"/>
+      <rect x="58" y="44" width="40" height="30" rx="10" fill="${m.color}"/>
+      <text x="78" y="64" text-anchor="middle" font-family="Fredoka, Nunito, sans-serif" font-weight="700" font-size="14" fill="#fff">${initials}</text>
+      <rect x="20" y="68" width="76" height="6" rx="3" fill="var(--chair)"/>
+    </svg>`;
+  }
+
+  TEAM.forEach((m) => {
+    const b = document.createElement('button');
+    b.className = 'desk' + (m.lead ? ' producer' : '');
+    b.type = 'button'; b.dataset.id = m.id; b.setAttribute('aria-pressed', 'false');
+    b.innerHTML = `<div class="top"><span class="pill ${m.cls}">${m.tag}</span>${avatar(m)}</div><div class="name">${m.name}</div><div class="role">${m.role}</div>`;
+    b.addEventListener('click', () => { show(m.id); if (history.replaceState) history.replaceState(null, '', '#' + m.id); });
+    desks.appendChild(b);
+  });
+
+  function show(id) {
+    const m = TEAM.find((t) => t.id === id); if (!m) return;
+    document.querySelectorAll('.desk').forEach((d) => d.setAttribute('aria-pressed', String(d.dataset.id === id)));
+    cName.textContent = m.name; cRole.textContent = m.role;
+    cBody.innerHTML = `<h3>Nə iş görür</h3><p>${m.does}</p>
+      <h3>Nəyə cavabdehdir</h3><ul>${m.owns.map((o) => `<li><code>${o}</code></li>`).join('')}</ul>
+      <h3>Son işlər</h3><ul>${m.recent.map((r) => `<li>${r}</li>`).join('')}</ul>
+      <span class="status ${m.cls}">${m.status}</span>`;
+    card.classList.add('open'); document.getElementById('wrap').classList.remove('nocard');
+    highlight(id);
+  }
+  function closeCard() { card.classList.remove('open'); document.getElementById('wrap').classList.add('nocard'); highlight(null); document.querySelectorAll('.desk').forEach((d) => d.setAttribute('aria-pressed', 'false')); if (history.replaceState) history.replaceState(null, '', location.pathname); }
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCard(); });
+  document.getElementById('close').addEventListener('click', () => { closeCard(); document.querySelectorAll('.desk').forEach((d) => d.setAttribute('aria-pressed', 'false')); });
+
+  const OWN = { producer: 'Prodüser', 'game-designer': 'Oyun dizayneri', 'gameplay-engineer': 'Gameplay', 'frontend-engineer': 'Frontend', 'ai-engineer': 'AI', 'level-designer': 'Level', 'qa-engineer': 'QA', 'tech-artist': 'Tech artist', 'mobile-engineer': 'Mobil', publisher: 'Publisher', 'monetization-designer': 'Monetizasiya', stakeholder: 'Pərvin' };
+  const BACKLOG = [{"title":"Səndə","note":"yalnız sən edə bilərsən","items":[{"id":"MM-15","p":"you","own":["stakeholder","mobile-engineer"],"day":"bu gün","t":"Apple: yenilənmiş Program License Agreement-i qəbul et (developer.apple.com → Agreements). Qəbul edilməyincə heç bir build TestFlight-a yüklənmir; build 26 hazırdır."},{"id":"AUD-Q1 / A2","p":"p0","own":["stakeholder","producer"],"day":"build 26 gələndə","t":"Real telefonda heç vaxt yoxlama olmayıb: planın başındakı 20 dəqiqəlik \"ağır nasazlıq\" alt-planı və bir səhifəlik playtest protokolu. Nəticə yazılana qədər App Review-a göndərilmir."},{"id":"Qərarlar","p":"you","own":["stakeholder"],"day":"istənilən vaxt","t":"Dörd qərar (defaultlar var): 2★ döşəməsi 1.0-a girsin (bəli), tutum yüksəlişi qalsın (bəli), musiqi (bəli), mağaza kadrları göndərməzdən əvvəl yenidən çəkilsin."}]},{"title":"Audit günü 2","note":"sabah, build 27","items":[{"id":"AUD-U2 / Q7","p":"p1","own":["frontend-engineer","tech-artist"],"day":"gün 43","t":"Mətn minimumu (bu gün 5,5–13 px) və \"Mətn ölçüsü\" ayarı 100 / 125 / 150 %, qoruyucu test."},{"id":"AUD-F1","p":"p1","own":["tech-artist","mobile-engineer"],"day":"gün 43","t":"Vurulanda səs və yüngül vibrasiya (bu gün heç biri yoxdur)."},{"id":"AUD-F2","p":"p1","own":["tech-artist"],"day":"gün 43","t":"Mina partlayışına öz effekti və səsi (bu gün adi ölümlə eynidir)."},{"id":"AUD-F4","p":"p1","own":["frontend-engineer","tech-artist"],"day":"gün 43","t":"Qələbə / məğlubiyyət kartından əvvəl 600 ms fasilə — son tutma görünsün; konfeti ekranda."},{"id":"AUD-B11","p":"p1","own":["game-designer","frontend-engineer"],"day":"gün 43","t":"Dərs kartı açıq olanda oyun ilk toxunuşa qədər dayansın (düşmən 0,0 s-də başlayır, kart 8 s qalır)."},{"id":"AUD-B2 / A11","p":"p1","own":["game-designer","frontend-engineer","ai-engineer"],"day":"gün 43","t":"Pat vəziyyəti insan üçün bitsin: 45 s tutma olmayanda \"Yenidən / davam\" kartı, geri çəkilmə məğlubiyyət sayılır; düşmən qalxanları 20 s-dən sonra düşür."},{"id":"AUD-B9","p":"p1","own":["level-designer"],"day":"gün 43","t":"3-cü səviyyə qərbdən başlayanda 0/20 — layout yenidən; sonra tutorial istisnası silinir."},{"id":"AUD-B12","p":"p1","own":["level-designer"],"day":"gün 43","t":"23 / 27 / 32 öyrənmə səviyyələrinə yazılmış layout rıçaqları (sadə oyunçu 7 / 6 / 4 ÷ 20); 100 toxum və bütün bükülmələrlə ölçü."},{"id":"AUD-B3","p":"p1","own":["monetization-designer"],"day":"gün 43","t":"Hər öyrənmə səviyyəsinə bir keçid (27 və 32 bir zolaqda bir keçidi paylaşır)."}]},{"title":"Audit günü 3","note":"o biri gün","items":[{"id":"AUD-F6","p":"p1","own":["tech-artist","frontend-engineer"],"day":"gün 44","t":"Audio kanalları (SFX / UI / Musiqi) + limiter + ducking; 0 eager baytlıq sintez musiqi loop; Musiqi / Effektlər ayarları."},{"id":"AUD-F3","p":"p1","own":["tech-artist","frontend-engineer"],"day":"gün 44","t":"Freeze və Overdrive busterləri dünyada görünsün (buz / qızıl halqalar), öz səsləri olsun."},{"id":"AUD-F5","p":"p1","own":["gameplay-engineer","game-designer"],"day":"gün 44","t":"Yeni axında ilk əsgər dərhal çıxsın (bu gün 1 035 ms gecikir) — sim dəyişikliyi, tam playtest."},{"id":"AUD-Q5","p":"p1","own":["qa-engineer","mobile-engineer"],"day":"gün 44","t":"CI-də WebKit (iPhone mühərriki) Playwright layihəsi; simulator tətbiqini bir dəfə açmaq."},{"id":"AUD-Q8","p":"p1","own":["qa-engineer","mobile-engineer"],"day":"gün 44","t":"Nisbi performans qapısı + ekranda kadr-vaxtı göstəricisi (TF-13 üçün)."},{"id":"AUD-B6","p":"p1","own":["producer","publisher","frontend-engineer"],"day":"gün 44","t":"Telemetriya: cihazda opt-in `level_end` hadisəsi (cəhd, nəticə, vaxt, ulduz) — 9 qərar \"telemetriya gələnə qədər\" gözləyir."}]},{"title":"Sənin playtest-indən sonra","note":"insan məlumatı lazımdır","items":[{"id":"AUD-B4 / A13","p":"p1","own":["game-designer","level-designer"],"day":"playtest sonra","t":"3★ saatları insan vaxtlarından (bot 1 000 oyunda 71 dəfə 3★ alır); 180 kristalı qapayır."},{"id":"AUD-B5","p":"p1","own":["game-designer","level-designer","monetization-designer"],"day":"playtest sonra","t":"17–50-də 2★ döşəməsi (16 səviyyənin saatı 5–30 s artır) — iqtisadiyyat §6 yenidən hesablanandan sonra."},{"id":"AUD-A3…A9","p":"p2","own":["ai-engineer","level-designer"],"day":"playtest sonra","t":"Düşmən AI: oyunçuya hücum, bir-birini bəsləməmək, lent titrəməsi, fürsətçi, gözləməyin pulsuz olması, tərs çətinlik — hər biri 34+ səviyyənin yenidən saatlanması deməkdir."}]},{"title":"Buraxılışdan əvvəl","note":"App Store-a göndərməzdən əvvəl","items":[{"id":"PUB-37","p":"p1","own":["publisher"],"day":"göndərməzdən əvvəl","t":"Mağaza kadrları build 26-dan köhnəlib (düymələr yerini dəyişdi) — 01–07 və 09 yenidən çəkilməli."},{"id":"QA-33","p":"p2","own":["qa-engineer","level-designer"],"day":"gün 43–44","t":"Kart qoruyucusuna 12 px ehtiyat; altı sıx kart (11 EN, 14 RU, 18 EN, 45 RU, 48 EN/TR) qısaldılmalı."},{"id":"PERF-11","p":"p2","own":["frontend-engineer"],"day":"gün 44","t":"Eager bundle 82,3 kB — bütün audit işləri saxlanmaqla 82-nin altına; sonra büdcə 84 → 82."},{"id":"PUB-9","p":"p2","own":["stakeholder"],"day":"buraxılışda","t":"`tower-clash-v1.0.0` teqi GitHub-dan (bu mühit teq push edə bilmir)."}]},{"title":"Hesablar gələndə","note":"sənin hesabların / telefonun lazımdır","items":[{"id":"ECON-1","p":"p2","own":["mobile-engineer","publisher","stakeholder"],"day":"1.0.1","t":"Real RevenueCat + AdMob açarları (GitHub secret kimi sən qoyursan), cihazda sandbox alışı, məhsullar App Store Connect / Play-də."},{"id":"ECON-8","p":"p2","own":["stakeholder"],"day":"1.0.1","t":"`app-ads.txt` üçün domen kökü lazımdır — sənin qərarın."},{"id":"QA-2 / MM-1","p":"p2","own":["qa-engineer","mobile-engineer","stakeholder"],"day":"telefon gələndə","t":"Android APK-nı real telefonda yoxlamaq (Play hesabı və Android telefon yoxdur)."}]},{"title":"Buraxılışdan sonra","note":"telemetriya ilə","items":[{"id":"LV-11","p":"p2","own":["game-designer"],"day":"1.0 sonra","t":"Həftəlik 3★ hədəfi: insanların 3★ nisbətinə baxıb hədəfi 1,1 × star3 etmək (5 %-dən az çatırsa)."},{"id":"MM-4 / M3-5","p":"p2","own":["mobile-engineer","qa-engineer"],"day":"1.0 sonra","t":"Cihazda yaddaş (üç canvas qatı) və 400 əsgərdə 60 fps ölçüsü."},{"id":"P2 / P3","p":"p2","own":["producer"],"day":"planlaşdırılmayıb","t":"65 tapıntı beş hesabatda: UX U6–U27, balans B8 / B10 / B13–B20, hiss F7–F19, QA Q10–Q19, AI A10 / A12 / A14–A15."}]}];
+  const groups = document.getElementById('groups');
+  BACKLOG.forEach((g) => {
+    const sec = document.createElement('div'); sec.className = 'group';
+    sec.innerHTML = `<h3>${g.title} <small>· ${g.note} · ${g.items.length} iş</small></h3><ul class="items">${g.items.map((it) => `
+      <li class="item ${it.p}" data-own="${it.own.join(' ')}"><span class="id">${it.id}</span><div class="txt">${it.t}
+        <div class="meta"><span class="chip day">${it.day}</span>${it.own.map((o) => `<button type="button" class="chip" data-go="${o}">${OWN[o]}</button>`).join('')}</div></div></li>`).join('')}</ul>`;
+    groups.appendChild(sec);
+  });
+  groups.addEventListener('click', (e) => { const b = e.target.closest('[data-go]'); if (!b) return; show(b.dataset.go); if (history.replaceState) history.replaceState(null, '', '#' + b.dataset.go); document.getElementById('card').scrollIntoView({ block: 'nearest' }); });
+  const filter = document.getElementById('filter'), filterName = document.getElementById('filterName');
+  function highlight(id) {
+    const m = TEAM.find((t) => t.id === id);
+    document.querySelectorAll('.item').forEach((li) => { const mine = li.dataset.own.split(' ').includes(id); li.classList.toggle('mine', !!id && mine); li.classList.toggle('dim', !!id && !mine); });
+    filter.classList.toggle('on', !!id); if (m) filterName.textContent = m.name;
+  }
+  document.getElementById('filterOff').addEventListener('click', closeCard);
+  const fromHash = () => { const id = location.hash.replace('#', ''); if (TEAM.some((t) => t.id === id)) show(id); };
+  window.addEventListener('hashchange', fromHash); fromHash();
+</script>

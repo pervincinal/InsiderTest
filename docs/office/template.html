@@ -1,0 +1,204 @@
+<title>Tower Clash Ofisi</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&family=Nunito:wght@400;600;700&display=swap">
+<style>
+  /* Layout: a top-down studio floor (desks on a grid, producer's desk in the middle, a whiteboard on the wall),
+     a detail card beside it on wide screens and as a bottom sheet on phones. Palette from the game's own island:
+     sea blue accent, sand paper, slate ink. Faces are the game's (Fredoka display, Nunito body). */
+  :root {
+    --bg: #eef3f6; --floor: #dfe7ec; --floor-line: #cfd9e0; --paper: #fffdf7; --paper-edge: #e4dccb;
+    --ink: #1e2a33; --ink-2: #51606b; --accent: #1f8fc2; --accent-ink: #0d5f87; --amber: #d98b0f; --green: #2f9e5c; --red: #c9453d;
+    --desk: #c9a471; --desk-edge: #a7844f; --chair: #44535e; --shadow: 0 10px 30px rgba(30, 42, 51, .12);
+    --display: 'Fredoka', 'Nunito', system-ui, sans-serif; --body: 'Nunito', system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #121a21; --floor: #1b2630; --floor-line: #26343f; --paper: #1f2a34; --paper-edge: #30404d;
+    --ink: #e8eef2; --ink-2: #a2b1bc; --accent: #4fb3e0; --accent-ink: #9bd6f0; --amber: #f0a832; --green: #4fc27a; --red: #e26a62;
+    --desk: #8a6d44; --desk-edge: #5f4a2d; --chair: #6d7f8c; --shadow: 0 10px 30px rgba(0, 0, 0, .4); color-scheme: dark } }
+  :root[data-theme="dark"] {
+    --bg: #121a21; --floor: #1b2630; --floor-line: #26343f; --paper: #1f2a34; --paper-edge: #30404d;
+    --ink: #e8eef2; --ink-2: #a2b1bc; --accent: #4fb3e0; --accent-ink: #9bd6f0; --amber: #f0a832; --green: #4fc27a; --red: #e26a62;
+    --desk: #8a6d44; --desk-edge: #5f4a2d; --chair: #6d7f8c; --shadow: 0 10px 30px rgba(0, 0, 0, .4); color-scheme: dark }
+  * { box-sizing: border-box }
+  body { background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.45;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 18px 40px }
+  h1, h2, h3 { font-family: var(--display); font-weight: 700; margin: 0; text-wrap: balance }
+  .wrap { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start }
+  .wrap.nocard { grid-template-columns: minmax(0, 1fr) }
+  @media (max-width: 860px) { .wrap { grid-template-columns: minmax(0, 1fr) } }
+  header { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px }
+  header h1 { font-size: clamp(26px, 4vw, 36px); color: var(--accent-ink) }
+  header p { margin: 0; color: var(--ink-2); font-size: 14px }
+
+  /* Whiteboard */
+  .board { background: var(--paper); border: 1px solid var(--paper-edge); border-radius: 10px; padding: 12px 14px; display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px 16px; box-shadow: var(--shadow) }
+  .board h2 { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); grid-column: 1 / -1 }
+  .stat b { display: block; font-family: var(--display); font-size: 22px; font-variant-numeric: tabular-nums; color: var(--ink) }
+  .stat span { font-size: 12px; color: var(--ink-2) }
+
+  /* Floor */
+  .floor { margin-top: 16px; background: var(--floor); border-radius: 14px; padding: 18px; position: relative;
+    background-image: linear-gradient(var(--floor-line) 1px, transparent 1px), linear-gradient(90deg, var(--floor-line) 1px, transparent 1px);
+    background-size: 40px 40px; }
+  .floor::before { content: "Tower Clash studiyası · 11 agent + 1 stakeholder"; position: absolute; top: -10px; left: 18px; font-family: var(--display); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; background: var(--accent); color: #fff; padding: 2px 10px; border-radius: 999px }
+  .desks { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px }
+  @media (max-width: 640px) { .desks { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px } }
+  .desk { appearance: none; border: 0; background: transparent; padding: 0; cursor: pointer; text-align: left; font: inherit; color: inherit; border-radius: 12px; outline-offset: 4px }
+  .desk:focus-visible { outline: 3px solid var(--accent) }
+  .desk .top { position: relative; aspect-ratio: 4 / 3; max-width: 100%; border-radius: 12px; background: var(--desk); border-bottom: 6px solid var(--desk-edge); display: grid; place-items: center; transition: transform .15s ease, box-shadow .15s ease }
+  .desk:hover .top, .desk[aria-pressed="true"] .top { transform: translateY(-3px); box-shadow: var(--shadow) }
+  .desk[aria-pressed="true"] .top { outline: 3px solid var(--accent) }
+  .desk svg { width: 64%; height: auto; display: block }
+  .desk .name { margin-top: 8px; font-family: var(--display); font-weight: 700; font-size: 15px; line-height: 1.15 }
+  .desk .role { font-size: 12px; color: var(--ink-2) }
+  .pill { position: absolute; top: 8px; right: 8px; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; padding: 2px 8px; border-radius: 999px; color: #fff; background: var(--green) }
+  .pill.wait { background: var(--amber) } .pill.you { background: var(--red) } .pill.lead { background: var(--accent) }
+  .producer .top { background: linear-gradient(180deg, var(--desk), var(--desk-edge)); }
+  @media (prefers-reduced-motion: reduce) { .desk .top { transition: none } }
+
+  /* Detail card */
+  .card:not(.open) { display: none }
+  .card { position: sticky; top: calc(12px + env(safe-area-inset-top, 0px)); background: var(--paper); border: 1px solid var(--paper-edge); border-radius: 12px; padding: 16px 18px; box-shadow: var(--shadow); min-width: 0 }
+  .card h2 { font-size: 22px; color: var(--accent-ink) }
+  .card .sub { color: var(--ink-2); font-size: 13px; margin: 2px 0 12px }
+  .card h3 { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); margin-top: 14px }
+  .card p { margin: 6px 0 0; font-size: 14.5px }
+  .card ul { margin: 6px 0 0; padding-left: 18px; font-size: 14px }
+  .card li + li { margin-top: 4px }
+  .card code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; background: var(--floor); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere }
+  .status { display: inline-block; margin-top: 10px; font-size: 12.5px; font-weight: 700; padding: 3px 10px; border-radius: 999px; color: #fff; background: var(--green) }
+  .status.wait { background: var(--amber) } .status.you { background: var(--red) } .status.lead { background: var(--accent) }
+  .hint { font-size: 13px; color: var(--ink-2); margin-top: 12px }
+  @media (max-width: 860px) {
+    .card { position: fixed; left: 0; right: 0; bottom: 0; top: auto; border-radius: 16px 16px 0 0; max-height: 70vh; overflow: auto; z-index: 20;
+      padding-left: max(18px, env(safe-area-inset-left, 0px)); padding-right: max(18px, env(safe-area-inset-right, 0px)); padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateY(105%); transition: transform .2s ease }
+    .card.open { transform: none; display: block }
+  }
+  .close { position: absolute; top: 10px; right: 10px; width: 34px; height: 34px; border: 0; border-radius: 50%; background: var(--floor); color: var(--ink); font: 700 20px/1 var(--display); cursor: pointer; display: grid; place-items: center }
+  .close:hover { background: var(--floor-line) } .close:focus-visible { outline: 2px solid var(--accent) }
+  .card h2 { padding-right: 40px }
+  /* Backlog */
+  .backlog { grid-column: 1; margin-top: 8px; min-width: 0 }
+  .backlog h2 { font-size: 22px; color: var(--accent-ink) }
+  .backlog .lede { color: var(--ink-2); font-size: 14px; margin: 4px 0 14px }
+  .group { background: var(--paper); border: 1px solid var(--paper-edge); border-radius: 12px; padding: 12px 14px; margin-top: 12px; min-width: 0 }
+  .group h3 { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline }
+  .group h3 small { font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--ink-2) }
+  .items { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px }
+  .item { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; align-items: start; padding: 8px 10px; border-radius: 8px; border-left: 4px solid var(--floor-line); background: transparent; transition: background .15s ease }
+  .item.p0 { border-left-color: var(--red) } .item.p1 { border-left-color: var(--amber) } .item.p2 { border-left-color: var(--accent) } .item.you { border-left-color: var(--red) }
+  .item.mine { background: var(--floor) }
+  .item.dim { opacity: .45 }
+  .item .id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--ink-2); padding-top: 2px; white-space: nowrap }
+  .item .txt { font-size: 14px; min-width: 0 }
+  .item .meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px }
+  .chip { font-size: 11.5px; font-weight: 700; padding: 1px 8px; border-radius: 999px; background: var(--floor); color: var(--ink-2); border: 0; font-family: inherit; cursor: pointer }
+  .chip.day { background: transparent; border: 1px solid var(--floor-line) }
+  .chip:focus-visible { outline: 2px solid var(--accent) }
+  .filter { font-size: 13px; color: var(--ink-2); margin-top: 10px; display: none } .filter.on { display: block }
+  .filter button { border: 0; background: var(--floor); color: var(--ink); font: inherit; font-size: 12.5px; font-weight: 700; padding: 3px 10px; border-radius: 999px; cursor: pointer; margin-left: 6px }
+  @media (max-width: 860px) { .backlog { padding-bottom: 20px } }
+  footer { grid-column: 1 / -1; color: var(--ink-2); font-size: 12.5px; margin-top: 8px }
+</style>
+
+<div class="wrap nocard" id="wrap">
+  <header>
+    <h1>Tower Clash Ofisi</h1>
+    <p>Masaya toxun: agentin nə iş gördüyü, nəyə cavabdeh olduğu və son işləri. Hər gün 08:02 Bakı vaxtı sprint başlayır.</p>
+  </header>
+
+  <section>
+    <div class="board" aria-label="Lövhə">
+      __BOARD__
+    </div>
+
+    <div class="floor">
+      <div class="desks" id="desks"></div>
+    </div>
+  </section>
+
+  <aside class="card" id="card" aria-live="polite" role="dialog" aria-label="İşçi hesabatı">
+    <button class="close" id="close" type="button" aria-label="Bağla" title="Bağla">×</button>
+    <h2 id="cName">Ofisə xoş gəlmisən</h2>
+    <p class="sub" id="cRole">Bir masaya toxun.</p>
+    <div id="cBody">
+      <p>On bir agent bir komanda kimi işləyir: prodüser günü planlayır, hər rol öz qovluğuna cavabdehdir, QA hər şeyi yoxlayır, publisher mağazaya hazırlayır. Sənin masan da buradadır.</p>
+    </div>
+  </aside>
+
+  <section class="backlog" id="backlog">
+    <h2>Backlog · açıq işlər</h2>
+    <p class="lede">Prioritet: <b style="color:var(--red)">P0</b> buraxılışı bloklayır · <b style="color:var(--amber)">P1</b> 1.0-dan əvvəl · <b style="color:var(--accent)">P2</b> 1.0.1. Sahibin adına toxun — masası açılır; masaya toxunanda onun işləri işıqlanır. 65 P2 / P3 tapıntı hesabatlarda gözləyir.</p>
+    <div class="filter" id="filter">Göstərilir: <b id="filterName"></b><button type="button" id="filterOff">Hamısını göstər</button></div>
+    <div id="groups"></div>
+  </section>
+
+  <footer>__FOOTER__</footer>
+</div>
+
+<script>
+  const TEAM = __TEAM__;
+
+  const desks = document.getElementById('desks');
+  const card = document.getElementById('card');
+  const cName = document.getElementById('cName'), cRole = document.getElementById('cRole'), cBody = document.getElementById('cBody');
+
+  function avatar(m) {
+    const initials = m.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+    return `<svg viewBox="0 0 120 90" aria-hidden="true">
+      <rect x="8" y="58" width="104" height="22" rx="6" fill="rgba(0,0,0,.18)"/>
+      <rect x="14" y="20" width="30" height="20" rx="3" fill="#0f1c26"/><rect x="17" y="23" width="24" height="14" rx="2" fill="${m.color}" opacity=".85"/>
+      <rect x="24" y="40" width="10" height="6" fill="#0f1c26"/>
+      <circle cx="78" cy="30" r="14" fill="#f4d3b0"/>
+      <path d="M62 26c0-12 32-12 32 0v-2c0-4-5-8-16-8s-16 4-16 8z" fill="#2d2118"/>
+      <rect x="58" y="44" width="40" height="30" rx="10" fill="${m.color}"/>
+      <text x="78" y="64" text-anchor="middle" font-family="Fredoka, Nunito, sans-serif" font-weight="700" font-size="14" fill="#fff">${initials}</text>
+      <rect x="20" y="68" width="76" height="6" rx="3" fill="var(--chair)"/>
+    </svg>`;
+  }
+
+  TEAM.forEach((m) => {
+    const b = document.createElement('button');
+    b.className = 'desk' + (m.lead ? ' producer' : '');
+    b.type = 'button'; b.dataset.id = m.id; b.setAttribute('aria-pressed', 'false');
+    b.innerHTML = `<div class="top"><span class="pill ${m.cls}">${m.tag}</span>${avatar(m)}</div><div class="name">${m.name}</div><div class="role">${m.role}</div>`;
+    b.addEventListener('click', () => { show(m.id); if (history.replaceState) history.replaceState(null, '', '#' + m.id); });
+    desks.appendChild(b);
+  });
+
+  function show(id) {
+    const m = TEAM.find((t) => t.id === id); if (!m) return;
+    document.querySelectorAll('.desk').forEach((d) => d.setAttribute('aria-pressed', String(d.dataset.id === id)));
+    cName.textContent = m.name; cRole.textContent = m.role;
+    cBody.innerHTML = `<h3>Nə iş görür</h3><p>${m.does}</p>
+      <h3>Nəyə cavabdehdir</h3><ul>${m.owns.map((o) => `<li><code>${o}</code></li>`).join('')}</ul>
+      <h3>Son işlər</h3><ul>${m.recent.map((r) => `<li>${r}</li>`).join('')}</ul>
+      <span class="status ${m.cls}">${m.status}</span>`;
+    card.classList.add('open'); document.getElementById('wrap').classList.remove('nocard');
+    highlight(id);
+  }
+  function closeCard() { card.classList.remove('open'); document.getElementById('wrap').classList.add('nocard'); highlight(null); document.querySelectorAll('.desk').forEach((d) => d.setAttribute('aria-pressed', 'false')); if (history.replaceState) history.replaceState(null, '', location.pathname); }
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCard(); });
+  document.getElementById('close').addEventListener('click', () => { closeCard(); document.querySelectorAll('.desk').forEach((d) => d.setAttribute('aria-pressed', 'false')); });
+
+  const OWN = { producer: 'Prodüser', 'game-designer': 'Oyun dizayneri', 'gameplay-engineer': 'Gameplay', 'frontend-engineer': 'Frontend', 'ai-engineer': 'AI', 'level-designer': 'Level', 'qa-engineer': 'QA', 'tech-artist': 'Tech artist', 'mobile-engineer': 'Mobil', publisher: 'Publisher', 'monetization-designer': 'Monetizasiya', stakeholder: 'Pərvin' };
+  const BACKLOG = __BACKLOG__;
+  const groups = document.getElementById('groups');
+  BACKLOG.forEach((g) => {
+    const sec = document.createElement('div'); sec.className = 'group';
+    sec.innerHTML = `<h3>${g.title} <small>· ${g.note} · ${g.items.length} iş</small></h3><ul class="items">${g.items.map((it) => `
+      <li class="item ${it.p}" data-own="${it.own.join(' ')}"><span class="id">${it.id}</span><div class="txt">${it.t}
+        <div class="meta"><span class="chip day">${it.day}</span>${it.own.map((o) => `<button type="button" class="chip" data-go="${o}">${OWN[o]}</button>`).join('')}</div></div></li>`).join('')}</ul>`;
+    groups.appendChild(sec);
+  });
+  groups.addEventListener('click', (e) => { const b = e.target.closest('[data-go]'); if (!b) return; show(b.dataset.go); if (history.replaceState) history.replaceState(null, '', '#' + b.dataset.go); document.getElementById('card').scrollIntoView({ block: 'nearest' }); });
+  const filter = document.getElementById('filter'), filterName = document.getElementById('filterName');
+  function highlight(id) {
+    const m = TEAM.find((t) => t.id === id);
+    document.querySelectorAll('.item').forEach((li) => { const mine = li.dataset.own.split(' ').includes(id); li.classList.toggle('mine', !!id && mine); li.classList.toggle('dim', !!id && !mine); });
+    filter.classList.toggle('on', !!id); if (m) filterName.textContent = m.name;
+  }
+  document.getElementById('filterOff').addEventListener('click', closeCard);
+  const fromHash = () => { const id = location.hash.replace('#', ''); if (TEAM.some((t) => t.id === id)) show(id); };
+  window.addEventListener('hashchange', fromHash); fromHash();
+</script>
