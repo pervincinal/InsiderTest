@@ -1,9 +1,11 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { onBlock, readWorkflow, runBlocks, stepText } from '../workflowYaml';
 import { NAIVE_TIE_EXEMPT } from '../../scripts/lib/naivePlayer';
+import { DEFAULT_PW_OUTPUT, TRACKED_SHOTS_DIR, shotsDirFor } from '../../e2e/tools/shots';
 
 /*
  * Repository hygiene guards (QA). Regression test for BUG-2: the Android/iOS workflows write
@@ -65,7 +67,7 @@ describe('tower-clash/e2e/lessonFit.spec.ts (QA-32)', () => {
 
   it('reuses the game card layout instead of re-implementing the wrap', () => {
     expect(src).toContain("export { lessonCardLayout } from './src/render/hud';");
-    expect(src).toContain("export { font } from './src/render/widgets';");
+    expect(src).toContain("export { font, wrapText } from './src/render/widgets';"); // wrapText: QA-33's re-wrap at 608 px
     expect(src).toContain("export { levelLesson, setLanguage } from './src/ui/i18n';");
     expect(src).toMatch(/L\.lessonCardLayout\(ctx, state, ui\)/);
     expect(src).not.toMatch(/function wrap|const wrap\b|\.split\(\/\\s\+\/\)[\s\S]{0,80}measureText/);
@@ -76,6 +78,68 @@ describe('tower-clash/e2e/lessonFit.spec.ts (QA-32)', () => {
     expect(src).toContain('expect(rows).toHaveLength(LEVELS.length * LANGS.length);');
     expect(src).toMatch(/const CARD_PX = 20;\nconst CARD_MAX_LINES = 3;\nconst CARD_TEXT_W = 620;\n/);
     expect(src).toContain("test.use({ viewport: { width: 360, height: 640 } });");
+  });
+
+  // QA-33 (2026-10-29): run 107 — CI's Chromium 129 measured 47 / 49 RU 2–4 px wider than the container's build, past 620,
+  // so the cards wrapped to 4 lines at 18 px on CI while the guard was green here. Every 20 px card must still fit 3 lines
+  // when the game's own wrapText re-wraps it at 620 − 12 = 608 px; the widest-line check stays at 620.
+  it('re-wraps every 20 px card at 620 - 12 px with the game wrapText and still needs <= 3 lines (QA-33)', () => {
+    expect(src).toContain('const CARD_WRAP_MARGIN = 12;');
+    expect(src).toContain("export { font, wrapText } from './src/render/widgets';");
+    expect(src).toContain('L.wrapText(ctx, text, marginW, Number.MAX_SAFE_INTEGER).length');
+    expect(src).toContain('marginW: CARD_TEXT_W - CARD_WRAP_MARGIN');
+    expect(src).toContain('if (r.px === CARD_PX && r.marginLines > CARD_MAX_LINES)');
+    // the 620 widest-line check and the slack column against 620 are unchanged
+    expect(src).toContain('if (widest > textW) failures.push(');
+    expect(src).toContain('(CARD_TEXT_W - widest).toFixed(0)');
+    expect(src).not.toContain('widest > CARD_TEXT_W - CARD_WRAP_MARGIN');
+  });
+});
+
+/*
+ * AUD-Q15 (2026-10-30): the smoke / content / look / WebView specs wrote the tracked e2e/__screenshots__/ whatever
+ * PW_OUTPUT said, so every agent run dirtied 13–40+ committed PNGs and parallel runs raced on them. Every milestone
+ * screenshot now goes through e2e/tools/shots.ts `shotPath`: the default run keeps the tracked folder, any other
+ * PW_OUTPUT writes <PW_OUTPUT>/__screenshots__/. No spec or e2e helper may name the folder itself.
+ */
+describe('tower-clash/e2e screenshot destination (AUD-Q15)', () => {
+  const root = '/r/tower-clash';
+  const tracked = path.join(root, 'e2e', '__screenshots__');
+
+  it('the default run writes the tracked folder, any other PW_OUTPUT writes <PW_OUTPUT>/__screenshots__', () => {
+    expect(DEFAULT_PW_OUTPUT).toBe('test-results');
+    expect(TRACKED_SHOTS_DIR).toBe(fileURLToPath(new URL('../../e2e/__screenshots__', import.meta.url)));
+    for (const unset of [undefined, '', 'test-results', './test-results', 'test-results/', path.join(root, 'test-results')]) expect(shotsDirFor(unset, root), String(unset)).toBe(tracked);
+    expect(shotsDirFor('/scratch/pw-qa', root)).toBe('/scratch/pw-qa/__screenshots__');
+    expect(shotsDirFor('test-results/shard-1', root)).toBe(path.join(root, 'test-results', 'shard-1', '__screenshots__'));
+    expect(shotsDirFor('../out', root)).toBe('/r/out/__screenshots__');
+  });
+
+  it('playwright.config.ts takes its default output dir from the same helper', () => {
+    expect(PW_CONFIG).toContain("import { DEFAULT_PW_OUTPUT } from './e2e/tools/shots';");
+    expect(PW_CONFIG).toContain('const OUTPUT_DIR = process.env.PW_OUTPUT || DEFAULT_PW_OUTPUT;');
+  });
+
+  it('no spec or e2e helper references the tracked screenshot folder directly', () => {
+    const files = readdirSync(E2E_DIR, { recursive: true })
+      .map(String)
+      .filter((f) => /\.(ts|mjs|js)$/.test(f) && !f.startsWith('__screenshots__') && f !== path.join('tools', 'shots.ts'));
+    expect(files.length).toBeGreaterThan(E2E_SPECS.length);
+    const offenders = files.filter((f) => {
+      const code = readFileSync(new URL(f, E2E_DIR), 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/^\s*\/\/.*$/gm, '');
+      return code.includes('__screenshots__');
+    });
+    expect(offenders, 'write milestone screenshots with shotPath() from e2e/tools/shots.ts').toEqual([]);
+  });
+
+  it('every page.screenshot / PNG write with a path goes to shotPath() or the test output dir', () => {
+    for (const f of E2E_SPECS) {
+      const src = readFileSync(new URL(f, E2E_DIR), 'utf8');
+      for (const m of src.matchAll(/screenshot\(\{\s*path:\s*([^,}]+)/g)) expect(m[1]!.trim(), f).toMatch(/^(shotPath\(|(test\.info\(\)|info|testInfo)\.outputPath\()/);
+      for (const m of src.matchAll(/writeFileSync\(([^,]+),/g)) expect(m[1]!.trim(), f).toMatch(/^(shotPath\(|path\.join\(out\b|(test\.info\(\)|info|testInfo)\.outputPath\()/);
+    }
   });
 });
 
@@ -484,40 +548,41 @@ describe('.github/workflows/tower-clash-ci.yml e2e shards (QA-26)', () => {
 
 /*
  * QA-30: "Naive human gate" gates both GD-7f tie orders on levels 1–16 (`--tie both`; LV-22 fixed
- * level 5's west start on 2026-10-21) with level 3's `tie desc` row exempt (`--tie-exempt 3`): GD-7h
- * cured that start with the tutorial steer, which the naive model never reads. The exempt ids in the
- * step must be exactly NAIVE_TIE_EXEMPT (scripts/lib/naivePlayer.ts, each with its item id) — a future
- * level cured by a tutorial goes into that registry with its item id and onto the step in one change.
+ * level 5's west start on 2026-10-21, AUD-B9 level 3's on 2026-10-30 — both by layout, so the GD-7h
+ * `--tie-exempt 3` is gone and no level is exempt). The exempt ids in the step must be exactly
+ * NAIVE_TIE_EXEMPT (scripts/lib/naivePlayer.ts, each with its item id; empty today) — a future level
+ * cured by a tutorial goes into that registry with its item id and onto the step in one change.
  */
 describe('.github/workflows/tower-clash-ci.yml naive human gate (QA-3, QA-30)', () => {
   const CI = readWorkflow('tower-clash-ci.yml');
   const NAME = 'Naive human gate (levels 1-16 x 5 seeds)';
-  const GATE = 'npm run playtest -- --naive --seeds 5 --gate 1-16 --tie both --tie-exempt 3';
+  const GATE = 'npm run playtest -- --naive --seeds 5 --gate 1-16 --tie both';
 
   it('gates 1-16 in both tie orders, exempting exactly the NAIVE_TIE_EXEMPT levels from tie desc', () => {
     expect(runBlocks(CI).filter((b) => b.step === NAME).map((b) => b.run)).toEqual([`${GATE}\n`]);
     const step = stepText(CI, NAME);
     expect(step).not.toMatch(/continue-on-error|\n\s+shell:/);
-    const exempt = /--tie-exempt (\S+)/.exec(GATE)![1]!.split(',').map(Number);
+    const listed = /--tie-exempt (\S+)/.exec(GATE)?.[1];
+    const exempt = listed ? listed.split(',').map(Number) : [];
     expect(exempt).toEqual(Object.keys(NAIVE_TIE_EXEMPT).map(Number));
+    expect(exempt).toEqual([]); // AUD-B9: level 3 left the registry
     for (const id of exempt) expect(NAIVE_TIE_EXEMPT[id]).toMatch(/^[A-Z]+-\d+[a-z]?: /); // the item id that cured it
   });
 
-  it('the runner wires --tie-exempt: level 3 seed 1 passes exempt, fails on its tie desc row without', () => {
+  it('the runner wires the both-order gate: level 3 seed 1 passes it (AUD-B9), --tie-exempt 3 is refused', () => {
     const tsx = fileURLToPath(new URL('../../node_modules/tsx/dist/cli.mjs', import.meta.url));
     const run = (...extra: string[]) =>
       spawnSync(process.execPath, [tsx, 'scripts/playtest.ts', '--naive', '--level', '3', '--seeds', '1', '--gate', '3-3', '--tie', 'both', ...extra], {
         cwd: fileURLToPath(new URL('../../', import.meta.url)),
         encoding: 'utf8',
       });
-    const exempt = run('--tie-exempt', '3');
-    expect(exempt.status, exempt.stdout + exempt.stderr).toBe(0);
-    expect(exempt.stdout).toMatch(/\n  exempt lvl 3 Free Real Estate \[tie desc\]: 0\/1 — GD-7h: .*; not gated\n/);
-    expect(exempt.stdout).toContain('naive gate lvl 3-3: 0 failed level(s) (asc 0, tie desc 0, tie desc exempt 3)');
-    // if this turns 0, level 3's reversed start recovered: drop 3 from NAIVE_TIE_EXEMPT and the CI step
     const plain = run();
-    expect(plain.status, plain.stdout).toBe(1);
-    expect(plain.stdout).toContain('FAIL lvl 3 Free Real Estate [tie desc]: 0/1');
+    expect(plain.status, plain.stdout + plain.stderr).toBe(0);
+    expect(plain.stdout).toContain('naive gate lvl 3-3: 0 failed level(s) (asc 0, tie desc 0)');
+    // level 3 is no longer in NAIVE_TIE_EXEMPT: the runner refuses to exempt it
+    const exempt = run('--tie-exempt', '3');
+    expect(exempt.status).toBe(1);
+    expect(exempt.stderr).toContain('--tie-exempt 3: not in NAIVE_TIE_EXEMPT');
   }, 30_000);
 });
 

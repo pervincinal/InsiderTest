@@ -29,7 +29,7 @@ interface TraceOptions {
   T: number;
   /** A tap per bubble, at least this long after the previous tap and after the bubble came up, ms. */
   gapMs?: number;
-  /** Answer only this many bubbles, then play the naive line (1 = today's table before GD-7h: west → east alone). */
+  /** Answer only this many bubbles, then play the naive line (1 = west → east alone, the table before GD-7h; 0 = west, then naive). */
   maxAnswers?: number;
 }
 
@@ -117,9 +117,39 @@ describe('GD-7h: level 3, west first — the tutorial steers home → west into 
     expect(run.outcome).toBe('won');
   });
 
-  it('answered at T = 10 s it wins ≥ 4/5 (west → east alone, the table before GD-7h: ≤ 1/5)', () => {
+  /*
+   * Since AUD-B9 (2026-10-30, level 3 re-laid: home 12 → 18 u, foe 12 → 7 u and 20 px up) the layout,
+   * not the tutorial, cures the west-first start, so the pre-GD-7h contrast "west → east alone ≤ 1/5"
+   * is false by design and is no longer asserted. Table on the AUD-B9 tree (QA 2026-10-30, this trace,
+   * seeds 1–5 times in s, then 20 seeds won / median / worst):
+   *   tutorial T = 10 s           5/5  60.6 52.4 52.4 53.0 51.6   20/20  51.6  60.6
+   *   tutorial T = 8 s            5/5  52.6 62.6 54.6 61.3 61.3   20/20  59.3  62.6
+   *   tutorial T = 9 s            5/5  52.6 56.6 43.5 50.6 56.6   20/20  51.9  56.6
+   *   tutorial T = 10 s, 100 ms   5/5  50.5 53.6 51.6 51.6 51.6   20/20  51.6  56.6
+   *   west → east alone (1 tap)   5/5  58.8 57.3 56.6 56.6 56.6   20/20  56.6  58.8   (before GD-7h / AUD-B9: ≤ 1/5)
+   *   west, then naive (0 taps)   5/5  57.3 56.6 56.6 63.7 56.6   20/20  57.6  63.7   (the west start of the naive `tie desc` row; the bot's own home → east at 3 s finds no free link)
+   *   east first                  5/5  59.4 58.6 49.6 58.6 58.6   20/20  58.6  59.4
+   * What stays asserted: the steer still wins ≥ 4/5, the paths without it now win ≥ 4/5 too (the
+   * AUD-B9 cure, which is what let `NAIVE_TIE_EXEMPT` go empty), and at the acceptance T = 10 s the
+   * steer does not cost time over west → east alone on the 5-seed median (52.4 vs 56.6 s; seed 1 alone
+   * is 1.8 s faster, and at T = 8 s the steered median is 61.3 s, so the median at T = 10 s is the claim).
+   */
+  it('answered at T = 10 s it wins ≥ 4/5, and since AUD-B9 west → east alone and west → naive win ≥ 4/5 as well', () => {
     expect(wins({ first: 'west', T: 10_000 })).toBeGreaterThanOrEqual(4);
-    expect(wins({ first: 'west', T: 10_000, maxAnswers: 1 })).toBeLessThanOrEqual(1);
+    expect(wins({ first: 'west', T: 10_000, maxAnswers: 1 })).toBeGreaterThanOrEqual(4);
+    expect(wins({ first: 'west', T: 10_000, maxAnswers: 0 })).toBeGreaterThanOrEqual(4);
+  });
+
+  it('since AUD-B9, at T = 10 s the steered line is not slower than west → east alone (5-seed median of the wins)', () => {
+    const median = (opts: TraceOptions): number => {
+      const ms = SEEDS.map((seed) => trace(seed, opts))
+        .filter((r) => r.outcome === 'won')
+        .map((r) => r.timeMs)
+        .sort((a, b) => a - b);
+      expect(ms.length, 'a median needs at least 4 wins of 5').toBeGreaterThanOrEqual(4);
+      return ms[Math.floor((ms.length - 1) / 2)]!;
+    };
+    expect(median({ first: 'west', T: 10_000 })).toBeLessThanOrEqual(median({ first: 'west', T: 10_000, maxAnswers: 1 }));
   });
 
   it('answered earlier (T = 8 s, 9 s) or a tap every 100 ms it wins ≥ 4/5 too', () => {

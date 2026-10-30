@@ -14,9 +14,9 @@
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.3}
   ],
   "towers": [
-    {"id": "home", "x": 360, "y": 1150, "owner": "player", "units": 12, "level": 1, "kind": "barracks"},
+    {"id": "home", "x": 360, "y": 1150, "owner": "player", "units": 18, "level": 1, "kind": "barracks"},
     {"id": "west", "x": 255, "y": 1040, "owner": "neutral", "units": 2},
     {"id": "east", "x": 465, "y": 1040, "owner": "neutral", "units": 2},
-    {"id": "foe", "x": 360, "y": 150, "owner": "enemy1", "units": 12, "level": 1, "kind": "barracks"}
+    {"id": "foe", "x": 360, "y": 130, "owner": "enemy1", "units": 7, "level": 1, "kind": "barracks"}
   ]
 }

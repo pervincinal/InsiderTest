@@ -115,32 +115,55 @@ describe('naive gate over both tie orders (GD-7f (2))', () => {
     expect(() => naiveGate([row(1, 5)], { from: 1, to: 1 }, ['asc', 'asc'])).toThrow(/bad tie orders/);
   });
 
-  it('QA-30: a NAIVE_TIE_EXEMPT level leaves only its desc row out of the gate', () => {
-    expect(Object.keys(NAIVE_TIE_EXEMPT).map(Number)).toEqual([3]);
-    expect(NAIVE_TIE_EXEMPT[3]).toMatch(/^GD-7h: /);
+  /*
+   * QA-30 registry, since AUD-B9 (2026-10-30): level 3 was re-laid so its west start wins by layout
+   * (naive `tie desc` 0/20 → 20/20 at 4 s and 8 s), GD-7h's exemption was dropped and `NAIVE_TIE_EXEMPT`
+   * is empty. The mechanism stays (a future level cured by a tutorial goes back in with its item id),
+   * so the gate is pinned with the empty registry: no row leaves the gate, and every exemption is refused.
+   */
+  it('QA-30, since AUD-B9: NAIVE_TIE_EXEMPT is empty, so the gate leaves no desc row out and refuses any exemption', () => {
+    expect(NAIVE_TIE_EXEMPT).toEqual({});
+    expect(Object.isFrozen(NAIVE_TIE_EXEMPT)).toBe(true);
+    // level 3's west start is gated like any other level now: a 0/5 desc row fails it, with or without an (empty) exempt list
     const rows = [row(3, 5), row(3, 0, 'desc'), row(4, 5), row(4, 0, 'desc')];
-    expect(naiveGate(rows, { from: 3, to: 4 }, ['asc', 'desc'], [3]).map((f) => [f.levelId, f.tie ?? 'asc'])).toEqual([[4, 'desc']]);
-    // the asc row of an exempt level is still gated, and a missing desc row is not a failure once exempt
-    expect(naiveGate([row(3, 3), row(3, 0, 'desc')], { from: 3, to: 3 }, ['asc', 'desc'], [3]).map((f) => f.tie ?? 'asc')).toEqual(['asc']);
-    expect(naiveGate([row(3, 5)], { from: 3, to: 3 }, ['asc', 'desc'], [3])).toEqual([]);
+    const failing = [
+      [3, 'desc'],
+      [4, 'desc'],
+    ];
+    expect(naiveGate(rows, { from: 3, to: 4 }, ['asc', 'desc']).map((f) => [f.levelId, f.tie ?? 'asc'])).toEqual(failing);
+    expect(naiveGate(rows, { from: 3, to: 4 }, ['asc', 'desc'], []).map((f) => [f.levelId, f.tie ?? 'asc'])).toEqual(failing);
+    // a missing desc row fails too (nothing is exempt), and the asc row is gated as before
+    expect(naiveGate([row(3, 5)], { from: 3, to: 3 }, ['asc', 'desc'], [])).toEqual([{ levelId: 3, name: '(not run)', wins: 0, k: 0, minWins: 1, rate: 0.8, losers: [], tie: 'desc' }]);
+    expect(naiveGate([row(3, 3), row(3, 5, 'desc')], { from: 3, to: 3 }, ['asc', 'desc'], []).map((f) => f.tie ?? 'asc')).toEqual(['asc']);
+    // the AUD-B9 rows (5/5 both orders) pass
+    expect(naiveGate([row(3, 5), row(3, 5, 'desc')], { from: 3, to: 3 }, ['asc', 'desc'], [])).toEqual([]);
+    // the guards still run in their old order: the desc-order check first, then the registry
     expect(() => naiveGate(rows, { from: 3, to: 4 }, ['asc'], [3])).toThrow(/needs the desc order/);
+    expect(() => naiveGate(rows, { from: 3, to: 4 }, ['asc', 'desc'], [3])).toThrow(/level 3 is not in NAIVE_TIE_EXEMPT/);
     expect(() => naiveGate(rows, { from: 3, to: 4 }, ['asc', 'desc'], [4])).toThrow(/level 4 is not in NAIVE_TIE_EXEMPT/);
   });
 });
 
-describe('--tie-exempt on the command line (QA-30)', () => {
-  it('parses registry ids with --gate … --tie both; refuses everything else', () => {
-    expect(parseArgs(['--naive', '--gate', '1-16', '--tie', 'both', '--tie-exempt', '3']).tieExempt).toEqual([3]);
-    expect(parseArgs(['--naive', '--gate=1-16', '--tie=both', '--tie-exempt=3']).tieExempt).toEqual([3]);
-    expect(parseArgs(['--naive', '--gate', '1-16', '--tie', 'both']).tieExempt).toBeUndefined();
-    expect(parseTieExempt('3')).toEqual([3]);
+describe('--tie-exempt on the command line (QA-30, since AUD-B9: empty registry)', () => {
+  it('the option still parses its spec, refuses every id (none is in NAIVE_TIE_EXEMPT) and is absent from the CI line', () => {
+    // no --tie-exempt: no exemption (the CI step since AUD-B9: --naive --seeds 5 --gate 1-16 --tie both)
+    expect(parseArgs(['--naive', '--seeds', '5', '--gate', '1-16', '--tie', 'both']).tieExempt).toBeUndefined();
+    expect(parseArgs(['--naive', '--gate=1-16', '--tie=both']).tieExempt).toBeUndefined();
+    // the spec check runs before the registry check: malformed specs keep their own message
     expect(() => parseTieExempt('3,3')).toThrow(/bad --tie-exempt/);
     expect(() => parseTieExempt('x')).toThrow(/bad --tie-exempt/);
-    expect(() => parseTieExempt('5')).toThrow(/--tie-exempt 5: not in NAIVE_TIE_EXEMPT/);
-    expect(() => parseArgs(['--naive', '--tie-exempt', '3'])).toThrow(/only applies to --naive --gate a-b --tie both/);
-    expect(() => parseArgs(['--naive', '--gate', '1-16', '--tie-exempt', '3'])).toThrow(/only applies to --naive --gate a-b --tie both/);
-    expect(() => parseArgs(['--naive', '--tie', 'both', '--tie-exempt', '3'])).toThrow(/only applies to --naive --gate a-b --tie both/);
-    expect(() => parseArgs(['--naive', '--gate', '4-16', '--tie', 'both', '--tie-exempt', '3'])).toThrow('--tie-exempt 3 is outside --gate 4-16');
+    expect(() => parseTieExempt('')).toThrow(/bad --tie-exempt/);
+    expect(() => parseTieExempt('3,')).toThrow(/bad --tie-exempt/);
+    // every well-formed id is refused now, level 3 (GD-7h, dropped by AUD-B9) first of all
+    for (let id = 1; id <= 16; id++) expect(() => parseTieExempt(String(id)), `id ${id}`).toThrow(new RegExp(`--tie-exempt ${id}: not in NAIVE_TIE_EXEMPT`));
+    expect(() => parseTieExempt('3,5')).toThrow(/--tie-exempt 3,5: not in NAIVE_TIE_EXEMPT/);
+    // on the command line too, in both flag forms, even with --gate … --tie both
+    expect(() => parseArgs(['--naive', '--gate', '1-16', '--tie', 'both', '--tie-exempt', '3'])).toThrow(/--tie-exempt 3: not in NAIVE_TIE_EXEMPT/);
+    expect(() => parseArgs(['--naive', '--gate=1-16', '--tie=both', '--tie-exempt=3'])).toThrow(/--tie-exempt 3: not in NAIVE_TIE_EXEMPT/);
+    // and where the option does not apply at all, the registry refuses it first (the context guards
+    // below are pinned with a synthetic registry in tests/scripts/naiveTieExemptGuards.test.ts)
+    expect(() => parseArgs(['--naive', '--tie-exempt', '3'])).toThrow(/not in NAIVE_TIE_EXEMPT/);
+    expect(() => parseArgs(['--naive', '--gate', '1-16', '--tie-exempt', '3'])).toThrow(/not in NAIVE_TIE_EXEMPT/);
   });
 });
 

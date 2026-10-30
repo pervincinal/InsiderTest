@@ -412,9 +412,7 @@ export const NAIVE_GATE_LAST = 16;
  * `--tie-exempt` may name only these ids (each with the backlog item that decided the cure); the gate
  * still checks their `asc` row. A future level cured by a tutorial steer goes here with its item id.
  */
-export const NAIVE_TIE_EXEMPT: Readonly<Record<number, string>> = Object.freeze({
-  3: 'GD-7h: the west first tap is answered by tutorial steps 1–3 (step 1 completes only on home → east), no layout reaches the bar',
-});
+export const NAIVE_TIE_EXEMPT: Readonly<Record<number, string>> = Object.freeze({});
 
 /** Parse `--tie-exempt a[,b…]`: unique ids from `NAIVE_TIE_EXEMPT`, ascending. */
 export function parseTieExempt(spec: string): number[] {

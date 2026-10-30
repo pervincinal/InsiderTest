@@ -84,13 +84,12 @@ jobs:
       # 13 s locally (2026-09-25, all 50 levels; the gate reads the first 16 rows).
       # QA-30 (2026-10-21, after LV-22 fixed level 5's west start): `--tie both` gates both tie orders
       # (GD-7f: `tie desc` = the larger id on an exact tie of the naive target key, the other side of
-      # every mirror pair); a level fails when either order is under its share. `--tie-exempt 3` takes
-      # only level 3's `tie desc` row out of the gate (its `asc` row stays gated): GD-7h cured that start
-      # with the tutorial steer, which the naive model never reads (0/5 by construction). Exempt ids must
-      # be in NAIVE_TIE_EXEMPT (scripts/lib/naivePlayer.ts) with their item id; the runner prints
-      # "now passes: drop it" when an exempt row recovers. Measured locally: 16.6 s asc only, 20–25 s both.
+      # every mirror pair); a level fails when either order is under its share. No level is exempt since
+      # AUD-B9 (2026-10-30: level 3's west start fixed by layout, the GD-7h `--tie-exempt 3` dropped); a
+      # level cured by a tutorial steer only would go into NAIVE_TIE_EXEMPT (scripts/lib/naivePlayer.ts)
+      # with its item id and onto this step as `--tie-exempt <id>`. Measured locally: 16.6 s asc only, 20–25 s both.
       - name: Naive human gate (levels 1-16 x 5 seeds)
-        run: npm run playtest -- --naive --seeds 5 --gate 1-16 --tie both --tie-exempt 3
+        run: npm run playtest -- --naive --seeds 5 --gate 1-16 --tie both
 
       # Commander tier gate (AUD-B1 / AUD-B17, QA 2026-10-30): "no single tier hurts". The unmodified run,
       # then every tier of every track with a sim effect alone (production 1-3, capacity 1-5, garrison 1-2,
