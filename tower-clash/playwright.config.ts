@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, devices } from '@playwright/test';
 import { acquireRunLock, releaseRunLock } from './e2e/tools/runLock';
+import { DEFAULT_PW_OUTPUT } from './e2e/tools/shots';
 
 /**
  * Locally the sandbox ships Chromium 1194 under /opt/pw-browsers while @playwright/test 1.47.2
@@ -27,11 +28,13 @@ const WEBVIEW_UA = devices['Pixel 7'].userAgent
  * directory without a scratch config: `PW_PORT` (default 4173) sets both `baseURL` and the preview
  * server's `--port`; `PW_OUTPUT` (default `test-results`) sets `outputDir` (traces, screenshots on
  * failure). Example: `PW_PORT=4192 PW_OUTPUT=<scratchpad>/pw-qa npx playwright test --project=chromium e2e/smoke.spec.ts`.
+ * AUD-Q15: a non-default `PW_OUTPUT` also takes the milestone screenshots (`<PW_OUTPUT>/__screenshots__/`,
+ * e2e/tools/shots.ts); only the default run rewrites the tracked e2e folder.
  */
 const DEFAULT_PORT = 4173;
 const PORT = process.env.PW_PORT ? Number(process.env.PW_PORT) : DEFAULT_PORT;
 if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65_535) throw new Error(`PW_PORT must be a TCP port, got ${String(process.env.PW_PORT)}`);
-const OUTPUT_DIR = process.env.PW_OUTPUT || 'test-results';
+const OUTPUT_DIR = process.env.PW_OUTPUT || DEFAULT_PW_OUTPUT;
 
 /**
  * QA-28: one run per output directory. Day 32's chromium, pwa and WebView runs were started in

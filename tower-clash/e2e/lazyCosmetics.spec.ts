@@ -50,6 +50,7 @@ test('lazy roof + theme + shape skin: 3 s of level 1 without errors, each cosmet
 
   expect(await page.evaluate(() => window.__towerclash.loadLevel(1, 1))).toBe(true);
   await expect.poll(() => screen(page)).toBe('play');
+  await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
   await expect.poll(() => simTime(page), { timeout: 20_000 }).toBeGreaterThanOrEqual(3_000);
   await expect.poll(() => fetched.get('skinShapes')?.length ?? 0, { message: 'roof material + silhouette skin chunk landed' }).toBe(1);
   await expect.poll(() => fetched.get('themes')?.length ?? 0, { message: 'terrain theme chunk landed' }).toBe(1);

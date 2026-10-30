@@ -106,6 +106,7 @@ test.describe('lazy chunks under a failing network', () => {
     // the rest of the game is untouched: another level still opens
     expect(await page.evaluate(() => window.__towerclash.loadLevel(1, 1))).toBe(true);
     await expect.poll(() => screen(page)).toBe('play');
+    await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
     await expect.poll(() => simTime(page)).toBeGreaterThan(200);
     expect(errors).toEqual([]);
 
@@ -116,6 +117,7 @@ test.describe('lazy chunks under a failing network', () => {
     expect((await fetched).ok()).toBe(true);
     await expect.poll(() => screen(page)).toBe('play');
     expect(await page.evaluate(() => window.__towerclash.getState()?.levelId)).toBe(3);
+    await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
     await expect.poll(() => simTime(page)).toBeGreaterThan(0);
     expect(errors).toEqual([]);
   });
@@ -187,6 +189,7 @@ test.describe('lazy chunks under a failing network', () => {
     const errors = await boot(page, { version: 3, skins: { owned: ['tower_keep', 'unit_robots'], equipped: { roof: 'tower_keep', helmet: 'unit_robots', theme: null } } });
     expect(await page.evaluate(() => window.__towerclash.loadLevel(1, 1))).toBe(true);
     await expect.poll(() => screen(page)).toBe('play');
+    await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
     await expect.poll(() => simTime(page)).toBeGreaterThan(1000);
     expect(aborted.length, 'the play screen asked for the skin chunk').toBeGreaterThanOrEqual(1);
     // the reference player wins the level with the default look on screen
@@ -238,6 +241,7 @@ test.describe('lazy chunks under a failing network', () => {
     expect(ground, 'the ground layer is already lit by the neon theme').not.toEqual(DEFAULT_SEA_TOP);
     expect(playAt - started, 'the wait for the chunks is short').toBeLessThan(5_000);
     expect(await page.evaluate(() => window.__towerclash.getState()?.levelId)).toBe(15);
+    await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
     await expect.poll(() => simTime(page)).toBeGreaterThan(200);
     expect(errors).toEqual([]);
   });
@@ -313,6 +317,7 @@ test.describe('lazy chunks under a failing network', () => {
     expect(requests, 'no tutorialSteps request on the title').toEqual([]);
     // a level without a tutorial (and its next-level preload, 6) does not need the chunk either
     expect(await page.evaluate(() => window.__towerclash.loadLevel(5, 1))).toBe(true);
+    await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
     await expect.poll(() => simTime(page)).toBeGreaterThan(200);
     expect(requests, 'no tutorialSteps request for level 5').toEqual([]);
     // first play of level 2: the chunk is requested by the start, before the play screen exists
@@ -320,6 +325,7 @@ test.describe('lazy chunks under a failing network', () => {
     await page.waitForFunction(() => window.__towerclash.getState()?.levelId === 2);
     expect(requests.length, 'tutorialSteps requested by the level 2 start').toBe(1);
     expect(await start).toBe(true);
+    await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the bubble shows once the card is gone
     await expect.poll(() => page.evaluate(() => window.__towerclash.getTutorialHint())).toBe(await text(page, 'tutorial.tapThenGrey'));
     expect(await text(page, 'tutorial.tapThenGrey')).not.toBe('tutorial.tapThenGrey');
     expect(requests, 'fetched once').toHaveLength(1);
@@ -336,6 +342,7 @@ test.describe('lazy chunks under a failing network', () => {
     expect(await page.evaluate(() => window.__towerclash.loadLevel(3, 1)), 'the level starts anyway (the tutorial is not load-bearing)').toBe(true);
     await expect.poll(() => screen(page)).toBe('play');
     expect(aborted.length).toBeGreaterThanOrEqual(1);
+    await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
     await expect.poll(() => simTime(page)).toBeGreaterThan(200);
     expect(await page.evaluate(() => window.__towerclash.getTutorialHint()), 'no tutorial while the chunk is missing').toBeNull();
     // network back: the play screen retries after the src/lazyChunk.ts back-off (3 s), under `?r=` (module map, BUG-8)

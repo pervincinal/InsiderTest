@@ -7,12 +7,17 @@ import { LEVEL_META } from '../levels/index';
  * challenge pool, a fixed seed and a "twist" (a player-side modifier set the sim already supports),
  * so every player in the world plays the same match that day and the reference bot can verify it.
  * Pure: no Date here — callers pass the day key (`dayKeyOf(new Date())` in the UI).
+ *
+ * PERF-11: the keys, unlock levels, rewards and milestones live in ./core.ts (re-exported here),
+ * the part the eager result path needs; this generator is reached only by lazy chunks (level map,
+ * debug surface) — eager code imports ./core.ts, never this file (checked on the build's source map,
+ * BACKLOG PERF-11: no `daily/challenge.ts` in the entry chunk).
  */
+export { REWARD, STREAK_MILESTONES, UNLOCK_AFTER_LEVEL, WEEKLY_BEST_KEEP, WEEKLY_REWARD, WEEKLY_STREAK_MILESTONES, WEEKLY_UNLOCK_AFTER_LEVEL, dayKeyOf, goldReward, weekKeyOf } from './core';
 
 /** First level of the pool; the challenge unlocks once the player has cleared `UNLOCK_AFTER_LEVEL`. */
 export const POOL_FROM = 9;
 export const POOL_TO = 50;
-export const UNLOCK_AFTER_LEVEL = 8;
 
 export interface Twist {
   id: 'plain' | 'lean' | 'fastFeet' | 'thinWalls' | 'reinforced';
@@ -27,37 +32,11 @@ export const TWISTS: readonly Twist[] = Object.freeze([
   { id: 'reinforced', modifiers: { ...DEFAULT_MODIFIERS, startGarrisonBonus: 5 } },
 ]);
 
-/** Rewards for the first win of the day (ECONOMY.md §3.x): base + per star. */
-export const REWARD = Object.freeze({ gold: 30, goldPerStar: 10, crystals: 5 });
-
-/** Streak milestones (ECONOMY.md §6.2): `[day, crystals]`, paid once per streak run when the streak reaches `day`. */
-export const STREAK_MILESTONES = [
-  [3, 5],
-  [7, 20],
-  [30, 100],
-] as const;
-
-/**
- * Week-streak milestones (WK-1, GDD §8.1): `[weeks, crystals]`, paid once by `recordWeeklyResult` when
- * the first win of a week brings `save.weekly.streak` to exactly `weeks`. No ledger: the streak passes
- * each value once per run, so a broken and rebuilt run pays again.
- */
-export const WEEKLY_STREAK_MILESTONES = [
-  [4, 15],
-  [8, 30],
-  [12, 60],
-] as const;
-
 export interface DailyChallenge {
   dayKey: string; // YYYY-MM-DD (UTC)
   levelId: number;
   seed: number;
   twist: Twist;
-}
-
-/** `YYYY-MM-DD` in UTC for a Date (the UI's only Date use for the challenge). */
-export function dayKeyOf(date: Date): string {
-  return date.toISOString().slice(0, 10);
 }
 
 /** FNV-1a 32-bit over the key: stable across platforms, spreads consecutive days well. */
@@ -156,9 +135,6 @@ export function challengeFor(dayKey: string): DailyChallenge {
 
 /** Weekly pool starts at band 4; the weekly unlocks once level `WEEKLY_UNLOCK_AFTER_LEVEL` has a star. */
 export const WEEKLY_POOL_FROM = 33;
-export const WEEKLY_UNLOCK_AFTER_LEVEL = 32;
-export const WEEKLY_REWARD = Object.freeze({ gold: 100, crystals: 20 });
-export const WEEKLY_BEST_KEEP = 12;
 
 export interface WeeklyChallenge {
   weekKey: string; // YYYY-MM-DD of the week's Monday (UTC)
@@ -166,12 +142,6 @@ export interface WeeklyChallenge {
   seed: number;
   twist: Twist; // never 'plain'
   targetMs: number; // the level's own 3★ clock
-}
-
-/** The Monday (UTC) day key of the week containing `date`. */
-export function weekKeyOf(date: Date): string {
-  const back = (date.getUTCDay() + 6) % 7;
-  return dayKeyOf(new Date(date.getTime() - back * 86_400_000));
 }
 
 export function isMondayKey(dayKey: string): boolean {
@@ -190,9 +160,4 @@ export function weeklyFor(weekKey: string): WeeklyChallenge {
   const twists = TWISTS.filter((t) => t.id !== 'plain');
   const twist = twists[hashDayKey(`${weekKey}#weektwist`) % twists.length]!;
   return { weekKey, levelId: level.id, seed: (h % 1_000_000) + 1, twist, targetMs: level.star3 };
-}
-
-/** Gold paid for a first win with `stars` stars. */
-export function goldReward(stars: number): number {
-  return REWARD.gold + REWARD.goldPerStar * Math.max(0, Math.min(3, stars));
 }

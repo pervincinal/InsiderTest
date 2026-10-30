@@ -109,6 +109,7 @@ test.describe('PERF-3 canvas layers', () => {
     const errors = await boot(page, NO_TUTORIAL);
     expect(await page.evaluate(() => window.__towerclash.loadLevel(1, 1))).toBe(true);
     await expect.poll(() => screen(page)).toBe('play');
+    await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
     await expect.poll(() => simTime(page)).toBeGreaterThan(400);
     await expectPlayLayersPainted(page, 'playing');
     const gameLive = await stats(page, 'game');
@@ -143,6 +144,7 @@ test.describe('PERF-3 canvas layers', () => {
     await expectHudBlank(page, 'level map after a result');
     expect(await page.evaluate(() => window.__towerclash.loadLevel(2, 1))).toBe(true);
     await expect.poll(() => screen(page)).toBe('play');
+    await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
     await expect.poll(() => simTime(page)).toBeGreaterThan(400);
     await expectPlayLayersPainted(page, 'level 2');
     expect(errors).toEqual([]);
@@ -152,6 +154,7 @@ test.describe('PERF-3 canvas layers', () => {
     const errors = await boot(page, NO_TUTORIAL);
     expect(await page.evaluate(() => window.__towerclash.loadLevel(1, 1))).toBe(true);
     await expect.poll(() => screen(page)).toBe('play');
+    await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
     await expect.poll(() => simTime(page)).toBeGreaterThan(400);
     const before = await stats(page, 'game');
 

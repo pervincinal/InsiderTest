@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { shotPath } from './tools/shots';
 
 /*
  * Android WebView emulation (QA-1). Runs only in the `android-webview` Playwright project
@@ -47,8 +47,8 @@ const LEVEL1_FILE = readdirSync(LEVELS_DIR)
   .sort()[0]!;
 const LEVEL1 = JSON.parse(readFileSync(new URL(LEVEL1_FILE, LEVELS_DIR), 'utf8')) as LevelJson;
 
-const SHOTS = fileURLToPath(new URL('./__screenshots__/', import.meta.url));
-const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}webview-${name}.png`, scale: 'css' });
+// AUD-Q15: e2e/tools/shots.ts picks the tracked folder (default run) or <PW_OUTPUT>/__screenshots__
+const shot = (page: Page, name: string) => page.screenshot({ path: shotPath(`webview-${name}`), scale: 'css' });
 
 const screen = (page: Page) => page.evaluate(() => window.__towerclash.getScreen());
 const simTime = (page: Page) => page.evaluate(() => window.__towerclash.getState()?.time ?? -1);
@@ -115,6 +115,7 @@ async function boot(page: Page): Promise<Errors> {
 async function startLevel1(page: Page): Promise<void> {
   expect(await page.evaluate(() => window.__towerclash.loadLevel(1, 1))).toBe(true);
   await expect.poll(() => screen(page)).toBe('play');
+  await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
   expect(await levelId(page)).toBe(1);
   const t0 = await simTime(page);
   await expect.poll(() => simTime(page), { message: 'sim must tick after loadLevel' }).toBeGreaterThan(t0);
@@ -184,9 +185,9 @@ test.describe('Tower Clash in an Android WebView', () => {
     await touchRect(page, levelNodeRect(0));
     await expect.poll(() => screen(page), { message: 'level node must react to a touch tap' }).toBe('play');
     expect(await levelId(page)).toBe(1);
+    // AUD-B11: the lesson card holds the match until the first touch on the map — no tick, no bubble yet
     const t0 = await simTime(page);
-    await expect.poll(() => simTime(page)).toBeGreaterThan(t0);
-    expect(await hint(page)).toBe('Tap your tower');
+    expect(await hint(page), 'the lesson card is up: no tutorial bubble yet').toBeNull();
 
     // (3) level 1's lesson by touch: home → camp sends units.
     const home = LEVEL1.towers.find((t) => t.id === 'home')!;
@@ -195,6 +196,7 @@ test.describe('Tower Clash in an Android WebView', () => {
     const garrisonBefore = await towerUnits(page, 'home');
     expect(garrisonBefore).toBeGreaterThan(0);
     await touchAt(page, home.x, home.y);
+    await expect.poll(() => simTime(page), { message: 'the first touch starts the held match (AUD-B11)' }).toBeGreaterThan(t0);
     await expect.poll(() => hint(page), { message: 'touching the home tower selects it' }).toBe('Now tap the grey tower — the stream keeps flowing');
     await touchAt(page, camp.x, camp.y);
     await expect.poll(() => hint(page), { message: 'touching the target starts the stream' }).toBeNull();

@@ -66,7 +66,10 @@ export const EARN_RULES = {
    * levels, not 8: the band bonus is the long-tail goal, not pay per level (per-level dilution is deliberate).
    */
   crystalsPerFullBand3Star: 20,
-  /** Six bands; `bandOf` in wallet.ts indexes them 0..5 (one level skip per band → 6 per campaign). */
+  /**
+   * Six bands; `bandOf` in wallet.ts indexes them 0..5. Level skips (ECONOMY.md §3.4, AUD-B3 2026-10-30): one per
+   * band plus one on each of `LEARNING_LEVEL_IDS` → up to 6 + 3 = 9 per campaign.
+   */
   bands: [
     [1, 8],
     [9, 16],
@@ -223,8 +226,16 @@ export const SKINS = [
   { id: 'unit_robots', label: 'Clockwork robots', category: 'unitShape', costCrystals: 150, source: 'shop' },
 ] as const satisfies readonly SkinDef[];
 
+/**
+ * The levels GDD §3 records as *learning levels* ("first-time line" item 9, GD-2: 23 and 32; GD-4: 27) — the
+ * naive line may lose them by design, so each carries its own level skip on top of its band's (ECONOMY.md §3.4,
+ * AUD-B3). Change it only together with the GDD list; `skipSlotOf` in wallet.ts is the only reader.
+ */
+export const LEARNING_LEVEL_IDS: readonly number[] = [23, 27, 32];
+
 /** Crystal-priced services (ECONOMY.md §3.1, §3.4, §3.5). */
 export const CRYSTAL_SERVICES = {
+  /** `maxPerBand` counts the ordinary levels of a band; a learning level's skip is its own (`LEARNING_LEVEL_IDS`). */
   levelSkip: { costCrystals: 30, offerAfterDefeats: 3, maxPerBand: 1, starsGranted: 1 },
   continue: { costCrystals: 10, rewindMs: 20_000, snapshotEveryMs: 1000, bonusInfantry: 15, freeFreeze: true, perAttempt: 1 },
   boosterCrate: { costCrystals: 60, charges: { overdrive: 5, freeze: 3, airstrike: 2 } },

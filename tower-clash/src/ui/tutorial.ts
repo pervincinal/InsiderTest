@@ -63,6 +63,11 @@ export class Tutorial {
     return this.index >= this.steps.length;
   }
 
+  /** Position in `steps` (debug / e2e: a step that timed out is told from its same-text successor). */
+  get stepIndex(): number {
+    return this.index;
+  }
+
   /** The step to display right now, or null when gated / finished. */
   current(state: GameState): TutorialStep | null {
     const step = this.steps[this.index];

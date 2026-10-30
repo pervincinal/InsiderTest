@@ -115,6 +115,7 @@ describe('refused taps play one `refuse` thud (ART-9)', () => {
 describe('stalemate hint plays the `stalemate` chime with the toast (ART-9)', () => {
   it('once, when StalemateWatch.check fires', () => {
     const play = new PlayScreen(fakeApp(save), fixture(), 1, 1);
+    play.startMatch(); // AUD-B11: the link below is enqueued directly, not through an input
     // The watch's own numbers are tested in tests/ui/stalemate.test.ts; here it is stubbed to fire
     // on the first check after the link exists.
     let fired = false;

@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { tapRect } from './helpers/tap';
+import { shotPath } from './tools/shots';
 
 /*
  * Economy (Phase A, docs/ECONOMY.md): commander upgrades reach the sim as `state.modifiers`, skins
@@ -34,13 +35,14 @@ const CONVERT_SEG = { x: CONVERT_CARD.x + 16, y: CONVERT_CARD.y + 96, w: CONVERT
 const CONVERT_BUY = { x: CONVERT_CARD.x + 24, y: CONVERT_CARD.y + CONVERT_CARD.h - 54 - 16, w: CONVERT_CARD.w - 48, h: 54 };
 const CONVERT_CONFIRM = { yes: { x: 130, y: 676, w: 210, h: 72 }, no: { x: 380, y: 676, w: 210, h: 72 } };
 // src/render/layout.ts — TITLE.achievements / TITLE.settings, ACHIEVEMENTS_LAYOUT.back, settingsAboutLayout(true, true)
-// (SETTINGS.about.y = 1012 since the FE-14 team-colour row: copy.y = 1012 + 22 + 62 + 31 − 24, privacy.y = 1012 + 22 + 2·62 + 10;
+// (SETTINGS.about.y = 1102 since the AUD-U2 text-size row (1012 after FE-14): copy.y = 1102 + 22 + 62 + 31 − 24,
+// privacy.y = 1102 + 22 + 2·62 + 10 — the About card then ends at 1350, inside a Pixel 5's 1559 layout px, so no scroll;
 // AUD-U1: privacy 320 wide so its tap area stays left of COPY's)
 const TITLE_ACHIEVEMENTS = { x: 18, y: 990, w: 128, h: 132 };
 const TITLE_SETTINGS = { x: 180, y: 776, w: 172, h: 64 };
 const ACHIEVEMENTS_BACK = { x: 18, y: 20, w: 140, h: 60 };
-const ABOUT_COPY = { x: 522, y: 1103, w: 118, h: 48 };
-const ABOUT_PRIVACY = { x: 200, y: 1168, w: 320, h: 60 };
+const ABOUT_COPY = { x: 522, y: 1193, w: 118, h: 48 };
+const ABOUT_PRIVACY = { x: 200, y: 1258, w: 320, h: 60 };
 // src/economy/catalog.ts — CONVERSION, CRYSTAL_SERVICES.boosterCrate, ACHIEVEMENTS crystals
 const CONVERSION = { goldPerCrystal: 5, packs: [20, 100, 500] };
 const CRATE = { cost: 60, charges: { overdrive: 5, freeze: 3, airstrike: 2 } };
@@ -67,8 +69,8 @@ type HelmetRecWindow = Window & { __qaTexts: { t: string; dx: number; dy: number
 const RESULT = { next: { x: 84, y: 780, w: 170, h: 72 }, menu: { x: 466, y: 780, w: 170, h: 72 }, continueAd: { x: 368, y: 696, w: 268, h: 62 }, howto: { x: 466, y: 494, w: 170, h: 44 } };
 // src/render/menuLayout.ts — HOWTO.close
 const HOWTO_CLOSE = { x: 180, y: 1054, w: 360, h: 72 };
-const SHOTS = fileURLToPath(new URL('./__screenshots__/', import.meta.url));
-const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}${name}.png`, scale: 'css' });
+// AUD-Q15: e2e/tools/shots.ts picks the tracked folder (default run) or <PW_OUTPUT>/__screenshots__
+const shot = (page: Page, name: string) => page.screenshot({ path: shotPath(name), scale: 'css' });
 const LEVELS_DIR = fileURLToPath(new URL('../src/levels/', import.meta.url));
 /** English lesson of a level, read from its JSON (data, not code — the spec still imports nothing from src/). */
 function lessonOf(id: number): string {

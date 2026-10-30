@@ -14,7 +14,8 @@ import {
 } from '../../src/economy/adsFlow';
 import { AD_PLACEMENTS, INTERSTITIAL_RULES } from '../../src/economy/catalog';
 import { noAds } from '../../src/economy/providers/noAds';
-import { grantProduct, recordResult } from '../../src/economy/wallet';
+import { recordResult } from '../../src/economy/wallet';
+import { grantProduct } from '../../src/economy/purchases';
 import { makeLevel } from '../helpers';
 
 let save: SaveData;

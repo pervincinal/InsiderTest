@@ -168,6 +168,7 @@ async function boot(page: Page, shape: Shape, extraQuery = ''): Promise<string[]
 async function startLevel(page: Page, id: number, speed?: number): Promise<void> {
   expect(await page.evaluate(([lid, seed]) => window.__towerclash.loadLevel(lid, seed), [id, SEED] as const), `loadLevel(${id})`).toBe(true);
   await expect.poll(() => screen(page)).toBe('play');
+  await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
   expect(await page.evaluate(() => window.__towerclash.getState()?.levelId)).toBe(id);
   if (speed !== undefined) await page.evaluate((n) => window.__towerclash.setSpeed(n), speed);
   await expect.poll(() => simTime(page), { message: `level ${id} sim should tick` }).toBeGreaterThan(0);

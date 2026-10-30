@@ -12,7 +12,7 @@
  */
 import type { LevelDef } from '../sim/types';
 import type { DailyChallenge, WeeklyChallenge } from '../daily/challenge';
-import { REWARD, STREAK_MILESTONES, UNLOCK_AFTER_LEVEL, goldReward } from '../daily/challenge';
+import { REWARD, STREAK_MILESTONES, UNLOCK_AFTER_LEVEL, goldReward } from '../daily/core';
 import { earnCrystals, earnGold } from '../economy/wallet';
 import type { ChallengeBest, SaveData } from './save';
 import { pruneChallengeBest, starsFor, writeSave } from './save';

@@ -7,7 +7,7 @@ import type { SaveData, SaveStorage } from '../../src/ui/save';
 import { defaultSave, setSaveStorageForTests } from '../../src/ui/save';
 import type { App, Screen, StartOptions } from '../../src/ui/screens';
 import { ResultScreen } from '../../src/ui/screens';
-import { PlayScreen } from '../../src/ui/play';
+import { PlayScreen, RESULT_BEAT_MS } from '../../src/ui/play';
 import { LevelSelectScreen } from '../../src/ui/levelSelect';
 import type { DailyChallenge } from '../../src/daily/challenge';
 import { TWISTS, UNLOCK_AFTER_LEVEL, challengeFor } from '../../src/daily/challenge';
@@ -76,12 +76,15 @@ function recordingStorage(): SaveStorage & { writes: number } {
 
 /** Every tower becomes the player's: the next tick ends the match as a win (see daily.test.ts). */
 function winNow(play: PlayScreen, clock: { now: number }): void {
+  play.startMatch(); // AUD-B11: the lesson card holds the match until a first input
   const state = play.state;
   for (const tw of Object.values(state.towers)) tw.owner = 'player';
   state.units = state.units.filter((u) => u.owner === 'player');
   state.links = state.links.filter((l) => l.owner === 'player');
   clock.now += 250;
   play.update(250, clock.now);
+  clock.now += RESULT_BEAT_MS; // AUD-F4: the result follows the outcome after the beat
+  play.update(0, clock.now);
 }
 
 function yesterdayChallenge(): DailyChallenge {

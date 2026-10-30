@@ -14,7 +14,7 @@
  */
 import type { LevelDef } from '../sim/types';
 import type { WeeklyChallenge } from '../daily/challenge';
-import { WEEKLY_BEST_KEEP, WEEKLY_REWARD, WEEKLY_STREAK_MILESTONES, WEEKLY_UNLOCK_AFTER_LEVEL } from '../daily/challenge';
+import { WEEKLY_BEST_KEEP, WEEKLY_REWARD, WEEKLY_STREAK_MILESTONES, WEEKLY_UNLOCK_AFTER_LEVEL } from '../daily/core';
 import { earnCrystals, earnGold } from '../economy/wallet';
 import type { SaveData, WeeklyBest } from './save';
 import { pruneChallengeBest, starsFor, writeSave } from './save';

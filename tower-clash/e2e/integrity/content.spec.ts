@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { shotPath } from '../tools/shots';
 
 /*
  * Content check: every authored level in src/levels/*.json must load in the real browser build
@@ -41,8 +41,8 @@ const LEVELS: LevelJson[] = LEVEL_FILES.map((f) => JSON.parse(readFileSync(new U
 const SCREENSHOT_IDS = [1, 5, 8, 16, 24, 32, 40, 50];
 const OBSTACLE_KINDS = ['wall', 'water', 'rock'] as const;
 
-const SHOTS = fileURLToPath(new URL('../__screenshots__/', import.meta.url));
-const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}content-${name}.png`, scale: 'css' });
+// AUD-Q15: e2e/tools/shots.ts picks the tracked folder (default run) or <PW_OUTPUT>/__screenshots__
+const shot = (page: Page, name: string) => page.screenshot({ path: shotPath(`content-${name}`), scale: 'css' });
 
 const screen = (page: Page) => page.evaluate(() => window.__towerclash.getScreen());
 const simTime = (page: Page) => page.evaluate(() => window.__towerclash.getState()?.time ?? -1);
@@ -73,6 +73,7 @@ test.describe('Tower Clash content: every authored level loads', () => {
       const loaded = await page.evaluate((id) => window.__towerclash.loadLevel(id), level.id);
       expect(loaded, `loadLevel(${level.id}) must find the level in the built index`).toBe(true);
       await expect.poll(() => screen(page)).toBe('play');
+      await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
       expect(await levelId(page)).toBe(level.id);
 
       // the sim is ticking (not paused, not stuck at 0)

@@ -545,8 +545,8 @@ describe('share card ART-12: defeat rows and one family per line', () => {
     }
     await setLanguage('ru');
     expect(uiFont()).toBe(FONT_RU);
-    expect(font(17, '500')).toBe(`500 17px ${FONT_RU}`);
-    expect(font(17, '500', FONT)).toBe(`500 17px ${FONT}`); // an explicit family (the logo) wins
+    expect(font(24, '500')).toBe(`500 24px ${FONT_RU}`);
+    expect(font(24, '500', FONT)).toBe(`500 24px ${FONT}`); // an explicit family (the logo) wins
   });
 
   describe('loadShareFonts (faces loaded before the card is drawn)', () => {

@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { fileURLToPath } from 'node:url';
 import { tapRect } from './helpers/tap';
+import { shotPath } from './tools/shots';
 import { expectToast, recordToasts, toastMark } from './helpers/toasts';
 
 /*
@@ -34,8 +34,8 @@ const DAY_C = '2026-09-29';
 /** The day before DAY_A: level 50, Reinforced (GDD §7.2 pins); the reference player wins it at the fixed seed. */
 const YESTERDAY_A = '2026-09-26';
 
-const SHOTS = fileURLToPath(new URL('./__screenshots__/', import.meta.url));
-const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}${name}.png`, scale: 'css' });
+// AUD-Q15: e2e/tools/shots.ts picks the tracked folder (default run) or <PW_OUTPUT>/__screenshots__
+const shot = (page: Page, name: string) => page.screenshot({ path: shotPath(name), scale: 'css' });
 
 type R = { x: number; y: number; w: number; h: number };
 

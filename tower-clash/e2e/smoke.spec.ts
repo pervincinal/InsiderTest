@@ -1,8 +1,8 @@
 import { readFileSync, readdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { tapAt, tapHud, tapRect } from './helpers/tap';
+import { shotPath } from './tools/shots';
 
 /*
  * Smoke: PWA files → title → level select (locks) → play level 1 (tutorial + manual stream: select
@@ -66,10 +66,10 @@ const LEVELS_DIR = new URL('../src/levels/', import.meta.url);
 const LEVEL_FILES = readdirSync(LEVELS_DIR).filter((f) => /^\d{3}-.*\.json$/.test(f)).sort();
 const readLevel = (file: string): LevelJson => JSON.parse(readFileSync(new URL(file, LEVELS_DIR), 'utf8')) as LevelJson;
 
-const SHOTS = fileURLToPath(new URL('./__screenshots__/', import.meta.url));
-const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}smoke-${name}.png`, scale: 'css' });
+// AUD-Q15: e2e/tools/shots.ts picks the tracked folder (default run) or <PW_OUTPUT>/__screenshots__
+const shot = (page: Page, name: string) => page.screenshot({ path: shotPath(`smoke-${name}`), scale: 'css' });
 /** Look-review shots (rules v2 streams / tutorial), named without the `smoke-` prefix. */
-const lookShot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}${name}.png`, scale: 'css' });
+const lookShot = (page: Page, name: string) => page.screenshot({ path: shotPath(name), scale: 'css' });
 
 /** Tap segment `i` of a segmented control drawn with `drawSegmented` (4 px inset, equal widths). */
 async function tapSegment(page: Page, r: { x: number; y: number; w: number; h: number }, count: number, i: number): Promise<void> {
@@ -245,14 +245,18 @@ test.describe('Tower Clash smoke', () => {
     await page.waitForTimeout(150);
     expect(await screen(page)).toBe('levelSelect');
 
-    // (c) tap level 1 → play screen, sim time advances, tutorial hint shown on a fresh save.
+    // (c) tap level 1 → play screen. AUD-B11 (GDD §4): the lesson card holds the match — sim time 0, no
+    //     tutorial hint — until the first input on the map; a tap on open grass (no tower, below the
+    //     card) starts the sim, and once the card has faded the tutorial hint shows on a fresh save.
     await tapRect(page, levelNodeRect(0));
     await expect.poll(() => screen(page)).toBe('play');
     expect(await levelId(page)).toBe(1);
-    const t0 = await simTime(page);
-    expect(t0).toBeGreaterThanOrEqual(0);
-    await expect.poll(() => simTime(page)).toBeGreaterThan(t0);
-    expect(await hint(page)).toBe('Tap your tower');
+    await page.waitForTimeout(800);
+    expect(await simTime(page), 'held by the lesson card').toBe(0);
+    expect(await hint(page), 'no tutorial bubble while the lesson card is up').toBeNull();
+    await tapAt(page, 560, 600);
+    await expect.poll(() => simTime(page)).toBeGreaterThan(0);
+    await expect.poll(() => hint(page)).toBe('Tap your tower');
     await page.waitForTimeout(300); // let the ring / arrow pulse once
     await lookShot(page, 'look3-tutorial');
 
@@ -389,7 +393,8 @@ test.describe('Tower Clash smoke', () => {
     await tapRect(page, RESULT.next);
     await expect.poll(() => screen(page)).toBe('play');
     expect(await levelId(page)).toBe(2);
-    expect(await hint(page), 'level 2 has its own tutorial on a fresh save').not.toBeNull();
+    await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: as a first input would
+    await expect.poll(() => hint(page), { message: 'level 2 has its own tutorial on a fresh save' }).not.toBeNull();
 
     // (e2) back to level select: level 2 unlocked, level 3 still locked; tapping level 3 does nothing,
     //      tapping level 2 starts it.
@@ -409,6 +414,7 @@ test.describe('Tower Clash smoke', () => {
     await tapRect(page, levelNodeRect(1));
     await expect.poll(() => screen(page)).toBe('play');
     expect(await levelId(page)).toBe(2);
+    await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card's hold ends
 
     // (f) pause menu: P pauses (sim frozen, tutorial hidden), speed toggle ×1→×2, RESUME continues at ×2.
     await page.keyboard.press('p');
@@ -511,6 +517,8 @@ test.describe('Tower Clash smoke', () => {
     // pause menu → card → BACK returns to the paused game with the sim still frozen
     await page.evaluate(() => window.__towerclash.loadLevel(1, 1));
     await expect.poll(() => screen(page)).toBe('play');
+    await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11
+    await page.waitForTimeout(100);
     await page.keyboard.press('p');
     await page.waitForTimeout(100);
     const pausedAt = await simTime(page);
@@ -556,6 +564,7 @@ test.describe('Tower Clash smoke', () => {
     // tutorial hint of level 1 is translated
     await page.evaluate(() => window.__towerclash.loadLevel(1, 1));
     await expect.poll(() => screen(page)).toBe('play');
+    await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the bubble shows once the card is gone
     await expect.poll(() => hint(page)).toBe('Öz qüllənə toxun');
 
     // the choice survives a reload; the title chip cycles languages (az → ru) and persists too

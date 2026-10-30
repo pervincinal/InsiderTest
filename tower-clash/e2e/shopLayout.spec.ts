@@ -372,8 +372,17 @@ test.describe('shop skin labels in every language at 360x640 (QA-16 B)', () => {
       await openSkins(page);
       const S = await Promise.all(['shop.equip', 'shop.equipped', 'shop.packOnly'].map((k) => text(page, k)));
       const texts = await drawnTexts(page); // every card of the tab is drawn each frame, whatever the scroll
-      const cardNames = texts.filter((d) => d.maxWidth !== null && Math.abs(d.maxWidth - (SKIN.w - 20)) < 0.5);
+      // AUD-U2 (2026-10-30): a card name is no longer squeezed through fillText's maxWidth — it is fitted
+      // (22 px floor, ≤ 26) and, past the floor, cut with "…" to the card less 16 px (menusShop.ts
+      // drawSkinCard). Names are the centred texts on a card column below the tabs that are not a button label.
+      const colX = [0, 1, 2].map((c) => SKIN.x0 + SKIN.w / 2 + c * (SKIN.w + SKIN.gapX));
+      const cardNames = texts.filter((d) => d.y > 150 && colX.some((x) => Math.abs(d.x - x) < 1) && !S.includes(d.t) && !/^[\d\s.,]+$/.test(d.t));
       expect(cardNames.length, `${lang}: card names drawn`).toBeGreaterThanOrEqual(20);
+      for (const d of cardNames) {
+        expect(d.t.endsWith('…'), `${lang}: "${d.t}" cut`).toBe(false);
+        expect(d.width, `${lang}: "${d.t}" inside its card`).toBeLessThanOrEqual(SKIN.w - 16 + 0.5);
+        expect(d.px, `${lang}: "${d.t}" at the 22 px floor or above`).toBeGreaterThanOrEqual(22 - 0.5);
+      }
       for (const s of S) expect(texts.map((d) => d.t), `${lang}: "${s}" drawn`).toContain(s);
       for (const d of texts) {
         if (d.maxWidth !== null && d.width > d.maxWidth + 0.5) squeezed.push(`${lang} "${d.t}" ${d.width.toFixed(1)} > ${d.maxWidth.toFixed(1)}`);

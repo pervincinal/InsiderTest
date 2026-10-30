@@ -1,7 +1,7 @@
-import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { hudClientPoint, tapHud, tapRect } from './helpers/tap';
+import { shotPath } from './tools/shots';
 
 /*
  * BUG-34 (TestFlight 1.0.0 (8), iPhone 17 Pro Max, ~19.5:9): "the game does not fill the screen".
@@ -44,7 +44,7 @@ const segment = (r: { x: number; y: number; w: number; h: number }, count: numbe
 const OVERDRIVE_COST = 30;
 const GOLD = 200;
 
-const SHOTS = fileURLToPath(new URL('./__screenshots__/', import.meta.url));
+// AUD-Q15: e2e/tools/shots.ts picks the tracked folder (default run) or <PW_OUTPUT>/__screenshots__
 
 const PHONES = [
   { name: '390x844', viewport: { width: 390, height: 844 }, safe: { top: 47, bottom: 34 } },
@@ -126,7 +126,7 @@ for (const phone of PHONES) {
       expectSea(title.tr, SEA_TOP, 'title top-right');
       expectSea(title.bl, SEA_BOTTOM, 'title bottom-left');
       expectSea(title.br, SEA_BOTTOM, 'title bottom-right');
-      await page.screenshot({ path: `${SHOTS}fullbleed-${phone.name}-title.png`, scale: 'css' });
+      await page.screenshot({ path: shotPath(`fullbleed-${phone.name}-title`), scale: 'css' });
       expect(errors).toEqual([]);
     });
 
@@ -134,6 +134,7 @@ for (const phone of PHONES) {
       const errors = await boot(page, phone.safe);
       expect(await page.evaluate(() => window.__towerclash.loadLevel(4, 1))).toBe(true);
       await expect.poll(() => screen(page)).toBe('play');
+      await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
       const t0 = await simTime(page);
       await expect.poll(() => simTime(page)).toBeGreaterThan(t0);
 
@@ -154,7 +155,7 @@ for (const phone of PHONES) {
       expect(pauseAt.y).toBeLessThan(pauseLayout.y - 15);
       const menuBottom = await hudClientPoint(page, HUD.menu.x, HUD.menu.y + HUD.menu.h);
       expect(menuBottom.y, 'MENU bottom edge = safe bottom − 20 layout px').toBeCloseTo(phone.viewport.height - phone.safe.bottom - 20 * scale, 0);
-      await page.screenshot({ path: `${SHOTS}fullbleed-${phone.name}-play.png`, scale: 'css' });
+      await page.screenshot({ path: shotPath(`fullbleed-${phone.name}-play`), scale: 'css' });
 
       // pause button: pauses (sim frozen), tapped again: resumes
       await tapHud(page, HUD.pause);

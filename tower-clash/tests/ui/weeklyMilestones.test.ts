@@ -8,7 +8,7 @@ import type { SaveData } from '../../src/ui/save';
 import { defaultSave, setSaveStorageForTests } from '../../src/ui/save';
 import type { App, Screen } from '../../src/ui/screens';
 import { ResultScreen } from '../../src/ui/screens';
-import { PlayScreen } from '../../src/ui/play';
+import { PlayScreen, RESULT_BEAT_MS } from '../../src/ui/play';
 import type { WeeklyChallenge } from '../../src/daily/challenge';
 import { STREAK_MILESTONES, TWISTS, WEEKLY_REWARD, WEEKLY_STREAK_MILESTONES, WEEKLY_UNLOCK_AFTER_LEVEL } from '../../src/daily/challenge';
 import { recordWeeklyResult } from '../../src/ui/weekly';
@@ -191,7 +191,9 @@ describe('result toast (GDD §7.3 slot: achievement > daily milestone > week-str
     for (const tw of Object.values(state.towers)) tw.owner = 'player';
     state.units = state.units.filter((u) => u.owner === 'player');
     state.links = state.links.filter((l) => l.owner === 'player');
+    play.startMatch();
     play.update(250, 250);
+    play.update(0, 250 + RESULT_BEAT_MS); // AUD-F4 beat
     const result = shell.current() as ResultScreen;
     expect(result).toBeInstanceOf(ResultScreen);
     result.enter();

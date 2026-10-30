@@ -8,7 +8,7 @@ import type { SaveData } from '../../src/ui/save';
 import { defaultSave, setSaveStorageForTests } from '../../src/ui/save';
 import type { App, Screen, StartOptions } from '../../src/ui/screens';
 import { ResultScreen } from '../../src/ui/screens';
-import { PlayScreen } from '../../src/ui/play';
+import { PlayScreen, RESULT_BEAT_MS } from '../../src/ui/play';
 import { REWARD, WEEKLY_REWARD, challengeFor, goldReward, weeklyFor } from '../../src/daily/challenge';
 import { challengeDone, recordChallengeResult } from '../../src/ui/daily';
 import { recordWeeklyResult, weeklyDone } from '../../src/ui/weekly';
@@ -63,12 +63,15 @@ function fakeApp(save: SaveData) {
 
 /** Every tower to the player: the win lands on the next tick (see continue.test.ts). */
 function winNow(play: PlayScreen, clock: { now: number }): void {
+  play.startMatch(); // AUD-B11: the lesson card holds the match until a first input
   const state = play.state;
   for (const tower of Object.values(state.towers)) tower.owner = 'player';
   state.units = state.units.filter((u) => u.owner === 'player');
   state.links = state.links.filter((l) => l.owner === 'player');
   clock.now += 250;
   play.update(250, clock.now);
+  clock.now += RESULT_BEAT_MS; // AUD-F4: the result follows the outcome after the beat
+  play.update(0, clock.now);
 }
 
 /** The campaign-side fields a challenge must never touch. */

@@ -62,6 +62,7 @@ test.describe('drag rubber band (BUG-35)', () => {
     await page.waitForFunction(() => typeof window.__towerclash?.getDrag === 'function');
     expect(await page.evaluate((seed) => window.__towerclash.loadLevel(2, seed), SEED)).toBe(true);
     await expect.poll(() => screen(page)).toBe('play');
+    await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
     await expect.poll(() => simTime(page)).toBeGreaterThan(0);
 
     const finger = new Finger(page, await page.context().newCDPSession(page));

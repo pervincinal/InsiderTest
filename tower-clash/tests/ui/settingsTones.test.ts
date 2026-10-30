@@ -141,7 +141,7 @@ describe('save field settings.tones (optional, schema stays v3)', () => {
 });
 
 describe('settings layout (SETTINGS.tones)', () => {
-  it('the row sits under the language picker and above the summary / RESET, inside the card; About still fits 9:16', () => {
+  it('the row sits under the language picker and above the summary / RESET, inside the card; About fits 9:16 on the web, scrolls into view with both native rows', () => {
     const r = SETTINGS.tones;
     const card = SETTINGS.card;
     expect(r.x).toBe(SETTINGS.language.x);
@@ -149,7 +149,10 @@ describe('settings layout (SETTINGS.tones)', () => {
     expect(r.h).toBeGreaterThanOrEqual(44);
     expect(SETTINGS.tonesLabelY).toBeGreaterThanOrEqual(SETTINGS.language.y + SETTINGS.language.h);
     expect(r.y).toBeGreaterThanOrEqual(SETTINGS.tonesLabelY + 40);
-    expect(SETTINGS.summaryY - 12).toBeGreaterThanOrEqual(r.y + r.h + 12);
+    // AUD-U2: the "Text size" row sits between the team colours and the summary
+    expect(SETTINGS.textSizeSepY).toBeGreaterThanOrEqual(r.y + r.h + 12);
+    expect(SETTINGS.textSize.y).toBeGreaterThanOrEqual(SETTINGS.textSizeSepY + 16);
+    expect(SETTINGS.summaryY - 12).toBeGreaterThanOrEqual(SETTINGS.textSize.y + SETTINGS.textSize.h + 12);
     expect(SETTINGS.reset.y).toBeGreaterThanOrEqual(SETTINGS.summaryY + 12);
     expect(SETTINGS.reset.y + SETTINGS.reset.h).toBeLessThanOrEqual(card.y + card.h - 16);
     expect(r.y + r.h).toBeLessThanOrEqual(card.y + card.h);
@@ -162,7 +165,9 @@ describe('settings layout (SETTINGS.tones)', () => {
     ] as const) {
       const about = settingsAboutLayout(support, privacy);
       expect(about.card.y).toBeGreaterThanOrEqual(card.y + card.h + 8);
-      expect(about.card.y + about.card.h, `about support=${support} privacy=${privacy}`).toBeLessThanOrEqual(1280 - 16);
+      // the web About (version only) fits a 9:16 screen without scrolling; the native rows scroll into view (settings.ts maxScroll)
+      if (!support) expect(about.card.y + about.card.h, `about support=${support} privacy=${privacy}`).toBeLessThanOrEqual(1280 - 16);
+      else expect(about.card.y + about.card.h, `about support=${support} privacy=${privacy}`).toBeLessThanOrEqual(1280 + 120);
     }
   });
 });
@@ -173,7 +178,7 @@ describe('locale keys (en / az / ru / tr)', () => {
     const want: Record<string, string[]> = {
       en: ['Team colours', 'Classic', 'Vivid', 'Royal', 'Pastel'],
       az: ['Komanda rəngləri', 'Klassik', 'Canlı', 'Kral', 'Pastel'],
-      ru: ['Цвета команд', 'Классика', 'Яркие', 'Королевские', 'Пастель'],
+      ru: ['Цвета команд', 'Классика', 'Яркие', 'Царские', 'Пастель'], // AUD-U2: "Королевские" did not fit its segment at 22 px
       tr: ['Takım renkleri', 'Klasik', 'Canlı', 'Kraliyet', 'Pastel'],
     };
     for (const [code, dict] of Object.entries({ en, az, ru, tr })) expect(keys.map((k) => dict[k]), code).toEqual(want[code]);

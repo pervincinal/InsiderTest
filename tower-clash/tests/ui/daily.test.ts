@@ -7,7 +7,7 @@ import type { SaveData } from '../../src/ui/save';
 import { defaultSave, setSaveStorageForTests } from '../../src/ui/save';
 import type { App, Screen, StartOptions } from '../../src/ui/screens';
 import { ResultScreen } from '../../src/ui/screens';
-import { PlayScreen } from '../../src/ui/play';
+import { PlayScreen, RESULT_BEAT_MS } from '../../src/ui/play';
 import type { DailyChallenge } from '../../src/daily/challenge';
 import { REWARD, STREAK_MILESTONES, TWISTS, UNLOCK_AFTER_LEVEL, goldReward } from '../../src/daily/challenge';
 import { challengeDone, challengeUnlocked, msToUtcMidnight, previousDayKey, recordChallengeResult, shownStreak } from '../../src/ui/daily';
@@ -243,12 +243,15 @@ describe('streak milestones (ECONOMY.md §6.2: day 3 / 7 / 30 → +5 / +20 / +10
 describe('PlayScreen in challenge mode', () => {
   /** A level the player wins on the first tick once every tower is theirs (see continue.test.ts). */
   function winNow(play: PlayScreen, clock: { now: number }): void {
+    play.startMatch(); // AUD-B11: the lesson card holds the match until a first input
     const state = play.state;
     for (const t of Object.values(state.towers)) t.owner = 'player';
     state.units = state.units.filter((u) => u.owner === 'player');
     state.links = state.links.filter((l) => l.owner === 'player');
     clock.now += 250;
     play.update(250, clock.now);
+    clock.now += RESULT_BEAT_MS; // AUD-F4: the result follows the outcome after the beat
+    play.update(0, clock.now);
   }
 
   it("applies the twist's modifiers instead of the commander upgrades and uses the fixed seed", () => {
@@ -275,7 +278,9 @@ describe('PlayScreen in challenge mode', () => {
     expect(play.useBooster('freeze')).toBe(false);
     expect(play.useBooster('airstrike')).toBe(false);
     expect(play.targeting).toBe(false);
+    play.startMatch();
     play.update(250, 250);
+    play.update(0, 250 + RESULT_BEAT_MS); // AUD-F4 beat
     expect(play.state.boosters).toEqual([]);
     expect(save.gold).toBe(100);
     expect(save.charges.overdrive).toBe(2);
@@ -445,7 +450,9 @@ describe('UTC day rollover during a match (GDD §7.5 item 4)', () => {
     for (const tower of Object.values(play.state.towers)) tower.owner = 'player';
     play.state.units = [];
     play.state.links = [];
+    play.startMatch();
     play.update(250, 250);
+    play.update(0, 250 + RESULT_BEAT_MS); // AUD-F4 beat
     const result = current() as ResultScreen;
     expect(result).toBeInstanceOf(ResultScreen);
     expect(save.challenge.lastWinDay).toBe(DAY);

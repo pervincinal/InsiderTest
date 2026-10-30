@@ -21,7 +21,7 @@ export type Language = (typeof LANGUAGE_CODES)[number];
 /** Picker entries: the language's own name (no flags). */
 export const LANGUAGES: readonly { code: Language; label: string }[] = [
   { code: 'en', label: 'English' },
-  { code: 'az', label: 'Azərbaycanca' },
+  { code: 'az', label: 'Azərbaycan' },
   { code: 'ru', label: 'Русский' },
   { code: 'tr', label: 'Türkçe' },
 ];

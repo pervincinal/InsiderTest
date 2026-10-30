@@ -1,23 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { SaveData } from '../../src/ui/save';
 import { SAVE_KEY, SAVE_KEY_V2, defaultSave, loadSaveFrom, resetProgress, setSaveStorageForTests } from '../../src/ui/save';
-import {
-  CONVERSION_PACKS,
-  buyBoosterCrate,
-  claimDaily,
-  conversionGold,
-  convertCrystals,
-  dailyStatus,
-  dayKey,
-  earnCrystals,
-  earnGold,
-  grantProduct,
-  payMilestones,
-  recordResult,
-  restorePurchases,
-  spendCrystals,
-  spendGold,
-} from '../../src/economy/wallet';
+import { claimDaily, dailyStatus, dayKey, earnCrystals, earnGold, payMilestones, recordResult, spendCrystals, spendGold } from '../../src/economy/wallet';
+import { CONVERSION_PACKS, buyBoosterCrate, conversionGold, convertCrystals, grantProduct, restorePurchases } from '../../src/economy/purchases';
 import { boosterDiscount, boosterPrice, equippedSkin, highestClearedLevel, interstitialsDisabled, ownsProduct, shopSkins, skinFamily, spriteSkinId, visibleProducts } from '../../src/economy/entitlements';
 import { HELMET_SKINS, ROOF_SKINS, THEME_IDS } from '../../src/render/sprites';
 import { modifiersFromSave, upgradeTier } from '../../src/ui/upgrades';

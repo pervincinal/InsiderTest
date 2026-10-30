@@ -176,6 +176,7 @@ async function boot(page: Page, save: Record<string, unknown> | null): Promise<s
 async function startLevel(page: Page, id: number): Promise<void> {
   expect(await page.evaluate(([lid, seed]) => window.__towerclash.loadLevel(lid, seed), [id, SEED] as const), `loadLevel(${id})`).toBe(true);
   await expect.poll(() => screen(page)).toBe('play');
+  await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
   expect(await page.evaluate(() => window.__towerclash.getState()?.levelId)).toBe(id);
   await expect.poll(() => simTime(page), { message: `level ${id} sim should tick` }).toBeGreaterThan(0);
 }
@@ -562,8 +563,11 @@ test.describe('touch gestures on a 430×932 iPhone-class screen, DPR 3, safe ins
     await startLevel(page, 3);
     await expect.poll(() => hint(page), { message: 'fresh save: level 3 opens on its first step' }).toBe(tapThenGrey);
     const shownAt = Date.now();
-    // nobody touches the screen: the step gives way after TUTORIAL_STEP_TIMEOUT_MS of visible play (20 s)
-    await expect.poll(() => hint(page), { message: 'the first step times out', timeout: 35_000, intervals: [500] }).toBeNull();
+    // nobody touches the screen: the step gives way after TUTORIAL_STEP_TIMEOUT_MS of visible play (20 s).
+    // Since AUD-B9 (level 3 re-laid, the rusher holds both greys by then) steps 2–3 settle at once and step 4
+    // (the same text, pointing at east) shows, so the step index, not an empty hint, tells the time-out.
+    expect(await page.evaluate(() => window.__towerclash.getTutorialStep())).toBe(0);
+    await expect.poll(() => page.evaluate(() => window.__towerclash.getTutorialStep()), { message: 'the first step times out', timeout: 35_000, intervals: [500] }).toBeGreaterThanOrEqual(1);
     const after = Date.now() - shownAt;
     expect(after, `the step stayed ${after} ms`).toBeGreaterThanOrEqual(19_000);
     expect(await playerLinks(page)).toEqual([]);

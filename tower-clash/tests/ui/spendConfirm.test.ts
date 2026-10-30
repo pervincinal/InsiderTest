@@ -10,6 +10,7 @@ import type { HudPlayUi } from '../../src/render/hud';
 import { hudOverlaysLoaded, loadHudOverlays } from '../../src/render/hud';
 import { createAdSession } from '../../src/economy/adsFlow';
 import { getStore } from '../../src/economy/store';
+import { skipSlotOf } from '../../src/economy/wallet';
 import { CRYSTAL_SERVICES } from '../../src/economy/catalog';
 import type { SaveData } from '../../src/ui/save';
 import { defaultSave, setSaveStorageForTests } from '../../src/ui/save';
@@ -179,6 +180,21 @@ describe('result: CONTINUE and SKIP LEVEL confirm first (AUD-U5)', () => {
     tap(r, CONFIRM.yes);
     expect(save.crystals).toBe(100 - CRYSTAL_SERVICES.levelSkip.costCrystals);
     expect(save.stars['5']).toBe(CRYSTAL_SERVICES.levelSkip.starsGranted);
+  });
+
+  it("AUD-B3: learning level 27 keeps its own skip after three defeats though its band's skip is used", () => {
+    save.crystals = 100;
+    save.defeats['27'] = CRYSTAL_SERVICES.levelSkip.offerAfterDefeats;
+    save.skips = [skipSlotOf(26)]; // band 25–32's ordinary slot, spent on level 26
+    const { app } = fakeApp(save);
+    const r = defeat(app, makeLevel({ id: 27 }));
+    expect(r.extras().skipCrystals).toBe(CRYSTAL_SERVICES.levelSkip.costCrystals);
+    tap(r, RESULT.extra);
+    tap(r, CONFIRM.yes);
+    expect(save.crystals).toBe(100 - CRYSTAL_SERVICES.levelSkip.costCrystals);
+    expect(save.stars['27']).toBe(CRYSTAL_SERVICES.levelSkip.starsGranted);
+    expect(save.skips).toEqual([skipSlotOf(26), skipSlotOf(27)]);
+    expect(save.defeats['27']).toBeUndefined();
   });
 });
 

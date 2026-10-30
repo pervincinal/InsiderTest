@@ -1,18 +1,19 @@
 /**
- * Wallet (ECONOMY.md §2, Phase A): the only code that changes `save.gold` / `save.crystals`,
- * applies store grants and pays the earn rules. Every mutation persists through `writeSave` and
- * balances never go negative. Pure over `SaveData` + an explicit `nowMs` so the rules unit-test
- * without a DOM or a clock.
+ * Wallet (ECONOMY.md §2, Phase A): the only code that changes `save.gold` / `save.crystals`
+ * (with ./purchases.ts, its shop half) and pays the earn rules. Every mutation persists through
+ * `writeSave` and balances never go negative. Pure over `SaveData` + an explicit `nowMs` so the
+ * rules unit-test without a DOM or a clock.
+ *
+ * PERF-11: the shop-only operations — crystal → gold conversion, the booster crate, store grants and
+ * restores — are ./purchases.ts, imported only by the shop, the debug surface and the store
+ * providers (all lazy chunks); this file is what the eager play / result / title path needs.
  *
  * Owned by the Frontend Engineer.
  */
 import type { LevelDef } from '../sim/types';
-import type { BoosterCharges, SaveData } from '../ui/save';
+import type { SaveData } from '../ui/save';
 import { starsFor, writeSave } from '../ui/save';
-import type { IapProductDef } from './catalog';
-import { CONVERSION, CRYSTAL_SERVICES, EARN_RULES, IAP_PRODUCTS } from './catalog';
-import type { StoreProvider } from './store';
-import { getStore } from './store';
+import { CRYSTAL_SERVICES, EARN_RULES, LEARNING_LEVEL_IDS } from './catalog';
 
 /* ---------- calendar days ---------- */
 
@@ -68,134 +69,6 @@ export function spendCrystals(save: SaveData, amount: number): boolean {
   return true;
 }
 
-/* ---------- crystal sinks: gold conversion, booster crate ---------- */
-
-/** Gold a conversion of `crystals` pays (CONVERSION.goldPerCrystal). */
-export function conversionGold(crystals: number): number {
-  return Math.max(0, Math.floor(crystals)) * CONVERSION.goldPerCrystal;
-}
-
-/** Pack sizes (in crystals) the shop offers for conversion. */
-export const CONVERSION_PACKS: readonly number[] = CONVERSION.packsCrystals;
-
-/**
- * Crystals → gold, one catalog pack at a time (gold → crystals never exists). Returns the gold
- * added, or null (nothing changes) when the pack is not offered or unaffordable.
- */
-export function convertCrystals(save: SaveData, crystals: number): number | null {
-  if (!CONVERSION_PACKS.includes(crystals)) return null;
-  if (!spendCrystals(save, crystals)) return null;
-  const gold = conversionGold(crystals);
-  save.gold += gold;
-  writeSave(save);
-  return gold;
-}
-
-/**
- * Booster crate (ECONOMY.md §3.1): crystals → pre-paid charges of every booster. Returns the
- * charges added, or null (nothing changes) when unaffordable.
- */
-export function buyBoosterCrate(save: SaveData): BoosterCharges | null {
-  const crate = CRYSTAL_SERVICES.boosterCrate;
-  if (!spendCrystals(save, crate.costCrystals)) return null;
-  const added: BoosterCharges = { ...crate.charges };
-  save.charges.overdrive += added.overdrive;
-  save.charges.freeze += added.freeze;
-  save.charges.airstrike += added.airstrike;
-  writeSave(save);
-  return added;
-}
-
-/* ---------- store grants ---------- */
-
-export function productById(id: string): IapProductDef | undefined {
-  return (IAP_PRODUCTS as readonly IapProductDef[]).find((p) => p.id === id);
-}
-
-export interface GrantResult {
-  productId: string;
-  gold: number;
-  crystals: number;
-  skins: string[];
-  noAds: boolean;
-  premium: boolean;
-}
-
-/**
- * The non-currency side of a product (skins, no-ads / premium / starter flags). Idempotent; returns
- * the skins that were newly added.
- */
-function applyEntitlements(save: SaveData, product: IapProductDef): string[] {
-  const g = product.grants;
-  const added: string[] = [];
-  for (const skin of g.skins ?? []) {
-    if (!save.skins.owned.includes(skin)) {
-      save.skins.owned.push(skin);
-      added.push(skin);
-    }
-  }
-  if (g.removeAds === true) save.entitlements.noAds = true;
-  if ((g.boosterDiscount ?? 0) > 0) save.entitlements.premium = true;
-  if (product.id === 'starter_pack') save.entitlements.starterPack = true;
-  return added;
-}
-
-/**
- * Apply a product's catalog grants exactly once. `transactionId` (from the store) is the dedupe
- * key; without one, consumables are granted unconditionally (the fake store always sends an id).
- *
- * Non-consumables are granted once per save (ECON-12 (2), "grant once per purchase"): the first
- * grant writes `owned:<productId>` into `save.purchases`; from then on a purchase retry, a second
- * transaction or any number of `restore()`s add no currency again — they only re-ensure the
- * entitlement (skins, no-ads / premium / starter flags) in case the save lost it, and return null.
- * A restore on a fresh save (reinstall, second device: no marker yet) grants once, because the
- * player paid; `resetProgress` keeps `purchases`, so a reset never re-opens the grant.
- * Returns null when the product is unknown or was already granted.
- */
-export function grantProduct(save: SaveData, productId: string, transactionId?: string): GrantResult | null {
-  const product = productById(productId);
-  if (!product) return null;
-  const marker = product.kind === 'nonConsumable' ? `owned:${productId}` : null;
-  if (marker && save.purchases.includes(marker)) {
-    const flags = JSON.stringify(save.entitlements);
-    const added = applyEntitlements(save, product);
-    if (added.length > 0 || JSON.stringify(save.entitlements) !== flags) writeSave(save);
-    return null;
-  }
-  if (transactionId && save.purchases.includes(transactionId)) return null;
-  const g = product.grants;
-  const result: GrantResult = {
-    productId,
-    gold: g.gold ?? 0,
-    crystals: g.crystals ?? 0,
-    skins: [],
-    noAds: g.removeAds === true,
-    premium: (g.boosterDiscount ?? 0) > 0,
-  };
-  save.gold += result.gold;
-  save.crystals += result.crystals;
-  result.skins = applyEntitlements(save, product);
-  if (transactionId) save.purchases.push(transactionId);
-  if (marker) save.purchases.push(marker);
-  writeSave(save);
-  return result;
-}
-
-/**
- * Ask the store for the owned non-consumables and grant each one idempotently (consumables the
- * store may report — the fake does — are ignored). Returns the ids granted for the first time.
- */
-export async function restorePurchases(save: SaveData, store: StoreProvider = getStore()): Promise<string[]> {
-  const ids = await store.restore();
-  const granted: string[] = [];
-  for (const id of ids) {
-    const product = productById(id);
-    if (!product || product.kind !== 'nonConsumable') continue;
-    if (grantProduct(save, id)) granted.push(id);
-  }
-  return granted;
-}
-
 /* ---------- earn rules on a result ---------- */
 
 export interface ResultEarnings {
@@ -218,6 +91,64 @@ export function levelsCleared(save: SaveData): number {
 /** Index (0..5) of the band a level id belongs to, or -1. */
 export function bandOf(levelId: number): number {
   return EARN_RULES.bands.findIndex(([a, b]) => levelId >= a && levelId <= b);
+}
+
+/* ---------- level skip (ECONOMY.md §3.4, AUD-B3) ---------- */
+
+/**
+ * `save.skips` holds one slot per skip spent: the band index (0..5) for an ordinary level, or
+ * `LEARNING_SKIP_SLOT_BASE + levelId` for a learning level (`LEARNING_LEVEL_IDS`). The offset keeps the two
+ * apart, so a save written before 2026-10-30 (band indices only) reads the same: an old skip of 27 spent band
+ * 25–32's slot, and 32 still has its own.
+ */
+export const LEARNING_SKIP_SLOT_BASE = 100;
+
+/** The `save.skips` slot a skip of this level spends, or -1 when the level is in no band. */
+export function skipSlotOf(levelId: number): number {
+  const band = bandOf(levelId);
+  if (band < 0) return -1;
+  return LEARNING_LEVEL_IDS.includes(levelId) ? LEARNING_SKIP_SLOT_BASE + levelId : band;
+}
+
+/** Most skips one campaign can use: one per band plus one per learning level (6 + 3 = 9). */
+export function maxSkipsPerCampaign(): number {
+  const learning = LEARNING_LEVEL_IDS.filter((id) => bandOf(id) >= 0).length;
+  return EARN_RULES.bands.length * CRYSTAL_SERVICES.levelSkip.maxPerBand + learning;
+}
+
+/**
+ * The level-skip offer, from the save alone: at least `offerAfterDefeats` (3) consecutive defeats on an
+ * uncleared level whose slot is unused — one skip per band, and one more on each learning level that neither
+ * spends nor needs its band's. The caller adds what the save cannot know (a defeat screen, not a daily / weekly).
+ */
+export function skipAvailable(save: SaveData, levelId: number): boolean {
+  const slot = skipSlotOf(levelId);
+  const key = String(levelId);
+  return (
+    slot >= 0 &&
+    (save.defeats[key] ?? 0) >= CRYSTAL_SERVICES.levelSkip.offerAfterDefeats &&
+    (save.stars[key] ?? 0) === 0 &&
+    !save.skips.includes(slot)
+  );
+}
+
+/**
+ * Buy a level skip: `costCrystals` (30), `starsGranted` (1★, no gold), the slot recorded, the defeat streak
+ * cleared and the milestones paid (a skip counts toward "levels cleared", never toward a full-3★ band).
+ * Returns the milestone crystals, or null (nothing changes) when the skip is not available or unaffordable.
+ * Achievements stay the caller's (`evaluateAchievements`; a skip of 50 never pays `grand_campaign`).
+ */
+export function buyLevelSkip(save: SaveData, levelId: number): { crystals: number; notes: string[] } | null {
+  const svc = CRYSTAL_SERVICES.levelSkip;
+  if (!skipAvailable(save, levelId) || save.crystals < svc.costCrystals) return null;
+  const key = String(levelId);
+  save.crystals -= svc.costCrystals;
+  save.stars[key] = Math.max(save.stars[key] ?? 0, svc.starsGranted);
+  save.skips.push(skipSlotOf(levelId));
+  delete save.defeats[key];
+  const paid = payMilestones(save);
+  writeSave(save);
+  return paid;
 }
 
 /**

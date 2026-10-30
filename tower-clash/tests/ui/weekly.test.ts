@@ -7,7 +7,7 @@ import type { SaveData } from '../../src/ui/save';
 import { defaultSave, normalizeSave, setSaveStorageForTests } from '../../src/ui/save';
 import type { App, Screen, StartOptions } from '../../src/ui/screens';
 import { ResultScreen } from '../../src/ui/screens';
-import { PlayScreen } from '../../src/ui/play';
+import { PlayScreen, RESULT_BEAT_MS } from '../../src/ui/play';
 import type { WeeklyChallenge } from '../../src/daily/challenge';
 import { TWISTS, WEEKLY_BEST_KEEP, WEEKLY_REWARD, WEEKLY_UNLOCK_AFTER_LEVEL, weekKeyOf, weeklyFor } from '../../src/daily/challenge';
 import { msToNextMonday, previousWeekKey, recordWeeklyResult, shownWeekStreak, weeklyDone, weeklyTargetDone, weeklyUnlocked } from '../../src/ui/weekly';
@@ -267,12 +267,15 @@ describe('PlayScreen in weekly mode', () => {
   const level = makeLevel({ star3: TARGET, star2: 60_000 });
   /** A level the player wins on the first tick once every tower is theirs (see continue.test.ts). */
   function winNow(play: PlayScreen, clock: { now: number }): void {
+    play.startMatch(); // AUD-B11: the lesson card holds the match until a first input
     const state = play.state;
     for (const t of Object.values(state.towers)) t.owner = 'player';
     state.units = state.units.filter((u) => u.owner === 'player');
     state.links = state.links.filter((l) => l.owner === 'player');
     clock.now += 250;
     play.update(250, clock.now);
+    clock.now += RESULT_BEAT_MS; // AUD-F4: the result follows the outcome after the beat
+    play.update(0, clock.now);
   }
 
   it("applies the twist's modifiers instead of the commander upgrades, uses the fixed seed, boosters off", () => {
@@ -289,7 +292,9 @@ describe('PlayScreen in weekly mode', () => {
     expect(play.state.seed).toBe(4242);
     expect(play.useBooster('overdrive')).toBe(false);
     expect(play.useBooster('airstrike')).toBe(false);
+    play.startMatch();
     play.update(250, 250);
+    play.update(0, 250 + RESULT_BEAT_MS); // AUD-F4 beat
     expect(play.state.boosters).toEqual([]);
     expect(save.gold).toBe(100);
     expect(save.charges.overdrive).toBe(2);
@@ -426,7 +431,9 @@ describe('PlayScreen in weekly mode', () => {
     for (const tower of Object.values(play2.state.towers)) tower.owner = 'player';
     play2.state.units = [];
     play2.state.links = [];
+    play2.startMatch();
     play2.update(250, 250);
+    play2.update(0, 250 + RESULT_BEAT_MS); // AUD-F4 beat
     const result = current() as ResultScreen;
     expect(result).toBeInstanceOf(ResultScreen);
     expect(save.weekly.lastWinWeek).toBe(WEEK);

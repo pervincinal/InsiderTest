@@ -189,10 +189,40 @@ const updateToActivated = (page: Page, timeoutMs: number) =>
     });
     return Math.round(performance.now() - t0);
   }, timeoutMs);
-/** What the served index.html loads before any game code runs: `<script type="module" src>` + `<link rel="modulepreload">` pathnames. */
+/**
+ * Tags every `<script>` / `<link>` that page code inserts (`data-qa-runtime`), so `shellModules` can tell
+ * them from the parser's. PERF-11 (2026-10-30): the debug surface and the lazy screens now share chunks
+ * (src/economy/purchases.ts, the challenge generator), so Vite's `__vitePreload` appends
+ * `<link rel="modulepreload">` for them when those `import()`s run at idle — lazy chunks the worker
+ * runtime-caches, not part of the shell index.html names.
+ */
+const markRuntimeInserted = (): void => {
+  const tag = (n: Node): void => {
+    if (n instanceof HTMLLinkElement || n instanceof HTMLScriptElement) n.dataset.qaRuntime = '1';
+  };
+  const append = Node.prototype.appendChild;
+  const insert = Node.prototype.insertBefore;
+  Node.prototype.appendChild = function <T extends Node>(this: Node, n: T): T {
+    tag(n);
+    return append.call(this, n) as T;
+  };
+  Node.prototype.insertBefore = function <T extends Node>(this: Node, n: T, ref: Node | null): T {
+    tag(n);
+    return insert.call(this, n, ref) as T;
+  };
+  for (const name of ['append', 'prepend'] as const) {
+    const orig = Element.prototype[name];
+    Element.prototype[name] = function (this: Element, ...nodes: (Node | string)[]): void {
+      nodes.forEach((n) => typeof n !== 'string' && tag(n));
+      orig.apply(this, nodes);
+    };
+  }
+};
+
+/** What the served index.html loads before any game code runs: `<script type="module" src>` + `<link rel="modulepreload">` pathnames (not the ones page code inserts later, `markRuntimeInserted`). */
 const shellModules = (page: Page) =>
   page.evaluate(() =>
-    [...document.querySelectorAll<HTMLElement>('script[type="module"][src], link[rel="modulepreload"][href]')].map(
+    [...document.querySelectorAll<HTMLElement>('script[type="module"][src]:not([data-qa-runtime]), link[rel="modulepreload"][href]:not([data-qa-runtime])')].map(
       (el) => new URL(el.getAttribute('src') ?? el.getAttribute('href') ?? '', location.href).pathname,
     ),
   );
@@ -267,6 +297,7 @@ async function navigate(page: Page): Promise<void> {
 }
 
 test.describe('PWA offline (QA-8)', () => {
+  test.beforeEach(({ context }) => context.addInitScript(markRuntimeInserted));
   test.setTimeout(60_000); // ok: 5.9–12.1 s idle per test, 7.0–25.6 s at host load 20–25 (2026-10-18, QA-28); every step bounded, see the project comment in playwright.config.ts
 
   test('first launch precaches the shell; the game boots and plays level 1 offline; a cold level chunk fails with the offline toast and loads once back online; offline again the level map opens from the runtime cache', async ({ page, context }, testInfo) => {
@@ -349,6 +380,7 @@ test.describe('PWA offline (QA-8)', () => {
       expect(await page.evaluate(() => window.__towerclash.loadLevel(1, 1))).toBe(true);
       await expect.poll(() => screen(page)).toBe('play');
       expect(await levelId(page)).toBe(1);
+      await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
       await expect.poll(() => simTime(page)).toBeGreaterThan(200);
       expect(pageErrors).toEqual([]);
 
@@ -375,6 +407,7 @@ test.describe('PWA offline (QA-8)', () => {
       expect((await refetch).ok()).toBe(true);
       await expect.poll(() => screen(page)).toBe('play');
       expect(await levelId(page)).toBe(COLD_LEVEL);
+      await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
       await expect.poll(() => simTime(page)).toBeGreaterThan(0);
       await expect
         .poll(async () => (await cachedPaths(page))[cacheName] ?? [], { timeout: 15_000 })
@@ -509,6 +542,7 @@ test.describe('PWA offline (QA-8)', () => {
       expect(await page.evaluate(() => window.__towerclash.loadLevel(1, 1))).toBe(true);
       await expect.poll(() => screen(page)).toBe('play');
       expect(await levelId(page)).toBe(1);
+      await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
       await expect.poll(() => simTime(page)).toBeGreaterThan(200);
       // (level 1's start also preloads level 2, which was never cached — that one may fail; the carried-over set must not)
       expect(failed.filter((p) => warm.includes(p)), 'no carried-over chunk was requested from the network').toEqual([]);
@@ -610,6 +644,7 @@ test.describe('PWA offline (QA-8)', () => {
       expect(await page.evaluate(() => window.__towerclash.loadLevel(1, 1))).toBe(true);
       await expect.poll(() => screen(page)).toBe('play');
       expect(await levelId(page)).toBe(1);
+      await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
       await expect.poll(() => simTime(page)).toBeGreaterThan(200);
       expect(pageErrors).toEqual([]);
     });

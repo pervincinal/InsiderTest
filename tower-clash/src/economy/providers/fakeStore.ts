@@ -1,13 +1,14 @@
 /**
  * Fake store for the web build, local development and e2e tests. Purchases "succeed" after a
  * short delay unless `configureFakeStore({ failNext })` was called. Prices come from
- * `src/economy/catalog.ts` (`priceUsd` per product) when that module exists at import time,
- * otherwise "$?.??".
+ * `src/economy/catalog.ts` (`IAP_PRODUCTS[].priceUsd`); an id the catalog does not know shows "$?.??".
  *
  * The frontend may expose `configureFakeStore` on its own debug hook (e.g.
  * `window.__towerclash.fakeStore.failNext(reason)`); this module does not touch `window`.
  */
 import type { PurchaseError, PurchaseResult, StoreProduct, StoreProvider } from '../store';
+import type { IapProductDef } from '../catalog';
+import { IAP_PRODUCTS } from '../catalog';
 
 export const FAKE_PURCHASE_DELAY_MS = 300;
 
@@ -31,37 +32,11 @@ interface CatalogEntry {
 }
 
 /**
- * Pull `{ id, priceUsd, title? }` entries out of whatever `catalog.ts` exports (arrays, records or
- * nested objects). Tolerant on purpose: the catalog is written concurrently by another role.
+ * The store products of the catalog by id (`IAP_PRODUCTS` are the only catalog entries with a
+ * `priceUsd`). PERF-11: a named import, not the old `import.meta.glob` walk over the whole module —
+ * that namespace pinned every catalog export (offers, price points, …) into the eager bundle.
  */
-function collectCatalogEntries(mod: unknown): CatalogEntry[] {
-  const out: CatalogEntry[] = [];
-  const seen = new Set<unknown>();
-  const visit = (value: unknown, depth: number): void => {
-    if (depth > 4 || value === null || typeof value !== 'object' || seen.has(value)) return;
-    seen.add(value);
-    const rec = value as Record<string, unknown>;
-    if (typeof rec.id === 'string' && typeof rec.priceUsd === 'number') {
-      out.push({
-        id: rec.id,
-        priceUsd: rec.priceUsd,
-        title: typeof rec.title === 'string' ? rec.title : typeof rec.name === 'string' ? rec.name : undefined,
-      });
-      return;
-    }
-    for (const child of Array.isArray(value) ? value : Object.values(rec)) visit(child, depth + 1);
-  };
-  visit(mod, 0);
-  return out;
-}
-
-// `import.meta.glob` resolves to `{}` when the file does not exist, so this compiles and runs
-// before the Monetization Designer's catalog lands. `eager` keeps it a static import in the bundle.
-const catalogModules: Record<string, unknown> = import.meta.glob('../catalog.ts', { eager: true });
-const catalogEntries = new Map<string, CatalogEntry>();
-for (const mod of Object.values(catalogModules)) {
-  for (const entry of collectCatalogEntries(mod)) catalogEntries.set(entry.id, entry);
-}
+const catalogEntries = new Map<string, CatalogEntry>((IAP_PRODUCTS as readonly IapProductDef[]).map((p) => [p.id, { id: p.id, priceUsd: p.priceUsd, title: p.title }]));
 
 let failNext: PurchaseError | null = null;
 let owned = new Set<string>();

@@ -180,6 +180,8 @@ async function waitForCapture(page: Page, id: string, speed: number, allowed: st
 async function startLevel(page: Page, id: number): Promise<void> {
   expect(await page.evaluate(([lid, seed]) => window.__towerclash.loadLevel(lid, seed), [id, SEED] as const), `loadLevel(${id})`).toBe(true);
   await expect.poll(() => screen(page)).toBe('play');
+  await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
+  await page.waitForTimeout(300); // the card's 250 ms fade: the tutorial bubble shows once it is gone
   expect(await page.evaluate(() => window.__towerclash.getState()?.levelId)).toBe(id);
   await expect.poll(() => simTime(page), { message: `level ${id} sim should tick` }).toBeGreaterThan(0);
 }

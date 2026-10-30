@@ -36,6 +36,12 @@ export interface Settings {
    * absent = `classic` (the shipped palette); an unknown value is dropped on load.
    */
   tones?: ToneSet;
+  /**
+   * Text size (AUD-U2; Settings → "Text size"): 1, 1.25 or 1.5 × every player-facing text
+   * (render/widgets.ts `setTextScale`). Optional, so no schema bump: absent = 100 %; any other value
+   * is dropped on load.
+   */
+  textScale?: 1 | 1.25 | 1.5;
 }
 
 /** One-time purchases the player owns (ECONOMY.md §4). */
@@ -147,7 +153,7 @@ export interface SaveData {
   replayGold: { day: string; earned: number };
   /** Consecutive defeats per level id (reset by a win); unlocks the level-skip offer. */
   defeats: Record<string, number>;
-  /** Band indices (0..4) where the level skip was already used. */
+  /** Level-skip slots already used (`skipSlotOf`, src/economy/wallet.ts): a band index 0..5, or 100 + level id for a learning level's own slot. */
   skips: number[];
   /** Unlocked achievement ids (crystals are granted once, at unlock). Added without a schema bump. */
   achievements: AchievementState;
@@ -326,6 +332,7 @@ export function normalizeSave(raw: unknown): SaveData {
     if (s.reducedMotion === 'auto' || s.reducedMotion === 'on' || s.reducedMotion === 'off') out.settings.reducedMotion = s.reducedMotion;
     if (isLanguage(s.language)) out.settings.language = s.language;
     if (isToneSet(s.tones)) out.settings.tones = s.tones;
+    if (s.textScale === 1 || s.textScale === 1.25 || s.textScale === 1.5) out.settings.textScale = s.textScale;
   }
   return out;
 }

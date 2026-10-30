@@ -63,6 +63,8 @@ function start(levelId: number): PlayScreen {
     commands.push(cmd);
     enqueue(cmd);
   });
+  play.startMatch(); // AUD-B11: the first input ends the lesson card's hold; the bubble shows once it has faded
+  play.update(0, now);
   return play;
 }
 

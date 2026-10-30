@@ -1,4 +1,4 @@
-import type { Command, GameState, LevelDef, Link, SimEvent } from '../sim/types';
+import type { Command, GameState, LevelDef, Link, Outcome, SimEvent } from '../sim/types';
 import { Rng } from '../sim/rng';
 import { C } from '../sim/constants';
 import { SnapshotRing, applyContinue } from '../sim/snapshot';
@@ -16,9 +16,9 @@ import { BOOSTERS, HUD, PAUSE, TOWER_HIT_RADIUS } from '../render/layout';
 import { playCamera, proj, unproj } from '../render/camera';
 import type { Rect } from '../render/widgets';
 import { hitRect } from '../render/widgets';
-import { ParticleSystem } from '../render/particles';
+import { ParticleSystem, prefersReducedMotion } from '../render/particles';
 import type { HudPlayUi } from '../render/hud';
-import { boosterColor, warmHudOverlays } from '../render/hud';
+import { STALEMATE_CARD_S, STALL, boosterColor, drawStallCard, hudOverlaysLoaded, lessonCardLayout, warmHudOverlays } from '../render/hud';
 import type { PointerPoint } from '../input/pointer';
 import { PlayGestures, hitTower } from '../input/pointer';
 import { GameLoop } from './loop';
@@ -131,6 +131,48 @@ export class StalemateWatch {
   }
 }
 
+/** AUD-B11 (GDD §4): the lesson card's fade after the first input — presentation only, the sim starts at once. */
+export const LESSON_FADE_MS = 250;
+/**
+ * AUD-F4: real ms between the outcome and the result screen (dim + card) so the last capture is seen;
+ * the world keeps drawing (the capture effect, the confetti spawned at the outcome) and input is
+ * ignored meanwhile. Reduced motion and a Retreat go to the result at once.
+ */
+export const RESULT_BEAT_MS = 600;
+/** AUD-B2 / A11 (GDD §2.4): sim ms without any capture before the "Nothing is changing" card. */
+export const STALEMATE_CARD_MS = STALEMATE_CARD_S * 1000;
+/** The card is never shown below this level (the tutorial band, GDD §2.4). */
+export const STALEMATE_CARD_FROM_LEVEL = 9;
+
+/**
+ * "Nothing is changing" card bookkeeping (AUD-B2 / A11, GDD §2.4): one window that opens at the sim
+ * start and restarts on every `capture` event (any tower, any owner), on "Keep playing" and on a
+ * Continue rewind. Once it has run `STALEMATE_CARD_MS` of sim time the card is due — at most once per
+ * window. Pure bookkeeping over sim time; the sim never sees it.
+ */
+export class StalemateCardWatch {
+  private since = 0;
+  private shown = false;
+
+  constructor(readonly enabled: boolean) {}
+
+  /** A new window from sim time `time` (sim start, a capture, Keep playing, a Continue). */
+  restart(time: number): void {
+    this.since = time;
+    this.shown = false;
+  }
+
+  /** True once per window, when the window has run `STALEMATE_CARD_MS` at sim time `time`. */
+  due(time: number): boolean {
+    if (!this.enabled || this.shown || time - this.since < STALEMATE_CARD_MS) return false;
+    this.shown = true;
+    return true;
+  }
+}
+
+/** The stalemate card's choices; `outside` = a tap off the card (Keep playing, GDD §2.4). */
+type StallButton = 'keep' | 'restart' | 'retreat' | 'outside';
+
 /**
  * Tappable things on the play HUD bands (BUG-36: each acts only for a press that began on it). The
  * STREAMS and coin pills are labels (no tap area); a press on them is still the band's, never the world's.
@@ -170,7 +212,26 @@ export class PlayScreen implements Screen {
    * airstrike-targeting tap; `card` = while paused, with the pause card's button it started on
    * (AUD-U7); null = no press (hover moves, a lift whose down was never seen).
    */
-  private press: { kind: 'world' } | { kind: 'hud'; button: HudButton | null } | { kind: 'target' } | { kind: 'card'; button: Rect | null } | null = null;
+  private press:
+    | { kind: 'world' }
+    | { kind: 'hud'; button: HudButton | null }
+    | { kind: 'target' }
+    | { kind: 'card'; button: Rect | null }
+    | { kind: 'stall'; button: StallButton | null }
+    | null = null;
+  /** AUD-B11: the lesson card holds the match — no tick runs until the first input (`startMatch`). */
+  private held = true;
+  /** `nowMs` of the first input (the lesson card's fade starts there), or null while held. */
+  private cardGoneAt: number | null = null;
+  /** The lesson card's rect this frame (HUD layout space, top band frame), for the "tap on the card" start. */
+  private cardRect: Rect | null = null;
+  /** AUD-B2 / A11: the "Nothing is changing" card is up (the sim is held while it is). */
+  private stallUp = false;
+  private readonly stallWatch: StalemateCardWatch;
+  /** The player chose Retreat on the stalemate card: the match ends as a defeat (GDD §2.4). */
+  private retreated = false;
+  /** AUD-F4: the result screen waiting out `RESULT_BEAT_MS` from the outcome (`nowMs`). */
+  private pendingResult: { screen: ResultScreen; at: number } | null = null;
   /** This attempt already used its "Reinforcements" continue (ECONOMY.md §3.5) — offered once per attempt. */
   private continued: boolean;
   /** State + rng snapshots of the last `C.SNAPSHOT_CAPACITY_MS` of sim time, one per `C.SNAPSHOT_INTERVAL_MS`. */
@@ -226,8 +287,9 @@ export class PlayScreen implements Screen {
     this.tutorial = tutorialFor(level.id, stars);
     this.tutorialLate = this.tutorial === null && needsTutorialSteps(level.id, stars);
     this.stalemate = new StalemateWatch(level.id !== 1); // the first tutorial level teaches one stream, no hint there
+    this.stallWatch = new StalemateCardWatch(level.id >= STALEMATE_CARD_FROM_LEVEL);
     this.gestures = new PlayGestures({
-      getState: () => (this.loop.finished ? null : this.loop.state),
+      getState: () => (this.over ? null : this.loop.state),
       limitHintText: (n) => t('hint.linkLimit', { n }),
       blockedHintText: () => t('hint.blocked'),
       emptyHintText: () => t('hint.empty'),
@@ -243,15 +305,67 @@ export class PlayScreen implements Screen {
         this.tutorial?.onCommand(cmd, this.state);
         // GD-5f: the link that completes the supply-line step raises no `hint.supplyLine` (the step was the lesson)
         if (step?.supplyLine && cmd.type === 'link' && this.tutorialStep() !== step) this.supplyHintDone = true;
-        this.loop.enqueue(cmd);
+        this.command(cmd);
       },
     });
   }
 
-  /** The tutorial step currently on screen (null when none / paused / finished). */
+  /** A player command (gesture, booster): the first one also starts a held match (AUD-B11). */
+  private command(cmd: Command): void {
+    this.startMatch();
+    this.loop.enqueue(cmd);
+  }
+
+  /** The tutorial step currently on screen (null when none / paused / finished / the lesson card is still up or fading — AUD-B11). */
+  /** Debug: the tutorial's step index (gated or not), null without a tutorial. */
+  tutorialStepIndex(): number | null {
+    return this.tutorial ? this.tutorial.stepIndex : null;
+  }
+
   tutorialStep(): TutorialStep | null {
-    if (!this.tutorial || this.loop.paused || this.loop.finished) return null;
+    if (!this.tutorial || this.loop.paused || this.over || this.stallUp || this.lessonCardAlpha(this.nowMs) > 0) return null;
     return this.tutorial.current(this.state);
+  }
+
+  /** The match is over: the sim decided it, or the player retreated (GDD §2.4). */
+  get over(): boolean {
+    return this.retreated || this.loop.finished;
+  }
+
+  /** The outcome the UI shows: a Retreat is a defeat at the current sim time. */
+  outcome(): Outcome {
+    return this.retreated ? 'lost' : getOutcome(this.state);
+  }
+
+  /** AUD-B11: the lesson card still holds the match (no first input yet). */
+  get cardUp(): boolean {
+    return this.held;
+  }
+
+  /** AUD-B2 / A11: the "Nothing is changing" card is on screen. */
+  get stalemateCardUp(): boolean {
+    return this.stallUp;
+  }
+
+  /**
+   * AUD-B11 (GDD §4): end the lesson card's hold — the sim runs from the next frame (the first input's
+   * frame), the card fades over `LESSON_FADE_MS` (reduced motion: gone at once). Called by the first
+   * press on the map or the card, the first player command and the debug bots / `startMatch` hook.
+   * False when the match was already running.
+   */
+  startMatch(): boolean {
+    if (!this.held) return false;
+    this.held = false;
+    this.cardGoneAt = this.nowMs;
+    this.stallWatch.restart(this.state.time);
+    return true;
+  }
+
+  /** The lesson card's opacity at `nowMs`: 1 while held, then the fade, 0 once gone. */
+  private lessonCardAlpha(nowMs: number): number {
+    if (this.held) return 1;
+    if (this.cardGoneAt === null || prefersReducedMotion()) return 0;
+    return Math.max(0, Math.min(1, 1 - (nowMs - this.cardGoneAt) / LESSON_FADE_MS));
   }
 
   get state(): GameState {
@@ -282,7 +396,7 @@ export class PlayScreen implements Screen {
    * caller then falls back to a restart with the bonus garrison).
    */
   resumeFromSnapshot(): boolean {
-    if (this.continued || !this.loop.finished) return false;
+    if (this.continued || this.retreated || !this.loop.finished) return false;
     const snap = this.ring.rewind(C.CONTINUE_REWIND_MS);
     if (!snap) return false;
     const restored = applyContinue(snap.state);
@@ -295,6 +409,9 @@ export class PlayScreen implements Screen {
     }
     this.continued = true;
     this.finishedHandled = false;
+    this.pendingResult = null;
+    this.stallUp = false;
+    this.stallWatch.restart(restored.time); // GDD §2.4: a Continue restarts the stalemate window
     this.targeting = false;
     this.pressedBooster = null;
     this.effects.length = 0;
@@ -324,11 +441,13 @@ export class PlayScreen implements Screen {
   /** Debug (e2e autoplay): a bot that issues the player's commands on every AI tick, or null to stop. */
   setPlayerBot(bot: PlayerBot | null): void {
     this.playerBot = bot;
+    if (bot) this.startMatch(); // a programmatic player counts as the first input (AUD-B11)
   }
 
   /** Debug (e2e "auto lose"): a command source that throws the level, or null to stop. */
   setLoseBot(bot: ((state: GameState) => Command[]) | null): void {
     this.loseBot = bot;
+    if (bot) this.startMatch();
   }
 
   setSpeed(n: number): void {
@@ -349,6 +468,7 @@ export class PlayScreen implements Screen {
           if (t.kind === 'tankFactory') m.capturedTankFactory = true;
         }
         if (t) this.effects.push({ x: t.x, y: t.y, color: pal.owners[ev.by], bornMs: this.nowMs, lifeMs: 450, kind: 'ring' });
+        this.stallWatch.restart(this.state.time); // any owner change restarts the stalemate window (GDD §2.4)
       } else if (ev.type === 'unitDied') {
         this.effects.push({ x: ev.x, y: ev.y, color: pal.owners[ev.owner], bornMs: this.nowMs, lifeMs: 300, kind: 'puff' });
         if (ev.owner === 'player' && ev.cause === 'clash') this.stalemate.onClash(ev.roadId);
@@ -414,21 +534,72 @@ export class PlayScreen implements Screen {
     if (this.tutorialLate) this.lateTutorial();
     this.tutorial?.onSelect(this.gestures.selectedTowerId, this.state);
     // a step on screen for TUTORIAL_STEP_TIMEOUT_MS without completion gives way (BUG-33: no overlay softlock)
-    if (!this.loop.paused && !this.loop.finished) this.tutorial?.elapse(dtMs, this.state);
+    if (this.tutorialStep()) this.tutorial?.elapse(dtMs, this.state);
     this.applyStepSelection();
-    if (this.loop.advance(dtMs) > 0) {
+    // AUD-B11: nothing ticks while the lesson card holds the match; AUD-B2: nor while the stalemate card is up
+    if (!this.held && !this.stallUp && !this.retreated && this.loop.advance(dtMs) > 0) {
       this.ring.record(this.snapshot()); // the ring clones at most once per interval
       if (this.stalemate.check(this.state)) {
         this.toast.show(t('hint.stalemate'), 'error', nowMs, 3200);
         playSfx('stalemate');
       }
+      // the card's strings and drawer are the overlay chunk's (warmed at level start): due only once it is in
+      if (!this.loop.finished && hudOverlaysLoaded() && this.stallWatch.due(this.state.time)) this.openStall();
     }
     onSimFrame(this.state); // own-unit arrivals are detected by diffing units (no sim event for them)
-    if (this.loop.finished && !this.finishedHandled) {
+    if (this.over && !this.finishedHandled) {
       this.finishedHandled = true;
       warmHudOverlays(); // outcome decided: a last chance for the result card to land before its first frame
       this.finish();
     }
+    // AUD-F4: the result screen follows the outcome after the beat
+    const pending = this.pendingResult;
+    if (pending && nowMs - pending.at >= RESULT_BEAT_MS) {
+      this.pendingResult = null;
+      this.app.go(pending.screen);
+    }
+  }
+
+  /* ----- "Nothing is changing" card (AUD-B2 / A11, GDD §2.4) ----- */
+
+  private openStall(): void {
+    this.stallUp = true;
+    this.targeting = false;
+    this.pressedBooster = null;
+    this.gestures.cancel();
+    playSfx('stalemate');
+  }
+
+  /** Keep playing: the card closes, the sim resumes and the 45 s window restarts. */
+  keepPlaying(): void {
+    if (!this.stallUp) return;
+    this.stallUp = false;
+    this.stallWatch.restart(this.state.time);
+    playSfx('button');
+  }
+
+  /** Retreat: the match ends as a defeat at the current sim time (the loss result flow, no Continue). */
+  retreat(): void {
+    if (!this.stallUp || this.over) return;
+    this.stallUp = false;
+    this.retreated = true;
+    playSfx('button');
+  }
+
+  private stallAction(b: StallButton): void {
+    if (b === 'restart') this.restart();
+    else if (b === 'retreat') this.retreat();
+    else this.keepPlaying();
+  }
+
+  /** The stalemate card's button under `p`, `outside` off the card, null on the card between buttons. */
+  private stallButtonAt(p: PointerPoint): StallButton | null {
+    const v = this.app.view;
+    if (hitRect(v, STALL.keep, p.x, p.y)) return 'keep';
+    if (hitRect(v, STALL.restart, p.x, p.y)) return 'restart';
+    if (hitRect(v, STALL.retreat, p.x, p.y)) return 'retreat';
+    const c = STALL.card;
+    return p.x >= c.x && p.x <= c.x + c.w && p.y >= c.y && p.y <= c.y + c.h ? null : 'outside';
   }
 
   /** Gold, discounted prices, pre-paid charges and the free-charge video offer for the booster bar. */
@@ -448,7 +619,7 @@ export class PlayScreen implements Screen {
   }
 
   private buildUi(): HudPlayUi {
-    const outcome = getOutcome(this.state);
+    const outcome = this.outcome();
     const idx = levelIndex(this.level.id);
     const twist = this.challenge?.twist ?? this.weekly?.twist;
     return {
@@ -464,6 +635,9 @@ export class PlayScreen implements Screen {
       },
       skin: equippedSkin(this.app.save),
       clockMs: this.elapsedMs(),
+      cardUp: this.held,
+      cardFade: this.lessonCardAlpha(this.nowMs),
+      resultBeat: this.pendingResult !== null || undefined,
       level: this.level,
       palette: this.app.palette(),
       alpha: this.loop.alpha,
@@ -485,7 +659,7 @@ export class PlayScreen implements Screen {
   }
 
   private finish(): void {
-    const outcome = getOutcome(this.state);
+    const outcome = this.outcome();
     if (outcome === 'playing') return;
     const elapsed = this.elapsedMs();
     this.match.outcome = outcome;
@@ -498,7 +672,7 @@ export class PlayScreen implements Screen {
       this.earnings = { stars: daily.stars, gold: 0, crystals: 0, notes: [], replayCapped: false };
       const ui = this.buildUi();
       this.gestures.reset();
-      this.app.go(new ResultScreen(this.app, { state: this.state, level: this.level, ui, earnings: this.earnings, continued: this.continued, achievements: { unlocked: [], crystals: 0 }, challenge: this.challenge, daily }));
+      this.present(new ResultScreen(this.app, { state: this.state, level: this.level, ui, earnings: this.earnings, continued: this.continued, achievements: { unlocked: [], crystals: 0 }, challenge: this.challenge, daily }));
       return;
     }
     if (this.challenge) {
@@ -512,7 +686,7 @@ export class PlayScreen implements Screen {
       this.earnings = { stars: daily.stars, gold: daily.gold, crystals: daily.crystals, notes: [], replayCapped: false };
       const ui = this.buildUi();
       this.gestures.reset();
-      this.app.go(new ResultScreen(this.app, { state: this.state, level: this.level, ui, earnings: this.earnings, continued: this.continued, achievements, challenge: this.challenge, daily }));
+      this.present(new ResultScreen(this.app, { state: this.state, level: this.level, ui, earnings: this.earnings, continued: this.continued, achievements, challenge: this.challenge, daily }));
       return;
     }
     if (this.weekly) {
@@ -522,14 +696,14 @@ export class PlayScreen implements Screen {
       this.earnings = { stars: weeklyOutcome.stars, gold: weeklyOutcome.gold, crystals: weeklyOutcome.crystals, notes: [], replayCapped: false };
       const ui = this.buildUi();
       this.gestures.reset();
-      this.app.go(new ResultScreen(this.app, { state: this.state, level: this.level, ui, earnings: this.earnings, continued: this.continued, achievements, weekly: this.weekly, weeklyOutcome }));
+      this.present(new ResultScreen(this.app, { state: this.state, level: this.level, ui, earnings: this.earnings, continued: this.continued, achievements, weekly: this.weekly, weeklyOutcome }));
       return;
     }
     this.earnings = recordResult(this.app.save, this.level, outcome, elapsed);
     const achievements = evaluateAchievements(this.app.save, this.match);
     const ui = this.buildUi(); // after recordResult so the totals are final
     this.gestures.reset();
-    this.app.go(
+    this.present(
       new ResultScreen(this.app, {
         state: this.state,
         level: this.level,
@@ -537,9 +711,20 @@ export class PlayScreen implements Screen {
         earnings: this.earnings,
         continued: this.continued,
         achievements,
-        resume: () => this.resumeFromSnapshot(),
+        // GDD §2.4: a Retreat is the player's choice to leave — no Continue offer on its result
+        resume: this.retreated ? undefined : () => this.resumeFromSnapshot(),
+        retreated: this.retreated || undefined,
       }),
     );
+  }
+
+  /**
+   * AUD-F4: the result screen after `RESULT_BEAT_MS` of the world still drawing the last capture (the
+   * save is already written); at once under reduced motion or after a Retreat (no capture to watch).
+   */
+  private present(screen: ResultScreen): void {
+    if (this.retreated || prefersReducedMotion()) this.app.go(screen);
+    else this.pendingResult = { screen, at: this.nowMs };
   }
 
   /** Restart this level; a challenge keeps its seed and twist. */
@@ -552,10 +737,20 @@ export class PlayScreen implements Screen {
     const step = this.tutorialStep();
     // BUG-57: the select hint leaves the bubble room round the step's tower
     if (step) ui.tutorialTowerId = stepTowerId(step, this.state);
-    // the tutorial bubble paints over the HUD, so those frames keep the single-canvas path
-    drawGame(view.ctx, this.state, view, ui, nowMs, !step);
+    // AUD-B11: where the lesson card is, for the "tap on the card" start (layout as hud.ts draws it)
+    this.cardRect = this.held ? (lessonCardLayout(view.ctx, this.state, ui)?.rect ?? null) : null;
+    // the tutorial bubble and the stalemate card paint over the HUD, so those frames keep the single-canvas path
+    drawGame(view.ctx, this.state, view, ui, nowMs, !step && !this.stallUp);
     this.effects.length = 0; // legacy flat ring/puff list: particles.ts renders these now
-    if (step) {
+    if (this.stallUp) {
+      const ctx = view.ctx;
+      ctx.save();
+      applyTransform(view);
+      const press = this.press;
+      const b = press?.kind === 'stall' ? press.button : null;
+      drawStallCard(ctx, view, ui, b === 'keep' ? STALL.keep : b === 'restart' ? STALL.restart : b === 'retreat' ? STALL.retreat : null);
+      ctx.restore();
+    } else if (step) {
       const ctx = view.ctx;
       ctx.save();
       applyTransform(view);
@@ -633,7 +828,7 @@ export class PlayScreen implements Screen {
    * booster with a rewarded video on offer starts the "free charge" flow instead (ECONOMY.md §5.2).
    */
   useBooster(kind: BoosterKind): boolean {
-    if (this.loop.paused || this.loop.finished) return false;
+    if (this.loop.paused || this.over || this.stallUp) return false;
     if (this.fixed) {
       this.toast.show(t(this.weekly ? 'weekly.noBoosters' : 'daily.noBoosters'), 'error', this.nowMs);
       return false;
@@ -652,14 +847,14 @@ export class PlayScreen implements Screen {
     }
     this.targeting = false;
     if (!this.payBooster(kind)) return false;
-    this.loop.enqueue({ type: 'booster', owner: 'player', booster: kind });
+    this.command({ type: 'booster', owner: 'player', booster: kind });
     playSfx('upgrade');
     return true;
   }
 
   /** Rewarded video → +1 charge of `kind`. The sim pauses while the video plays. */
   async freeCharge(kind: BoosterKind): Promise<boolean> {
-    if (this.adPending || this.loop.finished) return false;
+    if (this.adPending || this.over) return false;
     this.adPending = true;
     const wasPaused = this.loop.paused;
     this.loop.paused = true;
@@ -681,7 +876,7 @@ export class PlayScreen implements Screen {
     if (!t || t.owner === 'player' || t.owner === 'neutral') return false;
     if (!canUseBooster(this.state, 'airstrike', this.wallet())) return false;
     if (!this.payBooster('airstrike')) return false;
-    this.loop.enqueue({ type: 'booster', owner: 'player', booster: 'airstrike', towerId });
+    this.command({ type: 'booster', owner: 'player', booster: 'airstrike', towerId });
     this.targeting = false;
     const color = boosterColor(this.app.palette(), 'airstrike');
     this.particles.shot(t.x + 40, t.y - 420, t.x, t.y - 30, color);
@@ -746,20 +941,51 @@ export class PlayScreen implements Screen {
 
   /** Pause if the game is still running (app went to background). */
   pause(): void {
-    if (this.loop.paused || this.loop.finished) return;
+    if (this.loop.paused || this.over) return;
     this.togglePause();
+  }
+
+  /** AUD-B11: `p` (screen logical) is on the lesson card this frame (its rect moves with the top band, BUG-34). */
+  private onLessonCard(p: PointerPoint): boolean {
+    const r = this.cardRect;
+    if (!r) return false;
+    const y = r.y + hudAnchors(this.app.view).top;
+    return p.x >= r.x && p.x <= r.x + r.w && p.y >= y && p.y <= y + r.h;
+  }
+
+  /** Platform back (main.ts `onBack`): swallowed during the result beat; on the stalemate card it is Keep playing (GDD §2.4); false when it did nothing here. */
+  back(): boolean {
+    if (this.pendingResult) return true; // AUD-F4: the result beat ignores input, back included
+    if (!this.stallUp) return false;
+    this.keepPlaying();
+    return true;
   }
 
   down(p: PointerPoint): void {
     this.press = null;
+    if (this.over) return; // AUD-F4: the result beat ignores input
+    if (this.stallUp) {
+      this.press = { kind: 'stall', button: this.stallButtonAt(p) };
+      return;
+    }
     if (this.loop.paused) {
       this.press = { kind: 'card', button: this.cardButtonAt(p) };
       return;
     }
-    this.pressedBooster = this.loop.finished ? null : this.boosterAt(p);
+    this.pressedBooster = this.boosterAt(p);
     if (!this.inWorld(p)) {
       this.press = { kind: 'hud', button: this.hudButtonAt(p) };
       return;
+    }
+    if (this.held) {
+      // AUD-B11: the first press on the map (a tower, empty ground) or on the lesson card starts the sim;
+      // a press on the map goes on as usual (a drag places its link), one on the card ends there
+      const onCard = this.onLessonCard(p);
+      this.startMatch();
+      if (onCard) {
+        this.press = { kind: 'hud', button: null };
+        return;
+      }
     }
     if (this.targeting) {
       this.press = { kind: 'target' }; // the tap resolves on up: fire or cancel
@@ -771,9 +997,11 @@ export class PlayScreen implements Screen {
 
   move(p: PointerPoint): void {
     const press = this.press;
+    if (this.over) return;
     // a card / HUD press that slides off its button no longer taps it (BUG-36, AUD-U7)
     if (press?.kind === 'card' && press.button && this.cardButtonAt(p) !== press.button) press.button = null;
-    if (this.loop.paused) return;
+    if (press?.kind === 'stall' && press.button && this.stallButtonAt(p) !== press.button) press.button = null;
+    if (this.loop.paused || this.stallUp) return;
     if (this.pressedBooster && this.boosterAt(p) !== this.pressedBooster) this.pressedBooster = null;
     if (press?.kind === 'hud' && press.button && this.hudButtonAt(p) !== press.button) press.button = null;
     if (this.targeting || press?.kind === 'hud') return;
@@ -784,13 +1012,20 @@ export class PlayScreen implements Screen {
     this.pressedBooster = null;
     const press = this.press;
     this.press = null;
+    if (this.over) return;
+    if (this.stallUp) {
+      // pressed and released on the same button (AUD-U7's rule); off the card both times = Keep playing
+      const b = press?.kind === 'stall' ? press.button : null;
+      if (b && this.stallButtonAt(p) === b) this.stallAction(b);
+      return;
+    }
     if (this.loop.paused) {
       // AUD-U7 (BUG-36's rule on the card): pressed and released on the same button
       const b = press?.kind === 'card' ? press.button : null;
       if (b && this.cardButtonAt(p) === b) this.cardAction(b);
       return;
     }
-    if (!press || press.kind === 'card') return; // BUG-37: a lift whose press nobody saw (or that began while paused) does nothing
+    if (!press || press.kind === 'card' || press.kind === 'stall') return; // BUG-37: a lift whose press nobody saw (or that began while paused) does nothing
     if (press.kind === 'target') {
       if (this.targeting && this.inWorld(p)) {
         const w = this.toWorld(p);
@@ -819,7 +1054,7 @@ export class PlayScreen implements Screen {
     this.pressedBooster = null;
     const press = this.press;
     this.press = null;
-    if (this.loop.paused || this.targeting || press?.kind !== 'world') {
+    if (this.loop.paused || this.stallUp || this.over || this.targeting || press?.kind !== 'world') {
       // BUG-37: only a press the gestures saw may finish a drag at `at`
       this.gestures.cancel();
       return;
@@ -831,6 +1066,11 @@ export class PlayScreen implements Screen {
 
   /** AUD-U4: Esc opens / closes the pause card (never leaves); R opens it, R on the card restarts. */
   key(e: KeyboardEvent): void {
+    if (this.over) return; // AUD-F4: the result beat ignores input
+    if (this.stallUp) {
+      if (e.key === 'Escape') this.keepPlaying(); // GDD §2.4: Esc / back = Keep playing
+      return;
+    }
     if (e.key === 'Escape') {
       if (this.targeting) this.targeting = false;
       else this.togglePause();

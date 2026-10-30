@@ -97,6 +97,7 @@ describe('supply-line confirmation (GD-5f)', () => {
 
   it('a relay link raises hint.supplyLine once per match, over the full tower; plain links never do', () => {
     const play = new PlayScreen(fakeApp(save), fixture(), 1, 1);
+    play.startMatch(); // AUD-B11: commands below bypass the gestures, so the hold ends here
     play.loop.enqueue(link('relay', 'n')); // a plain attack
     frame(play);
     expect(play.state.links.map((l) => `${l.from}->${l.to}:${l.relay}`)).toEqual(['relay->n:false']);
@@ -124,6 +125,7 @@ describe('supply-line confirmation (GD-5f)', () => {
   it('a new match shows it again', () => {
     for (let i = 0; i < 2; i++) {
       const play = new PlayScreen(fakeApp(save), fixture(), 1, 1);
+      play.startMatch(); // AUD-B11: commands below bypass the gestures, so the hold ends here
       play.loop.enqueue(link('relay', 'n'));
       frame(play);
       play.loop.enqueue(link('src', 'relay'));
@@ -134,6 +136,7 @@ describe('supply-line confirmation (GD-5f)', () => {
 
   it("level 2: the link that completes the tutorial's supply-line step raises no hint", () => {
     const play = new PlayScreen(fakeApp(save), fixture(2), 1, 1);
+    play.startMatch(); // AUD-B11: commands below bypass the gestures, so the hold ends here
     play.loop.enqueue(link('relay', 'n'));
     // the first steps give way to the supply-line situation (doneWhen), one per frame
     for (let i = 0; i < 4 && !play.tutorialStep()?.supplyLine; i++) frame(play);

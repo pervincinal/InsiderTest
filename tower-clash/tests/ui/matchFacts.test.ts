@@ -68,6 +68,7 @@ function start(): PlayScreen {
   const shell = fakeApp(save);
   const play = new PlayScreen(shell.app, keepLevel(), 3, 1);
   shell.app.go(play);
+  play.startMatch(); // AUD-B11: the lesson card holds the match until a first input
   return play;
 }
 

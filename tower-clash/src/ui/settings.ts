@@ -7,15 +7,16 @@
  * paused play screen). Loaded lazily with its drawing (PERF-1, src/ui/lazyScreens.ts).
  */
 import type { View } from '../render/view';
-import { hudAnchors } from '../render/view';
-import type { SettingsAboutLayout } from '../render/menuLayout';
+import { bleed, hudAnchors } from '../render/view';
+import type { MenuBands, SettingsAboutLayout } from '../render/menuLayout';
 import { SETTINGS, SETTINGS_BANDS, bandToScreen, screenToBand, settingsAboutLayout } from '../render/menuLayout';
 import type { Rect } from '../render/widgets';
-import { hitRect } from '../render/widgets';
+import { hitRect, setTextScale } from '../render/widgets';
 import { segmentAt } from '../render/menuWidgets';
-import { LANGUAGE_SEGMENTS, MOTION_SEGMENTS, TONE_SEGMENTS, drawSettings } from '../render/menusSettings';
+import { LANGUAGE_SEGMENTS, MOTION_SEGMENTS, TEXT_SIZE_SEGMENTS, TONE_SEGMENTS, drawSettings } from '../render/menusSettings';
 import { loadToneSets, urlToneOverride } from '../render/palette';
 import type { PointerPoint } from '../input/pointer';
+import { dragThreshold } from '../input/pointer';
 import { resetProgress, writeSave } from './save';
 import { applyMotionPref } from './motion';
 import { isMuted, playSfx, toggleMuted } from '../audio/index';
@@ -47,6 +48,15 @@ export class SettingsScreen implements Screen {
   private privacyRequired = false;
   private about: SettingsAboutLayout = settingsAboutLayout(false, false);
   private privacyPending = false;
+  /**
+   * AUD-U2: the card and the About block scroll when they are taller than the screen (the About
+   * block with a support id and privacy options on a 9:16 screen; the header stays). Layout px.
+   */
+  private scroll = 0;
+  private held = false;
+  private dragging = false;
+  private downY = 0;
+  private scrollAtDown = 0;
 
   constructor(
     private readonly app: App,
@@ -91,8 +101,30 @@ export class SettingsScreen implements Screen {
     this.about = settingsAboutLayout(this.supportId !== null, this.privacyRequired);
   }
 
+  /** How far the content may scroll: its foot (the About block + 24) past the screen's bottom edge. */
+  maxScroll(): number {
+    const view = this.app.view;
+    const foot = this.about.card.y + this.about.card.h + 24;
+    return Math.max(0, Math.ceil(foot + hudAnchors(view).top - bleed(view).bottom));
+  }
+
+  /** The content's scroll (e2e / tests). */
+  get scrollY(): number {
+    return this.scroll;
+  }
+
+  setScroll(y: number): void {
+    this.scroll = Math.max(0, Math.min(this.maxScroll(), y));
+  }
+
+  /** The screen's bands: the body follows the header and its scroll. */
+  private bands(): MenuBands {
+    return { ...SETTINGS_BANDS, content: (a) => a.top - this.scroll };
+  }
+
   draw(view: View, nowMs: number): void {
     this.nowMs = nowMs;
+    this.setScroll(this.scroll); // the About block / the screen may have changed size: re-clamp
     const s = this.app.save.settings;
     const total = Object.values(this.app.save.stars).reduce((a, b) => a + b, 0);
     drawSettings(view, this.app.palette(), {
@@ -100,6 +132,8 @@ export class SettingsScreen implements Screen {
       colorBlind: s.colorBlind,
       reducedMotion: s.reducedMotion,
       language: currentLanguage(),
+      textScale: s.textScale ?? 1,
+      scroll: this.scroll,
       tones: s.tones ?? 'classic',
       toneOverride: urlToneOverride(),
       confirming: this.confirming,
@@ -116,7 +150,7 @@ export class SettingsScreen implements Screen {
 
   private rects(): Rect[] {
     if (this.confirming) return [SETTINGS.confirm.yes, SETTINGS.confirm.no];
-    const list = [SETTINGS.back, SETTINGS.sound, SETTINGS.colorBlind, SETTINGS.motion, SETTINGS.howto, SETTINGS.language, SETTINGS.tones, SETTINGS.reset];
+    const list = [SETTINGS.back, SETTINGS.sound, SETTINGS.colorBlind, SETTINGS.motion, SETTINGS.howto, SETTINGS.language, SETTINGS.tones, SETTINGS.textSize, SETTINGS.reset];
     if (this.about.copy) list.push(this.about.copy);
     if (this.about.privacy) list.push(this.about.privacy);
     return list;
@@ -159,27 +193,48 @@ export class SettingsScreen implements Screen {
    * top safe edge of a tall screen; the reset confirm card is centred on the screen (identity).
    */
   toLayout(x: number, y: number): { x: number; y: number } {
-    return this.confirming ? { x, y } : screenToBand(hudAnchors(this.app.view), SETTINGS_BANDS, x, y);
+    return this.confirming ? { x, y } : screenToBand(hudAnchors(this.app.view), this.bands(), x, y);
   }
 
   /** Where layout point (x, y) is drawn (e2e: `layoutToClient`). */
   fromLayout(x: number, y: number): { x: number; y: number } {
-    return this.confirming ? { x, y } : bandToScreen(hudAnchors(this.app.view), SETTINGS_BANDS, x, y);
+    return this.confirming ? { x, y } : bandToScreen(hudAnchors(this.app.view), this.bands(), x, y);
   }
 
   down(p: PointerPoint): void {
+    this.held = true;
+    this.dragging = false;
+    this.downY = p.y;
+    this.scrollAtDown = this.scroll;
     const l = this.toLayout(p.x, p.y);
     this.pressed = this.rects().find((r) => hitRect(this.app.view, r, l.x, l.y)) ?? null;
   }
 
   move(p: PointerPoint): void {
+    // a drag past the slop scrolls the body (only when it is taller than the screen) and drops the press
+    if (this.held && !this.confirming && this.maxScroll() > 0 && Math.abs(p.y - this.downY) > dragThreshold(this.app.view.scale)) {
+      this.dragging = true;
+      this.pressed = null;
+    }
+    if (this.dragging) {
+      this.setScroll(this.scrollAtDown - (p.y - this.downY));
+      return;
+    }
     const l = this.toLayout(p.x, p.y);
     if (this.pressed && !hitRect(this.app.view, this.pressed, l.x, l.y)) this.pressed = null;
+  }
+
+  wheel(dy: number): void {
+    if (!this.confirming) this.setScroll(this.scroll + dy);
   }
 
   up(pointer: PointerPoint): void {
     const hit = this.pressed;
     this.pressed = null;
+    const wasDrag = this.dragging;
+    this.held = false;
+    this.dragging = false;
+    if (wasDrag) return;
     const p = { ...pointer, ...this.toLayout(pointer.x, pointer.y) };
     if (!hit || !hitRect(this.app.view, hit, p.x, p.y)) return;
     p.y = hit.y + 1; // a segmented control picks by x: its tap area reaches above / below the drawn row (AUD-U1)
@@ -235,6 +290,13 @@ export class SettingsScreen implements Screen {
         save.settings.tones = seg.value;
         if (seg.value !== 'classic') void loadToneSets().catch(() => undefined);
       }
+    } else if (hit === SETTINGS.textSize) {
+      // AUD-U2: 100 / 125 / 150 %, applied at once (every font goes through render/widgets.ts `font()`)
+      const seg = TEXT_SIZE_SEGMENTS[segmentAt(SETTINGS.textSize, TEXT_SIZE_SEGMENTS.length, p.x, p.y)];
+      if (seg) {
+        save.settings.textScale = seg;
+        setTextScale(seg);
+      }
     } else if (hit === SETTINGS.reset) {
       this.confirming = true;
       return;
@@ -244,6 +306,8 @@ export class SettingsScreen implements Screen {
 
   cancel(): void {
     this.pressed = null;
+    this.held = false;
+    this.dragging = false;
   }
 
   key(e: KeyboardEvent): void {

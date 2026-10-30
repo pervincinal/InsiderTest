@@ -108,13 +108,15 @@ async function boot(page: Page, seeded: Record<string, unknown>, language: 'az' 
 /**
  * ART-16 (2026-10-10): a toast is no longer one fillText call — the words and the 24 px numerals are
  * separate runs and long toasts wrap — so a toast string is looked for in the concatenation of every
- * drawn run with all whitespace removed.
+ * drawn run with all whitespace removed. A wrap at " · " drops the separator at the line end
+ * (widgets.ts `wrapNumeralText`), so "·" is removed too: since AUD-U2's 22 px toast words (was 21) the
+ * AZ "Nailiyyət açıldı: … keç · +20 kristal" (616 px of a 604 px line) wraps there.
  */
-const compact = (s: string | readonly string[]): string => (Array.isArray(s) ? s.join(' ') : String(s)).replace(/\s+/g, '');
+const compact = (s: string | readonly string[]): string => (Array.isArray(s) ? s.join(' ') : String(s)).replace(/[\s·]+/g, '');
 
 /** Whether `needle` is in the compacted concatenation of every run drawn on the result screen so far. */
 function drawnIncludes(page: Page, needle: string): Promise<boolean> {
-  return page.evaluate((n) => (window as unknown as RecWindow).__qaResultTexts.join(' ').replace(/\s+/g, '').includes(n), compact(needle));
+  return page.evaluate((n) => (window as unknown as RecWindow).__qaResultTexts.join(' ').replace(/[\s·]+/g, '').includes(n), compact(needle));
 }
 
 /** `text` was painted on the result screen (polled: the recorder fills while the screen draws). */

@@ -1,8 +1,8 @@
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { tapRect } from './helpers/tap';
+import { shotPath } from './tools/shots';
 import { recordToasts, toastsSeen } from './helpers/toasts'; // BUG-25: page-side toast recorder
 
 /*
@@ -34,7 +34,7 @@ function levelName(id: number): string {
   return (JSON.parse(readFileSync(new URL(file, LEVELS_DIR), 'utf8')) as { name: string }).name;
 }
 
-const SHOTS = fileURLToPath(new URL('./__screenshots__/', import.meta.url));
+// AUD-Q15: e2e/tools/shots.ts picks the tracked folder (default run) or <PW_OUTPUT>/__screenshots__
 
 type R = { x: number; y: number; w: number; h: number };
 const screen = (page: Page) => page.evaluate(() => window.__towerclash.getScreen());
@@ -146,7 +146,7 @@ test.describe('share card (SHARE-1)', () => {
     expect(last).toMatchObject({ result: 'shared', text: cap.text, name: 'towerclash-level-01.png', type: 'image/png', width: 1080, height: 1350 });
     expect(last!.bytes).toBeGreaterThan(20_000);
     await expect.poll(() => toastsSeen(page), { message: 'the "Shared" toast went up (BUG-25)' }).toContain('Shared');
-    writeFileSync(`${SHOTS}look3-share-card.png`, Buffer.from(cap.base64!, 'base64'));
+    writeFileSync(shotPath('look3-share-card'), Buffer.from(cap.base64!, 'base64'));
     expect(await screen(page)).toBe('result'); // sharing never navigates
     expect(errors).toEqual([]);
   });

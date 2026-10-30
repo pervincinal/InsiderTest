@@ -1,8 +1,8 @@
-import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { tapRect } from './helpers/tap';
 import { recordToasts, toastsSeen } from './helpers/toasts';
+import { shotPath } from './tools/shots';
 
 /*
  * QA-13: the no-store shop — what App Review sees on build 8 (no IAP products configured), reached on
@@ -42,8 +42,8 @@ const SHOP_SKINS = ['roof_slate', 'roof_pagoda', 'roof_onion', 'roof_thatch', 'r
 const PACK_SKINS = ['roof_gold', 'helmet_bronze', 'helmet_royal'] as const;
 const SEEDED_CRYSTALS = 200;
 const SAVE_KEY = 'towerclash.save.v3';
-const SHOTS = fileURLToPath(new URL('./__screenshots__/', import.meta.url));
-const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}${name}.png`, scale: 'css' });
+// AUD-Q15: e2e/tools/shots.ts picks the tracked folder (default run) or <PW_OUTPUT>/__screenshots__
+const shot = (page: Page, name: string) => page.screenshot({ path: shotPath(name), scale: 'css' });
 /** A price string as the shop would draw it: "$0.99", "₼1,69", "9.99 €" … (wallet amounts are integers). */
 const PRICE_RE = /[$€£₼₺₽]|\d[.,]\d{2}(?!\d)/;
 

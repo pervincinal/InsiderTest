@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { fileURLToPath } from 'node:url';
 import { tapRect } from './helpers/tap';
+import { shotPath } from './tools/shots';
 import { expectToast, recordToasts, toastMark } from './helpers/toasts';
 
 /*
@@ -36,8 +36,8 @@ const UNLOCK_AFTER_LEVEL = 32;
 const WEEK_A = '2026-09-21';
 const WEEK_B = '2026-09-28';
 
-const SHOTS = fileURLToPath(new URL('./__screenshots__/', import.meta.url));
-const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}${name}.png`, scale: 'css' });
+// AUD-Q15: e2e/tools/shots.ts picks the tracked folder (default run) or <PW_OUTPUT>/__screenshots__
+const shot = (page: Page, name: string) => page.screenshot({ path: shotPath(name), scale: 'css' });
 
 type R = { x: number; y: number; w: number; h: number };
 

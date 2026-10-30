@@ -9,6 +9,7 @@ import type { View } from './render/view';
 import { createView, insetProbe, refreshSafeInsets, resize } from './render/view';
 import { blankLayer, createLayers } from './render/layers';
 import { setRussianFaces } from './render/fonts';
+import { setTextScale } from './render/widgets';
 import { preloadCosmetics, warmCosmetics } from './render/cosmetics';
 import { warmHudOverlays } from './render/hud';
 import { equippedSkin } from './economy/entitlements';
@@ -35,9 +36,9 @@ import { createAdSession, createFakeAds, setAdsProvider } from './economy/adsFlo
 import { getStore } from './economy/store';
 import { getAds } from './economy/ads';
 import type { FakeStoreOptions } from './economy/providers/fakeStore';
-import type { GrantResult } from './economy/wallet';
+import type { GrantResult } from './economy/purchases';
 import type { DailyChallenge, WeeklyChallenge } from './daily/challenge';
-import { dayKeyOf, weekKeyOf } from './daily/challenge';
+import { dayKeyOf, weekKeyOf } from './daily/core'; // not ./daily/challenge: the generator stays in the lazy chunks (PERF-11)
 
 /**
  * The level map, shop, achievements and settings screens (and the menu drawing they need) are a
@@ -69,8 +70,15 @@ export interface TowerClashDebug {
    * may be called right after it without awaiting: they apply to the level being started.
    */
   loadLevel(id: number, seed?: number): Promise<boolean>;
-  /** Hand the running (or starting) level to the reference player; false when no level is up. */
+  /** Hand the running (or starting) level to the reference player; false when no level is up. Starts a held match (AUD-B11). */
   autoplay(): boolean;
+  /**
+   * AUD-B11: end the lesson card's hold of the running (or starting) level as a first input would —
+   * the sim runs from the next frame. For specs and capture scripts that need sim time without a tap
+   * or a bot; the player's path stays strict (only an input on the map or the card starts it). False
+   * when no level is up.
+   */
+  startMatch(): boolean;
   setSpeed(n: number): void;
   getSpeed(): number;
   /**
@@ -101,6 +109,8 @@ export interface TowerClashDebug {
   getAnchors(): { top: number; bottom: number };
   /** Text of the tutorial hint on screen, or null. */
   getTutorialHint(): string | null;
+  /** The tutorial's step index on the play screen (gated steps included; a timed-out step is told from a same-text successor), or null. */
+  getTutorialStep(): number | null;
   /** Text of the link-limit refusal bubble while it is on screen (rules v2), or null. */
   getLimitHint(): string | null;
   /** On the "How to play" card: each rule's wrapped line count at the last frame, before the 3-line cut (GD-5f); else null. */
@@ -288,6 +298,7 @@ export class TowerClashApp implements App {
     this.view.layers = createLayers(canvas);
     resize(this.view);
     this.save = save;
+    setTextScale(save.settings.textScale); // AUD-U2: Settings → Text size (absent = 100 %)
     this.ads = createAdSession(save.adCounters.levelsCompleted); // the interstitial cadence counts this session's wins (AUD-B7)
     this.current = new TitleScreen(this);
     // AUD-Q2: an unreadable save was copied aside and the game starts fresh: the lazy chunk (fetched
@@ -497,7 +508,8 @@ export class TowerClashApp implements App {
   onBack(): boolean {
     const cur = this.current;
     if (cur instanceof PlayScreen) {
-      if (!cur.loop.paused && !cur.loop.finished) cur.pause();
+      if (cur.back()) return true; // the stalemate card: back = Keep playing (GDD §2.4)
+      if (!cur.loop.paused && !cur.over) cur.pause();
       else this.goLevels();
       return true;
     }

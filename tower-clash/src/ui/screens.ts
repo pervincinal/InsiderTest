@@ -16,12 +16,11 @@ import { drawGame } from '../render/draw';
 import type { HudPlayUi, ResultExtras } from '../render/hud';
 import { hudOverlaysLoaded, resultShareLayout } from '../render/hud';
 import type { SaveData } from './save';
-import { writeSave } from './save';
 import { isMuted, playSfx, toggleMuted } from '../audio/index';
 import type { AdSession } from '../economy/adsFlow';
 import { canShowRewarded, maybeShowInterstitial, onResultShown, showRewarded } from '../economy/adsFlow';
 import type { ResultEarnings } from '../economy/wallet';
-import { bandOf, claimDaily, dailyStatus, earnCrystals, earnGold, payMilestones, spendCrystals } from '../economy/wallet';
+import { buyLevelSkip, claimDaily, dailyStatus, earnCrystals, earnGold, skipAvailable, spendCrystals } from '../economy/wallet';
 import { ACHIEVEMENTS, AD_PLACEMENTS, CRYSTAL_SERVICES } from '../economy/catalog';
 import type { AchievementGrant } from '../economy/achievements';
 import { evaluateAchievements } from '../economy/achievements';
@@ -397,6 +396,8 @@ export interface ResultInfo {
    * False = no usable snapshot; the result screen then restarts the level with the bonus garrison.
    */
   resume?: () => boolean;
+  /** AUD-B2 / A11: the player retreated from the stalemate card — a defeat with no Continue offer (GDD §2.4). */
+  retreated?: boolean;
   /** Daily Challenge match (GDD §7): NEXT returns to the map, RETRY keeps the seed and twist. */
   challenge?: DailyChallenge;
   /** What the challenge result did (reward paid once, streak, best of the day). */
@@ -557,25 +558,19 @@ export class ResultScreen implements Screen {
     return this.info.ui.outcome === 'won';
   }
 
-  /** Level skip (ECONOMY.md §3.4): after 3 straight defeats, uncleared level, once per band. */
+  /**
+   * Level skip (ECONOMY.md §3.4, AUD-B3): after 3 straight defeats of an uncleared level, once per skip
+   * slot — one per band, plus one of its own on each learning level (`skipAvailable`).
+   */
   private skipOffered(): boolean {
-    const save = this.app.save;
-    const id = this.info.level.id;
-    const band = bandOf(id);
-    return (
-      !this.won &&
-      (save.defeats[String(id)] ?? 0) >= CRYSTAL_SERVICES.levelSkip.offerAfterDefeats &&
-      (save.stars[String(id)] ?? 0) === 0 &&
-      band >= 0 &&
-      !save.skips.includes(band)
-    );
+    return !this.won && skipAvailable(this.app.save, this.info.level.id);
   }
 
   extras(): ResultExtras {
     const save = this.app.save;
     const e = this.info.earnings;
     const fixed = !!(this.info.challenge ?? this.info.weekly);
-    const continueOffered = !this.won && !this.info.continued && !fixed;
+    const continueOffered = !this.won && !this.info.continued && !this.info.retreated && !fixed;
     const d = this.info.daily;
     const w = this.info.weeklyOutcome;
     return {
@@ -739,7 +734,7 @@ export class ResultScreen implements Screen {
   }
 
   continueWithCrystals(): void {
-    if (this.won || this.info.continued || this.pending) return;
+    if (this.won || this.info.continued || this.info.retreated || this.pending) return;
     if (!spendCrystals(this.app.save, CRYSTAL_SERVICES.continue.costCrystals)) {
       this.toast.show(t('result.notEnoughCrystals'), 'error', this.nowMs);
       return;
@@ -748,7 +743,7 @@ export class ResultScreen implements Screen {
   }
 
   continueWithAd(): void {
-    if (this.won || this.info.continued || this.pending) return;
+    if (this.won || this.info.continued || this.info.retreated || this.pending) return;
     if (!canShowRewarded(this.app.ads, this.app.save, CONTINUE_AD.id)) return;
     this.pending = true;
     void showRewarded(this.app.ads, this.app.save, CONTINUE_AD.id).then((ok) => {
@@ -758,20 +753,14 @@ export class ResultScreen implements Screen {
     });
   }
 
-  /** Level skip: 1★, next level unlocked, no gold, counts toward milestones; once per band. */
+  /** Level skip: 1★, next level unlocked, no gold, counts toward milestones; once per skip slot (`buyLevelSkip`). */
   skipLevel(): void {
     if (!this.skipOffered() || this.pending) return;
     const save = this.app.save;
-    if (!spendCrystals(save, CRYSTAL_SERVICES.levelSkip.costCrystals)) {
+    if (!buyLevelSkip(save, this.info.level.id)) {
       this.toast.show(t('result.notEnoughCrystals'), 'error', this.nowMs);
       return;
     }
-    const key = String(this.info.level.id);
-    save.stars[key] = Math.max(save.stars[key] ?? 0, CRYSTAL_SERVICES.levelSkip.starsGranted);
-    save.skips.push(bandOf(this.info.level.id));
-    delete save.defeats[key];
-    payMilestones(save);
-    writeSave(save);
     evaluateAchievements(save); // a skip changes the star table (never to 3★, but the rule is "after each result")
     playSfx('upgrade');
     this.leave(() => this.nextLevel());

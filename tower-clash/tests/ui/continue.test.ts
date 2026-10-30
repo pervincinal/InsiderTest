@@ -8,7 +8,7 @@ import type { SaveData } from '../../src/ui/save';
 import { defaultSave, setSaveStorageForTests, starsFor } from '../../src/ui/save';
 import type { App, Screen, StartOptions } from '../../src/ui/screens';
 import { ResultScreen } from '../../src/ui/screens';
-import { PlayScreen } from '../../src/ui/play';
+import { PlayScreen, RESULT_BEAT_MS } from '../../src/ui/play';
 import { makeLevel } from '../helpers';
 import { suicideCommands } from '../../src/debug';
 
@@ -183,6 +183,8 @@ describe('continue after defeat — rewind (ECONOMY.md §3.5, ECON-6b)', () => {
     state.links = state.links.filter((l) => l.owner === 'player');
     clock.now += 250;
     play.update(250, clock.now);
+    clock.now += RESULT_BEAT_MS; // AUD-F4: the result follows the outcome after the beat
+    play.update(0, clock.now);
     const won = shell.current();
     expect(won).toBeInstanceOf(ResultScreen);
     const info = (won as ResultScreen).info;
@@ -205,6 +207,8 @@ describe('continue after defeat — rewind (ECONOMY.md §3.5, ECON-6b)', () => {
     state.links = state.links.filter((l) => l.owner !== 'player');
     clock.now += 250;
     play.update(250, clock.now);
+    clock.now += RESULT_BEAT_MS;
+    play.update(0, clock.now);
     const again = shell.current();
     expect(again).toBeInstanceOf(ResultScreen);
     const r2 = again as ResultScreen;

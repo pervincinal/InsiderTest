@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { expect, test } from '@playwright/test';
 import type { lessonCardLayout as LessonCardLayout } from '../src/render/hud';
-import type { font as Font } from '../src/render/widgets';
+import type { font as Font, wrapText as WrapText } from '../src/render/widgets';
 import type { levelLesson as LevelLesson, setLanguage as SetLanguage } from '../src/ui/i18n';
 
 /*
@@ -21,6 +21,8 @@ import type { levelLesson as LevelLesson, setLanguage as SetLanguage } from '../
  *     not for shipped text), in at most 3 lines, nothing cut with "…", every word on the card;
  *   - no line is wider than the card's text width (the 620 px wrap width, and the card's own width
  *     less its 2 × 24 px padding);
+ *   - QA-33: the 20 px text re-wrapped at 620 − CARD_WRAP_MARGIN (608 px) with widgets.ts `wrapText` still fits
+ *     3 lines (cross-renderer drift: CI's Chromium and iOS WebKit measure a few px wider);
  *   - on a 360 × 640 phone the card (rect plus its 4 px clay edge) lies inside the play band: below the
  *     top HUD band, above the bottom one, inside the map's width.
  * One table row per level × language is printed (chars, lines, widest px, card size), like
@@ -35,6 +37,16 @@ type Lang = (typeof LANGS)[number];
 const CARD_PX = 20;
 const CARD_MAX_LINES = 3;
 const CARD_TEXT_W = 620;
+/**
+ * QA-33 (2026-10-29): text widths drift between renderers. CI's Chromium 129 measured 47 RU / 49 RU 2–4 px
+ * wider than this container's build (616 / 618 px here, past 620 there: 4 lines, 18 px fallback), and iOS
+ * WebKit measures differently again. A renderer that is wider by a few px wraps as if the width were narrower,
+ * so every 20 px card is also re-wrapped at CARD_TEXT_W - CARD_WRAP_MARGIN with the game's `wrapText` and must
+ * still fit CARD_MAX_LINES (column `@608`). A plain `widest <= 608` would fail about a third of all cards:
+ * wrapping at 620 fills every line it can, and a 615 px line that moves one word down is harmless unless the
+ * card grows a 4th line. The widest-line check stays at 620, and `slack` is printed against 620.
+ */
+const CARD_WRAP_MARGIN = 12;
 /** The 18 px fallback's wrap width (failing anyway: it is not the full size). */
 const CARD_FALLBACK_TEXT_W = 640;
 const CARD_PAD_X = 24;
@@ -68,19 +80,22 @@ interface Row {
   lines: string[];
   widths: number[];
   rect: { x: number; y: number; w: number; h: number };
+  /** QA-33: the card's line count when the same text, in the same font, wraps at CARD_TEXT_W - CARD_WRAP_MARGIN. */
+  marginLines: number;
 }
 interface LessonFitBundle {
   lessonCardLayout: typeof LessonCardLayout;
   font: typeof Font;
   setLanguage: typeof SetLanguage;
   levelLesson: typeof LevelLesson;
+  wrapText: typeof WrapText;
 }
 
 /** The game's own card layout code, bundled from src/ for the page (`window.__lessonFit`). */
 async function layoutBundle(): Promise<string> {
   const out = await build({
     stdin: {
-      contents: [`export { lessonCardLayout } from './src/render/hud';`, `export { font } from './src/render/widgets';`, `export { levelLesson, setLanguage } from './src/ui/i18n';`].join('\n'),
+      contents: [`export { lessonCardLayout } from './src/render/hud';`, `export { font, wrapText } from './src/render/widgets';`, `export { levelLesson, setLanguage } from './src/ui/i18n';`].join('\n'),
       resolveDir: fileURLToPath(ROOT),
       loader: 'ts',
     },
@@ -111,7 +126,7 @@ test('QA-32: every lesson card fits — <= 3 lines at 20 px, no line past the te
   const tBoot = Date.now();
 
   const rows = await page.evaluate(
-    async ({ levels, langs }) => {
+    async ({ levels, langs, marginW }) => {
       const L = (window as unknown as { __lessonFit: LessonFitBundle }).__lessonFit;
       const ctx = document.createElement('canvas').getContext('2d')!;
       const state = { time: 0 } as unknown as Parameters<typeof L.lessonCardLayout>[1];
@@ -130,13 +145,15 @@ test('QA-32: every lesson card fits — <= 3 lines at 20 px, no line past the te
           const text = L.levelLesson(level, lang); // what the card shows (English when untranslated)
           const card = L.lessonCardLayout(ctx, state, ui);
           if (!card) throw new Error(`lessonCardLayout returned null for level ${level.id} (${lang})`);
-          // lessonCardLayout leaves the card's lesson font set on ctx
-          out.push({ id: level.id, lang, text, font: ctx.font, fontsReady, px: card.px, lines: card.lines, widths: card.lines.map((l) => ctx.measureText(l).width), rect: card.rect });
+          // lessonCardLayout leaves the card's lesson font set on ctx; QA-33 re-wraps the same text in that font at the
+          // margin width with the game's own wrapText (no line cap, so the count is real)
+          const marginLines = L.wrapText(ctx, text, marginW, Number.MAX_SAFE_INTEGER).length;
+          out.push({ id: level.id, lang, text, font: ctx.font, fontsReady, px: card.px, lines: card.lines, widths: card.lines.map((l) => ctx.measureText(l).width), rect: card.rect, marginLines });
         }
       }
       return out;
     },
-    { levels: LEVELS, langs: [...LANGS] },
+    { levels: LEVELS, langs: [...LANGS], marginW: CARD_TEXT_W - CARD_WRAP_MARGIN },
   );
   const tLayout = Date.now();
   expect(rows).toHaveLength(LEVELS.length * LANGS.length);
@@ -145,14 +162,14 @@ test('QA-32: every lesson card fits — <= 3 lines at 20 px, no line past the te
   const top = HUD_MAP_TOP + anchors.top;
   const bottom = HUD_MAP_BOTTOM + anchors.bottom;
   const failures: string[] = [];
-  const table: string[] = [`[lesson-fit] 360x640 anchors top ${anchors.top} bottom ${anchors.bottom}; play band ${top}..${bottom}; rule: ${CARD_MAX_LINES} lines at ${CARD_PX} px, widest <= ${CARD_TEXT_W} px; bundle ${tBundle - t0} ms, boot ${tBoot - tBundle} ms, layout ${tLayout - tBoot} ms`];
-  table.push(`${'lvl'.padStart(3)} ${'lang'.padEnd(4)} ${'chars'.padStart(5)} ${'px'.padStart(2)} lines ${'widest'.padStart(6)} ${'slack'.padStart(5)}  card w x h, bottom`);
+  const table: string[] = [`[lesson-fit] 360x640 anchors top ${anchors.top} bottom ${anchors.bottom}; play band ${top}..${bottom}; rule: ${CARD_MAX_LINES} lines at ${CARD_PX} px, widest <= ${CARD_TEXT_W} px, still <= ${CARD_MAX_LINES} lines re-wrapped at ${CARD_TEXT_W} - ${CARD_WRAP_MARGIN} = ${CARD_TEXT_W - CARD_WRAP_MARGIN} px (column @${CARD_TEXT_W - CARD_WRAP_MARGIN}); bundle ${tBundle - t0} ms, boot ${tBoot - tBundle} ms, layout ${tLayout - tBoot} ms`];
+  table.push(`${'lvl'.padStart(3)} ${'lang'.padEnd(4)} ${'chars'.padStart(5)} ${'px'.padStart(2)} lines ${'widest'.padStart(6)} ${'slack'.padStart(5)} ${`@${CARD_TEXT_W - CARD_WRAP_MARGIN}`.padStart(4)}  card w x h, bottom`);
   for (const r of rows) {
     const widest = Math.max(...r.widths);
     const cardTop = r.rect.y + anchors.top;
     const cardBottom = r.rect.y + r.rect.h + CARD_EDGE + anchors.top;
     table.push(
-      `${String(r.id).padStart(3)} ${r.lang.padEnd(4)} ${String(r.text.length).padStart(5)} ${String(r.px).padStart(2)} ${String(r.lines.length).padStart(5)} ${widest.toFixed(0).padStart(6)} ${(CARD_TEXT_W - widest).toFixed(0).padStart(5)}  ${r.rect.w.toFixed(0)} x ${r.rect.h}, ${cardBottom.toFixed(0)}`,
+      `${String(r.id).padStart(3)} ${r.lang.padEnd(4)} ${String(r.text.length).padStart(5)} ${String(r.px).padStart(2)} ${String(r.lines.length).padStart(5)} ${widest.toFixed(0).padStart(6)} ${(CARD_TEXT_W - widest).toFixed(0).padStart(5)} ${String(r.marginLines).padStart(4)}  ${r.rect.w.toFixed(0)} x ${r.rect.h}, ${cardBottom.toFixed(0)}`,
     );
     const at = `level ${r.id} ${r.lang}`;
     const shown = r.lines.map((l, i) => `${r.widths[i]!.toFixed(0)}:"${l}"`).join(' | ');
@@ -163,6 +180,11 @@ test('QA-32: every lesson card fits — <= 3 lines at 20 px, no line past the te
     // the text width of the card as laid out: its wrap width (620 px at 20 px, 640 at the 18 px fallback) and its own width less the padding
     const textW = Math.min(r.px === CARD_PX ? CARD_TEXT_W : CARD_FALLBACK_TEXT_W, r.rect.w - 2 * CARD_PAD_X);
     if (widest > textW) failures.push(`${at}: widest line ${widest.toFixed(1)} px > text width ${textW.toFixed(1)} px: ${shown}`);
+    // QA-33: a renderer that measures text a little wider wraps this card as if at a narrower width; it must still fit
+    if (r.px === CARD_PX && r.marginLines > CARD_MAX_LINES)
+      failures.push(
+        `${at}: re-wrapped at ${CARD_TEXT_W} - ${CARD_WRAP_MARGIN} px wrap margin = ${CARD_TEXT_W - CARD_WRAP_MARGIN} px the card needs ${r.marginLines} lines > ${CARD_MAX_LINES} (fits here, but other renderers measure text a few px wider: CI's Chromium 129 put 47 / 49 RU 2–4 px past this build, iOS WebKit differs again, and there it wraps to a 4th line and the 18 px fallback): ${shown}`,
+      );
     if (cardTop < top || cardBottom > bottom || r.rect.x < 0 || r.rect.x + r.rect.w > MAP_W) failures.push(`${at}: card ${JSON.stringify(r.rect)} (bottom ${cardBottom}) leaves the play band ${top}..${bottom} x 0..${MAP_W}`);
   }
   const widestOf = (r: Row): number => Math.max(...r.widths);

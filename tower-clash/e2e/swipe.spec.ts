@@ -85,6 +85,7 @@ test.describe('touch drag-to-link and swipe-to-cut (BUG-33)', () => {
 
     expect(await page.evaluate((seed) => window.__towerclash.loadLevel(2, seed), SEED)).toBe(true);
     await expect.poll(() => screen(page)).toBe('play');
+    await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
     await expect.poll(() => simTime(page), { message: 'level 2 sim should tick' }).toBeGreaterThan(0);
     await expect.poll(() => hint(page), { message: 'fresh save: level 2 tutorial on' }).toBe(tapThenGrey);
 

@@ -22,8 +22,8 @@ import { resultShareLayout } from '../../src/render/hud';
 import type { ResultExtras } from '../../src/render/hud';
 import type { Rect } from '../../src/render/widgets';
 import { hitArea, hitRect, minHit } from '../../src/render/widgets';
-import { LANGUAGE_SEGMENTS, MOTION_SEGMENTS, TONE_SEGMENTS } from '../../src/render/menusSettings';
-import { CONVERSION_PACKS } from '../../src/economy/wallet';
+import { LANGUAGE_SEGMENTS, MOTION_SEGMENTS, TEXT_SIZE_SEGMENTS, TONE_SEGMENTS } from '../../src/render/menusSettings';
+import { CONVERSION_PACKS } from '../../src/economy/purchases';
 import { UPGRADE_DEFS } from '../../src/ui/upgrades';
 
 /*
@@ -137,7 +137,8 @@ const levelNodes = (): Target[] => Array.from({ length: 12 }, (_, i) => t(`node 
 
 function settings(): Target[] {
   const top: readonly [number, number] = [0, SETTINGS_BANDS.topEnd];
-  const body: readonly [number, number] = [SETTINGS_BANDS.topEnd, 1280];
+  // AUD-U2: the body scrolls when it is taller than the screen (About with both rows ends at 1350): its band is the content
+  const body: readonly [number, number] = [SETTINGS_BANDS.topEnd, 2000];
   const about = settingsAboutLayout(true, true);
   return [
     t('SETTINGS.back', SETTINGS.back, top),
@@ -147,6 +148,7 @@ function settings(): Target[] {
     t('SETTINGS.howto', SETTINGS.howto, body),
     ...segments('SETTINGS.language', SETTINGS.language, LANGUAGE_SEGMENTS.length, body),
     ...segments('SETTINGS.tones', SETTINGS.tones, TONE_SEGMENTS.length, body),
+    ...segments('SETTINGS.textSize', SETTINGS.textSize, TEXT_SIZE_SEGMENTS.length, body),
     t('SETTINGS.reset', SETTINGS.reset, body),
     t('about.copy', about.copy!, body),
     t('about.privacy', about.privacy!, body),

@@ -62,12 +62,13 @@ type Role = keyof typeof BASE_PX;
 const MIN_SCALE = 0.75;
 
 /**
- * Campaign defeat: level 3 seed 1 under `economy.autoLose()` (a v3 stream never drains its source, so
- * the "suicide" line *wins* some levels — 22, 44, 50 and the DAY_KEY daily level at seed 1; level 3
- * loses deterministically). Its names are among the longest of levels 1–8 in every language; the
- * longest names of all 50 levels are covered by the string sweep.
+ * Campaign defeat: level 15 seed 1 under `economy.autoLose()` (a v3 stream never drains its source, so
+ * the "suicide" line *wins* many levels — 2, 4, 6, 7, 8, 22, 44, 50, the DAY_KEY daily level at seed 1 and,
+ * since its AUD-B9 re-layout, 3 — and freezes on 5; level 15 loses deterministically at ≈ 135 s sim, as
+ * economy.spec's rewind check relies on too). The longest names of all 50 levels are covered by the string
+ * sweep, so the defeat card's own level name need not be a long one.
  */
-const LOSS_LEVEL = 3;
+const LOSS_LEVEL = 15;
 const LOSS_SEED = 1;
 const LEVELS_DIR = new URL('../src/levels/', import.meta.url);
 interface LevelJson {

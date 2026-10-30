@@ -12,7 +12,7 @@ import { currentLanguage, hasEnglish, loadEnglishMenus, t } from './ui/i18n';
 import { loadTutorialSteps } from './ui/tutorialChunk';
 import { configureFakeStore } from './economy/providers/fakeStore';
 import { getStore } from './economy/store';
-import { grantProduct } from './economy/wallet';
+import { grantProduct } from './economy/purchases';
 import { challengeFor, weekKeyOf, weeklyFor } from './daily/challenge';
 import { challengeDone, challengeUnlocked, previousDayKey, shownStreak, yesterdayOffered } from './ui/daily';
 import { shownWeekStreak, weeklyDone, weeklyTargetDone, weeklyUnlocked } from './ui/weekly';
@@ -67,6 +67,7 @@ export function installDebug(app: TowerClashApp): TowerClashDebug & QaDebugExtra
     loadLevel: (id, seed) => app.startLevel(id, seed),
     // the AI chunk is in whenever a play screen exists (startLevel awaits it); no static import of src/ai, so it stays one chunk (PERF-9)
     autoplay: () => app.withPlay((play) => play.setPlayerBot(aiModule().referencePlayerCommands)),
+    startMatch: () => app.withPlay((play) => play.startMatch()),
     setSpeed: (n) => app.setSpeed(n),
     getSpeed: () => app.play?.loop.speed ?? app.speed,
     // On the play screen a map point is drawn through the tilted camera (ART-21, `PlayScreen.fromLayout`):
@@ -86,6 +87,7 @@ export function installDebug(app: TowerClashApp): TowerClashDebug & QaDebugExtra
     logicalToLayout: (x, y) => app.current.toLayout?.(x, y) ?? { x, y },
     getAnchors: () => hudAnchors(app.view),
     getTutorialHint: () => (app.current === app.play ? (app.play?.tutorialStep()?.text ?? null) : null),
+    getTutorialStep: () => (app.current === app.play ? (app.play?.tutorialStepIndex() ?? null) : null),
     getLimitHint: () => (app.current === app.play && app.play?.gestures.limitHint ? app.play.gestures.limitHintText : null),
     // HowToScreen is in the lazy screens chunk: read its `lines` structurally (no static import of the chunk)
     getHowtoLines: () => (app.current.name === 'howto' ? [...((app.current as unknown as { lines?: readonly number[] }).lines ?? [])] : null),
