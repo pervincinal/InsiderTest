@@ -522,6 +522,25 @@ describe('.github/workflows/tower-clash-ci.yml naive human gate (QA-3, QA-30)', 
 });
 
 /*
+ * AUD-B1 / AUD-B17 (QA 2026-10-30): the capacity commander track broke the tutorial for the naive line
+ * (level 4 0/5, level 6 0/5 at one tier) and no gate caught it — `--upgrades max` only bounds stars from
+ * above and `--naive` ignored `--upgrades`. "Commander tier gate" runs every single tier on levels 1–16
+ * (naive line in both tie orders + reference player, K = 5) right after the naive gate, blocking.
+ */
+describe('.github/workflows/tower-clash-ci.yml commander tier gate (AUD-B1, AUD-B17)', () => {
+  const CI = readWorkflow('tower-clash-ci.yml');
+  const NAME = 'Commander tier gate (naive + reference, levels 1–16)';
+  const GATE = 'npm run playtest -- --tier-gate --seeds 5';
+
+  it('runs the tier gate at K = 5, blocking, right after the naive human gate', () => {
+    expect(runBlocks(CI).filter((b) => b.step === NAME).map((b) => b.run)).toEqual([`${GATE}\n`]);
+    expect(stepText(CI, NAME)).not.toMatch(/continue-on-error|\n\s+shell:/);
+    const steps = runBlocks(CI).map((b) => b.step);
+    expect(steps.indexOf(NAME)).toBe(steps.indexOf('Naive human gate (levels 1-16 x 5 seeds)') + 1);
+  });
+});
+
+/*
  * Regression test for BUG-26: the `deploy to GitHub Pages` job failed on every push from
  * 2026-09-28 to 2026-10-09 (first "Ensure GitHub Pages has been enabled", then "Branch … is not
  * allowed to deploy to github-pages due to environment protection rules") while the workflow

@@ -36,8 +36,12 @@ const budgetArg = args.indexOf('--budget');
  * warp, horizon haze, islets, tutorial side bubble; only the `?tilt=` override uses it since ART-24)
  * and the enemy AI (src/ai/*, awaited with the level chunk, src/ui/ai.ts) are lazy chunks. Budget
  * 92 → 82 kB (the new size + 2 kB headroom).
+ * 2026-10-30 (skills audit day 1: 44 pt hit areas through hitRect, crystal-spend confirm flows, MENU → pause,
+ * save backup / read-only paths, the native save mirror's eager gate): 81.3 → 82.3 kB. Budget 82 → 84 kB
+ * (Producer decision, AUD summary): the audit's P1 set is worth 1 kB; PERF-11 brings the eager chunk back
+ * under 82 kB (candidates: the debug surface's eager hooks, AUD-Q18; the boot path's duplicated locale glue).
  */
-const DEFAULT_GZIP_BUDGET = 82 * 1024;
+const DEFAULT_GZIP_BUDGET = 84 * 1024;
 /** Package name fragments that must never appear in the eagerly loaded chunks. */
 const FORBIDDEN_STRINGS = ['purchases-capacitor', 'capacitor-community/admob', 'capacitor-community/in-app-review'];
 

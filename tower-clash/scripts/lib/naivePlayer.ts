@@ -13,7 +13,7 @@
  * §3.13 (f)) — the same line started from the other side of a mirror pair; `asc` (default) is the gated line.
  */
 import { C, linksFrom, maxLevelOf, maxLinksOf } from '../../src/sim/index';
-import type { Command, GameState, LevelDef, Rng, Tower } from '../../src/sim/index';
+import type { Command, GameState, LevelDef, PlayerModifiers, Rng, Tower } from '../../src/sim/index';
 import { runHeadless, starsFor } from '../../src/ai/headless';
 import type { PlayerBot, RunResult } from '../../src/ai/headless';
 
@@ -342,9 +342,17 @@ function medianOf(values: readonly number[]): number | undefined {
 
 /**
  * The naive line (or, with `follow`, the literal card follower) on one level over seeds 1..k with the
- * given reaction delay, no Commander upgrades; `tie` (GD-7f) picks the id order on an exact target tie.
+ * given reaction delay; `tie` (GD-7f) picks the id order on an exact target tie. `modifiers` (AUD-B17:
+ * `--naive --upgrades max|<track>:<tier>`) are the player's Commander upgrades; default none.
  */
-export function runNaive(level: LevelDef, k: number, reactMs: number = NAIVE_REACT_MS, follow?: FollowSpec, tie: NaiveTie = 'asc'): NaiveRow {
+export function runNaive(
+  level: LevelDef,
+  k: number,
+  reactMs: number = NAIVE_REACT_MS,
+  follow?: FollowSpec,
+  tie: NaiveTie = 'asc',
+  modifiers?: Readonly<PlayerModifiers>,
+): NaiveRow {
   if (!Number.isInteger(k) || k < 1) throw new Error(`naive: bad seed count ${String(k)}`);
   checkNaiveTie(tie);
   if (follow) validateFollowSpec(follow, level);
@@ -356,7 +364,7 @@ export function runNaive(level: LevelDef, k: number, reactMs: number = NAIVE_REA
   const losers: number[] = [];
   let ticks = 0;
   for (const seed of seeds) {
-    const r = runHeadless(level, seed, makeNaivePlayer({ reactMs, follow, tie }));
+    const r = runHeadless(level, seed, makeNaivePlayer({ reactMs, follow, tie }), modifiers ? { modifiers } : {});
     results.push(r);
     ticks += r.ticks;
     const s = starsFor(level, r);

@@ -1,5 +1,6 @@
 /**
- * `npm run playtest [-- --level N] [-- --seed S] [-- --seeds N] [-- --upgrades none|max]`
+ * `npm run playtest [-- --level N] [-- --seed S] [-- --seeds N] [-- --upgrades none|max|<track>:<tier>]`
+ * `npm run playtest -- --tier-gate [--seeds K]`
  * `npm run playtest -- --daily YYYY-MM-DD [--days N] [--seeds K] [--no-twist] [--naive [--react MS]]`
  * `npm run playtest -- --weekly YYYY-MM-DD(Monday) [--weeks N] [--seeds K] [--no-twist] [--naive [--react MS]]`
  * `npm run playtest -- --twist <plain|lean|fastFeet|thinWalls|reinforced> [--seeds K] [--pool a-b]`
@@ -14,7 +15,14 @@
  * seed, later levels ≥ 95 %; the idle player must never win.
  * `--upgrades max` gives the player every Commander upgrade at its cap (ECONOMY.md §3.2; read from the
  * catalog). Extra gate: the reference player's median stars over every level × seed must stay ≤ 2.5
- * (upgrades help, they do not trivialise). Exit 1 if any gate fails.
+ * (upgrades help, they do not trivialise). Exit 1 if any gate fails. `--upgrades <track>:<tier>` (AUD-B17)
+ * gives one catalog track at one tier, every other at 0 (e.g. `capacity:1`; `parseUpgradeTier` in
+ * scripts/lib/tierGate.ts); `--naive` honours `--upgrades` too (before AUD-B17 it ignored it).
+ * Tier gate (`--tier-gate [--seeds K]`, AUD-B1, default K = 5): the unmodified run, then every tier of
+ * every track with a sim effect alone, on levels 1–16: the naive line in both tie orders (4 s) and the
+ * reference player. A tier fails a level when a naive row is under its naive gate share and under the
+ * unmodified row, or the reference player loses a seed the unmodified run won (`tierGateFailures`).
+ * One summary row per tier; exit 1 on any failure.
  * Daily mode (`--daily D`): the reference player on each day's Daily Challenge (`challengeFor`: level
  * 9–40, fixed seed, twist modifiers on the player side; no Commander upgrades) for D and the next N−1
  * days (`--days N`, default 1). `--seeds K` (default 1) measures each day over K seeds starting at the
@@ -55,6 +63,7 @@
  * The flag rules live in scripts/lib/playtestArgs.ts (unit-tested); rng streams come from `rngsFor`,
  * exactly as the game client derives them.
  */
+import { availableParallelism } from 'node:os';
 import { performance } from 'node:perf_hooks';
 import { loadAllLevels, loadLevel } from '../src/levels/index';
 import { C, DEFAULT_MODIFIERS } from '../src/sim/index';
@@ -70,6 +79,22 @@ import { NAIVE_GATE_LAST, NAIVE_REACT_MS, NAIVE_TIE_EXEMPT, NAIVE_WIN_RATE, form
 import type { FollowSpec, NaiveGateRange, NaiveRow, NaiveTie } from './lib/naivePlayer';
 import { parseArgs, tiesOf } from './lib/playtestArgs';
 import type { TieMode, Upgrades } from './lib/playtestArgs';
+import {
+  TIER_GATE_FROM,
+  TIER_GATE_TO,
+  TIER_GATE_SEEDS,
+  failedLevels,
+  formatUpgradeTier,
+  parseUpgradeTier,
+  priceOnlyTracks,
+  tierGateFailures,
+  tierModifiers,
+  tierSweep,
+  worstTierFailure,
+} from './lib/tierGate';
+import type { TierGateFailure, TierGateLine, TierGateRow, UpgradeTier } from './lib/tierGate';
+import { runTierGateJobs, tierGateLevels } from './lib/tierGateRun';
+import type { TierGateRunResult } from './lib/tierGateRun';
 
 export { runHeadless } from '../src/ai/headless';
 export { parseArgs } from './lib/playtestArgs';
@@ -87,7 +112,8 @@ export const MAX_UPGRADES_MEDIAN_STARS = 2.5;
 export { maxedModifiers } from '../src/economy/maxUpgrades';
 
 export function modifiersFor(upgrades: Upgrades): Readonly<PlayerModifiers> {
-  return upgrades === 'max' ? maxedModifiers() : DEFAULT_MODIFIERS;
+  if (upgrades === 'none') return DEFAULT_MODIFIERS;
+  return upgrades === 'max' ? maxedModifiers() : tierModifiers(parseUpgradeTier(upgrades));
 }
 
 function fmtTime(ms: number): string {
@@ -511,8 +537,22 @@ async function runTwistMode(twistId: Twist['id'], k: number, pool: Readonly<Pool
  * With `tie` (GD-7f) `desc`: the reversed id tie-break instead; `both`: each level's default row, then a
  * row labelled `tie desc`, one summary line per order, and a gate (if any) over both orders — a level
  * fails when either is under its share. `asc` prints exactly what it printed before GD-7f.
+ *
+ * With `upgrades` (AUD-B17) other than `none`: the player carries those Commander upgrades (every row,
+ * including a follower's `naive (bar)` row); the header names them. `none` prints what it did before.
  */
-async function runNaiveMode(levels: LevelDef[], k: number, reactMs: number, gate: NaiveGateRange | undefined, follow?: FollowSpec, tie: TieMode = 'asc', tieExempt: readonly number[] = []): Promise<number> {
+async function runNaiveMode(
+  levels: LevelDef[],
+  k: number,
+  reactMs: number,
+  gate: NaiveGateRange | undefined,
+  follow?: FollowSpec,
+  tie: TieMode = 'asc',
+  tieExempt: readonly number[] = [],
+  upgrades: Upgrades = 'none',
+): Promise<number> {
+  const mods = upgrades === 'none' ? undefined : modifiersFor(upgrades);
+  const upgradesNote = mods ? `${upgrades} (${fmtModifiers(mods)})` : 'none';
   const ties = tiesOf(tie);
   const tieLabel = (t: NaiveTie | undefined): string => (t === 'desc' ? ' tie desc' : '');
   const header = `${pad('lvl', 4)} ${pad('name', 20)} ${pad('wins', 6)} ${pad('3*/2*/1*/0*', 12)} ${pad('median', 8)} ${pad('worst', 8)} ${pad('star2', 8)} ${pad('holds', 6)} ${pad('star2?', 7)} ${pad('gate', 6)} losing seeds`;
@@ -523,7 +563,7 @@ async function runNaiveMode(levels: LevelDef[], k: number, reactMs: number, gate
   const line = follow ? `card follower [${formatFollowSpec(follow)}]` : 'naive';
   const tieNote = tie === 'asc' ? '' : `  tie=${tie} (desc = the larger id on an exact target tie${tie === 'both' ? '; extra rows labelled "tie desc"' : ''})`;
   console.log(
-    `playtest ${line}  react=${reactMs}ms  seeds=1..${k}  upgrades=none  max=${fmtTime(MAX_MS)}  informational: holds = wins/K >= ${Math.round(NAIVE_WIN_RATE * 100)}%, star2? = holds and median <= star2 (${gateNote})${tieNote}`,
+    `playtest ${line}  react=${reactMs}ms  seeds=1..${k}  upgrades=${upgradesNote}  max=${fmtTime(MAX_MS)}  informational: holds = wins/K >= ${Math.round(NAIVE_WIN_RATE * 100)}%, star2? = holds and median <= star2 (${gateNote})${tieNote}`,
   );
   console.log(header);
   console.log('-'.repeat(header.length));
@@ -541,7 +581,7 @@ async function runNaiveMode(levels: LevelDef[], k: number, reactMs: number, gate
   };
   for (const level of levels) {
     for (const t of ties) {
-      const row = runNaive(level, k, reactMs, follow, t);
+      const row = runNaive(level, k, reactMs, follow, t, mods);
       rows.push(row);
       totalTicks += row.ticks;
       const gated = gate !== undefined && level.id >= gate.from && level.id <= gate.to;
@@ -553,7 +593,7 @@ async function runNaiveMode(levels: LevelDef[], k: number, reactMs: number, gate
     // GD-8f (GDD §3.14 (a)): past the naive gate the follower's asc median is judged against
     // max(star2, the plain naive asc median of this run + 5 s) — run that row too (same K and reaction)
     if (follow && level.id > NAIVE_GATE_LAST && ties.includes('asc')) {
-      const naiveRow = runNaive(level, k, reactMs, undefined, 'asc');
+      const naiveRow = runNaive(level, k, reactMs, undefined, 'asc', mods);
       barRows.set(level.id, naiveRow);
       totalTicks += naiveRow.ticks;
       printRow(level, naiveRow, '  naive (bar)', '-');
@@ -655,6 +695,84 @@ async function runChallengeNaiveMode(kind: 'daily' | 'weekly', from: string, cou
   return 0;
 }
 
+/** The modifiers a tier changes, compactly (`cap x1.05`, `garrison +1`). */
+function fmtTierModifiers(m: Readonly<PlayerModifiers>): string {
+  const parts: string[] = [];
+  if (m.productionMul !== DEFAULT_MODIFIERS.productionMul) parts.push(`prod x${m.productionMul}`);
+  if (m.capacityMul !== DEFAULT_MODIFIERS.capacityMul) parts.push(`cap x${m.capacityMul}`);
+  if (m.startGarrisonBonus !== DEFAULT_MODIFIERS.startGarrisonBonus) parts.push(`garrison +${m.startGarrisonBonus}`);
+  if (m.unitSpeedMul !== DEFAULT_MODIFIERS.unitSpeedMul) parts.push(`speed x${m.unitSpeedMul}`);
+  return parts.length ? parts.join(' ') : 'none';
+}
+
+/**
+ * Tier gate (AUD-B1, AUD-B17): the unmodified run, then each tier of `tierSweep()` alone, on levels
+ * 1–16 over seeds 1..k (naive asc + tie desc at 4 s, reference player). One summary row per tier; the
+ * failures (`tierGateFailures` against the unmodified rows of this invocation) print as
+ * `FAIL <track>:<tier> lvl N name [line]: …`. The 13 runs go to `threads` worker threads
+ * (`runTierGateJobs`; the rows do not depend on it). Returns the number of failed tiers.
+ */
+async function runTierGateMode(k: number, threads: number): Promise<number> {
+  const levels = await tierGateLevels();
+  const tiers = tierSweep();
+  const ranges = new Map<string, number>();
+  for (const t of tiers) ranges.set(t.track, Math.max(ranges.get(t.track) ?? 0, t.tier));
+  const priceOnly = priceOnlyTracks();
+  console.log(
+    `playtest tier gate  lvl ${TIER_GATE_FROM}-${TIER_GATE_TO} (${levels.length} level(s))  seeds=1..${k}  lines: naive (react ${NAIVE_REACT_MS}ms, tie asc + desc), reference player  max=${fmtTime(MAX_MS)}  threads=${threads}`,
+  );
+  console.log(
+    `  tiers alone: ${[...ranges].map(([id, n]) => `${id}:1-${n}`).join(' ')} (${tiers.length})${priceOnly.length ? `; not swept (shop price, no sim modifier): ${priceOnly.join(', ')}` : ''}`,
+  );
+  console.log(
+    `  gate: a naive row under its share (lvl 1-8 ${Math.round(naiveGateRate(1)! * 100)}% = ${naiveGateMinWins(naiveGateRate(1)!, k)}/${k}, lvl 9-${NAIVE_GATE_LAST} ${Math.round(naiveGateRate(9)! * 100)}% = ${naiveGateMinWins(naiveGateRate(9)!, k)}/${k}) and under the unmodified row, or the reference player losing a seed the unmodified run won`,
+  );
+  const header = `${pad('tier', 14)} ${pad('modifiers', 14)} ${pad('naive', 7)} ${pad('desc', 7)} ${pad('ref', 7)} ${pad('failed', 7)} ${pad('levels', 16)} ${pad('worst', 48)} time`;
+  console.log(header);
+  console.log('-'.repeat(header.length));
+  const totals = (rows: readonly TierGateRow[], line: TierGateLine): string => {
+    const of = rows.filter((r) => r.line === line);
+    return `${of.reduce((n, r) => n + r.wins, 0)}/${of.reduce((n, r) => n + r.k, 0)}`;
+  };
+  const t0 = performance.now();
+  const results = await runTierGateJobs([{ tier: null, k }, ...tiers.map((tier) => ({ tier, k }))], threads);
+  const elapsed = (performance.now() - t0) / 1000;
+  const [base, ...runs] = results as [TierGateRunResult, ...TierGateRunResult[]];
+  const totalTicks = results.reduce((n, r) => n + r.ticks, 0);
+  const cpu = results.reduce((n, r) => n + r.ms, 0) / 1000;
+  console.log(
+    `${pad('unmodified', 14)} ${pad('none', 14)} ${pad(totals(base.rows, 'naive'), 7)} ${pad(totals(base.rows, 'naive tie desc'), 7)} ${pad(totals(base.rows, 'reference'), 7)} ${pad('-', 7)} ${pad('-', 16)} ${pad('-', 48)} ${(base.ms / 1000).toFixed(1)}s`,
+  );
+  const allFailures: { tier: UpgradeTier; failures: TierGateFailure[] }[] = [];
+  for (const [i, tier] of tiers.entries()) {
+    const run = runs[i]!;
+    const mods = tierModifiers(tier);
+    const failures = tierGateFailures(base.rows, run.rows);
+    allFailures.push({ tier, failures });
+    const lv = failedLevels(failures);
+    const w = worstTierFailure(failures);
+    const worst = w ? `lvl ${w.levelId} ${w.name} [${w.line}] ${w.wins}/${w.k} vs ${w.baseWins}/${w.k}` : '-';
+    console.log(
+      `${pad(formatUpgradeTier(tier), 14)} ${pad(fmtTierModifiers(mods), 14)} ${pad(totals(run.rows, 'naive'), 7)} ${pad(totals(run.rows, 'naive tie desc'), 7)} ${pad(totals(run.rows, 'reference'), 7)} ${pad(String(lv.length), 7)} ${pad(lv.length ? lv.join(',') : '-', 16)} ${pad(worst, 48)} ${(run.ms / 1000).toFixed(1)}s`,
+    );
+  }
+  console.log('-'.repeat(header.length));
+  // levels already under their share without upgrades: the naive gate's business, reported so a tier row is read against them
+  for (const r of base.rows) {
+    if (r.line === 'reference' ? r.losers.length > 0 : r.wins < naiveGateMinWins(naiveGateRate(r.levelId)!, r.k)) {
+      console.log(`  unmodified lvl ${r.levelId} ${r.name} [${r.line}]: ${r.wins}/${r.k} — already under its share without upgrades; a tier fails it only by doing worse`);
+    }
+  }
+  for (const { tier, failures } of allFailures) {
+    for (const f of failures) console.log(`  FAIL ${formatUpgradeTier(tier)} lvl ${f.levelId} ${f.name} [${f.line}]: ${f.why}`);
+  }
+  const failedTiers = allFailures.filter((a) => a.failures.length > 0);
+  const failureCount = allFailures.reduce((n, a) => n + a.failures.length, 0);
+  console.log(`tier gate lvl ${TIER_GATE_FROM}-${TIER_GATE_TO}: ${failedTiers.length}/${tiers.length} tier(s) failed (${failureCount} level row(s)${failedTiers.length ? `: ${failedTiers.map((a) => formatUpgradeTier(a.tier)).join(', ')}` : ''})`);
+  console.log(`perf: ${totalTicks} ticks in ${elapsed.toFixed(2)}s wall (${cpu.toFixed(1)}s summed over ${threads} thread(s)) = ${Math.round(totalTicks / Math.max(elapsed, 1e-6))} ticks/s`);
+  return failedTiers.length;
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   if (args.naive && args.daily !== undefined) {
@@ -666,7 +784,12 @@ async function main(): Promise<void> {
     return;
   }
   if (args.naive) {
-    const failed = await runNaiveMode(await selectLevels(args.level), args.seeds ?? 5, args.reactMs, args.gate, args.follow, args.tie ?? 'asc', args.tieExempt);
+    const failed = await runNaiveMode(await selectLevels(args.level), args.seeds ?? 5, args.reactMs, args.gate, args.follow, args.tie ?? 'asc', args.tieExempt, args.upgrades);
+    if (failed > 0) process.exit(1);
+    return;
+  }
+  if (args.tierGate) {
+    const failed = await runTierGateMode(args.seeds ?? TIER_GATE_SEEDS, args.jobs ?? Math.min(availableParallelism(), tierSweep().length + 1));
     if (failed > 0) process.exit(1);
     return;
   }

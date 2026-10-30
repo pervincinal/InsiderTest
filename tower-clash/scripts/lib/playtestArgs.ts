@@ -16,6 +16,12 @@
  * fails when either order is under its share) — `--gate --tie desc` would drop the gated line and is refused.
  * QA-30: `--tie-exempt a[,b]` (only with `--gate … --tie both`, ids inside the gate range and in
  * `NAIVE_TIE_EXEMPT`) skips those levels' `tie desc` row in the gate — levels cured by a tutorial steer.
+ * AUD-B17 (QA 2026-10-30): `--upgrades none|max|<track>:<tier>` applies to the campaign reference run and
+ * to the campaign `--naive` run (before, `--naive` ignored it); `<track>:<tier>` is one catalog track at
+ * one tier, the rest at 0 (`parseUpgradeTier`, scripts/lib/tierGate.ts). The challenge and twist modes
+ * run without Commander upgrades by definition and refuse anything but `none`.
+ * AUD-B1: `--tier-gate [--seeds K] [--jobs N]` (campaign, default K = 5) is the "no single tier hurts"
+ * gate; `--jobs N` (only with it; default: the host's parallelism) sets its worker threads. It takes no other flag.
  */
 import { C } from '../../src/sim/index';
 import { TWISTS, isMondayKey } from '../../src/daily/challenge';
@@ -24,10 +30,12 @@ import { DEFAULT_POOL, parsePool, twistById } from './daily';
 import type { PoolRange } from './daily';
 import { NAIVE_REACT_MS, parseFollowSpec, parseNaiveGate, parseTieExempt } from './naivePlayer';
 import type { FollowSpec, NaiveGateRange, NaiveTie } from './naivePlayer';
+import { parseUpgradeTier } from './tierGate';
 
 export const DEFAULT_SEED = 1;
 
-export type Upgrades = 'none' | 'max';
+/** `--upgrades`: none, every track maxed, or one track at one tier (`capacity:1`, validated by `parseUpgradeTier`). */
+export type Upgrades = 'none' | 'max' | `${string}:${number}`;
 
 /** GD-7f `--tie`: one tie order, or `both` (the `asc` row plus an extra `tie desc` row per level). */
 export type TieMode = NaiveTie | 'both';
@@ -69,6 +77,10 @@ export interface Args {
   tie?: Exclude<TieMode, 'asc'>;
   /** `--tie-exempt a[,b]` (QA-30): gate levels whose `tie desc` row is not gated (`NAIVE_TIE_EXEMPT`); absent = none. */
   tieExempt?: number[];
+  /** `--tier-gate` (AUD-B1): every single Commander tier on levels 1–16, naive line and reference player; absent = off. */
+  tierGate?: true;
+  /** `--jobs N` (only with `--tier-gate`): worker threads; absent = the host's parallelism. Never changes a row. */
+  jobs?: number;
 }
 
 export function parseArgs(argv: readonly string[]): Args {
@@ -91,6 +103,8 @@ export function parseArgs(argv: readonly string[]): Args {
   let holdIds: string | undefined;
   let tieSpec: string | undefined;
   let tieExemptSpec: string | undefined;
+  let tierGate = false;
+  let jobs: number | undefined;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
     const next = argv[i + 1];
@@ -130,11 +144,14 @@ export function parseArgs(argv: readonly string[]): Args {
     else if (arg.startsWith('--tie=')) tieSpec = arg.slice('--tie='.length);
     else if (arg === '--tie-exempt' && next !== undefined) tieExemptSpec = next;
     else if (arg.startsWith('--tie-exempt=')) tieExemptSpec = arg.slice('--tie-exempt='.length);
+    else if (arg === '--tier-gate') tierGate = true;
+    else if (arg === '--jobs' && next !== undefined) jobs = Number(next);
+    else if (arg.startsWith('--jobs=')) jobs = Number(arg.slice('--jobs='.length));
   }
   if (level !== undefined && !Number.isInteger(level)) throw new Error(`bad --level ${String(level)}`);
   if (!Number.isInteger(seed)) throw new Error(`bad --seed ${String(seed)}`);
   if (seeds !== undefined && (!Number.isInteger(seeds) || seeds < 1)) throw new Error(`bad --seeds ${String(seeds)}`);
-  if (upgrades !== 'none' && upgrades !== 'max') throw new Error(`bad --upgrades ${upgrades} (none|max)`);
+  if (upgrades !== 'none' && upgrades !== 'max') parseUpgradeTier(upgrades); // throws `bad --upgrades …` with the valid tracks and tiers
   if (daily !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(daily)) throw new Error(`bad --daily ${daily} (YYYY-MM-DD)`);
   if (!Number.isInteger(days) || days < 1) throw new Error(`bad --days ${String(days)}`);
   if (weekly !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(weekly)) throw new Error(`bad --weekly ${weekly} (YYYY-MM-DD, a Monday)`);
@@ -148,6 +165,22 @@ export function parseArgs(argv: readonly string[]): Args {
   if (modes.length > 1) throw new Error(`${modes.join(' and ')} are separate modes`);
   // QA-7: --naive rides on --daily / --weekly (the naive line on each challenge); the twist sweep stays the reference player's
   if (naive && twistDef) throw new Error('--twist and --naive are separate modes');
+  // AUD-B17: a flag that changes nothing must not be accepted silently — the challenges and the twist sweep have no upgrades
+  const noUpgradeMode = modes[0];
+  if (upgrades !== 'none' && noUpgradeMode !== undefined) throw new Error(`--upgrades does not apply to ${noUpgradeMode} (it runs without Commander upgrades); use the campaign run or --naive`);
+  // AUD-B1: the tier gate is a campaign mode of its own with a fixed scope (every tier, levels 1–16, both naive tie orders + the reference player)
+  if (tierGate) {
+    const other = [
+      naive ? '--naive' : undefined,
+      ...modes,
+      level !== undefined ? '--level' : undefined,
+      upgrades !== 'none' ? '--upgrades' : undefined,
+      seed !== DEFAULT_SEED ? '--seed' : undefined,
+    ].filter((m) => m !== undefined);
+    if (other.length) throw new Error(`--tier-gate takes only --seeds K and --jobs N (it runs every tier of every track on levels 1-16); drop ${other.join(', ')}`);
+  }
+  if (jobs !== undefined && (!Number.isInteger(jobs) || jobs < 1)) throw new Error(`bad --jobs ${String(jobs)}`);
+  if (jobs !== undefined && !tierGate) throw new Error('--jobs only applies to --tier-gate');
   const challengeNaive = naive && (daily !== undefined || weekly !== undefined);
   if (challengeNaive && level !== undefined) throw new Error(`--level does not apply to --naive with ${daily !== undefined ? '--daily' : '--weekly'} (the challenge picks the level)`);
   const pool = poolSpec === undefined ? DEFAULT_POOL : parsePool(poolSpec);
@@ -182,5 +215,25 @@ export function parseArgs(argv: readonly string[]): Args {
   if (tieExempt && !(gate && tie === 'both')) throw new Error('--tie-exempt only applies to --naive --gate a-b --tie both (it exempts a level\'s tie desc row from the gate)');
   const outside = tieExempt && gate ? tieExempt.filter((id) => id < gate.from || id > gate.to) : [];
   if (gate && outside.length) throw new Error(`--tie-exempt ${outside.join(',')} is outside --gate ${gate.from}-${gate.to}`);
-  return { level, seed, seeds, upgrades, daily, days, twist, twistId: twistDef?.id, pool, weekly, weeks, naive, reactMs, gate, ...(follow ? { follow } : {}), ...(tie !== 'asc' ? { tie } : {}), ...(tieExempt ? { tieExempt } : {}) };
+  return {
+    level,
+    seed,
+    seeds,
+    upgrades: upgrades as Upgrades,
+    daily,
+    days,
+    twist,
+    twistId: twistDef?.id,
+    pool,
+    weekly,
+    weeks,
+    naive,
+    reactMs,
+    gate,
+    ...(follow ? { follow } : {}),
+    ...(tie !== 'asc' ? { tie } : {}),
+    ...(tieExempt ? { tieExempt } : {}),
+    ...(tierGate ? { tierGate: true as const } : {}),
+    ...(jobs !== undefined ? { jobs } : {}),
+  };
 }
