@@ -38,9 +38,9 @@ function towers(owner: 'player' | 'enemy1', units: number): TowerDef[] {
 }
 
 describe('AI-6 upgrade break at capacity', () => {
-  it('reference player under thinWalls: a linked L2 at 40/40 is L3 and streaming again within 2 AI ticks', () => {
-    const state = createState(makeLevel({ towers: towers('player', 40) }), 1, { ...DEFAULT_MODIFIERS, capacityMul: 0.8 });
-    expect(state.towers['home']!.units).toBe(40); // = capacity 50 × 0.8: the sim's auto-upgrade is blocked only by the link
+  it('reference player under thinWalls: a linked L2 at 50/50 is L3 and streaming again within 2 AI ticks', () => {
+    const state = createState(makeLevel({ towers: towers('player', 50) }), 1, { ...DEFAULT_MODIFIERS, capacityMul: 0.8 });
+    expect(state.towers['home']!.units).toBe(50); // AUD-B1: the L2 → L3 threshold is the base 50 under every capacityMul; the sim's auto-upgrade is blocked only by the link
     applyCommand(state, link('player', 'home', 'a'));
     const bot = (s: GameState) => referencePlayerCommands(s, new Rng(1));
     const [first, second] = runTicks(state, 2, bot);

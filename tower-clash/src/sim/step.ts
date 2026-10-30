@@ -95,9 +95,11 @@ export function streamRate(from: Pick<Tower, 'kind' | 'level' | 'owner'>, state?
 }
 
 /**
- * Rules v2 auto-upgrade: an owned L1/L2 tower whose garrison has reached its (modified) capacity
- * gains a level at once, keeping its garrison. A linked tower never upgrades (its growth is paused).
- * At the kind's max level the garrison is clamped at capacity. Returns whether a level was gained.
+ * Rules v2 auto-upgrade: an owned L1/L2 tower whose garrison has reached its capacity gains a level
+ * at once, keeping its garrison. Below the max level `capacityOf` is the base ladder (25 / 50, fortress
+ * 37) for every owner — `capacityMul` never moves the threshold (AUD-B1). A linked tower never upgrades
+ * (its growth is paused). At the kind's max level the garrison is clamped at its (modified) holding cap.
+ * Returns whether a level was gained.
  */
 export function tryAutoUpgrade(state: GameState, tower: Tower): boolean {
   if (!C.AUTO_UPGRADE || tower.owner === 'neutral') return false;
@@ -114,12 +116,20 @@ export function tryAutoUpgrade(state: GameState, tower: Tower): boolean {
 }
 
 /**
- * Maximum garrison (in weight) a tower can hold. Pass the state to include the player's
- * `capacityMul` (floored, min 1); it is applied by the tower's *current* owner, so a tower gains or
+ * Maximum garrison (in weight) a tower holds at its current level — the one "full" number every rule
+ * reads: the auto-upgrade threshold below the max level, the holding cap at it, `targetFull`, relay and
+ * the reinforcement / start-garrison / continue clamps.
+ *
+ * AUD-B1 (2026-10-30): **below the kind's max level it is always the base ladder** `C.CAPACITY`
+ * (25 / 50; fortress × FORTRESS_CAPACITY_MUL = 37) for every owner, so the L1 → L2 and L2 → L3
+ * auto-upgrade thresholds are never multiplied. **Only at the max level** (L3, fortress L2) is the
+ * owner's `capacityMul` applied (floored, min 1): with the capacity track at +25 % an L3 holds 125
+ * and a fortress L2 93. It is read for the tower's *current* owner, so a top-level tower gains or
  * loses the bonus the moment it is captured. Without a state the base (unmodified) capacity is returned.
  */
 export function capacityOf(tower: Tower, state?: Pick<GameState, 'modifiers'>): number {
   const base = baseCapacityOf(tower);
+  if (tower.level < maxLevelOf(tower)) return base;
   const mul = modifiersFor(tower.owner, state).capacityMul;
   return mul === 1 ? base : Math.max(1, Math.floor(base * mul));
 }
@@ -226,7 +236,10 @@ export function removeLink(state: GameState, link: Link, reason: UnlinkReason): 
   state.events.push({ type: 'unlinked', owner: link.owner, from: link.from, to: link.to, reason });
 }
 
-/** True when `tower` is owned by `owner` and its garrison is at its (modified) capacity. */
+/**
+ * True when `tower` is owned by `owner` and its garrison is at `capacityOf` — the base threshold below
+ * the max level, the (modified) holding cap at it. Drives `targetFull` and relay.
+ */
 function isFullFor(state: GameState, tower: Tower, owner: Owner): boolean {
   return tower.owner === owner && tower.units >= capacityOf(tower, state);
 }

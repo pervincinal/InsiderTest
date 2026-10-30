@@ -134,19 +134,16 @@ describe('auto-upgrade', () => {
     expect(upgrades(state)).toEqual([{ type: 'upgrade', towerId: 'p', level: 2 }]);
   });
 
-  it('the player capacity modifier multiplies the ladder: ×1.25 → upgrade at 31, not 25', () => {
+  it('AUD-B1: the player capacity modifier does not move the ladder — ×1.25 still upgrades at 25, not 31', () => {
     const state = createState(
       makeLevel({ towers: [{ id: 'p', x: 0, y: 0, owner: 'player', units: 25, level: 1 }]}),
       1,
       { ...DEFAULT_MODIFIERS, capacityMul: 1.25 },
     );
-    run(state, 100); // 5 s: 30
-    expect(state.towers['p']!.level).toBe(1);
-    expect(state.towers['p']!.units).toBe(30);
-    run(state, 20); // 31
+    step(state); // first tick: 25 = the base L1 threshold
     expect(state.towers['p']!.level).toBe(2);
-    expect(state.towers['p']!.units).toBe(31);
-    expect(capacityOf(state.towers['p']!, state)).toBe(62);
+    expect(state.towers['p']!.units).toBe(25);
+    expect(capacityOf(state.towers['p']!, state)).toBe(50);
   });
 
   it('a start-garrison bonus that fills the tower upgrades it on the first tick, not in createState', () => {

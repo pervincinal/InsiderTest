@@ -162,7 +162,7 @@ export interface Booster {
  */
 export interface PlayerModifiers {
   productionMul: number; // generation (and stream) interval ÷ productionMul (multiplicative with overdrive)
-  capacityMul: number; // capacity × capacityMul, floored, min 1
+  capacityMul: number; // max-level holding cap × capacityMul, floored, min 1; L1 / L2 thresholds never scaled (AUD-B1)
   startGarrisonBonus: number; // extra units on every player tower at createState (capped at capacity)
   unitSpeedMul: number; // unit speed × unitSpeedMul, applied at spawn
 }

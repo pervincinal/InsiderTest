@@ -28,7 +28,7 @@ describe("common helpers read the owner's modifiers", () => {
     expect(linkRate(state, e)).toBe(1);
     expect(projectedUnits(p, 10_000, state)).toBe(22); // 10 + floor(12)
     expect(projectedUnits(e, 10_000, state)).toBe(20);
-    expect(projectedUnits(p, 60_000, state)).toBe(31); // capped at floor(25 × 1.25) — the L1 ladder step
+    expect(projectedUnits(p, 60_000, state)).toBe(25); // AUD-B1: the L1 → L2 threshold is the base 25 for every owner; capacityMul raises only the top-level cap
     expect(projectedUnits(e, 60_000, state)).toBe(25);
     // A neutral never produces, boosted or not.
     const n = { ...p, owner: 'neutral' as const };

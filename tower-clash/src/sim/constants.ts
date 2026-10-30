@@ -8,7 +8,9 @@ export const C = Object.freeze({
   GEN_MS: [0, 1000, 700, 500] as const,
   /**
    * Garrison capacity (weight) by level (index = level) — GDD §2.0 ladder 25 / 50 / 100. Every tower
-   * kind uses this ladder (fortress × FORTRESS_CAPACITY_MUL); the player's `capacityMul` multiplies it.
+   * kind uses this ladder (fortress × FORTRESS_CAPACITY_MUL). The L1 / L2 entries are the auto-upgrade
+   * thresholds for every owner and are never multiplied; the player's `capacityMul` scales only the
+   * holding cap at the kind's max level (L3 100, fortress L2 75) — AUD-B1, `capacityOf` in step.ts.
    */
   CAPACITY: [0, 25, 50, 100] as const,
   /**

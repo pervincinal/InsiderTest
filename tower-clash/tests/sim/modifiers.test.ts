@@ -104,12 +104,22 @@ describe('productionMul', () => {
   });
 });
 
-describe('capacityMul', () => {
-  it('1.25 at L1 → cap 31 for the player (floor of 31.25), 25 for the enemy', () => {
+describe('capacityMul (AUD-B1: max-level holding cap only)', () => {
+  it('1.25 at L1 / L2 → the base thresholds 25 / 50 for the player and the enemy alike', () => {
     const state = createState(duo(0), 1, mods({ capacityMul: 1.25 }));
-    expect(capacityOf(state.towers['p']!, state)).toBe(31);
+    expect(capacityOf(state.towers['p']!, state)).toBe(25);
     expect(capacityOf(state.towers['e']!, state)).toBe(25);
     expect(capacityOf(state.towers['p']!)).toBe(25); // no state → base capacity
+    const l2 = createState(duo(0, 2), 1, mods({ capacityMul: 1.25 }));
+    expect(capacityOf(l2.towers['p']!, l2)).toBe(50);
+    expect(capacityOf(l2.towers['e']!, l2)).toBe(50);
+  });
+
+  it('1.25 at L3 → cap 125 for the player, 100 for the enemy', () => {
+    const state = createState(duo(0, 3), 1, mods({ capacityMul: 1.25 }));
+    expect(capacityOf(state.towers['p']!, state)).toBe(125);
+    expect(capacityOf(state.towers['e']!, state)).toBe(100);
+    expect(capacityOf(state.towers['p']!)).toBe(100);
   });
 
   it('1.25 at L3 → the player fills to 125 while the enemy clamps at 100', () => {
@@ -120,11 +130,18 @@ describe('capacityMul', () => {
   });
 
   it.each([
-    ['barracks', 2, 50, 62],
+    ['barracks', 1, 25, 25],
+    ['barracks', 2, 50, 50],
+    ['barracks', 3, 100, 125],
+    ['fortress', 1, 37, 37],
     ['fortress', 2, 75, 93],
-    ['artillery', 1, 25, 31],
-    ['tankFactory', 1, 25, 31],
-  ] as const)('%s L%i: base %i → 62.5 %% more is %i', (kind, level, base, modified) => {
+    ['artillery', 1, 25, 25],
+    ['artillery', 2, 50, 50],
+    ['artillery', 3, 100, 125],
+    ['tankFactory', 1, 25, 25],
+    ['tankFactory', 2, 50, 50],
+    ['tankFactory', 3, 100, 125],
+  ] as const)('%s L%i: base %i → with ×1.25 %i (scaled only at the max level)', (kind, level, base, modified) => {
     const state = createState(
       makeLevel({ towers: [{ id: 'p', x: 0, y: 0, owner: 'player', kind, level }]}),
       1,
@@ -134,9 +151,11 @@ describe('capacityMul', () => {
     expect(capacityOf(state.towers['p']!, state)).toBe(modified);
   });
 
-  it('never drops below 1', () => {
-    const state = createState(duo(), 1, mods({ capacityMul: 0.01 }));
+  it('never drops below 1 at the max level, and never moves the L1 threshold', () => {
+    const state = createState(duo(10, 3), 1, mods({ capacityMul: 0.001 }));
     expect(capacityOf(state.towers['p']!, state)).toBe(1);
+    const l1 = createState(duo(), 1, mods({ capacityMul: 0.001 }));
+    expect(capacityOf(l1.towers['p']!, l1)).toBe(25);
   });
 
   it('caps friendly arrivals at the modified capacity', () => {
@@ -167,13 +186,15 @@ describe('startGarrisonBonus', () => {
     expect(state.towers['n']!.units).toBe(10);
   });
 
-  it('is capped at capacity, including the capacityMul bonus', () => {
+  it('is capped at capacity: the base threshold below the max level, the capacityMul cap at L3', () => {
     const plain = createState(duo(22), 1, mods({ startGarrisonBonus: 5 }));
     expect(plain.towers['p']!.units).toBe(25);
-    const roomy = createState(duo(22), 1, mods({ startGarrisonBonus: 5, capacityMul: 1.25 }));
-    expect(roomy.towers['p']!.units).toBe(27);
-    const full = createState(duo(30), 1, mods({ startGarrisonBonus: 5, capacityMul: 1.25 }));
-    expect(full.towers['p']!.units).toBe(31);
+    const l1 = createState(duo(22), 1, mods({ startGarrisonBonus: 5, capacityMul: 1.25 }));
+    expect(l1.towers['p']!.units).toBe(25); // AUD-B1: not 27 — the L1 threshold is not scaled
+    const l3 = createState(duo(98, 3), 1, mods({ startGarrisonBonus: 5, capacityMul: 1.25 }));
+    expect(l3.towers['p']!.units).toBe(103);
+    const full = createState(duo(123, 3), 1, mods({ startGarrisonBonus: 5, capacityMul: 1.25 }));
+    expect(full.towers['p']!.units).toBe(125);
   });
 });
 
@@ -235,33 +256,33 @@ describe('modifiers follow the current owner', () => {
   it('a captured enemy tower immediately produces and caps at player rates', () => {
     const state = createState(makeLevel({ towers: [
       { id: 'p', x: 360, y: 1000, owner: 'player', units: 10 },
-      { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 0 },
+      { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 0, level: 3 },
     ] }), 1, all);
-    expect(capacityOf(state.towers['e']!, state)).toBe(25);
+    expect(capacityOf(state.towers['e']!, state)).toBe(100);
     spawn(state, { owner: 'player', from: 'p', to: 'e', progress: 1 });
     step(state); // capture: e is now the player's with 1 unit
     expect(state.towers['e']!.owner).toBe('player');
     expect(state.towers['e']!.units).toBe(1);
-    expect(capacityOf(state.towers['e']!, state)).toBe(31);
-    run(state, 16); // 800 ms since capture
-    expect(state.towers['e']!.units).toBe(1);
-    run(state, 1); // 850 ms ≥ 833.3
+    expect(capacityOf(state.towers['e']!, state)).toBe(125);
+    run(state, 9); // 450 ms since capture (L3: 500 ms ÷ 1.2 = 416.7)
     expect(state.towers['e']!.units).toBe(2);
   });
 
   it('a lost player tower reverts to base rates for the enemy', () => {
     const state = createState(makeLevel({ towers: [
-      { id: 'p', x: 360, y: 1000, owner: 'player', units: 0 },
+      { id: 'p', x: 360, y: 1000, owner: 'player', units: 0, level: 3 },
       { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 10 },
     ] }), 1, all);
-    expect(capacityOf(state.towers['p']!, state)).toBe(31);
+    expect(capacityOf(state.towers['p']!, state)).toBe(125);
     spawn(state, { owner: 'enemy1', from: 'e', to: 'p', progress: 1 });
     step(state);
     expect(state.towers['p']!.owner).toBe('enemy1');
-    expect(capacityOf(state.towers['p']!, state)).toBe(25);
-    run(state, 19); // 950 ms since capture: 1.2× rate would already have produced
+    expect(capacityOf(state.towers['p']!, state)).toBe(100);
+    run(state, 8); // 400 ms since capture: the 1.2× rate (416.7 ms) would not have produced either
     expect(state.towers['p']!.units).toBe(1);
-    run(state, 1); // 1000 ms
+    run(state, 1); // 450 ms: still nothing at the base 500 ms
+    expect(state.towers['p']!.units).toBe(1);
+    run(state, 1); // 500 ms
     expect(state.towers['p']!.units).toBe(2);
   });
 });

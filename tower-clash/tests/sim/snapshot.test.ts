@@ -206,21 +206,21 @@ describe('applyContinue', () => {
     expect(state.towers['e']!.units).toBe(13);
   });
 
-  it('reinforcements are capped at the tower capacity (including the player capacity modifier)', () => {
+  it('reinforcements are capped at the tower capacity (the player capacity modifier only at L3, AUD-B1)', () => {
     const base = createState(makeLevel({ towers: [{ id: 'p', x: 0, y: 0, owner: 'player', units: 20 }]}), 1);
     applyContinue(base, { freezeMs: 5000, infantry: 15 });
     expect(base.towers['p']!.units).toBe(25);
 
-    const boosted = createState(makeLevel({ towers: [{ id: 'p', x: 0, y: 0, owner: 'player', units: 20 }]}), 1, {
-      productionMul: 1,
-      capacityMul: 1.25,
-      startGarrisonBonus: 0,
-      unitSpeedMul: 1,
-    });
+    const mods = { productionMul: 1, capacityMul: 1.25, startGarrisonBonus: 0, unitSpeedMul: 1 };
+    const boostedL1 = createState(makeLevel({ towers: [{ id: 'p', x: 0, y: 0, owner: 'player', units: 20 }]}), 1, mods);
+    applyContinue(boostedL1, { freezeMs: 5000, infantry: 15 });
+    expect(boostedL1.towers['p']!.units).toBe(25); // the L1 threshold is never scaled
+
+    const boosted = createState(makeLevel({ towers: [{ id: 'p', x: 0, y: 0, owner: 'player', units: 100, level: 3 }]}), 1, mods);
     applyContinue(boosted, { freezeMs: 5000, infantry: 15 });
-    expect(boosted.towers['p']!.units).toBe(31); // floor(25 × 1.25)
+    expect(boosted.towers['p']!.units).toBe(115);
     applyContinue(boosted, { freezeMs: 5000, infantry: 15 });
-    expect(boosted.towers['p']!.units).toBe(31);
+    expect(boosted.towers['p']!.units).toBe(125); // floor(100 × 1.25)
   });
 
   it('on a tie the first player tower in level order is chosen', () => {
