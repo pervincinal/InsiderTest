@@ -420,6 +420,7 @@ Locally: create `tower-clash/.env.local` with the same `VITE_*` lines (`VITE_RC_
 - **Xcode SPM**: `npx cap sync` added `CapacitorCommunityAdmob` (pulls Google Mobile Ads 13.6.0 + UMP) and `RevenuecatPurchasesCapacitor` (purchases-hybrid-common 18.36.1) to `ios/App/CapApp-SPM/Package.swift`; the first macOS build resolves them from GitHub.
 - **Share card (MM-8)**: `@capacitor/share` 8.0.3 and `@capacitor/filesystem` 8.1.4 (exact pins). When the player taps *Share* inside the app, `src/native/share.ts` writes the result-card PNG into the app's private **cache** folder (one file, `tower-clash-share.png`, overwritten each time) and opens the phone's normal share sheet with the picture and the text; if the picture cannot be saved it shares the text alone, and closing the sheet just returns to the game. Nothing is uploaded and the app makes no network call — the image leaves the phone only through the app the player picks. Both plugins are loaded only inside the native app (dynamic `import()`), so the web/PWA download is unchanged. No new permission or Info.plist key: iOS needs none for the share sheet, and on Android the plugin hands the file out through the app's own `FileProvider` (`${applicationId}.fileprovider` in `AndroidManifest.xml`, `<cache-path>` in `res/xml/file_paths.xml`, both from the Capacitor template and already committed — the plugin does **not** ship its own provider, so do not delete them). `npx cap update android ios` (runs on Linux, no build needed) added `:capacitor-share` / `:capacitor-filesystem` to `android/capacitor.settings.gradle` + `android/app/capacitor.build.gradle` and `CapacitorShare` / `CapacitorFilesystem` to `ios/App/CapApp-SPM/Package.swift`; the first builds additionally download `io.ionic.libs:ionfilesystem-android` (Maven Central) and `ion-ios-filesystem` (GitHub, SPM). Info.plist: `NSPhotoLibraryAddUsageDescription` is required because the share sheet offers "Save Image" (added 2026-10-08, PUB-16 finding); the app never reads the library.
 - **Rating prompt (MM-9, §8.8)**: `@capacitor-community/in-app-review` 8.0.0 (exact pin). `npx cap update android ios` added `:capacitor-community-in-app-review` to `android/capacitor.settings.gradle` + `android/app/capacitor.build.gradle` and `CapacitorCommunityInAppReview` to `ios/App/CapApp-SPM/Package.swift`; the first Android build downloads `com.google.android.play:review:2.0.2` (Google Maven). Java 21 like AdMob; no manifest, permission or Info.plist change.
+- **Save mirror (AUD-Q4, §8.9)**: `@capacitor/preferences` 8.0.1 (exact pin). `npm run cap:sync` added `:capacitor-preferences` to `android/capacitor.settings.gradle` + `android/app/capacitor.build.gradle` and `CapacitorPreferences` to `ios/App/CapApp-SPM/Package.swift` — nothing else under `android/` / `ios/` changed. No permission, no manifest or Info.plist key; the iOS privacy manifest already declares UserDefaults (`CA92.1`, same-app data), which is what the plugin uses.
 
 ### 8.5 How test purchases and test ads work
 
@@ -476,6 +477,43 @@ Reverting to option B (personalised ads on iOS) would need: the ATT call back in
 - **Apple:** the system shows the sheet **at most 3 times in 365 days** per app and may decide not to show it at all; the app is not told. Players can switch all such prompts off (Settings → App Store → *In-App Ratings & Reviews*). In **TestFlight builds the sheet never appears**; in builds run from Xcode it always appears but cannot be submitted.
 - **Google:** Play enforces a **time-bound quota** per user (Google does not publish the number) and never shows the sheet again to someone who already rated; the app is not told whether it appeared. It only works for an app **installed from Google Play** — a debug APK copied to the phone shows nothing. To test: upload to *Internal app sharing* or the *internal testing* track and install from there.
 - Because we ask only once per install, the store quotas are never the limiting factor; a failed request (plugin error) is not counted, so the next qualifying win tries again.
+
+### 8.9 Save mirror (AUD-Q4) — a second copy of the progress inside the app
+
+**Qısaca (AZ):** tətbiqdə irəliləyiş (ulduzlar, qızıl, kristal, alınmış şeylər, ayarlar) indi iki yerdə saxlanır: oyunun öz yaddaşında (WebView) və telefonun tətbiq ayarlarında (iPhone: `UserDefaults`, Android: `SharedPreferences`). Hər dəyişiklikdən ən gec 0,25 saniyə sonra, tətbiq arxa plana keçəndə isə dərhal ikinci nüsxə də yazılır. Açılışda oyunun yaddaşı boşdursa və ya pozulubsa, oyun irəliləyişi ikinci nüsxədən geri qaytarır. Veb / PWA versiyasında ikinci nüsxə yoxdur. Yoxlama: TestFlight planında TF-00 və TF-17b.
+
+**What is stored where.** The whole save is one JSON text (`towerclash.save.v3`, `src/ui/save.ts`: stars, gold, crystals, purchases and entitlements, upgrades, skins, streaks, achievements, settings — about 2 kB for a full player).
+
+| Copy | Where on the phone | Written |
+|---|---|---|
+| WebView copy (the one the game reads) | the WebView's `localStorage` of the app (iOS: WKWebView data under the app's `Library/`; Android: `app_webview/` in the app's data folder) | at once, on every change |
+| Native copy (new, native app only) | `@capacitor/preferences` — iOS `UserDefaults` of the app (`Library/Preferences/com.pervincinal.towerclash.plist`, key `CapacitorStorage.towerclash.save.v3`); Android `shared_prefs/CapacitorStorage.xml`, key `towerclash.save.v3` | the same text, at most **250 ms** after a change (one write for a burst of changes, newest wins) and **at once** when the app goes to the background or the app switcher |
+| Corrupt-save backup (frontend, AUD-Q2) | WebView `localStorage`, `towerclash.save.v3.bad.<time>` | when the game finds an unreadable WebView copy |
+
+**At launch** (before the title appears, `startSaveMirror()` in `src/native/index.ts`, awaited in `boot()` of `src/main.ts`; the code is `src/native/saveMirror.ts`, a separate download chunk with the plugin, so the web/PWA build never loads either):
+1. The WebView copy is readable → it is used. If the native copy is empty or unreadable (the first launch after the update that added the mirror) it is filled from the WebView copy.
+2. The WebView copy is missing or unreadable and the native copy is readable → the native copy is put back into the WebView (an unreadable WebView text is first kept under `towerclash.save.v3.bad.<time>`, never deleted) and the game loads it as usual. The player sees the title with their progress; no message.
+3. Neither is readable → a fresh game (or the old v1 / v2 save migration, or the frontend's corrupt-save notice).
+4. The plugin does not answer within 1.5 s → the game starts from the WebView copy; the mirror is switched off for that launch only if switching it on could overwrite a good native copy with an empty game.
+A save written by a newer version (read-only, AUD-Q3) is never mirrored over; "Reset progress" is mirrored, so a reset stays a reset.
+
+**What survives what** (expected; the "on device" column is what TF-00 / TF-17b and the open items below still have to confirm):
+
+| Event | WebView copy | Native copy | Result | On device |
+|---|---|---|---|---|
+| App update (TestFlight, App Store, Play) | kept | kept | progress kept | TF-00 |
+| Kill / swipe-away / crash right after a win | iOS may lose the last ~1 s (WebKit writes `localStorage` to disk later) | written ≤ 250 ms after the win and at once when the app switcher opens | kept if the WebView copy is *missing*; see the limit below | TF-17b |
+| OS removes the app's web data, or it becomes unreadable | lost | kept | restored at the next launch | — |
+| iOS *Offload App* (Settings → General → iPhone Storage) | kept | kept | kept | — |
+| Android *Clear cache* | kept | kept | kept | — |
+| Android *Clear storage* / iOS *Delete App* / uninstall | deleted | deleted | progress lost (as the About card says); store purchases come back with *Restore purchases* | — |
+| Reinstall on Android with Google backup on | probably restored (`allowBackup="true"`, Auto Backup) | restored (`shared_prefs` are in Auto Backup by default) | progress back if a backup ran (Android backs up about once a day on Wi-Fi while charging) | not tested |
+| New iPhone / restore from iCloud or computer backup | probably restored | restored (`UserDefaults` is part of the app backup) | progress back | not tested |
+| Web / PWA | the only copy | none | unchanged | — |
+
+**Known limit.** The native copy is used only when the WebView copy is missing or unreadable. If iOS kept an *older but readable* WebView copy (the kill landed between the two writes), that older copy is used and the next change overwrites the native one — the win is lost exactly as before. Choosing the newer of two readable copies needs a write counter inside the save (`writeSeq`, the audit's suggestion; a `src/ui/save.ts` change for the Frontend Engineer). TF-17b tells whether this happens on the stakeholder's phone.
+
+**Checking it by hand (team):** Android — `adb shell run-as com.pervincinal.towerclash cat shared_prefs/CapacitorStorage.xml` on a debug APK shows the native copy. iOS simulator — `xcrun simctl get_app_container booted com.pervincinal.towerclash data`, then `plutil -p Library/Preferences/com.pervincinal.towerclash.plist`. Tests: `tests/native/saveMirror.test.ts` (fake Preferences).
 
 ## 7. Open items
 
