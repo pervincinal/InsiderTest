@@ -24,7 +24,7 @@ import {
   streamChipRect,
 } from '../../src/render/worldChips';
 import type { BadgeWant } from '../../src/render/worldChips';
-import { LESSON_CARD_MS, lessonCardLayout } from '../../src/render/hud';
+import { lessonCardLayout } from '../../src/render/hud';
 import type { PlayUi } from '../../src/render/draw';
 import { ParticleSystem } from '../../src/render/particles';
 import { DEFAULT_PALETTE } from '../../src/render/palette';
@@ -226,7 +226,7 @@ describe('badges below the lesson card (ART-22)', () => {
     ({ outcome, level: makeLevel({ lesson: 'Everything together: hold your own walls, take the guns from the flank, then break the citadel with every stream you have' }) }) as unknown as PlayUi;
   const at = (time: number): GameState => ({ time }) as GameState;
 
-  it('the card is up for the first LESSON_CARD_MS of a running level, under the top band', () => {
+  it('the card is up until the first input (AUD-B11: no time-out), under the top band', () => {
     const ctx = fakeCtx();
     const card = lessonCardLayout(ctx, at(0), ui());
     expect(card).not.toBeNull();
@@ -234,8 +234,12 @@ describe('badges below the lesson card (ART-22)', () => {
     expect(card!.rect.y).toBeGreaterThan(HUD.mapTop);
     expect(card!.lines.length).toBeGreaterThanOrEqual(2);
     expect(card!.rect.h).toBe(card!.lines.length * card!.lineH + 18 + card!.captionH);
-    expect(lessonCardLayout(ctx, at(LESSON_CARD_MS - 50), ui())).not.toBeNull();
-    expect(lessonCardLayout(ctx, at(LESSON_CARD_MS), ui())).toBeNull();
+    const held = { ...ui(), cardUp: true } as PlayUi;
+    expect(lessonCardLayout(ctx, at(0), held)).not.toBeNull(); // held: no time-out any more
+    expect(lessonCardLayout(ctx, at(1000), ui())).toBeNull(); // a frame that does not say: up only at sim time 0
+    const gone = { ...ui(), cardUp: false, cardFade: 0 } as PlayUi;
+    expect(lessonCardLayout(ctx, at(0), gone)).toBeNull();
+    expect(lessonCardLayout(ctx, at(0), { ...gone, cardFade: 0.5 } as PlayUi)).not.toBeNull(); // fading
     expect(lessonCardLayout(ctx, at(0), ui('won'))).toBeNull();
   });
 
@@ -255,7 +259,7 @@ describe('badges below the lesson card (ART-22)', () => {
 
   it('on 9:16 a far tower (level 15 citadel) whose badge sat under the card is drawn below it', () => {
     const cam = playCamera();
-    const card = lessonCardLayout(fakeCtx(), at(1000), ui())!;
+    const card = lessonCardLayout(fakeCtx(), at(0), ui())!;
     const cardBottom = card.rect.y + card.rect.h; // 9:16: hudAnchors().top = 0
     const p = proj(cam, 360, 230);
     const bs = badgeScale(p.s);
@@ -274,7 +278,7 @@ describe('a badge that would be clamped onto its own tower goes below it (ART-24
   const foe = { x: 360, y: 150 };
   const west = { x: 255, y: 1040 };
   const lesson = 'Neutral towers are free production: grab both before you fight';
-  const card = lessonCardLayout(fakeCtx(), { time: 1000 } as GameState, { outcome: 'playing', level: makeLevel({ lesson }) } as unknown as PlayUi)!;
+  const card = lessonCardLayout(fakeCtx(), { time: 0 } as GameState, { outcome: 'playing', level: makeLevel({ lesson }) } as unknown as PlayUi)!;
   // the two phone shapes (view.ts resize): 430 × 932 with 59 / 34 insets, 360 × 640 with none
   const shapes = [
     { name: '430x932', cssW: 430, cssH: 932, insets: { top: 59, right: 0, bottom: 34, left: 0 } },

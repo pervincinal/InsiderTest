@@ -6,7 +6,8 @@
  * before the chunk is in is skipped, never queued: a late click would be worse than none.
  * Every sound is ≤ 400 ms except `won`/`lost`. Nothing here touches the DOM.
  */
-import type { CaptureKind, SfxName, SfxOptions } from './sfx';
+import type { Owner, SimEvent } from '../sim/types';
+import type { CaptureKind, HitState, SfxName, SfxOptions } from './sfx';
 import { sendPitchHz } from './sfx';
 import type { AudioBufferLike, AudioContextLike, BlipOptions, GainNodeLike, NoiseOptions, Synth } from './synth';
 
@@ -14,6 +15,40 @@ const ATTACK_S = 0.004;
 const NOISE_BUFFER_S = 1;
 /** Envelope floor for exponential ramps (0 is not allowed). */
 const FLOOR = 0.0001;
+
+/** AUD-F1: one tower knocks (and taps the phone) at most once per HIT_TOWER_MS… */
+export const HIT_TOWER_MS = 250;
+/** …and all towers together at most once per HIT_GAP_MS: ≤ 6 in any second (0, 170, … 850 ms; the 7th at 1020). */
+export const HIT_GAP_MS = 170;
+
+/**
+ * AUD-F1: being attacked. For every foe's landing on a tower `me` still owns after the tick, and every
+ * capture that takes one of `me`'s towers (its last landing flipped it, so that landing no longer reads as
+ * "on `me`"), call `fire(weight)` — unless the same tower fired within HIT_TOWER_MS or any tower within
+ * HIT_GAP_MS (wall clock `nowMs`; a refused hit is not recorded, so the next landing gets the slot).
+ */
+export function playHits(
+  events: readonly SimEvent[],
+  me: Owner,
+  towers: Readonly<Record<string, { owner: Owner }>>,
+  st: HitState,
+  nowMs: number,
+  fire: (weight: number) => void,
+): void {
+  for (const ev of events) {
+    let id: string | null = null;
+    let weight = 1;
+    // (a landing of `me`'s own unit that flips a tower also leaves it `me`'s: that is a capture, not a hit)
+    if (ev.type === 'landed' && ev.hostile && ev.owner !== me && towers[ev.towerId]?.owner === me) {
+      id = ev.towerId;
+      weight = ev.weight;
+    } else if (ev.type === 'capture' && ev.from === me) id = ev.towerId;
+    if (id === null || nowMs - st.last < HIT_GAP_MS || nowMs - (st.at.get(id) ?? -Infinity) < HIT_TOWER_MS) continue;
+    st.last = nowMs;
+    st.at.set(id, nowMs);
+    fire(weight);
+  }
+}
 
 /** Schedule the voices of `name` on `s` (the caller has checked the context, mute and rate limit). */
 export function playRecipe(s: Synth, name: SfxName, opts: SfxOptions): void {
@@ -67,6 +102,23 @@ export function playRecipe(s: Synth, name: SfxName, opts: SfxOptions): void {
       // (capture 'gain' is a fifth on triangles an octave up; send/button are single clicks).
       blip(s, 392, 150, 'sine', { gain: 0.18 });
       blip(s, 523.3, 210, 'sine', { gain: 0.18, delayS: 0.16 });
+      return;
+    case 'hit': {
+      // AUD-F1: a short wooden knock on the gate — a falling triangle above the phone-speaker floor plus
+      // a band-passed noise crack. Higher, shorter and brighter than `refuse` (200 → 70 Hz, 110 ms, low-
+      // passed knock) so "they hit me" never reads as "you can't do that"; a tank (weight > 1) knocks a
+      // fifth lower and longer.
+      const k = (opts.weight ?? 1) > 1 ? 0.67 : 1;
+      sweep(s, 320 * k, 150 * k, 70 / k, 'triangle', { gain: 0.22 });
+      noiseBurst(s, 30, 2200 * k, { gain: 0.14, filter: 'bandpass' });
+      return;
+    }
+    case 'mine':
+      // AUD-F2: the trigger's metal click, then a boom (a falling triangle: harmonics a phone speaker can
+      // play, unlike artillery's sub-bass sine) and a bright debris rush (wider than the 70 ms clash crackle)
+      blip(s, 2400, 16, 'square', { gain: 0.05 });
+      sweep(s, 240, 48, 320, 'triangle', { gain: 0.4, delayS: 0.02 });
+      noiseBurst(s, 220, 1500, { gain: 0.26, delayS: 0.02 });
       return;
   }
 }

@@ -3,7 +3,7 @@ import type { Palette, Tones } from './palette';
 import { BADGE_LIP, rimOf, shade } from './palette';
 import { TANK_RADIUS, UNIT_OUTLINE_PX } from './layout';
 import { C } from '../sim/constants';
-import { font, roundRect } from './widgets';
+import { roundRect, worldFont, worldScale } from './widgets';
 import { SHADOW_DX, SHADOW_DY } from './terrain';
 import { chunkBackoff, loadChunk } from '../lazyChunk';
 import type { Parts, SpriteBox } from './spriteCache';
@@ -1208,12 +1208,13 @@ export function drawSwordsPip(ctx: CanvasRenderingContext2D, x: number, y: numbe
 /**
  * Size of the pill `drawBadge` draws for `text` at `scale` (leaves the badge font set on `ctx`):
  * under fire it widens to the left for the crossed-swords pip; the number keeps its size. The chip
- * layout (worldChips.ts) measures badges with this so its rects are the drawn ones.
+ * layout (worldChips.ts) measures badges with this so its rects are the drawn ones. AUD-U2: the
+ * numerals follow the Settings text size up to WORLD_TEXT_MAX, and the pill grows with them (36 tall at 100 %).
  */
 export function badgeSize(ctx: CanvasRenderingContext2D, text: string, scale = 1, underFire = false): { w: number; h: number } {
-  ctx.font = font(26, '900');
+  ctx.font = worldFont(26);
   const pipW = underFire ? 20 * scale : 0;
-  return { w: Math.max(50, ctx.measureText(text).width + 24) * scale + pipW, h: 36 * scale };
+  return { w: Math.max(50, ctx.measureText(text).width + 24) * scale + pipW, h: (10 + 26 * worldScale()) * scale };
 }
 
 /**
@@ -1270,7 +1271,7 @@ export function drawBadge(ctx: CanvasRenderingContext2D, pal: Palette, x: number
     ctx.globalAlpha = 1;
   }
   ctx.fillStyle = pal.ink;
-  ctx.font = font(px * s, '900');
+  ctx.font = worldFont(px * s);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, x, y + 1);

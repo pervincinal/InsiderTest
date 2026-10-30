@@ -1,9 +1,11 @@
-import type { GameState, Owner, SimEvent, Tower } from '../sim/types';
+import type { GameState, Mine, Owner, SimEvent, Tower } from '../sim/types';
 import { C } from '../sim/constants';
 import type { Palette, Tones } from './palette';
 import { DEFAULT_PALETTE, shade } from './palette';
 import { towerTop } from './sprites';
+import type { Camera } from './camera';
 import { playCamera, proj, projAngle, unproj } from './camera';
+import type { PlacedChip } from './worldChips';
 import { artilleryMuzzle } from './sprites';
 import { reducedMotionOverride } from '../ui/motion';
 import { chunkBackoff, loadChunk } from '../lazyChunk';
@@ -113,23 +115,37 @@ function backOut(t: number): number {
   return 1 + (c1 + 1) * u * u * u + c1 * u * u;
 }
 
-/** Spawner surface of `ParticleSystem` that the economy bursts use. */
+/** Spawner surface of `ParticleSystem` that the lazy bursts (src/render/particlesEconomy.ts) use. */
 export interface BurstHost {
+  readonly reducedMotion: boolean;
+  /** The world shake's start (wall clock) and peak px (`shake`). */
+  shakeAt: number;
+  shakeAmp: number;
+  /** AUD-F2 reduced motion: wall clock of the last blast per mine (index into `state.mines`). */
+  readonly marks: Map<number, number>;
   rnd(): number;
   make(kind: Kind, x: number, y: number, color: string, life: number, size: number): Particle;
   push(p: Particle): void;
+  takeLandToken(nowMs: number): boolean;
+  kick(x: number, y: number, colors: readonly string[], size: number, k: number): void;
+  death(x: number, y: number, light?: string, dark?: string): void;
 }
 
 /**
- * Purchase / reward bursts (`coin`, `gem`) live in src/render/particlesEconomy.ts, a lazy chunk: the
- * first frame a system draws warms it, `coinBurst` / `crystalBurst` spawn through it (on landing, in
- * the rare case it is not in yet), and `draw` paints those two kinds through it.
+ * Purchase / reward bursts (`coin`, `gem`) and the AUD-F2 mine blast live in src/render/particlesEconomy.ts,
+ * a lazy chunk: the first frame a system draws warms it, `coinBurst` / `crystalBurst` spawn through it
+ * (on landing, in the rare case it is not in yet), `draw` paints those two kinds through it, and a mine
+ * kill bursts / marks through it (a grey death puff until it is in).
  */
 export interface EconomyBursts {
   coin(host: BurstHost, x: number, y: number, n: number, pal: Palette): void;
   crystal(host: BurstHost, x: number, y: number, n: number, pal: Palette): void;
   /** Paint one `coin` / `gem` particle (`t` = age fraction, `fade` = 1 − t). */
   draw(ctx: CanvasRenderingContext2D, p: Particle, t: number, fade: number): void;
+  /** AUD-F2: a unit (`own`: the player's) killed by a mine at (x, y) — the blast at the nearest mine of `state` (false: no mine, nothing done). */
+  mine(host: BurstHost, state: GameState, x: number, y: number, own: boolean, pal: Palette, nowMs: number): boolean;
+  /** AUD-F2 reduced motion: outline the chips of the mines in `host.marks` (`ParticleSystem.drawMineMarks`). */
+  marks(host: BurstHost, ctx: CanvasRenderingContext2D, pal: Palette, mines: readonly Mine[], chips: readonly PlacedChip[], nowMs: number, cam: Camera): void;
 }
 
 const ECONOMY_CHUNK = 'particlesEconomy';
@@ -163,8 +179,10 @@ export class ParticleSystem implements BurstHost {
   private readonly fire = new Map<string, { until: number; hitAt: number; ringAt: number }>();
   /** ART-23: last friendly landing burst per tower; the shared landing-burst bucket (`takeLandToken`). */
   private readonly friendAt = new Map<string, number>();
+  readonly marks = new Map<number, number>();
   private landAt = -Infinity;
-  private shakeAt = -Infinity;
+  shakeAt = -Infinity;
+  shakeAmp = SHAKE_PX;
   private lastMs = 0;
   private salt = 1;
   private warmed = false;
@@ -257,11 +275,11 @@ export class ParticleSystem implements BurstHost {
     return this.aims.get(towerId);
   }
 
-  /** Short decaying screen shake after the player captures a tower (≤ SHAKE_PX, world only). */
+  /** Short decaying screen shake after the player captures a tower (SHAKE_PX) or loses a unit to a mine (2 px, AUD-F2); world only. */
   shake(nowMs: number): { dx: number; dy: number } {
     const t = (nowMs - this.shakeAt) / SHAKE_MS;
     if (t < 0 || t >= 1) return { dx: 0, dy: 0 };
-    const a = SHAKE_PX * (1 - t) * (1 - t);
+    const a = this.shakeAmp * (1 - t) * (1 - t);
     const w = t * Math.PI * 2 * SHAKE_CYCLES;
     return { dx: Math.sin(w) * a, dy: Math.cos(w * 0.8) * a * 0.5 };
   }
@@ -277,7 +295,10 @@ export class ParticleSystem implements BurstHost {
   capture(x: number, y: number, color: string, towerId?: string, from: Owner = 'neutral', nowMs = 0, shake = false, tones?: Tones): void {
     if (this.reducedMotion) return;
     if (towerId) this.captures.set(towerId, { at: nowMs, from });
-    if (shake) this.shakeAt = nowMs;
+    if (shake) {
+      this.shakeAt = nowMs;
+      this.shakeAmp = SHAKE_PX;
+    }
     const lit = tones?.lit ?? shade(color, 0.35);
     const dark = tones?.shade ?? shade(color, -0.25);
     this.push(this.make('ring', x, y, color, 520, 30));
@@ -340,7 +361,7 @@ export class ParticleSystem implements BurstHost {
   }
 
   /** Sparks kicked up off a plinth, one per colour in `colors`; `k` scales their size / speed / life. */
-  private kick(x: number, y: number, colors: readonly string[], size: number, k: number): void {
+  kick(x: number, y: number, colors: readonly string[], size: number, k: number): void {
     for (const c of colors) {
       const p = this.make('spark', x + (this.rnd() - 0.5) * 16 * k, y - 3, c, (200 + this.rnd() * 100) * (0.5 + k * 0.5), size);
       p.vx = (this.rnd() - 0.5) * 170 * k;
@@ -366,14 +387,20 @@ export class ParticleSystem implements BurstHost {
   }
 
 
-  death(x: number, y: number): void {
+  /** Three puffs where a unit died: pale grey (clash, artillery) or, for a mine, soot in `light` / `dark`. */
+  death(x: number, y: number, light = '#eef1f5', dark = '#c9d1dc'): void {
     if (this.reducedMotion) return;
     for (let i = 0; i < 3; i++) {
-      const p = this.make('puff', x + (this.rnd() - 0.5) * 8, y - 4, i === 1 ? '#eef1f5' : '#c9d1dc', 320 + this.rnd() * 160, 4 + this.rnd() * 3);
+      const p = this.make('puff', x + (this.rnd() - 0.5) * 8, y - 4, i === 1 ? light : dark, 320 + this.rnd() * 160, 4 + this.rnd() * 3);
       p.vx = (this.rnd() - 0.5) * 30;
       p.vy = -25 - this.rnd() * 25;
       this.push(p);
     }
+  }
+
+  /** AUD-F2 reduced motion: the just-blasted mines' chips outlined (lazy chunk); call after the chips are drawn (draw.ts `drawWorld`). */
+  drawMineMarks(ctx: CanvasRenderingContext2D, pal: Palette, mines: readonly Mine[], chips: readonly PlacedChip[], nowMs: number, cam: Camera): void {
+    if (this.marks.size) economy?.marks(this, ctx, pal, mines, chips, nowMs, cam);
   }
 
   /**
@@ -474,11 +501,14 @@ export class ParticleSystem implements BurstHost {
     else if (!chunkBackoff(ECONOMY_CHUNK)) void loadEconomyBursts().then(spawn).catch(() => undefined);
   }
 
-  /** Victory: confetti rains from the top of the map in the player colours and gold. */
+  /**
+   * Victory: confetti rains down the top of the screen in the player colours and gold. AUD-F4: the band
+   * starts on screen (y 0…300) so the 600 ms result beat shows it, not 1–2 of 90 pieces.
+   */
   victory(colors: readonly string[]): void {
     if (this.reducedMotion) return;
     for (let i = 0; i < 90; i++) {
-      const p = this.make('confetti', this.rnd() * C.MAP_W, -20 - this.rnd() * 300, colors[i % colors.length]!, 2600 + this.rnd() * 1400, 5 + this.rnd() * 5);
+      const p = this.make('confetti', this.rnd() * C.MAP_W, this.rnd() * 300, colors[i % colors.length]!, 2600 + this.rnd() * 1400, 5 + this.rnd() * 5);
       p.vx = (this.rnd() - 0.5) * 60;
       p.vy = 90 + this.rnd() * 120;
       p.gravity = 40;
@@ -511,6 +541,8 @@ export class ParticleSystem implements BurstHost {
           break;
         }
         case 'unitDied': {
+          // AUD-F2: a mine kill bursts at its mine (lazy chunk; the grey puff until it is in)
+          if (ev.cause === 'mine' && economy?.mine(this, state, ev.x, ev.y, ev.owner === 'player', pal, nowMs)) break;
           this.death(ev.x, ev.y);
           if (ev.cause === 'artillery') {
             const gun = nearestGun(state, ev.x, ev.y, ev.owner);
@@ -545,7 +577,8 @@ export class ParticleSystem implements BurstHost {
 
   /** Step by wall-clock time and paint. Expects the logical transform to be active. */
   draw(ctx: CanvasRenderingContext2D, nowMs: number, project?: ParticleProjection): void {
-    if (!this.warmed && !this.reducedMotion) {
+    if (!this.warmed) {
+      // reduced motion too: the AUD-F2 mine marks are drawn through the chunk
       this.warmed = true;
       warmEconomyBursts();
     }

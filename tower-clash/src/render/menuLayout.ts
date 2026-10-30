@@ -69,7 +69,7 @@ export const staysPut = (): number => 0;
 export const SETTINGS = Object.freeze({
   headerH: 100,
   back: { x: 18, y: 20, w: 140, h: 60 } as Rect,
-  card: { x: 50, y: 150, w: 620, h: 844 } as Rect,
+  card: { x: 50, y: 150, w: 620, h: 934 } as Rect,
   rowH: 96,
   labelX: 86,
   /** Row controls, top to bottom. */
@@ -95,16 +95,25 @@ export const SETTINGS = Object.freeze({
    */
   tonesLabelY: 736,
   tones: { x: 86, y: 786, w: 548, h: 56 } as Rect,
+  /**
+   * "Text size" row (AUD-U2): label left, a 100 / 125 / 150 % segmented control right (three segments
+   * ≥ 88 wide, AUD-U1), under a hairline at `textSizeSepY`. It goes under the team colours, so every
+   * rect above keeps its place; the summary, RESET and the About card moved down 90 (worst case, About
+   * with support id + privacy options, ends at 1350: the screen scrolls when it is taller than the
+   * screen, settings.ts).
+   */
+  textSizeSepY: 856,
+  textSize: { x: 356, y: 874, w: 274, h: 56 } as Rect,
   /** Centre line of the stars / coins summary above RESET. */
-  summaryY: 876,
-  reset: { x: 160, y: 906, w: 400, h: 64 } as Rect,
+  summaryY: 966,
+  reset: { x: 160, y: 996, w: 400, h: 64 } as Rect,
   confirm: {
     card: { x: 90, y: 470, w: 540, h: 320 } as Rect,
     yes: { x: 130, y: 676, w: 210, h: 72 } as Rect,
     no: { x: 380, y: 676, w: 210, h: 72 } as Rect,
   },
   /** About card under the settings card: version, support id (copy), privacy options (native). */
-  about: { x: 50, y: 1012, w: 620 },
+  about: { x: 50, y: 1102, w: 620 },
   aboutRowH: 62,
 });
 

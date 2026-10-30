@@ -24,7 +24,7 @@ import {
 import type { SfxName } from '../../src/audio/index';
 import { FakeAudioContext } from './fakeAudio';
 
-const ALL: SfxName[] = ['send', 'arrive', 'capture', 'upgrade', 'unitDied', 'artillery', 'won', 'lost', 'button', 'refuse', 'stalemate'];
+const ALL: SfxName[] = ['send', 'arrive', 'capture', 'upgrade', 'unitDied', 'artillery', 'won', 'lost', 'button', 'refuse', 'stalemate', 'hit', 'mine'];
 
 let ctx: FakeAudioContext;
 let save: SaveData;
@@ -226,7 +226,7 @@ describe('event → sfx mapping', () => {
       'upgrade',
       'artillery',
       'unitDied',
-      'unitDied',
+      'mine', // AUD-F2: no longer the clash crackle
       'won',
       'lost',
     ]);

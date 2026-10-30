@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Rect } from '../../src/render/widgets';
-import { FONT_RU } from '../../src/render/widgets';
+import type { TextScale } from '../../src/render/widgets';
+import { FONT_RU, TEXT_SCALES, setTextScale } from '../../src/render/widgets';
 import { FLAT, playCamera, proj, setTilt } from '../../src/render/camera';
 import type { Camera } from '../../src/render/camera';
 import { HUD, TOWER_HIT_RADIUS, WORLD_ZOOM } from '../../src/render/layout';
@@ -197,9 +198,15 @@ interface Finding {
 const LEVELS = await loadAllLevels();
 const LANGS: readonly Language[] = ['en', 'az', 'ru', 'tr'];
 
-/** Everything measured, failing or not (margins: the closest call of each check per screen). */
-function survey(cam: Camera): Finding[] {
+/**
+ * Everything measured, failing or not (margins: the closest call of each check per screen), at text
+ * size `k` (AUD-U2: the badge numerals and their pills, the stream / mine chips and the lesson card grow
+ * with it; the guard runs at 100 % and 150 %).
+ */
+function survey(cam: Camera, k: TextScale = 1): Finding[] {
   const out: Finding[] = [];
+  setTextScale(k);
+  const tag = k === 1 ? '' : ` ${k * 100}%`;
   for (const level of LEVELS) {
     const state = createState(level, 1);
     for (const shape of SHAPES) {
@@ -207,7 +214,7 @@ function survey(cam: Camera): Finding[] {
       // BUG-56: nothing selected, or a home (every own tower at the start: level 8 has two), card up / gone, every language
       const sels = [null, ...Object.values(state.towers).filter((t) => t.owner === 'player').map((t) => t.id)];
       const moments: { when: string; time: number; lang: Language; sel: string | null }[] = [];
-      for (const sel of sels) for (const time of [0, 10_000]) for (const lang of LANGS) moments.push({ when: `t=${time / 1000}${time ? 's' : ''} ${lang}${sel ? ` sel=${sel}` : ''}`, time, lang, sel });
+      for (const sel of sels) for (const time of [0, 10_000]) for (const lang of LANGS) moments.push({ when: `t=${time / 1000}${time ? 's' : ''} ${lang}${sel ? ` sel=${sel}` : ''}${tag}`, time, lang, sel });
       for (const m of moments) {
         void setLanguage(m.lang);
         const L = layout({ ...state, time: m.time }, level, a, cam, m.sel);
@@ -242,6 +249,7 @@ function survey(cam: Camera): Finding[] {
     }
   }
   void setLanguage('en');
+  setTextScale(1);
   return out;
 }
 
@@ -286,7 +294,7 @@ describe('QA-24: badges, chips and tap targets after the ART-24 zoom, every leve
     lang = currentLanguage();
     setTilt(undefined);
     expect(playCamera()).toBe(FLAT); // the default camera is the flat map (TILT_DEFAULT = 1)
-    rows = survey(playCamera());
+    rows = TEXT_SCALES.flatMap((k) => survey(playCamera(), k));
   });
   afterAll(() => void setLanguage(lang));
 
@@ -295,7 +303,7 @@ describe('QA-24: badges, chips and tap targets after the ART-24 zoom, every leve
     expect(new Set(rows.map((r) => r.level)).size).toBe(50);
     expect(new Set(rows.map((r) => r.screen))).toEqual(new Set(SHAPES.map((s) => s.name)));
     const whens = new Set(rows.map((r) => r.when));
-    for (const w of ['t=0 tr', 't=10s ru', 't=0 az sel=home', 't=10s tr sel=home', 't=0 en sel=homeW', 't=10s ru sel=homeE']) expect(whens.has(w), w).toBe(true);
+    for (const w of ['t=0 tr', 't=10s ru', 't=0 az sel=home', 't=10s tr sel=home', 't=0 en sel=homeW', 't=10s ru sel=homeE', 't=0 tr 150%', 't=10s az sel=home 150%']) expect(whens.has(w), w).toBe(true);
   });
 
   for (const check of ['badge/badge', 'chip/other', 'badge in band', 'badge in map x', 'badge/card', 'chip in band', 'chip in map x', 'chip/card'] as const) {

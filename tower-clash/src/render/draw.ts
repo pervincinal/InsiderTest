@@ -8,9 +8,9 @@ import type { HudAnchors, View } from './view';
 import { applyDeviceTransform, applyTransform, bleed, bleedRect, hudAnchors } from './view';
 import { HUD, SOLDIER_DRAW_SCALE, SWIPE_TRAIL_MS, TANK_DRAW_SCALE, WORLD_ZOOM } from './layout';
 import type { Rect } from './widgets';
-import { font, roundRect } from './widgets';
+import { font, roundRect, textPx } from './widgets';
 type XY = { x: number; y: number };
-import { SELECT_HINT, drawHud, drawOverlays, lessonCardLayout, selectHintCover, selectHintObstacles, selectHintScan, selectHintScore, selectHintShown, selectHintSpots, selectHintTextW } from './hud';
+import { SELECT_HINT, drawHud, drawOverlays, lessonCardLayout, selectHintBox, selectHintCover, selectHintPart, selectHintObstacles, selectHintScan, selectHintScore, selectHintShown, selectHintSpots, selectHintTutorialRoom } from './hud';
 import type { BadgeWant, WorldLayout } from './worldChips';
 import { CARD_CLEAR, badgeScale, chipMinTop, drawWorldChips, layoutWorldChips, overlaps, placeBadges, setFrameWorldLayout, towerBodyRect, worldChipSpecs } from './worldChips';
 import { blankLayer, paintGround, paintHud } from './layers';
@@ -636,7 +636,7 @@ export function playLayout(ctx: CanvasRenderingContext2D, state: GameState, cam:
   const layout = worldLayout(ctx, state, cam, selectedId, card, streams);
   if (!selectedId || !hint) return { layout, hint: null, block: card, avoid: null };
   const keep = (L: WorldFrame, pill: Rect, block: Rect | null, avoid: Rect | null = null): PlayLayout => ({ layout: { ...L, hint: { id: selectedId, rect: pill } }, hint: pill, block, avoid });
-  const { low, top } = selectHintSpots(selectHintTextW(ctx), a, card);
+  const { low, top } = selectHintSpots(selectHintBox(ctx, selectHintPart(state, selectedId)), a, card);
   const obs = selectHintObstacles(state, selectedId, cam, layout);
   // (1) over the bottom band
   if (selectHintScore(low, obs) === 0) return keep(layout, low, card);
@@ -650,14 +650,14 @@ export function playLayout(ctx: CanvasRenderingContext2D, state: GameState, cam:
   const y0 = top.y - SELECT_HINT.gap + CARD_CLEAR;
   const room = focus ? tutorialRoom(layout, focus) : [];
   let crowded: PlayLayout | null = null;
-  for (const r of selectHintScan(low.w, y0, low.y, [...obs.fixed, ...obs.badges, ...obs.chips, ...room])) {
+  for (const r of selectHintScan(low.w, y0, low.y, [...obs.fixed, ...obs.badges, ...obs.chips, ...room], low.h)) {
     const score = selectHintScore(r, obs);
     if (score === 0 && selectHintCover(r, room) === 0) return keep(layout, r, card);
     if (score === 0) crowded ??= keep(layout, r, card);
     else if (score < best.score) best = { out: keep(layout, r, card), score };
   }
   let tries = 0;
-  for (const r of selectHintScan(low.w, y0, low.y, [...obs.fixed, ...room])) {
+  for (const r of selectHintScan(low.w, y0, low.y, [...obs.fixed, ...room], low.h)) {
     if (selectHintCover(r, obs.fixed) > 0 || obs.own.some((o) => overlaps(r, o))) continue;
     if (crowded && selectHintCover(r, room) > 0) continue;
     const L = worldLayout(ctx, state, cam, selectedId, card, streams, r);
@@ -680,8 +680,9 @@ function tutorialRoom(layout: WorldLayout, id: string): Rect[] {
   const body = layout.bodies.get(id);
   if (!body) return [];
   const badge = layout.badges.get(id)?.rect ?? body;
-  const y0 = Math.min(body.y, badge.y) - SELECT_HINT.tutorialRoom;
-  return [{ x: 0, y: y0, w: C.MAP_W, h: Math.max(body.y + body.h, badge.y + badge.h) + SELECT_HINT.tutorialRoom - y0 }];
+  const room = selectHintTutorialRoom();
+  const y0 = Math.min(body.y, badge.y) - room;
+  return [{ x: 0, y: y0, w: C.MAP_W, h: Math.max(body.y + body.h, badge.y + badge.h) + room - y0 }];
 }
 
 /** The world layout of a play frame (`worldLayout`). */
@@ -784,6 +785,7 @@ function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState
     });
   }
   drawWorldChips(ctx, pal, state, layout.chips);
+  fx?.drawMineMarks(ctx, pal, state.mines, layout.chips, nowMs, cam); // AUD-F2 reduced motion: the blasted mine's chip outlined
   const hintAt = ui.limitHint?.towerId ?? ui.selectedTowerId;
   if (hint && ui.limitHintText && hintAt) {
     const t = state.towers[hintAt];
@@ -862,7 +864,7 @@ function drawHintBubble(ctx: CanvasRenderingContext2D, pal: Palette, t: XY, badg
   const px = 22;
   ctx.font = font(px, '700');
   const w = Math.min(C.MAP_W - 24, ctx.measureText(text).width + 30);
-  const h = 42;
+  const h = Math.round(textPx(px)) + 20; // 42 at 100 % text size (AUD-U2)
   const below = badgeTop - 22 - h < HUD.mapTop + 6;
   const cy = below ? t.y + 34 + h / 2 : badgeTop - 30 - h / 2;
   const cx = Math.max(12 + w / 2, Math.min(C.MAP_W - 12 - w / 2, t.x));

@@ -20,7 +20,11 @@ export type SfxName =
   /** A refused tap: link limit, blocked lane or empty source (`PlayGestures.limitHint`, ART-9). */
   | 'refuse'
   /** The stalemate hint toast (`hint.stalemate`, ART-9). */
-  | 'stalemate';
+  | 'stalemate'
+  /** AUD-F1: a hostile landing on a player tower, or the player losing one (rate-limited per tower and globally, recipes.ts `playHits`). */
+  | 'hit'
+  /** AUD-F2: a unit killed by a mine (replaces the clash-death noise for that cause). */
+  | 'mine';
 
 /** `gain`: we captured it; `loss`: an enemy took ours; `other`: an enemy took neutral/another enemy's. */
 export type CaptureKind = 'gain' | 'loss' | 'other';
@@ -30,6 +34,8 @@ export interface SfxOptions {
   count?: number;
   /** `capture`: which side the capture is for. Default 'other'. */
   capture?: CaptureKind;
+  /** `hit`: the landing unit's weight (a tank, 5, knocks lower and longer). Default 1. */
+  weight?: number;
 }
 
 export interface SfxCall {
@@ -46,6 +52,7 @@ export const RATE_LIMIT_S: Readonly<Partial<Record<SfxName, number>>> = Object.f
   artillery: 0.1,
   send: 0.05,
   refuse: 0.12, // a tap-spam of refusals is one thud per tap, never a rumble
+  mine: 0.12, // a column walking over a mine is one blast per kill up to ≈ 8/s (`hit` is limited in recipes.ts `playHits`)
 });
 
 /** Tolerance for clock arithmetic so a gap of exactly the limit is accepted. */
@@ -63,8 +70,25 @@ export function sendPitchHz(count: number): number {
 /** Sound-effect recipes; loaded lazily (`loadSfxRecipes`). */
 export type SfxRecipe = (synth: Synth, name: SfxName, opts: SfxOptions) => void;
 
+/** AUD-F1 hit limiter state (the logic is recipes.ts `playHits`, lazy): wall-clock ms of the last hit per tower and of the last one overall. */
+export interface HitState {
+  at: Map<string, number>;
+  last: number;
+}
+
+/** recipes.ts `playHits`: `fire(weight)` for each hostile landing on, or loss of, a `me` tower that the limits in `st` let through. */
+export type HitsFn = (
+  events: readonly SimEvent[],
+  me: Owner,
+  towers: Readonly<Record<string, { owner: Owner }>>,
+  st: HitState,
+  nowMs: number,
+  fire: (weight: number) => void,
+) => void;
+
 const RECIPES_CHUNK = 'sfxRecipes';
 let recipe: SfxRecipe | null = null;
+let hits: HitsFn | null = null;
 let recipePromise: Promise<SfxRecipe> | null = null;
 
 /**
@@ -73,7 +97,7 @@ let recipePromise: Promise<SfxRecipe> | null = null;
  */
 export function loadSfxRecipes(): Promise<SfxRecipe> {
   recipePromise ??= loadChunk(RECIPES_CHUNK, () => import('./recipes'))
-    .then((m) => (recipe = m.playRecipe))
+    .then((m) => ((hits = m.playHits), (recipe = m.playRecipe)))
     .catch((err: unknown) => {
       recipePromise = null;
       throw err;
@@ -85,6 +109,12 @@ export function loadSfxRecipes(): Promise<SfxRecipe> {
 function recipeNow(): SfxRecipe | null {
   if (!recipe && !chunkBackoff(RECIPES_CHUNK)) void loadSfxRecipes().catch(() => undefined);
   return recipe;
+}
+
+/** The AUD-F1 hit mapping + limiter from the recipes chunk, or null (and the load started) until it is in. */
+export function hitsNow(): HitsFn | null {
+  recipeNow();
+  return hits;
 }
 
 /** Plays named sounds through a synth, applying per-sound rate limits. */
@@ -129,7 +159,8 @@ export function sfxForEvents(
         if (towers[ev.towerId]?.owner === me) out.push({ name: 'upgrade' });
         break;
       case 'unitDied':
-        out.push({ name: ev.cause === 'artillery' ? 'artillery' : 'unitDied' });
+        // AUD-F2: a mine kill has its own blast; artillery its shell; a clash the short crackle
+        out.push({ name: ev.cause === 'clash' ? 'unitDied' : ev.cause });
         break;
       case 'won':
         out.push({ name: 'won' });

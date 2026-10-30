@@ -1,7 +1,7 @@
 import type { ButtonInk, Palette } from './palette';
 import { shade } from './palette';
 import type { Rect, Segment } from './widgets';
-import { BUTTON_EDGE, PRESS_DROP, SHADOW_INK, drawButton, drawRoundButton, font, inRect, innerHighlight, roundRect } from './widgets';
+import { BUTTON_EDGE, PRESS_DROP, SHADOW_INK, drawButton, drawRoundButton, fitFontPx, font, inRect, innerHighlight, roundRect } from './widgets';
 import { t } from '../ui/i18n';
 
 /*
@@ -49,8 +49,9 @@ export function drawSegmented(
       innerHighlight(ctx, sr, 12, 0.45);
     }
     ctx.fillStyle = on ? activeInk.text : pal.textDim;
-    ctx.font = font(fontPx);
-    ctx.fillText(seg.label, sr.x + sr.w / 2, sr.y + sr.h / 2 + 1, sr.w - 6);
+    // AUD-U2: fitted to the segment (never squeezed), at most its height less 8 px at a bigger text size
+    ctx.font = font(fitFontPx(ctx, seg.label, fontPx, sr.w - 8), 'bold', undefined, sr.h - 8);
+    ctx.fillText(seg.label, sr.x + sr.w / 2, sr.y + sr.h / 2 + 1);
   });
   ctx.restore();
 }
@@ -85,11 +86,12 @@ export function drawToggle(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect,
   ctx.ellipse(kx - knobR * 0.25, ky - knobR * 0.4, knobR * 0.35, knobR * 0.18, -0.6, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = on ? pal.shopBuy.text : pal.textDim;
-  ctx.font = font(20);
+  const label = on ? t('common.on') : t('common.off');
+  ctx.font = font(fitFontPx(ctx, label, 22, r.w - knobR * 2 - 20), 'bold', undefined, r.h - 24);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const labelX = on ? r.x + (r.w - knobR * 2 - 16) / 2 : r.x + knobR * 2 + 16 + (r.w - knobR * 2 - 16) / 2;
-  ctx.fillText(on ? t('common.on') : t('common.off'), labelX, ky + 1, r.w - knobR * 2 - 20);
+  ctx.fillText(label, labelX, ky + 1);
   ctx.restore();
 }
 

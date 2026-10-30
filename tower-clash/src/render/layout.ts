@@ -95,8 +95,9 @@ export const PAUSE = Object.freeze({
   card: { x: 100, y: 376, w: 520, h: 690 } as Rect,
   resume: { x: 210, y: 560, w: 300, h: 80 } as Rect,
   speed: { x: 210, y: 660, w: 300, h: 64 } as Rect,
-  sound: { x: 180, y: 748, w: 170, h: 64 } as Rect,
-  settings: { x: 370, y: 748, w: 170, h: 64 } as Rect,
+  /** AUD-U2: 200 wide (were 170), so a 22 px label beside the glyph fits ("НАСТРОЙКИ", "БЕЗ ЗВУКА"). */
+  sound: { x: 150, y: 748, w: 200, h: 64 } as Rect,
+  settings: { x: 370, y: 748, w: 200, h: 64 } as Rect,
   retry: { x: 180, y: 860, w: 170, h: 72 } as Rect,
   menu: { x: 370, y: 860, w: 170, h: 72 } as Rect,
   /** "How to play" card (FE-3), under RETRY / MENU; the card returns here. */

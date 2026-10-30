@@ -6,7 +6,7 @@ import { BADGE_MIN_SCALE, proj } from './camera';
 import { HUD, TOWER_RADIUS, WORLD_ZOOM } from './layout';
 import { towerFootprintRadius, towerTop } from './sprites';
 import type { Rect } from './widgets';
-import { font, roundRect } from './widgets';
+import { roundRect, worldFont, worldScale } from './widgets';
 
 /*
  * ART-22: the small chips standing on the world next to the badges — the stream count "→ n" left of
@@ -62,8 +62,8 @@ const slideInX = (x: number, w: number): number => Math.min(Math.max(x, IN_FRAME
 export const CARD_CLEAR = 6;
 /** The lesson card's clay bottom edge (`drawCard` edge) below its rect. */
 const CARD_EDGE = 4;
-/** A badge's half height at scale 1 (sprites.ts `badgeSize`). */
-const BADGE_HALF_H = 18;
+/** A badge's half height at scale 1 (sprites.ts `badgeSize`: 18 at 100 % text size, AUD-U2). */
+const badgeHalfH = (): number => 5 + 13 * worldScale();
 
 /** The scale a badge (and its chips) is drawn at for depth scale `s`: `s × WORLD_ZOOM.badge`, floored at BADGE_MIN_SCALE (1.15 on the flat map). */
 export function badgeScale(s: number): number {
@@ -79,7 +79,7 @@ export function badgeScale(s: number): number {
 export function badgeMinY(cardBottom: number | null, bs: number): number {
   const top = HUD.mapTop + 26;
   if (cardBottom === null) return top;
-  return Math.max(top, cardBottom + CARD_EDGE + CARD_CLEAR + BADGE_HALF_H * bs);
+  return Math.max(top, cardBottom + CARD_EDGE + CARD_CLEAR + badgeHalfH() * bs);
 }
 
 /** Clear space (logical px) between a tower's plinth and a badge flipped below it, or beside it (BUG-42). */
@@ -87,7 +87,7 @@ export const BADGE_BELOW_GAP = 6;
 
 /** Whether clamping a badge centre from `naturalY` down to `minY` moves it by more than a third of its height (it would sit on its own tower). */
 function clampedOntoTower(naturalY: number, minY: number, bs: number): boolean {
-  return minY - naturalY > (2 * BADGE_HALF_H * bs) / 3;
+  return minY - naturalY > (2 * badgeHalfH() * bs) / 3;
 }
 
 /**
@@ -101,7 +101,7 @@ function clampedOntoTower(naturalY: number, minY: number, bs: number): boolean {
  * candidate); chips are laid out against wherever they land (`drawWorldChips`).
  */
 export function badgeCentre(naturalY: number, minY: number, baseY: number, plinth: number, bs: number): { y: number; below: boolean } {
-  const half = BADGE_HALF_H * bs;
+  const half = badgeHalfH() * bs;
   if (!clampedOntoTower(naturalY, minY, bs)) return { y: Math.max(minY, naturalY), below: false };
   const below = baseY + plinth + half + BADGE_BELOW_GAP;
   return below < minY ? { y: minY, below: false } : { y: below, below: true };
@@ -165,7 +165,8 @@ export function placeBadges(wants: readonly BadgeWant[], card: Rect | null, avoi
     inFrameX(r) &&
     r.y + r.h / 2 >= HUD.mapTop + 26 &&
     r.y + r.h <= HUD.mapBottom - 8 &&
-    !(block && overlaps(r, block, CARD_CLEAR)) &&
+    // the clamped spot (`badgeMinY`) lies exactly CARD_CLEAR under the card: a float ulp must not reject it
+    !(block && overlaps(r, block, CARD_CLEAR - 1e-6)) &&
     !(avoid && overlaps(r, avoid, CARD_CLEAR)) &&
     !taken.some((t) => overlaps(r, t, CHIP_GAP));
   const above = (b: BadgeWant): Rect => at(b, slideInX(b.x - b.w / 2, b.w), Math.max(badgeMinY(cardBottom, b.bs), b.naturalY));
@@ -185,7 +186,13 @@ export function placeBadges(wants: readonly BadgeWant[], card: Rect | null, avoi
     const moved = avoid && overlaps(clamped[0], avoid, CARD_CLEAR);
     const lifted: [Rect, BadgeSide][] = moved ? [[{ ...clamped[0], y: avoid.y - CARD_CLEAR - b.h }, 'above']] : [];
     const dropped: [Rect, BadgeSide][] = moved ? [[{ ...clamped[0], y: avoid.y + avoid.h + CARD_CLEAR }, 'above']] : [];
-    const spots: [Rect, BadgeSide][] = [...lifted, [at(b, b.x - b.w / 2, b.y + b.plinth + b.h / 2 + BADGE_BELOW_GAP), 'below'], ...beside(b.y), ...dropped, clamped, ...(minY > b.y ? beside(minY) : [])];
+    // AUD-U2 (150 % text: a taller lesson card): a base under the card, none of those free — the clamped
+    // spot slid along its row to the nearest free x, no further from the base than the beside spots
+    const row = (minY > b.y ? taken.flatMap((t) => [t.x + t.w + CHIP_GAP + 1e-6, t.x - CHIP_GAP - 1e-6 - b.w]) : [])
+      .filter((x) => Math.abs(x + b.w / 2 - b.x) <= b.plinth + b.w)
+      .sort((p, q) => Math.abs(p - clamped[0].x) - Math.abs(q - clamped[0].x))
+      .map((x): [Rect, BadgeSide] => [{ ...clamped[0], x }, 'above']);
+    const spots: [Rect, BadgeSide][] = [...lifted, [at(b, b.x - b.w / 2, b.y + b.plinth + b.h / 2 + BADGE_BELOW_GAP), 'below'], ...beside(b.y), ...dropped, clamped, ...(minY > b.y ? beside(minY) : []), ...row];
     const hit = spots.find(([r]) => free(r)) ?? clamped;
     put(b, hit[0], hit[1]);
   }
@@ -194,14 +201,15 @@ export function placeBadges(wants: readonly BadgeWant[], card: Rect | null, avoi
 
 /** Highest screen y a chip may slide to: the top of the badge band (HUD.mapTop + 8), or under the lesson card while it is up. */
 export function chipMinTop(cardBottom: number | null): number {
-  const top = HUD.mapTop + 26 - BADGE_HALF_H;
+  const top = HUD.mapTop + 8;
   return cardBottom === null ? top : Math.max(top, cardBottom + CARD_EDGE + CARD_CLEAR);
 }
 
-/** Where a stream chip wants to be: left of `badge` (its drawn rect) at badge scale `bs`, centred on it. */
+/** Where a stream chip wants to be: left of `badge` (its drawn rect) at badge scale `bs`, centred on it. AUD-U2: grows with the text size. */
 export function streamChipRect(badge: Rect, bs: number): Rect {
-  const w = STREAM_CHIP.w * bs;
-  const h = STREAM_CHIP.h * bs;
+  const k = worldScale();
+  const w = STREAM_CHIP.w * bs * k;
+  const h = STREAM_CHIP.h * bs * k;
   const cy = badge.y + badge.h / 2 + STREAM_CHIP.dy * bs;
   return { x: badge.x - CHIP_GAP - w, y: cy - h / 2, w, h };
 }
@@ -228,8 +236,8 @@ export function mineChipRequest(ctx: CanvasRenderingContext2D, cam: Camera, x: n
   const p = proj(cam, x, y);
   const s = MINE_CHIP.scale * badgeScale(p.s);
   const k = p.s * WORLD_ZOOM.prop;
-  ctx.font = font(MINE_CHIP.font, '900');
-  const h = MINE_CHIP.h * s;
+  ctx.font = worldFont(MINE_CHIP.font);
+  const h = (MINE_CHIP.h + MINE_CHIP.font * (worldScale() - 1)) * s; // AUD-U2: grows with the text size (≤ WORLD_TEXT_MAX)
   const w = h + (ctx.measureText(String(charges)).width + 3 * MINE_CHIP.pad) * s;
   const cy = p.y - MINE_CHIP.rise * k;
   return { req: { rect: { x: p.x - w / 2, y: cy - h / 2, w, h }, mine: { x: p.x, y: p.y, r: MINE_BODY_R * k } }, s };
@@ -401,7 +409,7 @@ export function drawMineChip(ctx: CanvasRenderingContext2D, pal: Palette, r: Rec
   ctx.arc(gx, gy, R * 0.24, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = pal.paper;
-  ctx.font = font(MINE_CHIP.font * s, '900');
+  ctx.font = worldFont(MINE_CHIP.font * s);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, (r.x + 2 * R + r.x + r.w - MINE_CHIP.pad * s) / 2, gy + s);
@@ -420,12 +428,13 @@ function drawStreamChip(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, bs
   ctx.strokeStyle = tones.shade;
   ctx.stroke();
   const cy = r.y + r.h / 2;
-  drawStreamArrow(ctx, tones.mid, r.x + 14 * bs, cy, 10 * bs, 2.5 * bs);
+  const k = bs * worldScale(); // the chip grows with the text size (`streamChipRect`)
+  drawStreamArrow(ctx, tones.mid, r.x + 14 * k, cy, 10 * k, 2.5 * k);
   ctx.fillStyle = pal.ink;
-  ctx.font = font(16 * bs, '900');
+  ctx.font = worldFont(16 * bs);
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  ctx.fillText(String(n), r.x + 25 * bs, cy + bs);
+  ctx.fillText(String(n), r.x + 25 * k, cy + bs);
 }
 
 /**

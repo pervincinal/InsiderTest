@@ -2,8 +2,8 @@ import type { Palette, ToneSet } from './palette';
 import { TONE_SETS, shade } from './palette';
 import type { View } from './view';
 import { bleedRect, hudAnchors } from './view';
-import type { Rect } from './widgets';
-import { drawButton, drawCard, drawCoin, drawExtrudedText, drawGlassBand, drawStars, fitFontPx, font } from './widgets';
+import type { Rect, TextScale } from './widgets';
+import { MIN_TEXT_PX, TEXT_SCALES, clipText, drawButton, drawCard, drawCoin, drawExtrudedText, drawGlassBand, drawStars, exemptFont, fitFontPx, fitTextLines, font, getTextScale } from './widgets';
 import { drawChevronDisc, drawSegmented, drawToggle, paletteGlyph } from './menuWidgets';
 import type { SettingsAboutLayout } from './menuLayout';
 import { SETTINGS } from './menuLayout';
@@ -24,6 +24,10 @@ export interface SettingsOpts {
   colorBlind: boolean;
   reducedMotion: MotionPref;
   language: Language;
+  /** AUD-U2: the saved text size (`settings.textScale`, absent = 1) — the picker's selection. */
+  textScale?: TextScale;
+  /** The body's scroll (layout px; `SettingsScreen` scrolls it when it is taller than the screen). */
+  scroll?: number;
   /** FE-14: the player's team-colour set (`settings.tones`; absent = classic) — the picker's selection. */
   tones?: ToneSet;
   /** The page's `?tones=` override when there is one (it wins over the setting: a dim note next to the title). */
@@ -53,8 +57,10 @@ export const TONE_SEGMENTS: readonly { key: 'settings.tonesClassic' | 'settings.
   key: value === 'classic' ? 'settings.tonesClassic' : value === 'vivid' ? 'settings.tonesVivid' : value === 'royal' ? 'settings.tonesRoyal' : 'settings.tonesPastel',
   value,
 }));
-/** Label size of the team-colour segments (tests/render/contrast.test.ts fits every locale's names at it). */
-export const TONE_SEGMENT_PX = 18;
+/** Label size of the team-colour segments (tests/render/contrast.test.ts fits every locale's names at it; AUD-U2: the 22 px floor). */
+export const TONE_SEGMENT_PX = 22;
+/** AUD-U2 "Text size" picker: one segment per `TEXT_SCALES` step (100 / 125 / 150 %). */
+export const TEXT_SIZE_SEGMENTS: readonly TextScale[] = TEXT_SCALES;
 /** Swatch strip of the "Team colours" title line: dot radius and centre step (logical px). */
 export const TONE_SWATCH = Object.freeze({ r: 12, step: 30 });
 
@@ -84,24 +90,56 @@ function teamSwatches(ctx: CanvasRenderingContext2D, pal: Palette, right: number
   return right - (owners.length - 1) * step - 2 * r;
 }
 
-function settingsRow(ctx: CanvasRenderingContext2D, pal: Palette, control: Rect, title: string, sub: string, separator = true): void {
+/**
+ * A row's title over its grey line, left of `control` (AUD-U2): the line at the 22 px floor (was 17),
+ * on one line where it fits (≤ 26 px at a bigger text size), else wrapped to two 22 px lines with the
+ * title moved up; the title 26 px (≤ 36, ≤ 30 over two lines). Fitted, never squeezed. Returns the
+ * title's drawn width.
+ */
+function settingsRow(ctx: CanvasRenderingContext2D, pal: Palette, control: Rect, title: string, sub: string, separator = true): number {
   const cy = control.y + (control.h - 4) / 2;
+  const w = control.x - SETTINGS.labelX - 16;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
+  const subFont = font(fitFontPx(ctx, sub, 22, w, '500'), '500', undefined, 26);
+  ctx.font = subFont;
+  const one = ctx.measureText(sub).width <= w;
+  const two = one ? null : fitTextLines(ctx, sub, MIN_TEXT_PX / getTextScale(), w, 2, '500', 1.1);
   ctx.fillStyle = pal.ink;
-  ctx.font = font(26);
-  ctx.fillText(title, SETTINGS.labelX, cy - 12, control.x - SETTINGS.labelX - 16);
+  ctx.font = font(fitFontPx(ctx, title, 26, w), 'bold', undefined, one ? 36 : 30);
+  const shown = clipText(ctx, title, w);
+  const titleW = ctx.measureText(shown).width;
+  ctx.fillText(shown, SETTINGS.labelX, one ? cy - 16 : cy - 24);
   ctx.fillStyle = pal.textDim;
-  ctx.font = font(17, '500');
-  ctx.fillText(sub, SETTINGS.labelX, cy + 16, control.x - SETTINGS.labelX - 16);
+  if (two) {
+    // the wrap was measured in the subtitle font: set it again (the title's bold font is still on `ctx`)
+    ctx.font = font(two.px, '500');
+    two.lines.forEach((l, i) => ctx.fillText(l, SETTINGS.labelX, cy + 4 + i * two.lineH));
+  } else {
+    ctx.font = subFont;
+    ctx.fillText(sub, SETTINGS.labelX, cy + 19);
+  }
   // hairline separator under the row
   if (separator) {
     ctx.fillStyle = 'rgba(30, 42, 68, 0.1)';
     ctx.fillRect(SETTINGS.card.x + 28, control.y + SETTINGS.rowH - 22, SETTINGS.card.w - 56, 2);
   }
+  return titleW;
 }
 
-/** About: "Tower Clash · Version x.y.z", the store support id with a COPY button, PRIVACY OPTIONS when the ads SDK asks for it. */
+/** One line fitted to `w` from `px` down to the floor (≤ `maxPx` drawn), "…" only past the floor (AUD-U2: never squeezed). */
+function fitLine(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, w: number, px: number, weight: '500' | '700', maxPx: number): number {
+  ctx.font = font(fitFontPx(ctx, text, px, w, weight), weight, undefined, maxPx);
+  const shown = clipText(ctx, text, w);
+  ctx.fillText(shown, x, y);
+  return ctx.measureText(shown).width;
+}
+
+/**
+ * About: "Tower Clash" with the version at the right of its line, "Progress is stored on this device"
+ * under both (AUD-U2: the full card width, so the 22 px line fits every language), the store support
+ * id with a COPY button, PRIVACY OPTIONS when the ads SDK asks for it.
+ */
 function drawAboutCard(ctx: CanvasRenderingContext2D, pal: Palette, o: SettingsOpts): void {
   const ab = o.about;
   drawCard(ctx, pal, ab.card);
@@ -110,26 +148,21 @@ function drawAboutCard(ctx: CanvasRenderingContext2D, pal: Palette, o: SettingsO
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'left';
   ctx.fillStyle = pal.ink;
-  ctx.font = font(26);
-  ctx.fillText('Tower Clash', x, ab.versionY - 12);
+  const nameW = fitLine(ctx, 'Tower Clash', x, ab.versionY - 16, right - x, 26, '700', 32);
   ctx.fillStyle = pal.textDim;
-  ctx.font = font(17, '500');
-  ctx.fillText(t('settings.aboutSub'), x, ab.versionY + 16, ab.card.w - 260);
+  fitLine(ctx, t('settings.aboutSub'), x, ab.versionY + 18, right - x, 22, '500', 26);
   ctx.textAlign = 'right';
   ctx.fillStyle = pal.ink;
-  ctx.font = font(20, '500');
-  ctx.fillText(t('settings.version', { v: o.version }), right, ab.versionY + 2, 220);
+  fitLine(ctx, t('settings.version', { v: o.version }), right, ab.versionY - 15, right - x - nameW - 20, 22, '500', 28);
   if (ab.supportY !== null && ab.copy && o.supportId !== null) {
     ctx.fillStyle = 'rgba(30, 42, 68, 0.1)';
     ctx.fillRect(ab.card.x + 28, ab.supportY - SETTINGS.aboutRowH / 2 - 2, ab.card.w - 56, 2);
     ctx.textAlign = 'left';
     ctx.fillStyle = pal.ink;
-    ctx.font = font(22);
-    ctx.fillText(t('settings.supportId'), x, ab.supportY - 12, ab.copy.x - x - 16);
+    fitLine(ctx, t('settings.supportId'), x, ab.supportY - 13, ab.copy.x - x - 16, 22, '700', 28);
     ctx.fillStyle = pal.textDim;
-    ctx.font = font(16, '500');
-    ctx.fillText(o.supportId, x, ab.supportY + 15, ab.copy.x - x - 16);
-    drawButton(ctx, pal, ab.copy, t('settings.copy'), { fontPx: 19, flat: true, pressed: o.pressed === ab.copy });
+    fitLine(ctx, o.supportId, x, ab.supportY + 15, ab.copy.x - x - 16, 22, '500', 24);
+    drawButton(ctx, pal, ab.copy, t('settings.copy'), { fontPx: 22, flat: true, pressed: o.pressed === ab.copy });
   }
   if (ab.privacy) {
     ctx.fillStyle = 'rgba(30, 42, 68, 0.1)';
@@ -144,16 +177,16 @@ export function drawSettings(view: View, pal: Palette, o: SettingsOpts): void {
   // FE-11: on a tall screen the header sits on the top safe-area edge (a.top ≤ 0) and the cards follow it up
   const a = hudAnchors(view);
   ctx.save();
-  ctx.translate(0, a.top);
+  ctx.translate(0, a.top - (o.scroll ?? 0)); // AUD-U2: the body scrolls when it is taller than the screen
   const card = SETTINGS.card;
   drawCard(ctx, pal, card);
   // rows
   settingsRow(ctx, pal, SETTINGS.sound, t('settings.sound'), t('settings.soundSub'));
   drawToggle(ctx, pal, SETTINGS.sound, o.soundOn, o.pressed === SETTINGS.sound);
   const cbLabel = t('settings.colorBlind');
-  settingsRow(ctx, pal, SETTINGS.colorBlind, cbLabel, t('settings.colorBlindSub'));
-  ctx.font = font(26);
-  paletteGlyph(ctx, pal, SETTINGS.labelX + Math.min(ctx.measureText(cbLabel).width, 230) + 40, SETTINGS.colorBlind.y + (SETTINGS.colorBlind.h - 4) / 2 - 13, 15);
+  const cbW = settingsRow(ctx, pal, SETTINGS.colorBlind, cbLabel, t('settings.colorBlindSub'));
+  // the palette dots after the title, kept clear of the toggle
+  paletteGlyph(ctx, pal, Math.min(SETTINGS.labelX + cbW + 40, SETTINGS.colorBlind.x - 44), SETTINGS.colorBlind.y + (SETTINGS.colorBlind.h - 4) / 2 - 15, 15);
   drawToggle(ctx, pal, SETTINGS.colorBlind, o.colorBlind, o.pressed === SETTINGS.colorBlind);
   settingsRow(ctx, pal, SETTINGS.motion, t('settings.motion'), t('settings.motionSub'));
   drawSegmented(
@@ -162,7 +195,7 @@ export function drawSettings(view: View, pal: Palette, o: SettingsOpts): void {
     SETTINGS.motion,
     MOTION_SEGMENTS.map((m) => ({ label: t(m.key) })),
     MOTION_SEGMENTS.findIndex((m) => m.value === o.reducedMotion),
-    20,
+    22,
   );
   // "How to play" (FE-3): the whole row opens the card; a chevron disc at the right says so
   const howtoLabel: Rect = { x: SETTINGS.howto.x + SETTINGS.howto.w - 70, y: SETTINGS.howto.y + 4, w: 70, h: 56 };
@@ -177,7 +210,7 @@ export function drawSettings(view: View, pal: Palette, o: SettingsOpts): void {
     SETTINGS.language,
     LANGUAGE_SEGMENTS.map((l) => ({ label: l.label })),
     LANGUAGE_SEGMENTS.findIndex((l) => l.code === o.language),
-    17,
+    22,
   );
   // team colours (FE-14): hairline under the language picker, title line + live swatches, full-width picker
   ctx.fillStyle = 'rgba(30, 42, 68, 0.1)';
@@ -189,15 +222,14 @@ export function drawSettings(view: View, pal: Palette, o: SettingsOpts): void {
     // dev / A-B: the page URL decides this load; the picker still shows (and saves) the player's set
     ctx.textAlign = 'right';
     ctx.fillStyle = pal.textDim;
-    ctx.font = font(15, '500');
+    ctx.font = exemptFont('devNote', 15, '500'); // AUD-U2 exemption: a dev / A-B URL note, not player text
     const note = `?tones=${o.toneOverride}`;
     ctx.fillText(note, titleRight, tonesCy + 1);
     titleRight -= ctx.measureText(note).width + 12;
   }
   ctx.textAlign = 'left';
   ctx.fillStyle = pal.ink;
-  ctx.font = font(26);
-  ctx.fillText(t('settings.tones'), SETTINGS.labelX, tonesCy, titleRight - SETTINGS.labelX);
+  fitLine(ctx, t('settings.tones'), SETTINGS.labelX, tonesCy, titleRight - SETTINGS.labelX, 26, '700', 36);
   drawSegmented(
     ctx,
     pal,
@@ -206,12 +238,24 @@ export function drawSettings(view: View, pal: Palette, o: SettingsOpts): void {
     TONE_SETS.indexOf(o.tones ?? 'classic'),
     TONE_SEGMENT_PX,
   );
+  // text size (AUD-U2): hairline under the team colours, then a row like Reduced motion
+  ctx.fillStyle = 'rgba(30, 42, 68, 0.1)';
+  ctx.fillRect(card.x + 28, SETTINGS.textSizeSepY, card.w - 56, 2);
+  settingsRow(ctx, pal, SETTINGS.textSize, t('settings.textSize'), t('settings.textSizeSub'), false);
+  drawSegmented(
+    ctx,
+    pal,
+    SETTINGS.textSize,
+    TEXT_SIZE_SEGMENTS.map((k) => ({ label: t('settings.textSizePct', { n: Math.round(k * 100) }) })),
+    TEXT_SIZE_SEGMENTS.indexOf(o.textScale ?? 1),
+    22,
+  );
   // progress summary + reset
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = pal.textDim;
-  ctx.font = font(20, '500');
   const summary = t('settings.summary', { stars: o.totalStars, coins: o.coins });
+  ctx.font = font(fitFontPx(ctx, summary, 22, 480, '500'), '500', undefined, 28);
   ctx.fillText(summary, 360 + 12, SETTINGS.summaryY);
   const sw = ctx.measureText(summary).width;
   drawStars(ctx, pal, 360 + 12 - sw / 2 - 22, SETTINGS.summaryY, 1, 10, [1, 0, 0]);
@@ -240,12 +284,10 @@ export function drawSettings(view: View, pal: Palette, o: SettingsOpts): void {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = pal.ink;
-    ctx.font = font(34);
-    ctx.fillText(t('settings.resetTitle'), 360, c.card.y + 62, c.card.w - 40);
+    fitLine(ctx, t('settings.resetTitle'), 360, c.card.y + 62, c.card.w - 40, 34, '700', 44);
     ctx.fillStyle = pal.textDim;
-    ctx.font = font(21, '500');
-    ctx.fillText(t('settings.resetLine1'), 360, c.card.y + 116, c.card.w - 40);
-    ctx.fillText(t('settings.resetLine2'), 360, c.card.y + 146, c.card.w - 40);
+    fitLine(ctx, t('settings.resetLine1'), 360, c.card.y + 114, c.card.w - 40, 22, '500', 28);
+    fitLine(ctx, t('settings.resetLine2'), 360, c.card.y + 148, c.card.w - 40, 22, '500', 28);
     drawButton(ctx, pal, c.yes, t('settings.resetYes'), { fill: pal.toastError.face, fontPx: 26, pressed: o.pressed === c.yes });
     drawButton(ctx, pal, c.no, t('common.cancel'), { fontPx: 26, pressed: o.pressed === c.no });
   }

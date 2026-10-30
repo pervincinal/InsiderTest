@@ -1,6 +1,7 @@
 import type { Palette } from './palette';
 import { biomeFor, shade, withAlpha } from './palette';
-import { FONT, FONT_RU, drawCard, drawExtrudedText, drawStar, fitFontPx, font, formatTime, innerHighlight, roundRect } from './widgets';
+import type { FontWeight } from './widgets';
+import { FONT, FONT_RU, drawCard, drawExtrudedText, drawStar, exemptFont, formatTime, innerHighlight, roundRect } from './widgets';
 import { drawTowerShadow, drawTowerSprite } from './sprites';
 import { setRussianFaces } from './fonts';
 import { drawBush, makeRng } from './terrain';
@@ -136,14 +137,25 @@ export async function loadShareFonts(spec: ShareCardSpec, timeoutMs = 2000): Pro
   if (texts.some(hasCyrillic)) setRussianFaces(true); // registered at boot in Russian already; idempotent
   for (const text of texts) {
     const family = shareFontFamily(text);
-    loads.push(fonts.load(font(32, '700', family), text));
-    if (text.startsWith('towerclash')) loads.push(fonts.load(font(32, '500', family), text));
+    loads.push(fonts.load(exemptFont('image', 32, '700', family), text));
+    if (text.startsWith('towerclash')) loads.push(fonts.load(exemptFont('image', 32, '500', family), text));
   }
   const all = Promise.all(loads).then(() => undefined);
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<void>((resolve) => (timer = setTimeout(resolve, timeoutMs)));
   await Promise.race([all, timeout]).catch(() => undefined);
   if (timer !== undefined) clearTimeout(timer);
+}
+
+/**
+ * AUD-U2: the card is a picture, not the screen — its text is sized for the 1080 × 1350 image and
+ * never follows the Settings text size or the screen's floor (`exemptFont('image')`). Largest size
+ * ≤ `px` at which `text` fits `maxWidth`; leaves that font set.
+ */
+function fitImagePx(ctx: CanvasRenderingContext2D, text: string, px: number, maxWidth: number, weight: FontWeight, family: string): number {
+  ctx.font = exemptFont('image', px, weight, family);
+  const w = ctx.measureText(text).width;
+  return w <= maxWidth || w <= 0 ? px : Math.max(8, Math.floor((px * maxWidth) / w));
 }
 
 /** Draw the whole card into `ctx`, whose user space is the 1080 × 1350 image. */
@@ -153,13 +165,13 @@ export function drawShareCard(ctx: CanvasRenderingContext2D, pal: Palette, spec:
   drawWater(ctx, pal, spec.levelId);
   const header = 'TOWER CLASH';
   const headerFamily = shareFontFamily(header); // Fredoka on every card, whatever the UI language
-  drawExtrudedText(ctx, header, SHARE_W / 2, 128, fitFontPx(ctx, header, 118, 940, '700', headerFamily), { face: pal.gold, side: pal.goldShade, outline: pal.ink, depth: 9, family: headerFamily });
+  drawExtrudedText(ctx, header, SHARE_W / 2, 128, fitImagePx(ctx, header, 118, 940, '700', headerFamily), { face: pal.gold, side: pal.goldShade, outline: pal.ink, depth: 9, family: headerFamily, exempt: 'image' });
   drawIsland(ctx, pal, spec);
   drawInfoCard(ctx, pal, spec);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const footer = footerText(spec);
-  ctx.font = font(30, '500', shareFontFamily(footer));
+  ctx.font = exemptFont('image', 30, '500', shareFontFamily(footer));
   ctx.fillStyle = withAlpha(pal.ink, 0.72);
   ctx.fillText(footer, SHARE_W / 2, SHARE_LAYOUT.footerY, SHARE_W - 120);
   ctx.restore();
@@ -275,10 +287,10 @@ function drawInfoCard(ctx: CanvasRenderingContext2D, pal: Palette, spec: ShareCa
   ctx.restore();
   const title = titleText(spec);
   const titleFamily = shareFontFamily(title);
-  const titlePx = fitFontPx(ctx, title, 88, card.w - 80, '700', titleFamily);
+  const titlePx = fitImagePx(ctx, title, 88, card.w - 80, '700', titleFamily);
   // BUG-20: the title's centre stays at card.y + 66 (AZ / TR dotted capitals clear the card top)
-  if (spec.won) drawExtrudedText(ctx, title, SHARE_W / 2, card.y + 66, titlePx, { face: pal.gold, side: pal.goldShade, outline: pal.ink, depth: 8, family: titleFamily });
-  else drawExtrudedText(ctx, title, SHARE_W / 2, card.y + 66, titlePx, { face: pal.paper, side: shade(pal.owners.enemy1, -0.45), outline: pal.ink, depth: 8, family: titleFamily });
+  if (spec.won) drawExtrudedText(ctx, title, SHARE_W / 2, card.y + 66, titlePx, { face: pal.gold, side: pal.goldShade, outline: pal.ink, depth: 8, family: titleFamily, exempt: 'image' });
+  else drawExtrudedText(ctx, title, SHARE_W / 2, card.y + 66, titlePx, { face: pal.paper, side: shade(pal.owners.enemy1, -0.45), outline: pal.ink, depth: 8, family: titleFamily, exempt: 'image' });
 
   // rows under the banner, centred in the remaining space (heights: SHARE_ROW_H)
   const challenge = challengeLine(spec);
@@ -288,7 +300,7 @@ function drawInfoCard(ctx: CanvasRenderingContext2D, pal: Palette, spec: ShareCa
   const textRow = (text: string, px: number, color: string) => (cy: number) => {
     const family = shareFontFamily(text);
     ctx.fillStyle = color;
-    ctx.font = font(fitFontPx(ctx, text, px, maxW, '700', family), '700', family);
+    ctx.font = exemptFont('image', fitImagePx(ctx, text, px, maxW, '700', family), '700', family);
     ctx.fillText(text, SHARE_W / 2, cy);
   };
   const draws: Record<ShareRow, (cy: number) => void> = {

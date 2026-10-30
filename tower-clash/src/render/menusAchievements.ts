@@ -4,7 +4,7 @@ import { shade } from './palette';
 import type { View } from './view';
 import { hudAnchors } from './view';
 import type { Rect } from './widgets';
-import { drawButton, drawCard, drawExtrudedText, drawGlassBand, drawPill, drawRoundButton, drawTrophyGlyph, fitFontPx, font, roundRect } from './widgets';
+import { clipText, drawButton, drawCard, drawExtrudedText, drawGlassBand, drawPill, drawRoundButton, drawTrophyGlyph, fitFontPx, font, roundRect } from './widgets';
 import { ACHIEVEMENTS_LAYOUT, bandedContentBottom } from './menuLayout';
 import type { ToastOpts } from './economyWidgets';
 import { drawToast } from './economyWidgets';
@@ -63,10 +63,10 @@ function drawAchievementRow(ctx: CanvasRenderingContext2D, pal: Palette, a: Achi
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = pal.ink;
-  ctx.font = font(22);
   const textX = r.x + 104;
   const barW = 290;
-  ctx.fillText(a.label, textX, r.y + 30, r.w - 104 - 170);
+  ctx.font = font(fitFontPx(ctx, a.label, 22, r.w - 104 - 170), 'bold', undefined, 28);
+  ctx.fillText(clipText(ctx, a.label, r.w - 104 - 170), textX, r.y + 30);
   const bar: Rect = { x: textX, y: r.y + 54, w: barW, h: 14 };
   roundRect(ctx, bar, 7);
   ctx.fillStyle = 'rgba(30, 42, 68, 0.12)';
@@ -78,8 +78,9 @@ function drawAchievementRow(ctx: CanvasRenderingContext2D, pal: Palette, a: Achi
     ctx.fill();
   }
   ctx.fillStyle = pal.textDim;
-  ctx.font = font(15, '500');
-  ctx.fillText(`${a.current}/${a.target}`, bar.x + bar.w + 12, bar.y + bar.h / 2 + 1, 60);
+  const progress = `${a.current}/${a.target}`;
+  ctx.font = font(fitFontPx(ctx, progress, 22, 70, '500'), '500', undefined, 24); // AUD-U2 (was 15 px)
+  ctx.fillText(progress, bar.x + bar.w + 10, bar.y + bar.h / 2 + 1);
   // reward pill
   const pill: Rect = { x: r.x + r.w - 148, y: r.y + 24, w: 128, h: 42 };
   if (a.unlocked) {
@@ -91,9 +92,10 @@ function drawAchievementRow(ctx: CanvasRenderingContext2D, pal: Palette, a: Achi
     drawCrystal(ctx, pal, pill.x + 24, pill.y + pill.h / 2, 10);
     ctx.fillStyle = pal.ink;
   }
-  ctx.font = font(20);
+  const reward = `+${a.crystals}`;
+  ctx.font = font(fitFontPx(ctx, reward, 22, pill.w - 50), 'bold', undefined, 30);
   ctx.textAlign = 'center';
-  ctx.fillText(`+${a.crystals}`, pill.x + 24 + (pill.w - 24) / 2 - 2, pill.y + pill.h / 2 + 1, pill.w - 50);
+  ctx.fillText(reward, pill.x + 24 + (pill.w - 24) / 2 - 2, pill.y + pill.h / 2 + 1);
   if (a.unlocked) {
     drawCrystal(ctx, pal, pill.x + pill.w - 22, pill.y + pill.h / 2, 9);
   }
@@ -125,10 +127,11 @@ export function drawAchievements(view: View, pal: Palette, o: AchievementsOpts):
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = pal.ink;
-  ctx.font = font(19, '500');
   const summary = t('achievements.summary', { unlocked: o.unlockedCount, total: o.total, crystals: o.crystalsEarned });
-  const summaryW = Math.min(ctx.measureText(summary).width, L.summary.w - 60);
-  ctx.fillText(summary, 360 + 10, L.summary.y + L.summary.h / 2 + 1, L.summary.w - 60);
+  ctx.font = font(fitFontPx(ctx, summary, 22, L.summary.w - 60, '500'), '500', undefined, L.summary.h - 14);
+  const summaryText = clipText(ctx, summary, L.summary.w - 60);
+  const summaryW = ctx.measureText(summaryText).width;
+  ctx.fillText(summaryText, 360 + 10, L.summary.y + L.summary.h / 2 + 1);
   drawCrystal(ctx, pal, 360 + 10 + summaryW / 2 + 16, L.summary.y + L.summary.h / 2, 9);
   ctx.restore();
   if (o.toast) drawToast(ctx, pal, { ...o.toast, y: (o.toast.y ?? 1210) + a.bottom });

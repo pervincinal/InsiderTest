@@ -4,7 +4,7 @@ import { shade } from './palette';
 import type { View } from './view';
 import { hudAnchors } from './view';
 import type { Rect } from './widgets';
-import { drawButton, drawCard, drawExtrudedText, drawGlassBand, fitFontPx, font, roundRect, wrapText } from './widgets';
+import { drawButton, drawCard, drawExtrudedText, drawGlassBand, fitFontPx, fitTextLines, font, getTextScale, roundRect, wrapText } from './widgets';
 import { badgeY, drawBadge, drawSwordsPip, drawTowerShadow, drawTowerSprite } from './sprites';
 import { HOWTO, howtoIconRect, howtoRowRect, howtoRowShift } from './menuLayout';
 import { beginFrame, drawWater, headerBand } from './menus';
@@ -310,7 +310,7 @@ export function drawHowTo(view: View, pal: Palette, o: HowToOpts): number[] {
     ctx.arc(box.x + 16, box.y + 16, 13, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = pal.paper;
-    ctx.font = font(17, '900');
+    ctx.font = font(22, '900', undefined, 22); // AUD-U2 (was 17): inside the 13 px pip, so 22 at any text size
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(String(i + 1), box.x + 16, box.y + 17);
@@ -321,9 +321,14 @@ export function drawHowTo(view: View, pal: Palette, o: HowToOpts): number[] {
     const text = t(HOWTO_KEYS[i]!);
     const all = wrapText(ctx, text, HOWTO.text.w, Infinity);
     counts.push(all.length);
-    const lines = all.length <= HOWTO.maxLines ? all : wrapText(ctx, text, HOWTO.text.w, HOWTO.maxLines);
-    const y0 = row.y + row.h / 2 - ((lines.length - 1) * HOWTO.lineH) / 2;
-    lines.forEach((line, k) => ctx.fillText(line, HOWTO.text.x, y0 + k * HOWTO.lineH, HOWTO.text.w));
+    // AUD-U2: at a bigger text size the pitch grows with it and the sentence steps back towards 22 px
+    // until it takes ≤ maxLines (never squeezed); at 100 % this is the 22 px wrap above
+    const fit = getTextScale() === 1 ? null : fitTextLines(ctx, text, HOWTO.textPx, HOWTO.text.w, HOWTO.maxLines, '500', HOWTO.lineH / HOWTO.textPx);
+    if (fit) ctx.font = font(fit.px, '500');
+    const lines = fit ? fit.lines : all.length <= HOWTO.maxLines ? all : wrapText(ctx, text, HOWTO.text.w, HOWTO.maxLines);
+    const lineH = fit ? fit.lineH : HOWTO.lineH;
+    const y0 = row.y + row.h / 2 - ((lines.length - 1) * lineH) / 2;
+    lines.forEach((line, k) => ctx.fillText(line, HOWTO.text.x, y0 + k * lineH));
     ctx.restore();
     if (i < HOWTO.rows - 1) {
       // separator halfway between this row and the next (their gap grows on a tall screen)

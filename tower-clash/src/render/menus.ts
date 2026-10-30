@@ -7,7 +7,7 @@ import { applyTransform, bleed } from './view';
 import type { SeaColors } from './sea';
 import { drawSea, menuSea, terrainSea } from './sea';
 import type { Rect } from './widgets';
-import { FONT, drawButton, drawExtrudedText, drawGearGlyph, drawPill, drawRoundButton, drawSpeakerGlyph, drawTrophyGlyph, font, withShadow } from './widgets';
+import { FONT, clipText, drawButton, drawExtrudedText, drawGearGlyph, drawGlyphLabel, drawPill, drawRoundButton, drawSpeakerGlyph, drawTrophyGlyph, fitFontPx, font, withShadow } from './widgets';
 import type { TerrainSpec } from './terrain';
 import { drawTerrain, getTerrain } from './terrain';
 import type { TitleGroup, TitleShifts } from './titleLayout';
@@ -283,37 +283,34 @@ export function drawTitle(view: View, pal: Palette, o: TitleOpts): void {
     ctx,
     () => {
       // the wordmark is the brand: Fredoka in every UI language (FONT), like the share card's header
-      drawExtrudedText(ctx, 'TOWER', 360, 372 + bob, 112, { face: pal.paper, side: shade(blue, -0.25), outline: pal.ink, depth: 8, family: FONT });
-      drawExtrudedText(ctx, 'CLASH', 360, 474 + bob2, 112, { face: blue, side: shade(blue, -0.45), outline: pal.ink, depth: 8, family: FONT });
+      drawExtrudedText(ctx, 'TOWER', 360, 372 + bob, 112, { face: pal.paper, side: shade(blue, -0.25), outline: pal.ink, depth: 8, family: FONT, exempt: 'wordmark' });
+      drawExtrudedText(ctx, 'CLASH', 360, 474 + bob2, 112, { face: blue, side: shade(blue, -0.45), outline: pal.ink, depth: 8, family: FONT, exempt: 'wordmark' });
     },
     14,
     18,
     0.22,
   );
   const tagline = t('title.tagline');
-  ctx.font = font(22, '500');
+  // AUD-U2: fitted to the 600 px pill (never squeezed), ≤ 32 px in its 46 px height
+  const taglineFont = font(fitFontPx(ctx, tagline, 22, 600 - 44, '500'), '500', undefined, 32);
+  ctx.font = taglineFont;
   const subW = Math.min(600, Math.max(292, ctx.measureText(tagline).width + 44));
   const sub: Rect = { x: 360 - subW / 2, y: 548, w: subW, h: 46 };
   drawPill(ctx, sub, pal.paper);
   ctx.fillStyle = pal.ink;
-  ctx.font = font(22, '500');
-  ctx.fillText(tagline, 360, sub.y + sub.h / 2 + 1, subW - 24);
+  ctx.font = taglineFont;
+  ctx.fillText(tagline, 360, sub.y + sub.h / 2 + 1);
 
   shiftTo(titleRectShift(sh, o.playRect));
   drawButton(ctx, pal, o.playRect, t('title.play'), { fill: blue, fontPx: 46, pressed: o.pressed === o.playRect });
 
   // settings row: gear · sound
+  // AUD-U2: glyph + 22 px label centred as a group, the label fitted (never squeezed; "…" only past the floor)
   drawButton(ctx, pal, o.settingsRect, '', { pressed: o.pressed === o.settingsRect });
-  drawGearGlyph(ctx, pal.ink, o.settingsRect.x + 38, o.settingsRect.y + o.settingsRect.h / 2 - 1, 14);
-  ctx.textAlign = 'left';
-  ctx.fillStyle = pal.ink;
-  ctx.font = font(19);
-  ctx.fillText(t('title.settings'), o.settingsRect.x + 68, o.settingsRect.y + o.settingsRect.h / 2 - 1, o.settingsRect.w - 78);
+  const rowY = (r: Rect): number => r.y + r.h / 2 - 1;
+  drawGlyphLabel(ctx, o.settingsRect, t('title.settings'), 28, (cx, cy) => drawGearGlyph(ctx, pal.ink, cx, cy, 14), pal.ink, 22, 32, rowY(o.settingsRect));
   drawButton(ctx, pal, o.soundRect, '', { pressed: o.pressed === o.soundRect });
-  drawSpeakerGlyph(ctx, o.soundOn ? pal.ink : pal.textDim, o.soundRect.x + 38, o.soundRect.y + o.soundRect.h / 2 - 1, 17, o.soundOn);
-  ctx.fillStyle = o.soundOn ? pal.ink : pal.textDim;
-  ctx.font = font(19);
-  ctx.fillText(o.soundOn ? t('title.soundOn') : t('title.soundOff'), o.soundRect.x + 68, o.soundRect.y + o.soundRect.h / 2 - 1, o.soundRect.w - 78);
+  drawGlyphLabel(ctx, o.soundRect, o.soundOn ? t('title.soundOn') : t('title.soundOff'), 32, (cx, cy) => drawSpeakerGlyph(ctx, o.soundOn ? pal.ink : pal.textDim, cx - 3, cy, 17, o.soundOn), o.soundOn ? pal.ink : pal.textDim, 22, 32, rowY(o.soundRect));
 
   // shop: crystal glyph + label
   drawButton(ctx, pal, o.shopRect, '', { pressed: o.pressed === o.shopRect });
@@ -334,7 +331,7 @@ export function drawTitle(view: View, pal: Palette, o: TitleOpts): void {
   // language chip (top-right): "EN" · tap → next language
   const lr = o.langRect;
   shiftTo(titleRectShift(sh, lr));
-  drawButton(ctx, pal, lr, o.language.toUpperCase(), { fontPx: 19, flat: true, pressed: o.pressed === lr });
+  drawButton(ctx, pal, lr, o.language.toUpperCase(), { fontPx: 22, flat: true, pressed: o.pressed === lr });
   shiftTo(0);
   if (o.toast) drawToast(ctx, pal, o.toast);
   ctx.restore();
@@ -364,12 +361,12 @@ function drawDailyChest(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, d:
   ctx.restore();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const tag: Rect = { x: r.x + 14, y: r.y + r.h - 34, w: r.w - 28, h: 30 };
+  const tag: Rect = { x: r.x + 6, y: r.y + r.h - 34, w: r.w - 12, h: 30 }; // AUD-U2: 116 wide (was 100) for a 22 px "ДЕНЬ 7"
   drawPill(ctx, tag, hot ? pal.gold : pal.paper, hot ? pal.goldShade : undefined, 2);
   ctx.fillStyle = pal.ink;
-  ctx.font = font(15);
   const label = d.adChest ? `+${d.crystals}` : d.claimable ? t('title.day', { n: d.day }) : t('title.done');
-  ctx.fillText(label, tag.x + tag.w / 2 + (d.adChest ? 8 : 0), tag.y + tag.h / 2 + 1, tag.w - 8);
+  ctx.font = font(fitFontPx(ctx, label, 22, tag.w - (d.adChest ? 28 : 10)), 'bold', undefined, 26); // AUD-U2 (was 15 px)
+  ctx.fillText(clipText(ctx, label, tag.w - (d.adChest ? 28 : 10)), tag.x + tag.w / 2 + (d.adChest ? 8 : 0), tag.y + tag.h / 2 + 1);
   if (d.adChest) drawCrystal(ctx, pal, tag.x + tag.w / 2 - 18, tag.y + tag.h / 2, 8);
 }
 
@@ -384,10 +381,11 @@ function drawTrophyButton(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, 
   ctx.restore();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const tag: Rect = { x: r.x + 14, y: r.y + r.h - 34, w: r.w - 28, h: 30 };
+  const tag: Rect = { x: r.x + 6, y: r.y + r.h - 34, w: r.w - 12, h: 30 }; // AUD-U2: 116 wide (was 100) for a 22 px "ДЕНЬ 7"
   const done = a.total > 0 && a.unlocked >= a.total;
   drawPill(ctx, tag, done ? pal.gold : pal.paper, done ? pal.goldShade : undefined, 2);
   ctx.fillStyle = pal.ink;
-  ctx.font = font(15);
-  ctx.fillText(`${a.unlocked}/${a.total}`, tag.x + tag.w / 2, tag.y + tag.h / 2 + 1, tag.w - 8);
+  const count = `${a.unlocked}/${a.total}`;
+  ctx.font = font(fitFontPx(ctx, count, 22, tag.w - 10), 'bold', undefined, 26); // AUD-U2 (was 15 px)
+  ctx.fillText(count, tag.x + tag.w / 2, tag.y + tag.h / 2 + 1);
 }

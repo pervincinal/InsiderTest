@@ -1,12 +1,91 @@
 /**
- * Purchase / reward bursts (gold coins, crystals) for the shop and the result screen. Lazy chunk —
- * src/render/particles.ts loads it on the first drawn frame of a particle system and spawns / paints
- * the `coin` and `gem` kinds through `ECONOMY_BURSTS`, so the eager bundle stays under its 80 kB
- * budget. Gameplay effects (capture confetti, impacts, smoke, planks) stay in particles.ts.
+ * Purchase / reward bursts (gold coins, crystals) for the shop and the result screen, and (AUD-F2) the
+ * mine blast. Lazy chunk — src/render/particles.ts loads it on the first drawn frame of a particle
+ * system and spawns / paints the `coin` and `gem` kinds and mine kills through `ECONOMY_BURSTS`, so the
+ * eager bundle stays under its budget. The other gameplay effects (capture chips, impacts, smoke,
+ * planks) stay in particles.ts.
  */
-import type { EconomyBursts } from './particles';
+import type { BurstHost, EconomyBursts } from './particles';
+import { proj } from './camera';
+import { roundRect } from './widgets';
+
+/** AUD-F2 mine blast: the world nudge (px) when the mine kills the player's unit, over the capture shake's 320 ms… */
+export const MINE_SHAKE_PX = 2;
+/** …and under reduced motion how long the blasted mine's chip stays outlined (ms). */
+export const MINE_MARK_MS = 300;
+/** The capture shake's length (particles.ts SHAKE_MS): a running shake stronger than the nudge is left alone. */
+const SHAKE_MS = 320;
+
+/** Start a `px` world shake unless the one running is still stronger (a 2 px nudge never cuts a capture's 6 px short). */
+function shakeBy(host: BurstHost, px: number, nowMs: number): void {
+  const t = (nowMs - host.shakeAt) / SHAKE_MS;
+  if (t >= 0 && t < 1 && host.shakeAmp * (1 - t) * (1 - t) > px) return;
+  host.shakeAt = nowMs;
+  host.shakeAmp = px;
+}
 
 export const ECONOMY_BURSTS: EconomyBursts = {
+  /**
+   * AUD-F2: a unit died on a mine at (x, y). The blast sits on the mine it crossed (the nearest one).
+   * Gun-metal soot puffs at the victim; at the mine, for one token of the shared landing bucket, a
+   * mine-red flash with a paper core, a mine-red impact ring and four sparks (mine red / metal shade /
+   * paper / metal lit) — 10 particles in all, ≤ 2 fills / strokes each; a MINE_SHAKE_PX nudge when `own`.
+   * Reduced motion: nothing moves — the mine is marked for `marks` instead.
+   */
+  mine(host, state, x, y, own, pal, nowMs) {
+    let i = -1;
+    let best = Infinity;
+    state.mines.forEach((m, j) => {
+      const d = Math.hypot(m.x - x, m.y - y);
+      if (d < best) [best, i] = [d, j];
+    });
+    const m = state.mines[i];
+    if (!m) return false;
+    if (host.reducedMotion) {
+      host.marks.set(i, nowMs);
+      return true;
+    }
+    const metal = pal.metal;
+    host.death(x, y, metal.lit, metal.mid);
+    if (own) shakeBy(host, MINE_SHAKE_PX, nowMs);
+    if (!host.takeLandToken(nowMs)) return true;
+    host.push(host.make('flash', m.x, m.y - 4, pal.mine, 220, 15));
+    host.push(host.make('flash', m.x, m.y - 4, '#fffaf0', 120, 7));
+    host.push(host.make('impact', m.x, m.y, pal.mine, 420, 16));
+    host.kick(m.x, m.y, [pal.mine, metal.shade, '#fffaf0', metal.lit], 3.6, 1.1);
+    return true;
+  },
+
+  /**
+   * AUD-F2 reduced motion: a static outline (4 px mine red under a 1.5 px paper line) round the chip of
+   * every mine that blew up in the last MINE_MARK_MS — the same on every frame, no fade — or, once the
+   * mine is spent and has no chip, round the mine itself.
+   */
+  marks(host, ctx, pal, mines, chips, nowMs, cam) {
+    ctx.save();
+    for (const [i, at] of host.marks) {
+      const m = mines[i];
+      if (!m || nowMs - at >= MINE_MARK_MS) {
+        host.marks.delete(i);
+        continue;
+      }
+      const p = proj(cam, m.x, m.y);
+      const c = chips.find((c) => c.req.mine && Math.abs(c.req.mine.x - p.x) < 1 && Math.abs(c.req.mine.y - p.y) < 1);
+      if (c) roundRect(ctx, { x: c.rect.x - 4, y: c.rect.y - 4, w: c.rect.w + 8, h: c.rect.h + 8 }, c.rect.h / 2 + 4);
+      else {
+        ctx.beginPath();
+        ctx.ellipse(p.x, p.y, 26 * p.s, 14 * p.s, 0, 0, Math.PI * 2);
+      }
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = pal.mine;
+      ctx.stroke();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#fffaf0';
+      ctx.stroke();
+    }
+    ctx.restore();
+  },
+
   coin(host, x, y, n, pal) {
     const g = pal.goldTones;
     for (let i = 0; i < n; i++) {

@@ -4,11 +4,11 @@ import type { Palette } from './palette';
 import { shade } from './palette';
 import { CONFIRM, PAUSE, RESULT } from './layout';
 import type { Rect } from './widgets';
-import { drawButton, drawCard, drawExtrudedText, drawGearGlyph, drawSpeakerGlyph, drawStar, fitFontPx, font, formatTime, innerHighlight, roundRect, wrapText } from './widgets';
+import { MIN_TEXT_PX, clipText, drawButton, drawCard, drawGlyphLabel, drawExtrudedText, drawGearGlyph, drawSpeakerGlyph, drawStar, fitFontPx, fitTextLines, font, formatTime, getTextScale, innerHighlight, roundRect, textPx } from './widgets';
 import type { PlayUi } from './draw';
 import { drawCrystal, drawGoldCoin, drawVideoGlyph } from './sprites';
 import { drawSpinner } from './economyWidgets';
-import { hudClockOf, hudExtrasOf, resultShareLayout } from './hud';
+import { STALL, STALEMATE_CARD_S, hudClockOf, hudExtrasOf, resultShareLayout } from './hud';
 import { levelLesson, t } from '../ui/i18n';
 
 /*
@@ -23,6 +23,8 @@ export interface HudOverlayDrawers {
   pause(ctx: CanvasRenderingContext2D, state: GameState, ui: PlayUi): void;
   /** `screenBottom`: logical y of the screen's bottom edge (BUG-34: below 1280 on a tall phone); the card slides in from under it. */
   result(ctx: CanvasRenderingContext2D, state: GameState, ui: PlayUi, since: number, screenBottom?: number): void;
+  /** AUD-B2 / A11 "Nothing is changing" card (`STALL` rects; `pressed`: the button held down). */
+  stall(ctx: CanvasRenderingContext2D, ui: PlayUi, pressed: Rect | null): void;
 }
 
 function drawPauseCard(ctx: CanvasRenderingContext2D, state: GameState, ui: PlayUi): void {
@@ -33,28 +35,23 @@ function drawPauseCard(ctx: CanvasRenderingContext2D, state: GameState, ui: Play
   const pausedTitle = t('pause.title');
   drawExtrudedText(ctx, pausedTitle, 360, card.y + 72, fitFontPx(ctx, pausedTitle, 60, 460), { face: pal.paper, side: shade(pal.owners.player, -0.3), outline: pal.ink, depth: 5 });
   ctx.fillStyle = pal.textDim;
-  ctx.font = font(24, '500');
+  const subtitle = t('pause.subtitle', { n: ui.level.id, time: formatTime(hudClockOf(ui, state)) });
+  ctx.font = font(fitFontPx(ctx, subtitle, 24, card.w - 40, '500'), '500', undefined, 32);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(t('pause.subtitle', { n: ui.level.id, time: formatTime(hudClockOf(ui, state)) }), 360, card.y + 136, card.w - 40);
+  ctx.fillText(clipText(ctx, subtitle, card.w - 40), 360, card.y + 136);
   drawButton(ctx, pal, PAUSE.resume, t('pause.resume'), { fill: pal.owners.player, fontPx: 30 });
   const fast = ui.speed !== 1;
   drawButton(ctx, pal, PAUSE.speed, t('pause.speed', { n: ui.speed }), { fontPx: 24, border: fast ? pal.accent : undefined, text: fast ? pal.accent : undefined });
   // sound toggle (glyph + state) · settings (gear)
   const muted = hud?.muted ?? false;
   const sb = PAUSE.sound;
+  // AUD-U2: glyph + 22 px label centred as a group, the label fitted (never squeezed; "…" only past the floor)
   drawButton(ctx, pal, sb, '');
-  drawSpeakerGlyph(ctx, muted ? pal.textDim : pal.ink, sb.x + 34, sb.y + (sb.h - 4) / 2, 14, !muted);
-  ctx.fillStyle = muted ? pal.textDim : pal.ink;
-  ctx.font = font(20);
-  ctx.textAlign = 'left';
-  ctx.fillText(muted ? t('pause.muted') : t('pause.sound'), sb.x + 62, sb.y + (sb.h - 4) / 2 + 1, sb.w - 72);
+  drawGlyphLabel(ctx, sb, muted ? t('pause.muted') : t('pause.sound'), 30, (cx, cy) => drawSpeakerGlyph(ctx, muted ? pal.textDim : pal.ink, cx - 2, cy, 14, !muted), muted ? pal.textDim : pal.ink, 22, 30);
   const gb = PAUSE.settings;
   drawButton(ctx, pal, gb, '');
-  drawGearGlyph(ctx, pal.ink, gb.x + 32, gb.y + (gb.h - 4) / 2, 12);
-  ctx.fillStyle = pal.ink;
-  ctx.font = font(20);
-  ctx.fillText(t('pause.settings'), gb.x + 56, gb.y + (gb.h - 4) / 2 + 1, gb.w - 66);
+  drawGlyphLabel(ctx, gb, t('pause.settings'), 26, (cx, cy) => drawGearGlyph(ctx, pal.ink, cx, cy, 12), pal.ink, 22, 30);
   ctx.textAlign = 'center';
   drawButton(ctx, pal, PAUSE.retry, t('common.retry'), { fontPx: 26 });
   drawButton(ctx, pal, PAUSE.menu, t('common.menu'), { fontPx: 26 });
@@ -99,9 +96,10 @@ function drawResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: Pla
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = pal.ink;
-  ctx.font = font(30);
+  const timeLine = t('result.time', { time: formatTime(hudClockOf(ui, state)) });
+  ctx.font = font(fitFontPx(ctx, timeLine, 30, card.w - 60), 'bold', undefined, 40);
   // a defeat has no star row: the time sits a little higher and the tip block takes the stars' place (FE-4)
-  ctx.fillText(t('result.time', { time: formatTime(hudClockOf(ui, state)) }), 360, card.y + (won ? 200 : 190), card.w - 60);
+  ctx.fillText(timeLine, 360, card.y + (won ? 200 : 190));
 
   // stars pop in one after another with a gold burst
   if (won) {
@@ -117,13 +115,15 @@ function drawResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: Pla
   const pressed = hud?.pressed ?? null;
   if (won) {
     ctx.fillStyle = pal.textDim;
-    ctx.font = font(20, '500');
-    ctx.fillText(t('result.starRule', { t3: formatTime(ui.level.star3), t2: formatTime(ui.level.star2) }), 360, card.y + 326, card.w - 60);
+    const starRule = t('result.starRule', { t3: formatTime(ui.level.star3), t2: formatTime(ui.level.star2) });
+    ctx.font = font(fitFontPx(ctx, starRule, 22, card.w - 60, '500'), '500', undefined, 30);
+    ctx.fillText(starRule, 360, card.y + 326);
     // gold counts up (a crystal reward sits beside it)
     const countT = easeOutCubic((since - 900) / 800);
     const shown = Math.round(ui.coinsEarned * countT);
     const pop = 1 + 0.12 * Math.max(0, 1 - Math.abs((since - 1700) / 180));
-    ctx.font = font(34);
+    const goldFont = font(34, 'bold', undefined, 40); // the rows around it are fixed: 40 px at most
+    ctx.font = goldFont;
     const label = `+${shown}`;
     const labelW = ctx.measureText(label).width;
     const crystals = ex?.crystalsEarned ?? 0;
@@ -133,12 +133,12 @@ function drawResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: Pla
     ctx.scale(pop, pop);
     drawGoldCoin(ctx, pal, -labelW / 2 - 24, 0, 17);
     ctx.fillStyle = pal.ink;
-    ctx.font = font(34);
+    ctx.font = goldFont;
     ctx.fillText(label, 8, 1);
     ctx.restore();
     if (crystals > 0) {
       const cl = `+${Math.round(crystals * countT)}`;
-      ctx.font = font(34);
+      ctx.font = goldFont;
       const clw = ctx.measureText(cl).width;
       ctx.save();
       ctx.translate(470, card.y + 376);
@@ -149,7 +149,6 @@ function drawResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: Pla
       ctx.restore();
     }
     ctx.fillStyle = pal.textDim;
-    ctx.font = font(18, '500');
     const daily = ex?.daily;
     const weekly = ex?.weekly;
     const note = daily
@@ -169,8 +168,11 @@ function drawResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: Pla
           : ui.coinsEarned > 0
             ? t('result.goldTotal', { n: ui.coinsTotal })
             : t('result.alreadyCleared', { n: ui.coinsTotal });
-    ctx.font = font(fitFontPx(ctx, note, 18, card.w - 60, '500'), '500');
-    ctx.fillText(note, 360, card.y + 416, card.w - 60);
+    // AUD-U2: one line fitted down to the 22 px floor, else two lines at the floor (never squeezed)
+    const noteFit = fitTextLines(ctx, note, 22, card.w - 60, 1);
+    const noteLines = noteFit.lines[0]?.endsWith('…') ? fitTextLines(ctx, note, 22, card.w - 60, 2) : noteFit;
+    const noteY = card.y + (noteLines.lines.length > 1 ? 420 : 416) - ((noteLines.lines.length - 1) * noteLines.lineH) / 2;
+    noteLines.lines.forEach((l, i) => ctx.fillText(l, 360, noteY + i * noteLines.lineH));
   } else {
     drawDefeatTip(ctx, pal, ex?.tip ?? levelLesson(ui.level), ex?.howto ?? false, pressed);
     // Reinforcements: crystals and / or a rewarded video (ECONOMY.md §3.5)
@@ -178,8 +180,9 @@ function drawResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: Pla
       const both = ex.continueCrystals !== null && ex.continueAd;
       ctx.textAlign = 'center';
       ctx.fillStyle = pal.textDim;
-      ctx.font = font(16, '500');
-      ctx.fillText(t('result.reinforcements', { s: Math.round(C.CONTINUE_REWIND_MS / 1000), n: C.CONTINUE_INFANTRY }), 360, RESULT.continueSolo.y - 18, card.w - 60);
+      const reinf = t('result.reinforcements', { s: Math.round(C.CONTINUE_REWIND_MS / 1000), n: C.CONTINUE_INFANTRY });
+      ctx.font = font(fitFontPx(ctx, reinf, 22, card.w - 60, '500'), '500', undefined, 26);
+      ctx.fillText(clipText(ctx, reinf, card.w - 60), 360, RESULT.continueSolo.y - 18);
       if (ex.continueCrystals !== null) {
         const r = both ? RESULT.continueCrystals : RESULT.continueSolo;
         drawOfferButton(ctx, pal, r, t('common.continue'), String(ex.continueCrystals), 'crystal', { pressed: pressed === r, pending: ex.pending, nowMs: since });
@@ -199,8 +202,9 @@ function drawResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: Pla
       drawOfferButton(ctx, pal, RESULT.extra, t('result.doubleGold', { n: ex.doubleGold }), t('common.watch'), 'video', { pressed: pressed === RESULT.extra, pending: ex.pending, nowMs: since });
     } else if (won && ex.doubled) {
       ctx.fillStyle = pal.textDim;
-      ctx.font = font(18, '500');
-      ctx.fillText(t('result.goldDoubled'), 360, RESULT.extra.y + RESULT.extra.h / 2);
+      const doubled = t('result.goldDoubled');
+      ctx.font = font(fitFontPx(ctx, doubled, 22, card.w - 60, '500'), '500');
+      ctx.fillText(doubled, 360, RESULT.extra.y + RESULT.extra.h / 2);
     } else if (!won && ex.skipCrystals !== null) {
       drawOfferButton(ctx, pal, RESULT.extra, t('result.skipLevel'), String(ex.skipCrystals), 'crystal', { pressed: pressed === RESULT.extra, pending: ex.pending, nowMs: since, outline: true });
     }
@@ -224,14 +228,16 @@ function drawSpendConfirm(ctx: CanvasRenderingContext2D, pal: Palette, q: { kind
   ctx.textBaseline = 'middle';
   ctx.fillStyle = pal.ink;
   const title = t('spend.title', { n: q.crystals });
-  ctx.font = font(fitFontPx(ctx, title, 34, w));
-  ctx.fillText(title, 360, c.card.y + 62, w);
+  ctx.font = font(fitFontPx(ctx, title, 34, w), 'bold', undefined, 44);
+  ctx.fillText(title, 360, c.card.y + 62);
   const what = q.kind === 'skip' ? t('spend.skip') : t('result.reinforcements', { s: Math.round(C.CONTINUE_REWIND_MS / 1000), n: C.CONTINUE_INFANTRY });
-  ctx.font = font(20, '500');
-  wrapText(ctx, what, w, 2).forEach((l, i, all) => ctx.fillText(l, 360, c.card.y + 122 + (i - (all.length - 1) / 2) * 26, w));
+  // AUD-U2: 22 px (× text size, ≤ 28), wrapped to two lines (never squeezed)
+  const whatFit = fitTextLines(ctx, what, Math.min(22, 28 / (textPx(22) / 22)), w, 2);
+  whatFit.lines.forEach((l, i, all) => ctx.fillText(l, 360, c.card.y + 120 + (i - (all.length - 1) / 2) * whatFit.lineH));
   ctx.fillStyle = pal.textDim;
-  ctx.font = font(19, '500');
-  ctx.fillText(t('spend.left', { n: Math.max(0, q.have - q.crystals) }), 360, c.card.y + 168, w);
+  const left = t('spend.left', { n: Math.max(0, q.have - q.crystals) });
+  ctx.font = font(fitFontPx(ctx, left, 22, w, '500'), '500', undefined, 28);
+  ctx.fillText(left, 360, c.card.y + 172);
   drawButton(ctx, pal, c.yes, t('spend.yes'), { fill: pal.shopBuy.face, text: pal.shopBuy.text, fontPx: 26, pressed: pressed === c.yes });
   drawButton(ctx, pal, c.no, t('common.cancel'), { fontPx: 26, pressed: pressed === c.no });
 }
@@ -282,34 +288,30 @@ export function drawShareGlyph(ctx: CanvasRenderingContext2D, color: string, cx:
 }
 
 /**
- * Defeat tip (FE-4): a lightbulb + "Tip" caption, the level's lesson centred in ≤ 3 lines (18 px, or
- * 16 px when the lesson would be cut) and, on the second consecutive defeat of the level, a HOW TO
- * PLAY link-button right of the time line (RESULT.howto, AUD-U1). Same wrap helper as the lesson banner.
+ * Defeat tip (FE-4): a lightbulb + "Tip" caption, the level's lesson centred under it and, on the
+ * second consecutive defeat of the level, a HOW TO PLAY link-button right of the time line
+ * (RESULT.howto, AUD-U1). AUD-U2: caption and lesson at the 22 px floor (× text size) in ≤ 4 lines of
+ * the tip's width — a bigger text size steps back down towards 22 px before a fifth line would be
+ * needed, and only past that is the lesson cut with "…". Never squeezed.
  */
 function drawDefeatTip(ctx: CanvasRenderingContext2D, pal: Palette, text: string, howto: boolean, pressed: Rect | null): void {
   const r = RESULT.tip;
   const cap = t('result.tip');
-  ctx.font = font(14, '500');
+  ctx.font = font(22, '500', undefined, 26);
   const capW = ctx.measureText(cap).width;
   const x0 = 360 - (capW + 26) / 2;
-  drawBulbGlyph(ctx, x0 + 9, r.y + 13, 9, pal.star, pal.ink);
+  drawBulbGlyph(ctx, x0 + 9, r.y + 12, 9, pal.star, pal.ink);
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = pal.textDim;
-  ctx.fillText(cap, x0 + 26, r.y + 14);
-  let px = 18;
-  ctx.font = font(px, '500');
-  let lines = wrapText(ctx, text, r.w, 3);
-  if (lines[lines.length - 1]?.endsWith('…')) {
-    px = 16;
-    ctx.font = font(px, '500');
-    lines = wrapText(ctx, text, r.w, 3);
-  }
-  const lineH = px + 3;
+  ctx.fillText(cap, x0 + 26, r.y + 13);
+  // the lines fit the tip box under the caption (r.h − 30 px): a bigger size steps down until they do
+  let fit = fitTextLines(ctx, text, 22, r.w, 4, '500', 1.12);
+  while (fit.lines.length * fit.lineH > r.h - 30 && fit.drawnPx > MIN_TEXT_PX) fit = fitTextLines(ctx, text, fit.px - 1 / getTextScale(), r.w, 4, '500', 1.12);
   ctx.textAlign = 'center';
   ctx.fillStyle = pal.ink;
-  lines.forEach((l, i) => ctx.fillText(l, 360, r.y + 38 + i * lineH, r.w));
-  if (howto) drawButton(ctx, pal, RESULT.howto, t('result.howto'), { fontPx: 20, flat: true, pressed: pressed === RESULT.howto });
+  fit.lines.forEach((l, i) => ctx.fillText(l, 360, r.y + 38 + i * fit.lineH));
+  if (howto) drawButton(ctx, pal, RESULT.howto, t('result.howto'), { fontPx: 22, flat: true, pressed: pressed === RESULT.howto });
 }
 
 /**
@@ -335,10 +337,11 @@ function drawOfferButton(
     return;
   }
   ctx.fillStyle = text;
-  ctx.font = font(21);
+  // AUD-U2: label and price tag at 22 px (× text size, ≤ 30: the button is fixed), fitted, never squeezed
+  ctx.font = font(fitFontPx(ctx, label, 22, r.w * 0.58), 'bold', undefined, 30);
   ctx.textAlign = 'left';
-  ctx.fillText(label, r.x + 18, cy + 1, r.w * 0.58);
-  ctx.font = font(19);
+  ctx.fillText(clipText(ctx, label, r.w * 0.58), r.x + 18, cy + 1);
+  ctx.font = font(fitFontPx(ctx, tag, 22, r.w * 0.3), 'bold', undefined, 30);
   const tw = ctx.measureText(tag).width;
   const gx = r.x + r.w - 18 - tw - 28;
   if (glyph === 'crystal') drawCrystal(ctx, pal, gx + 6, cy, 11);
@@ -423,4 +426,26 @@ export function drawBulbGlyph(ctx: CanvasRenderingContext2D, cx: number, cy: num
   ctx.restore();
 }
 
-export const HUD_OVERLAYS: HudOverlayDrawers = { pause: drawPauseCard, result: drawResultCard };
+/** AUD-B2 / A11 (GDD §2.4): title, the body (up to four lines), KEEP PLAYING, then RESTART · RETREAT. */
+function drawStallCard(ctx: CanvasRenderingContext2D, ui: PlayUi, pressed: Rect | null): void {
+  const pal = ui.palette;
+  const card = STALL.card;
+  drawCard(ctx, pal, card);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = pal.ink;
+  const title = t('stall.title');
+  ctx.font = font(fitFontPx(ctx, title, 40, card.w - 60));
+  ctx.fillText(title, 360, card.y + 62);
+  ctx.fillStyle = pal.textDim;
+  // AUD-U2: the body's pitch follows the text size (30 at 100 %), ≤ 28 px drawn so four lines fit above KEEP PLAYING
+  const body = fitTextLines(ctx, t('stall.body', { n: STALEMATE_CARD_S }), Math.min(22, 28 / (textPx(22) / 22)), card.w - 70, 4, '500', 1.36);
+  const lines = body.lines;
+  const top = card.y + 162 - ((lines.length - 1) * body.lineH) / 2;
+  lines.forEach((l, i) => ctx.fillText(l, 360, top + i * body.lineH));
+  drawButton(ctx, pal, STALL.keep, t('stall.keep'), { fill: pal.owners.player, fontPx: 28, pressed: pressed === STALL.keep });
+  drawButton(ctx, pal, STALL.restart, t('stall.restart'), { fontPx: 22, pressed: pressed === STALL.restart });
+  drawButton(ctx, pal, STALL.retreat, t('stall.retreat'), { fontPx: 22, pressed: pressed === STALL.retreat });
+}
+
+export const HUD_OVERLAYS: HudOverlayDrawers = { pause: drawPauseCard, result: drawResultCard, stall: drawStallCard };

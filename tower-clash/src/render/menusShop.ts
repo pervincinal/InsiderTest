@@ -5,6 +5,7 @@ import type { View } from './view';
 import { bleedRect, hudAnchors } from './view';
 import type { Rect } from './widgets';
 import {
+  clipText,
   drawBoltGlyph,
   drawButton,
   drawCard,
@@ -16,9 +17,11 @@ import {
   drawRoundButton,
   drawSnowflakeGlyph,
   fitFontPx,
+  fitTextLines,
   font,
   NUMERAL_PX,
   roundRect,
+  textPx,
 } from './widgets';
 import { drawSegmented } from './menuWidgets';
 import type { ShopTab } from './menuLayout';
@@ -180,8 +183,10 @@ function drawBuyButton(
   const glyphW = o.glyph ? glyphR * 2 + 8 : 0;
   // BUG-21: a long label (RU "ТОЛЬКО В НАБОРЕ") used to be squeezed by fillText's maxWidth; size the
   // font to the room left beside the glyph instead, so the glyphs keep their proportions.
-  const px = fitFontPx(ctx, label, o.fontPx ?? SHOP_NUMERAL_PX, r.w - 16 - glyphW);
-  ctx.font = font(px);
+  // AUD-U2: never below the 22 px floor; at a bigger text size no taller than the button allows
+  const maxPx = r.h - 20;
+  const px = fitFontPx(ctx, label, Math.max(22, o.fontPx ?? SHOP_NUMERAL_PX), r.w - 16 - glyphW);
+  ctx.font = font(px, 'bold', undefined, maxPx);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const tw = ctx.measureText(label).width;
@@ -190,9 +195,20 @@ function drawBuyButton(
   if (o.glyph === 'gold') drawGoldCoin(ctx, pal, x0 + glyphR, cy, glyphR);
   else if (o.glyph === 'crystal') drawCrystal(ctx, pal, x0 + glyphR, cy, glyphR * 1.05);
   ctx.fillStyle = text;
-  ctx.font = font(px);
+  ctx.font = font(px, 'bold', undefined, maxPx);
   ctx.textAlign = 'left';
-  ctx.fillText(label, x0 + glyphW, cy + 1, r.w - 16);
+  ctx.fillText(clipText(ctx, label, r.w - 16 - glyphW), x0 + glyphW, cy + 1);
+}
+
+/**
+ * AUD-U2: a card's grey lines at the 22 px floor, each fitted to `w` (never squeezed, "…" only past
+ * the floor), `pitch` apart — a fixed card, so no bigger than 24 px at any text size.
+ */
+function drawCardLines(ctx: CanvasRenderingContext2D, lines: readonly string[], x: number, y0: number, w: number, pitch: number): void {
+  lines.forEach((line, i) => {
+    ctx.font = font(fitFontPx(ctx, line, 22, w, '500'), '500', undefined, 24);
+    ctx.fillText(clipText(ctx, line, w), x, y0 + i * pitch);
+  });
 }
 
 function drawPackCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopPackCard, o: ShopOpts): void {
@@ -202,15 +218,15 @@ function drawPackCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopPackCa
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = pal.ink;
-  ctx.font = font(34);
+  ctx.font = font(34, 'bold', undefined, 44);
   ctx.fillText(formatAmount(c.crystals), r.x + r.w / 2 + 10, r.y + 154);
   drawCrystal(ctx, pal, r.x + r.w / 2 - ctx.measureText(formatAmount(c.crystals)).width / 2 - 10, r.y + 154, 13);
   if (c.bonusPct > 0) {
     // bonus ribbon, top-right corner: a numeral, so the shop's owned ink pair at ≥ 24 px (BUG-22)
     const label = `+${Math.round(c.bonusPct * 100)}%`;
-    ctx.font = font(SHOP_NUMERAL_PX);
+    ctx.font = font(SHOP_NUMERAL_PX, 'bold', undefined, 32);
     const w = ctx.measureText(label).width + 22;
-    const tag: Rect = { x: r.x + r.w - w - 12, y: r.y + 12, w, h: 36 };
+    const tag: Rect = { x: r.x + r.w - w - 12, y: r.y + 12, w, h: Math.round(textPx(SHOP_NUMERAL_PX, 32)) + 12 };
     drawPill(ctx, tag, pal.shopOwned.face, shade(pal.shopOwned.face, -0.35), 2);
     ctx.fillStyle = pal.shopOwned.text;
     ctx.fillText(label, tag.x + tag.w / 2, tag.y + tag.h / 2 + 1);
@@ -244,13 +260,12 @@ function drawBundleCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopBund
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = pal.ink;
-  ctx.font = font(26);
   const textX = r.x + 136;
   const textW = r.w - 136 - SHOP.buyW - 40;
-  ctx.fillText(c.title, textX, r.y + 40, textW);
+  ctx.font = font(fitFontPx(ctx, c.title, 26, textW), 'bold', undefined, 32);
+  ctx.fillText(clipText(ctx, c.title, textW), textX, r.y + 40);
   ctx.fillStyle = pal.textDim;
-  ctx.font = font(17, '500');
-  c.lines.slice(0, 4).forEach((line, i) => ctx.fillText(line, textX, r.y + 72 + i * 24, textW));
+  drawCardLines(ctx, c.lines.slice(0, 4), textX, r.y + 72, textW, 25);
   const buy = shopRowBuyRect(r);
   if (c.owned) {
     drawBuyButton(ctx, pal, buy, t('shop.owned'), { ink: pal.shopOwned, fontPx: 22 });
@@ -285,14 +300,14 @@ function drawSkinCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopSkinCa
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = pal.ink;
-  ctx.font = font(19);
-  ctx.fillText(c.label, r.x + r.w / 2, r.y + 142, r.w - 20);
+  ctx.font = font(fitFontPx(ctx, c.label, 22, r.w - 20), 'bold', undefined, 26); // AUD-U2 (was 19 px)
+  ctx.fillText(clipText(ctx, c.label, r.w - 16), r.x + r.w / 2, r.y + 142);
   const buy = shopBuyRect(r, r.w - 36, 54);
   const pressed = rectEq(o.pressed, buy) || rectEq(o.pressed, r);
-  if (c.equipped) drawBuyButton(ctx, pal, buy, t('shop.equipped'), { ink: pal.shopOwned, pressed, fontPx: 20 });
-  else if (c.owned) drawBuyButton(ctx, pal, buy, t('shop.equip'), { pressed, fontPx: 20 });
+  if (c.equipped) drawBuyButton(ctx, pal, buy, t('shop.equipped'), { ink: pal.shopOwned, pressed, fontPx: 22 });
+  else if (c.owned) drawBuyButton(ctx, pal, buy, t('shop.equip'), { pressed, fontPx: 22 });
   else if (c.locked) {
-    drawBuyButton(ctx, pal, buy, t('shop.packOnly'), { disabled: true, fontPx: 17 });
+    drawBuyButton(ctx, pal, buy, t('shop.packOnly'), { disabled: true, fontPx: 22 });
   } else {
     drawBuyButton(ctx, pal, buy, String(c.cost), { glyph: 'crystal', ink: pal.shopBuy, disabled: o.crystals < c.cost, pressed, fontPx: SHOP_NUMERAL_PX });
   }
@@ -318,18 +333,18 @@ function drawCrateCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopCrate
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = pal.ink;
-  ctx.font = font(26);
   const textX = r.x + 136;
   const textW = r.w - 136 - SHOP.buyW - 40;
-  ctx.fillText(t('shop.crate'), textX, r.y + 40, textW);
+  const crate = t('shop.crate');
+  ctx.font = font(fitFontPx(ctx, crate, 26, textW), 'bold', undefined, 32);
+  ctx.fillText(clipText(ctx, crate, textW), textX, r.y + 40);
   ctx.fillStyle = pal.textDim;
-  ctx.font = font(17, '500');
   const lines = [
     t('shop.crateCharges', { o: c.charges.overdrive, f: c.charges.freeze, a: c.charges.airstrike }),
     t('shop.crateSub'),
     t('shop.crateOwned', { o: c.owned.overdrive, f: c.owned.freeze, a: c.owned.airstrike }),
   ];
-  lines.forEach((line, i) => ctx.fillText(line, textX, r.y + 72 + i * 24, textW));
+  drawCardLines(ctx, lines, textX, r.y + 74, textW, 30);
   const buy = shopRowBuyRect(r);
   drawBuyButton(ctx, pal, buy, String(c.cost), {
     glyph: 'crystal',
@@ -347,13 +362,12 @@ function drawConvertCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopCon
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = pal.ink;
-  ctx.font = font(26);
   const convert = t('shop.convert');
-  ctx.fillText(convert, cx + 14, r.y + 36, r.w - 60);
+  ctx.font = font(fitFontPx(ctx, convert, 26, r.w - 60), 'bold', undefined, 32);
+  ctx.fillText(convert, cx + 14, r.y + 36);
   drawCrystal(ctx, pal, cx - Math.min(ctx.measureText(convert).width, r.w - 60) / 2 - 8, r.y + 36, 12);
   ctx.fillStyle = pal.textDim;
-  ctx.font = font(16, '500');
-  ctx.fillText(t('shop.convertRate', { n: c.goldPerCrystal }), cx, r.y + 70, r.w - 24);
+  drawCardLines(ctx, [t('shop.convertRate', { n: c.goldPerCrystal })], cx, r.y + 70, r.w - 24, 0);
   drawSegmented(
     ctx,
     pal,
@@ -392,9 +406,9 @@ function drawConvertConfirm(ctx: CanvasRenderingContext2D, pal: Palette, q: { cr
   ctx.textBaseline = 'middle';
   ctx.fillStyle = pal.ink;
   const title = convert ? t('shop.convertTitle') : t('spend.title', { n: q.crystals });
-  ctx.font = font(fitFontPx(ctx, title, 34, c.card.w - 40));
-  ctx.fillText(title, 360, c.card.y + 62, c.card.w - 40);
-  ctx.font = font(26);
+  ctx.font = font(fitFontPx(ctx, title, 34, c.card.w - 40), 'bold', undefined, 44);
+  ctx.fillText(title, 360, c.card.y + 62);
+  ctx.font = font(26, 'bold', undefined, 34);
   if (convert) {
     const line = `${q.crystals}       ${q.gold}`;
     const w = ctx.measureText(line).width;
@@ -405,12 +419,14 @@ function drawConvertConfirm(ctx: CanvasRenderingContext2D, pal: Palette, q: { cr
     drawGoldCoin(ctx, pal, 360 + w / 2 + 18, c.card.y + 122, 12);
   } else {
     const line = q.line ?? '';
-    ctx.font = font(fitFontPx(ctx, line, 26, c.card.w - 40, '500'), '500');
-    ctx.fillText(line, 360, c.card.y + 122, c.card.w - 40);
+    ctx.font = font(fitFontPx(ctx, line, 26, c.card.w - 40, '500'), '500', undefined, 34);
+    ctx.fillText(clipText(ctx, line, c.card.w - 40), 360, c.card.y + 122);
   }
   ctx.fillStyle = pal.textDim;
-  ctx.font = font(19, '500');
-  ctx.fillText(convert ? t('shop.convertWarn') : t('spend.left', { n: Math.max(0, o.crystals - q.crystals) }), 360, c.card.y + 168, c.card.w - 40);
+  // AUD-U2: 22 px (was 19), two lines where a translation needs them (never squeezed)
+  const warn = convert ? t('shop.convertWarn') : t('spend.left', { n: Math.max(0, o.crystals - q.crystals) });
+  const warnFit = fitTextLines(ctx, warn, Math.min(22, 26 / (textPx(22) / 22)), c.card.w - 40, 2);
+  warnFit.lines.forEach((l, i, all) => ctx.fillText(l, 360, c.card.y + 172 + (i - (all.length - 1) / 2) * warnFit.lineH));
   drawButton(ctx, pal, c.yes, convert ? t('shop.convert') : t('spend.yes'), { fill: pal.shopBuy.face, text: pal.shopBuy.text, fontPx: 26, pressed: o.pressed === c.yes });
   drawButton(ctx, pal, c.no, t('common.cancel'), { fontPx: 26, pressed: o.pressed === c.no });
 }
@@ -444,31 +460,40 @@ function drawUpgradeCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopUpg
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = pal.ink;
-  ctx.font = font(25);
   const textX = r.x + 130;
   const textW = r.w - 130 - SHOP.buyW - 36;
-  ctx.fillText(c.label, textX, r.y + 36, textW);
+  ctx.font = font(fitFontPx(ctx, c.label, 25, textW), 'bold', undefined, 30);
+  ctx.fillText(clipText(ctx, c.label, textW), textX, r.y + 36);
   drawTierPips(ctx, pal, textX + 10, r.y + 70, c.tier, c.maxTier);
   // ART-17: "Tier 1/5" beside the pips — the fraction 24 px bold (one run), the word 16 px, dim on the
   // card (≥ 4.5:1); baseline 8 px under the pips' centre puts the numerals' middle on it
   const tierX = textX + c.maxTier * 24 + 8;
-  drawNumeralLine(ctx, t('shop.tier', { tier: c.tier, max: c.maxTier }), tierX, r.y + 78, textX + textW - tierX, pal.textDim, 16);
+  // AUD-U2: the words at the 22 px floor (were 16 / 18 / 17), numbers 24; a fixed card: ≤ 24 px drawn
+  drawNumeralLine(ctx, t('shop.tier', { tier: c.tier, max: c.maxTier }), tierX, r.y + 78, textX + textW - tierX, pal.textDim, 22, 'left', 24);
   // ART-16: the current tier's numbers at ≥ 24 px like the "Next" line below (same helper), the
-  // words still 18 px ink; baseline 6 px under the old 18 px middle line keeps its visual centre
-  drawNumeralLine(ctx, c.tier > 0 ? t('shop.now', { effect: c.effectNow }) : t('shop.notTrained'), textX, r.y + 110, textW, pal.ink, 18);
+  // words ink; baseline 6 px under the old 18 px middle line keeps its visual centre
+  drawNumeralLine(ctx, c.tier > 0 ? t('shop.now', { effect: c.effectNow }) : t('shop.notTrained'), textX, r.y + 110, textW, pal.ink, 22, 'left', 24);
   if (c.cost === null) {
     ctx.fillStyle = pal.textDim;
-    ctx.font = font(17, '500');
-    ctx.fillText(t('shop.fullyTrained'), textX, r.y + 132, textW);
+    drawCardLines(ctx, [t('shop.fullyTrained')], textX, r.y + 132, textW, 0);
   } else {
     // ART-15: the next tier's gain in the palette's gain colour (≥ 4.5:1 on the card; the owner-2
-    // green it replaces was 3.8:1), its numbers at ≥ 24 px; same visual centre as the 17 px line
-    drawNumeralLine(ctx, t('shop.next', { effect: c.effectNext }), textX, r.y + 138, textW, pal.gainText, 17);
+    // green it replaces was 3.8:1), its numbers at ≥ 24 px
+    drawNumeralLine(ctx, t('shop.next', { effect: c.effectNext }), textX, r.y + 138, textW, pal.gainText, 22, 'left', 24);
   }
   const buy = shopRowBuyRect(r);
   const pressed = rectEq(o.pressed, buy) || rectEq(o.pressed, r);
   if (c.cost === null) drawBuyButton(ctx, pal, buy, t('shop.max'), { ink: pal.shopOwned, fontPx: 22 });
   else drawBuyButton(ctx, pal, buy, String(c.cost), { glyph: 'gold', ink: pal.shopBuy, disabled: !c.affordable, pressed, fontPx: SHOP_NUMERAL_PX });
+}
+
+/**
+ * A dim footer under the last card (AUD-U2: 22 px, was 15): up to two 24 px-pitch lines across 640 px
+ * from `y` down (the content keeps 60 px under the last card / RESTORE, ui/shop.ts), never squeezed.
+ */
+function drawFooter(ctx: CanvasRenderingContext2D, text: string, y: number): void {
+  const fit = fitTextLines(ctx, text, Math.min(22, 22 / (textPx(22) / 22)), 640, 2, '500', 1.1);
+  fit.lines.forEach((l, i) => ctx.fillText(l, 360, y + i * 24));
 }
 
 export function drawShop(view: View, pal: Palette, o: ShopOpts): void {
@@ -492,7 +517,7 @@ export function drawShop(view: View, pal: Palette, o: ShopOpts): void {
   for (const h of o.skinHeaders) {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.font = font(22);
+    ctx.font = font(22, 'bold', undefined, 28);
     const w = ctx.measureText(h.label).width + 40;
     const pill: Rect = { x: SHOP.skin.x0, y: h.y, w, h: 36 };
     drawPill(ctx, pill, pal.paper);
@@ -503,26 +528,19 @@ export function drawShop(view: View, pal: Palette, o: ShopOpts): void {
   for (const c of o.upgrades) drawUpgradeCard(ctx, pal, c, o);
   if (o.restoreRect) {
     const rr = o.restoreRect;
-    drawButton(ctx, pal, rr, o.pending === 'restore' ? '' : t('shop.restore'), { fontPx: 20, flat: true, pressed: rectEq(o.pressed, rr), disabled: !o.storeAvailable });
+    drawButton(ctx, pal, rr, o.pending === 'restore' ? '' : t('shop.restore'), { fontPx: 22, flat: true, pressed: rectEq(o.pressed, rr), disabled: !o.storeAvailable });
     if (o.pending === 'restore') drawSpinner(ctx, pal.ink, rr.x + rr.w / 2, rr.y + (rr.h - 4) / 2, 11, o.nowMs);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = pal.textDim;
-    ctx.font = font(15, '500');
-    ctx.fillText(
-      o.storeAvailable ? t('shop.testStore') : t('shop.storeUnavailable'),
-      360,
-      rr.y + rr.h + 22,
-      640,
-    );
+    drawFooter(ctx, o.storeAvailable ? t('shop.testStore') : t('shop.storeUnavailable'), rr.y + rr.h + 22);
   }
   if (o.tab === 'upgrades') {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = pal.textDim;
-    ctx.font = font(15, '500');
     const last = o.upgrades[o.upgrades.length - 1];
-    if (last) ctx.fillText(t('shop.upgradesFooter'), 360, last.rect.y + last.rect.h + 26, 640);
+    if (last) drawFooter(ctx, t('shop.upgradesFooter'), last.rect.y + last.rect.h + 22);
   }
   o.particles?.draw(ctx, o.nowMs);
   ctx.restore();
@@ -536,7 +554,7 @@ export function drawShop(view: View, pal: Palette, o: ShopOpts): void {
   drawExtrudedText(ctx, title, 280, 50, fitFontPx(ctx, title, 40, 220), { face: pal.paper, side: shade(pal.owners.player, -0.25), outline: pal.ink, depth: 4 });
   drawWallet(ctx, pal, o.walletRect, o.gold, o.crystals);
   const tabs = o.tabs ?? SHOP_TABS;
-  drawSegmented(ctx, pal, o.tabsRect, tabs.map((tab) => ({ label: t(TAB_KEYS[tab]), value: tab })), tabs.indexOf(o.tab), 19);
+  drawSegmented(ctx, pal, o.tabsRect, tabs.map((tab) => ({ label: t(TAB_KEYS[tab]), value: tab })), tabs.indexOf(o.tab), 22);
   ctx.restore();
   if (o.confirmConvert) drawConvertConfirm(ctx, pal, o.confirmConvert, o, bleedRect(view));
   if (o.toast) drawToast(ctx, pal, { ...o.toast, y: (o.toast.y ?? 1210) + a.bottom });

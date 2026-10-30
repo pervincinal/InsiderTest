@@ -40,20 +40,159 @@ function weightOf(weight: FontWeight): 500 | 700 {
   return weight === 'normal' || weight === '500' ? 500 : 700;
 }
 
-/** CSS font shorthand; `family` defaults to the UI language's stack (`uiFont()`; the share card and the logo pass theirs). */
-export function font(px: number, weight: FontWeight = 'bold', family: string = uiFont()): string {
-  return `${weightOf(weight)} ${px}px ${family}`;
+/* ---------- text sizes (AUD-U2 / Q7, ART_DIRECTION "Text sizes") ---------- */
+
+/**
+ * Smallest layout px of any text a player must read. The 720 × 1280 layout is drawn at 0.5 CSS px
+ * per layout px on a 360-wide phone (0.6 at 430), so 22 layout px = 11 CSS px = 11 pt there (13 at
+ * 430). `font()` never returns less; the only texts below it are `TEXT_EXEMPTIONS` (`exemptFont`).
+ * Guards: tests/render/contrast.test.ts (tight lines, settings rows), tests/render/badgeLayout.test.ts
+ * and selectHint.test.ts (at 100 and 150 %); the 2026-10-30 probe measured every fillText of the
+ * title, level map, settings and play screens at 360 × 640 and 430 × 932 against it (BACKLOG AUD-U2).
+ */
+export const MIN_TEXT_PX = 22;
+
+/** The Settings "Text size" steps (save `settings.textScale`): 100 / 125 / 150 %. */
+export const TEXT_SCALES = [1, 1.25, 1.5] as const;
+export type TextScale = (typeof TEXT_SCALES)[number];
+
+/**
+ * The map's count badges and stream / mine chips follow the text size up to 125 % only: towers stand
+ * ≥ 150 px apart and a 150 % badge (56 tall) would cover its neighbour's (QA-24 guard). Their numerals
+ * are 30 layout px (15 CSS px at 360) at 100 % already.
+ */
+export const WORLD_TEXT_MAX = 1.25;
+
+/** The text size a badge / chip on the map follows (≤ WORLD_TEXT_MAX). */
+export const worldScale = (): number => Math.min(textScale, WORLD_TEXT_MAX);
+
+/** `font(px, '900')` for a badge / chip on the map: grows no further than WORLD_TEXT_MAX. */
+export const worldFont = (px: number): string => font(px, '900', uiFont(), px * WORLD_TEXT_MAX);
+
+/** True for one of the `TEXT_SCALES` steps (the save's read keeps nothing else). */
+export function isTextScale(v: unknown): v is TextScale {
+  return typeof v === 'number' && (TEXT_SCALES as readonly number[]).includes(v);
+}
+
+let textScale: TextScale = 1;
+
+/** Apply the player's text size (anything but a `TEXT_SCALES` step falls back to 100 %). */
+export function setTextScale(k: unknown): void {
+  textScale = isTextScale(k) ? k : 1;
+}
+
+/** The text size in force (1 = 100 %). */
+export function getTextScale(): TextScale {
+  return textScale;
+}
+
+/**
+ * Drawn layout px of a player-facing text set at `px`: scaled by the text size, at most `maxPx` (a box
+ * that cannot grow: a HUD band pill, a price chip), never under MIN_TEXT_PX.
+ */
+export function textPx(px: number, maxPx = Infinity): number {
+  return Math.max(MIN_TEXT_PX, Math.min(Math.round(px * textScale * 100) / 100, maxPx));
+}
+
+/**
+ * The documented exemptions from MIN_TEXT_PX (ART_DIRECTION "Text sizes"), drawn through `exemptFont`:
+ *   lessonCard  the lesson card's 20 / 18 px lines (hud.ts `lessonCardLayout`): a guarded system of its
+ *               own (e2e/lessonFit.spec.ts asserts every level × language at 20 px in ≤ 3 lines); it
+ *               still scales with the text size.
+ *   image       pictures that are not the screen: the 1080 × 1350 share card (shareCard.ts), sized
+ *               for the image; never scaled.
+ *   devNote     the dim `?tones=` URL-override note on Settings (dev / A-B builds only); never scaled.
+ *   wordmark    the title's TOWER / CLASH logo (112 px, far above the floor): brand art, so it keeps
+ *               its size at every text size.
+ */
+export const TEXT_EXEMPTIONS = Object.freeze({ lessonCard: { scaled: true }, image: { scaled: false }, devNote: { scaled: false }, wordmark: { scaled: false } });
+export type TextExemption = keyof typeof TEXT_EXEMPTIONS;
+
+/**
+ * CSS font shorthand for a player-facing text: `px` scaled by the text size and floored at
+ * MIN_TEXT_PX (`textPx`), capped at `maxPx` when given. `family` defaults to the UI language's stack
+ * (`uiFont()`).
+ */
+export function font(px: number, weight: FontWeight = 'bold', family: string = uiFont(), maxPx = Infinity): string {
+  return `${weightOf(weight)} ${textPx(px, maxPx)}px ${family}`;
+}
+
+/** Font of an exempt text (`TEXT_EXEMPTIONS`): no floor; scaled by the text size only where the exemption says so. */
+export function exemptFont(kind: TextExemption, px: number, weight: FontWeight = 'bold', family: string = uiFont()): string {
+  const k = TEXT_EXEMPTIONS[kind].scaled ? textScale : 1;
+  return `${weightOf(weight)} ${Math.round(px * k * 100) / 100}px ${family}`;
 }
 
 /**
  * Largest size ≤ `px` at which `text` fits `maxWidth` (translated headings vary a lot in length,
- * e.g. "LEVELS" → "SƏVİYYƏLƏR"). Measures once at `px` and scales linearly; leaves `ctx.font` set.
+ * e.g. "LEVELS" → "SƏVİYYƏLƏR"), as the size to hand to `font()`: measures once at the drawn size
+ * (`textPx`) and scales linearly, but never below MIN_TEXT_PX drawn — a text still too wide there
+ * must wrap or get a bigger box (`fitTextLines`). Leaves `ctx.font` set.
  */
 export function fitFontPx(ctx: CanvasRenderingContext2D, text: string, px: number, maxWidth: number, weight: FontWeight = '700', family: string = uiFont()): number {
   ctx.font = font(px, weight, family);
   const w = ctx.measureText(text).width;
   if (w <= maxWidth || w <= 0) return px;
-  return Math.max(8, Math.floor((px * maxWidth) / w));
+  return Math.max(MIN_TEXT_PX, Math.floor((textPx(px) * maxWidth) / w)) / textScale;
+}
+
+/**
+ * A glyph and a label centred as one group on button `r` (AUD-U2): the label at `px` (22 px floor,
+ * ≤ `maxPx` drawn) fitted to what the button leaves beside a `glyphW` glyph, "…" only past the floor.
+ * `glyph` draws at the given centre. Leaves the label font set and `textAlign` left.
+ */
+export function drawGlyphLabel(ctx: CanvasRenderingContext2D, r: Rect, label: string, glyphW: number, glyph: (cx: number, cy: number) => void, colour: string, px = 22, maxPx = 32, cy = r.y + (r.h - 4) / 2): void {
+  const gap = 8;
+  const room = r.w - 16 - glyphW - gap;
+  ctx.font = font(fitFontPx(ctx, label, px, room), 'bold', undefined, maxPx);
+  const shown = clipText(ctx, label, room);
+  const w = ctx.measureText(shown).width;
+  const x0 = r.x + (r.w - (glyphW + gap + w)) / 2;
+  glyph(x0 + glyphW / 2, cy);
+  ctx.fillStyle = colour;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(shown, x0 + glyphW + gap, cy + 1);
+}
+
+/**
+ * `text` as it fits `maxWidth` in the current font: whole, or cut at a word (else a letter) with "…" —
+ * the last resort of a fixed box once its text is at the floor (AUD-U2: never squeezed).
+ */
+export function clipText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  let s = text;
+  while (s.length > 1 && ctx.measureText(`${s}…`).width > maxWidth) s = s.lastIndexOf(' ') > 0 && ctx.measureText(`${s.slice(0, s.lastIndexOf(' '))}…`).width <= maxWidth ? s.slice(0, s.lastIndexOf(' ')) : s.slice(0, -1);
+  return `${s.trimEnd()}…`;
+}
+
+/** `fitTextLines` result: the lines, the size to hand to `font()`, the drawn size and the line pitch (layout px). */
+export interface FittedLines {
+  lines: string[];
+  px: number;
+  drawnPx: number;
+  lineH: number;
+}
+
+/**
+ * Re-flow for a box of `maxWidth` that may take up to `maxLines` lines (AUD-U2: never squeezed with
+ * `fillText`'s maxWidth). One line at full size if it fits, else the fewest lines (≤ `maxLines`) at
+ * full size, else the size shrinks step by step down to MIN_TEXT_PX drawn at `maxLines`; past that the
+ * last line ends with "…". `lineH` is `drawnPx × lineGap`. Leaves the chosen font set on `ctx`.
+ */
+export function fitTextLines(ctx: CanvasRenderingContext2D, text: string, px: number, maxWidth: number, maxLines: number, weight: FontWeight = '500', lineGap = 1.2): FittedLines {
+  const at = (p: number): FittedLines => {
+    ctx.font = font(p, weight);
+    const drawnPx = textPx(p);
+    return { lines: wrapText(ctx, text, maxWidth, maxLines), px: p, drawnPx, lineH: Math.round(drawnPx * lineGap) };
+  };
+  const fits = (f: FittedLines): boolean => !f.lines[f.lines.length - 1]?.endsWith('…') && f.lines.every((l) => ctx.measureText(l).width <= maxWidth);
+  let f = at(px);
+  for (let p = px; !fits(f) && textPx(p) > MIN_TEXT_PX; ) {
+    p = Math.max(MIN_TEXT_PX / textScale, p - 1 / textScale);
+    f = at(p);
+  }
+  return f;
 }
 
 /* ---------- numerals in translated lines (ART-15 / ART-16) ---------- */
@@ -135,9 +274,9 @@ export function runWidth(ctx: CanvasRenderingContext2D, f: string, s: string): n
 }
 
 /** Width of `text` set as a numeral line (words at `wordPx` 500, numbers at `numPx` 700). May change `ctx.font`. */
-export function numeralLineWidth(ctx: CanvasRenderingContext2D, text: string, wordPx: number, numPx: number = NUMERAL_PX): number {
+export function numeralLineWidth(ctx: CanvasRenderingContext2D, text: string, wordPx: number, numPx: number = NUMERAL_PX, maxPx = Infinity): number {
   let w = 0;
-  for (const r of numeralRuns(text)) w += runWidth(ctx, font(r.num ? numPx : wordPx, r.num ? '700' : '500'), r.s);
+  for (const r of numeralRuns(text)) w += runWidth(ctx, font(r.num ? numPx : wordPx, r.num ? '700' : '500', undefined, maxPx), r.s);
   return w;
 }
 
@@ -145,8 +284,9 @@ export function numeralLineWidth(ctx: CanvasRenderingContext2D, text: string, wo
  * One line (alphabetic baseline at `y`) whose numbers are drawn bold at NUMERAL_PX and the words at
  * `wordPx` (ART-15: numerals ≥ 24 px where a number is read, the translated words keep their size).
  * `x` is the left edge, or the centre with `align: 'center'`. A line too wide for `maxW` shrinks its
- * words first (≥ 12 px) and its numbers only as a last resort, so `fillText` never squeezes the
- * glyphs (BUG-21). Returns the drawn width.
+ * words first and its numbers only as a last resort, neither below MIN_TEXT_PX drawn (AUD-U2), so
+ * `fillText` never squeezes the glyphs (BUG-21); a caller whose line can still be too wide there
+ * wraps first (`wrapNumeralText`). Returns the drawn width.
  */
 export function drawNumeralLine(
   ctx: CanvasRenderingContext2D,
@@ -157,11 +297,13 @@ export function drawNumeralLine(
   colour: string,
   wordPx: number,
   align: 'left' | 'center' = 'left',
+  /** AUD-U2: the drawn size never exceeds this (a fixed box: a pill, the challenge card), whatever the text size. */
+  maxPx = Infinity,
 ): number {
   ctx.save();
   const runs = numeralRuns(text);
   const widthOf = (num: boolean, px: number): number => {
-    const f = font(px, num ? '700' : '500');
+    const f = font(px, num ? '700' : '500', undefined, maxPx);
     let sum = 0;
     for (const r of runs) if (r.num === num) sum += runWidth(ctx, f, r.s);
     return sum;
@@ -169,15 +311,16 @@ export function drawNumeralLine(
   let numPx = NUMERAL_PX;
   const numW = widthOf(true, numPx);
   let wordW = widthOf(false, wordPx);
+  const minPx = MIN_TEXT_PX / textScale;
   if (numW + wordW > maxW && wordW > 0) {
-    wordPx = Math.max(12, Math.floor((wordPx * Math.max(0, maxW - numW)) / wordW));
+    wordPx = Math.max(minPx, Math.floor((wordPx * Math.max(0, maxW - numW)) / wordW));
     wordW = widthOf(false, wordPx);
   }
   let total = numW + wordW;
   if (total > maxW) {
     const k = maxW / total;
-    numPx = Math.max(8, Math.floor(numPx * k));
-    wordPx = Math.max(8, Math.floor(wordPx * k));
+    numPx = Math.max(minPx, Math.floor(numPx * k));
+    wordPx = Math.max(minPx, Math.floor(wordPx * k));
     total = widthOf(true, numPx) + widthOf(false, wordPx);
   }
   ctx.textAlign = 'left';
@@ -185,8 +328,8 @@ export function drawNumeralLine(
   ctx.fillStyle = colour;
   let cx = align === 'center' ? x - total / 2 : x;
   // runs are drawn in reading order; the font is set only where it changes (widths come from the memo)
-  const numFont = font(numPx, '700');
-  const wordFont = font(wordPx, '500');
+  const numFont = font(numPx, '700', undefined, maxPx);
+  const wordFont = font(wordPx, '500', undefined, maxPx);
   let set = '';
   for (const r of runs) {
     const f = r.num ? numFont : wordFont;
@@ -213,10 +356,11 @@ export interface NumeralWrap {
  * Break a translated line into at most `maxLines` numeral lines no wider than `maxW` (ART-16 toast
  * fit pass). " · " is the preferred break (the separator is dropped at a line end: "Need 200 gold ·
  * earn stars …" → "Need 200 gold" / "earn stars …"); a part still too wide breaks between words. If
- * the text needs more lines than `maxLines`, the words shrink a pixel at a time (≥ `minWordPx`) and
- * the numbers stay at NUMERAL_PX; past that `drawNumeralLine` shrinks a line as its last resort.
+ * the text needs more lines than `maxLines`, the words shrink a pixel at a time (≥ `minWordPx`, by
+ * default MIN_TEXT_PX drawn) and the numbers stay at NUMERAL_PX; past that `drawNumeralLine` shrinks a
+ * line as its last resort.
  */
-export function wrapNumeralText(ctx: CanvasRenderingContext2D, text: string, maxW: number, wordPx: number, maxLines: number, minWordPx = 16): NumeralWrap {
+export function wrapNumeralText(ctx: CanvasRenderingContext2D, text: string, maxW: number, wordPx: number, maxLines: number, minWordPx = MIN_TEXT_PX / textScale): NumeralWrap {
   for (let px = wordPx; ; px--) {
     const lines = wrapAt(ctx, text, maxW, px);
     if (lines.length <= maxLines || px <= minWordPx) {
@@ -435,10 +579,12 @@ export function drawButton(
   innerHighlight(ctx, face, radius, light ? 0.9 : 0.45);
   if (label) {
     ctx.fillStyle = style.text ?? (light ? pal.text : pal.panel);
-    ctx.font = font(style.fontPx ?? 28);
+    // AUD-U2: fitted to the face (never squeezed), at most the face's height less its padding at any text size
+    const px = Math.min(fitFontPx(ctx, label, style.fontPx ?? 28, face.w - 16), (face.h - 14) / textScale);
+    ctx.font = font(px);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(label, face.x + face.w / 2, face.y + face.h / 2 + 1, face.w - 16);
+    ctx.fillText(label, face.x + face.w / 2, face.y + face.h / 2 + 1);
   }
   ctx.restore();
 }
@@ -520,6 +666,8 @@ export interface ExtrudeStyle {
   depth?: number;
   /** Font family stack (default the UI language's, `uiFont()`). */
   family?: string;
+  /** A `TEXT_EXEMPTIONS` kind (the share card's `image`, the title's `wordmark`): drawn with `exemptFont`. */
+  exempt?: TextExemption;
   /** Extrusion direction (default lower-right, matching the key light). */
   dx?: number;
   dy?: number;
@@ -538,7 +686,8 @@ export function drawExtrudedText(ctx: CanvasRenderingContext2D, text: string, x:
   const dy = s.dy ?? 1;
   const outline = s.outline ?? '#1e2a44';
   ctx.save();
-  ctx.font = font(px, s.weight ?? '700', s.family);
+  ctx.font = s.exempt ? exemptFont(s.exempt, px, s.weight ?? '700', s.family) : font(px, s.weight ?? '700', s.family);
+  px = s.exempt ? Number(/([\d.]+)px/.exec(ctx.font)?.[1] ?? px) : textPx(px);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.lineJoin = 'round';

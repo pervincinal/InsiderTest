@@ -18,11 +18,16 @@ import {
   drawRoundButton,
   drawSnowflakeGlyph,
   drawSpeakerGlyph,
+  clipText,
   drawStars,
+  exemptFont,
   fitFontPx,
+  fitTextLines,
   font,
   formatTime,
+  getTextScale,
   roundRect,
+  textPx,
   wrapText,
 } from './widgets';
 import type { PlayUi } from './draw';
@@ -140,7 +145,30 @@ export type HudPlayUi = PlayUi & {
    * on screen matches the one the stars are scored on (ECONOMY.md §3.5).
    */
   clockMs?: number;
+  /**
+   * AUD-B11 (GDD §4): the lesson card holds the match (no first input yet). Undefined = a frame
+   * without a play screen behind it (tests, tools): the card is drawn as if held.
+   */
+  cardUp?: boolean;
+  /** The lesson card's opacity once dismissed (1 → 0 over the play screen's fade; 0 = gone). */
+  cardFade?: number;
+  /** AUD-F4: the outcome is decided but the result beat is still running — no dim, no card yet. */
+  resultBeat?: boolean;
 };
+
+/** The stalemate card's window in seconds (GDD §2.4; play.ts `STALEMATE_CARD_MS` is this × 1000), for its body text. */
+export const STALEMATE_CARD_S = 45;
+
+/**
+ * AUD-B2 / A11 "Nothing is changing" card (GDD §2.4): title, body, KEEP PLAYING over RESTART · RETREAT.
+ * Row centres 98 apart, columns 220 apart, so the ≥ 44 pt tap areas (`hitRect`) never overlap.
+ */
+export const STALL = Object.freeze({
+  card: { x: 90, y: 420, w: 540, h: 440 } as Rect,
+  keep: { x: 150, y: 650, w: 420, h: 80 } as Rect,
+  restart: { x: 150, y: 752, w: 200, h: 72 } as Rect,
+  retreat: { x: 370, y: 752, w: 200, h: 72 } as Rect,
+});
 
 /**
  * Result card rect and SHARE rect (SHARE-1): SHARE takes the ×2 gold / skip slot when nothing else
@@ -195,7 +223,11 @@ function pauseGlyph(ctx: CanvasRenderingContext2D, color: string, cx: number, cy
   }
 }
 
-/** Active-streams pill (rules v2, where the SEND toggle used to be): small caption, then "⇢ n". */
+/**
+ * Active-streams pill (rules v2, where the SEND toggle used to be): caption, then "⇢ n". AUD-U2: the
+ * caption at the 22 px floor (fitted to the pill, never squeezed); the pill sits in the bottom band,
+ * so at a bigger text size the caption stops at 24 px and the number at 30.
+ */
 function drawStreamsPill(ctx: CanvasRenderingContext2D, ui: PlayUi, n: number): void {
   const pal = ui.palette;
   const r = HUD.streams;
@@ -204,14 +236,21 @@ function drawStreamsPill(ctx: CanvasRenderingContext2D, ui: PlayUi, n: number): 
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = pal.textDim;
-  ctx.font = font(14, '500');
-  ctx.fillText(t('hud.streams'), r.x + 16, cy - 13, 120);
+  const caption = t('hud.streams');
+  ctx.font = font(fitFontPx(ctx, caption, 22, r.w - 32, '500'), '500', undefined, 24);
+  ctx.fillText(caption, r.x + 16, cy - 13);
   const color = n > 0 ? pal.owners.player : pal.textDim;
-  drawStreamArrow(ctx, color, r.x + 28, cy + 12, 12, 3);
+  drawStreamArrow(ctx, color, r.x + 28, cy + 13, 12, 3);
   ctx.fillStyle = n > 0 ? pal.ink : pal.textDim;
-  ctx.font = font(26);
-  ctx.fillText(String(n), r.x + 48, cy + 13);
+  ctx.font = font(26, 'bold', undefined, 30);
+  ctx.fillText(String(n), r.x + 48, cy + 14);
 }
+
+/**
+ * The booster cost chip under a disc (AUD-U2): 76 wide and 28 tall, overlapping the disc's foot by 8
+ * so a 22 px price fits inside the bottom band (it ends where the 22 px chip under the disc did).
+ */
+export const BOOSTER_CHIP = Object.freeze({ w: 76, h: 28, overlap: 8 });
 
 function boosterGlyph(ctx: CanvasRenderingContext2D, kind: BoosterKind, color: string, cx: number, cy: number, s: number, outline: string): void {
   if (kind === 'overdrive') drawBoltGlyph(ctx, color, cx, cy, s, outline);
@@ -252,7 +291,7 @@ function drawBoosterBar(ctx: CanvasRenderingContext2D, ui: PlayUi, hud: HudExtra
     }
     // cost chip under the disc: charges ("×2" on gold), a video glyph when a free charge is on offer,
     // otherwise the gold price
-    const chip: Rect = { x: rect.x + 6, y: rect.y + BOOSTERS.disc + 4, w: rect.w - 12, h: BOOSTERS.chipH };
+    const chip: Rect = { x: cx - BOOSTER_CHIP.w / 2, y: rect.y + BOOSTERS.disc - BOOSTER_CHIP.overlap, w: BOOSTER_CHIP.w, h: BOOSTER_CHIP.h };
     roundRect(ctx, chip, chip.h / 2);
     const chipFill = st.charges > 0 ? pal.gold : st.adOffer ? pal.owners.player : st.affordable ? pal.paper : shade(pal.panel, -0.1);
     ctx.fillStyle = chipFill;
@@ -260,23 +299,36 @@ function drawBoosterBar(ctx: CanvasRenderingContext2D, ui: PlayUi, hud: HudExtra
     ctx.lineWidth = 2;
     ctx.strokeStyle = st.charges > 0 ? pal.goldShade : st.adOffer ? shade(pal.owners.player, -0.35) : st.affordable ? shade(pal.gold, -0.2) : pal.textDim;
     ctx.stroke();
-    ctx.font = font(16);
-    ctx.textAlign = 'left';
+    // the chip is a fixed box in the band: 22 px at any text size (it cannot grow)
+    const chipFont = font(22, 'bold', undefined, 22);
+    ctx.font = chipFont;
+    ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    const my = chip.y + chip.h / 2 + 1;
     if (st.charges > 0) {
       ctx.fillStyle = pal.ink;
-      ctx.textAlign = 'center';
-      ctx.fillText(`×${st.charges}`, chip.x + chip.w / 2, chip.y + chip.h / 2 + 1);
+      ctx.fillText(`×${st.charges}`, chip.x + chip.w / 2, my);
     } else if (st.adOffer) {
-      drawVideoGlyph(ctx, pal, chip.x + 13, chip.y + chip.h / 2, 7);
-      ctx.fillStyle = pal.paper;
+      // "▶ FREE" where the word fits beside the video glyph at 22 px, else the glyph alone. Measured
+      // 2026-10-30: no language fits the 76-wide chip (FREE 53, PULSUZ 80, BEDAVA 80, БЕСПЛ. 82 px; room 40),
+      // so the chip shows the video glyph alone (BACKLOG AUD-U2 note)
       const free = t('hud.free');
-      ctx.font = font(free.length > 4 ? 11 : 14);
-      ctx.fillText(free, chip.x + 24, chip.y + chip.h / 2 + 1, chip.w - 26);
+      const tw = ctx.measureText(free).width;
+      if (tw + 26 <= chip.w - 10) {
+        const x0 = chip.x + (chip.w - (tw + 26)) / 2;
+        drawVideoGlyph(ctx, pal, x0 + 8, chip.y + chip.h / 2, 8);
+        ctx.fillStyle = pal.paper;
+        ctx.textAlign = 'left';
+        ctx.fillText(free, x0 + 26, my);
+      } else drawVideoGlyph(ctx, pal, chip.x + chip.w / 2, chip.y + chip.h / 2, 10);
     } else {
-      drawCoin(ctx, pal, chip.x + 12, chip.y + chip.h / 2, 7);
+      const cost = String(st.cost);
+      const tw = ctx.measureText(cost).width;
+      const x0 = chip.x + (chip.w - (tw + 24)) / 2;
+      drawCoin(ctx, pal, x0 + 8, chip.y + chip.h / 2, 8);
       ctx.fillStyle = st.affordable ? pal.ink : pal.textDim;
-      ctx.fillText(String(st.cost), chip.x + 23, chip.y + chip.h / 2 + 1);
+      ctx.textAlign = 'left';
+      ctx.fillText(cost, x0 + 24, my);
     }
   }
 }
@@ -288,10 +340,11 @@ function drawCoinPill(ctx: CanvasRenderingContext2D, ui: PlayUi): void {
   drawPill(ctx, r, pal.paper);
   drawCoin(ctx, pal, r.x + 22, r.y + r.h / 2, 13);
   ctx.fillStyle = pal.ink;
-  ctx.font = font(24);
+  const coins = String(ui.coinsTotal);
+  ctx.font = font(fitFontPx(ctx, coins, 24, r.w - 50), 'bold', undefined, 30);
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
-  ctx.fillText(String(ui.coinsTotal), r.x + r.w - 14, r.y + r.h / 2 + 1, r.w - 50);
+  ctx.fillText(coins, r.x + r.w - 14, r.y + r.h / 2 + 1);
 }
 
 /** Airstrike targeting: pulsing crosshair rings on every enemy tower and an instruction pill (just above the bottom band, moved by `dy`). */
@@ -318,15 +371,16 @@ function drawTargeting(ctx: CanvasRenderingContext2D, state: GameState, ui: Play
     drawCrosshairGlyph(ctx, color, t.x, t.y - 70 * t.s * WORLD_ZOOM.tower, 14);
   }
   ctx.restore();
-  ctx.font = font(20, '500');
-  const text = t('hud.airstrikeHint');
-  const w = Math.min(700, ctx.measureText(text).width + 44);
-  const pill: Rect = { x: 360 - w / 2, y: 1126 + dy, w, h: 42 };
+  // AUD-U2: 22 px, wrapped (never squeezed); the pill grows upwards from its foot at 1168
+  const fit = fitTextLines(ctx, t('hud.airstrikeHint'), 22, 656, 3);
+  const w = Math.min(700, Math.max(...fit.lines.map((l) => ctx.measureText(l).width)) + 44);
+  const h = fit.lines.length * fit.lineH + 16;
+  const pill: Rect = { x: 360 - w / 2, y: 1168 - h + dy, w, h };
   drawPill(ctx, pill, color, shade(color, -0.35));
   ctx.fillStyle = pal.paper;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, 360, pill.y + pill.h / 2 + 1, w - 20);
+  fit.lines.forEach((l, i) => ctx.fillText(l, 360, pill.y + 8 + fit.lineH * (i + 0.5) + 1));
 }
 
 /** The lesson card's layout (HUD layout space: the top band's frame, shift by `hudAnchors().top` for the screen). */
@@ -338,28 +392,43 @@ export interface LessonCard {
   captionH: number;
 }
 
-/** The lesson card is up for the first seconds of a running level. */
-export const LESSON_CARD_MS = 8000;
+/**
+ * AUD-B11 (GDD §4): the lesson card's opacity — 1 while it holds the match, then the play screen's fade
+ * after the first input, 0 once gone. It no longer times out: the hold ends only with the player's
+ * first input. A frame that does not say (`HudPlayUi.cardUp` undefined: tests, tools) shows it only at
+ * sim time 0 — a held match never leaves 0, a running one has.
+ */
+export function lessonCardAlpha(ui: PlayUi, state: Pick<GameState, 'time'>): number {
+  const u = ui as HudPlayUi;
+  if (u.cardUp === undefined) return state.time === 0 ? 1 : 0;
+  return u.cardUp ? 1 : Math.max(0, Math.min(1, u.cardFade ?? 0));
+}
 
 /**
- * The lesson hint during the first LESSON_CARD_MS (a small "LESSON" caption over the lesson text,
- * both in the UI language), or null when it is not shown. Up to three lines at 20 px; longer lessons
- * (band finales, translations) drop to 18 px and up to five lines rather than being cut with an
- * ellipsis. Leaves a lesson font set on `ctx`. The world clamps badges below it (ART-22, draw.ts).
+ * The lesson hint while the card holds the match and during its fade (a small "LESSON" caption over
+ * the lesson text, both in the UI language), or null when it is not shown. Up to three lines at 20 px;
+ * longer lessons (band finales, translations) drop to 18 px and up to five lines rather than being
+ * cut with an ellipsis. AUD-U2: the lines are a documented exemption from the 22 px floor
+ * (`exemptFont('lessonCard')`, guarded by e2e/lessonFit.spec.ts at 100 %) but follow the text size:
+ * at 125 / 150 % the lesson takes up to eight lines of the bigger text (then the 18 px step) and the
+ * card grows downwards. `px` is the 100 % size (drawn: `px` × text size); the caption is floor text.
+ * Leaves a lesson font set on `ctx`. The world clamps badges below it (ART-22, draw.ts).
  */
 export function lessonCardLayout(ctx: CanvasRenderingContext2D, state: GameState, ui: PlayUi): LessonCard | null {
-  if (state.time >= LESSON_CARD_MS || ui.outcome !== 'playing') return null;
+  if (ui.outcome !== 'playing' || lessonCardAlpha(ui, state) <= 0) return null;
   const lesson = levelLesson(ui.level);
-  ctx.font = font(20, '500');
-  let lines = wrapText(ctx, lesson, 620, 3);
+  const k = getTextScale();
+  const steps: readonly (readonly [number, number, number])[] = k === 1 ? [[20, 620, 3], [18, 640, 5]] : [[20, 620, 3], [20, 640, 8], [18, 640, 8]];
   let px = 20;
-  if (lines[lines.length - 1]?.endsWith('…')) {
-    px = 18;
-    ctx.font = font(px, '500');
-    lines = wrapText(ctx, lesson, 640, 5);
+  let lines: string[] = [];
+  for (const [p, wrapW, max] of steps) {
+    px = p;
+    ctx.font = exemptFont('lessonCard', px, '500');
+    lines = wrapText(ctx, lesson, wrapW, max);
+    if (!lines[lines.length - 1]?.endsWith('…')) break;
   }
-  const lineH = px + 6;
-  const captionH = 18;
+  const lineH = Math.round(px * k) + 6;
+  const captionH = Math.round(textPx(22)) + 4;
   const h = lines.length * lineH + 18 + captionH;
   const w = Math.min(690, Math.max(...lines.map((l) => ctx.measureText(l).width)) + 48);
   return { rect: { x: 360 - w / 2, y: 108, w, h }, lines, px, lineH, captionH };
@@ -370,23 +439,77 @@ export function lessonCardLayout(ctx: CanvasRenderingContext2D, state: GameState
  * when it moves up (GD-5d), the clear space it keeps from every tower body, ring, badge and chip, and
  * the room it leaves above and below the tower a tutorial step points at (BUG-57: the bubble's arrow
  * tip gap 8 + reach 54 + bob 8 + a one-line bubble 56 + 3, render/tutorialBubble.ts TUTORIAL_BUBBLE).
+ * AUD-U2 / U12: `h` / `y` are the one-line pill at 100 % text size; the text is `px` (the 22 px floor;
+ * at a bigger text size at most `maxPx`: the pill must still find room between the towers of a dense
+ * map, tests/render/selectHint.test.ts) in lines of at most `maxW` − 2 × `padX` (`selectHintBox`), the
+ * pill `padY` taller than its lines, its low spot `bottomGap` above the bottom band.
  */
-export const SELECT_HINT = Object.freeze({ h: 38, y: 1128, gap: 10, clear: 3, tutorialRoom: 130 });
+export const SELECT_HINT = Object.freeze({ h: 38, y: 1128, gap: 10, clear: 3, tutorialRoom: 130, px: 22, maxPx: 26, maxW: 700, padX: 20, padY: 12, bottomGap: 14 });
 
-/** The select hint's measured text width at its 19 px font (leaves that font set on `ctx`). */
-export function selectHintTextW(ctx: CanvasRenderingContext2D): number {
-  ctx.font = font(19, '500');
-  return ctx.measureText(t('hud.selectHint')).width;
+/** The select hint's lines and pill size (`selectHintBox`). */
+export interface SelectHintBox {
+  lines: string[];
+  lineH: number;
+  w: number;
+  h: number;
+}
+
+const hintBoxes = new WeakMap<CanvasRenderingContext2D, { key: string; box: SelectHintBox }>();
+
+/**
+ * AUD-U2 / U12: which half of the select hint ("start a stream · … to stop", one " · " in every
+ * language) applies to the selected tower: 0 (start) while it sends no stream, 1 (stop) once it does.
+ * At the 22 px floor the whole sentence no longer fits one line (and a two-line pill finds no clear
+ * spot on a dense map), so the hint says the half the player can act on.
+ */
+export function selectHintPart(state: Pick<GameState, 'links' | 'towers'>, selectedId: string): 0 | 1 {
+  const owner = state.towers[selectedId]?.owner;
+  return state.links.some((l) => l.from === selectedId && l.owner === owner) ? 1 : 0;
+}
+
+/** The select hint's text for `part` (`selectHintPart`): that half of `hud.selectHint`, capitalised. */
+export function selectHintText(part: 0 | 1): string {
+  const parts = t('hud.selectHint').split(' · ');
+  const s = (parts.length > 1 ? parts[part] : parts[0]) ?? '';
+  return s.charAt(0).toLocaleUpperCase(currentLanguage()) + s.slice(1);
 }
 
 /**
- * The select hint's two home spots for its measured text `textW` (pure): `low` centred just above the
+ * AUD-U2 / U12: the select hint (`selectHintText`) at 22 px (× text size), never squeezed: one line
+ * where it fits the 660 px text width, else wrapped between words; the pill is the widest line +
+ * 2 × `padX` (≤ 700) by lines × pitch + `padY`. Memoised per canvas on the font and text (drawn every
+ * frame while a tower is selected). Leaves the hint font set on `ctx`.
+ */
+export function selectHintBox(ctx: CanvasRenderingContext2D, part: 0 | 1 = 0): SelectHintBox {
+  const text = selectHintText(part);
+  const f = font(SELECT_HINT.px, '500', undefined, SELECT_HINT.maxPx);
+  ctx.font = f;
+  const key = `${f}|${text}`;
+  const hit = hintBoxes.get(ctx);
+  if (hit?.key === key) return hit.box;
+  const maxText = SELECT_HINT.maxW - 2 * SELECT_HINT.padX;
+  const lines = wrapText(ctx, text, maxText, 8);
+  const lineH = Math.round(textPx(SELECT_HINT.px, SELECT_HINT.maxPx) * 1.18);
+  const w = Math.min(SELECT_HINT.maxW, Math.max(...lines.map((l) => ctx.measureText(l).width)) + 2 * SELECT_HINT.padX);
+  const box = { lines, lineH, w, h: lines.length * lineH + SELECT_HINT.padY };
+  hintBoxes.set(ctx, { key, box });
+  return box;
+}
+
+/** Layout y of the select hint's low spot (just above the bottom band) for a pill `h` tall. */
+export const selectHintLowY = (h: number, a: HudAnchors): number => HUD.mapBottom - SELECT_HINT.bottomGap - h + a.bottom;
+
+/** BUG-57 tutorial room above and below the focus tower at the current text size (the one-line bubble grows with it). */
+export const selectHintTutorialRoom = (): number => SELECT_HINT.tutorialRoom + Math.round(56 * (getTextScale() - 1));
+
+/**
+ * The select hint's two home spots for its pill size `box` (pure): `low` centred just above the
  * bottom band, `top` at the top of the map band, under the top HUD band or, while it is up, the lesson
  * card (`card`, logical frame; its clay edge is 4 px under its rect).
  */
-export function selectHintSpots(textW: number, a: HudAnchors, card: Rect | null): { low: Rect; top: Rect } {
-  const w = Math.min(700, textW + 40);
-  const low = { x: 360 - w / 2, y: SELECT_HINT.y + a.bottom, w, h: SELECT_HINT.h };
+export function selectHintSpots(box: { w: number; h: number }, a: HudAnchors, card: Rect | null): { low: Rect; top: Rect } {
+  const { w, h } = box;
+  const low = { x: 360 - w / 2, y: selectHintLowY(h, a), w, h };
   return { low, top: { ...low, y: card ? card.y + card.h + 4 + SELECT_HINT.gap : Math.max(0, HUD.mapTop + a.top) + SELECT_HINT.gap } };
 }
 
@@ -395,8 +518,8 @@ export function selectHintSpots(textW: number, a: HudAnchors, card: Rect | null)
  * (the selected tower's footprint and badge, `selectHintAvoid`), then the top spot. The play frame
  * places it with draw.ts `playLayout` (BUG-57) and `selectHintPill` returns that one.
  */
-export function selectHintRect(textW: number, a: HudAnchors, card: Rect | null, avoid: readonly Rect[]): Rect {
-  const { low, top } = selectHintSpots(textW, a, card);
+export function selectHintRect(box: { w: number; h: number }, a: HudAnchors, card: Rect | null, avoid: readonly Rect[]): Rect {
+  const { low, top } = selectHintSpots(box, a, card);
   return avoid.some((r) => overlaps(r, low)) ? top : low;
 }
 
@@ -446,9 +569,8 @@ export function selectHintCover(r: Rect, obstacles: readonly Rect[]): number {
  * of `obstacles`; columns are centred or SELECT_HINT.clear beside an obstacle of the row, inside the
  * map's width less 4 px — so the first spot of the band clear of `obstacles` is among them.
  */
-export function* selectHintScan(w: number, y0: number, y1: number, obstacles: readonly Rect[]): Generator<Rect> {
+export function* selectHintScan(w: number, y0: number, y1: number, obstacles: readonly Rect[], h: number = SELECT_HINT.h): Generator<Rect> {
   const g = SELECT_HINT.clear;
-  const h = SELECT_HINT.h;
   const cx = 360 - w / 2;
   const edges = obstacles.flatMap((o) => [Math.ceil(o.y + o.h + g), Math.floor(o.y - g - h)]);
   const ys = [...new Set([y0, y1, ...edges])].filter((y) => y >= y0 && y <= y1).sort((p, q) => p - q);
@@ -476,9 +598,9 @@ export function selectHintAvoid(state: GameState, selectedId: string, cam: Camer
  * `card`: the lesson card in the logical frame, or null.
  */
 export function selectHintPill(ctx: CanvasRenderingContext2D, state: GameState, selectedId: string, a: HudAnchors, card: Rect | null, cam: Camera = playCamera(), layout: WorldLayout | null = frameWorldLayout(state)): Rect {
-  const textW = selectHintTextW(ctx);
+  const box = selectHintBox(ctx, selectHintPart(state, selectedId));
   if (layout?.hint?.id === selectedId) return layout.hint.rect;
-  return selectHintRect(textW, a, card, selectHintAvoid(state, selectedId, cam, layout));
+  return selectHintRect(box, a, card, selectHintAvoid(state, selectedId, cam, layout));
 }
 
 /** Whether `drawHud` shows the select hint this frame: a tower selected while playing, and no airstrike targeting under way. */
@@ -487,7 +609,7 @@ export function selectHintShown(ui: PlayUi): boolean {
 }
 
 /** Whether `pill` (`selectHintPill`) moved up from its spot over the bottom band (GD-5d). */
-export const selectHintMoved = (pill: Rect, a: HudAnchors): boolean => pill.y !== SELECT_HINT.y + a.bottom;
+export const selectHintMoved = (pill: Rect, a: HudAnchors): boolean => pill.y !== selectHintLowY(pill.h, a);
 
 /** The two glass bands, from the screen edges to the anchored band edges (exactly `HUD.topBar` / `HUD.bottomBar` on a 9:16 screen). */
 export function hudBandRects(view: View, a: HudAnchors = hudAnchors(view)): { top: Rect; bottom: Rect } {
@@ -520,26 +642,31 @@ export function drawHud(ctx: CanvasRenderingContext2D, state: GameState, view: V
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = hud?.challenge ? pal.goldShade : pal.textDim;
-  ctx.font = font(14, '500');
-  ctx.fillText(hud?.challenge ? hud.challenge.twist : t('hud.level', { n: ui.level.id }), chip.x + 24, chip.y + 19, chip.w - 44);
+  // AUD-U2: caption at the 22 px floor over a 24 px title, both fitted to the chip (never squeezed;
+  // "…" only past the floor); the chip is a fixed box in the band, so 24 / 28 px at most
+  const chipW = chip.w - 40;
+  const caption = hud?.challenge ? hud.challenge.twist : t('hud.level', { n: ui.level.id });
+  ctx.font = font(fitFontPx(ctx, caption, 22, chipW, '500'), '500', undefined, 24);
+  ctx.fillText(clipText(ctx, caption, chipW), chip.x + 22, chip.y + 17);
   ctx.fillStyle = pal.ink;
   const chipTitle = hud?.challenge ? t(hud.challenge.weekly ? 'weekly.chip' : 'daily.chip', { name: levelName(ui.level) }) : levelName(ui.level);
-  ctx.font = font(fitFontPx(ctx, chipTitle, 24, chip.w - 44));
-  ctx.fillText(chipTitle, chip.x + 24, chip.y + 41, chip.w - 44);
+  ctx.font = font(fitFontPx(ctx, chipTitle, 24, chipW), 'bold', undefined, 28);
+  ctx.fillText(clipText(ctx, chipTitle, chipW), chip.x + 22, chip.y + 42);
 
   // timer pill (+ speed tag)
   const timer = HUD.timer;
   drawPill(ctx, timer, pal.paper);
   ctx.textAlign = 'center';
   ctx.fillStyle = pal.ink;
-  ctx.font = font(34);
+  ctx.font = font(34, 'bold', undefined, 40); // the pill is a fixed box in the band
   ctx.fillText(formatTime(clockOf(ui, state)), timer.x + timer.w / 2, timer.y + timer.h / 2 + 2);
   if (ui.speed !== 1) {
     const tag = HUD.speedTag;
     drawPill(ctx, tag, pal.accent);
     ctx.fillStyle = pal.paper;
-    ctx.font = font(20);
-    ctx.fillText(`×${ui.speed}`, tag.x + tag.w / 2, tag.y + tag.h / 2 + 1);
+    const speed = `×${ui.speed}`;
+    ctx.font = font(fitFontPx(ctx, speed, 22, tag.w - 12), 'bold', undefined, 26);
+    ctx.fillText(speed, tag.x + tag.w / 2, tag.y + tag.h / 2 + 1);
   }
 
   // mute + pause buttons
@@ -551,18 +678,22 @@ export function drawHud(ctx: CanvasRenderingContext2D, state: GameState, view: V
   drawButton(ctx, pal, pb, '');
   pauseGlyph(ctx, pal.ink, pb.x + pb.w / 2, pb.y + (pb.h - 4) / 2, ui.paused);
 
-  // lesson hint during the first seconds (`lessonCardLayout`)
+  // lesson hint until the first input, then its short fade (`lessonCardLayout`, AUD-B11)
   const card = lessonCardLayout(ctx, state, ui);
   if (card) {
     const { rect, lines, px, lineH, captionH } = card;
+    ctx.save();
+    ctx.globalAlpha = lessonCardAlpha(ui, state);
     drawCard(ctx, pal, rect, { radius: 18, edge: 4 });
     ctx.textAlign = 'center';
     ctx.fillStyle = pal.textDim;
-    ctx.font = font(13, '500');
-    ctx.fillText(t('hud.lesson'), 360, rect.y + 14, rect.w - 24);
+    const caption = t('hud.lesson');
+    ctx.font = font(fitFontPx(ctx, caption, 22, rect.w - 24, '500'), '500');
+    ctx.fillText(caption, 360, rect.y + 6 + captionH / 2);
     ctx.fillStyle = pal.ink;
-    ctx.font = font(px, '500');
+    ctx.font = exemptFont('lessonCard', px, '500');
     lines.forEach((l, i) => ctx.fillText(l, 360, rect.y + 20 + captionH + i * lineH));
+    ctx.restore();
   }
   ctx.restore();
 
@@ -583,14 +714,13 @@ export function drawHud(ctx: CanvasRenderingContext2D, state: GameState, view: V
   if (hud?.targeting && ui.outcome === 'playing' && !ui.paused) drawTargeting(ctx, state, ui, nowMs, a.bottom);
   // selection hint: just above the bottom band, or where this frame's layout moved it off the towers (GD-5d, BUG-57)
   else if (ui.selectedTowerId && ui.outcome === 'playing') {
-    const text = t('hud.selectHint');
     const pill = selectHintPill(ctx, state, ui.selectedTowerId, a, card ? { ...card.rect, y: card.rect.y + a.top } : null);
-    const w = pill.w;
+    const box = selectHintBox(ctx, selectHintPart(state, ui.selectedTowerId));
     drawPill(ctx, pill, pal.paper);
-    ctx.font = font(19, '500');
     ctx.fillStyle = pal.ink;
     ctx.textAlign = 'center';
-    ctx.fillText(text, pill.x + w / 2, pill.y + pill.h / 2 + 1, w - 20);
+    const top = pill.y + (pill.h - box.lines.length * box.lineH) / 2;
+    box.lines.forEach((l, i) => ctx.fillText(l, pill.x + pill.w / 2, top + box.lineH * (i + 0.5) + 1));
   }
   // transient status while playing (free charge added, "not in the daily challenge"); overlays draw their own.
   // It sits over the bottom band, so it moves with it.
@@ -606,10 +736,11 @@ export function drawHud(ctx: CanvasRenderingContext2D, state: GameState, view: V
 export function hudKey(state: GameState, ui: PlayUi, nowMs: number): string {
   const hud = extrasOf(ui);
   let k =
-    `${currentLanguage()}|${ui.palette.owners.enemy1}|${ui.level.id}|${hud?.challenge?.twist ?? ''}|${formatTime(clockOf(ui, state))}|${ui.speed}|` +
-    `${hud?.muted ? 1 : 0}${ui.paused ? 1 : 0}${state.time < 8000 ? 1 : 0}${ui.selectedTowerId ? 1 : 0}|${ui.outcome}|${hud?.streams ?? 0}|${ui.coinsTotal}|${hud?.pressedBooster ?? ''}`;
+    `${currentLanguage()}|${getTextScale()}|${ui.palette.owners.enemy1}|${ui.level.id}|${hud?.challenge?.twist ?? ''}|${formatTime(clockOf(ui, state))}|${ui.speed}|` +
+    `${hud?.muted ? 1 : 0}${ui.paused ? 1 : 0}${Math.round(lessonCardAlpha(ui, state) * 32)}${ui.selectedTowerId ? 1 : 0}|${ui.outcome}|${hud?.streams ?? 0}|${ui.coinsTotal}|${hud?.pressedBooster ?? ''}`;
   // GD-5d / BUG-57: the select hint's spot, as this frame's world layout placed it (draw.ts `playLayout`)
   const hint = ui.selectedTowerId ? frameWorldLayout(state)?.hint : undefined;
+  if (ui.selectedTowerId) k += `|p${selectHintPart(state, ui.selectedTowerId)}`; // AUD-U2: which half of the hint
   if (hint?.id === ui.selectedTowerId) k += `|s${Math.round(hint.rect.x)},${Math.round(hint.rect.y)}`;
   else if (ui.selectedTowerId) for (const r of selectHintAvoid(state, ui.selectedTowerId)) k += `|s${Math.round(r.x)},${Math.round(r.y)},${Math.round(r.w)},${Math.round(r.h)}`;
   if (hud) {
@@ -727,7 +858,7 @@ function drawPlainResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui
   else if (!won && ex.skipCrystals !== null) offers.push([RESULT.extra, `${t('result.skipLevel')} · ${ex.skipCrystals}`]);
   if (ex.howto) offers.push([RESULT.howto, t('result.howto')]);
   if (layout.share) offers.push([layout.share, t('result.share')]);
-  for (const [r, label] of offers) drawButton(ctx, pal, r, label, { fontPx: 18, flat: true, pressed: pressed === r });
+  for (const [r, label] of offers) drawButton(ctx, pal, r, label, { fontPx: 22, flat: true, pressed: pressed === r });
 }
 
 /**
@@ -740,6 +871,11 @@ export function drawOverlays(ctx: CanvasRenderingContext2D, state: GameState, vi
   ctx.textBaseline = 'middle';
   const ov = overlays;
   if (!ov) warmHudOverlays();
+  // AUD-F4: during the result beat the world (the last capture) stays undimmed
+  if (ui.outcome !== 'playing' && (ui as HudPlayUi).resultBeat) {
+    ctx.restore();
+    return;
+  }
   if (ui.outcome === 'playing') {
     dimWorld(ctx, view, false);
     if (ov) ov.pause(ctx, state, ui);
@@ -758,5 +894,18 @@ export function drawOverlays(ctx: CanvasRenderingContext2D, state: GameState, vi
   else drawPlainResultCard(ctx, state, ui);
   const toast = extrasOf(ui)?.toast;
   if (toast) drawToast(ctx, ui.palette, toast);
+  ctx.restore();
+}
+
+/**
+ * AUD-B2 / A11: the "Nothing is changing" card over a dimmed world (logical transform active), drawn by
+ * the overlay chunk. The play screen raises the card only once that chunk is in (`hudOverlaysLoaded`).
+ */
+export function drawStallCard(ctx: CanvasRenderingContext2D, view: View, ui: PlayUi, pressed: Rect | null): void {
+  const ov = overlays;
+  if (!ov) return;
+  ctx.save();
+  dimWorld(ctx, view, false);
+  ov.stall(ctx, ui, pressed);
   ctx.restore();
 }

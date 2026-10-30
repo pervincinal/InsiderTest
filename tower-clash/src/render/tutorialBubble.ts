@@ -7,7 +7,7 @@ import type { HudAnchors, View } from './view';
 import { hudAnchors } from './view';
 import { HUD, TOWER_RADIUS, WORLD_ZOOM } from './layout';
 import type { Rect } from './widgets';
-import { font, roundRect } from './widgets';
+import { font, getTextScale, roundRect } from './widgets';
 import type { PlayUi } from './draw';
 import { playLayout } from './draw';
 import { lessonCardLayout, selectHintPill, selectHintShown } from './hud';
@@ -135,8 +135,11 @@ export function fitLines(ctx: CanvasRenderingContext2D, text: string, maxW: numb
   return null;
 }
 
+/** Line pitch at the current text size (AUD-U2: `lineH` and `h1` are the 100 % metrics). */
+const lineHNow = (): number => Math.round(B.lineH * getTextScale());
+
 /** Bubble height for `n` lines. */
-const heightOf = (n: number): number => (n <= 1 ? B.h1 : n * B.lineH + 2 * B.padY);
+const heightOf = (n: number): number => (n <= 1 ? Math.round(B.h1 * getTextScale()) : n * lineHNow() + 2 * B.padY);
 
 /** Bounding rect of points. */
 function boxOf(pts: readonly { x: number; y: number }[]): Rect {
@@ -461,6 +464,6 @@ export function drawTutorialBubble(ctx: CanvasRenderingContext2D, state: GameSta
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const n = place.lines.length;
-  place.lines.forEach((line, i) => ctx.fillText(line, r.x + r.w / 2, n === 1 ? r.y + r.h / 2 + 1 : r.y + B.padY + B.lineH * (i + 0.5) + 1));
+  place.lines.forEach((line, i) => ctx.fillText(line, r.x + r.w / 2, n === 1 ? r.y + r.h / 2 + 1 : r.y + B.padY + lineHNow() * (i + 0.5) + 1));
   ctx.restore();
 }

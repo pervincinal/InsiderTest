@@ -3,12 +3,13 @@ import type { SaveData } from '../ui/save';
 import { writeSave } from '../ui/save';
 import type { AudioContextFactory, AudioContextLike } from './synth';
 import { Synth } from './synth';
-import type { SfxName, SfxOptions } from './sfx';
-import { ArrivalTracker, SfxPlayer, loadSfxRecipes, sfxForEvents } from './sfx';
+import type { HitState, SfxName, SfxOptions } from './sfx';
+import { ArrivalTracker, SfxPlayer, hitsNow, loadSfxRecipes, sfxForEvents } from './sfx';
+import { hapticCapture } from '../native/index';
 
 export type { SfxName, SfxOptions, SfxCall, CaptureKind } from './sfx';
 export { sfxForEvents, sendPitchHz, loadSfxRecipes, ArrivalTracker, SfxPlayer, RATE_LIMIT_S, SEND_PITCH_CAP } from './sfx';
-export type { SfxRecipe } from './sfx';
+export type { SfxRecipe, HitState, HitsFn } from './sfx';
 export { Synth } from './synth';
 export type { AudioContextLike, AudioContextFactory } from './synth';
 
@@ -31,11 +32,14 @@ interface AudioModule {
   arrivals: ArrivalTracker;
   save: SaveData | null;
   persist: (save: SaveData) => void;
+  /** AUD-F1: the hit limiter's state and the light haptic it fires (src/native `hapticCapture`; a no-op on the web). */
+  hits: HitState;
+  haptic: () => void;
 }
 
 function createModule(factory: AudioContextFactory): AudioModule {
   const synth = new Synth(factory);
-  return { synth, player: new SfxPlayer(synth), arrivals: new ArrivalTracker('player'), save: null, persist: writeSave };
+  return { synth, player: new SfxPlayer(synth), arrivals: new ArrivalTracker('player'), save: null, persist: writeSave, hits: { at: new Map(), last: -Infinity }, haptic: hapticCapture };
 }
 
 let mod: AudioModule = createModule(browserContextFactory);
@@ -45,6 +49,8 @@ export interface InitAudioOptions {
   factory?: AudioContextFactory;
   /** How to persist the save after a mute change. Default: `writeSave`. */
   persist?: (save: SaveData) => void;
+  /** AUD-F1: the haptic a hit fires (tests). Default: src/native `hapticCapture`. */
+  haptic?: () => void;
 }
 
 /** Bind audio to the save (mute = `!settings.sound`). Re-initialising replaces any previous state. */
@@ -52,6 +58,7 @@ export function initAudio(save: SaveData, opts: InitAudioOptions = {}): void {
   mod = createModule(opts.factory ?? browserContextFactory);
   mod.save = save;
   if (opts.persist) mod.persist = opts.persist;
+  if (opts.haptic) mod.haptic = opts.haptic;
   mod.synth.setMuted(!save.settings.sound);
   if (save.settings.sound) warmRecipes();
 }
@@ -112,6 +119,13 @@ export function toggleMuted(): boolean {
 export function onSimEvents(events: readonly SimEvent[], state: Pick<GameState, 'towers'>): void {
   mod.arrivals.noteEvents(events);
   for (const call of sfxForEvents(events, 'player', state.towers)) mod.player.play(call.name, call.opts);
+  // AUD-F1: being attacked knocks (and taps the phone) at most every 250 ms per tower and 6 times a
+  // second overall; there is no vibration setting, so the haptic follows the sound setting
+  if (!mod.synth.muted)
+    hitsNow()?.(events, 'player', state.towers, mod.hits, performance.now(), (weight) => {
+      mod.player.play('hit', { weight });
+      mod.haptic();
+    });
 }
 
 /** Call once per frame after the loop advanced: plays the soft arrival tap for own units. */
@@ -122,4 +136,5 @@ export function onSimFrame(state: Pick<GameState, 'units'>): void {
 /** Forget per-level tracking (call when a level starts). */
 export function resetAudioLevel(): void {
   mod.arrivals.reset();
+  mod.hits.at.clear();
 }

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Rect } from '../../src/render/widgets';
-import { FONT_RU, font } from '../../src/render/widgets';
+import { FONT_RU, setTextScale } from '../../src/render/widgets';
 import { HUD } from '../../src/render/layout';
 import { FLAT, playCamera, proj, setTilt } from '../../src/render/camera';
 import { C } from '../../src/sim/constants';
@@ -8,11 +8,12 @@ import { hudAnchors } from '../../src/render/view';
 import type { HudAnchors } from '../../src/render/view';
 import type { PlayUi } from '../../src/render/draw';
 import { playLayout } from '../../src/render/draw';
-import { SELECT_HINT, lessonCardLayout, selectHintPill } from '../../src/render/hud';
+import { SELECT_HINT, lessonCardLayout, selectHintBox, selectHintLowY, selectHintPart, selectHintPill, selectHintText } from '../../src/render/hud';
 import { selectedFootprint } from '../../src/render/worldChips';
 import { loadAllLevels } from '../../src/levels/index';
 import { createState } from '../../src/sim/create';
-import { currentLanguage, setLanguage, t } from '../../src/ui/i18n';
+import type { GameState } from '../../src/sim/types';
+import { currentLanguage, setLanguage } from '../../src/ui/i18n';
 import type { Language } from '../../src/ui/i18n';
 import { ADVANCES, ADVANCE_CHARS, ADVANCE_ERROR } from './fontAdvances';
 
@@ -28,8 +29,12 @@ import { ADVANCES, ADVANCE_CHARS, ADVANCE_ERROR } from './fontAdvances';
  *   badge    ≥ 3 px from every tower's badge of the frame's final layout
  *   band     inside the map band: under the top HUD band / the lesson card's clay edge, above the bottom
  *            band, inside the map's width
- *   pill     its size and text unchanged (h 38, w = text + 40 ≤ 700), and the pill drawHud draws
- *            (`selectHintPill` against the final layout) is the one the world was laid out round
+ *   pill     its size and text unchanged (`selectHintBox`: 22 px lines, w = widest + 40 ≤ 700, one-line
+ *            h 38 at 100 %), and the pill drawHud draws (`selectHintPill` against the final layout) is
+ *            the one the world was laid out round
+ * AUD-U2 (2026-10-30): the hint is 22 px (≤ 26 at a bigger text size) and says the half of the sentence
+ * that applies (`selectHintPart`: start, or stop once the selected tower streams), so every case runs
+ * idle and streaming; at 100 % and at the 150 % text size (card gone, see `survey`).
  * Stream / mine chips are reported with BUG57_TABLE=1 (closest calls), and asserted ≥ 0 (never under it).
  * Level 43 on 360 × 640 with the card up put the moved pill over both top enemy towers (BUG-57).
  */
@@ -87,6 +92,14 @@ function clearance(a: Rect, b: Rect): number {
   return -Math.min(ox, oy);
 }
 
+/** `state` with one player stream from `id` along its first lane (the hint's "stop" half), or null when it has none. */
+function withStream(state: GameState, id: string): GameState | null {
+  const road = Object.values(state.roads).find((r) => r.a === id || r.b === id);
+  if (!road) return null;
+  const link = { owner: state.towers[id]!.owner, from: id, to: road.a === id ? road.b : road.a, roadId: road.id, createdMs: 0, emitAccMs: 0 } as GameState['links'][number];
+  return { ...state, links: [...state.links, link] };
+}
+
 const LEVELS = await loadAllLevels();
 const LANGS: readonly Language[] = ['en', 'az', 'ru', 'tr'];
 /** Clear space the pill keeps from every tower body / ring / badge. */
@@ -103,32 +116,51 @@ interface Finding {
 
 const NEED: Record<Finding['check'], number> = { body: GAP, badge: GAP, chip: 0, band: 0, pill: 0 };
 
+/** AUD-U2: the text sizes the guard runs at (100 % and the largest step). */
+const SCALES = [1, 1.5] as const;
+
 async function survey(): Promise<{ rows: Finding[]; cases: number; spots: Map<string, number> }> {
   const ctx = measuringCtx();
   const rows: Finding[] = [];
   const spots = new Map<string, number>();
   let cases = 0;
+  for (const k of SCALES)
   for (const lang of LANGS) {
+    setTextScale(k);
     await setLanguage(lang);
-    ctx.font = font(19, '500');
-    const pillW = Math.min(700, ctx.measureText(t('hud.selectHint')).width + 40);
+    // AUD-U2: the hint says the half the player can act on (`selectHintPart`): start, or stop once the
+    // selected tower streams — each half one 22 px line where it fits, never squeezed
+    for (const part of [0, 1] as const) {
+      const box = selectHintBox(ctx, part);
+      expect(box.lines.join(' ')).toBe(selectHintText(part));
+      expect(box.w).toBeLessThanOrEqual(700);
+    }
     for (const level of LEVELS) {
       for (const shape of SHAPES) {
         const a = anchorsOf(shape);
-        for (const time of [0, 10_000]) {
-          const state = { ...createState(level, 1), time };
+        // at 150 % with the card gone only: selecting a tower is the player's first input, which ends the
+        // lesson card's hold (AUD-B11) — the card-up case is the 100 % one, kept from BUG-57
+        for (const time of k === 1 ? [0, 10_000] : [10_000]) {
+          const base = { ...createState(level, 1), time };
           const ui = { outcome: 'playing', level } as unknown as PlayUi;
-          const lc = lessonCardLayout(ctx, state, ui);
+          const lc = lessonCardLayout(ctx, base, ui);
           const card = lc ? { ...lc.rect, y: lc.rect.y + a.top } : null;
-          for (const sel of Object.values(state.towers).filter((tw) => tw.owner === 'player')) {
+          for (const sel of Object.values(base.towers).filter((tw) => tw.owner === 'player'))
+          for (const part of [0, 1] as const) {
+            const state = part === 0 ? base : withStream(base, sel.id);
+            if (!state) continue;
+            expect(selectHintPart(state, sel.id)).toBe(part);
+            const box = selectHintBox(ctx, part);
             cases++;
-            const { layout, hint } = playLayout(ctx, state, FLAT, sel.id, card, a, true, true);
+            // a stream means the player has touched the map: the lesson card's hold is over (AUD-B11), it is gone
+            const cardNow = part === 0 ? card : null;
+            const { layout, hint } = playLayout(ctx, state, FLAT, sel.id, cardNow, a, true, true);
             const pill = hint!;
-            const low = SELECT_HINT.y + a.bottom;
-            const top = card ? card.y + card.h + 4 + SELECT_HINT.gap : Math.max(0, HUD.mapTop + a.top) + SELECT_HINT.gap;
+            const low = selectHintLowY(box.h, a);
+            const top = cardNow ? cardNow.y + cardNow.h + 4 + SELECT_HINT.gap : Math.max(0, HUD.mapTop + a.top) + SELECT_HINT.gap;
             const spot = pill.y === low && pill.x === 360 - pill.w / 2 ? 'low' : pill.y === top && pill.x === 360 - pill.w / 2 ? 'top' : `at ${Math.round(pill.x)},${Math.round(pill.y)}`;
             spots.set(spot.startsWith('at') ? 'other' : spot, (spots.get(spot.startsWith('at') ? 'other' : spot) ?? 0) + 1);
-            const where = `${shape.name} ${lang} t=${time / 1000}s sel=${sel.id} pill ${spot}`;
+            const where = `${shape.name} ${lang} ${k * 100}% t=${time / 1000}s sel=${sel.id}${part ? ' streaming' : ''} pill ${spot}`;
             const add = (check: Finding['check'], what: string, px: number): void => void rows.push({ level: level.id, where, check, what, px });
             for (const [id, body] of layout.bodies) {
               const tw = state.towers[id]!;
@@ -137,18 +169,19 @@ async function survey(): Promise<{ rows: Finding[]; cases: number; spots: Map<st
             }
             for (const [id, b] of layout.badges) add('badge', `badge ${id}`, clearance(pill, b.rect));
             for (const c of layout.chips) add('chip', `${c.kind} chip ${c.tower ?? ''}`.trim(), clearance(pill, c.rect));
-            const bandTop = card ? card.y + card.h + 4 : HUD.mapTop + a.top;
+            const bandTop = cardNow ? cardNow.y + cardNow.h + 4 : HUD.mapTop + a.top;
             add('band', 'under the HUD / card', pill.y - bandTop);
             add('band', 'above the bottom band', HUD.mapBottom + a.bottom - (pill.y + pill.h));
             add('band', 'in the map width', Math.min(pill.x, C.MAP_W - (pill.x + pill.w)));
-            add('pill', 'size', pill.h === SELECT_HINT.h && Math.abs(pill.w - pillW) < 1e-6 ? 0 : -1);
-            const drawn = selectHintPill(ctx, state, sel.id, a, card, FLAT, layout);
+            add('pill', 'size', pill.h === box.h && Math.abs(pill.w - box.w) < 1e-6 ? 0 : -1);
+            const drawn = selectHintPill(ctx, state, sel.id, a, cardNow, FLAT, layout);
             add('pill', 'drawn = laid out', drawn.x === pill.x && drawn.y === pill.y && drawn.w === pill.w ? 0 : -1);
           }
         }
       }
     }
   }
+  setTextScale(1);
   await setLanguage('en');
   return { rows, cases, spots };
 }
@@ -173,11 +206,14 @@ describe('BUG-57: the select hint never covers a tower, every level', () => {
   });
   afterAll(() => void setLanguage(lang));
 
-  it('covers every level on both screens, card up and gone, every own tower selected, four languages', () => {
+  it('covers every level on both screens, card up and gone, every own tower selected, four languages, 100 / 150 % text', () => {
     const own = LEVELS.reduce((n, l) => n + l.towers.filter((tw) => tw.owner === 'player').length, 0);
     expect(new Set(res.rows.map((r) => r.level)).size).toBe(50);
     expect(own).toBeGreaterThanOrEqual(51); // one home on every level, two on level 8 (homeW, homeE), more where a level starts with an own outpost
-    expect(res.cases).toBe(own * SHAPES.length * 2 * LANGS.length);
+    // every own tower selected idle, and streaming along a lane (towers without a lane only idle)
+    const times = 2 + 1; // 100 %: card up and gone; 150 %: gone
+    expect(res.cases).toBeGreaterThanOrEqual(own * SHAPES.length * times * LANGS.length);
+    expect(res.cases).toBeLessThanOrEqual(2 * own * SHAPES.length * times * LANGS.length);
     if (process.env.BUG57_TABLE) console.log(`select hint spots: ${JSON.stringify(Object.fromEntries(res.spots))}`);
   });
 

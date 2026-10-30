@@ -3,7 +3,7 @@ import { shade } from './palette';
 import type { View } from './view';
 import { bleed, hudAnchors } from './view';
 import type { Rect } from './widgets';
-import { drawButton, drawCard, drawExtrudedText, drawGlassBand, drawNumeralLine, drawPill, drawStar, drawStars, fitFontPx, font, formatTime, withShadow } from './widgets';
+import { NUMERAL_PX, clipText, drawButton, drawCard, drawExtrudedText, drawGlassBand, drawNumeralLine, drawPill, drawStar, drawStars, fitFontPx, font, formatTime, numeralLineWidth, textPx, withShadow } from './widgets';
 import { drawFlag, drawLock } from './menuWidgets';
 import { LEVEL_MAP, levelNodeCentre, levelNodeRect } from './menuLayout';
 import type { ToastOpts } from './economyWidgets';
@@ -96,7 +96,41 @@ const COUNTDOWN_GAP = 8;
 /** Room for the countdown inside its pill. */
 export const COUNTDOWN_INSET = 8;
 /** Word size of the countdown and the reward line (their numbers are NUMERAL_PX). */
-const CARD_WORD_PX = 17;
+/**
+ * AUD-U2: the challenge card's word size, the 22 px floor (was 17). The card is a fixed 104 px box
+ * in the sticky block over the map, so its lines stay at their 100 % size (`CARD_MAX_PX`) at a bigger
+ * text size — they are already at the floor and the card cannot grow.
+ */
+const CARD_WORD_PX = 22;
+const CARD_MAX_PX = 24;
+
+/** Drawn width of a challenge-card numeral line (words CARD_WORD_PX, numbers NUMERAL_PX, ≤ CARD_MAX_PX). */
+const cardLineW = (ctx: CanvasRenderingContext2D, text: string): number => numeralLineWidth(ctx, text, CARD_WORD_PX, NUMERAL_PX, CARD_MAX_PX);
+
+/** A countdown without its reset note: "New in 6d 23h (Mon 00:00 UTC)" → "New in 6d 23h". */
+export const shortCountdown = (s: string): string => s.replace(/\s*\([^)]*\)\s*$/, '');
+
+/**
+ * The challenge card's third row at 22 px (AUD-U2), from its two texts: `wide` — the streak pill
+ * carries the next-bonus tail (70 px wider) — and `compact` — the reward shows its amounts beside
+ * their glyphs only. The reward keeps its words whenever they fit the row; the bonus tail shows when
+ * it fits its pill and the reward still fits beside it (or goes compact anyway). `reward` null: the
+ * row shows the best time instead.
+ */
+export function challengeRowLayout(ctx: CanvasRenderingContext2D, reward: string | null, bonusLabel: string | null): { wide: boolean; compact: boolean } {
+  const textW = LEVEL_MAP.daily.w - 96 - CARD_RIGHT_W - 24;
+  const rewardW = reward === null ? 0 : cardLineW(ctx, reward);
+  const wide = bonusLabel !== null && cardLineW(ctx, bonusLabel) <= CARD_RIGHT_W + 70 - 16 && (reward === null || rewardW <= textW - 46 - 70 || rewardW > textW - 46);
+  return { wide, compact: reward !== null && rewardW > textW - 46 - (wide ? 70 : 0) };
+}
+
+/** Width of the card's right column (DONE badge, streak pill). */
+const CARD_RIGHT_W = 176;
+
+/** `text` when it fits `room` on the card at 22 / 24 px, else its `short` form (AUD-U2: shorten, never squeeze). */
+function fitCardLine(ctx: CanvasRenderingContext2D, text: string, room: number, short: (s: string) => string): string {
+  return cardLineW(ctx, text) <= room ? text : short(text);
+}
 
 /** Countdown pill rect of the challenge card `r` (exported for the contrast / fit tests). */
 export function countdownPillRect(r: Rect): Rect {
@@ -123,8 +157,8 @@ function drawCardTabs(ctx: CanvasRenderingContext2D, pal: Palette, active: 'dail
     const label = t(id === 'daily' ? 'daily.title' : 'weekly.title');
     // ART-16: a locked card's inactive tab is dim but readable on the tinted frame (textDim was 4.35:1)
     ctx.fillStyle = on ? pal.shopBuy.text : dim ? pal.textDimFrame : pal.ink;
-    ctx.font = font(fitFontPx(ctx, label, 17, seg.w - 14));
-    ctx.fillText(label, seg.x + seg.w / 2, seg.y + seg.h / 2 + 1, seg.w - 14);
+    ctx.font = font(fitFontPx(ctx, label, 22, seg.w - 10), 'bold', undefined, CARD_MAX_PX);
+    ctx.fillText(clipText(ctx, label, seg.w - 8), seg.x + seg.w / 2, seg.y + seg.h / 2 + 1);
   }
   ctx.textAlign = 'left';
 }
@@ -161,7 +195,7 @@ function drawDailyCard(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, o: 
   else drawLock(ctx, shade(pal.owners.neutral, -0.4), bx, by + 1, 22);
 
   const left = r.x + 96;
-  const rightW = 176;
+  const rightW = CARD_RIGHT_W;
   const textW = r.w - (left - r.x) - rightW - 24;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
@@ -180,14 +214,15 @@ function drawDailyCard(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, o: 
       const label = t('daily.done');
       ctx.textAlign = 'center';
       ctx.fillStyle = pal.ink;
-      ctx.font = font(fitFontPx(ctx, label, 17, cd.w - 20 - (pip ? 28 : 0), '700'), '700');
-      ctx.fillText(label, cd.x + cd.w / 2 - (pip ? 12 : 0), cd.y + cd.h / 2 + 1, cd.w - 20);
+      ctx.font = font(fitFontPx(ctx, label, 22, cd.w - 20 - (pip ? 28 : 0), '700'), '700', undefined, CARD_MAX_PX);
+      ctx.fillText(label, cd.x + cd.w / 2 - (pip ? 12 : 0), cd.y + cd.h / 2 + 1);
       if (pip) drawStar(ctx, pal, cd.x + cd.w - 26, cd.y + cd.h / 2, 10, true);
       ctx.textAlign = 'left';
     } else {
       // ART-17: the time left and the reset time are 24 px bold numerals (dim on the paper pill,
-      // ≥ 4.5:1), the words 17 px; a long line gives up word size first (drawNumeralLine)
-      drawNumeralLine(ctx, d.countdown, cd.x + cd.w / 2, cd.y + cd.h / 2 + 8, cd.w - COUNTDOWN_INSET * 2, pal.textDim, CARD_WORD_PX, 'center');
+      // ≥ 4.5:1), the words 22 px (AUD-U2); a line too long for the pill drops its reset note
+      const room = cd.w - COUNTDOWN_INSET * 2;
+      drawNumeralLine(ctx, fitCardLine(ctx, d.countdown, room, shortCountdown), cd.x + cd.w / 2, cd.y + cd.h / 2 + 8, room, pal.textDim, CARD_WORD_PX, 'center', CARD_MAX_PX);
     }
   }
   // line 2: level · twist, or the unlock hint
@@ -195,50 +230,62 @@ function drawDailyCard(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, o: 
   if (d.unlocked) {
     const line2 = `${d.levelName} · ${d.twist}`;
     ctx.fillStyle = pal.ink;
-    ctx.font = font(fitFontPx(ctx, line2, 19, textW, '500'), '500');
-    ctx.fillText(line2, left, r.y + 56, textW);
+    ctx.font = font(fitFontPx(ctx, line2, 22, textW, '500'), '500', undefined, CARD_MAX_PX);
+    ctx.fillText(clipText(ctx, line2, textW), left, r.y + 56);
   } else {
     // ART-17: "Clear level 8 to unlock" — the level number 24 px bold, the words 19 px; the baseline
     // keeps the numeral's top 3 px under the tab frame (frame bottom r.y + 46)
     const hint = t(weekly ? 'weekly.locked' : 'daily.locked', { n: d.unlockLevel });
-    drawNumeralLine(ctx, hint, left, r.y + 66, lockedW, pal.textDim, 19);
+    drawNumeralLine(ctx, hint, left, r.y + 66, lockedW, pal.textDim, CARD_WORD_PX, 'left', CARD_MAX_PX);
   }
   // line 3: reward (best when done) + streak pill (wider when it names the next bonus); the countdown while locked
   if (d.unlocked) {
-    let x = left;
-    const nextBonus = weekly ? null : o.nextBonus;
+    const x = left;
+    // AUD-U2: the next-bonus tail ("· +10 at day 7") widens the streak pill only where it fits at 22 px
+    // and the reward beside it keeps its words (it goes compact anyway when it needs the whole row)
+    const reward = t(weekly ? 'weekly.reward' : 'daily.reward', { gold: d.gold, crystals: d.crystals });
+    const bonus = weekly ? null : o.nextBonus;
+    const bonusLabel = bonus ? t('daily.streakNext', { n: d.streak, day: bonus[0], crystals: bonus[1] }) : null;
+    const row = challengeRowLayout(ctx, d.done && d.best ? null : reward, bonusLabel);
+    const nextBonus = row.wide ? bonus : null;
     const wide = nextBonus ? 70 : 0;
     if (d.done && d.best) {
       ctx.fillStyle = pal.textDim;
-      ctx.font = font(17, '500');
       const best =
         weekly && !o.weekly.target
           ? t('weekly.best', { stars: d.best.stars, time: formatTime(d.best.timeMs), target: formatTime(o.weekly.targetMs) })
           : t('daily.best', { stars: d.best.stars, time: formatTime(d.best.timeMs) });
-      ctx.font = font(fitFontPx(ctx, best, 17, textW, '500'), '500');
-      ctx.fillText(best, x, r.y + 84, textW);
+      ctx.font = font(fitFontPx(ctx, best, 22, textW, '500'), '500', undefined, CARD_MAX_PX);
+      ctx.fillText(clipText(ctx, best, textW), x, r.y + 84);
     } else {
-      drawGoldCoin(ctx, pal, x + 9, r.y + 84, 9);
-      drawCrystal(ctx, pal, x + 30, r.y + 84, 9);
-      x += 46;
-      // ART-17: "up to +60 gold · +5 crystals" — amounts 24 px bold, words 17 px, on the streak
-      // pill's baseline (sp.y + sp.h / 2 + 8)
-      const reward = t(weekly ? 'weekly.reward' : 'daily.reward', { gold: d.gold, crystals: d.crystals });
-      drawNumeralLine(ctx, reward, x, r.y + 89, textW - 46 - wide, pal.ink, CARD_WORD_PX);
+      // ART-17: "up to +60 gold · +5 crystals" — amounts 24 px bold, words 22 px (AUD-U2), on the
+      // streak pill's baseline (sp.y + sp.h / 2 + 8); too long for its room at 22 px, the amounts
+      // stand beside their glyphs alone ("[coin] +60  [crystal] +5")
+      const room = textW - 46 - wide;
+      if (!row.compact) {
+        drawGoldCoin(ctx, pal, x + 9, r.y + 84, 9);
+        drawCrystal(ctx, pal, x + 30, r.y + 84, 9);
+        drawNumeralLine(ctx, reward, x + 46, r.y + 89, room, pal.ink, CARD_WORD_PX, 'left', CARD_MAX_PX);
+      } else {
+        drawGoldCoin(ctx, pal, x + 9, r.y + 84, 9);
+        const w = drawNumeralLine(ctx, `+${d.gold}`, x + 24, r.y + 89, room, pal.ink, CARD_WORD_PX, 'left', CARD_MAX_PX);
+        drawCrystal(ctx, pal, x + 24 + w + 22, r.y + 84, 9);
+        drawNumeralLine(ctx, `+${d.crystals}`, x + 24 + w + 36, r.y + 89, room, pal.ink, CARD_WORD_PX, 'left', CARD_MAX_PX);
+      }
     }
-    if (d.streak > 0 || nextBonus || weekly) {
+    if (d.streak > 0 || bonus || weekly) {
       const live = d.streak > 0;
       const sp: Rect = { x: pill.x - wide, y: r.y + 66, w: rightW + wide, h: 30 };
       // ART-16: a live streak is an active state, so the pill takes the active-choice pair (paper
       // 7.1:1; paper on the owner mid blue was 4.35:1); its numbers are 24 px bold, the words 16 px
       const face = pal.shopBuy.face;
       drawPill(ctx, sp, live ? face : pal.paper, live ? shade(face, -0.35) : undefined, 2);
-      const label = weekly ? t('weekly.streak', { n: d.streak }) : nextBonus ? t('daily.streakNext', { n: d.streak, day: nextBonus[0], crystals: nextBonus[1] }) : t('daily.streak', { n: d.streak });
-      drawNumeralLine(ctx, label, sp.x + sp.w / 2, sp.y + sp.h / 2 + 8, sp.w - 16, live ? pal.shopBuy.text : pal.textDim, 16, 'center');
+      const label = weekly ? t('weekly.streak', { n: d.streak }) : nextBonus && bonusLabel ? bonusLabel : t('daily.streak', { n: d.streak });
+      drawNumeralLine(ctx, label, sp.x + sp.w / 2, sp.y + sp.h / 2 + 8, sp.w - 16, live ? pal.shopBuy.text : pal.textDim, CARD_WORD_PX, 'center', CARD_MAX_PX);
     }
   } else {
-    // ART-17: the locked card's countdown, numerals 24 px like the pill's (words 17 px, were 16 px)
-    drawNumeralLine(ctx, d.countdown, left, r.y + 91, lockedW, pal.textDim, CARD_WORD_PX);
+    // ART-17: the locked card's countdown, numerals 24 px like the pill's (words 22 px, AUD-U2)
+    drawNumeralLine(ctx, fitCardLine(ctx, d.countdown, lockedW, shortCountdown), left, r.y + 91, lockedW, pal.textDim, CARD_WORD_PX, 'left', CARD_MAX_PX);
   }
   ctx.restore();
 }
@@ -274,26 +321,27 @@ function drawYesterdayRow(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, 
   ctx.stroke();
   // practice pill (right)
   const label = t('daily.practice');
-  const pw = 136;
+  const pw = 150; // AUD-U2: room for a 22 px "Тренировка"
   const pill: Rect = { x: r.x + r.w - pw - 12, y: cy - 15, w: pw, h: 30 };
   drawPill(ctx, pill, pal.paper, undefined, 2);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = pal.textDim;
-  ctx.font = font(fitFontPx(ctx, label, 16, pw - 16, '500'), '500');
-  ctx.fillText(label, pill.x + pill.w / 2, pill.y + pill.h / 2 + 1, pw - 16);
-  // label over level · twist
+  // AUD-U2: a fixed 56 px row in the sticky block: every line at the 22 px floor, fitted (never squeezed)
+  ctx.font = font(fitFontPx(ctx, label, 22, pw - 16, '500'), '500', undefined, 22);
+  ctx.fillText(clipText(ctx, label, pw - 12), pill.x + pill.w / 2, pill.y + pill.h / 2 + 1);
+  // label over level · twist: two 22 px lines in the 52 px face
   const left = r.x + 60;
   const textW = pill.x - left - 12;
   ctx.textAlign = 'left';
   const title = t('daily.yesterday');
   ctx.fillStyle = pal.textDim;
-  ctx.font = font(fitFontPx(ctx, title, 15, textW));
-  ctx.fillText(title, left, r.y + 16, textW);
+  ctx.font = font(fitFontPx(ctx, title, 22, textW), 'bold', undefined, 22);
+  ctx.fillText(clipText(ctx, title, textW), left, r.y + 15);
   const line = `${y.levelName} · ${y.twist}`;
   ctx.fillStyle = pal.ink;
-  ctx.font = font(fitFontPx(ctx, line, 18, textW, '500'), '500');
-  ctx.fillText(line, left, r.y + 37, textW);
+  ctx.font = font(fitFontPx(ctx, line, 22, textW, '500'), '500', undefined, 22);
+  ctx.fillText(clipText(ctx, line, textW), left, r.y + 38);
   ctx.restore();
 }
 
@@ -495,16 +543,16 @@ function drawNode(ctx: CanvasRenderingContext2D, pal: Palette, node: LevelNode, 
   }
   const inkOnGold = node.stars > 0;
   ctx.fillStyle = inkOnGold ? pal.ink : pal.paper;
-  ctx.font = font(40);
+  ctx.font = font(40, 'bold', undefined, 52); // inside the 46 px node
   ctx.fillText(String(node.id), c.x, c.y + 3);
   if (node.stars > 0) drawStars(ctx, pal, c.x, c.y + r + 18, node.stars, 12);
   if (current) {
     const wave = anim ? Math.sin(nowMs / 220) * 3 : 0;
     drawFlag(ctx, pal.owners.enemy1, c.x + r * 0.62, c.y - r * 0.55, 44, wave);
-    // level name pill under the current node
-    ctx.font = font(20);
+    // level name pill under the current node (AUD-U2: 22 px, the pill grows with the text size)
+    ctx.font = font(22);
     const w = ctx.measureText(node.name).width + 36;
-    const pill: Rect = { x: c.x - w / 2, y: c.y + r + (node.stars > 0 ? 36 : 14), w, h: 38 };
+    const pill: Rect = { x: c.x - w / 2, y: c.y + r + (node.stars > 0 ? 36 : 14), w, h: Math.round(textPx(22)) + 16 };
     drawPill(ctx, pill, pal.paper);
     ctx.fillStyle = pal.ink;
     ctx.fillText(node.name, c.x, pill.y + pill.h / 2 + 1);
@@ -556,16 +604,22 @@ export function drawLevelSelect(view: View, pal: Palette, o: LevelSelectOpts): v
   ctx.save();
   ctx.translate(0, a.bottom);
   const cr = o.commanderRect;
-  drawButton(ctx, pal, cr, '', { fontPx: 18, pressed: o.pressed === cr, flat: true });
+  drawButton(ctx, pal, cr, '', { fontPx: 22, pressed: o.pressed === cr, flat: true });
   drawUpgradeGlyph(ctx, pal, cr.x + 30, cr.y + (cr.h - 4) / 2, 17, 'production');
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = pal.ink;
-  ctx.font = font(18);
-  ctx.fillText(t('levels.commander'), cr.x + 58, cr.y + (cr.h - 4) / 2 + 1);
+  // AUD-U2: the label at 22 px, then the summary after it in what is left of the chip (fitted, "…" past the floor)
+  const cmd = t('levels.commander');
+  ctx.font = font(22, 'bold', undefined, 28);
+  const cmdW = ctx.measureText(cmd).width;
+  ctx.fillText(cmd, cr.x + 58, cr.y + (cr.h - 4) / 2 + 1);
   ctx.fillStyle = o.commander ? pal.ink : pal.textDim;
-  ctx.font = font(17, '500');
-  ctx.fillText(o.commander ?? t('levels.noUpgrades'), cr.x + 190, cr.y + (cr.h - 4) / 2 + 1, cr.w - 204);
+  const summary = o.commander ?? t('levels.noUpgrades');
+  const sx = cr.x + 58 + cmdW + 16;
+  const sw = cr.x + cr.w - 16 - sx;
+  ctx.font = font(fitFontPx(ctx, summary, 22, sw, '500'), '500', undefined, 28);
+  ctx.fillText(clipText(ctx, summary, sw), sx, cr.y + (cr.h - 4) / 2 + 1);
   ctx.restore();
   if (o.toast) drawToast(ctx, pal, { ...o.toast, y: (o.toast.y ?? 1090) + a.bottom });
   ctx.restore();

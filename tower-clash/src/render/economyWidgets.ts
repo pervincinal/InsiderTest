@@ -1,7 +1,7 @@
 import type { Palette } from './palette';
 import { shade } from './palette';
 import type { NumeralWrap, Rect } from './widgets';
-import { drawNumeralLine, drawPill, drawStars, font, wrapNumeralText } from './widgets';
+import { drawNumeralLine, drawPill, drawStars, fitFontPx, font, getTextScale, textPx, wrapNumeralText } from './widgets';
 import { drawCrystal, drawGoldCoin } from './sprites';
 import { prefersReducedMotion } from './particles';
 import { reducedMotionOverride } from '../ui/motion';
@@ -49,9 +49,11 @@ export function drawWallet(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect,
     else if (c.glyph === 'crystal') drawCrystal(ctx, pal, gx, gy, cell.h * 0.32);
     else drawStars(ctx, pal, gx, gy, 1, cell.h * 0.24, [1, 0, 0]);
     ctx.fillStyle = pal.ink;
-    ctx.font = font(fontPx);
+    const amount = formatAmount(c.value);
+    // AUD-U2: fitted to the pill (never squeezed), at most 62 % of its height at a bigger text size
+    ctx.font = font(fitFontPx(ctx, amount, fontPx, cell.w - cell.h - 10), 'bold', undefined, r.h * 0.62);
     ctx.textAlign = 'right';
-    ctx.fillText(formatAmount(c.value), cell.x + cell.w - 14, gy + 1, cell.w - cell.h - 10);
+    ctx.fillText(amount, cell.x + cell.w - 14, gy + 1);
   });
   ctx.restore();
 }
@@ -72,8 +74,17 @@ export interface ToastOpts {
   y?: number;
 }
 
-/** Toast type sizes (ART-16): words 21 px, numbers NUMERAL_PX (24 px), up to four lines in a ≤ 660 px pill. */
-export const TOAST = Object.freeze({ wordPx: 21, maxW: 660, pad: 28, maxLines: 4, lineH: 30, h: 48 });
+/**
+ * Toast type sizes (ART-16): words 22 px (AUD-U2 floor), numbers NUMERAL_PX (24 px), up to four lines
+ * in a ≤ 660 px pill; `lineH` and `h` are at 100 % text size and grow with it (`toastMetrics`).
+ */
+export const TOAST = Object.freeze({ wordPx: 22, maxW: 660, pad: 28, maxLines: 4, lineH: 30, h: 48 });
+
+/** The toast's line pitch and one-line pill height at the current text size (AUD-U2). */
+export function toastMetrics(): { lineH: number; h: number } {
+  const k = getTextScale();
+  return { lineH: Math.round(TOAST.lineH * k), h: Math.round(TOAST.h * k) };
+}
 
 let lastWrap: { key: string; wrap: NumeralWrap } | null = null;
 
@@ -104,7 +115,8 @@ export function drawToast(ctx: CanvasRenderingContext2D, pal: Palette, o: ToastO
   const wrap = toastLines(ctx, o.text);
   const textW = TOAST.maxW - TOAST.pad * 2;
   const w = Math.min(TOAST.maxW, wrap.width + TOAST.pad * 2);
-  const h = TOAST.h + (wrap.lines.length - 1) * TOAST.lineH;
+  const m = toastMetrics();
+  const h = m.h + (wrap.lines.length - 1) * m.lineH;
   const bottom = (o.y ?? 1090) + TOAST.h / 2 - (1 - fadeIn) * 12;
   const pill: Rect = { x: 360 - w / 2, y: bottom - h, w, h };
   // ART-15: info / success toasts on the active-choice blue (paper 7.1:1; the owner mid blue was
@@ -112,9 +124,9 @@ export function drawToast(ctx: CanvasRenderingContext2D, pal: Palette, o: ToastO
   const ink = o.kind === 'ok' ? pal.shopBuy : pal.toastError;
   drawPill(ctx, pill, ink.face, shade(ink.face, -0.35));
   // alphabetic baseline ≈ half the words' cap height under each line's centre (Fredoka caps ≈ 0.7 em)
-  const base = Math.round(wrap.wordPx * 0.33);
+  const base = Math.round(textPx(wrap.wordPx) * 0.33);
   wrap.lines.forEach((line, i) => {
-    const cy = pill.y + TOAST.h / 2 + i * TOAST.lineH;
+    const cy = pill.y + m.h / 2 + i * m.lineH;
     drawNumeralLine(ctx, line, 360, cy + base, textW, ink.text, wrap.wordPx, 'center');
   });
   ctx.restore();
