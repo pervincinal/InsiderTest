@@ -24,7 +24,7 @@
     {"id": "ne", "x": 570, "y": 700, "owner": "neutral", "units": 12},
     {"id": "n", "x": 360, "y": 620, "owner": "neutral", "units": 8},
     {"id": "red", "x": 130, "y": 420, "owner": "enemy1", "units": 6, "level": 1, "kind": "barracks"},
-    {"id": "yellow", "x": 360, "y": 380, "owner": "enemy3", "units": 6, "level": 1, "kind": "barracks"},
+    {"id": "yellow", "x": 360, "y": 360, "owner": "enemy3", "units": 11, "level": 1, "kind": "barracks"},
     {"id": "green", "x": 590, "y": 420, "owner": "enemy2", "units": 2, "level": 1, "kind": "barracks"}
   ],
   "obstacles": [
