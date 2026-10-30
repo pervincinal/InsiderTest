@@ -1,10 +1,13 @@
 /**
  * Public AI API (rules v3). Controllers are pure functions of (state, rng) and return commands only; the
- * caller applies them with `applyCommand` on every AI tick (`C.AI_TICK_MS`, see `isAiTick`).
+ * caller applies them with `applyCommand` on every AI tick (`C.AI_TICK_MS`, see `isAiTick`). The enemies
+ * also carry one deterministic memory per owner per match (`memory.ts`: standoff timers, AUD-A11) —
+ * found from the match state by default, so a seed replays the same game everywhere.
  */
 import type { Command, EnemyDef, GameState, Owner } from '../sim/index';
 import { Rng } from '../sim/index';
 import { opportunistCommands, rusherCommands, turtleCommands } from './personalities';
+import { memoryFor, type EnemyMemory } from './memory';
 
 export {
   referencePlayerCommands,
@@ -65,16 +68,21 @@ export {
   FALLS_HORIZON_MS,
 } from './common';
 export type { Neighbour, Siege, Flow, Plan, PlannedLink, Contest } from './common';
+export { STANDOFF_RELEASE_MS, memoryFor, newMemory, observe, barredLanes, laneKey } from './memory';
+export type { EnemyMemory } from './memory';
 
-/** Commands for one enemy this AI tick, according to its personality and aggression. */
-export function enemyCommands(state: GameState, enemy: EnemyDef, rng: Rng): Command[] {
+/**
+ * Commands for one enemy this AI tick, according to its personality and aggression. `memory` is the
+ * enemy's per-match memory (default: the one kept for this state object, `memoryFor`).
+ */
+export function enemyCommands(state: GameState, enemy: EnemyDef, rng: Rng, memory: EnemyMemory = memoryFor(state, enemy.owner)): Command[] {
   switch (enemy.personality) {
     case 'rusher':
-      return rusherCommands(state, enemy, rng);
+      return rusherCommands(state, enemy, rng, memory);
     case 'turtle':
-      return turtleCommands(state, enemy, rng);
+      return turtleCommands(state, enemy, rng, memory);
     case 'opportunist':
-      return opportunistCommands(state, enemy, rng);
+      return opportunistCommands(state, enemy, rng, memory);
     default:
       return [];
   }
@@ -82,13 +90,14 @@ export function enemyCommands(state: GameState, enemy: EnemyDef, rng: Rng): Comm
 
 /**
  * Commands for every enemy listed in the level, in level order. `rng` is either one shared stream or a
- * per-owner map (see `rngsFor`); an enemy without a stream in the map is skipped.
+ * per-owner map (see `rngsFor`); an enemy without a stream in the map is skipped. `memories` (optional)
+ * are the enemies' per-match memories by owner; default: the ones kept for this state object.
  */
-export function runAiTick(state: GameState, rng: Rng | ReadonlyMap<Owner, Rng>): Command[] {
+export function runAiTick(state: GameState, rng: Rng | ReadonlyMap<Owner, Rng>, memories?: ReadonlyMap<Owner, EnemyMemory>): Command[] {
   const cmds: Command[] = [];
   for (const enemy of state.enemies) {
     const r = rng instanceof Rng ? rng : rng.get(enemy.owner);
-    if (r) cmds.push(...enemyCommands(state, enemy, r));
+    if (r) cmds.push(...enemyCommands(state, enemy, r, memories?.get(enemy.owner) ?? memoryFor(state, enemy.owner)));
   }
   return cmds;
 }

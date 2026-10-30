@@ -42,6 +42,7 @@ import {
   type SiegeOptions,
   underSiege,
 } from './common';
+import { laneKey } from './memory';
 
 /**
  * A tower under fire holding fewer units than this ends every stream that is not winning its lane: it
@@ -73,12 +74,22 @@ export interface Ctx {
   used: Set<string>;
   /** Towers whose decisions are skipped this tick (aggression gate); they neither link nor unlink. */
   skipped: Set<string>;
+  /**
+   * Lanes (`laneKey`) the owner may neither hold nor link this tick: standoffs at `STANDOFF_RELEASE_MS`
+   * (their links are released by `maintain`) and lanes given up until a landing (enemy memory, AUD-A11).
+   */
+  barred: ReadonlySet<string>;
   rule: string;
   trace?: RuleTrace;
 }
 
-export function newCtx(state: GameState, owner: Owner, trace?: RuleTrace): Ctx {
-  return { state, owner, cmds: [], planned: [], ended: [], used: new Set(), skipped: new Set(), rule: '', trace };
+export function newCtx(state: GameState, owner: Owner, trace?: RuleTrace, barred: ReadonlySet<string> = new Set()): Ctx {
+  return { state, owner, cmds: [], planned: [], ended: [], used: new Set(), skipped: new Set(), barred, rule: '', trace };
+}
+
+/** True when the owner may not link (or keep holding) `from → to` this tick (GDD §2.5 standoff release). */
+export function laneBarred(ctx: Ctx, from: string, to: string): boolean {
+  return ctx.barred.size > 0 && ctx.barred.has(laneKey(from, to));
 }
 
 export function options(ctx: Ctx): SiegeOptions {
@@ -187,6 +198,7 @@ export function maintain(ctx: Ctx, tower: Tower, cfg: MaintainConfig): void {
   }
   const retreat = isUnderFire(state, tower) && tower.units < RETREAT_UNITS;
   for (const link of links) {
+    ctx.rule = 'maintain';
     const target = state.towers[link.to];
     if (!target) continue;
     if (target.owner === ctx.owner) {
@@ -194,7 +206,11 @@ export function maintain(ctx: Ctx, tower: Tower, cfg: MaintainConfig): void {
       if (retreat || !cfg.keepSupply(ctx, tower, target, link)) issueUnlink(ctx, link);
       continue;
     }
-    const shield = isShield(ctx, link);
+    // Standoff release (GDD §2.5, AUD-A11): a shield whose lane has been silent for `STANDOFF_RELEASE_MS`
+    // (or was given up and is still barred) no longer counts as one — it ends under the rules below.
+    const released = isShield(ctx, link) && laneBarred(ctx, link.from, link.to);
+    const shield = !released && isShield(ctx, link);
+    if (released) ctx.rule = 'release';
     const flow = laneFlow(state, link, [...state.links.filter((l) => !ctx.ended.includes(l)), ...ctx.planned]);
     const landing = flow !== undefined && landsEnough(flow);
     const falls = landing ? siege(ctx, target).fallsAtMs : Infinity;
@@ -301,7 +317,7 @@ export function defend(ctx: Ctx, tower: Tower, cfg: DefendConfig): boolean {
     const source = state.towers[a.link.from];
     if (!source) continue;
     const sources = helpers()
-      .filter((t) => roadBetween(state, t.id, source.id) && !hasLink(state, t.id, source.id))
+      .filter((t) => roadBetween(state, t.id, source.id) && !hasLink(state, t.id, source.id) && !laneBarred(ctx, t.id, source.id))
       .sort(bySpeed(state, source, ctx.owner));
     const plan = siegePlan(state, ctx.owner, source, sources, cfg.counterMs, options(ctx));
     if (!plan) continue;
@@ -331,7 +347,7 @@ export function defend(ctx: Ctx, tower: Tower, cfg: DefendConfig): boolean {
     for (const a of attackers) {
       if (s.fallsAtMs === Infinity || s.fallsAtMs > counterDoneMs + RACE_MARGIN_MS) break;
       const source = state.towers[a.link.from];
-      if (!source || hasLink(state, tower.id, source.id)) continue;
+      if (!source || hasLink(state, tower.id, source.id) || laneBarred(ctx, tower.id, source.id)) continue;
       if (linkRate(state, tower, ctx.owner) < linkRate(state, source, a.link.owner)) continue;
       if (freeSlots(ctx, tower, cap) <= 0) {
         const reclaim = reclaimableFor(ctx, tower, s.fallsAtMs, { owner: ctx.owner, from: tower.id, to: source.id }, cfg.reclaimReinforcement === true, cfg.finishMs ?? 0);
@@ -470,7 +486,7 @@ export function attack(ctx: Ctx, cfg: AttackConfig): void {
       const already = siege(ctx, target);
       const mine = state.links.some((l) => l.to === id && l.owner === ctx.owner && !ctx.ended.includes(l)) || ctx.planned.some((p) => p.to === id);
       if (mine && already.fallsAtMs <= cfg.planMs) continue;
-      const adjacent = sources.filter((s) => roadBetween(state, s.id, id) && !hasLink(state, s.id, id)).sort(bySpeed(state, target, ctx.owner));
+      const adjacent = sources.filter((s) => roadBetween(state, s.id, id) && !hasLink(state, s.id, id) && !laneBarred(ctx, s.id, id)).sort(bySpeed(state, target, ctx.owner));
       const ordered = [...adjacent.filter((s) => !lastResort(s)), ...adjacent.filter((s) => lastResort(s))];
       const opts: SiegeOptions = { planned: ctx.planned, exclude: ctx.ended };
       const onAdd = cfg.anticipate ? (link: PlannedLink, planned: readonly PlannedLink[]) => anticipatedShield(state, target, link, planned) : undefined;
@@ -564,7 +580,7 @@ export function stack(ctx: Ctx, cfg: StackConfig = {}): void {
     let best: { id: string; falls: number } | undefined;
     for (const id of [...targets].sort()) {
       const target = state.towers[id]!;
-      if (!maySource(source, target) || !roadBetween(state, source.id, id) || hasLink(state, source.id, id) || ctx.planned.some((p) => p.from === source.id && p.to === id)) continue;
+      if (!maySource(source, target) || !roadBetween(state, source.id, id) || hasLink(state, source.id, id) || laneBarred(ctx, source.id, id) || ctx.planned.some((p) => p.from === source.id && p.to === id)) continue;
       const link: PlannedLink = { owner: ctx.owner, from: source.id, to: id };
       const flow = laneFlow(state, link, [...allLinks(state, options(ctx)), link]);
       if (!flow || !landsEnough(flow)) continue;

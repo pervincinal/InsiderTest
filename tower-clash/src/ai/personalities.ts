@@ -20,10 +20,14 @@
  * From there every personality defends the same way (GDD §2.5 defence): reinforce a falling tower from
  * a neighbour when that makes it hold, else besiege the attacker's source from a second tower, else
  * stream back on the same lane when its rate is at least the attacker's (the streams cancel and nothing lands).
+ * The one thing an enemy carries between ticks is its per-match memory (`memory.ts`, AUD-A11): a shield that
+ * a rival's stream cancels with nothing landing on either tower for `STANDOFF_RELEASE_MS` is dropped and
+ * its lane left alone until something lands there again.
  */
 import type { Command, EnemyDef, GameState, Tower } from '../sim/index';
 import { Rng, isUnderFire } from '../sim/index';
 import { clamp01, hopsToOpponent, isCapped, linksTo, skipsAction, type Plan } from './common';
+import { barredLanes, commit, memoryFor, observe, type EnemyMemory } from './memory';
 import { actors, attack, defend, maintain, newCtx, reclaimForAttack, stack, supply, type Ctx } from './tactics';
 
 /** Plan horizon per personality: a target must fall within this (× the aggression scale) to be attacked, seconds. */
@@ -83,9 +87,13 @@ interface PersonalityConfig {
   stacks?: boolean;
 }
 
-/** The shared tick: aggression gate → maintain → defend → attack → stack (→ supply). */
-function run(state: GameState, enemy: EnemyDef, rng: Rng, cfg: PersonalityConfig): Command[] {
-  const ctx = newCtx(state, enemy.owner);
+/**
+ * The shared tick: observe (enemy memory: standoff timers, AUD-A11) → aggression gate → maintain →
+ * defend → attack → stack (→ supply) → commit the lanes released this tick.
+ */
+function run(state: GameState, enemy: EnemyDef, rng: Rng, cfg: PersonalityConfig, memory: EnemyMemory = memoryFor(state, enemy.owner)): Command[] {
+  observe(memory, state, enemy.owner);
+  const ctx = newCtx(state, enemy.owner, undefined, barredLanes(memory, state));
   // One rng draw per own tower, in level order, whatever the tower does this tick (determinism).
   for (const t of actors(ctx)) if (skipsAction(enemy, rng)) ctx.skipped.add(t.id);
   const towers = actors(ctx);
@@ -101,32 +109,45 @@ function run(state: GameState, enemy: EnemyDef, rng: Rng, cfg: PersonalityConfig
   });
   if (cfg.stacks) stack(ctx, { cap: cfg.cap, sources: cfg.sources, anticipate: cfg.anticipate });
   if (cfg.supplies) supply(ctx, hopsToOpponent(state, enemy.owner), cfg.cap);
+  commit(memory, state, ctx.ended);
   return ctx.cmds;
 }
 
 /** Rusher: any tower streams at the hostile neighbour that falls soonest within 30 s (scaled by aggression). */
-export function rusherCommands(state: GameState, enemy: EnemyDef, rng: Rng): Command[] {
-  return run(state, enemy, rng, { cap: RUSHER_MAX_LINKS, planMs: planMsFor('rusher', enemy.aggression), races: true });
+export function rusherCommands(state: GameState, enemy: EnemyDef, rng: Rng, memory?: EnemyMemory): Command[] {
+  return run(state, enemy, rng, { cap: RUSHER_MAX_LINKS, planMs: planMsFor('rusher', enemy.aggression), races: true }, memory);
 }
 
 /** Turtle: towers grow to L2 before their first attack, then use every link; capped keeps supply neighbours. */
-export function turtleCommands(state: GameState, enemy: EnemyDef, rng: Rng): Command[] {
-  return run(state, enemy, rng, {
-    cap: TURTLE_MAX_LINKS,
-    planMs: planMsFor('turtle', enemy.aggression),
-    sources: (t) => t.level >= TURTLE_MIN_LEVEL,
-    supplies: true,
-    anticipate: true,
-    stacks: true,
-  });
+export function turtleCommands(state: GameState, enemy: EnemyDef, rng: Rng, memory?: EnemyMemory): Command[] {
+  return run(
+    state,
+    enemy,
+    rng,
+    {
+      cap: TURTLE_MAX_LINKS,
+      planMs: planMsFor('turtle', enemy.aggression),
+      sources: (t) => t.level >= TURTLE_MIN_LEVEL,
+      supplies: true,
+      anticipate: true,
+      stacks: true,
+    },
+    memory,
+  );
 }
 
 /** Opportunist: targets already under fire from someone else come first, then whatever falls soonest. */
-export function opportunistCommands(state: GameState, enemy: EnemyDef, rng: Rng): Command[] {
-  return run(state, enemy, rng, {
-    cap: OPPORTUNIST_MAX_LINKS,
-    planMs: planMsFor('opportunist', enemy.aggression),
-    score: (target, plan) => plan.siege.fallsAtMs - (underFireByOther(state, target, enemy.owner) ? HOPELESS_MS : 0),
-    races: true,
-  });
+export function opportunistCommands(state: GameState, enemy: EnemyDef, rng: Rng, memory?: EnemyMemory): Command[] {
+  return run(
+    state,
+    enemy,
+    rng,
+    {
+      cap: OPPORTUNIST_MAX_LINKS,
+      planMs: planMsFor('opportunist', enemy.aggression),
+      score: (target, plan) => plan.siege.fallsAtMs - (underFireByOther(state, target, enemy.owner) ? HOPELESS_MS : 0),
+      races: true,
+    },
+    memory,
+  );
 }
