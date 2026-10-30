@@ -2,7 +2,7 @@ import type { GameState } from '../sim/types';
 import { C } from '../sim/constants';
 import type { Palette } from './palette';
 import { shade } from './palette';
-import { PAUSE, RESULT } from './layout';
+import { CONFIRM, PAUSE, RESULT } from './layout';
 import type { Rect } from './widgets';
 import { drawButton, drawCard, drawExtrudedText, drawGearGlyph, drawSpeakerGlyph, drawStar, fitFontPx, font, formatTime, innerHighlight, roundRect, wrapText } from './widgets';
 import type { PlayUi } from './draw';
@@ -207,6 +207,33 @@ function drawResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: Pla
     if (layout.share) drawShareButton(ctx, pal, layout.share, pressed === layout.share, ex.sharing === true, since);
   }
   ctx.restore();
+  if (ex?.confirm) drawSpendConfirm(ctx, pal, ex.confirm, pressed);
+}
+
+/**
+ * AUD-U5: "Spend 10 crystals?" over the result card before CONTINUE / SKIP LEVEL pays — the shop's
+ * Convert confirm card (`CONFIRM` = SHOP.convertConfirm, menusShop.ts): what it buys, what is left, SPEND / CANCEL.
+ */
+function drawSpendConfirm(ctx: CanvasRenderingContext2D, pal: Palette, q: { kind: 'continue' | 'skip'; crystals: number; have: number }, pressed: Rect | null): void {
+  ctx.fillStyle = 'rgba(26, 58, 90, 0.5)';
+  ctx.fillRect(-2000, -2000, 4720, 5280); // the whole screen, margins of a tall / wide one included (BUG-34)
+  const c = CONFIRM;
+  const w = c.card.w - 40;
+  drawCard(ctx, pal, c.card);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = pal.ink;
+  const title = t('spend.title', { n: q.crystals });
+  ctx.font = font(fitFontPx(ctx, title, 34, w));
+  ctx.fillText(title, 360, c.card.y + 62, w);
+  const what = q.kind === 'skip' ? t('spend.skip') : t('result.reinforcements', { s: Math.round(C.CONTINUE_REWIND_MS / 1000), n: C.CONTINUE_INFANTRY });
+  ctx.font = font(20, '500');
+  wrapText(ctx, what, w, 2).forEach((l, i, all) => ctx.fillText(l, 360, c.card.y + 122 + (i - (all.length - 1) / 2) * 26, w));
+  ctx.fillStyle = pal.textDim;
+  ctx.font = font(19, '500');
+  ctx.fillText(t('spend.left', { n: Math.max(0, q.have - q.crystals) }), 360, c.card.y + 168, w);
+  drawButton(ctx, pal, c.yes, t('spend.yes'), { fill: pal.shopBuy.face, text: pal.shopBuy.text, fontPx: 26, pressed: pressed === c.yes });
+  drawButton(ctx, pal, c.no, t('common.cancel'), { fontPx: 26, pressed: pressed === c.no });
 }
 
 /** SHARE (SHARE-1): paper button, share glyph + label; a spinner while the image is drawn / the sheet is open. */
@@ -256,8 +283,8 @@ export function drawShareGlyph(ctx: CanvasRenderingContext2D, color: string, cx:
 
 /**
  * Defeat tip (FE-4): a lightbulb + "Tip" caption, the level's lesson centred in ≤ 3 lines (18 px, or
- * 16 px when the lesson would be cut) and, on the second consecutive defeat of the level, a small
- * HOW TO PLAY link-button at the block's foot (RESULT.howto). Same wrap helper as the lesson banner.
+ * 16 px when the lesson would be cut) and, on the second consecutive defeat of the level, a HOW TO
+ * PLAY link-button right of the time line (RESULT.howto, AUD-U1). Same wrap helper as the lesson banner.
  */
 function drawDefeatTip(ctx: CanvasRenderingContext2D, pal: Palette, text: string, howto: boolean, pressed: Rect | null): void {
   const r = RESULT.tip;
@@ -282,7 +309,7 @@ function drawDefeatTip(ctx: CanvasRenderingContext2D, pal: Palette, text: string
   ctx.textAlign = 'center';
   ctx.fillStyle = pal.ink;
   lines.forEach((l, i) => ctx.fillText(l, 360, r.y + 38 + i * lineH, r.w));
-  if (howto) drawButton(ctx, pal, RESULT.howto, t('result.howto'), { fontPx: 16, flat: true, pressed: pressed === RESULT.howto });
+  if (howto) drawButton(ctx, pal, RESULT.howto, t('result.howto'), { fontPx: 20, flat: true, pressed: pressed === RESULT.howto });
 }
 
 /**

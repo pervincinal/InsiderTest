@@ -7,12 +7,15 @@ export const HUD = Object.freeze({
   timer: { x: 290, y: 22, w: 140, h: 52 } as Rect,
   /** Speed tag (only when speed ≠ 1) sits between the timer and the mute button. */
   speedTag: { x: 444, y: 30, w: 82, h: 36 } as Rect,
-  /** Mute toggle (M1-8b / ART-3), left of pause. */
-  mute: { x: 560, y: 18, w: 62, h: 60 } as Rect,
+  /**
+   * Mute toggle (M1-8b / ART-3), left of pause. AUD-U1: every button's tap area is padded to 88 × 88
+   * (`hitRect`, 44 pt at 360 wide), so the two sit 88 px apart centre to centre (579 / 669).
+   */
+  mute: { x: 548, y: 18, w: 62, h: 60 } as Rect,
   pause: { x: 636, y: 18, w: 66, h: 60 } as Rect,
   bottomBar: { x: 0, y: 1180, w: 720, h: 100 } as Rect,
-  /** Active-streams pill (rules v2, replaces the SEND toggle): "STREAMS ⇢ n" for the player's links. */
-  streams: { x: 18, y: 1196, w: 200, h: 64 } as Rect,
+  /** Active-streams pill (rules v2, replaces the SEND toggle): "STREAMS ⇢ n" for the player's links. A label: no tap area. */
+  streams: { x: 18, y: 1196, w: 180, h: 64 } as Rect,
   /** Coin balance pill, right of the booster bar. */
   coins: { x: 474, y: 1204, w: 98, h: 46 } as Rect,
   /** Gold + crystal wallet drawn over the booster bar once the level is over (tap → shop). */
@@ -25,12 +28,13 @@ export const HUD = Object.freeze({
 
 /**
  * Booster bar (M3-1): three round clay buttons in the bottom band between the streams pill and the coin pill.
- * Each hit rect is the disc (top-aligned, `disc` px) plus the cost chip underneath it.
+ * Each rect is the disc (top-aligned, `disc` px) plus the cost chip underneath it; the tap areas are
+ * 88 wide (AUD-U1), so the discs sit 88 px apart (centres 250 / 338 / 426: tap areas 206 … 470).
  */
 export const BOOSTERS = Object.freeze({
-  overdrive: { x: 232, y: 1186, w: 66, h: 88 } as Rect,
-  freeze: { x: 314, y: 1186, w: 66, h: 88 } as Rect,
-  airstrike: { x: 396, y: 1186, w: 66, h: 88 } as Rect,
+  overdrive: { x: 217, y: 1186, w: 66, h: 88 } as Rect,
+  freeze: { x: 305, y: 1186, w: 66, h: 88 } as Rect,
+  airstrike: { x: 393, y: 1186, w: 66, h: 88 } as Rect,
   disc: 64,
   chipH: 22,
 });
@@ -48,35 +52,53 @@ export const RESULT = Object.freeze({
    * it (`share`) inside the 80 px taller `cardShare` — `resultShareLayout` in hud.ts picks.
    */
   shareInline: { x: 230, y: 874, w: 260, h: 62 } as Rect,
-  share: { x: 230, y: 958, w: 260, h: 62 } as Rect,
+  share: { x: 230, y: 962, w: 260, h: 62 } as Rect,
   cardShare: { x: 60, y: 330, w: 600, h: 720 } as Rect,
+  /** AUD-U1: the rows' 88-tall tap areas stack without overlap (continue 683–771, buttons 772–860, extra 861–949, share 949–1037). */
   next: { x: 84, y: 780, w: 170, h: 72 } as Rect,
   retry: { x: 275, y: 780, w: 170, h: 72 } as Rect,
   menu: { x: 466, y: 780, w: 170, h: 72 } as Rect,
-  continueCrystals: { x: 84, y: 700, w: 268, h: 62 } as Rect,
-  continueAd: { x: 368, y: 700, w: 268, h: 62 } as Rect,
+  continueCrystals: { x: 84, y: 696, w: 268, h: 62 } as Rect,
+  continueAd: { x: 368, y: 696, w: 268, h: 62 } as Rect,
   /** Single centred continue button when only the crystal offer exists. */
-  continueSolo: { x: 180, y: 700, w: 360, h: 62 } as Rect,
+  continueSolo: { x: 180, y: 696, w: 360, h: 62 } as Rect,
   /** ×2 gold (win) or skip level (defeat). */
   extra: { x: 150, y: 874, w: 420, h: 62 } as Rect,
   /**
    * Defeat tip (FE-4): lightbulb caption + the level's lesson (≤ 3 lines) under the time line, in
    * place of the hollow stars; ends above the Reinforcements label (continueSolo.y − 18 − 8 px).
    */
-  tip: { x: 90, y: 540, w: 540, h: 132 } as Rect,
-  /** "HOW TO PLAY" link-button at the foot of the tip (second consecutive defeat of the same level). */
-  howto: { x: 250, y: 638, w: 220, h: 34 } as Rect,
+  tip: { x: 90, y: 540, w: 540, h: 130 } as Rect,
+  /**
+   * "HOW TO PLAY" link-button (second consecutive defeat of the same level): right of the time line,
+   * under the banner — at the tip's foot its 88-tall tap area ran into CONTINUE's (AUD-U1).
+   */
+  howto: { x: 466, y: 494, w: 170, h: 44 } as Rect,
 });
 
-/** Pause menu (M1-11 + M3-3 + FE-3): resume, speed toggle ×1/×2, sound + settings, retry, menu, how to play. */
+/**
+ * Crystal-spend confirm card (AUD-U5), the Convert card's geometry (SHOP.convertConfirm): skins,
+ * booster crate, Continue and level skip ask "Spend N crystals?" here before anything is paid.
+ */
+export const CONFIRM = Object.freeze({
+  card: { x: 90, y: 470, w: 540, h: 320 } as Rect,
+  yes: { x: 130, y: 676, w: 210, h: 72 } as Rect,
+  no: { x: 380, y: 676, w: 210, h: 72 } as Rect,
+});
+
+/**
+ * Pause menu (M1-11 + M3-3 + FE-3): resume, speed toggle ×1/×2, sound + settings, retry, menu, how to play.
+ * AUD-U1: row centres ≥ 88 apart (600 / 692 / 780 / 896 / 992), so the 88-tall tap areas never overlap;
+ * RETRY / MENU, the two that end the match, keep a wider gap from the rows above.
+ */
 export const PAUSE = Object.freeze({
   card: { x: 100, y: 376, w: 520, h: 690 } as Rect,
-  resume: { x: 210, y: 566, w: 300, h: 76 } as Rect,
-  speed: { x: 210, y: 662, w: 300, h: 64 } as Rect,
-  sound: { x: 180, y: 746, w: 170, h: 64 } as Rect,
-  settings: { x: 370, y: 746, w: 170, h: 64 } as Rect,
-  retry: { x: 180, y: 872, w: 170, h: 72 } as Rect,
-  menu: { x: 370, y: 872, w: 170, h: 72 } as Rect,
+  resume: { x: 210, y: 560, w: 300, h: 80 } as Rect,
+  speed: { x: 210, y: 660, w: 300, h: 64 } as Rect,
+  sound: { x: 180, y: 748, w: 170, h: 64 } as Rect,
+  settings: { x: 370, y: 748, w: 170, h: 64 } as Rect,
+  retry: { x: 180, y: 860, w: 170, h: 72 } as Rect,
+  menu: { x: 370, y: 860, w: 170, h: 72 } as Rect,
   /** "How to play" card (FE-3), under RETRY / MENU; the card returns here. */
   howto: { x: 180, y: 960, w: 360, h: 64 } as Rect,
 });
@@ -87,16 +109,17 @@ export const PAUSE = Object.freeze({
  */
 export const TITLE = Object.freeze({
   play: { x: 180, y: 640, w: 360, h: 96 } as Rect,
-  settings: { x: 180, y: 780, w: 172, h: 64 } as Rect,
-  sound: { x: 368, y: 780, w: 172, h: 64 } as Rect,
+  /** AUD-U1: settings · sound and SHOP 88 apart (tap areas 764–852 / 852–940). */
+  settings: { x: 180, y: 776, w: 172, h: 64 } as Rect,
+  sound: { x: 368, y: 776, w: 172, h: 64 } as Rect,
   shop: { x: 180, y: 864, w: 360, h: 64 } as Rect,
   /** Daily chest sits bottom-right, clear of the demo towers' unit badges. */
   daily: { x: 574, y: 990, w: 128, h: 132 } as Rect,
   /** Trophy button (achievements) mirrors the chest, bottom-left. */
   achievements: { x: 18, y: 990, w: 128, h: 132 } as Rect,
   wallet: { x: 120, y: 1172, w: 480, h: 52 } as Rect,
-  /** Language chip (top-right): shows the current code, tap → next language. */
-  lang: { x: 630, y: 18, w: 72, h: 44 } as Rect,
+  /** Language chip (top-right): shows the current code, tap → next language. AUD-U1: 88 × 56, tap area 0–88 under the safe edge. */
+  lang: { x: 614, y: 16, w: 88, h: 56 } as Rect,
 });
 
 /**

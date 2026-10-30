@@ -14,7 +14,8 @@ import {
 } from '../../src/economy/adsFlow';
 import { AD_PLACEMENTS, INTERSTITIAL_RULES } from '../../src/economy/catalog';
 import { noAds } from '../../src/economy/providers/noAds';
-import { grantProduct } from '../../src/economy/wallet';
+import { grantProduct, recordResult } from '../../src/economy/wallet';
+import { makeLevel } from '../helpers';
 
 let save: SaveData;
 let session: AdSession;
@@ -94,6 +95,70 @@ describe('interstitial gating (ECONOMY.md §5.1)', () => {
     expect(interstitialBlockedBy(session, save, T0 + 600_000, true)).toBe('notNth');
     results(2);
     expect(interstitialBlockedBy(session, save, T0 + 600_000, true)).toBeNull();
+  });
+});
+
+describe('interstitial and defeats (AUD-B7)', () => {
+  const lvl = (id: number) => makeLevel({ id, star3: 30_000, star2: 60_000 });
+  /** A real result through the wallet (`recordResult`), then its result screen. */
+  function play(id: number, outcome: 'won' | 'lost'): void {
+    recordResult(save, lvl(id), outcome, 40_000, T0);
+    onResultShown(session);
+  }
+
+  it('defeats never count: five wins and any number of losses is still too early, and losses add nothing to the every-3rd cadence', () => {
+    for (let id = 1; id <= 5; id++) play(id, 'won');
+    for (let i = 0; i < 10; i++) play(6, 'lost');
+    expect(save.adCounters.levelsCompleted).toBe(5);
+    expect(interstitialBlockedBy(session, save, T0 + 300_000, true)).toBe('tooEarly');
+    // after an ad the cadence needs three more wins, whatever the losses in between
+    play(6, 'won');
+    expect(interstitialBlockedBy(session, save, T0 + 300_000, true)).toBeNull();
+    session.winsAtLastAd = save.adCounters.levelsCompleted; // as maybeShowInterstitial does on a shown ad
+    play(7, 'lost');
+    play(7, 'won');
+    play(8, 'lost');
+    play(8, 'won');
+    expect(interstitialBlockedBy(session, save, T0 + 600_000, true)).toBe('notNth');
+    play(9, 'won');
+    expect(interstitialBlockedBy(session, save, T0 + 600_000, true)).toBeNull();
+  });
+
+  it('none while an uncleared level has a defeat streak of 2 or more; the streak-breaking win (or a cleared level) frees it', async () => {
+    const ads = createFakeAds();
+    for (let id = 1; id <= 8; id++) play(id, 'won');
+    play(9, 'lost');
+    expect(interstitialBlockedBy(session, save, T0 + 300_000, true)).toBeNull(); // one defeat: allowed
+    play(9, 'lost');
+    expect(save.defeats['9']).toBe(INTERSTITIAL_RULES.noneFromDefeatStreak);
+    expect(interstitialBlockedBy(session, save, T0 + 300_000, true)).toBe('defeatStreak');
+    expect(await maybeShowInterstitial(session, save, T0 + 300_000, ads)).toBe(false);
+    play(3, 'won'); // a replay win elsewhere does not end level 9's streak
+    expect(interstitialBlockedBy(session, save, T0 + 300_000, true)).toBe('defeatStreak');
+    play(9, 'won');
+    expect(interstitialBlockedBy(session, save, T0 + 300_000, true)).toBeNull();
+    expect(await maybeShowInterstitial(session, save, T0 + 300_000, ads)).toBe(true);
+    // losing a cleared level twice (a 3★ chase) is not the stuck-player case
+    play(2, 'lost');
+    play(2, 'lost');
+    expect(save.defeats['2']).toBe(2);
+    expect(interstitialBlockedBy(session, save, T0 + 900_000, true)).toBe('notNth');
+  });
+
+  it('the app starts the session at the save’s win count: a returning player needs three wins this session', () => {
+    save.adCounters.levelsCompleted = 40;
+    session = createAdSession(save.adCounters.levelsCompleted);
+    play(41, 'won');
+    play(42, 'won');
+    expect(interstitialBlockedBy(session, save, T0, true)).toBe('notNth');
+    play(43, 'won');
+    expect(interstitialBlockedBy(session, save, T0, true)).toBeNull();
+    // a progress reset mid-session (counter back to 0) re-anchors the cadence instead of freezing it
+    save.adCounters.levelsCompleted = 0;
+    expect(interstitialBlockedBy(session, save, T0, true)).toBe('tooEarly');
+    expect(session.winsAtLastAd).toBe(0);
+    for (let id = 1; id <= 6; id++) play(id, 'won');
+    expect(interstitialBlockedBy(session, save, T0, true)).toBeNull();
   });
 });
 

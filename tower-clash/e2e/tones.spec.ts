@@ -12,7 +12,7 @@ import { clientPoint, tapRect } from './helpers/tap';
 
 const SAVE_KEY = 'towerclash.save.v3';
 // src/render/layout.ts — TITLE.settings; src/render/menuLayout.ts — SETTINGS.back, SETTINGS.tones (four equal segments, TONE_SETS order)
-const TITLE_SETTINGS = { x: 180, y: 780, w: 172, h: 64 };
+const TITLE_SETTINGS = { x: 180, y: 776, w: 172, h: 64 };
 const SETTINGS_BACK = { x: 18, y: 20, w: 140, h: 60 };
 const SETTINGS_TONES = { x: 86, y: 786, w: 548, h: 56 };
 const TONE_ORDER = ['classic', 'vivid', 'royal', 'pastel'] as const;

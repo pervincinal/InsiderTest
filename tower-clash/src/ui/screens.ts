@@ -5,16 +5,16 @@ import type { View } from '../render/view';
 import { applyTransform, clipToMap, hudAnchors, toHudSpace } from '../render/view';
 import { drawSea } from '../render/sea';
 import type { ShopTab } from '../render/menuLayout';
-import { HUD, RESULT, TITLE } from '../render/layout';
+import { CONFIRM, HUD, RESULT, TITLE } from '../render/layout';
 import type { Rect } from '../render/widgets';
-import { inRect } from '../render/widgets';
+import { hitRect } from '../render/widgets';
 import { drawTitle } from '../render/menus';
 import { screenToTitle, titleRectShift, titleShifts, titleToScreen } from '../render/titleLayout';
 import type { ToastOpts } from '../render/economyWidgets';
 import type { PointerPoint } from '../input/pointer';
 import { drawGame } from '../render/draw';
 import type { HudPlayUi, ResultExtras } from '../render/hud';
-import { resultShareLayout } from '../render/hud';
+import { hudOverlaysLoaded, resultShareLayout } from '../render/hud';
 import type { SaveData } from './save';
 import { writeSave } from './save';
 import { isMuted, playSfx, toggleMuted } from '../audio/index';
@@ -296,7 +296,7 @@ export class TitleScreen implements Screen {
    * rect is hit where it is drawn — its layout rect moved by the same shift the renderer applies.
    */
   private on(r: Rect, p: { x: number; y: number }): boolean {
-    return inRect(r, p.x, p.y - titleRectShift(titleShifts(this.app.view), r));
+    return hitRect(this.app.view, r, p.x, p.y - titleRectShift(titleShifts(this.app.view), r));
   }
 
   /** Screen logical point → title layout point (e2e: `logicalToLayout`). */
@@ -478,6 +478,8 @@ export class ResultScreen implements Screen {
   private sharePrep: Promise<PreparedShare | null> | null = null;
   /** Consecutive defeats of this level in the session, this one included (0 on a win). */
   private readonly defeatCount: number;
+  /** AUD-U5: the crystal spend waiting on the confirm card (`CONFIRM`), or null. */
+  private ask: 'continue' | 'skip' | null = null;
 
   constructor(
     private readonly app: App,
@@ -592,7 +594,30 @@ export class ResultScreen implements Screen {
       howto: !this.won && this.defeatCount >= 2,
       share: this.shareOffered(),
       sharing: this.sharing,
+      confirm: this.ask && { kind: this.ask, crystals: this.cost(this.ask), have: save.crystals },
     };
+  }
+
+  private cost(kind: 'continue' | 'skip'): number {
+    return (kind === 'skip' ? CRYSTAL_SERVICES.levelSkip : CRYSTAL_SERVICES.continue).costCrystals;
+  }
+
+  /** AUD-U5: CONTINUE / SKIP LEVEL tapped — the confirm card, or the "not enough crystals" toast. */
+  private askSpend(kind: 'continue' | 'skip'): void {
+    const msg = this.app.save.crystals < this.cost(kind) ? 'result.notEnoughCrystals' : hudOverlaysLoaded() ? null : 'common.loadFailed';
+    if (msg) this.toast.show(t(msg), 'error', this.nowMs);
+    else {
+      playSfx('button');
+      this.ask = kind;
+    }
+  }
+
+  /** The confirm card's YES (`yes`) or CANCEL. */
+  answer(yes: boolean): void {
+    const kind = this.ask;
+    this.ask = null;
+    if (yes && kind === 'skip') this.skipLevel();
+    else if (yes && kind) this.continueWithCrystals();
   }
 
   draw(view: View, nowMs: number): void {
@@ -609,6 +634,7 @@ export class ResultScreen implements Screen {
   }
 
   private rects(): Rect[] {
+    if (this.ask) return [CONFIRM.yes, CONFIRM.no];
     const ex = this.extras();
     const list: Rect[] = [RESULT.retry, RESULT.menu, HUD.wallet, HUD.menu];
     if (this.won && this.info.ui.hasNext) list.push(RESULT.next);
@@ -625,11 +651,8 @@ export class ResultScreen implements Screen {
 
   /** `r` holds the point: the bottom band's rects (wallet, MENU) through `toHudSpace` — the band is anchored to the screen edge (BUG-34) — the card's as they are. */
   private hits(r: Rect, p: PointerPoint): boolean {
-    if (r === HUD.wallet || r === HUD.menu) {
-      const h = toHudSpace(hudAnchors(this.app.view), p.x, p.y);
-      return inRect(r, h.x, h.y);
-    }
-    return inRect(r, p.x, p.y);
+    const h = r === HUD.wallet || r === HUD.menu ? toHudSpace(hudAnchors(this.app.view), p.x, p.y) : p;
+    return hitRect(this.app.view, r, h.x, h.y);
   }
 
   down(p: PointerPoint): void {
@@ -669,7 +692,8 @@ export class ResultScreen implements Screen {
     this.pressed = null;
     if (!hit || !this.hits(hit, p) || this.pending || this.leaving) return;
     const { ui } = this.info;
-    if (hit === RESULT.retry) this.leave(() => this.retry());
+    if (this.ask) this.answer(hit === CONFIRM.yes);
+    else if (hit === RESULT.retry) this.leave(() => this.retry());
     else if (hit === RESULT.menu || hit === HUD.menu) this.leave(() => this.app.goLevels());
     else if (hit === RESULT.next && ui.outcome === 'won' && ui.hasNext) this.leave(() => this.nextLevel());
     else if (hit === HUD.wallet) this.app.goShop('crystals', () => this.app.go(this));
@@ -680,8 +704,8 @@ export class ResultScreen implements Screen {
     }
     else if (hit === RESULT.extra) {
       if (this.won) this.doubleGold();
-      else this.skipLevel();
-    } else if (hit === RESULT.continueCrystals || (hit === RESULT.continueSolo && !this.extras().continueAd)) this.continueWithCrystals();
+      else this.askSpend('skip');
+    } else if (hit === RESULT.continueCrystals || (hit === RESULT.continueSolo && !this.extras().continueAd)) this.askSpend('continue');
     else if (hit === RESULT.continueAd || hit === RESULT.continueSolo) this.continueWithAd();
   }
 
@@ -755,7 +779,9 @@ export class ResultScreen implements Screen {
 
   key(e: KeyboardEvent): void {
     if (this.pending || this.leaving) return;
-    if (e.key === 'Escape') this.leave(() => this.app.goLevels());
+    if (this.ask) {
+      if (e.key === 'Escape' || e.key === 'Enter') this.answer(e.key === 'Enter');
+    } else if (e.key === 'Escape') this.leave(() => this.app.goLevels());
     else if (e.key === 'Enter') {
       const { ui } = this.info;
       if (ui.outcome === 'won' && ui.hasNext) this.leave(() => this.nextLevel());

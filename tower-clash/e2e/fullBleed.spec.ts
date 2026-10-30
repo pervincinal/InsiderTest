@@ -22,10 +22,12 @@ const SEA_BOTTOM = [0x8e, 0xe2, 0xf5];
 const OLD_BAND = [0x1f, 0x8f, 0xc2];
 // src/render/layout.ts — HUD / BOOSTERS (layout coordinates; the bands move, these do not)
 const HUD = { pause: { x: 636, y: 18, w: 66, h: 60 }, menu: { x: 586, y: 1196, w: 116, h: 64 } };
-const BOOSTERS = { overdrive: { x: 232, y: 1186, w: 66, h: 88 } };
+const BOOSTERS = { overdrive: { x: 217, y: 1186, w: 66, h: 88 } };
+// PAUSE.menu: the band's MENU opens the pause card (AUD-U4); the card's MENU leaves
+const PAUSE_MENU = { x: 370, y: 860, w: 170, h: 72 };
 // FE-11 — src/render/menuLayout.ts (layout coordinates of the menus; their header / bottom chrome move on a tall screen)
 const TITLE_PLAY = { x: 180, y: 640, w: 360, h: 96 };
-const TITLE_SETTINGS = { x: 180, y: 780, w: 172, h: 64 };
+const TITLE_SETTINGS = { x: 180, y: 776, w: 172, h: 64 };
 const MENU_BACK = { x: 18, y: 20, w: 140, h: 60 };
 const SHOP_TABS = { x: 30, y: 112, w: 660, h: 60 };
 const SHOP_ROW_0 = { x: 34, y: 200, w: 652, h: 168 };
@@ -171,8 +173,13 @@ for (const phone of PHONES) {
       await expect.poll(() => page.evaluate(() => window.__towerclash.getCoins())).toBe(GOLD - OVERDRIVE_COST);
       await expect.poll(() => page.evaluate(() => (window.__towerclash.getState()?.boosters ?? []).map((b) => b.type))).toEqual(['overdrive']);
 
-      // MENU: back to the level map
+      // MENU (AUD-U4): opens the pause card; the card's MENU goes back to the level map
       await tapHud(page, HUD.menu);
+      const held = await simTime(page);
+      await page.waitForTimeout(300);
+      expect(await simTime(page), 'MENU pauses the sim').toBe(held);
+      expect(await screen(page)).toBe('play');
+      await tapRect(page, PAUSE_MENU);
       await expect.poll(() => screen(page)).toBe('levelSelect');
       const map = await corners(page, 'game');
       // the level map's header glass covers the top corners; the bottom ones are the sea or the map running on into the margin

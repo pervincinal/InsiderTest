@@ -35,7 +35,7 @@ function levelNodeRect(index: number, scroll = 0): { x: number; y: number; w: nu
   const r = LEVEL_MAP.nodeR;
   return { x: cx - r, y: cy - r, w: r * 2, h: r * 2 };
 }
-const PAUSE_RESUME = { x: 210, y: 566, w: 300, h: 76 };
+const PAUSE_RESUME = { x: 210, y: 560, w: 300, h: 80 };
 
 interface LevelJson {
   id: number;

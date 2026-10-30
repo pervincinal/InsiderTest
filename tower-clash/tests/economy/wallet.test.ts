@@ -272,14 +272,14 @@ describe('earn rules on a result', () => {
     expect(recordResult(save, level, 'won', 20_000, NOON + DAY)).toMatchObject({ gold: 9, replayCapped: false });
   });
 
-  it('a defeat counts the streak (for the skip offer) and a win clears it; both count completed levels', () => {
+  it('a defeat counts the streak (for the skip offer) and a win clears it; only the win counts toward the interstitial (AUD-B7)', () => {
     expect(recordResult(save, level, 'lost', 90_000, NOON).gold).toBe(0);
     recordResult(save, level, 'lost', 90_000, NOON);
     expect(save.defeats['3']).toBe(2);
-    expect(save.adCounters.levelsCompleted).toBe(2);
+    expect(save.adCounters.levelsCompleted).toBe(0);
     recordResult(save, level, 'won', 90_000, NOON);
     expect(save.defeats['3']).toBeUndefined();
-    expect(save.adCounters.levelsCompleted).toBe(3);
+    expect(save.adCounters.levelsCompleted).toBe(1);
   });
 
   it('pays crystal milestones at 10/20/30/40 levels and 20 per full-3★ band, once', () => {

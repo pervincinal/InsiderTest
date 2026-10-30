@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SaveData } from '../../src/ui/save';
-import { SAVE_KEY, SAVE_KEY_V1, SAVE_KEY_V2, defaultSave, loadSaveFrom, normalizeSave } from '../../src/ui/save';
+import { SAVE_BACKUP_PREFIX, SAVE_KEY, SAVE_KEY_V1, SAVE_KEY_V2, defaultSave, loadSaveFrom, normalizeSave, saveLoadIssue } from '../../src/ui/save';
 import { equippedSkin } from '../../src/economy/entitlements';
 import { themeFor } from '../../src/render/palette';
 import { earnGold, spendCrystals, spendGold } from '../../src/economy/wallet';
@@ -136,12 +136,16 @@ describe('normalizeSave under hostile input', () => {
     expect(roundTrip(s)).toEqual(s);
   });
 
-  it('loadSaveFrom: corrupt v3 JSON, then a hostile v2, then a hostile v1 — always a playable default', () => {
+  it('loadSaveFrom: corrupt v3 JSON (kept, not destroyed), then a hostile v2, then a hostile v1 — always a playable default', () => {
     const mem = new Map<string, string>();
     const store = { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v), removeItem: (k: string) => void mem.delete(k) };
     mem.set(SAVE_KEY, '{"version":3,"gold":');
-    expect(loadSaveFrom(store)).toEqual(defaultSave());
-    mem.delete(SAVE_KEY);
+    expect(loadSaveFrom(store, 1_000)).toEqual(defaultSave());
+    // AUD-Q2: the unreadable bytes stay under the v3 key and are copied aside; the player is told
+    expect(mem.get(SAVE_KEY)).toBe('{"version":3,"gold":');
+    expect(mem.get(`${SAVE_BACKUP_PREFIX}1000`)).toBe('{"version":3,"gold":');
+    expect(saveLoadIssue()).toEqual({ kind: 'corrupt', kept: true });
+    mem.clear();
     mem.set(SAVE_KEY_V2, JSON.stringify({ version: 2, coins: -7, stars: { '1': 5 } }));
     let s = loadSaveFrom(store);
     expect([s.gold, s.stars['1']]).toEqual([0, 3]);

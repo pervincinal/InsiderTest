@@ -240,7 +240,19 @@ const TRAIL_MAX = 48;
 
 /* ---------- play gestures → commands ---------- */
 
-const DRAG_THRESHOLD = 14; // logical px before a press counts as a drag
+/**
+ * AUD-U3: a press becomes a drag / swipe once it moved this far on the screen, in CSS px (≈ pt; the
+ * platforms' touch slop is about 10 pt). At 360 wide (0.5 CSS px per layout px) that is 20 layout px.
+ */
+export const DRAG_SLOP_PT = 10;
+
+/** The drag threshold in layout px for a view drawn at `scale` CSS px per layout px. */
+export function dragThreshold(scale: number): number {
+  return DRAG_SLOP_PT / (scale > 0 ? scale : 1);
+}
+
+/** Layout px threshold when the gestures are given no view scale (unit tests of the rules). */
+const DRAG_THRESHOLD = 14;
 /** How long a refusal (shake + hint bubble: link limit or blocked lane) stays on screen. */
 export const LIMIT_HINT_MS = 900;
 /** How long a confirmation in the same bubble (`notify`, GD-5f `hint.supplyLine`) stays on screen. */
@@ -259,6 +271,8 @@ export interface GestureOptions {
   fullTopHintText?(): string;
   /** The play camera's projection (ART-21; the identity on the flat map): tower hit areas follow the drawn buildings (`hitTower`). Undefined = the plain base circle. */
   hitProjection?(): HitProjection | undefined;
+  /** CSS px per layout px of the view (`View.scale`): the drag threshold is `dragThreshold(scale)` (AUD-U3). */
+  viewScale?(): number;
 }
 
 /** Where a drag from an own tower is right now (for the renderer's rubber-band line). */
@@ -409,7 +423,8 @@ export class PlayGestures {
   move(p: PointerPoint): void {
     const state = this.opts.getState();
     if (!state) return;
-    if (this.pointerDown && Math.hypot(p.x - this.downX, p.y - this.downY) > DRAG_THRESHOLD) this.moved = true;
+    const slop = this.opts.viewScale ? dragThreshold(this.opts.viewScale()) : DRAG_THRESHOLD;
+    if (this.pointerDown && Math.hypot(p.x - this.downX, p.y - this.downY) > slop) this.moved = true;
     if (this.pointerDown && this.moved && this.swipe) {
       this.hoverTowerId = null;
       this.swipeTo(state, p);
@@ -427,7 +442,8 @@ export class PlayGestures {
     }
   }
 
-  up(p: PointerPoint): void {
+  /** `tapBack` = false: a drag back onto its start tower stays a no-op (a platform cancel is not a tap). */
+  up(p: PointerPoint, tapBack = true): void {
     const state = this.opts.getState();
     const downTowerId = this.downTowerId;
     const moved = this.moved;
@@ -446,9 +462,9 @@ export class PlayGestures {
         this.selectedTowerId = src.id;
         this.act(state, src.id, target.id, p.timeMs, false);
       }
-      return;
-    }
-    if (moved) return; // a swipe (started on empty ground / a foreign tower): its cuts already happened live
+      // AUD-U3: released on its own start tower it is a tap that jittered past the slop (select / deselect)
+      if (!tapBack || target?.id !== src.id) return;
+    } else if (moved) return; // a swipe (started on empty ground / a foreign tower): its cuts already happened live
 
     // Tap.
     if (!target) {
@@ -492,7 +508,7 @@ export class PlayGestures {
     const state = this.opts.getState();
     const src = state && this.downTowerId ? state.towers[this.downTowerId] : undefined;
     if (at && this.pointerDown && this.moved && src?.owner === 'player') {
-      this.up(at);
+      this.up(at, false);
       return;
     }
     this.hoverTowerId = null;

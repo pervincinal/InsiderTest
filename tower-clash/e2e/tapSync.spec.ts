@@ -22,6 +22,8 @@ const SAVE_KEY = 'towerclash.save.v3';
 // src/render/layout.ts — SHOP row 0 (the booster crate on the Bundles tab); src/economy/catalog.ts boosterCrate
 const CRATE_ROW = { x: 34, y: 200, w: 652, h: 168 };
 const CRATE = { cost: 60, charges: { overdrive: 5, freeze: 3, airstrike: 2 } };
+// src/render/layout.ts CONFIRM.yes (AUD-U5: a crystal spend confirms first)
+const SPEND_CONFIRM_YES = { x: 130, y: 676, w: 210, h: 72 };
 
 type GateWindow = Window & {
   __qaFrames: { hold: boolean; held: number; shopFrames: number; release(): void };
@@ -111,6 +113,7 @@ test('a tap sent while the just-opened shop has not painted yet waits for its fi
   const downs = await page.evaluate(() => (window as unknown as GateWindow).__qaDowns);
   expect(downs, 'one pointerdown, sent after the shop painted').toHaveLength(1);
   expect(downs[0]!).toBeGreaterThan(shopFramesBefore);
+  await tapRect(page, SPEND_CONFIRM_YES); // AUD-U5: the crate asks on the confirm card first
   await expect.poll(() => charges(page), { message: 'the crate was bought: the tap reached the shop' }).toEqual(CRATE.charges);
   expect((await page.evaluate(() => window.__towerclash.economy.getSave().crystals))).toBe(0);
   expect(errors).toEqual([]);

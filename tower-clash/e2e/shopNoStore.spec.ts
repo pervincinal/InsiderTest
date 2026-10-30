@@ -36,6 +36,8 @@ function shopSkinRect(top: number, i: number): R {
 const SKIN_BUTTON_BELOW_LABEL = 51;
 // src/economy/catalog.ts — SKINS (catalog order = card order) and the Slate price
 const SLATE_COST = 80;
+// src/render/layout.ts CONFIRM.yes (= SHOP.convertConfirm.yes): every crystal spend confirms first (AUD-U5)
+const SPEND_CONFIRM_YES: R = { x: 130, y: 676, w: 210, h: 72 };
 const SHOP_SKINS = ['roof_slate', 'roof_pagoda', 'roof_onion', 'roof_thatch', 'roof_glass', 'helmet_viking', 'helmet_knight', 'helmet_samurai', 'helmet_crusader', 'helmet_spartan'] as const;
 const PACK_SKINS = ['roof_gold', 'helmet_bronze', 'helmet_royal'] as const;
 const SEEDED_CRYSTALS = 200;
@@ -197,6 +199,7 @@ test.describe('shop without a store (QA-13, App Review build 8)', () => {
 
     // Slate roof (first roof card) for earned crystals → owned and equipped; tap again → EQUIP
     await tapRect(page, shopSkinRect(SKIN_ROOFS_TOP, 0));
+    await tapRect(page, SPEND_CONFIRM_YES); // AUD-U5: the confirm card's SPEND
     await expect.poll(async () => (await save(page)).skins.equipped.roof).toBe('roof_slate');
     let s = await save(page);
     expect(s.crystals).toBe(SEEDED_CRYSTALS - SLATE_COST);

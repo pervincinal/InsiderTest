@@ -8,7 +8,7 @@ import type { View } from '../render/view';
 import { hudAnchors } from '../render/view';
 import { HOWTO, HOWTO_BANDS, bandAt, bandToScreen, screenToBand } from '../render/menuLayout';
 import type { Rect } from '../render/widgets';
-import { inRect } from '../render/widgets';
+import { hitRect } from '../render/widgets';
 import { drawHowTo } from '../render/menusHowto';
 import type { PointerPoint } from '../input/pointer';
 import { playSfx } from '../audio/index';
@@ -37,7 +37,7 @@ export class HowToScreen implements Screen {
     const band = bandAt(hudAnchors(this.app.view), HOWTO_BANDS, p.y);
     const r = band === 'top' ? HOWTO.back : band === 'bottom' ? HOWTO.close : null;
     const l = this.toLayout(p.x, p.y);
-    return r && inRect(r, l.x, l.y) ? r : null;
+    return r && hitRect(this.app.view, r, l.x, l.y) ? r : null;
   }
 
   /** FE-11: screen logical point → layout point (BACK moves up with the header, CLOSE down to the bottom safe edge). */

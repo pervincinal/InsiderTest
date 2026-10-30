@@ -1,5 +1,6 @@
 import type { Rect } from './widgets';
 import type { HudAnchors } from './view';
+import { CONFIRM } from './layout';
 
 /*
  * Geometry only the lazily loaded menu screens use (settings, level map, achievements, shop):
@@ -74,7 +75,8 @@ export const SETTINGS = Object.freeze({
   /** Row controls, top to bottom. */
   sound: { x: 470, y: 216, w: 160, h: 56 } as Rect,
   colorBlind: { x: 470, y: 312, w: 160, h: 56 } as Rect,
-  motion: { x: 372, y: 408, w: 258, h: 56 } as Rect,
+  /** Three segments ≥ 88 wide each (AUD-U1: 44 pt at 360 wide). */
+  motion: { x: 356, y: 408, w: 274, h: 56 } as Rect,
   /**
    * "How to play" row (FE-3): the whole row is the tap target (label left, chevron disc right). It
    * takes the slot the rules-v2 removal of the send ratio freed (y ≈ 504), so the language picker /
@@ -114,21 +116,34 @@ export const SETTINGS_BANDS: MenuBands = Object.freeze({ topEnd: SETTINGS.header
 /** Level-select geometry (content space scrolls vertically under a fixed header). */
 export const LEVEL_MAP = Object.freeze({
   headerH: 100,
-  back: { x: 18, y: 20, w: 140, h: 60 } as Rect,
+  /** 100 wide here (140 on the other menus): the DAILY tab's tap area reaches up beside it (AUD-U1). */
+  back: { x: 18, y: 20, w: 100, h: 60 } as Rect,
   /** Gold + crystal pills in the header (tap → shop). */
   wallet: { x: 402, y: 24, w: 300, h: 52 } as Rect,
   /** Commander summary chip at the bottom (tap → shop, upgrades tab). */
   commander: { x: 60, y: 1206, w: 600, h: 54 } as Rect,
   /** Daily Challenge card (GDD §7): sticky under the header, over the scrolling map (tap → start). */
   daily: { x: 30, y: 112, w: 660, h: 104 } as Rect,
-  /** DAILY / WEEKLY tabs in the card's title row (GDD §8.2): 44 px tap targets over a 36 px segmented pill. */
+  /** DAILY / WEEKLY tabs in the card's title row (GDD §8.2): drawn as a 36 px segmented pill. */
   dailyTabDaily: { x: 126, y: 118, w: 118, h: 44 } as Rect,
   dailyTabWeekly: { x: 244, y: 118, w: 118, h: 44 } as Rect,
+  /**
+   * The tabs' tap areas (AUD-U1): 88 tall, ending at the tabs' bottom — the card's level · twist line
+   * runs right under them and a tap there starts the challenge — and reaching up into the gap under
+   * the header, clear of BACK (100 wide here) and the wallet.
+   */
+  dailyTabDailyHit: { x: 126, y: 74, w: 118, h: 88 } as Rect,
+  dailyTabWeeklyHit: { x: 244, y: 74, w: 118, h: 88 } as Rect,
   /**
    * "Yesterday's map" row (DAILY-6, GDD §7.3): a slimmer secondary card docked under the daily card,
    * sticky like it, on the DAILY tab only while yesterday's challenge is unwon. ≥ 44 px tap target.
    */
   yesterday: { x: 54, y: 222, w: 612, h: 56 } as Rect,
+  /**
+   * The row's tap area (AUD-U1): 88 tall, reaching down from the row (the challenge card sits right
+   * above it); the sticky block and its band end at its bottom.
+   */
+  yesterdayHit: { x: 54, y: 222, w: 612, h: 88 } as Rect,
   /** Node radius (hit rect is the 2r square). */
   nodeR: 46,
   /** Content-space y of the first node and the vertical step between nodes. */
@@ -148,8 +163,9 @@ export const LEVEL_MAP = Object.freeze({
  * path stays where it is and the scroll range follows the chip (`levelMapMaxScroll(count, MAP_H + a.bottom)`).
  */
 export function levelMapBands(yesterdayRow: boolean): MenuBands {
-  const sticky = yesterdayRow ? LEVEL_MAP.yesterday : LEVEL_MAP.daily;
-  return { topEnd: sticky.y + sticky.h, bottomStart: LEVEL_MAP.commander.y - 10, content: staysPut };
+  const sticky = yesterdayRow ? LEVEL_MAP.yesterdayHit : LEVEL_MAP.daily;
+  // AUD-U1: the chip's band starts where its 88-tall tap area does (1206 + 27 − 44)
+  return { topEnd: sticky.y + sticky.h, bottomStart: LEVEL_MAP.commander.y - 17, content: staysPut };
 }
 
 /** Content-space centre of level node `index`. */
@@ -179,7 +195,7 @@ export function levelMapMaxScroll(count: number, viewH = 1280): number {
  */
 export function levelMapMinScroll(yesterdayRow: boolean): number {
   const d = LEVEL_MAP.daily;
-  const y = LEVEL_MAP.yesterday;
+  const y = LEVEL_MAP.yesterdayHit;
   return yesterdayRow ? d.y + d.h - (y.y + y.h) : 0;
 }
 
@@ -231,7 +247,8 @@ export function settingsAboutLayout(hasSupportId: boolean, hasPrivacy: boolean):
   }
   let privacy: Rect | null = null;
   if (hasPrivacy) {
-    privacy = { x: 160, y: y + 10, w: 400, h: 60 };
+    // AUD-U1: 320 wide (centred) so its tap area stays left of COPY's (522–640), whose 88-tall area reaches down to here
+    privacy = { x: 200, y: y + 10, w: 320, h: 60 };
     y += 80;
   }
   return { card: { x: a.x, y: a.y, w: a.w, h: y + 22 - a.y }, versionY, supportY, copy, privacy };
@@ -336,12 +353,8 @@ export const SHOP = Object.freeze({
   /** Buy button inside a card (relative to the card's bottom-right). */
   buyW: 150,
   buyH: 54,
-  /** Crystals → gold confirm card (screen space, over the crystals tab). */
-  convertConfirm: {
-    card: { x: 90, y: 470, w: 540, h: 320 } as Rect,
-    yes: { x: 130, y: 676, w: 210, h: 72 } as Rect,
-    no: { x: 380, y: 676, w: 210, h: 72 } as Rect,
-  },
+  /** Crystals → gold confirm card (screen space, over the tab); AUD-U5: every crystal spend asks on it (`CONFIRM`). */
+  convertConfirm: CONFIRM,
 });
 
 /**
@@ -382,7 +395,8 @@ export function shopBuyRect(card: Rect, w: number = SHOP.buyW, h: number = SHOP.
 
 /** Pack-size segmented control inside the crystals → gold convert card. */
 export function shopConvertSegRect(card: Rect): Rect {
-  return { x: card.x + 24, y: card.y + 96, w: card.w - 48, h: 52 };
+  // AUD-U1: three segments ≥ 88 wide (44 pt at 360 wide)
+  return { x: card.x + 16, y: card.y + 96, w: card.w - 32, h: 52 };
 }
 
 /** Buy button docked at the right of a full-width row. */

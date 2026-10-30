@@ -30,16 +30,17 @@ function shopPackRect(i: number): R {
 }
 // the convert card takes the grid slot after the 5 crystal packs; its segmented picker and CONVERT button
 const CONVERT_CARD = shopPackRect(5);
-const CONVERT_SEG = { x: CONVERT_CARD.x + 24, y: CONVERT_CARD.y + 96, w: CONVERT_CARD.w - 48, h: 52 };
+const CONVERT_SEG = { x: CONVERT_CARD.x + 16, y: CONVERT_CARD.y + 96, w: CONVERT_CARD.w - 32, h: 52 };
 const CONVERT_BUY = { x: CONVERT_CARD.x + 24, y: CONVERT_CARD.y + CONVERT_CARD.h - 54 - 16, w: CONVERT_CARD.w - 48, h: 54 };
 const CONVERT_CONFIRM = { yes: { x: 130, y: 676, w: 210, h: 72 }, no: { x: 380, y: 676, w: 210, h: 72 } };
 // src/render/layout.ts — TITLE.achievements / TITLE.settings, ACHIEVEMENTS_LAYOUT.back, settingsAboutLayout(true, true)
-// (SETTINGS.about.y = 1012 since the FE-14 team-colour row: copy.y = 1012 + 22 + 62 + 31 − 24, privacy.y = 1012 + 22 + 2·62 + 10)
+// (SETTINGS.about.y = 1012 since the FE-14 team-colour row: copy.y = 1012 + 22 + 62 + 31 − 24, privacy.y = 1012 + 22 + 2·62 + 10;
+// AUD-U1: privacy 320 wide so its tap area stays left of COPY's)
 const TITLE_ACHIEVEMENTS = { x: 18, y: 990, w: 128, h: 132 };
-const TITLE_SETTINGS = { x: 180, y: 780, w: 172, h: 64 };
+const TITLE_SETTINGS = { x: 180, y: 776, w: 172, h: 64 };
 const ACHIEVEMENTS_BACK = { x: 18, y: 20, w: 140, h: 60 };
 const ABOUT_COPY = { x: 522, y: 1103, w: 118, h: 48 };
-const ABOUT_PRIVACY = { x: 160, y: 1168, w: 400, h: 60 };
+const ABOUT_PRIVACY = { x: 200, y: 1168, w: 320, h: 60 };
 // src/economy/catalog.ts — CONVERSION, CRYSTAL_SERVICES.boosterCrate, ACHIEVEMENTS crystals
 const CONVERSION = { goldPerCrystal: 5, packs: [20, 100, 500] };
 const CRATE = { cost: 60, charges: { overdrive: 5, freeze: 3, airstrike: 2 } };
@@ -63,7 +64,7 @@ const HELMET_SEED_CRYSTALS = 200;
 const HELMET_SCROLL = 400; // brings helmet rows 2–3 (Crusader, Spartan) into the 1280 px view
 type HelmetRecWindow = Window & { __qaTexts: { t: string; dx: number; dy: number }[] | null; __qaFills: Set<string> | null };
 // src/render/layout.ts — RESULT
-const RESULT = { next: { x: 84, y: 780, w: 170, h: 72 }, menu: { x: 466, y: 780, w: 170, h: 72 }, continueAd: { x: 368, y: 700, w: 268, h: 62 }, howto: { x: 250, y: 638, w: 220, h: 34 } };
+const RESULT = { next: { x: 84, y: 780, w: 170, h: 72 }, menu: { x: 466, y: 780, w: 170, h: 72 }, continueAd: { x: 368, y: 696, w: 268, h: 62 }, howto: { x: 466, y: 494, w: 170, h: 44 } };
 // src/render/menuLayout.ts — HOWTO.close
 const HOWTO_CLOSE = { x: 180, y: 1054, w: 360, h: 72 };
 const SHOTS = fileURLToPath(new URL('./__screenshots__/', import.meta.url));
@@ -225,9 +226,16 @@ test.describe('economy', () => {
     await page.evaluate(() => window.__towerclash.economy.openShop('bundles'));
     await expect.poll(() => screen(page)).toBe('shop');
     await tapRect(page, shopRowRect(0)); // the crate is the first row
+    // AUD-U5: the confirm card first; CANCEL spends nothing, SPEND buys
+    await tapRect(page, CONVERT_CONFIRM.no);
+    await page.waitForTimeout(150);
+    expect((await save(page)).crystals).toBe(CRATE.cost * 2 + 10);
+    await tapRect(page, shopRowRect(0));
+    await tapRect(page, CONVERT_CONFIRM.yes);
     await expect.poll(async () => (await save(page)).charges).toEqual({ overdrive: 1 + 5, freeze: 3, airstrike: 2 });
     expect((await save(page)).crystals).toBe(CRATE.cost + 10);
     await tapRect(page, shopRowRect(0));
+    await tapRect(page, CONVERT_CONFIRM.yes);
     await expect.poll(async () => (await save(page)).charges).toEqual({ overdrive: 11, freeze: 6, airstrike: 4 });
     expect((await save(page)).crystals).toBe(10);
     await tapRect(page, shopRowRect(0)); // 10 crystals: unaffordable
@@ -269,6 +277,9 @@ test.describe('economy', () => {
     await page.evaluate(() => window.__towerclash.economy.openShop('skins'));
     await expect.poll(() => screen(page)).toBe('shop');
     await tapRect(page, shopSkinRect(SKIN_ROOFS_TOP, 0)); // Slate roof, 80 crystals
+    await page.waitForTimeout(150);
+    expect((await save(page)).crystals, 'AUD-U5: nothing spent before the confirm card').toBe(100);
+    await tapRect(page, CONVERT_CONFIRM.yes); // SPEND
     await expect.poll(async () => (await save(page)).skins.equipped.roof).toBe('roof_slate');
     let s = await save(page);
     expect(s.crystals).toBe(100 - SLATE_COST);
@@ -296,6 +307,7 @@ test.describe('economy', () => {
     const before = (await save(page)).crystals;
     expect(before).toBeGreaterThanOrEqual(DUSK_COST);
     await tapRect(page, themeCard(0)); // Dusk, 150 crystals
+    await tapRect(page, CONVERT_CONFIRM.yes); // AUD-U5: SPEND on the confirm card
     await expect.poll(async () => (await save(page)).skins.equipped.theme).toBe('theme_dusk');
     s = await save(page);
     expect(s.crystals).toBe(before - DUSK_COST);
@@ -425,6 +437,7 @@ test.describe('economy', () => {
 
     // buy Crusader: crystals −120, owned and equipped in the helmet slot; the card says EQUIPPED
     await tapRect(page, helmetCard(CRUSADER_INDEX));
+    await tapRect(page, CONVERT_CONFIRM.yes); // AUD-U5: SPEND on the confirm card
     await expect.poll(async () => (await save(page)).skins.equipped.helmet).toBe('helmet_crusader');
     let s = await save(page);
     expect(s.crystals).toBe(HELMET_SEED_CRYSTALS - CRUSADER_COST);

@@ -373,9 +373,12 @@ export const AD_PLACEMENTS = [
 
 /** Interstitial policy (ECONOMY.md §5.1). Rewarded placements are never gated by these. */
 export const INTERSTITIAL_RULES = {
-  /** No interstitial until this many levels have been completed (won or lost). */
+  /** No interstitial until this many levels have been won (AUD-B7: defeats are not counted). */
   minLevelsCompleted: 5,
+  /** Then every Nth result screen of a won level (defeats are not counted). */
   everyNthCompletedLevel: 3,
+  /** No interstitial while an uncleared level's defeat streak (`save.defeats`, the skip offer's) is at least this (AUD-B7). */
+  noneFromDefeatStreak: 2,
   /** Minimum time since the last ad of any kind (also satisfied by the placement cooldown). */
   minMsSinceLastAd: 120_000,
   sessionCap: 4,

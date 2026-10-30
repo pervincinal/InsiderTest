@@ -12,7 +12,8 @@ import type { View } from '../render/view';
 import { hudAnchors } from '../render/view';
 import { LEVEL_MAP, bandAt, bandToScreen, levelMapBands, levelMapMaxScroll, levelMapMinScroll, levelNodeCentre, levelNodeRect, screenToBand } from '../render/menuLayout';
 import type { Rect } from '../render/widgets';
-import { formatTime, inRect } from '../render/widgets';
+import { formatTime, hitRect } from '../render/widgets';
+import { dragThreshold } from '../input/pointer';
 import type { DailyCardOpts, WeeklyCardOpts } from '../render/menusLevels';
 import { drawLevelSelect } from '../render/menusLevels';
 import type { PointerPoint } from '../input/pointer';
@@ -29,6 +30,13 @@ import type { SaveData } from './save';
 /* ---------- Level select: winding path map ---------- */
 
 const BACK = LEVEL_MAP.back;
+
+/** Drawn rect → its own tap rect where the padded one would reach into a neighbour (AUD-U1, menuLayout.ts). */
+const OWN_HIT = new Map<Rect, Rect>([
+  [LEVEL_MAP.dailyTabDaily, LEVEL_MAP.dailyTabDailyHit],
+  [LEVEL_MAP.dailyTabWeekly, LEVEL_MAP.dailyTabWeeklyHit],
+  [LEVEL_MAP.yesterday, LEVEL_MAP.yesterdayHit],
+]);
 /** A level's name in the UI language: the metadata carries English only, the translations are ../levels/names.ts (PERF-10). */
 const metaName = (meta: LevelMeta): string => levelName({ ...meta, ...LEVEL_NAMES[meta.id] });
 const HOUR_MS = 3_600_000;
@@ -101,7 +109,8 @@ export class LevelSelectScreen implements Screen {
     const l = this.toLayout(p.x, p.y);
     const rects = band === 'bottom' ? [LEVEL_MAP.commander] : [BACK, LEVEL_MAP.wallet, LEVEL_MAP.dailyTabDaily, LEVEL_MAP.dailyTabWeekly, LEVEL_MAP.daily];
     if (band === 'top' && this.yesterday()) rects.push(LEVEL_MAP.yesterday);
-    return rects.find((r) => inRect(r, l.x, l.y)) ?? null;
+    // AUD-U1: padded tap areas; the tabs' and the "Yesterday's map" row's are their own rects (`…Hit`)
+    return rects.find((r) => hitRect(this.app.view, OWN_HIT.get(r) ?? r, l.x, l.y)) ?? null;
   }
 
   setScroll(y: number): void {
@@ -258,7 +267,7 @@ export class LevelSelectScreen implements Screen {
 
   move(p: PointerPoint): void {
     if (!this.held) return;
-    if (Math.abs(p.y - this.downY) > 14) {
+    if (Math.abs(p.y - this.downY) > dragThreshold(this.app.view.scale)) {
       this.dragging = true;
       this.pressed = null;
     }
@@ -305,7 +314,7 @@ export class LevelSelectScreen implements Screen {
     if (bandAt(hudAnchors(this.app.view), levelMapBands(y !== null), p.y) !== 'content') return;
     for (let i = 0; i < LEVEL_META.length; i++) {
       const level = LEVEL_META[i];
-      if (level && inRect(levelNodeRect(i, this.scroll), p.x, p.y)) {
+      if (level && hitRect(this.app.view, levelNodeRect(i, this.scroll), p.x, p.y)) {
         if (isLevelUnlocked(this.app.save, LEVEL_META, i)) void this.app.startLevel(level.id);
         return; // locked: the tap does nothing
       }

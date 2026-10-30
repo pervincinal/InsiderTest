@@ -15,7 +15,7 @@ import { equippedSkin } from './economy/entitlements';
 import { attachPointer } from './input/pointer';
 import type { PointerPoint } from './input/pointer';
 import type { SaveData } from './ui/save';
-import { currentLevelIndex, loadSave, writeSave } from './ui/save';
+import { currentLevelIndex, isSaveReadOnly, loadSave, saveLoadIssue, writeSave, writeSaveAtBoot } from './ui/save';
 import type { App, NativeInfoOverride, QueuedToast, Screen, StartOptions } from './ui/screens';
 import { ResultScreen, TitleScreen, beginMapFrame, endMapFrame, handOverToasts } from './ui/screens';
 import { PlayScreen } from './ui/play';
@@ -28,7 +28,7 @@ import type { Language } from './ui/i18n';
 import { ENGLISH_MENUS_CHUNK, browserLanguages, detectLanguage, loadEnglishMenus, onLanguageChange, setLanguage, t } from './ui/i18n';
 import { drawSpinner } from './render/economyWidgets';
 import { initAudio, setAudioBackground, toggleMuted, unlockAudio } from './audio/index';
-import { initNative } from './native/index';
+import { initNative, startSaveMirror } from './native/index';
 import type { ShopTab } from './render/menuLayout';
 import type { AdSession, FakeAdsProvider } from './economy/adsFlow';
 import { createAdSession, createFakeAds, setAdsProvider } from './economy/adsFlow';
@@ -260,7 +260,7 @@ function whenIdle(fn: () => void): void {
 export class TowerClashApp implements App {
   readonly view: View;
   readonly save: SaveData;
-  readonly ads: AdSession = createAdSession();
+  readonly ads: AdSession;
   current: Screen;
   private lastFrame = 0;
   /** Re-reads the safe-area insets on the first frames / after un-hiding (MM-7). */
@@ -288,7 +288,12 @@ export class TowerClashApp implements App {
     this.view.layers = createLayers(canvas);
     resize(this.view);
     this.save = save;
+    this.ads = createAdSession(save.adCounters.levelsCompleted); // the interstitial cadence counts this session's wins (AUD-B7)
     this.current = new TitleScreen(this);
+    // AUD-Q2: an unreadable save was copied aside and the game starts fresh: the lazy chunk (fetched
+    // now instead of at idle) tidies the copies and says so once (src/ui/saveRecovery.ts)
+    const issue = saveLoadIssue();
+    if (issue?.kind === 'corrupt') void this.loadLazy().then((L) => L.noticeUnreadableSave(this, issue.kept), () => undefined);
     initAudio(this.save);
     applyMotionPref(this.save.settings.reducedMotion);
     // Store / ads providers (fake store on the web; `?fakeads=1` installs the dev ads provider).
@@ -655,6 +660,8 @@ export class TowerClashApp implements App {
       blankLayer(this.view.layers?.ground);
     }
     this.current.draw(this.view, now);
+    // AUD-Q3: a newer build's save is played read-only; the title says so for as long as it lasts
+    if (this.current.name === 'title' && isSaveReadOnly()) this.lazy?.drawSaveNotice(this.view, this.palette());
     this.preloadLazy(); // after the first paint; a no-op from then on
     requestAnimationFrame((f) => this.frame(f));
   }
@@ -709,14 +716,15 @@ async function waitForFonts(language: Language, timeoutMs = 1500): Promise<void>
 /**
  * UI language: the persisted choice, else the browser's preference on the first run (persisted so
  * a later browser change does not silently switch the game). The dictionary is awaited so the
- * title never flashes English.
+ * title never flashes English. The detection is a boot write (`writeSaveAtBoot`, AUD-Q2): it never
+ * overwrites an unreadable save still under the v3 key — it lands with the player's first change.
  */
 async function bootLanguage(save: SaveData): Promise<Language> {
   let code = save.settings.language;
   if (!code) {
     code = detectLanguage(browserLanguages());
     save.settings.language = code;
-    writeSave(save);
+    writeSaveAtBoot(save);
   }
   await setLanguage(code);
   return code;
@@ -725,6 +733,7 @@ async function bootLanguage(save: SaveData): Promise<Language> {
 async function boot(): Promise<void> {
   const canvas = document.getElementById('game');
   if (!(canvas instanceof HTMLCanvasElement)) throw new Error('#game canvas missing');
+  await startSaveMirror(); // AUD-Q4: native shell only — restores the v3 save from Preferences when localStorage lost it, then mirrors every write
   const save = loadSave();
   const language = await bootLanguage(save);
   await waitForFonts(language);

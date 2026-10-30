@@ -167,12 +167,16 @@ describe('defeat tip geometry (layout.ts RESULT.tip / RESULT.howto)', () => {
   const BANNER_H = 158; // hud.ts drawResultCard
   const REINFORCEMENTS_LABEL_TOP = RESULT.continueSolo.y - 18 - 8; // 16 px label centred 18 px over the continue row
 
-  it('sits inside the card under the banner, ends above the Reinforcements label, and the link is inside the block', () => {
+  it('sits inside the card under the banner, ends above the Reinforcements label; the link sits right of the time line', () => {
     expect(inside(RESULT.tip, RESULT.card, 24)).toBe(true);
     expect(RESULT.tip.y).toBeGreaterThanOrEqual(RESULT.card.y + BANNER_H + 40);
     expect(RESULT.tip.y + RESULT.tip.h).toBeLessThanOrEqual(REINFORCEMENTS_LABEL_TOP);
-    expect(inside(RESULT.howto, RESULT.tip)).toBe(true);
-    expect(RESULT.howto.h).toBeGreaterThanOrEqual(32); // ≥ 16 CSS px at the 360×640 letterbox scale (0.5)
+    // AUD-U1: at the tip's foot the link's 88-tall tap area ran into CONTINUE's — it moved under the banner, right of "Time 01:02"
+    expect(inside(RESULT.howto, RESULT.card, 24)).toBe(true);
+    expect(RESULT.howto.y).toBeGreaterThanOrEqual(RESULT.card.y + BANNER_H);
+    expect(RESULT.howto.y + RESULT.howto.h).toBeLessThanOrEqual(RESULT.tip.y);
+    expect(RESULT.howto.x).toBeGreaterThanOrEqual(460); // clear of the centred time line (≈ 280–440 at 30 px)
+    expect(RESULT.howto.h).toBeGreaterThanOrEqual(44);
   });
 
   it('never overlaps another result-card target', () => {
@@ -180,7 +184,8 @@ describe('defeat tip geometry (layout.ts RESULT.tip / RESULT.howto)', () => {
       expect(overlaps(RESULT.tip, r)).toBe(false);
       expect(overlaps(RESULT.howto, r)).toBe(false);
     }
-    expect(inRect(RESULT.howto, 360, RESULT.howto.y + RESULT.howto.h / 2)).toBe(true);
+    expect(overlaps(RESULT.howto, RESULT.tip)).toBe(false);
+    expect(inRect(RESULT.howto, RESULT.howto.x + RESULT.howto.w / 2, RESULT.howto.y + RESULT.howto.h / 2)).toBe(true);
   });
 
   it('is on screen at 360×640 (DPR 1): the letterboxed map keeps every logical rect inside the viewport', () => {

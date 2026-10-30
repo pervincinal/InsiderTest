@@ -47,9 +47,11 @@ const NATIVE_DPR_CAP = 2;
 const IPHONE_UA =
   'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1';
 // src/render/layout.ts — HUD (layout coordinates; the bands move, these do not)
-const HUD = { pause: { x: 636, y: 18, w: 66, h: 60 }, menu: { x: 586, y: 1196, w: 116, h: 64 }, streams: { x: 18, y: 1196, w: 200, h: 64 } };
+const HUD = { pause: { x: 636, y: 18, w: 66, h: 60 }, menu: { x: 586, y: 1196, w: 116, h: 64 }, streams: { x: 18, y: 1196, w: 180, h: 64 } };
 // src/render/layout.ts — BOOSTERS.overdrive (bottom band); src/economy — OVERDRIVE costs 30 gold
-const OVERDRIVE = { x: 232, y: 1186, w: 66, h: 88 };
+const OVERDRIVE = { x: 217, y: 1186, w: 66, h: 88 };
+// src/render/layout.ts — PAUSE.menu (the band's MENU opens the pause card, AUD-U4)
+const PAUSE_MENU = { x: 370, y: 860, w: 170, h: 72 };
 /** src/sim/constants.ts CAPACITY[2] × FORTRESS_CAPACITY_MUL: a level-2 fortress (its top level) holds 75. */
 const FORTRESS_L2_CAPACITY = 75;
 
@@ -510,8 +512,43 @@ test.describe('touch gestures on a 430×932 iPhone-class screen, DPR 3, safe ins
     await f.tapHud(HUD.pause);
     await expect.poll(() => simTime(page), { message: 'tapped again: the sim runs' }).toBeGreaterThan(frozen);
 
+    // AUD-U4: MENU opens the pause card (the sim stops, the match stays); the card's MENU leaves
     await f.tapHud(HUD.menu);
-    await expect.poll(() => screen(page), { message: 'MENU → level map' }).toBe('levelSelect');
+    await expect.poll(async () => {
+      const a = await simTime(page);
+      await page.waitForTimeout(150);
+      return (await simTime(page)) - a;
+    }, { message: 'MENU pauses' }).toBe(0);
+    expect(await screen(page)).toBe('play');
+    await f.tap({ x: PAUSE_MENU.x + PAUSE_MENU.w / 2, y: PAUSE_MENU.y + PAUSE_MENU.h / 2 });
+    await expect.poll(() => screen(page), { message: 'pause card MENU → level map' }).toBe('levelSelect');
+    expect(errors).toEqual([]);
+  });
+
+  test('AUD-U1: a tap just outside the drawn pause button, inside its 44 pt area, still pauses; one past it does not', async ({ page }) => {
+    const errors = await boot(page, CLEARED);
+    await startLevel(page, 2);
+    const f = new Fingers(page, await page.context().newCDPSession(page));
+    const scale = (await page.evaluate(() => window.__towerclash.toClient(720, 0))).x / 720;
+    const centre = await hudClientPoint(page, HUD.pause.x + HUD.pause.w / 2, HUD.pause.y + HUD.pause.h / 2);
+    // 44 pt square about the button's centre: 22 CSS px each way; the drawn button is 39 × 36 CSS px here
+    const below = { x: centre.x, y: centre.y + 20 }; // under the drawn button (its bottom edge is 18 CSS px below the centre)
+    expect(centre.y + (HUD.pause.h / 2) * scale).toBeLessThan(below.y);
+    const t0 = await simTime(page);
+    await f.tapClient({ x: centre.x, y: centre.y + 25 }); // past the 44 pt square (still on the top band): nothing
+    await expect.poll(() => simTime(page), { message: 'a tap past the area does not pause' }).toBeGreaterThan(t0 + 100);
+    await f.tapClient(below);
+    await expect.poll(async () => {
+      const a = await simTime(page);
+      await page.waitForTimeout(150);
+      return (await simTime(page)) - a;
+    }, { message: 'a tap in the padded area pauses' }).toBe(0);
+    await f.tapHud(HUD.pause);
+    await expect.poll(async () => {
+      const a = await simTime(page);
+      await page.waitForTimeout(150);
+      return (await simTime(page)) - a;
+    }, { message: 'resumed' }).toBeGreaterThan(0);
     expect(errors).toEqual([]);
   });
 

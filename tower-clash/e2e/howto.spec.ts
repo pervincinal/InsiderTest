@@ -15,7 +15,7 @@ test.use({ viewport: { width: 360, height: 640 } });
 
 const SAVE_KEY = 'towerclash.save.v3';
 // src/render/titleLayout.ts — TITLE.settings; src/render/menuLayout.ts — SETTINGS.howto
-const TITLE_SETTINGS = { x: 180, y: 780, w: 172, h: 64 };
+const TITLE_SETTINGS = { x: 180, y: 776, w: 172, h: 64 };
 const SETTINGS_HOWTO = { x: 86, y: 500, w: 548, h: 64 };
 /** src/render/menuLayout.ts — HOWTO.rows / maxLines */
 const ROWS = 6;

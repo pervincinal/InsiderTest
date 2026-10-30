@@ -131,8 +131,11 @@ export interface ShopOpts {
   crate?: ShopCrateCard | null;
   /** Convert card (crystals tab). */
   convert?: ShopConvertCard | null;
-  /** Conversion awaiting confirmation (modal over the tab). */
-  confirmConvert?: { crystals: number; gold: number } | null;
+  /**
+   * Crystal spend awaiting confirmation (modal over the tab): a conversion (`gold`), or a skin / the
+   * booster crate (AUD-U5: `line` names what the crystals buy).
+   */
+  confirmConvert?: { crystals: number; gold?: number; line?: string } | null;
   /** Restore-purchases button (content space), on the store tabs. */
   restoreRect: Rect | null;
   storeAvailable: boolean;
@@ -375,29 +378,40 @@ function drawConvertCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopCon
   });
 }
 
-/** Modal over the crystals tab: "Convert 20 crystals into 100 gold?" with CONVERT / CANCEL. */
-function drawConvertConfirm(ctx: CanvasRenderingContext2D, pal: Palette, q: { crystals: number; gold: number }, o: ShopOpts, dim: Rect): void {
+/**
+ * Modal over the tab: "Convert crystals?" (20 crystals \u2192 100 gold) with CONVERT / CANCEL; AUD-U5: the
+ * same card asks "Spend 80 crystals?" (what they buy \u00b7 how many are left) before a skin or the crate.
+ */
+function drawConvertConfirm(ctx: CanvasRenderingContext2D, pal: Palette, q: { crystals: number; gold?: number; line?: string }, o: ShopOpts, dim: Rect): void {
   ctx.fillStyle = 'rgba(26, 58, 90, 0.5)';
   ctx.fillRect(dim.x, dim.y, dim.w, dim.h); // the whole screen (BUG-34)
   const c = SHOP.convertConfirm;
+  const convert = q.gold !== undefined;
   drawCard(ctx, pal, c.card);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = pal.ink;
-  ctx.font = font(34);
-  ctx.fillText(t('shop.convertTitle'), 360, c.card.y + 62, c.card.w - 40);
+  const title = convert ? t('shop.convertTitle') : t('spend.title', { n: q.crystals });
+  ctx.font = font(fitFontPx(ctx, title, 34, c.card.w - 40));
+  ctx.fillText(title, 360, c.card.y + 62, c.card.w - 40);
   ctx.font = font(26);
-  const line = `${q.crystals}       ${q.gold}`;
-  const w = ctx.measureText(line).width;
-  ctx.fillText(line, 360, c.card.y + 122);
-  drawCrystal(ctx, pal, 360 - w / 2 - 18, c.card.y + 122, 13);
-  ctx.fillStyle = pal.textDim;
-  ctx.fillText('\u2192', 360, c.card.y + 122);
-  drawGoldCoin(ctx, pal, 360 + w / 2 + 18, c.card.y + 122, 12);
+  if (convert) {
+    const line = `${q.crystals}       ${q.gold}`;
+    const w = ctx.measureText(line).width;
+    ctx.fillText(line, 360, c.card.y + 122);
+    drawCrystal(ctx, pal, 360 - w / 2 - 18, c.card.y + 122, 13);
+    ctx.fillStyle = pal.textDim;
+    ctx.fillText('\u2192', 360, c.card.y + 122);
+    drawGoldCoin(ctx, pal, 360 + w / 2 + 18, c.card.y + 122, 12);
+  } else {
+    const line = q.line ?? '';
+    ctx.font = font(fitFontPx(ctx, line, 26, c.card.w - 40, '500'), '500');
+    ctx.fillText(line, 360, c.card.y + 122, c.card.w - 40);
+  }
   ctx.fillStyle = pal.textDim;
   ctx.font = font(19, '500');
-  ctx.fillText(t('shop.convertWarn'), 360, c.card.y + 168, c.card.w - 40);
-  drawButton(ctx, pal, c.yes, t('shop.convert'), { fill: pal.shopBuy.face, text: pal.shopBuy.text, fontPx: 26, pressed: o.pressed === c.yes });
+  ctx.fillText(convert ? t('shop.convertWarn') : t('spend.left', { n: Math.max(0, o.crystals - q.crystals) }), 360, c.card.y + 168, c.card.w - 40);
+  drawButton(ctx, pal, c.yes, convert ? t('shop.convert') : t('spend.yes'), { fill: pal.shopBuy.face, text: pal.shopBuy.text, fontPx: 26, pressed: o.pressed === c.yes });
   drawButton(ctx, pal, c.no, t('common.cancel'), { fontPx: 26, pressed: o.pressed === c.no });
 }
 

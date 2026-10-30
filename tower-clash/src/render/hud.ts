@@ -110,6 +110,8 @@ export interface ResultExtras {
   share?: boolean;
   /** The share image is being drawn / the share sheet is open: the SHARE button shows a spinner. */
   sharing?: boolean;
+  /** AUD-U5: a crystal spend waiting on the confirm card (`CONFIRM`): what, its price, the balance now. */
+  confirm?: { kind: 'continue' | 'skip'; crystals: number; have: number } | null;
   /** Daily Challenge result (GDD §7): the reward line (first win) or the day's best (replay). */
   daily?: {
     won: boolean;

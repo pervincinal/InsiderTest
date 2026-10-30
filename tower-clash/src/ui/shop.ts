@@ -9,8 +9,9 @@
 import type { View } from '../render/view';
 import { hudAnchors } from '../render/view';
 import type { Rect } from '../render/widgets';
-import { inRect } from '../render/widgets';
+import { hitRect } from '../render/widgets';
 import { segmentAt } from '../render/menuWidgets';
+import { dragThreshold } from '../input/pointer';
 import type { ShopTab } from '../render/menuLayout';
 import { SHOP, SHOP_BANDS, bandToScreen, bandedContentBottom, screenToBand, shopBuyRect, shopConvertSegRect, shopPackRect, shopRowRect, shopSkinRect, shopTabsFor } from '../render/menuLayout';
 import type { ShopBundleCard, ShopConvertCard, ShopCrateCard, ShopPackCard, ShopSkinCard, ShopUpgradeCard } from '../render/menusShop';
@@ -36,6 +37,17 @@ interface Hit {
   rect: Rect;
   /** `p` is the pointer in content space (scroll already applied). */
   action: (p: PointerPoint) => void;
+}
+
+/**
+ * A crystal spend waiting on the confirm card: a conversion (`gold` it buys) or — AUD-U5 — a skin or
+ * the booster crate (`line`: what the crystals buy). `run` pays and grants once YES is tapped.
+ */
+interface SpendAsk {
+  crystals: number;
+  gold?: number;
+  line?: string;
+  run: () => boolean;
 }
 
 interface Layout {
@@ -90,7 +102,7 @@ export class ShopScreen implements Screen {
   private pending: string | null = null;
   /** Selected conversion pack (index into CONVERSION_PACKS) and the pending confirmation. */
   private convertIdx = 0;
-  private confirmConvert: { crystals: number; gold: number } | null = null;
+  private confirmConvert: SpendAsk | null = null;
   private nowMs = 0;
   readonly toast = new Toast();
   private readonly particles = new ParticleSystem();
@@ -154,7 +166,14 @@ export class ShopScreen implements Screen {
 
   /** Conversion awaiting confirmation, if any (e2e). */
   get pendingConversion(): { crystals: number; gold: number } | null {
-    return this.confirmConvert;
+    const q = this.confirmConvert;
+    return q?.gold !== undefined ? { crystals: q.crystals, gold: q.gold } : null;
+  }
+
+  /** Any crystal spend awaiting the confirm card (AUD-U5): its price and what it buys (tests). */
+  get pendingSpend(): { crystals: number; gold?: number; line?: string } | null {
+    const q = this.confirmConvert;
+    return q && { crystals: q.crystals, gold: q.gold, line: q.line };
   }
 
   private priceOf(p: IapProductDef): string {
@@ -191,7 +210,8 @@ export class ShopScreen implements Screen {
         goldPerCrystal: CONVERSION.goldPerCrystal,
         affordable: save.crystals >= crystals,
       };
-      out.hits.push({ rect: segRect, action: (p) => this.pickConversion(segmentAt(segRect, CONVERSION_PACKS.length, p.x, p.y)) });
+      // the segment by x: the tap area reaches above / below the drawn control (AUD-U1)
+      out.hits.push({ rect: segRect, action: (p) => this.pickConversion(segmentAt(segRect, CONVERSION_PACKS.length, p.x, segRect.y + 1)) });
       out.hits.push({ rect: buyRect, action: () => this.askConversion() });
       bottom = Math.max(bottom, rect.y + rect.h);
     } else if (this.tab === 'bundles') {
@@ -346,13 +366,18 @@ export class ShopScreen implements Screen {
     if (l.y < SHOP.contentTop || l.y > this.contentBottom()) return null;
     this.relayout();
     const y = l.y + this.scroll;
-    return this.hits.find((h) => inRect(h.rect, l.x, y)) ?? null;
+    return this.hits.find((h) => hitRect(this.app.view, h.rect, l.x, y)) ?? null;
+  }
+
+  /** `r` holds layout point `l` (its AUD-U1 tap area). */
+  private on(r: Rect, l: { x: number; y: number }): boolean {
+    return hitRect(this.app.view, r, l.x, l.y);
   }
 
   down(p: PointerPoint): void {
     if (this.confirmConvert) {
       const c = SHOP.convertConfirm;
-      this.pressed = [c.yes, c.no].find((r) => inRect(r, p.x, p.y)) ?? null;
+      this.pressed = [c.yes, c.no].find((r) => this.on(r, p)) ?? null;
       return;
     }
     this.held = true;
@@ -360,17 +385,17 @@ export class ShopScreen implements Screen {
     this.scrollAtDown = this.scroll;
     this.dragging = false;
     const l = this.toLayout(p.x, p.y);
-    if (inRect(SHOP.back, l.x, l.y)) this.pressed = SHOP.back;
+    if (this.on(SHOP.back, l)) this.pressed = SHOP.back;
     else this.pressed = this.contentHit(l)?.rect ?? null;
   }
 
   move(p: PointerPoint): void {
     if (this.confirmConvert) {
-      if (this.pressed && !inRect(this.pressed, p.x, p.y)) this.pressed = null;
+      if (this.pressed && !this.on(this.pressed, p)) this.pressed = null;
       return;
     }
     if (!this.held) return;
-    if (Math.abs(p.y - this.downY) > 14) {
+    if (Math.abs(p.y - this.downY) > dragThreshold(this.app.view.scale)) {
       this.dragging = true;
       this.pressed = null;
     }
@@ -382,8 +407,8 @@ export class ShopScreen implements Screen {
     this.pressed = null;
     if (this.confirmConvert) {
       const c = SHOP.convertConfirm;
-      if (hit === c.yes && inRect(c.yes, p.x, p.y)) this.confirmConversion();
-      else if (hit === c.no && inRect(c.no, p.x, p.y)) this.cancelConversion();
+      if (hit === c.yes && this.on(c.yes, p)) this.confirmConversion();
+      else if (hit === c.no && this.on(c.no, p)) this.cancelConversion();
       return;
     }
     const wasDrag = this.dragging;
@@ -391,17 +416,17 @@ export class ShopScreen implements Screen {
     this.dragging = false;
     if (wasDrag) return;
     const l = this.toLayout(p.x, p.y);
-    if (inRect(SHOP.back, l.x, l.y)) {
+    if (this.on(SHOP.back, l)) {
       this.back();
       return;
     }
-    if (inRect(SHOP.wallet, l.x, l.y)) {
+    if (this.on(SHOP.wallet, l)) {
       this.setTab('crystals');
       return;
     }
-    if (inRect(SHOP.tabs, l.x, l.y)) {
+    if (this.on(SHOP.tabs, l)) {
       const tabs = this.tabs;
-      const tab = tabs[segmentAt(SHOP.tabs, tabs.length, l.x, l.y)];
+      const tab = tabs[segmentAt(SHOP.tabs, tabs.length, l.x, SHOP.tabs.y + 1)];
       if (tab && tab !== this.activeTab()) {
         playSfx('button');
         this.setTab(tab);
@@ -409,7 +434,7 @@ export class ShopScreen implements Screen {
       return;
     }
     const target = this.contentHit(l);
-    if (target && hit && inRect(hit, l.x, l.y + this.scroll)) target.action({ ...p, x: l.x, y: l.y + this.scroll });
+    if (target && hit && this.on(hit, { x: l.x, y: l.y + this.scroll })) target.action({ ...p, x: l.x, y: l.y + this.scroll });
   }
 
   wheel(dy: number): void {
@@ -512,20 +537,25 @@ export class ShopScreen implements Screen {
       return;
     }
     playSfx('button');
-    this.confirmConvert = { crystals, gold: conversionGold(crystals) };
+    this.confirmConvert = { crystals, gold: conversionGold(crystals), run: () => this.convert(crystals) };
   }
 
+  /** CANCEL on the confirm card: nothing is spent. */
   cancelConversion(): void {
     this.confirmConvert = null;
     playSfx('button');
   }
 
-  /** Confirmed: spend the crystals, add the gold, burst coins on the card. */
+  /** YES on the confirm card (CONVERT / SPEND): pay and grant what it asked about. */
   confirmConversion(): boolean {
     const q = this.confirmConvert;
     this.confirmConvert = null;
-    if (!q) return false;
-    const gold = convertCrystals(this.app.save, q.crystals);
+    return q ? q.run() : false;
+  }
+
+  /** Spend the crystals, add the gold, burst coins on the card. */
+  private convert(crystals: number): boolean {
+    const gold = convertCrystals(this.app.save, crystals);
     if (gold === null) {
       this.toast.show(t('shop.toast.notEnoughCrystals'), 'error', this.nowMs);
       return false;
@@ -533,21 +563,34 @@ export class ShopScreen implements Screen {
     const card = this.layout().convert?.rect;
     if (card) this.burst('gold', card);
     playSfx('upgrade');
-    this.toast.show(t('shop.toast.converted', { crystals: q.crystals, gold }), 'ok', this.nowMs);
+    this.toast.show(t('shop.toast.converted', { crystals, gold }), 'ok', this.nowMs);
     return true;
   }
 
   /* ----- booster crate (ECONOMY.md §3.1) ----- */
 
+  /** Crate tapped: the confirm card (AUD-U5), or the "need N crystals" toast when unaffordable. */
   private tapCrate(rect: Rect): void {
+    const crate = CRYSTAL_SERVICES.boosterCrate;
+    if (this.app.save.crystals < crate.costCrystals) {
+      this.toast.show(t('shop.toast.needCrate', { n: crate.costCrystals }), 'error', this.nowMs);
+      return;
+    }
+    playSfx('button');
+    const c = crate.charges;
+    this.confirmConvert = { crystals: crate.costCrystals, line: t('shop.toast.crateAdded', { o: c.overdrive, f: c.freeze, a: c.airstrike }), run: () => this.buyCrate(rect) };
+  }
+
+  private buyCrate(rect: Rect): boolean {
     const added = buyBoosterCrate(this.app.save);
     if (!added) {
       this.toast.show(t('shop.toast.needCrate', { n: CRYSTAL_SERVICES.boosterCrate.costCrystals }), 'error', this.nowMs);
-      return;
+      return false;
     }
     this.burst('crystal', rect);
     playSfx('upgrade');
     this.toast.show(t('shop.toast.crateAdded', { o: added.overdrive, f: added.freeze, a: added.airstrike }), 'ok', this.nowMs);
+    return true;
   }
 
   private tapSkin(skin: SkinDef, family: SkinFamily, rect: Rect): void {
@@ -560,9 +603,20 @@ export class ShopScreen implements Screen {
       this.toast.show(skin.source === 'starter' ? t('shop.toast.starterOnly') : t('shop.toast.premiumOnly'), 'ok', this.nowMs);
       return;
     }
-    if (!spendCrystals(save, skin.costCrystals)) {
+    if (save.crystals < skin.costCrystals) {
       this.toast.show(t('shop.toast.notEnoughCrystals'), 'error', this.nowMs);
       return;
+    }
+    // AUD-U5: crystals are bought with money — the confirm card first
+    playSfx('button');
+    this.confirmConvert = { crystals: skin.costCrystals, line: skinName(skin), run: () => this.buySkin(skin, family, rect) };
+  }
+
+  private buySkin(skin: SkinDef, family: SkinFamily, rect: Rect): boolean {
+    const save = this.app.save;
+    if (!spendCrystals(save, skin.costCrystals)) {
+      this.toast.show(t('shop.toast.notEnoughCrystals'), 'error', this.nowMs);
+      return false;
     }
     save.skins.owned.push(skin.id);
     save.skins.equipped[family] = skin.id;
@@ -570,6 +624,7 @@ export class ShopScreen implements Screen {
     this.burst('crystal', rect);
     playSfx('upgrade');
     this.toast.show(t('shop.toast.skinUnlocked', { name: skinName(skin) }), 'ok', this.nowMs);
+    return true;
   }
 
   /** Equip an owned skin; tapping the equipped one reverts to the default look. */

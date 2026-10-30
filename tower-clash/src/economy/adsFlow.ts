@@ -18,8 +18,12 @@ import { dayKey } from './wallet';
 
 export interface AdSession {
   interstitialsShown: number;
-  /** Results seen since the last ad of any kind (a rewarded video resets it too). */
-  levelsSinceAd: number;
+  /**
+   * `save.adCounters.levelsCompleted` (levels won) at the last ad of any kind, or at the session's
+   * start (`createAdSession(wins)`): the "every Nth" cadence counts wins since then (AUD-B7 — a
+   * defeat's result screen never brings an interstitial closer).
+   */
+  winsAtLastAd: number;
   /** Wall-clock ms of the last ad of any kind (-Infinity before the first). */
   lastAdAtMs: number;
   /** A rewarded video was watched on the result screen currently showing. */
@@ -29,8 +33,9 @@ export interface AdSession {
   rewardedShown: number;
 }
 
-export function createAdSession(): AdSession {
-  return { interstitialsShown: 0, levelsSinceAd: 0, lastAdAtMs: -Infinity, rewardedOnResult: false, lastRewardedAtMs: {}, rewardedShown: 0 };
+/** `winsSoFar`: the save's `adCounters.levelsCompleted` when the session starts (the app passes its save's). */
+export function createAdSession(winsSoFar = 0): AdSession {
+  return { interstitialsShown: 0, winsAtLastAd: winsSoFar, lastAdAtMs: -Infinity, rewardedOnResult: false, lastRewardedAtMs: {}, rewardedShown: 0 };
 }
 
 /* ---------- provider selection (debug / e2e override) ---------- */
@@ -86,20 +91,29 @@ export function createFakeAds(delayMs = 0): FakeAdsProvider {
 
 /** Call once per result screen (win or loss) before deciding on an interstitial. */
 export function onResultShown(session: AdSession): void {
-  session.levelsSinceAd += 1;
   session.rewardedOnResult = false;
 }
 
-export type InterstitialBlock = 'disabled' | 'unavailable' | 'tooEarly' | 'notNth' | 'cooldown' | 'sessionCap' | 'rewarded';
+export type InterstitialBlock = 'disabled' | 'unavailable' | 'tooEarly' | 'defeatStreak' | 'notNth' | 'cooldown' | 'sessionCap' | 'rewarded';
 
-/** Why an interstitial may not fire now, or null when it may (ECONOMY.md §5.1). */
+/** Longest defeat streak (`save.defeats`, the skip offer's count) on a level not yet cleared. */
+export function unclearedDefeatStreak(save: SaveData): number {
+  return Math.max(0, ...Object.entries(save.defeats).map(([id, n]) => (save.stars[id] ? 0 : n)));
+}
+
+/**
+ * Why an interstitial may not fire now, or null when it may (ECONOMY.md §5.1). The one side effect:
+ * a win count below the session's anchor (progress was reset) moves the anchor down to it.
+ */
 export function interstitialBlockedBy(session: AdSession, save: SaveData, nowMs: number, available: boolean): InterstitialBlock | null {
+  session.winsAtLastAd = Math.min(session.winsAtLastAd, save.adCounters.levelsCompleted);
   if (interstitialsDisabled(save)) return 'disabled';
   if (!available) return 'unavailable';
   if (save.adCounters.levelsCompleted <= INTERSTITIAL_RULES.minLevelsCompleted) return 'tooEarly';
+  if (unclearedDefeatStreak(save) >= INTERSTITIAL_RULES.noneFromDefeatStreak) return 'defeatStreak';
   if (session.interstitialsShown >= INTERSTITIAL_RULES.sessionCap) return 'sessionCap';
   if (INTERSTITIAL_RULES.skipAfterRewarded && session.rewardedOnResult) return 'rewarded';
-  if (session.levelsSinceAd < INTERSTITIAL_RULES.everyNthCompletedLevel) return 'notNth';
+  if (save.adCounters.levelsCompleted - session.winsAtLastAd < INTERSTITIAL_RULES.everyNthCompletedLevel) return 'notNth';
   if (nowMs - session.lastAdAtMs < INTERSTITIAL_RULES.minMsSinceLastAd) return 'cooldown';
   return null;
 }
@@ -118,7 +132,7 @@ export async function maybeShowInterstitial(session: AdSession, save: SaveData, 
   }
   if (shown) {
     session.interstitialsShown += 1;
-    session.levelsSinceAd = 0;
+    session.winsAtLastAd = save.adCounters.levelsCompleted;
     session.lastAdAtMs = nowMs;
   }
   return shown;
@@ -180,7 +194,7 @@ export async function showRewarded(session: AdSession, save: SaveData, placement
   save.adCounters.rewardedByPlacement[placementId] = (save.adCounters.rewardedByPlacement[placementId] ?? 0) + 1;
   session.lastRewardedAtMs[placementId] = nowMs;
   session.lastAdAtMs = nowMs;
-  session.levelsSinceAd = 0;
+  session.winsAtLastAd = save.adCounters.levelsCompleted;
   session.rewardedOnResult = true;
   session.rewardedShown += 1;
   writeSave(save);

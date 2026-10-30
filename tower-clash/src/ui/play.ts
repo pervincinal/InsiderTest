@@ -14,7 +14,8 @@ import { applyTransform, clipToMap, hudAnchors, toHudSpace } from '../render/vie
 import { drawGame } from '../render/draw';
 import { BOOSTERS, HUD, PAUSE, TOWER_HIT_RADIUS } from '../render/layout';
 import { playCamera, proj, unproj } from '../render/camera';
-import { inRect } from '../render/widgets';
+import type { Rect } from '../render/widgets';
+import { hitRect } from '../render/widgets';
 import { ParticleSystem } from '../render/particles';
 import type { HudPlayUi } from '../render/hud';
 import { boosterColor, warmHudOverlays } from '../render/hud';
@@ -130,8 +131,11 @@ export class StalemateWatch {
   }
 }
 
-/** Tappable things on the play HUD bands (BUG-36: each acts only for a press that began on it). */
-type HudButton = 'pause' | 'mute' | 'menu' | 'coins' | 'streams' | BoosterKind;
+/**
+ * Tappable things on the play HUD bands (BUG-36: each acts only for a press that began on it). The
+ * STREAMS and coin pills are labels (no tap area); a press on them is still the band's, never the world's.
+ */
+type HudButton = 'pause' | 'mute' | 'menu' | BoosterKind;
 
 export class PlayScreen implements Screen {
   readonly name = 'play' as const;
@@ -163,9 +167,10 @@ export class PlayScreen implements Screen {
    * Where the current press began (BUG-36 / BUG-37): `world` = handed to the gestures (a tap / drag /
    * swipe there always ends through `gestures.up` / `cancel`, wherever the finger lifts); `hud` = on
    * the HUD bands, with the button it started on (null once the finger left it); `target` = an
-   * airstrike-targeting tap; null = no press (hover moves, a lift whose down was never seen).
+   * airstrike-targeting tap; `card` = while paused, with the pause card's button it started on
+   * (AUD-U7); null = no press (hover moves, a lift whose down was never seen).
    */
-  private press: { kind: 'world' } | { kind: 'hud'; button: HudButton | null } | { kind: 'target' } | null = null;
+  private press: { kind: 'world' } | { kind: 'hud'; button: HudButton | null } | { kind: 'target' } | { kind: 'card'; button: Rect | null } | null = null;
   /** This attempt already used its "Reinforcements" continue (ECONOMY.md §3.5) — offered once per attempt. */
   private continued: boolean;
   /** State + rng snapshots of the last `C.SNAPSHOT_CAPACITY_MS` of sim time, one per `C.SNAPSHOT_INTERVAL_MS`. */
@@ -227,6 +232,7 @@ export class PlayScreen implements Screen {
       blockedHintText: () => t('hint.blocked'),
       emptyHintText: () => t('hint.empty'),
       fullTopHintText: () => t('hint.fullTop'),
+      viewScale: () => this.app.view.scale, // AUD-U3: the drag slop is measured on the screen
       // the drawn-building capsule on the flat map too (ART-24: the roof of a zoomed tower takes a tap)
       hitProjection: () => {
         const cam = playCamera();
@@ -606,7 +612,7 @@ export class PlayScreen implements Screen {
 
   private boosterAt(p: PointerPoint): BoosterKind | null {
     const h = this.hudPoint(p);
-    for (const k of BOOSTER_KINDS) if (inRect(BOOSTERS[k], h.x, h.y)) return k;
+    for (const k of BOOSTER_KINDS) if (hitRect(this.app.view, BOOSTERS[k], h.x, h.y)) return k;
     return null;
   }
 
@@ -690,23 +696,40 @@ export class PlayScreen implements Screen {
   /** The HUD button under `p` (moved bands mapped back, BUG-34), or null. */
   private hudButtonAt(p: PointerPoint): HudButton | null {
     const h = this.hudPoint(p);
-    if (inRect(HUD.pause, h.x, h.y)) return 'pause';
-    if (inRect(HUD.mute, h.x, h.y)) return 'mute';
-    const booster = this.boosterAt(p);
-    if (booster) return booster;
-    if (inRect(HUD.coins, h.x, h.y)) return 'coins';
-    if (inRect(HUD.streams, h.x, h.y)) return 'streams';
-    if (inRect(HUD.menu, h.x, h.y)) return 'menu';
+    const v = this.app.view;
+    if (hitRect(v, HUD.pause, h.x, h.y)) return 'pause';
+    if (hitRect(v, HUD.mute, h.x, h.y)) return 'mute';
+    if (hitRect(v, HUD.menu, h.x, h.y)) return 'menu';
+    return this.boosterAt(p);
+  }
+
+  /** A tap on HUD button `b` (pressed and released on it). AUD-U4: MENU opens the pause card (its MENU leaves). */
+  private hudAction(b: HudButton): void {
+    if (b === 'pause' || b === 'menu') this.togglePause();
+    else if (b === 'mute') toggleMuted();
+    else this.useBooster(b);
+  }
+
+  /**
+   * The pause card's button under `p`, as its PAUSE rect; the band's pause and MENU close the card
+   * (RESUME), its mute is SOUND. AUD-U7: the card acts only for a press that began on the button.
+   */
+  private cardButtonAt(p: PointerPoint): Rect | null {
+    const b = this.hudButtonAt(p);
+    if (b === 'pause' || b === 'menu') return PAUSE.resume;
+    if (b === 'mute') return PAUSE.sound;
+    for (const r of [PAUSE.resume, PAUSE.speed, PAUSE.sound, PAUSE.settings, PAUSE.retry, PAUSE.menu, PAUSE.howto]) if (hitRect(this.app.view, r, p.x, p.y)) return r;
     return null;
   }
 
-  /** A tap on HUD button `b` (pressed and released on it). */
-  private hudAction(b: HudButton): void {
-    if (b === 'pause') this.togglePause();
-    else if (b === 'mute') toggleMuted();
-    else if (b === 'menu') this.app.goLevels();
-    else if (b === 'overdrive' || b === 'freeze' || b === 'airstrike') this.useBooster(b);
-    // coins / streams pills: no action, but the tap is theirs
+  private cardAction(r: Rect): void {
+    if (r === PAUSE.resume) this.togglePause();
+    else if (r === PAUSE.speed) this.toggleSpeed();
+    else if (r === PAUSE.sound) toggleMuted();
+    else if (r === PAUSE.settings) this.app.openSettings(this);
+    else if (r === PAUSE.howto) this.app.openHowTo(this);
+    else if (r === PAUSE.retry) this.restart();
+    else if (r === PAUSE.menu) this.app.goLevels();
   }
 
   togglePause(): void {
@@ -729,7 +752,10 @@ export class PlayScreen implements Screen {
 
   down(p: PointerPoint): void {
     this.press = null;
-    if (this.loop.paused) return;
+    if (this.loop.paused) {
+      this.press = { kind: 'card', button: this.cardButtonAt(p) };
+      return;
+    }
     this.pressedBooster = this.loop.finished ? null : this.boosterAt(p);
     if (!this.inWorld(p)) {
       this.press = { kind: 'hud', button: this.hudButtonAt(p) };
@@ -744,10 +770,11 @@ export class PlayScreen implements Screen {
   }
 
   move(p: PointerPoint): void {
+    const press = this.press;
+    // a card / HUD press that slides off its button no longer taps it (BUG-36, AUD-U7)
+    if (press?.kind === 'card' && press.button && this.cardButtonAt(p) !== press.button) press.button = null;
     if (this.loop.paused) return;
     if (this.pressedBooster && this.boosterAt(p) !== this.pressedBooster) this.pressedBooster = null;
-    // a HUD press that slides off its button no longer taps it (BUG-36)
-    const press = this.press;
     if (press?.kind === 'hud' && press.button && this.hudButtonAt(p) !== press.button) press.button = null;
     if (this.targeting || press?.kind === 'hud') return;
     this.gestures.move(this.toWorld(p)); // a world press, or a hover (no press: the gestures only update the hover)
@@ -758,17 +785,12 @@ export class PlayScreen implements Screen {
     const press = this.press;
     this.press = null;
     if (this.loop.paused) {
-      const h = this.hudPoint(p);
-      if (inRect(PAUSE.resume, p.x, p.y) || inRect(HUD.pause, h.x, h.y)) this.togglePause();
-      else if (inRect(PAUSE.speed, p.x, p.y)) this.toggleSpeed();
-      else if (inRect(PAUSE.sound, p.x, p.y) || inRect(HUD.mute, h.x, h.y)) toggleMuted();
-      else if (inRect(PAUSE.settings, p.x, p.y)) this.app.openSettings(this);
-      else if (inRect(PAUSE.howto, p.x, p.y)) this.app.openHowTo(this);
-      else if (inRect(PAUSE.retry, p.x, p.y)) this.restart();
-      else if (inRect(PAUSE.menu, p.x, p.y) || inRect(HUD.menu, h.x, h.y)) this.app.goLevels();
+      // AUD-U7 (BUG-36's rule on the card): pressed and released on the same button
+      const b = press?.kind === 'card' ? press.button : null;
+      if (b && this.cardButtonAt(p) === b) this.cardAction(b);
       return;
     }
-    if (!press) return; // BUG-37: a lift whose press nobody saw (or that began while paused) does nothing
+    if (!press || press.kind === 'card') return; // BUG-37: a lift whose press nobody saw (or that began while paused) does nothing
     if (press.kind === 'target') {
       if (this.targeting && this.inWorld(p)) {
         const w = this.toWorld(p);
@@ -807,12 +829,16 @@ export class PlayScreen implements Screen {
     if (this.gestures.limitHint && this.gestures.limitHint !== hintBefore) playSfx('refuse');
   }
 
+  /** AUD-U4: Esc opens / closes the pause card (never leaves); R opens it, R on the card restarts. */
   key(e: KeyboardEvent): void {
     if (e.key === 'Escape') {
       if (this.targeting) this.targeting = false;
-      else this.app.goLevels();
+      else this.togglePause();
     } else if (e.key === 'p' || e.key === 'P' || e.key === ' ') this.togglePause();
-    else if (e.key === 'r' || e.key === 'R') this.restart();
+    else if (e.key === 'r' || e.key === 'R') {
+      if (this.loop.paused) this.restart();
+      else this.pause();
+    }
     else if (e.key === '1') this.useBooster('overdrive');
     else if (e.key === '2') this.useBooster('freeze');
     else if (e.key === '3') this.useBooster('airstrike');

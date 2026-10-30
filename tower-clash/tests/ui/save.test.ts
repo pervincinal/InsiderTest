@@ -101,7 +101,9 @@ describe('save schema v3 (M3-3 + economy Phase A)', () => {
     expect(s.settings.reducedMotion).toBe('on');
     const v2only = memStore({ [SAVE_KEY_V1]: JSON.stringify({ coins: 5 }), [SAVE_KEY_V2]: JSON.stringify({ version: 2, coins: 50 }) });
     expect(loadSaveFrom(v2only).gold).toBe(50);
-    expect(loadSaveFrom(memStore({ [SAVE_KEY]: '{not json' })).gold).toBe(0);
+    const corrupt = memStore({ [SAVE_KEY]: '{not json' });
+    expect(loadSaveFrom(corrupt).gold).toBe(0);
+    expect(corrupt.dump()[SAVE_KEY]).toBe('{not json'); // AUD-Q2: kept, never overwritten by the load
     expect(loadSaveFrom(null).version).toBe(3);
   });
 

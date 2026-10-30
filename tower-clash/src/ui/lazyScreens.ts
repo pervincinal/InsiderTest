@@ -10,3 +10,6 @@ export { ShopScreen } from './shop';
 export { AchievementsScreen } from './achievements';
 export { SettingsScreen } from './settings';
 export { HowToScreen } from './howto';
+/** AUD-Q2 / AUD-Q3 save notices over the title (src/main.ts calls them once this chunk is in). */
+export { drawSaveNotice } from '../render/saveNotice';
+export { noticeUnreadableSave } from './saveRecovery';

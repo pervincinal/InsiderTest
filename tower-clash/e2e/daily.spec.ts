@@ -289,6 +289,7 @@ test.describe('daily challenge', () => {
     // midnight passes while the match runs; the pause menu's restart (R) re-reads the day
     await page.evaluate((key) => window.__towerclash.setDayKey(key), DAY_B);
     const beforeRestart = await toastMark(page);
+    await page.keyboard.press('r'); // AUD-U4: R opens the pause card, R on it restarts
     await page.keyboard.press('r');
     await expect.poll(() => screen(page)).toBe('levelSelect');
     expect(await page.evaluate(() => window.__towerclash.getState())).toBeNull();
@@ -300,7 +301,8 @@ test.describe('daily challenge', () => {
     const seed = await page.evaluate(() => window.__towerclash.getState()!.seed);
     expect(seed).toBe((await daily(page)).challenge.seed);
     expect(seed).not.toBe(info.challenge.seed);
-    // same day: R restarts the challenge in place
+    // same day: R, R restarts the challenge in place
+    await page.keyboard.press('r');
     await page.keyboard.press('r');
     await expect.poll(() => screen(page)).toBe('play');
     expect(await page.evaluate(() => window.__towerclash.getState()!.seed)).toBe(seed);

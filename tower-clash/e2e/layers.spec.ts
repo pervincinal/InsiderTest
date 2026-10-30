@@ -21,7 +21,7 @@ const SAVE_KEY = 'towerclash.save.v3';
 const NO_TUTORIAL = { version: 3, gold: 100, stars: { '1': 1, '2': 1, '3': 1 } };
 // src/render/layout.ts — TITLE.play, PAUSE.resume
 const TITLE_PLAY = { x: 180, y: 640, w: 360, h: 96 };
-const PAUSE_RESUME = { x: 210, y: 566, w: 300, h: 76 };
+const PAUSE_RESUME = { x: 210, y: 560, w: 300, h: 80 };
 // src/sim/constants.ts — MAP_W / MAP_H
 const MAP = { w: 720, h: 1280 };
 

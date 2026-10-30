@@ -251,17 +251,18 @@ export function payMilestones(save: SaveData): { crystals: number; notes: string
 
 /**
  * Record a finished level (EARN_RULES): stars, first-clear / star-improvement gold, capped replay
- * gold, crystal milestones, the defeat streak for the skip offer and the interstitial counter.
+ * gold, crystal milestones, the defeat streak for the skip offer and the interstitial counter
+ * (AUD-B7: wins only — a defeat never brings an interstitial closer).
  */
 export function recordResult(save: SaveData, level: LevelDef, outcome: 'won' | 'lost', timeMs: number, nowMs = Date.now()): ResultEarnings {
   const key = String(level.id);
   const out: ResultEarnings = { stars: 0, gold: 0, crystals: 0, notes: [], replayCapped: false };
-  save.adCounters.levelsCompleted += 1;
   if (outcome === 'lost') {
     save.defeats[key] = (save.defeats[key] ?? 0) + 1;
     writeSave(save);
     return out;
   }
+  save.adCounters.levelsCompleted += 1;
   delete save.defeats[key];
   const stars = starsFor(level, timeMs);
   const before = save.stars[key] ?? 0;

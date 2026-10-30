@@ -94,9 +94,9 @@ describe('entry points (layout.ts SETTINGS.howto, PAUSE.howto)', () => {
     expect(r.y).toBeGreaterThanOrEqual(PAUSE.retry.y + PAUSE.retry.h + 8);
     for (const other of [PAUSE.resume, PAUSE.speed, PAUSE.sound, PAUSE.settings, PAUSE.retry, PAUSE.menu]) expect(overlaps(r, other)).toBe(false);
     expect(PAUSE.card.y + PAUSE.card.h).toBeLessThanOrEqual(HUD.bottomBar.y);
-    // the rects the e2e specs mirror did not move
-    expect(PAUSE.resume).toEqual({ x: 210, y: 566, w: 300, h: 76 });
-    expect(PAUSE.speed).toEqual({ x: 210, y: 662, w: 300, h: 64 });
+    // the rects the e2e specs mirror (AUD-U1 re-spaced the rows 88 apart; e2e/layers.spec.ts follows)
+    expect(PAUSE.resume).toEqual({ x: 210, y: 560, w: 300, h: 80 });
+    expect(PAUSE.speed).toEqual({ x: 210, y: 660, w: 300, h: 64 });
     expect(SETTINGS.language).toEqual({ x: 86, y: 664, w: 548, h: 56 });
   });
 });
@@ -192,9 +192,13 @@ describe('screen transitions', () => {
     const shell = fakeApp(save);
     const play = new PlayScreen(shell.app, makeLevel(), 1, 1);
     const p = centre(PAUSE.howto);
+    play.down(p);
     play.up(p); // running: the point is on the map, not a menu button
     expect(shell.opened).toEqual([]);
     play.togglePause();
+    play.up(p); // AUD-U7: a lift whose press was not seen on the card does nothing
+    expect(shell.opened).toEqual([]);
+    play.down(p);
     play.up(p);
     expect(shell.opened).toEqual([play]);
     expect(play.loop.paused).toBe(true); // still paused when the card returns

@@ -48,6 +48,24 @@ export function getPlatform(): NativePlatform {
 
 // Type-only imports are erased by TypeScript, so they do not pull the plugin into the web bundle.
 type HapticsModule = typeof import('@capacitor/haptics');
+type RestoreOutcome = import('./saveMirror').RestoreOutcome;
+
+/**
+ * Native save mirror (AUD-Q4, `src/native/saveMirror.ts`, docs/MOBILE.md §8.9). Awaited once by
+ * `boot()` before `loadSave()`: inside a native shell it restores the v3 save from
+ * `@capacitor/preferences` when localStorage has none (or an unreadable one) and then mirrors every
+ * save write. The mirror and the plugin are one lazy chunk; on the web this resolves `'web'` at once.
+ * Never rejects.
+ */
+export function startSaveMirror(): Promise<RestoreOutcome> {
+  if (!isNative()) return Promise.resolve('web');
+  return import('./saveMirror')
+    .then((m) => m.bootSaveMirror())
+    .catch((err: unknown) => {
+      warn('save mirror', err);
+      return 'unavailable' as const;
+    });
+}
 
 let haptics: { plugin: HapticsModule['Haptics']; light: HapticsModule['ImpactStyle']['Light'] } | null =
   null;

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Command, LevelDef } from '../../src/sim/types';
 import type { View } from '../../src/render/view';
 import { getPalette } from '../../src/render/palette';
-import { BOOSTERS, HUD } from '../../src/render/layout';
+import { BOOSTERS, HUD, PAUSE } from '../../src/render/layout';
 import type { Rect } from '../../src/render/widgets';
 import { createAdSession } from '../../src/economy/adsFlow';
 import type { SaveData } from '../../src/ui/save';
@@ -88,7 +88,7 @@ const boosterCommands = () => commands.filter((c) => c.type === 'booster');
 const links = () => commands.filter((c) => c.type === 'link');
 
 describe('HUD buttons need a press that began on them (BUG-36)', () => {
-  it('controls: a plain tap on OVERDRIVE fires it, on pause pauses, on MENU leaves', () => {
+  it('controls: a plain tap on OVERDRIVE fires it, on pause pauses, on MENU opens the pause card (AUD-U4), whose MENU leaves', () => {
     play.down(centre(BOOSTERS.overdrive));
     play.up(centre(BOOSTERS.overdrive));
     expect(boosterCommands()).toHaveLength(1);
@@ -99,7 +99,54 @@ describe('HUD buttons need a press that began on them (BUG-36)', () => {
     play.togglePause();
     play.down(centre(HUD.menu));
     play.up(centre(HUD.menu));
+    expect(nav).toEqual([]);
+    expect(play.loop.paused).toBe(true);
+    // the band's MENU again closes the card
+    play.down(centre(HUD.menu));
+    play.up(centre(HUD.menu));
+    expect(play.loop.paused).toBe(false);
+    play.down(centre(HUD.menu));
+    play.up(centre(HUD.menu));
+    play.down(centre(PAUSE.menu));
+    play.up(centre(PAUSE.menu));
     expect(nav).toEqual(['levels']);
+  });
+
+  it('AUD-U4: Esc opens and closes the pause card, never leaves; R opens it, R on the card restarts', () => {
+    const key = (k: string) => play.key({ key: k } as KeyboardEvent);
+    key('Escape');
+    expect(play.loop.paused).toBe(true);
+    key('Escape');
+    expect(play.loop.paused).toBe(false);
+    expect(nav).toEqual([]);
+    const restart = vi.spyOn(play, 'restart').mockImplementation(() => undefined);
+    key('r');
+    expect(play.loop.paused).toBe(true);
+    expect(restart).not.toHaveBeenCalled();
+    key('R');
+    expect(restart).toHaveBeenCalledTimes(1);
+  });
+
+  it('AUD-U7: a pause-card button acts only for a press that began on it (RETRY / MENU included)', () => {
+    const restart = vi.spyOn(play, 'restart').mockImplementation(() => undefined);
+    play.togglePause();
+    // a press that starts on SPEED and lifts on MENU / RETRY presses neither
+    play.down(centre(PAUSE.speed));
+    play.move(centre(PAUSE.menu));
+    play.up(centre(PAUSE.menu));
+    play.down(centre(PAUSE.resume));
+    play.up(centre(PAUSE.retry));
+    expect(nav).toEqual([]);
+    expect(restart).not.toHaveBeenCalled();
+    expect(play.loop.paused).toBe(true);
+    // a press that leaves RETRY and comes back still counts; one that ends off it does not
+    play.down(centre(PAUSE.retry));
+    play.move(centre(PAUSE.howto));
+    play.up(centre(PAUSE.retry));
+    expect(restart).not.toHaveBeenCalled();
+    play.down(centre(PAUSE.retry));
+    play.up(pt(PAUSE.retry.x + 6, PAUSE.retry.y + 6));
+    expect(restart).toHaveBeenCalledTimes(1);
   });
 
   it('(a) a drag from an own tower that ends on OVERDRIVE does not fire it (no gold spent)', () => {

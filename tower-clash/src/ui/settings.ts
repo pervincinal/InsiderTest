@@ -11,7 +11,7 @@ import { hudAnchors } from '../render/view';
 import type { SettingsAboutLayout } from '../render/menuLayout';
 import { SETTINGS, SETTINGS_BANDS, bandToScreen, screenToBand, settingsAboutLayout } from '../render/menuLayout';
 import type { Rect } from '../render/widgets';
-import { inRect } from '../render/widgets';
+import { hitRect } from '../render/widgets';
 import { segmentAt } from '../render/menuWidgets';
 import { LANGUAGE_SEGMENTS, MOTION_SEGMENTS, TONE_SEGMENTS, drawSettings } from '../render/menusSettings';
 import { loadToneSets, urlToneOverride } from '../render/palette';
@@ -169,19 +169,20 @@ export class SettingsScreen implements Screen {
 
   down(p: PointerPoint): void {
     const l = this.toLayout(p.x, p.y);
-    this.pressed = this.rects().find((r) => inRect(r, l.x, l.y)) ?? null;
+    this.pressed = this.rects().find((r) => hitRect(this.app.view, r, l.x, l.y)) ?? null;
   }
 
   move(p: PointerPoint): void {
     const l = this.toLayout(p.x, p.y);
-    if (this.pressed && !inRect(this.pressed, l.x, l.y)) this.pressed = null;
+    if (this.pressed && !hitRect(this.app.view, this.pressed, l.x, l.y)) this.pressed = null;
   }
 
   up(pointer: PointerPoint): void {
     const hit = this.pressed;
     this.pressed = null;
     const p = { ...pointer, ...this.toLayout(pointer.x, pointer.y) };
-    if (!hit || !inRect(hit, p.x, p.y)) return;
+    if (!hit || !hitRect(this.app.view, hit, p.x, p.y)) return;
+    p.y = hit.y + 1; // a segmented control picks by x: its tap area reaches above / below the drawn row (AUD-U1)
     const save = this.app.save;
     if (this.confirming) {
       if (hit === SETTINGS.confirm.yes) resetProgress(save);

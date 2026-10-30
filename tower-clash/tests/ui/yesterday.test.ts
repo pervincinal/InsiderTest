@@ -139,7 +139,8 @@ describe('level map row', () => {
     expect(map.yesterday()).toEqual(challengeFor(YESTERDAY));
     map.setScroll(-10_000);
     expect(map.getScroll()).toBe(levelMapMinScroll(true));
-    expect(levelMapMinScroll(true)).toBe(LEVEL_MAP.daily.y + LEVEL_MAP.daily.h - (LEVEL_MAP.yesterday.y + LEVEL_MAP.yesterday.h));
+    // by the row's tap area (AUD-U1: 88 tall, reaching down from the drawn row), so level 1 clears it
+    expect(levelMapMinScroll(true)).toBe(LEVEL_MAP.daily.y + LEVEL_MAP.daily.h - (LEVEL_MAP.yesterdayHit.y + LEVEL_MAP.yesterdayHit.h));
     expect(levelMapMinScroll(false)).toBe(0);
   });
 

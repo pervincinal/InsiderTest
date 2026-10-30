@@ -259,6 +259,28 @@ export function inRect(r: Rect, x: number, y: number): boolean {
   return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
 }
 
+/**
+ * AUD-U1 touch targets: a tap area is at least 44 CSS px (= pt) both ways on screen, i.e.
+ * `44 / view.scale` layout px (88 at 360 wide, 74 at 430). Capped at 88: the layouts keep every
+ * pair of neighbours' hit areas apart at that size (tests/ui/touchTargets.test.ts), so a screen
+ * narrower than 360 gets no larger areas rather than overlapping ones.
+ */
+export function minHit(view: { scale: number }): number {
+  return Math.min(88, 44 / (view.scale > 0 ? view.scale : 1));
+}
+
+/** `r` grown about its centre to at least `min` layout px each way (never shrunk): its tap area. */
+export function hitArea(r: Rect, min: number): Rect {
+  const w = Math.max(r.w, min);
+  const h = Math.max(r.h, min);
+  return { x: r.x - (w - r.w) / 2, y: r.y - (h - r.h) / 2, w, h };
+}
+
+/** Hit test of a button: the point is on `r`'s tap area (`hitArea` at `minHit(view)`). Every button press goes through this. */
+export function hitRect(view: { scale: number }, r: Rect, x: number, y: number): boolean {
+  return inRect(hitArea(r, minHit(view)), x, y);
+}
+
 export function roundRect(ctx: CanvasRenderingContext2D, r: Rect, radius: number): void {
   const rad = Math.max(0, Math.min(radius, r.w / 2, r.h / 2));
   ctx.beginPath();

@@ -75,6 +75,11 @@ describe('shop hit regions without a painted frame (FE-10)', () => {
     shop.enter();
     tap(shop, shopRowRect(0)); // the crate is the first row
     const crate = CRYSTAL_SERVICES.boosterCrate;
+    // AUD-U5: the confirm card first — nothing is spent until SPEND
+    expect(shop.pendingSpend?.crystals).toBe(crate.costCrystals);
+    expect(save.crystals).toBe(100);
+    tap(shop, SHOP.convertConfirm.yes);
+    expect(shop.pendingSpend).toBeNull();
     expect(save.crystals).toBe(100 - crate.costCrystals);
     expect(save.charges).toEqual(crate.charges);
     expect(draws).toBe(0);
@@ -99,7 +104,9 @@ describe('shop hit regions without a painted frame (FE-10)', () => {
     const tabs = shop.tabs;
     tap(shop, tabRect(tabs.indexOf('skins'), tabs.length));
     expect(shop.currentTab).toBe('skins');
-    tap(shop, shopSkinRect(SHOP.row.y0 - 6, 0)); // first roof card: bought and equipped
+    tap(shop, shopSkinRect(SHOP.row.y0 - 6, 0)); // first roof card: the confirm card (AUD-U5), SPEND → bought and equipped
+    expect(save.skins.owned).toHaveLength(0);
+    tap(shop, SHOP.convertConfirm.yes);
     expect(save.skins.owned).toHaveLength(1);
     expect(save.skins.equipped.roof).toBe(save.skins.owned[0]);
     // the same card again, before any frame: the rebuilt regions know it is owned now → unequip

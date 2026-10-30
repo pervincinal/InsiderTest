@@ -4,6 +4,12 @@
  * ad counters and the list of granted store transactions. v1 (`towerclash.save.v1`) and v2
  * (`towerclash.save.v2`) saves are read once, migrated and written back under the v3 key; the old
  * entries are left in place so a downgrade still finds them.
+ *
+ * Hostile saves (AUD-Q2 / AUD-Q3, `loadSaveFrom`): an unreadable v3 entry is copied to
+ * `towerclash.save.v3.bad.<ms>` (deduplicated and pruned to the newest 2 by ./saveRecovery.ts) and the game boots with a default
+ * that is not written over the entry until the player changes something (`writeSaveAtBoot` waits,
+ * `writeSave` does not); a save from a newer schema is played from memory and never written
+ * (`isSaveReadOnly`). Every write of the v3 key goes through `putSave`; `onSaveWritten` observes it.
  */
 export const SAVE_KEY = 'towerclash.save.v3';
 export const SAVE_KEY_V2 = 'towerclash.save.v2';
@@ -103,7 +109,7 @@ export interface AdCounters {
   day: string;
   /** Rewarded videos watched today per placement id. */
   rewardedByPlacement: Record<string, number>;
-  /** Results seen (won or lost) — the interstitial gate (INTERSTITIAL_RULES.minLevelsCompleted). */
+  /** Levels won (AUD-B7: defeats do not count; saves before 2026-10-30 counted them too) — the interstitial gate (INTERSTITIAL_RULES.minLevelsCompleted). */
   levelsCompleted: number;
 }
 
@@ -324,11 +330,99 @@ export function normalizeSave(raw: unknown): SaveData {
   return out;
 }
 
-/** Minimal storage surface so migration can be unit-tested without a DOM. */
+/**
+ * Minimal storage surface so migration can be unit-tested without a DOM. `length` / `key` (as on
+ * `Storage`) are optional: without them the corrupt-save backups are written but never pruned.
+ */
 export interface SaveStorage {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
   removeItem(key: string): void;
+  readonly length?: number;
+  key?(index: number): string | null;
+}
+
+/** Prefix of the corrupt-save copies: `towerclash.save.v3.bad.<Date.now()>` (AUD-Q2). */
+export const SAVE_BACKUP_PREFIX = `${SAVE_KEY}.bad.`;
+
+/** What the last `loadSaveFrom` met: an unreadable v3 entry (`corrupt`: `kept` = a copy exists) or a newer schema. */
+export type SaveLoadIssue = { kind: 'corrupt'; kept: boolean } | { kind: 'newer'; version: number } | null;
+
+let loadIssue: SaveLoadIssue = null;
+/** A newer-schema save is loaded: nothing may write the v3 key this session (AUD-Q3). */
+let readOnly = false;
+/** The v3 key holds an unreadable original: boot-time writes (`writeSaveAtBoot`) wait for the player's first change. */
+let holdingOriginal = false;
+const writeListeners = new Set<(json: string) => void>();
+
+export function saveLoadIssue(): SaveLoadIssue {
+  return loadIssue;
+}
+
+/** True when the loaded save comes from a newer build: `writeSave` writes nothing (title notice "Update Tower Clash…"). */
+export function isSaveReadOnly(): boolean {
+  return readOnly;
+}
+
+/**
+ * Native-mirror hook (AUD-Q4, src/native/): `fn` receives the exact JSON of every save the game
+ * commits — each `writeSave` and the one-time v1 / v2 migration — whether or not localStorage then
+ * accepted it (quota, storage disabled), so a mirror can be the copy that survives. Never called while
+ * the save is read-only or held at boot (nothing is committed then). Register before `loadSave()` to
+ * see a migration write. A throwing listener is ignored. Returns the unsubscribe function.
+ */
+export function onSaveWritten(fn: (json: string) => void): () => void {
+  writeListeners.add(fn);
+  return () => void writeListeners.delete(fn);
+}
+
+/** The one write of the v3 key: refused when read-only; listeners first, then the store. True iff the store took it. */
+function putSave(store: SaveStorage | null, data: unknown): boolean {
+  if (readOnly) return false;
+  try {
+    const json = JSON.stringify(data);
+    try {
+      for (const fn of writeListeners) fn(json);
+    } catch {
+      /* a broken mirror must not stop the local write */
+    }
+    store!.setItem(SAVE_KEY, json);
+    return true;
+  } catch {
+    return false; /* no storage, private mode, quota: play on without persistence */
+  }
+}
+
+/** Parsed v3 entry when it is an object we can read as a save, else null (unparseable, `null`, an array, a stray value). */
+function readableSave(text: string): Record<string, unknown> | null {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!isRecord(raw) || Array.isArray(raw)) return null;
+  if ('version' in raw && typeof raw.version !== 'number') return null;
+  return ['version', 'stars', 'gold', 'coins', 'settings'].some((k) => k in raw) ? raw : null;
+}
+
+/** True when `loadSaveFrom` would read `text` (under the v3 key) as a save rather than keep it aside as corrupt. */
+export function isReadableSaveText(text: string | null | undefined): boolean {
+  return !!text && readableSave(text) !== null;
+}
+
+/**
+ * Copy an unreadable v3 entry aside under `SAVE_BACKUP_PREFIX + nowMs`. True iff the copy landed.
+ * Deduplication and the `SAVE_BACKUP_KEEP` limit are `pruneSaveBackups` (./saveRecovery.ts, in the
+ * lazy chunk the app fetches at once when this happens) — kept out of the eager bundle.
+ */
+function keepOriginal(store: SaveStorage, text: string, nowMs: number): boolean {
+  try {
+    store.setItem(SAVE_BACKUP_PREFIX + nowMs, text);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function storage(): SaveStorage | null {
@@ -347,23 +441,43 @@ export function setSaveStorageForTests(store: SaveStorage | null | undefined): v
   activeStorage = store;
 }
 
+/** The store `loadSave` / `writeSave` use: localStorage (null where it is missing or blocked), or the test store. */
+export function saveStorage(): SaveStorage | null {
+  return activeStorage === undefined ? storage() : activeStorage;
+}
+
 /**
  * Load the v3 save, or migrate a v2 / v1 save (written back under the v3 key; the older entry is
- * left untouched so a downgrade still finds it). Corrupt JSON falls back to a fresh save.
+ * left untouched so a downgrade still finds it). Sets the session's save state (`saveLoadIssue`):
+ * - an unreadable v3 entry (bad JSON, or not a save-shaped object) is copied to a backup key and a
+ *   default is returned; the entry itself stays until the player's first change (`writeSave`);
+ * - a v3 entry with `version > SAVE_VERSION` (a newer build wrote it) is read as far as this build
+ *   understands it and the session turns read-only: nothing writes the key, its bytes stay as found.
  */
-export function loadSaveFrom(store: SaveStorage | null): SaveData {
+export function loadSaveFrom(store: SaveStorage | null, nowMs = Date.now()): SaveData {
+  loadIssue = null;
+  readOnly = false;
+  holdingOriginal = false;
   if (!store) return defaultSave();
   try {
     const v3 = store.getItem(SAVE_KEY);
-    if (v3) return normalizeSave(JSON.parse(v3));
+    if (v3) {
+      const raw = readableSave(v3);
+      if (!raw) {
+        holdingOriginal = true;
+        loadIssue = { kind: 'corrupt', kept: keepOriginal(store, v3, nowMs) };
+        return defaultSave();
+      }
+      if (typeof raw.version === 'number' && raw.version > SAVE_VERSION) {
+        readOnly = true;
+        loadIssue = { kind: 'newer', version: raw.version };
+      }
+      return normalizeSave(raw);
+    }
     const older = store.getItem(SAVE_KEY_V2) ?? store.getItem(SAVE_KEY_V1);
     if (!older) return defaultSave();
     const migrated = normalizeSave(JSON.parse(older));
-    try {
-      store.setItem(SAVE_KEY, JSON.stringify(migrated));
-    } catch {
-      /* quota: play on with the migrated copy in memory */
-    }
+    putSave(store, migrated); // a refused write (quota) plays on with the migrated copy in memory
     return migrated;
   } catch {
     return defaultSave();
@@ -371,17 +485,28 @@ export function loadSaveFrom(store: SaveStorage | null): SaveData {
 }
 
 export function loadSave(): SaveData {
-  return loadSaveFrom(activeStorage === undefined ? storage() : activeStorage);
+  return loadSaveFrom(saveStorage());
 }
 
-export function writeSave(data: SaveData): void {
-  try {
-    data.version = SAVE_VERSION;
-    const store = activeStorage === undefined ? storage() : activeStorage;
-    store?.setItem(SAVE_KEY, JSON.stringify(data));
-  } catch {
-    /* private mode / quota: play on without persistence */
-  }
+/**
+ * Persist a change the player made (every progress / economy / settings write). Writes nothing
+ * while the save is read-only (AUD-Q3). Ends the boot hold on an unreadable original (AUD-Q2): the
+ * player has changed something, and the original is in its backup key. True iff storage took it.
+ */
+export function writeSave(data: SaveData): boolean {
+  if (readOnly) return false;
+  holdingOriginal = false;
+  data.version = SAVE_VERSION;
+  return putSave(saveStorage(), data);
+}
+
+/**
+ * A write the game makes on its own at boot (the first-run language detection). Skipped while the
+ * v3 key still holds an unreadable original, so booting never overwrites it: the value then lands
+ * with the player's first `writeSave`.
+ */
+export function writeSaveAtBoot(data: SaveData): boolean {
+  return holdingOriginal ? false : writeSave(data);
 }
 
 /** Wipe progress and the economy (settings and purchases survive) and persist. */

@@ -7,7 +7,8 @@ import type { View } from '../render/view';
 import { hudAnchors } from '../render/view';
 import { ACHIEVEMENTS_BANDS, ACHIEVEMENTS_LAYOUT, achievementRowRect, achievementsMaxScroll, bandToScreen, screenToBand } from '../render/menuLayout';
 import type { Rect } from '../render/widgets';
-import { inRect } from '../render/widgets';
+import { hitRect } from '../render/widgets';
+import { dragThreshold } from '../input/pointer';
 import type { AchievementRow } from '../render/menusAchievements';
 import { drawAchievements } from '../render/menusAchievements';
 import type { PointerPoint } from '../input/pointer';
@@ -89,12 +90,12 @@ export class AchievementsScreen implements Screen {
     this.scrollAtDown = this.scroll;
     this.dragging = false;
     const l = this.toLayout(p.x, p.y);
-    this.pressed = inRect(ACHIEVEMENTS_LAYOUT.back, l.x, l.y) ? ACHIEVEMENTS_LAYOUT.back : null;
+    this.pressed = hitRect(this.app.view, ACHIEVEMENTS_LAYOUT.back, l.x, l.y) ? ACHIEVEMENTS_LAYOUT.back : null;
   }
 
   move(p: PointerPoint): void {
     if (!this.held) return;
-    if (Math.abs(p.y - this.downY) > 14) {
+    if (Math.abs(p.y - this.downY) > dragThreshold(this.app.view.scale)) {
       this.dragging = true;
       this.pressed = null;
     }
@@ -109,7 +110,7 @@ export class AchievementsScreen implements Screen {
     this.dragging = false;
     if (wasDrag) return;
     const l = this.toLayout(p.x, p.y);
-    if (hit === ACHIEVEMENTS_LAYOUT.back && inRect(hit, l.x, l.y)) this.back();
+    if (hit === ACHIEVEMENTS_LAYOUT.back && hitRect(this.app.view, hit, l.x, l.y)) this.back();
   }
 
   wheel(dy: number): void {

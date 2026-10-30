@@ -20,14 +20,14 @@ import { tapAt, tapHud, tapRect } from './helpers/tap';
 
 // src/render/layout.ts — TITLE
 const TITLE_PLAY = { x: 180, y: 640, w: 360, h: 96 };
-const TITLE_SETTINGS = { x: 180, y: 780, w: 172, h: 64 };
+const TITLE_SETTINGS = { x: 180, y: 776, w: 172, h: 64 };
 // src/render/layout.ts — SETTINGS (+ the language picker: one segment per language in src/ui/i18n.ts LANGUAGES order)
 const SETTINGS = { back: { x: 18, y: 20, w: 140, h: 60 }, sound: { x: 470, y: 216, w: 160, h: 56 }, howto: { x: 86, y: 500, w: 548, h: 64 }, language: { x: 86, y: 664, w: 548, h: 56 } };
 // src/render/menuLayout.ts — HOWTO (the "How to play" card, FE-3)
 const HOWTO = { back: { x: 18, y: 20, w: 140, h: 60 }, close: { x: 180, y: 1054, w: 360, h: 72 } };
 const LANGUAGE_ORDER = ['en', 'az', 'ru', 'tr'] as const;
 // src/render/layout.ts — TITLE.lang (language chip, tap → next language)
-const TITLE_LANG = { x: 630, y: 18, w: 72, h: 44 };
+const TITLE_LANG = { x: 614, y: 16, w: 88, h: 56 };
 // src/render/layout.ts — LEVEL_MAP + levelNodeRect (winding path map; the test scrolls the map to 0 first)
 const LEVEL_MAP = { nodeR: 46, top: 260, step: 150, amp: 185, period: 5 };
 function levelNodeRect(index: number, scroll = 0): { x: number; y: number; w: number; h: number } {
@@ -36,10 +36,10 @@ function levelNodeRect(index: number, scroll = 0): { x: number; y: number; w: nu
   const r = LEVEL_MAP.nodeR;
   return { x: cx - r, y: cy - r, w: r * 2, h: r * 2 };
 }
-const HUD = { mapTop: 96, mapBottom: 1180, pause: { x: 636, y: 18, w: 66, h: 60 }, mute: { x: 560, y: 18, w: 62, h: 60 } };
-const BOOSTERS = { overdrive: { x: 232, y: 1186, w: 66, h: 88 } };
+const HUD = { mapTop: 96, mapBottom: 1180, pause: { x: 636, y: 18, w: 66, h: 60 }, mute: { x: 548, y: 18, w: 62, h: 60 } };
+const BOOSTERS = { overdrive: { x: 217, y: 1186, w: 66, h: 88 } };
 const RESULT = { next: { x: 84, y: 780, w: 170, h: 72 } };
-const PAUSE = { resume: { x: 210, y: 566, w: 300, h: 76 }, speed: { x: 210, y: 662, w: 300, h: 64 }, howto: { x: 180, y: 960, w: 360, h: 64 } };
+const PAUSE = { resume: { x: 210, y: 560, w: 300, h: 80 }, speed: { x: 210, y: 660, w: 300, h: 64 }, menu: { x: 370, y: 860, w: 170, h: 72 }, howto: { x: 180, y: 960, w: 360, h: 64 } };
 // src/render/layout.ts — TITLE.wallet (tap → shop), SHOP (header back, crystal pack cards, restore button)
 const TITLE_WALLET = { x: 120, y: 1172, w: 480, h: 52 };
 const SHOP_BACK = { x: 18, y: 20, w: 140, h: 60 };
@@ -393,7 +393,11 @@ test.describe('Tower Clash smoke', () => {
 
     // (e2) back to level select: level 2 unlocked, level 3 still locked; tapping level 3 does nothing,
     //      tapping level 2 starts it.
+    // AUD-U4: Esc opens the pause card (never leaves by itself); its MENU leaves
     await page.keyboard.press('Escape');
+    await page.waitForTimeout(150);
+    expect(await screen(page)).toBe('play');
+    await tapRect(page, PAUSE.menu);
     await expect.poll(() => screen(page)).toBe('levelSelect');
     expect(await unlocked(page, [1, 2, 3])).toEqual([true, true, false]);
     // the map opens on the current level (2); pin the scroll so the mirrored node rects apply
