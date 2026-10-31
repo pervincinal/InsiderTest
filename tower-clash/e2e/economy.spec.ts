@@ -35,14 +35,14 @@ const CONVERT_SEG = { x: CONVERT_CARD.x + 16, y: CONVERT_CARD.y + 96, w: CONVERT
 const CONVERT_BUY = { x: CONVERT_CARD.x + 24, y: CONVERT_CARD.y + CONVERT_CARD.h - 54 - 16, w: CONVERT_CARD.w - 48, h: 54 };
 const CONVERT_CONFIRM = { yes: { x: 130, y: 676, w: 210, h: 72 }, no: { x: 380, y: 676, w: 210, h: 72 } };
 // src/render/layout.ts — TITLE.achievements / TITLE.settings, ACHIEVEMENTS_LAYOUT.back, settingsAboutLayout(true, true)
-// (SETTINGS.about.y = 1102 since the AUD-U2 text-size row (1012 after FE-14): copy.y = 1102 + 22 + 62 + 31 − 24,
-// privacy.y = 1102 + 22 + 2·62 + 10 — the About card then ends at 1350, inside a Pixel 5's 1559 layout px, so no scroll;
+// (SETTINGS.about.y = 1152 since the AUD-F6 Music row (1102 after AUD-U2, 1012 after FE-14): copy.y = 1152 + 22 + 62 + 31 − 24,
+// privacy.y = 1152 + 22 + 2·62 + 10 — the About card then ends at 1400, inside a Pixel 5's 1559 layout px, so no scroll;
 // AUD-U1: privacy 320 wide so its tap area stays left of COPY's)
 const TITLE_ACHIEVEMENTS = { x: 18, y: 990, w: 128, h: 132 };
 const TITLE_SETTINGS = { x: 180, y: 776, w: 172, h: 64 };
 const ACHIEVEMENTS_BACK = { x: 18, y: 20, w: 140, h: 60 };
-const ABOUT_COPY = { x: 522, y: 1193, w: 118, h: 48 };
-const ABOUT_PRIVACY = { x: 200, y: 1258, w: 320, h: 60 };
+const ABOUT_COPY = { x: 522, y: 1243, w: 118, h: 48 };
+const ABOUT_PRIVACY = { x: 200, y: 1308, w: 320, h: 60 };
 // src/economy/catalog.ts — CONVERSION, CRYSTAL_SERVICES.boosterCrate, ACHIEVEMENTS crystals
 const CONVERSION = { goldPerCrystal: 5, packs: [20, 100, 500] };
 const CRATE = { cost: 60, charges: { overdrive: 5, freeze: 3, airstrike: 2 } };

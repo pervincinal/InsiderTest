@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig, devices } from '@playwright/test';
 import { acquireRunLock, releaseRunLock } from './e2e/tools/runLock';
 import { DEFAULT_PW_OUTPUT } from './e2e/tools/shots';
+import { IPHONE_UA } from './e2e/tools/webkit';
 
 /**
  * Locally the sandbox ships Chromium 1194 under /opt/pw-browsers while @playwright/test 1.47.2
@@ -154,7 +155,7 @@ export default defineConfig({
       // Default project: `npm run e2e` (smoke, content, economy, perf). Mobile-sized Chromium.
       name: 'chromium',
       use: { ...devices['Pixel 5'] },
-      testIgnore: /(webview|pwa)\.spec\.ts$/,
+      testIgnore: /(webview|pwa|webkit)\.spec\.ts$/,
     },
     {
       /**
@@ -179,6 +180,30 @@ export default defineConfig({
       name: 'android-webview',
       use: { ...devices['Pixel 7'], userAgent: WEBVIEW_UA, isMobile: true, hasTouch: true },
       testMatch: /webview\.spec\.ts$/,
+    },
+    {
+      /**
+       * AUD-Q5: the shipping engine. Playwright's WebKit on an iPhone-class screen — the stakeholder's
+       * phone as e2e/gestures430.spec.ts models it (430 × 932 CSS px, DPR 3, touch, mobile viewport, its
+       * iOS Safari UA; the spec simulates the safe-area insets) — runs the WebKit subset in
+       * e2e/webkit.spec.ts only: boot + PWA manifest, level 1 by touch to a win, the lesson-card hold,
+       * Settings → Text size, the share card. `launchOptions: {}`: WebKit must never get the local
+       * Chromium headless-shell `executablePath` above. CI-only: job `e2e (webkit)` installs WebKit and
+       * sets `PW_WEBKIT=1`; elsewhere the tests are listed and skipped unless WebKit is installed
+       * (e2e/tools/webkit.ts). `npm run e2e:webkit` where WebKit exists.
+       */
+      name: 'webkit-iphone',
+      use: {
+        ...devices['iPhone 14 Pro Max'],
+        browserName: 'webkit',
+        viewport: { width: 430, height: 932 }, // the device's `screen` (430 × 932) is spread in above
+        deviceScaleFactor: 3,
+        isMobile: true,
+        hasTouch: true,
+        userAgent: IPHONE_UA,
+        launchOptions: {},
+      },
+      testMatch: /webkit\.spec\.ts$/,
     },
   ],
   webServer: {

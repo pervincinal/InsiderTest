@@ -233,3 +233,56 @@ jobs:
             tower-clash/e2e/__screenshots__
           if-no-files-found: ignore
           retention-days: 7
+
+  # AUD-Q5 (2026-10-31): the shipping engine. The `webkit-iphone` Playwright project (playwright.config.ts:
+  # Playwright's WebKit, 430 × 932 CSS px, DPR 3, touch, the iOS Safari UA of e2e/gestures430.spec.ts) runs
+  # e2e/webkit.spec.ts — boot + PWA manifest, level 1 by touch to a reference-player win, the lesson-card
+  # hold, Settings → Text size, the share card (5 tests). In parallel with `verify` and the chromium shards
+  # (no `needs:`), on its own build, port and output dir like a shard. `PW_WEBKIT=1` makes WebKit required:
+  # without it e2e/tools/webkit.ts skips the tests when WebKit is not installed (the agents' container has
+  # Chromium only and must never `playwright install`), so this job can never go green on a skipped run.
+  # WebKit is installed here only. Required with the CI group in scripts/ciStatus.mjs (REQUIRED_TOGETHER).
+  # Linux WebKit is not iOS WKWebView (no WebGL, GStreamer audio): the game's AudioContext guard
+  # (src/audio/synth.ts) must hold, media-backend console lines are annotations (webkit.spec.ts AUDIO_BACKEND).
+  # The same 5 tests pass on Chromium with the same metrics, 31 s (2026-10-31, scratch run); WebKit itself first runs here.
+  e2e-webkit:
+    name: e2e (webkit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: true
+    defaults:
+      run:
+        working-directory: tower-clash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tower-clash/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Install WebKit for Playwright
+        run: npx playwright install --with-deps webkit
+
+      - name: Browser e2e (WebKit, iPhone-class screen)
+        timeout-minutes: 10
+        run: PW_WEBKIT=1 PW_PORT=4194 PW_OUTPUT=test-results/webkit npx playwright test --project=webkit-iphone
+
+      - name: Upload Playwright report, traces and screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-e2e-webkit
+          path: |
+            tower-clash/playwright-report
+            tower-clash/test-results
+          if-no-files-found: ignore
+          retention-days: 7

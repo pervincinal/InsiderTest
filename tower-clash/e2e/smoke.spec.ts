@@ -22,7 +22,8 @@ import { shotPath } from './tools/shots';
 const TITLE_PLAY = { x: 180, y: 640, w: 360, h: 96 };
 const TITLE_SETTINGS = { x: 180, y: 776, w: 172, h: 64 };
 // src/render/layout.ts — SETTINGS (+ the language picker: one segment per language in src/ui/i18n.ts LANGUAGES order)
-const SETTINGS = { back: { x: 18, y: 20, w: 140, h: 60 }, sound: { x: 470, y: 216, w: 160, h: 56 }, howto: { x: 86, y: 500, w: 548, h: 64 }, language: { x: 86, y: 664, w: 548, h: 56 } };
+// AUD-F6: `sound` is the Effects toggle (the save field kept its name), under the new Music row: every row below moved 80
+const SETTINGS = { back: { x: 18, y: 20, w: 140, h: 60 }, sound: { x: 470, y: 296, w: 160, h: 56 }, howto: { x: 86, y: 580, w: 548, h: 64 }, language: { x: 86, y: 744, w: 548, h: 56 } };
 // src/render/menuLayout.ts — HOWTO (the "How to play" card, FE-3)
 const HOWTO = { back: { x: 18, y: 20, w: 140, h: 60 }, close: { x: 180, y: 1054, w: 360, h: 72 } };
 const LANGUAGE_ORDER = ['en', 'az', 'ru', 'tr'] as const;

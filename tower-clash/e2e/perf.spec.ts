@@ -1,6 +1,8 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { tapAt, tapRect } from './helpers/tap';
+import { expectToast, recordToasts, toastMark, toastsSeen } from './helpers/toasts';
 
 /*
  * Frame-cost guard on the headless shell. Three samples:
@@ -71,6 +73,19 @@ import type { Page } from '@playwright/test';
  * calibration is still measured and printed so CI's own calibMs can re-derive the reference.
  * Every `[perf]` line carries the calibration, the reference and the factor. Changing the calibration
  * workload changes calibMs: re-derive CALIBRATION_REF_MS (below) in the same change.
+ *
+ * AUD-Q8 (2026-10-31): the 50 ms ceiling is ≈ 3× CI's own samples (title 17.6, level 50 14.3, shop 15.5 ms
+ * at calib 11.5, run 106), so a 2× regression passed. Each frame sample is now also gated RELATIVE to a
+ * committed baseline (e2e/perf.baseline.json): its work per frame divided by this worker's calibration
+ * (`norm`, host-speed free) against the baseline's `norm` for the scene on this kind of host (`ci` on CI,
+ * `container` elsewhere; `PERF_BASELINE_HOST` overrides) — over REGRESSION_WARN_RATIO (×1.2) the line says
+ * WARN and the test gets a `perf-regression` annotation, over REGRESSION_FAIL_RATIO (×1.35) it fails. The
+ * absolute 50 ms (host-scaled) stays as the second check. Each gate prints a `[perf-gate]` line and the
+ * file ends with a one-line `[perf-table]`. A deliberate change re-measures with `npm run perf:baseline`
+ * (scripts/perfBaseline.mjs: N runs of this spec, the median `norm` per scene, the head sha and the date),
+ * so the new numbers are a reviewed diff. The calibration is the median of CALIBRATION_WINDOWS 1 s windows
+ * (one 2 s mean read 20.1–24.9 ms over five runs of one build on this container, while the scenes moved
+ * ±5 %; the 1 s windows of one page read 20.8–24.2, so their median is within ≈ 2 %).
  */
 
 /** BUG-47: main-thread work per frame, thread-CPU ms, mean over the sample — the old wall-clock interval budget's number. */
@@ -108,7 +123,33 @@ const SCREEN_SAMPLE_MS = 3_000;
 const CALIBRATION_REF_MS = 20;
 /** BUG-55: a host slower than this × the reference is not a valid perf measurement (skip, never pass). */
 const HOST_FACTOR_CEILING = 2.5;
-const CALIBRATION_SAMPLE_MS = 2_000;
+/** AUD-Q8: the calibration is the median of this many windows of CALIBRATION_WINDOW_MS (≥ CALIBRATION_WINDOW_FRAMES frames each). */
+const CALIBRATION_WINDOWS = 5;
+const CALIBRATION_WINDOW_MS = 1_000;
+const CALIBRATION_WINDOW_FRAMES = 12;
+
+/**
+ * AUD-Q8: the relative regression gate. A scene's `norm` (main-thread work per frame / this worker's calibMs)
+ * over the baseline's × REGRESSION_FAIL_RATIO fails, over × REGRESSION_WARN_RATIO warns. The baseline file is
+ * written by scripts/perfBaseline.mjs (`npm run perf:baseline`); never edit its numbers by hand.
+ */
+const REGRESSION_FAIL_RATIO = 1.35;
+const REGRESSION_WARN_RATIO = 1.2;
+const BASELINE_HOST = process.env.PERF_BASELINE_HOST || (process.env.CI ? 'ci' : 'container');
+interface SceneBaseline {
+  workMs: number;
+  norm: number;
+}
+interface HostBaseline {
+  sha: string;
+  date: string;
+  source: string;
+  calibMs: number;
+  scenes: Record<string, SceneBaseline>;
+}
+const BASELINE_FILE = new URL('./perf.baseline.json', import.meta.url);
+/** Absent file = no baseline: every relative gate fails, naming `npm run perf:baseline` (how the first one is written). */
+const BASELINE = (existsSync(BASELINE_FILE) ? JSON.parse(readFileSync(BASELINE_FILE, 'utf8')) : { hosts: {} }) as { hosts: Record<string, HostBaseline> };
 
 const LEVELS_DIR = new URL('../src/levels/', import.meta.url);
 const LEVEL_IDS = readdirSync(LEVELS_DIR)
@@ -298,6 +339,8 @@ interface HostCalibration {
   /** Main-thread work per frame of CALIBRATION_PAGE, ms (thread CPU, same measure as the gates). */
   calibMs: number;
   frames: number;
+  /** AUD-Q8: each window's work per frame, ms (calibMs is their median). */
+  windows: number[];
   /** calibMs / CALIBRATION_REF_MS, before the CI rule and the floor of 1. */
   ratio: number;
   /** The budget multiplier: 1 on CI, else max(1, ratio). */
@@ -324,18 +367,21 @@ async function calibrateHost(page: Page): Promise<HostCalibration> {
         requestAnimationFrame(f);
       }),
   );
-  const s = await sampleFrames(page, CALIBRATION_SAMPLE_MS, MIN_FRAMES.screen, { stayOn: 'calibration' });
-  expect(s.frames, 'the calibration sample must hold a meaningful number of frames').toBeGreaterThanOrEqual(MIN_FRAMES.screen);
-  expect(s.work, 'the calibration page must have done measurable work').toBeGreaterThan(0);
+  const windows: FrameSample[] = [];
+  for (let i = 0; i < CALIBRATION_WINDOWS; i++) windows.push(await sampleFrames(page, CALIBRATION_WINDOW_MS, CALIBRATION_WINDOW_FRAMES, { stayOn: 'calibration' }));
+  const frames = windows.reduce((n, w) => n + w.frames, 0);
+  const calibMs = median(windows.map((w) => w.work));
+  expect(frames, 'the calibration sample must hold a meaningful number of frames').toBeGreaterThanOrEqual(MIN_FRAMES.screen);
+  expect(calibMs, 'the calibration page must have done measurable work').toBeGreaterThan(0);
   const ci = !!process.env.CI;
-  const ratio = s.work / CALIBRATION_REF_MS;
-  hostCalibration = { calibMs: s.work, frames: s.frames, ratio, factor: hostFactor(ratio, ci), ci };
+  const ratio = calibMs / CALIBRATION_REF_MS;
+  hostCalibration = { calibMs, frames, windows: windows.map((w) => w.work), ratio, factor: hostFactor(ratio, ci), ci };
   return hostCalibration;
 }
 
 function describeHost(h: HostCalibration): string {
   return (
-    `host calib ${h.calibMs.toFixed(1)} ms / frame over ${h.frames} frames, ref ${CALIBRATION_REF_MS} → ratio ${h.ratio.toFixed(2)}, ` +
+    `host calib ${h.calibMs.toFixed(1)} ms / frame (median of ${h.windows.map((w) => w.toFixed(1)).join(' / ')}) over ${h.frames} frames, ref ${CALIBRATION_REF_MS} → ratio ${h.ratio.toFixed(2)}, ` +
     `factor ${h.factor.toFixed(2)}${h.ci ? ' (CI: forced to 1)' : ''}, ceiling ${HOST_FACTOR_CEILING}`
   );
 }
@@ -378,6 +424,46 @@ function expectFrameWork(f: FrameSample, minFrames: number, summary: string, h: 
   expect(f.work, summary).toBeLessThanOrEqual(budget);
 }
 
+/** AUD-Q8: one relative gate's row of the `[perf-table]`. */
+interface GateRow {
+  scene: string;
+  workMs: number;
+  norm: number;
+  base: number;
+  ratio: number;
+  verdict: 'ok' | 'WARN' | 'FAIL';
+}
+const gateRows: GateRow[] = [];
+
+function regressionVerdict(ratio: number): GateRow['verdict'] {
+  return ratio > REGRESSION_FAIL_RATIO ? 'FAIL' : ratio > REGRESSION_WARN_RATIO ? 'WARN' : 'ok';
+}
+
+/**
+ * AUD-Q8: the sample's work per frame over the calibration (`norm`) against the committed baseline of this
+ * kind of host: fails over × REGRESSION_FAIL_RATIO, warns over × REGRESSION_WARN_RATIO. Called after the
+ * absolute gate passed; the `perf-sample` annotation (what scripts/perfBaseline.mjs reads) is pushed first,
+ * so a deliberate slowdown can be re-baselined from the same run that fails here.
+ */
+function expectNoRegression(scene: string, f: FrameSample, h: HostCalibration): void {
+  const norm = f.work / h.calibMs;
+  test.info().annotations.push({ type: 'perf-sample', description: JSON.stringify({ scene, workMs: f.work, calibMs: h.calibMs, norm, frames: f.frames }) });
+  const host = BASELINE.hosts[BASELINE_HOST];
+  const base = host?.scenes[scene];
+  expect(base, `AUD-Q8: e2e/perf.baseline.json has no "${BASELINE_HOST}" baseline for "${scene}" — measure one with npm run perf:baseline`).toBeDefined();
+  const ratio = norm / base!.norm;
+  const verdict = regressionVerdict(ratio);
+  gateRows.push({ scene, workMs: f.work, norm, base: base!.norm, ratio, verdict });
+  const line =
+    `${scene}: ${f.work.toFixed(1)} ms / calib ${h.calibMs.toFixed(1)} = ${norm.toFixed(3)} vs the ${BASELINE_HOST} baseline ${base!.norm.toFixed(3)} ` +
+    `(${host!.sha}, ${host!.date}) → ×${ratio.toFixed(2)} ${verdict} (warn over ×${REGRESSION_WARN_RATIO}, fail over ×${REGRESSION_FAIL_RATIO})`;
+  console.log(`[perf-gate] ${line}`);
+  // on GitHub Actions a WARN / FAIL is also a check-run annotation (readable without the job log)
+  if (verdict !== 'ok' && process.env.GITHUB_ACTIONS) console.log(`::warning title=perf ${verdict} (AUD-Q8)::${line}`);
+  test.info().annotations.push({ type: verdict === 'ok' ? 'perf-gate' : 'perf-regression', description: line });
+  expect(ratio, `AUD-Q8 relative gate — ${line}`).toBeLessThanOrEqual(REGRESSION_FAIL_RATIO);
+}
+
 async function gotoTitle(page: Page, query = ''): Promise<string[]> {
   const pageErrors: string[] = [];
   page.on('pageerror', (err) => pageErrors.push(String(err)));
@@ -388,6 +474,16 @@ async function gotoTitle(page: Page, query = ''): Promise<string[]> {
 }
 
 test.describe('Tower Clash perf', () => {
+  // AUD-Q8: the relative gates of this worker in one line (a failed test restarts the worker: the rows after it start a new table)
+  test.afterAll(() => {
+    if (!gateRows.length) return;
+    const cells = gateRows.map((r) => `${r.scene} ${r.workMs.toFixed(1)} ms → ${r.norm.toFixed(3)} / ${r.base.toFixed(3)} ×${r.ratio.toFixed(2)} ${r.verdict}`);
+    const table = `[perf-table] ${BASELINE_HOST} baseline (${BASELINE.hosts[BASELINE_HOST]?.sha ?? '?'}), calib ${hostCalibration?.calibMs.toFixed(1) ?? '?'} ms | ${cells.join(' | ')}`;
+    console.log(table);
+    // CI's numbers as a check-run annotation: `npm run perf:baseline -- --host ci --from-log <file with this line>` re-measures from it
+    if (process.env.GITHUB_ACTIONS) console.log(`::notice title=perf table (AUD-Q8)::${table}`);
+  });
+
   test(`level ${HIGHEST} seed ${PLAY_SEED} at x${PLAY_SPEED} with autoplay, play frames only: main-thread work <= ${FRAME_WORK_BUDGET_MS} ms per frame`, async ({ page }) => {
     test.setTimeout(60_000); // ok: 13 s idle (2 s calibration + 8 s sample + boot), 2026-10-23; the sample stretches until 120 frames on a loaded host
     const host = await calibrateHost(page);
@@ -429,6 +525,7 @@ test.describe('Tower Clash perf', () => {
     expect(screenAfter, `the match is still running after the sample — ${summary}`).toBe('play');
     expect(pageErrors).toEqual([]);
     expectFrameWork(f, MIN_FRAMES.play, summary, host);
+    expectNoRegression(`level${HIGHEST}`, f, host);
   });
 
   test(`level ${GROUND_BUILD_LEVEL} ground image (ART-21 per-row warp, ?tilt=0.72) builds within ${GROUND_BUILD_MAX_RATIO}× the flat build (ceiling ${GROUND_BUILD_CEILING_MS} ms) at ${CPU_THROTTLE}x CPU`, async ({ page }) => {
@@ -477,6 +574,7 @@ test.describe('Tower Clash perf', () => {
     expect(screenAfter, 'nothing may navigate away from the title on its own').toBe('title');
     expect(pageErrors).toEqual([]);
     expectFrameWork(f, MIN_FRAMES.screen, summary, host);
+    expectNoRegression('title', f, host);
   });
 
   test(`shop screen: main-thread work <= ${FRAME_WORK_BUDGET_MS} ms per frame`, async ({ page }) => {
@@ -502,5 +600,127 @@ test.describe('Tower Clash perf', () => {
     expect(screenAfter, 'the shop must stay open while idle').toBe(shopScreen);
     expect(pageErrors).toEqual([]);
     expectFrameWork(f, MIN_FRAMES.screen, summary, host);
+    expectNoRegression('shop', f, host);
+  });
+});
+
+/*
+ * AUD-Q8: the on-screen frame-time overlay (src/ui/perfOverlay.ts) for the on-device check TF-13. It is a
+ * lazy chunk fetched only when switched on — by `?perf=1` or by five taps within 2 s on the version row of
+ * Settings → About, which persists `settings.perfOverlay` — and its numbers are
+ * `window.__towerclash.perf.getStats()`. The chip never covers a tower (it is placed like the select hint).
+ */
+/** src/render/layout.ts TITLE.settings (mirrored like smoke.spec.ts: the spec imports nothing from src/). */
+const TITLE_SETTINGS = { x: 180, y: 776, w: 172, h: 64 };
+/** src/render/layout.ts HUD.mapTop: the top HUD band's lower edge on a 9:16 screen. */
+const HUD_MAP_TOP = 96;
+const PERF_CHUNK = /\/perfOverlay-[\w-]+\.js(\?|$)/;
+
+type PerfStats = NonNullable<ReturnType<Window['__towerclash']['perf']['getStats']>>;
+const perfStats = (page: Page): Promise<PerfStats | null> => page.evaluate(() => window.__towerclash.perf.getStats());
+const perfOn = (page: Page): Promise<boolean> => page.evaluate(() => window.__towerclash.perf.isOn());
+const savedPerf = (page: Page): Promise<boolean | null> => page.evaluate(() => window.__towerclash.economy.getSave().settings.perfOverlay ?? null);
+
+test.describe('frame-time overlay (AUD-Q8, TF-13)', () => {
+  test('?perf=1 fetches the lazy overlay chunk and reads fps / p95 / units / long frames on level 50, clear of the towers; without the flag nothing loads', async ({ page }) => {
+    const chunks: string[] = [];
+    page.on('request', (r) => void (PERF_CHUNK.test(r.url()) && chunks.push(r.url())));
+    const pageErrors = await gotoTitle(page);
+    // the debug surface is installed when idle, after the idle preloads: by now every eager / idle chunk is in
+    expect(await perfOn(page)).toBe(false);
+    expect(await perfStats(page)).toBeNull();
+    expect(chunks, 'no flag, no overlay chunk').toEqual([]);
+
+    await gotoTitle(page, 'perf=1');
+    expect(await perfOn(page)).toBe(true);
+    await expect.poll(async () => (await perfStats(page))?.frames ?? 0, { message: 'the chip counts title frames' }).toBeGreaterThan(5);
+    expect(chunks.length, 'the flag fetched the overlay chunk once').toBe(1);
+    const title = (await perfStats(page))!;
+    expect(title.screen).toBe('title');
+    expect(title.units, 'no units off the play screen').toBeNull();
+    expect(title.chip, 'drawn on the title').not.toBeNull();
+    expect(title.chip!.x).toBeGreaterThanOrEqual(0);
+
+    expect(
+      await page.evaluate(
+        ([id, seed]) => {
+          const tc = window.__towerclash;
+          tc.setSpeed(1);
+          const started = tc.loadLevel(id, seed);
+          tc.autoplay();
+          return started;
+        },
+        [HIGHEST, PLAY_SEED] as const,
+      ),
+    ).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.__towerclash.getScreen())).toBe('play');
+    // the count restarts with the screen; 2 s of play fill the window
+    await expect.poll(async () => { const s = await perfStats(page); return s?.screen === 'play' && s.sinceMs >= 2_000 && (s.units ?? 0) > 0 && s.chip !== null; }, { timeout: 20_000 }).toBe(true);
+    const s = (await perfStats(page))!;
+    const anchors = await page.evaluate(() => window.__towerclash.getAnchors());
+    const towers = await page.evaluate(() => Object.values(window.__towerclash.getState()!.towers).map((t) => ({ id: t.id, x: t.x, y: t.y })));
+    const line = `[perf] overlay on level ${HIGHEST}: ${Math.round(s.fps)} fps, p50 ${s.p50Ms.toFixed(1)} / p95 ${s.p95Ms.toFixed(1)} / max ${s.maxMs.toFixed(1)} ms over ${s.frames} frames, long ${s.longFrames} of ${s.totalFrames} in ${(s.sinceMs / 1000).toFixed(1)} s, units ${s.units}, chip ${JSON.stringify(s.chip)}`;
+    console.log(line);
+    test.info().annotations.push({ type: 'perf', description: line });
+    expect(s.frames, line).toBeGreaterThan(5);
+    expect(s.fps, line).toBeGreaterThan(0);
+    expect(s.p50Ms, line).toBeGreaterThan(0);
+    expect(s.maxMs, line).toBeGreaterThanOrEqual(s.p50Ms);
+    expect(s.totalFrames, line).toBeGreaterThanOrEqual(s.frames);
+    expect(s.longFrames, line).toBeLessThanOrEqual(s.totalFrames);
+    // under the top HUD band, inside the map's width, on no tower (centre + 20 px)
+    const chip = s.chip!;
+    expect(chip.y, line).toBeGreaterThanOrEqual(HUD_MAP_TOP + anchors.top);
+    expect(chip.x, line).toBeGreaterThanOrEqual(0);
+    expect(chip.x + chip.w, line).toBeLessThanOrEqual(720);
+    const covered = towers.filter((t) => t.x > chip.x - 20 && t.x < chip.x + chip.w + 20 && t.y > chip.y - 20 && t.y < chip.y + chip.h + 20);
+    expect(covered, `the chip covers no tower — ${line}`).toEqual([]);
+    expect(pageErrors).toEqual([]);
+  });
+
+  test('five taps on the About version line within 2 s switch the overlay on (persisted, no URL needed) and off; four taps do nothing', async ({ page }) => {
+    await recordToasts(page); // QA-20: toasts are read from the page-side recorder
+    const pageErrors = await gotoTitle(page);
+    const openSettings = async (): Promise<{ x: number; y: number }> => {
+      await tapRect(page, TITLE_SETTINGS);
+      await expect.poll(() => page.evaluate(() => window.__towerclash.getScreen())).toBe('settings');
+      const row = await page.evaluate(() => window.__towerclash.perf.versionRow());
+      expect(row, 'the settings screen exposes its version row').not.toBeNull();
+      return { x: row!.x + row!.w * 0.75, y: row!.y + row!.h / 2 }; // on the version text (right of "Tower Clash")
+    };
+    const taps = async (at: { x: number; y: number }, n: number): Promise<void> => {
+      for (let i = 0; i < n; i++) await tapAt(page, at.x, at.y);
+    };
+    let at = await openSettings();
+    // four taps, then the fifth after the 2 s window: nothing
+    const mark = await toastMark(page);
+    await taps(at, 4);
+    await page.waitForTimeout(2_200); // ok: the 2 s tap window must lapse (VERSION_TAP_WINDOW_MS)
+    await taps(at, 1);
+    expect(await perfOn(page)).toBe(false);
+    expect(await toastsSeen(page, { since: mark, screen: 'settings' })).toEqual([]);
+    expect(await savedPerf(page)).toBeNull();
+    expect(await page.evaluate(() => window.__towerclash.getScreen()), 'a version tap is not a button: still on settings').toBe('settings');
+
+    // five within 2 s: on, said, persisted, drawn
+    await taps(at, 5);
+    await expect.poll(() => perfOn(page)).toBe(true);
+    await expectToast(page, 'Frame-time overlay on', { screen: 'settings' });
+    expect(await savedPerf(page)).toBe(true);
+    await expect.poll(async () => (await perfStats(page))?.screen ?? null).toBe('settings');
+
+    // a fresh boot without the URL flag: still on (TF-13 needs no URL)
+    await gotoTitle(page);
+    expect(await perfOn(page)).toBe(true);
+    await expect.poll(async () => (await perfStats(page))?.screen ?? null).toBe('title');
+
+    // five more: off, said, forgotten, gone
+    at = await openSettings();
+    await taps(at, 5);
+    await expect.poll(() => perfOn(page)).toBe(false);
+    await expectToast(page, 'Frame-time overlay off', { screen: 'settings' });
+    expect(await savedPerf(page)).toBeNull();
+    expect(await perfStats(page)).toBeNull();
+    expect(pageErrors).toEqual([]);
   });
 });

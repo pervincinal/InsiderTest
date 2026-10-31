@@ -1,0 +1,77 @@
+{
+  "about": "AUD-Q8 relative perf gate (e2e/perf.spec.ts): per host kind, each scene's main-thread work per frame over the calibration loop (norm). Fail over ×1.35, warn over ×1.2. Written by npm run perf:baseline (scripts/perfBaseline.mjs); do not edit the numbers by hand.",
+  "hosts": {
+    "ci": {
+      "sha": "b59785a",
+      "date": "2026-10-29",
+      "source": "CI run 106 (b59785a, shard 2, 2026-10-29) as recorded in docs/BACKLOG.md QA-31 (the job log is not readable from the container); run 104 (b131e49, calib 20.0: level 50 23.1, title 28.8, shop 26.1 ms) reads norm 1.155 / 1.440 / 1.305 = x0.93 / 0.94 / 0.97 of it. Calibration then: one 2 s mean; the first CI run of AUD-Q8 (median of 5 x 1 s) confirms or re-measures it",
+      "runs": 1,
+      "calibMs": 11.5,
+      "scenes": {
+        "level50": {
+          "workMs": 14.3,
+          "norm": 1.2435,
+          "samples": [
+            1.2435
+          ]
+        },
+        "title": {
+          "workMs": 17.6,
+          "norm": 1.5304,
+          "samples": [
+            1.5304
+          ]
+        },
+        "shop": {
+          "workMs": 15.5,
+          "norm": 1.3478,
+          "samples": [
+            1.3478
+          ]
+        }
+      }
+    },
+    "container": {
+      "sha": "2fa8509",
+      "date": "2026-10-31",
+      "source": "npm run perf:baseline, 5 runs of e2e/perf.spec.ts's frame tests (median per scene) on the agents' 4-core container (load 6-10 from parallel agent runs), 2fa8509 + the uncommitted 2026-10-31 sprint tree incl. AUD-Q8",
+      "runs": 5,
+      "calibMs": 22.02,
+      "scenes": {
+        "level50": {
+          "workMs": 26.68,
+          "norm": 1.2422,
+          "samples": [
+            1.2422,
+            1.2494,
+            1.307,
+            1.1277,
+            1.1954
+          ]
+        },
+        "title": {
+          "workMs": 37.84,
+          "norm": 1.72,
+          "samples": [
+            1.8779,
+            1.6427,
+            1.7349,
+            1.72,
+            1.6196
+          ]
+        },
+        "shop": {
+          "workMs": 25.63,
+          "norm": 1.1911,
+          "samples": [
+            1.159,
+            1.2183,
+            1.1264,
+            1.1911,
+            1.2082
+          ]
+        }
+      }
+    }
+  }
+}

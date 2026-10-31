@@ -38,8 +38,9 @@ const GREEN = new Set(['success', 'neutral', 'skipped']);
 const GENERIC = /^Process completed with exit code \d+\.?$/;
 /** QA-26: check-run names that must all report once one of them does (see the header). */
 const REQUIRED_TOGETHER = [
-  // .github/workflows/tower-clash-ci.yml: `verify` and the `e2e` matrix (`e2e (shard ${{ matrix.shard }}/2)`)
-  ['check + playtest + build + e2e', 'e2e (shard 1/2)', 'e2e (shard 2/2)'],
+  // .github/workflows/tower-clash-ci.yml: `verify`, the `e2e` matrix (`e2e (shard ${{ matrix.shard }}/2)`)
+  // and AUD-Q5's `e2e-webkit` (the webkit-iphone Playwright project)
+  ['check + playtest + build + e2e', 'e2e (shard 1/2)', 'e2e (shard 2/2)', 'e2e (webkit)'],
 ];
 
 if (process.argv.includes('--help') || process.argv.includes('-h')) {

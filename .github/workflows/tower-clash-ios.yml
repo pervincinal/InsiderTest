@@ -1,7 +1,8 @@
 name: tower-clash-ios
 
 # Builds the Capacitor iOS shell for the iOS Simulator, unsigned (no Apple Developer
-# account needed). Runs on demand, or when the iOS project itself changes.
+# account needed), then boots it once in an iPhone simulator and keeps a screenshot (AUD-Q5).
+# Runs on demand, or when the iOS project or this workflow changes.
 on:
   push:
     paths:
@@ -101,4 +102,59 @@ jobs:
           name: tower-clash-ios-simulator
           path: tower-clash/ios/App/build/DerivedData/Build/Products/Debug-iphonesimulator/App.app
           if-no-files-found: error
+          retention-days: 30
+
+      # AUD-Q5 (2026-10-31): boot the built app once instead of only compiling it. Newest iOS runtime on the
+      # runner, its first available iPhone: boot → install App.app → launch → 8 s → screenshot → terminate.
+      # Fails (with a `simulator boot` annotation) when the app is missing, install or launch errors, or the
+      # app is no longer running 8 s after launch (`simctl terminate` finds nothing: a crash on start, e.g.
+      # a bad GADApplicationIdentifier). Only the screenshot may fail without failing the step (`|| true`).
+      # Runs after the .app upload so the build artifact exists even when the boot fails.
+      - name: Boot the app in an iPhone simulator (install, launch, screenshot)
+        timeout-minutes: 15
+        run: |
+          set -euo pipefail
+          APP=ios/App/build/DerivedData/Build/Products/Debug-iphonesimulator/App.app
+          OUT="$RUNNER_TEMP/simulator"
+          mkdir -p "$OUT"
+          test -d "$APP" || { echo "::error title=simulator boot::$APP was not built"; exit 1; }
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
+          echo "Bundle id: $BUNDLE_ID"
+          xcrun simctl list devices available
+          PICK=$(xcrun simctl list --json devices available | node -e '
+            const d = JSON.parse(require("fs").readFileSync(0, "utf8")).devices;
+            const ver = (k) => (/iOS-(\d+)-(\d+)/.exec(k) || [0, 0, 0]).slice(1).map(Number);
+            const runtimes = Object.keys(d).filter((k) => /SimRuntime\.iOS-/.test(k)).sort((a, b) => ver(b)[0] - ver(a)[0] || ver(b)[1] - ver(a)[1]);
+            for (const r of runtimes) {
+              const dev = d[r].find((x) => x.isAvailable !== false && /^iPhone/.test(x.name));
+              if (dev) { console.log([dev.udid, dev.state, dev.name + " (" + r.split(".").pop() + ")"].join(" ")); process.exit(0); }
+            }
+            console.error("no available iPhone simulator on this runner");
+            process.exit(1);
+          ')
+          read -r UDID STATE LABEL <<< "$PICK"
+          echo "Simulator: $LABEL — $UDID ($STATE)"
+          if [ "$STATE" != "Booted" ]; then
+            xcrun simctl boot "$UDID"
+          fi
+          xcrun simctl bootstatus "$UDID"
+          xcrun simctl install "$UDID" "$APP" || { echo "::error title=simulator boot::simctl install failed on $LABEL"; exit 1; }
+          xcrun simctl launch "$UDID" "$BUNDLE_ID" || { echo "::error title=simulator boot::simctl launch $BUNDLE_ID failed on $LABEL"; exit 1; }
+          sleep 8
+          xcrun simctl io "$UDID" screenshot "$OUT/launch-8s.png" || true
+          if ! xcrun simctl terminate "$UDID" "$BUNDLE_ID"; then
+            echo "::error title=simulator boot::$BUNDLE_ID was not running 8 s after launch on $LABEL (crashed on start?); its log is in the tower-clash-ios-simulator-launch artifact"
+            xcrun simctl spawn "$UDID" log show --last 2m --style compact --predicate 'process == "App"' > "$OUT/app.log" 2>&1 || echo "log show failed"
+            tail -n 40 "$OUT/app.log"
+            exit 1
+          fi
+          echo "Launched, alive after 8 s and terminated on $LABEL"
+
+      - name: Upload simulator launch screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tower-clash-ios-simulator-launch
+          path: ${{ runner.temp }}/simulator
+          if-no-files-found: warn
           retention-days: 30
