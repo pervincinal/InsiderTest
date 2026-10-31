@@ -46,7 +46,7 @@ Alternative with a USB cable and the Android SDK installed: `adb install -r app-
 
 ## 3. iOS builds
 
-The **tower-clash-ios** workflow (manual, or automatic when `tower-clash/ios/**` changes) runs on a macOS runner and builds the app **for the iOS Simulator, unsigned**. The artifact **tower-clash-ios-simulator** contains `App.app`; it runs in Xcode's Simulator on a Mac (`xcrun simctl install booted App.app`) but **cannot be installed on a real iPhone**. Installing on a physical device requires an Apple Developer account and code signing (see section 5). It has run successfully on `macos-latest` (commit `16d720b`, 2026-09-27), so the AdMob and RevenueCat Swift packages resolve on the runner.
+The **tower-clash-ios** workflow (manual, or automatic when `tower-clash/ios/**` changes) runs on a macOS runner and builds the app **for the iOS Simulator, unsigned**. The artifact **tower-clash-ios-simulator** contains `App.app`; it runs in Xcode's Simulator on a Mac (`xcrun simctl install booted App.app`) but **cannot be installed on a real iPhone**. Installing on a physical device requires an Apple Developer account and code signing (see section 5). It has run successfully on `macos-latest` (commit `16d720b`, 2026-09-27), so the AdMob and RevenueCat Swift packages resolve on the runner. Since AUD-Q5 (2026-10-31) the job also boots the built app once in an iPhone simulator and keeps a screenshot (artifact **tower-clash-ios-simulator-launch**, §3.3).
 
 ### Signed TestFlight / App Store build from CI — no Mac needed
 
@@ -125,6 +125,42 @@ Pushes to any other branch never start either workflow. The release workflow sti
 **Not automatable (stays with the stakeholder):** creating the app record (the API has no "create app"), the **App Privacy** questionnaire (not accepted with an API key), the AdMob iOS ids and the four `ASC_REVIEW_*` secrets, the contact e-mail for the privacy / support pages, and *Release This Version*. Step-by-step for the stakeholder: `LAUNCH_CHECKLIST.md` §0b.
 
 **Known uncertainties** (first real run will tell): the price / availability calls (above); the first `metadata` run on a brand-new record renames the default version "1.0" to `1.0.0` (deliver `app_version`); `submit` fails with "Build number … does not exist" while Apple is still processing the build — repeat later; App Store Connect refuses a submission while App Privacy is unpublished — the run then fails with Apple's message and the version stays a draft.
+
+### 3.3 WebKit in CI and the simulator boot (AUD-Q5, 2026-10-31)
+
+Until AUD-Q5 every automated browser run was Chromium, although the game ships first inside iOS WKWebView, and the simulator build was compiled but never started. Two automated checks now cover the WebKit side. Neither replaces the TestFlight pass on a real iPhone (`docs/publishing/TESTFLIGHT_TEST_PLAN.md`).
+
+**1. Playwright WebKit project `webkit-iphone`** (`tower-clash/playwright.config.ts`, spec `tower-clash/e2e/webkit.spec.ts`). It uses Playwright's WebKit on the stakeholder's phone class, the way `e2e/gestures430.spec.ts` models it: 430 × 932 CSS px, DPR 3, touch, mobile viewport, the iOS 26 Safari user agent (`IPHONE_UA` in `e2e/tools/webkit.ts`). The Dynamic Island / home-indicator insets (59 / 34 px) are simulated on `#app`. It runs five tests:
+
+| # | Test | What it checks |
+|---|---|---|
+| 1 | boot | it really is WebKit with the phone metrics; the map sits inside the safe-area insets (letterbox math of `e2e/webview.spec.ts`); manifest, icons, `apple-touch-icon`, `sw.js`, `apple-mobile-web-app-capable` and `viewport-fit=cover` are served |
+| 2 | level 1 by touch | real `touchscreen.tap`s must reach the game as Pointer Events of type `touch`; title → level map → level 1; the lesson card holds the match (sim time 0) until the first touch (AUD-B11); home → camp streams and the garrison holds; the reference player wins (seed 1) → result screen, stars saved |
+| 3 | lesson-card hold | `startMatch()` is false with no level, a loaded level stays at sim time 0 until `startMatch()` releases it, and then the tutorial starts |
+| 4 | Settings → Text size | 150 % is saved, the "Text size" row is redrawn bigger (canvas pixels), the value survives a reload, and 100 % sets it back |
+| 5 | share card | win level 1 → SHARE → `navigator.share` (stubbed) gets one 1080 × 1350 PNG named `towerclash-level-01.png`, and the "Shared" toast shows |
+
+Tests 3–5 tap with the suite's shared mouse-pointer helpers, so a gap in WebKit's touch emulation fails test 2 only. The Settings rects come from the source of `src/render/menuLayout.ts`, so moving a settings row does not break the spec. Audio: WebKit on Linux plays sound through GStreamer, not through iOS. The game's AudioContext guard (`src/audio/synth.ts`) must hold, so an uncaught exception fails the test. Console lines from the Linux media backend are only recorded as annotations. Any other console error fails the test.
+
+**Where it runs:** only in CI, in the job **`e2e (webkit)`** (`.github/workflows/tower-clash-ci.yml`). The job runs in parallel with the check job and the chromium shards, on its own build, with `npx playwright install --with-deps webkit` and `PW_WEBKIT=1 PW_PORT=4194 PW_OUTPUT=test-results/webkit npx playwright test --project=webkit-iphone`. When it fails, the artifact `playwright-report-e2e-webkit` is uploaded. `scripts/ciStatus.mjs` requires this job together with the check job and both shards, so a missing or skipped WebKit job turns the CI line red. **The gate** (`e2e/tools/webkit.ts`):
+- With `PW_WEBKIT=1`, the tests always run. If the browser is missing, each test fails with Playwright's "Executable doesn't exist" error, so CI can never go green on a skipped run.
+- Without `PW_WEBKIT=1`, the tests run only when Playwright's WebKit build is installed (`webkit.executablePath()`). Otherwise they are skipped with the reason.
+
+The agents' container has Chromium only and must never run `playwright install`. There, `npx playwright test --list --project=webkit-iphone` lists the five tests and a run reports "5 skipped". On a machine with WebKit, run `npm run e2e:webkit`. Before the first CI run, the same five tests passed on Chromium with the same metrics (31 s, scratch run of 2026-10-31). Only CI shows how WebKit behaves.
+
+**2. Simulator boot** (`.github/workflows/tower-clash-ios.yml`, job "simulator build (unsigned)", step *Boot the app in an iPhone simulator*). After the simulator build and the `.app` upload, the step does the following:
+- reads the bundle id from the built `Info.plist`;
+- picks the first available iPhone of the newest iOS runtime on the runner (`xcrun simctl list --json devices available`);
+- boots it, then waits with `bootstatus`;
+- runs `simctl install` and `simctl launch`, waits 8 s, and takes `simctl io … screenshot`;
+- runs `simctl terminate`.
+
+The step fails, with a `simulator boot` annotation, in these cases:
+- `App.app` is missing;
+- install or launch errors;
+- the app is no longer running 8 s after launch, so `terminate` finds nothing (a crash on start). The last 40 lines of the app's log are then printed and saved.
+
+Only the screenshot may fail without failing the step. The PNG (`launch-8s.png`, plus `app.log` after a crash) is in the artifact **tower-clash-ios-simulator-launch** (30 days). The workflow runs on a push that changes `tower-clash/ios/**` or the workflow file itself, so the commit that added the step also starts its first run. It has not run on macOS yet: the first run is its verification.
 
 ## 4. Build locally
 
