@@ -1,5 +1,5 @@
 /**
- * Settings screen (M3-3 + I18N): sound, colour-blind palette, reduced motion (auto/on/off
+ * Settings screen (M3-3 + I18N): music and effects (AUD-F6), colour-blind palette, reduced motion (auto/on/off
  * override), the "How to play" card (FE-3), UI language, the team-colour set (FE-14) and a two-step
  * reset of the progress; the About card shows the version, the store support id (COPY) and the ads
  * SDK's privacy options (native).
@@ -19,7 +19,7 @@ import type { PointerPoint } from '../input/pointer';
 import { dragThreshold } from '../input/pointer';
 import { resetProgress, writeSave } from './save';
 import { applyMotionPref } from './motion';
-import { isMuted, playSfx, toggleMuted } from '../audio/index';
+import { effectsOn, musicOn, playSfx, setMusicOn, setMuted } from '../audio/index';
 import type { AdsProvider } from '../economy/ads';
 import { getAds } from '../economy/ads';
 import type { StoreProvider } from '../economy/store';
@@ -37,6 +37,15 @@ interface SupportIdExt {
   getSupportId?: () => Promise<string | null> | string | null;
 }
 
+/** AUD-Q8: taps on the About card's version row, within this many ms, that switch the frame-time overlay (TF-13). */
+export const VERSION_TAPS = 5;
+export const VERSION_TAP_WINDOW_MS = 2000;
+
+/** AUD-Q8: the About card's first row (name · version, and the line under them): the overlay's hidden switch. Not a button: no press look. */
+export function versionRowOf(about: SettingsAboutLayout): Rect {
+  return { x: about.card.x, y: about.card.y, w: about.card.w, h: about.versionY + SETTINGS.aboutRowH / 2 - about.card.y };
+}
+
 export class SettingsScreen implements Screen {
   readonly name = 'settings' as const;
   private pressed: Rect | null = null;
@@ -47,6 +56,9 @@ export class SettingsScreen implements Screen {
   private supportId: string | null = null;
   private privacyRequired = false;
   private about: SettingsAboutLayout = settingsAboutLayout(false, false);
+  private versionRect: Rect = versionRowOf(this.about);
+  /** AUD-Q8: times (performance.now) of the recent taps on the version row. */
+  private versionTaps: number[] = [];
   private privacyPending = false;
   /**
    * AUD-U2: the card and the About block scroll when they are taller than the screen (the About
@@ -99,6 +111,32 @@ export class SettingsScreen implements Screen {
     this.supportId = typeof id === 'string' && id.length > 0 ? id : null;
     this.privacyRequired = privacy;
     this.about = settingsAboutLayout(this.supportId !== null, this.privacyRequired);
+    this.versionRect = versionRowOf(this.about);
+  }
+
+  /** AUD-Q8: the version row (layout px; e2e). */
+  get versionRow(): Rect {
+    return this.versionRect;
+  }
+
+  /**
+   * AUD-Q8: a tap on the version row; the VERSION_TAPS-th within VERSION_TAP_WINDOW_MS switches the
+   * frame-time overlay (persisted in `settings.perfOverlay`, so TF-13 needs no URL) and says so.
+   */
+  private versionTap(): void {
+    const now = performance.now();
+    this.versionTaps = this.versionTaps.filter((at) => now - at < VERSION_TAP_WINDOW_MS);
+    this.versionTaps.push(now);
+    if (this.versionTaps.length < VERSION_TAPS) return;
+    this.versionTaps = [];
+    const save = this.app.save;
+    const on = !(this.app.perfOverlayOn ?? save.settings.perfOverlay === true);
+    if (on) save.settings.perfOverlay = true;
+    else delete save.settings.perfOverlay;
+    writeSave(save);
+    this.app.setPerfOverlay?.(on);
+    playSfx('button');
+    this.toast.show(t(on ? 'settings.perfOn' : 'settings.perfOff'), 'ok', this.nowMs);
   }
 
   /** How far the content may scroll: its foot (the About block + 24) past the screen's bottom edge. */
@@ -128,7 +166,8 @@ export class SettingsScreen implements Screen {
     const s = this.app.save.settings;
     const total = Object.values(this.app.save.stars).reduce((a, b) => a + b, 0);
     drawSettings(view, this.app.palette(), {
-      soundOn: !isMuted(),
+      soundOn: effectsOn(),
+      musicOn: musicOn(),
       colorBlind: s.colorBlind,
       reducedMotion: s.reducedMotion,
       language: currentLanguage(),
@@ -150,9 +189,10 @@ export class SettingsScreen implements Screen {
 
   private rects(): Rect[] {
     if (this.confirming) return [SETTINGS.confirm.yes, SETTINGS.confirm.no];
-    const list = [SETTINGS.back, SETTINGS.sound, SETTINGS.colorBlind, SETTINGS.motion, SETTINGS.howto, SETTINGS.language, SETTINGS.tones, SETTINGS.textSize, SETTINGS.reset];
+    const list = [SETTINGS.back, SETTINGS.music, SETTINGS.sound, SETTINGS.colorBlind, SETTINGS.motion, SETTINGS.howto, SETTINGS.language, SETTINGS.tones, SETTINGS.textSize, SETTINGS.reset];
     if (this.about.copy) list.push(this.about.copy);
     if (this.about.privacy) list.push(this.about.privacy);
+    list.push(this.versionRect); // last: COPY's tap area reaches up into the row and wins there
     return list;
   }
 
@@ -249,8 +289,14 @@ export class SettingsScreen implements Screen {
       this.back();
       return;
     }
+    // AUD-F6: Music and Effects persist through the audio facade (both flags; the click is on the UI bus, so Effects off is silent)
+    if (hit === SETTINGS.music) {
+      setMusicOn(!musicOn());
+      playSfx('button');
+      return;
+    }
     if (hit === SETTINGS.sound) {
-      toggleMuted();
+      setMuted(effectsOn());
       playSfx('button');
       return;
     }
@@ -267,6 +313,10 @@ export class SettingsScreen implements Screen {
     if (hit === this.about.privacy) {
       playSfx('button');
       this.openPrivacyOptions();
+      return;
+    }
+    if (hit === this.versionRect) {
+      this.versionTap();
       return;
     }
     playSfx('button');

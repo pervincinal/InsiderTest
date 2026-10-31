@@ -64,7 +64,9 @@ export const enMenus = {
   'share.saved': 'Saved',
 
   'settings.title': 'SETTINGS',
-  'settings.sound': 'Sound',
+  'settings.music': 'Music',
+  'settings.musicSub': 'A calm synth loop',
+  'settings.effects': 'Effects',
   'settings.soundSub': 'Synth effects and jingles',
   'settings.colorBlind': 'Colour-blind',
   'settings.colorBlindSub': 'Distinct owner colours',
@@ -102,6 +104,8 @@ export const enMenus = {
   'settings.copyFailed': 'Could not copy the Support ID',
   'settings.privacyUnavailable': 'Privacy options are not available here',
   'settings.privacyFailed': 'Could not open privacy options',
+  'settings.perfOn': 'Frame-time overlay on',
+  'settings.perfOff': 'Frame-time overlay off',
 
   'achievements.title': 'ACHIEVEMENTS',
   'achievements.summary': '{unlocked} of {total} unlocked  ·  {crystals} {crystals|crystal|crystals} earned',

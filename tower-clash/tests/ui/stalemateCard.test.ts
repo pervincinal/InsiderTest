@@ -7,7 +7,8 @@ import { createAdSession } from '../../src/economy/adsFlow';
 import type { SaveData } from '../../src/ui/save';
 import { defaultSave, setSaveStorageForTests } from '../../src/ui/save';
 import type { App, Screen } from '../../src/ui/screens';
-import { ResultScreen } from '../../src/ui/screens';
+import { ResultScreen } from '../../src/ui/result';
+import '../registerResult'; // PERF-11: the lazy result chunk is in
 import { PlayScreen, STALEMATE_CARD_FROM_LEVEL, STALEMATE_CARD_MS, StalemateCardWatch } from '../../src/ui/play';
 import { makeLevel, wall } from '../helpers';
 

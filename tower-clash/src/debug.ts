@@ -5,7 +5,7 @@ import type { TowerClashApp, TowerClashDebug } from './main';
 import { LEVEL_META, levelIndex } from './levels/index';
 import { fromHudSpace, hudAnchors, toClient } from './render/view';
 import { isLevelUnlocked } from './ui/save';
-import { ResultScreen, lastShareRecord } from './ui/screens';
+import { ResultScreen, lastShareRecord } from './ui/result';
 import { lastReviewResult } from './native/review';
 import type { TranslationKey } from './ui/i18n';
 import { currentLanguage, hasEnglish, loadEnglishMenus, t } from './ui/i18n';
@@ -20,6 +20,8 @@ import { getTerrain } from './render/terrain';
 import { FLAT, playCamera } from './render/camera';
 import { activeToneSet, biomeFor, toneSetsLoaded } from './render/palette';
 import { equippedSkin } from './economy/entitlements';
+import { audioSynth, effectsOn, musicOn } from './audio/index';
+import { busLevels, musicState } from './audio/inspect';
 
 /*
  * Playwright / QA surface (`window.__towerclash`, PERF-6): a lazy chunk that main.ts installs once
@@ -35,12 +37,27 @@ export interface QaDebugExtras {
    * the ART-21 per-row warp is a one-off cost per level. Null when no level is on screen.
    */
   getGroundBuildMs(flat?: boolean): number | null;
+  /**
+   * AUD-F6 mixer: `getBuses()` the live master / SFX / UI / music / duck gains and the limiter (null
+   * before the first gesture built the mixer); `getMusic()` whether the loop runs, its next step and
+   * whether the pulse layer is on.
+   */
+  audio: {
+    getBuses(): ReturnType<typeof busLevels>;
+    getMusic(): ReturnType<typeof musicState>;
+    settings(): { effects: boolean; music: boolean };
+  };
 }
 
 let groundBuilds = 0;
 
 export function installDebug(app: TowerClashApp): TowerClashDebug & QaDebugExtras {
   const extras: QaDebugExtras = {
+    audio: {
+      getBuses: () => busLevels(audioSynth()),
+      getMusic: () => musicState(audioSynth()),
+      settings: () => ({ effects: effectsOn(), music: musicOn() }),
+    },
     getGroundBuildMs: (flat = false) => {
       const play = app.current === app.play ? app.play : undefined;
       if (!play) return null;
@@ -109,6 +126,14 @@ export function installDebug(app: TowerClashApp): TowerClashDebug & QaDebugExtra
       return t(key as TranslationKey, params);
     },
     getToast: () => app.current.toast?.opts(performance.now())?.text ?? null,
+    perf: {
+      isOn: () => app.perfOverlayOn,
+      getStats: () => app.perf?.stats() ?? null,
+      versionRow: () => {
+        const L = app.lazy;
+        return L && app.current instanceof L.SettingsScreen ? { ...app.current.versionRow } : null;
+      },
+    },
     get lastShare() {
       return lastShareRecord();
     },

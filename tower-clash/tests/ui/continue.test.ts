@@ -7,7 +7,8 @@ import { createAdSession } from '../../src/economy/adsFlow';
 import type { SaveData } from '../../src/ui/save';
 import { defaultSave, setSaveStorageForTests, starsFor } from '../../src/ui/save';
 import type { App, Screen, StartOptions } from '../../src/ui/screens';
-import { ResultScreen } from '../../src/ui/screens';
+import { ResultScreen } from '../../src/ui/result';
+import '../registerResult'; // PERF-11: the lazy result chunk is in
 import { PlayScreen, RESULT_BEAT_MS } from '../../src/ui/play';
 import { makeLevel } from '../helpers';
 import { suicideCommands } from '../../src/debug';

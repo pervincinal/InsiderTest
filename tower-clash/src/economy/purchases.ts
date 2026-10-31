@@ -2,8 +2,8 @@
  * The shop half of the wallet (ECONOMY.md §2–§4): crystal → gold conversion, the booster crate,
  * store grants (once per transaction / non-consumable) and restores. Split from ./wallet.ts for
  * PERF-11: only the shop and the debug surface use these — both lazy chunks — so this file is a
- * lazy chunk of its own (shared by the two). ./store.ts and the fake store stay eager: main.ts calls
- * `getStore().init()` at boot (≈ 1.3 kB gzip with the catalog's IAP_PRODUCTS, a PERF-11 candidate). Same rules as
+ * lazy chunk of its own (shared by the two). ./store.ts and the fake store are a lazy chunk too since
+ * 2026-10-31 (main.ts initialises the store at idle, ShopScreen.enter on a first open before that). Same rules as
  * the wallet: every mutation persists through `writeSave`, balances never go negative.
  *
  * Owned by the Frontend Engineer.

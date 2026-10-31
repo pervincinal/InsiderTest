@@ -7,7 +7,8 @@ import { recordResult } from '../../src/economy/wallet';
 import type { SaveData } from '../../src/ui/save';
 import { defaultSave, setSaveStorageForTests } from '../../src/ui/save';
 import type { App, Screen, StartOptions } from '../../src/ui/screens';
-import { ResultScreen } from '../../src/ui/screens';
+import { ResultScreen } from '../../src/ui/result';
+import '../registerResult'; // PERF-11: the lazy result chunk is in
 import { PlayScreen, RESULT_BEAT_MS } from '../../src/ui/play';
 import { REWARD, WEEKLY_REWARD, challengeFor, goldReward, weeklyFor } from '../../src/daily/challenge';
 import { challengeDone, recordChallengeResult } from '../../src/ui/daily';

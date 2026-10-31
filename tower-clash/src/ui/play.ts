@@ -24,7 +24,9 @@ import { PlayGestures, hitTower } from '../input/pointer';
 import { GameLoop } from './loop';
 import { starsFor, writeSave } from './save';
 import type { App, Screen, StartOptions } from './screens';
-import { ResultScreen, Toast } from './screens';
+import { Toast } from './screens';
+import type { ResultInfo } from './result';
+import { makeResultScreen, resultChunkFailures, warmResultChunk } from './resultChunk';
 import type { Tutorial, TutorialStep } from './tutorial';
 import { stepTowerId, tutorialFor } from './tutorial';
 import { drawTutorial } from '../render/tutorialDraw';
@@ -230,8 +232,11 @@ export class PlayScreen implements Screen {
   private readonly stallWatch: StalemateCardWatch;
   /** The player chose Retreat on the stalemate card: the match ends as a defeat (GDD §2.4). */
   private retreated = false;
-  /** AUD-F4: the result screen waiting out `RESULT_BEAT_MS` from the outcome (`nowMs`). */
-  private pendingResult: { screen: ResultScreen; at: number } | null = null;
+  /**
+   * AUD-F4: the result waiting out `RESULT_BEAT_MS` from the outcome (`nowMs`) — and, PERF-11, for the
+   * lazy result chunk when it is not in by then (`failures`: the chunk's download failures already toasted).
+   */
+  private pendingResult: { info: ResultInfo; at: number; failures: number } | null = null;
   /** This attempt already used its "Reinforcements" continue (ECONOMY.md §3.5) — offered once per attempt. */
   private continued: boolean;
   /** State + rng snapshots of the last `C.SNAPSHOT_CAPACITY_MS` of sim time, one per `C.SNAPSHOT_INTERVAL_MS`. */
@@ -288,6 +293,7 @@ export class PlayScreen implements Screen {
     this.tutorialLate = this.tutorial === null && needsTutorialSteps(level.id, stars);
     this.stalemate = new StalemateWatch(level.id !== 1); // the first tutorial level teaches one stream, no hint there
     this.stallWatch = new StalemateCardWatch(level.id >= STALEMATE_CARD_FROM_LEVEL);
+    warmResultChunk(); // PERF-11: the result screen chunk (normally in already from the title's idle preload)
     this.gestures = new PlayGestures({
       getState: () => (this.over ? null : this.loop.state),
       limitHintText: (n) => t('hint.linkLimit', { n }),
@@ -552,12 +558,28 @@ export class PlayScreen implements Screen {
       warmHudOverlays(); // outcome decided: a last chance for the result card to land before its first frame
       this.finish();
     }
-    // AUD-F4: the result screen follows the outcome after the beat
+    // AUD-F4: the result screen follows the outcome after the beat (PERF-11: once its chunk is in)
     const pending = this.pendingResult;
-    if (pending && nowMs - pending.at >= RESULT_BEAT_MS) {
-      this.pendingResult = null;
-      this.app.go(pending.screen);
+    if (pending && nowMs - pending.at >= RESULT_BEAT_MS) this.showResult(pending);
+  }
+
+  /**
+   * PERF-11: open the result screen when its lazy chunk is in; otherwise keep the beat's undimmed frame
+   * (`pendingResult` stays set, input stays ignored), re-request the chunk under the back-off and say
+   * so once per failed download. Platform back leaves for the map after a failure (the result is booked).
+   */
+  private showResult(pending: { info: ResultInfo; at: number; failures: number }): boolean {
+    const screen = makeResultScreen(this.app, pending.info);
+    if (!screen) {
+      warmResultChunk();
+      const failures = resultChunkFailures();
+      if (failures > pending.failures) this.toast.show(t('common.loadFailed'), 'error', this.nowMs);
+      pending.failures = failures;
+      return false;
     }
+    this.pendingResult = null;
+    this.app.go(screen);
+    return true;
   }
 
   /* ----- "Nothing is changing" card (AUD-B2 / A11, GDD §2.4) ----- */
@@ -672,7 +694,7 @@ export class PlayScreen implements Screen {
       this.earnings = { stars: daily.stars, gold: 0, crystals: 0, notes: [], replayCapped: false };
       const ui = this.buildUi();
       this.gestures.reset();
-      this.present(new ResultScreen(this.app, { state: this.state, level: this.level, ui, earnings: this.earnings, continued: this.continued, achievements: { unlocked: [], crystals: 0 }, challenge: this.challenge, daily }));
+      this.present({ state: this.state, level: this.level, ui, earnings: this.earnings, continued: this.continued, achievements: { unlocked: [], crystals: 0 }, challenge: this.challenge, daily });
       return;
     }
     if (this.challenge) {
@@ -686,7 +708,7 @@ export class PlayScreen implements Screen {
       this.earnings = { stars: daily.stars, gold: daily.gold, crystals: daily.crystals, notes: [], replayCapped: false };
       const ui = this.buildUi();
       this.gestures.reset();
-      this.present(new ResultScreen(this.app, { state: this.state, level: this.level, ui, earnings: this.earnings, continued: this.continued, achievements, challenge: this.challenge, daily }));
+      this.present({ state: this.state, level: this.level, ui, earnings: this.earnings, continued: this.continued, achievements, challenge: this.challenge, daily });
       return;
     }
     if (this.weekly) {
@@ -696,35 +718,35 @@ export class PlayScreen implements Screen {
       this.earnings = { stars: weeklyOutcome.stars, gold: weeklyOutcome.gold, crystals: weeklyOutcome.crystals, notes: [], replayCapped: false };
       const ui = this.buildUi();
       this.gestures.reset();
-      this.present(new ResultScreen(this.app, { state: this.state, level: this.level, ui, earnings: this.earnings, continued: this.continued, achievements, weekly: this.weekly, weeklyOutcome }));
+      this.present({ state: this.state, level: this.level, ui, earnings: this.earnings, continued: this.continued, achievements, weekly: this.weekly, weeklyOutcome });
       return;
     }
     this.earnings = recordResult(this.app.save, this.level, outcome, elapsed);
     const achievements = evaluateAchievements(this.app.save, this.match);
     const ui = this.buildUi(); // after recordResult so the totals are final
     this.gestures.reset();
-    this.present(
-      new ResultScreen(this.app, {
-        state: this.state,
-        level: this.level,
-        ui,
-        earnings: this.earnings,
-        continued: this.continued,
-        achievements,
-        // GDD §2.4: a Retreat is the player's choice to leave — no Continue offer on its result
-        resume: this.retreated ? undefined : () => this.resumeFromSnapshot(),
-        retreated: this.retreated || undefined,
-      }),
-    );
+    this.present({
+      state: this.state,
+      level: this.level,
+      ui,
+      earnings: this.earnings,
+      continued: this.continued,
+      achievements,
+      // GDD §2.4: a Retreat is the player's choice to leave — no Continue offer on its result
+      resume: this.retreated ? undefined : () => this.resumeFromSnapshot(),
+      retreated: this.retreated || undefined,
+    });
   }
 
   /**
    * AUD-F4: the result screen after `RESULT_BEAT_MS` of the world still drawing the last capture (the
    * save is already written); at once under reduced motion or after a Retreat (no capture to watch).
+   * PERF-11: either way only once the result chunk is in (`showResult`).
    */
-  private present(screen: ResultScreen): void {
-    if (this.retreated || prefersReducedMotion()) this.app.go(screen);
-    else this.pendingResult = { screen, at: this.nowMs };
+  private present(info: ResultInfo): void {
+    const now = this.retreated || prefersReducedMotion();
+    const pending = { info, at: now ? this.nowMs - RESULT_BEAT_MS : this.nowMs, failures: 0 };
+    if (!now || !this.showResult(pending)) this.pendingResult = pending;
   }
 
   /** Restart this level; a challenge keeps its seed and twist. */
@@ -848,7 +870,7 @@ export class PlayScreen implements Screen {
     this.targeting = false;
     if (!this.payBooster(kind)) return false;
     this.command({ type: 'booster', owner: 'player', booster: kind });
-    playSfx('upgrade');
+    playSfx(kind); // AUD-F3: its own cast sound ('freeze' / 'overdrive'; airstrike returned above)
     return true;
   }
 
@@ -955,7 +977,11 @@ export class PlayScreen implements Screen {
 
   /** Platform back (main.ts `onBack`): swallowed during the result beat; on the stalemate card it is Keep playing (GDD §2.4); false when it did nothing here. */
   back(): boolean {
-    if (this.pendingResult) return true; // AUD-F4: the result beat ignores input, back included
+    if (this.pendingResult) {
+      // AUD-F4: the result beat ignores input, back included — PERF-11: unless the result chunk failed (the result is booked)
+      if (this.pendingResult.failures > 0) this.app.goLevels();
+      return true;
+    }
     if (!this.stallUp) return false;
     this.keepPlaying();
     return true;

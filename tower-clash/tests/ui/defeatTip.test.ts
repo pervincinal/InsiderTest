@@ -11,7 +11,7 @@ import { createAdSession } from '../../src/economy/adsFlow';
 import type { SaveData } from '../../src/ui/save';
 import { defaultSave, setSaveStorageForTests } from '../../src/ui/save';
 import type { App, Screen } from '../../src/ui/screens';
-import { ResultScreen, noteResult, resetDefeatStreakForTests } from '../../src/ui/screens';
+import { ResultScreen, noteResult, resetDefeatStreakForTests } from '../../src/ui/result';
 import { levelLesson, registerDictionary, setLanguage } from '../../src/ui/i18n';
 import { az } from '../../src/ui/locales/az';
 import { en } from '../../src/ui/locales/en';

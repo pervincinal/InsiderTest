@@ -19,3 +19,5 @@ registerAi(ai);
 // (src/ui/tutorialChunk.ts); tests build tutorials and play screens directly
 registerEnglish(enTutorial);
 registerTutorialSteps(LATE_STEPS);
+// PERF-11: not the result chunk (src/ui/result.ts): its graph reaches src/native/index.ts, which the provider tests
+// mock — a play-to-result test imports tests/registerResult.ts instead

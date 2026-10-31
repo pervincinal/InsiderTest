@@ -137,11 +137,12 @@ const levelNodes = (): Target[] => Array.from({ length: 12 }, (_, i) => t(`node 
 
 function settings(): Target[] {
   const top: readonly [number, number] = [0, SETTINGS_BANDS.topEnd];
-  // AUD-U2: the body scrolls when it is taller than the screen (About with both rows ends at 1350): its band is the content
+  // AUD-U2: the body scrolls when it is taller than the screen (About with both rows ends at 1400 since AUD-F6): its band is the content
   const body: readonly [number, number] = [SETTINGS_BANDS.topEnd, 2000];
   const about = settingsAboutLayout(true, true);
   return [
     t('SETTINGS.back', SETTINGS.back, top),
+    t('SETTINGS.music', SETTINGS.music, body), // AUD-F6
     t('SETTINGS.sound', SETTINGS.sound, body),
     t('SETTINGS.colorBlind', SETTINGS.colorBlind, body),
     ...segments('SETTINGS.motion', SETTINGS.motion, MOTION_SEGMENTS.length, body),

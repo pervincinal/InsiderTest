@@ -97,7 +97,7 @@ describe('entry points (layout.ts SETTINGS.howto, PAUSE.howto)', () => {
     // the rects the e2e specs mirror (AUD-U1 re-spaced the rows 88 apart; e2e/layers.spec.ts follows)
     expect(PAUSE.resume).toEqual({ x: 210, y: 560, w: 300, h: 80 });
     expect(PAUSE.speed).toEqual({ x: 210, y: 660, w: 300, h: 64 });
-    expect(SETTINGS.language).toEqual({ x: 86, y: 664, w: 548, h: 56 });
+    expect(SETTINGS.language).toEqual({ x: 86, y: 744, w: 548, h: 56 }); // AUD-F6: the Music row moved every settings row below it 80
   });
 });
 

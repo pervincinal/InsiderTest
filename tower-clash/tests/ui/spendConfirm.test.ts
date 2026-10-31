@@ -15,7 +15,7 @@ import { CRYSTAL_SERVICES } from '../../src/economy/catalog';
 import type { SaveData } from '../../src/ui/save';
 import { defaultSave, setSaveStorageForTests } from '../../src/ui/save';
 import type { App, StartOptions } from '../../src/ui/screens';
-import { ResultScreen, resetDefeatStreakForTests } from '../../src/ui/screens';
+import { ResultScreen, resetDefeatStreakForTests } from '../../src/ui/result';
 import { ShopScreen } from '../../src/ui/shop';
 import { en } from '../../src/ui/locales/en';
 import { az } from '../../src/ui/locales/az';

@@ -134,7 +134,9 @@ export const tr: Dictionary = {
   'share.unavailable': 'Paylaşım kullanılamıyor',
 
   'settings.title': 'AYARLAR',
-  'settings.sound': 'Ses',
+  'settings.music': 'Müzik',
+  'settings.musicSub': 'Sakin sentez melodisi',
+  'settings.effects': 'Efektler',
   'settings.soundSub': 'Sentez efektleri ve melodiler',
   'settings.colorBlind': 'Renk körlüğü',
   'settings.colorBlindSub': 'Ayırt edilir oyuncu renkleri',
@@ -169,6 +171,8 @@ export const tr: Dictionary = {
   'settings.copyFailed': 'Destek kimliği kopyalanamadı',
   'settings.privacyUnavailable': 'Gizlilik seçenekleri burada yok',
   'settings.privacyFailed': 'Gizlilik seçenekleri açılamadı',
+  'settings.perfOn': 'Kare süresi paneli açık',
+  'settings.perfOff': 'Kare süresi paneli kapalı',
 
   'achievements.title': 'BAŞARIMLAR',
   'achievements.summary': '{unlocked}/{total} açıldı  ·  {crystals} kristal kazanıldı',

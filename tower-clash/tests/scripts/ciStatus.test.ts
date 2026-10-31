@@ -27,8 +27,9 @@ const red = (id: number, name: string): Run => ({ id, name, status: 'completed',
 const CHECK = 'check + playtest + build + e2e';
 const SHARD1 = 'e2e (shard 1/2)';
 const SHARD2 = 'e2e (shard 2/2)';
-// tower-clash-ci.yml (QA-26: the check job + the two-shard chromium e2e matrix), Pages build, Android debug
-const GREEN_RUNS = [ok(1, CHECK), ok(7, SHARD1), ok(8, SHARD2), ok(2, 'build web app'), ok(3, 'debug APK')];
+const WEBKIT = 'e2e (webkit)';
+// tower-clash-ci.yml (QA-26: the check job + the two-shard chromium e2e matrix; AUD-Q5: the WebKit job), Pages build, Android debug
+const GREEN_RUNS = [ok(1, CHECK), ok(7, SHARD1), ok(8, SHARD2), ok(9, WEBKIT), ok(2, 'build web app'), ok(3, 'debug APK')];
 const PAGES_RED = red(4, 'deploy to GitHub Pages');
 const IOS_LANES = [red(5, 'signed archive + App Store Connect upload'), red(6, 'App Store Connect metadata / review submission')];
 const NOTES: Record<number, Note[]> = {
@@ -95,7 +96,7 @@ describe('scripts/ciStatus.mjs — CI per job, not per workflow (QA-18, BUG-26)'
     expect(r.stderr).toBe('');
     expect(r.status).toBe(0);
     for (const j of GREEN_RUNS) expect(r.stdout).toContain(`  ${j.name}: success\n`);
-    expect(r.stdout).toContain('CI: 5 job(s) green, expected-red: none (efeb5e7)');
+    expect(r.stdout).toContain('CI: 6 job(s) green, expected-red: none (efeb5e7)');
     const calls = readCalls(dir);
     expect(calls[0]).toBe(`api repos/pervincinal/InsiderTest/commits/${SHA}/check-runs?per_page=100&filter=latest`);
     expect(calls.some((c) => c.includes('/actions/'))).toBe(false); // the proxy blocks /actions/*
@@ -107,7 +108,7 @@ describe('scripts/ciStatus.mjs — CI per job, not per workflow (QA-18, BUG-26)'
     expect(r.status).toBe(1);
     expect(r.stdout).toContain(`  deploy to GitHub Pages: failure — ${PAGES_404}\n`);
     expect(r.stdout).not.toContain('second line');
-    expect(r.stdout).toContain('CI: 5 job(s) green, expected-red: none; RED: deploy to GitHub Pages (efeb5e7)');
+    expect(r.stdout).toContain('CI: 6 job(s) green, expected-red: none; RED: deploy to GitHub Pages (efeb5e7)');
   });
 
   it('red release lanes matching --allow are "expected" → exit 0 when nothing else failed', () => {
@@ -117,7 +118,7 @@ describe('scripts/ciStatus.mjs — CI per job, not per workflow (QA-18, BUG-26)'
     expect(r.stdout).toContain(`  App Store Connect metadata / review submission: failure (expected) — ${NO_SECRETS}\n`);
     expect(r.stdout).not.toContain('Process completed with exit code');
     expect(r.stdout).toContain(
-      'CI: 5 job(s) green, expected-red: App Store Connect metadata / review submission, signed archive + App Store Connect upload (efeb5e7)',
+      'CI: 6 job(s) green, expected-red: App Store Connect metadata / review submission, signed archive + App Store Connect upload (efeb5e7)',
     );
   });
 
@@ -214,7 +215,7 @@ describe('scripts/ciStatus.mjs --annotations (QA-19)', () => {
         '      failure [Register one device] Apple cannot generate the development profile …\n' +
         '              second line\n' +
         '      failure Process completed with exit code 65.\n' +
-        'CI: 5 job(s) green, expected-red: none; RED: signed archive + App Store Connect upload (efeb5e7)\n',
+        'CI: 6 job(s) green, expected-red: none; RED: signed archive + App Store Connect upload (efeb5e7)\n',
     );
     expect(r.stdout).not.toContain('Node.js 20 is deprecated');
   });
@@ -257,8 +258,8 @@ describe('scripts/ciStatus.mjs required job groups (QA-26)', () => {
     const { gh, dir } = fakeGh([others]);
     const r = run(gh);
     expect(r.status).toBe(1);
-    expect(r.stdout).toContain(`  ${SHARD2}: missing — no check run, required with ${CHECK}, ${SHARD1}\n`);
-    expect(r.stdout).toContain(`CI: 4 job(s) green, expected-red: none; RED: ${SHARD2} (efeb5e7)`);
+    expect(r.stdout).toContain(`  ${SHARD2}: missing — no check run, required with ${CHECK}, ${SHARD1}, ${WEBKIT}\n`);
+    expect(r.stdout).toContain(`CI: 5 job(s) green, expected-red: none; RED: ${SHARD2} (efeb5e7)`);
     expect(readCalls(dir).some((c) => c.includes('/annotations'))).toBe(false);
   });
 
@@ -271,7 +272,7 @@ describe('scripts/ciStatus.mjs required job groups (QA-26)', () => {
     const waited = run(fakeGh([[running, ...others.slice(1)], [running, ...others.slice(1)], GREEN_RUNS]).gh, '--wait', '10');
     expect(waited.status).toBe(0);
     expect(waited.stdout).toContain(`  ${SHARD2}: success\n`);
-    expect(waited.stdout).toContain('CI: 5 job(s) green, expected-red: none (efeb5e7)');
+    expect(waited.stdout).toContain('CI: 6 job(s) green, expected-red: none (efeb5e7)');
   });
 
   it('a required shard concluding skipped is red (the e2e did not run), other skipped jobs stay green', () => {
@@ -281,6 +282,14 @@ describe('scripts/ciStatus.mjs required job groups (QA-26)', () => {
     expect(r.stdout).toContain(`  ${SHARD1}: skipped — required job did not run\n`);
     expect(r.stdout).toContain('  debug APK: skipped\n');
     expect(r.stdout).toContain(`; RED: ${SHARD1} (efeb5e7)`);
+  });
+
+  // AUD-Q5: the WebKit job is part of the group — absent once the rest finished, the line is red
+  it('the e2e (webkit) job with no check run after the rest of the group finished → red "missing", exit 1', () => {
+    const r = run(fakeGh([GREEN_RUNS.filter((j) => j.name !== WEBKIT)]).gh);
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain(`  ${WEBKIT}: missing — no check run, required with ${CHECK}, ${SHARD1}, ${SHARD2}\n`);
+    expect(r.stdout).toContain(`; RED: ${WEBKIT} (efeb5e7)`);
   });
 
   it('a push the CI workflow did not run for (path filters) requires none of the group', () => {
@@ -302,7 +311,7 @@ describe('scripts/ciStatus.mjs required job groups (QA-26)', () => {
     const r = run(gh, '--help');
     expect(r.status).toBe(0);
     expect(r.stdout).toMatch(/^Usage: {2}node scripts\/ciStatus\.mjs /m);
-    expect(r.stdout).toContain(`Required together:\n  ${CHECK} | ${SHARD1} | ${SHARD2}\n`);
+    expect(r.stdout).toContain(`Required together:\n  ${CHECK} | ${SHARD1} | ${SHARD2} | ${WEBKIT}\n`);
     expect(() => readCalls(dir)).toThrow();
   });
 });

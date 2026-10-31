@@ -134,7 +134,9 @@ export const ru: Dictionary = {
   'share.unavailable': 'Поделиться недоступно',
 
   'settings.title': 'НАСТРОЙКИ',
-  'settings.sound': 'Звук',
+  'settings.music': 'Музыка',
+  'settings.musicSub': 'Спокойная синт-мелодия',
+  'settings.effects': 'Эффекты',
   'settings.soundSub': 'Синт-эффекты и мелодии',
   'settings.colorBlind': 'Дальтонизм',
   'settings.colorBlindSub': 'Различимые цвета игроков',
@@ -169,6 +171,8 @@ export const ru: Dictionary = {
   'settings.copyFailed': 'Не удалось скопировать ID',
   'settings.privacyUnavailable': 'Настройки конфиденциальности здесь недоступны',
   'settings.privacyFailed': 'Не удалось открыть настройки конфиденциальности',
+  'settings.perfOn': 'Панель времени кадра включена',
+  'settings.perfOff': 'Панель времени кадра выключена',
 
   'achievements.title': 'ДОСТИЖЕНИЯ',
   'achievements.summary': 'Открыто {unlocked} из {total}  ·  {crystals|получен|получено|получено} {crystals} {crystals|кристалл|кристалла|кристаллов}',

@@ -40,8 +40,13 @@ const budgetArg = args.indexOf('--budget');
  * save backup / read-only paths, the native save mirror's eager gate): 81.3 → 82.3 kB. Budget 82 → 84 kB
  * (Producer decision, AUD summary): the audit's P1 set is worth 1 kB; PERF-11 brings the eager chunk back
  * under 82 kB (candidates: the debug surface's eager hooks, AUD-Q18; the boot path's duplicated locale glue).
+ * 2026-10-30 / 31 (PERF-11): 85.0 → 80.7 kB — lazy chunks for the purchases flows and the Daily / Weekly
+ * generator (day 1), then the result screen (src/ui/result.ts + native/review.ts, loaded by src/ui/resultChunk.ts,
+ * warmed at idle and at level start, the 600 ms result beat covering any download still in flight) and the store
+ * boot (src/economy/store.ts + the web fake, initialised at idle / on the shop's first open). Budget 84 → 82 kB
+ * (≈ 1.3 kB headroom; features added since must stay at 0 eager bytes or bring their own savings).
  */
-const DEFAULT_GZIP_BUDGET = 84 * 1024;
+const DEFAULT_GZIP_BUDGET = 82 * 1024;
 /** Package name fragments that must never appear in the eagerly loaded chunks. */
 const FORBIDDEN_STRINGS = ['purchases-capacitor', 'capacitor-community/admob', 'capacitor-community/in-app-review'];
 

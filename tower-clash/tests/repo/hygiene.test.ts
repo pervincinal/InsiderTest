@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -153,6 +154,11 @@ describe('tower-clash/e2e screenshot destination (AUD-Q15)', () => {
  * stall fails in seconds naming its step instead of eating the test budget.
  */
 const PW_CONFIG = readFileSync(new URL('../../playwright.config.ts', import.meta.url), 'utf8');
+/**
+ * Output dir for the `playwright test --list` runs below: the config takes QA-28's run lock on its output dir, and
+ * a `--list` on the default test-results/ would fail fast while someone's default `npm run e2e` is live.
+ */
+const LIST_OUTPUT = path.join(tmpdir(), `tower-clash-hygiene-list-${process.pid}`);
 const pwNumber = (key: string): number => {
   const m = new RegExp(`${key}:\\s*([\\d_]+)`).exec(PW_CONFIG);
   return m ? Number(m[1]!.replace(/_/g, '')) : NaN;
@@ -183,7 +189,7 @@ describe('tower-clash/playwright.config.ts (BUG-16)', () => {
     expect(pwa).toMatch(/outputDir:\s*path\.join\(OUTPUT_DIR,\s*'pwa'\)/);
     expect(blocks.filter((p) => /retries:/.test(p))).toHaveLength(1);
     const chromium = blocks.find((p) => /name:\s*'chromium'/.test(p)) ?? '';
-    expect(chromium).toMatch(/testIgnore:\s*\/\(webview\|pwa\)\\\.spec\\\.ts\$\//);
+    expect(chromium).toMatch(/testIgnore:\s*\/\(webview\|pwa\|webkit\)\\\.spec\\\.ts\$\//); // AUD-Q5: + webkit.spec.ts
     expect(PW_CONFIG).toMatch(/process\.env\.PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS \?\?= '1'/);
     expect(E2E_SPECS).toContain('pwa.spec.ts');
     expect(readFileSync(new URL('pwa.spec.ts', E2E_DIR), 'utf8')).toMatch(/test\.use\(\{ serviceWorkers: 'allow' \}\)/);
@@ -523,7 +529,7 @@ describe('.github/workflows/tower-clash-ci.yml e2e shards (QA-26)', () => {
       const r = spawnSync(process.execPath, [cli, 'test', '--project=chromium', '--list', `--shard=${shard}`], {
         cwd: fileURLToPath(new URL('../../', import.meta.url)),
         encoding: 'utf8',
-        env: { ...process.env, CI: '' },
+        env: { ...process.env, CI: '', PW_OUTPUT: LIST_OUTPUT },
       });
       expect(r.status, r.stderr).toBe(0);
       return [...new Set([...r.stdout.matchAll(/\[chromium\] › (\S+\.spec\.ts):\d+/g)].map((m) => m[1]!))].sort();
@@ -532,7 +538,7 @@ describe('.github/workflows/tower-clash-ci.yml e2e shards (QA-26)', () => {
     expect(one).toEqual(expect.arrayContaining(['camera.spec.ts', 'gestures430.spec.ts', 'integrity/content.spec.ts', 'economy.spec.ts', 'daily.spec.ts']));
     expect(two).toEqual(expect.arrayContaining(['shopLayout.spec.ts', 'shareLocales.spec.ts', 'smoke.spec.ts', 'lazy.spec.ts', 'weekly.spec.ts', 'lessonFit.spec.ts']));
     // every chromium spec in exactly one shard
-    const chromium = E2E_SPECS.filter((f) => !/(webview|pwa)\.spec\.ts$/.test(f));
+    const chromium = E2E_SPECS.filter((f) => !/(webview|pwa|webkit)\.spec\.ts$/.test(f));
     expect([...one, ...two].sort()).toEqual(chromium);
   }, 30_000);
 
@@ -542,7 +548,109 @@ describe('.github/workflows/tower-clash-ci.yml e2e shards (QA-26)', () => {
     const group = /Required together:\n {2}(.*)\n/.exec(help.stdout)?.[1]?.split(' | ');
     const shards = [...job('e2e').matchAll(/\n {10}- shard: (\d+)\n/g)].map((m) => `e2e (shard ${m[1]}/2)`);
     expect(shards).toEqual(['e2e (shard 1/2)', 'e2e (shard 2/2)']);
-    expect(group).toEqual(['check + playtest + build + e2e', ...shards]);
+    // AUD-Q5: the WebKit job is required with them
+    const webkit = /^ {4}name: (.*)\n/.exec(job('e2e-webkit'))?.[1];
+    expect(webkit).toBe('e2e (webkit)');
+    expect(group).toEqual(['check + playtest + build + e2e', ...shards, webkit]);
+  });
+});
+
+/*
+ * AUD-Q5 (2026-10-31): zero WebKit in automation — every Playwright project was Chromium and the iOS
+ * simulator workflow built App.app without ever launching it. Guards:
+ * - playwright.config.ts has a `webkit-iphone` project: Playwright WebKit on the gestures430 phone (430 × 932,
+ *   DPR 3, touch, the same iPhone UA), e2e/webkit.spec.ts only, and `launchOptions: {}` so WebKit never gets
+ *   the local Chromium headless-shell `executablePath`; chromium ignores the spec;
+ * - the gate (e2e/tools/webkit.ts): the tests run when `PW_WEBKIT=1` or WebKit is installed, else they are
+ *   skipped — and `--list --project=webkit-iphone` lists them in this container, where WebKit is absent;
+ * - CI: job `e2e (webkit)` installs WebKit (the only `install … webkit`), builds its own dist/, runs the project
+ *   with `PW_WEBKIT=1` on its own port / output dir, uploads artefacts on failure, parallel to `verify`;
+ * - tower-clash-ios.yml boots the built app once (boot, install, launch, 8 s, screenshot, terminate) after
+ *   the build and keeps the screenshot; only the screenshot may fail quietly.
+ */
+describe('WebKit project and iOS simulator boot (AUD-Q5)', () => {
+  const CI = readWorkflow('tower-clash-ci.yml');
+  const job = (yaml: string, id: string): string => new RegExp(`\\n  ${id}:\\n([\\s\\S]*?)(?=\\n  [a-z][\\w-]*:\\n|$)`).exec(yaml)?.[1] ?? '';
+  const WEBKIT_TOOL = readFileSync(new URL('../../e2e/tools/webkit.ts', import.meta.url), 'utf8');
+  const WEBKIT_SPEC = readFileSync(new URL('webkit.spec.ts', E2E_DIR), 'utf8');
+
+  it('the webkit-iphone project: Playwright WebKit on the 430×932 DPR-3 touch phone, webkit.spec.ts only, no Chromium executablePath', () => {
+    const projects = /\n  projects: \[([\s\S]*?)\n  \],/.exec(PW_CONFIG)?.[1] ?? '';
+    const block = projects.split(/\n    \{\n/).find((p) => /name:\s*'webkit-iphone'/.test(p)) ?? '';
+    expect(block).toMatch(/browserName: 'webkit'/);
+    expect(block).toMatch(/viewport: \{ width: 430, height: 932 \}/);
+    expect(block).toMatch(/deviceScaleFactor: 3,/);
+    expect(block).toMatch(/isMobile: true,\s*hasTouch: true,/);
+    expect(block).toMatch(/userAgent: IPHONE_UA,/);
+    expect(block).toMatch(/launchOptions: \{\},/);
+    expect(block).toMatch(/testMatch: \/webkit\\\.spec\\\.ts\$\//);
+    expect(PW_CONFIG).toMatch(/\nimport \{ IPHONE_UA \} from '\.\/e2e\/tools\/webkit';\n/);
+    // the UA is the one gestures430.spec.ts models the stakeholder's phone with
+    const ua = (src: string) => /const IPHONE_UA =\s*'([^']+)'/.exec(src)?.[1];
+    expect(ua(WEBKIT_TOOL)).toBeTruthy();
+    expect(ua(WEBKIT_TOOL)).toBe(ua(readFileSync(new URL('gestures430.spec.ts', E2E_DIR), 'utf8')));
+  });
+
+  it('the gate: PW_WEBKIT=1 or an installed WebKit runs the tests; the spec skips on nothing else', () => {
+    expect(WEBKIT_TOOL).toContain("export const WEBKIT_REQUIRED = process.env.PW_WEBKIT === '1';");
+    expect(WEBKIT_TOOL).toContain('export const WEBKIT_RUNS = WEBKIT_REQUIRED || webkitInstalled();');
+    expect(WEBKIT_TOOL).toMatch(/return exe !== '' && existsSync\(exe\);/);
+    const skips = codeLines(WEBKIT_SPEC).filter(({ line }) => /\b(test|testInfo|info)\.(skip|fixme)\(/.test(line));
+    expect(skips.map(({ line }) => line.trim())).toEqual(['test.skip(!WEBKIT_RUNS, WEBKIT_SKIP_REASON);']);
+  });
+
+  it('`--list --project=webkit-iphone` works without the browser and lists the 4–6 WebKit tests, all from webkit.spec.ts', () => {
+    const cli = fileURLToPath(new URL('../../node_modules/@playwright/test/cli.js', import.meta.url));
+    const r = spawnSync(process.execPath, [cli, 'test', '--project=webkit-iphone', '--list'], {
+      cwd: fileURLToPath(new URL('../../', import.meta.url)),
+      encoding: 'utf8',
+      env: { ...process.env, CI: '', PW_WEBKIT: '', PW_OUTPUT: LIST_OUTPUT },
+    });
+    expect(r.status, r.stderr).toBe(0);
+    const listed = [...r.stdout.matchAll(/\[webkit-iphone\] › (\S+\.spec\.ts):\d+/g)].map((m) => m[1]);
+    expect(listed.length).toBeGreaterThanOrEqual(4);
+    expect(listed.length).toBeLessThanOrEqual(6);
+    expect(new Set(listed)).toEqual(new Set(['webkit.spec.ts']));
+  }, 30_000);
+
+  it('CI job `e2e (webkit)`: own build, installs WebKit (only here), runs the project with PW_WEBKIT=1 on port 4194, artefacts on failure', () => {
+    const wk = job(CI, 'e2e-webkit');
+    expect(wk).toContain('    name: e2e (webkit)\n');
+    expect(wk).not.toMatch(/\n    needs:/);
+    const r = runBlocks(wk).map((b) => b.run.trim());
+    const at = (cmd: string) => r.indexOf(cmd);
+    const RUN = 'PW_WEBKIT=1 PW_PORT=4194 PW_OUTPUT=test-results/webkit npx playwright test --project=webkit-iphone';
+    expect(at('npm ci')).toBeGreaterThanOrEqual(0);
+    expect(at('npm run build')).toBeGreaterThan(at('npm ci'));
+    expect(at('npx playwright install --with-deps webkit')).toBeGreaterThan(at('npm run build'));
+    expect(at(RUN)).toBeGreaterThan(at('npx playwright install --with-deps webkit'));
+    expect(stepText(wk, 'Browser e2e (WebKit, iPhone-class screen)')).not.toMatch(/continue-on-error/);
+    expect(stepText(wk, 'Upload Playwright report, traces and screenshots')).toMatch(/\n {8}if: failure\(\)\n[\s\S]*name: playwright-report-e2e-webkit\n/);
+    // WebKit is installed and the project run in this job only
+    const all = runBlocks(CI).map((b) => b.run.trim());
+    expect(all.filter((x) => /playwright install .*webkit/.test(x))).toEqual(['npx playwright install --with-deps webkit']);
+    expect(all.filter((x) => x.includes('webkit-iphone'))).toEqual([RUN]);
+  });
+
+  it('tower-clash-ios.yml boots the built app once: boot, install, launch, 8 s, screenshot, terminate — only the screenshot may fail quietly', () => {
+    const IOS = readWorkflow('tower-clash-ios.yml');
+    const NAME = 'Boot the app in an iPhone simulator (install, launch, screenshot)';
+    const steps = runBlocks(IOS).map((b) => b.step);
+    expect(steps.indexOf(NAME)).toBeGreaterThan(steps.indexOf('Build for iOS Simulator'));
+    const run = runBlocks(IOS).find((b) => b.step === NAME)?.run ?? '';
+    expect(run.startsWith('set -euo pipefail\n')).toBe(true);
+    const order = ['xcrun simctl list --json devices available', 'xcrun simctl boot "$UDID"', 'xcrun simctl bootstatus "$UDID"', 'xcrun simctl install "$UDID" "$APP"', 'xcrun simctl launch "$UDID" "$BUNDLE_ID"', 'sleep 8', 'xcrun simctl io "$UDID" screenshot', 'xcrun simctl terminate "$UDID" "$BUNDLE_ID"'];
+    const idx = order.map((s) => run.indexOf(s));
+    expect(idx.every((i) => i >= 0), order.filter((_, k) => idx[k]! < 0).join(', ')).toBe(true);
+    expect([...idx].sort((a, b) => a - b)).toEqual(idx);
+    // `|| true` only on the screenshot; a dead app at terminate fails the step
+    expect(run.split('\n').filter((l) => l.includes('|| true')).map((l) => l.trim())).toEqual(['xcrun simctl io "$UDID" screenshot "$OUT/launch-8s.png" || true']);
+    expect(run).toMatch(/if ! xcrun simctl terminate "\$UDID" "\$BUNDLE_ID"; then\n[\s\S]*?\n {2}exit 1\n/);
+    expect(stepText(IOS, NAME)).not.toMatch(/continue-on-error/);
+    const upload = stepText(IOS, 'Upload simulator launch screenshot');
+    expect(upload).toMatch(/\n {8}if: always\(\)\n/);
+    expect(upload).toContain('name: tower-clash-ios-simulator-launch');
+    expect(upload).toContain('path: ${{ runner.temp }}/simulator');
   });
 });
 
@@ -726,5 +834,72 @@ describe('release workflows start from their request file, never from their own 
     expect(on).not.toContain(file);
     expect(on).not.toContain('.github/workflows');
     expect(on).not.toMatch(/pull_request|schedule|paths-ignore/);
+  });
+});
+
+/*
+ * PERF-11 (eager bundle back under 82 kB): the result screen (src/ui/result.ts + the review hook it
+ * alone calls) and the store provider (src/economy/store.ts + the web fake) are lazy chunks. A static
+ * import from anything src/main.ts reaches would silently fold them back into the entry chunk, so pin
+ * the graph, the loaders and the budget (scripts/checkBundle.mjs).
+ */
+describe('PERF-11 lazy chunks: result screen and store boot', () => {
+  const SRC = path.resolve(fileURLToPath(new URL('../../src/', import.meta.url)));
+  const readTs = (f: string): string | null => {
+    try {
+      return readFileSync(f, 'utf8');
+    } catch {
+      return null;
+    }
+  };
+  const resolveTs = (from: string, spec: string): string | null => {
+    if (!spec.startsWith('.')) return null;
+    const base = path.resolve(path.dirname(from), spec);
+    for (const c of [`${base}.ts`, path.join(base, 'index.ts')]) if (readTs(c) !== null) return c;
+    return null;
+  };
+  /** Files reachable from `entry` through value imports / re-exports (not `import type`, not `import()`). */
+  const eagerGraph = (entry: string): Set<string> => {
+    const seen = new Set<string>();
+    const stack = [entry];
+    while (stack.length) {
+      const f = stack.pop()!;
+      if (seen.has(f)) continue;
+      seen.add(f);
+      for (const m of (readTs(f) ?? '').matchAll(/^\s*(?:import|export)\s+(?!type\b)(?:[^;'"]*?\s+from\s+)?'([^']+)'/gm)) {
+        const t = resolveTs(f, m[1]!);
+        if (t) stack.push(t);
+      }
+    }
+    return seen;
+  };
+  const eager = eagerGraph(path.join(SRC, 'main.ts'));
+  const src = (f: string): string => readTs(path.join(SRC, f)) ?? '';
+
+  it('src/main.ts reaches none of the moved modules statically', () => {
+    expect(eager.size).toBeGreaterThan(50);
+    expect(eager.has(path.join(SRC, 'ui/resultChunk.ts'))).toBe(true);
+    for (const f of ['ui/result.ts', 'native/review.ts', 'economy/store.ts', 'economy/providers/fakeStore.ts']) expect(eager.has(path.join(SRC, f)), f).toBe(false);
+  });
+
+  it('the result chunk has one loader (src/ui/resultChunk.ts), warmed by the title idle preload and the play screen start', () => {
+    const loaders = readdirSync(SRC, { recursive: true })
+      .map(String)
+      .filter((f) => f.endsWith('.ts') && /\bimport\(\s*'\.\/result'\s*\)/.test(src(f)));
+    expect(loaders.map((f) => f.split(path.sep).join('/'))).toEqual(['ui/resultChunk.ts']);
+    expect(src('main.ts')).toMatch(/whenIdle\(\(\) => \{[^}]*warmResultChunk\(\)/);
+    expect(src('ui/play.ts')).toMatch(/StalemateCardWatch\([^)]*\);\n\s*warmResultChunk\(\);/);
+    // the play screen opens the result only through the chunk, after the beat (never a blank: it waits)
+    expect(src('ui/play.ts')).not.toMatch(/new ResultScreen\(/);
+  });
+
+  it('the store is initialised from an idle import() at boot and on the shop\'s enter, never by a static import', () => {
+    expect(src('main.ts')).toMatch(/whenIdle\(\(\) => void loadChunk\('store', \(\) => import\('\.\/economy\/store'\)\)\.then\(\(m\) => m\.getStore\(\)\.init\(\)/);
+    expect(src('ui/shop.ts')).toMatch(/enter\(\): void \{[\s\S]{0,400}?void getStore\(\)\.init\(\);/);
+  });
+
+  it('scripts/checkBundle.mjs keeps the 82 kB budget', () => {
+    const script = readFileSync(new URL('../../scripts/checkBundle.mjs', import.meta.url), 'utf8');
+    expect(script).toMatch(/\nconst DEFAULT_GZIP_BUDGET = 82 \* 1024;\n/);
   });
 });

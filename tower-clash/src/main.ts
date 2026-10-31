@@ -18,10 +18,11 @@ import type { PointerPoint } from './input/pointer';
 import type { SaveData } from './ui/save';
 import { currentLevelIndex, isSaveReadOnly, loadSave, saveLoadIssue, writeSave, writeSaveAtBoot } from './ui/save';
 import type { App, NativeInfoOverride, QueuedToast, Screen, StartOptions } from './ui/screens';
-import { ResultScreen, TitleScreen, beginMapFrame, endMapFrame, handOverToasts } from './ui/screens';
+import { TitleScreen, beginMapFrame, endMapFrame, handOverToasts } from './ui/screens';
 import { PlayScreen } from './ui/play';
 import { AI_CHUNK, aiLoaded, loadAi } from './ui/ai';
 import { preloadTutorialSteps } from './ui/tutorialChunk';
+import { warmResultChunk } from './ui/resultChunk';
 import { preloadCamera } from './render/camera';
 import { preloadTutorialBubble } from './render/tutorialDraw';
 import { applyMotionPref } from './ui/motion';
@@ -33,12 +34,12 @@ import { initNative, startSaveMirror } from './native/index';
 import type { ShopTab } from './render/menuLayout';
 import type { AdSession, FakeAdsProvider } from './economy/adsFlow';
 import { createAdSession, createFakeAds, setAdsProvider } from './economy/adsFlow';
-import { getStore } from './economy/store';
 import { getAds } from './economy/ads';
 import type { FakeStoreOptions } from './economy/providers/fakeStore';
 import type { GrantResult } from './economy/purchases';
 import type { DailyChallenge, WeeklyChallenge } from './daily/challenge';
 import { dayKeyOf, weekKeyOf } from './daily/core'; // not ./daily/challenge: the generator stays in the lazy chunks (PERF-11)
+import type { PerfOverlay, PerfOverlayStats } from './ui/perfOverlay';
 
 /**
  * The level map, shop, achievements and settings screens (and the menu drawing they need) are a
@@ -132,6 +133,12 @@ export interface TowerClashDebug {
   getText(key: string, params?: Record<string, string | number>): Promise<string>;
   /** Text of the current screen's toast while it is on screen, or null. */
   getToast(): string | null;
+  /**
+   * AUD-Q8 frame-time overlay (TF-13): whether it is switched on (`?perf=1` / `settings.perfOverlay`),
+   * its numbers once its lazy chunk drew a frame (else null), and on the settings screen the About
+   * card's version row (layout px) whose five taps within 2 s switch it (else null).
+   */
+  perf: { isOn(): boolean; getStats(): PerfOverlayStats | null; versionRow(): { x: number; y: number; w: number; h: number } | null };
   /**
    * What the last result-screen SHARE tap did (SHARE-1), or null before the first: the outcome of
    * the fallback chain, the share text, and the PNG's name, MIME type, byte size and pixel size.
@@ -291,6 +298,9 @@ export class TowerClashApp implements App {
   weekKeyOverride: string | null = null;
   /** Queued toasts of a screen the player left before they showed, waiting for the next menu screen (FE-9). */
   private carriedToasts: QueuedToast[] = [];
+  /** AUD-Q8: the frame-time overlay (src/ui/perfOverlay.ts, a lazy chunk) while `perfOverlayOn`. */
+  perf: PerfOverlay | null = null;
+  perfOverlayOn = false;
 
   constructor(canvas: HTMLCanvasElement, save: SaveData) {
     this.view = createView(canvas);
@@ -308,9 +318,15 @@ export class TowerClashApp implements App {
     initAudio(this.save);
     applyMotionPref(this.save.settings.reducedMotion);
     // Store / ads providers (fake store on the web; `?fakeads=1` installs the dev ads provider).
-    void getStore().init();
+    // PERF-11: the store provider (src/economy/store.ts + the web fake) is a lazy chunk, initialised when
+    // the browser is idle — queued here, ahead of the debug surface's idle hook (boot) — or by the shop's
+    // first open (ShopScreen.enter), whichever comes first. Nothing earlier reads it: purchases and
+    // restore live in the shop, and "remove ads" is the save's entitlement the interstitial gate reads.
+    whenIdle(() => void loadChunk('store', () => import('./economy/store')).then((m) => m.getStore().init(), () => undefined));
     void getAds().init();
-    if (new URLSearchParams(window.location.search).get('fakeads') === '1') this.setFakeAds(true, 1000);
+    const query = new URLSearchParams(window.location.search);
+    if (query.get('fakeads') === '1') this.setFakeAds(true, 1000);
+    this.setPerfOverlay(save.settings.perfOverlay === true || query.get('perf') === '1'); // AUD-Q8 (TF-13)
     void initNative({ onBack: () => this.onBack(), isTitleScreen: () => this.current.name === 'title' });
 
     const forward = <K extends 'down' | 'move' | 'up'>(k: K) => (p: PointerPoint) => this.current[k]?.(p);
@@ -465,6 +481,7 @@ export class TowerClashApp implements App {
       void this.loadLazy().catch(() => undefined);
       this.preloadLevel(LEVEL_META[currentLevelIndex(this.save, LEVEL_META)]?.id);
       void loadAi().catch(() => undefined); // PERF-9: the enemy AI, so the first PLAY is instant
+      warmResultChunk(); // PERF-11: the result screen, in (and in the worker's cache) before the first outcome
       void this.preloadCosmetics(); // equipped skins / theme, so the title and the first PLAY are already skinned
       void preloadCamera(); // PERF-9: the `?tilt=` perspective camera chunk, when one is asked for
     });
@@ -646,6 +663,13 @@ export class TowerClashApp implements App {
     return true;
   }
 
+  /** AUD-Q8: switch the frame-time overlay; its chunk is fetched on the first switch-on (the flag check is all the eager bundle holds). */
+  setPerfOverlay(on: boolean): void {
+    this.perfOverlayOn = on;
+    if (!on) this.perf = null;
+    else if (!this.perf) void loadChunk('perfOverlay', () => import('./ui/perfOverlay')).then((m) => void (this.perfOverlayOn && (this.perf ??= m.createPerfOverlay())), () => undefined);
+  }
+
   setFakeAds(on: boolean, delayMs = 0): void {
     this.fakeAds = on ? createFakeAds(delayMs) : null;
     setAdsProvider(this.fakeAds);
@@ -655,7 +679,7 @@ export class TowerClashApp implements App {
   backFromShop(): () => void {
     const from = this.current;
     if (from.name === 'shop') return () => this.goTitle();
-    if (from instanceof ResultScreen) return () => this.go(from);
+    if (from.name === 'result') return () => this.go(from);
     if (from.name === 'levelSelect') return () => this.goLevels();
     return () => this.goTitle();
   }
@@ -674,6 +698,7 @@ export class TowerClashApp implements App {
     this.current.draw(this.view, now);
     // AUD-Q3: a newer build's save is played read-only; the title says so for as long as it lasts
     if (this.current.name === 'title' && isSaveReadOnly()) this.lazy?.drawSaveNotice(this.view, this.palette());
+    this.perf?.frame(this, now); // AUD-Q8: over everything the screen drew
     this.preloadLazy(); // after the first paint; a no-op from then on
     requestAnimationFrame((f) => this.frame(f));
   }

@@ -27,7 +27,14 @@ export type MotionPref = 'auto' | 'on' | 'off';
 /** Rules v2 removed the send ratio; a `sendRatio` field in an older save is ignored (schema stays v3). */
 export interface Settings {
   colorBlind: boolean;
+  /** Settings → Effects (AUD-F6: the SFX + UI buses; the field kept its pre-split name, so no schema bump). */
   sound: boolean;
+  /**
+   * Settings → Music (AUD-F6). Optional, so no schema bump: absent = `sound` (a save from before the split
+   * keeps its choice — Sound off → both off); a non-boolean is dropped on load. The audio facade writes
+   * both fields on any change (src/audio/index.ts).
+   */
+  music?: boolean;
   reducedMotion: MotionPref;
   /** UI language (src/ui/i18n.ts). Absent until the first run detects it from the browser or the player picks one. */
   language?: Language;
@@ -42,6 +49,12 @@ export interface Settings {
    * is dropped on load.
    */
   textScale?: 1 | 1.25 | 1.5;
+  /**
+   * AUD-Q8: the frame-time overlay (src/ui/perfOverlay.ts) for the on-device check TF-13, switched by
+   * five taps on Settings → About's version line. Optional, so no schema bump: absent = off; only
+   * `true` survives a load.
+   */
+  perfOverlay?: boolean;
 }
 
 /** One-time purchases the player owns (ECONOMY.md §4). */
@@ -329,10 +342,12 @@ export function normalizeSave(raw: unknown): SaveData {
     const s = raw.settings;
     if (typeof s.colorBlind === 'boolean') out.settings.colorBlind = s.colorBlind;
     if (typeof s.sound === 'boolean') out.settings.sound = s.sound;
+    if (typeof s.music === 'boolean') out.settings.music = s.music;
     if (s.reducedMotion === 'auto' || s.reducedMotion === 'on' || s.reducedMotion === 'off') out.settings.reducedMotion = s.reducedMotion;
     if (isLanguage(s.language)) out.settings.language = s.language;
     if (isToneSet(s.tones)) out.settings.tones = s.tones;
     if (s.textScale === 1 || s.textScale === 1.25 || s.textScale === 1.5) out.settings.textScale = s.textScale;
+    if (s.perfOverlay === true) out.settings.perfOverlay = true;
   }
   return out;
 }

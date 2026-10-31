@@ -134,7 +134,9 @@ export const az: Dictionary = {
   'share.unavailable': 'Paylaşmaq mümkün deyil',
 
   'settings.title': 'AYARLAR',
-  'settings.sound': 'Səs',
+  'settings.music': 'Musiqi',
+  'settings.musicSub': 'Sakit sintez melodiyası',
+  'settings.effects': 'Effektlər',
   'settings.soundSub': 'Səs effektləri və melodiyalar',
   'settings.colorBlind': 'Rəng korluğu',
   'settings.colorBlindSub': 'Daha fərqli tərəf rəngləri',
@@ -169,6 +171,8 @@ export const az: Dictionary = {
   'settings.copyFailed': 'Dəstək ID kopyalanmadı',
   'settings.privacyUnavailable': 'Məxfilik seçimləri burada yoxdur',
   'settings.privacyFailed': 'Məxfilik seçimləri açılmadı',
+  'settings.perfOn': 'Kadr vaxtı paneli açıqdır',
+  'settings.perfOff': 'Kadr vaxtı paneli bağlıdır',
 
   'achievements.title': 'NAİLİYYƏTLƏR',
   'achievements.summary': '{unlocked}/{total} açılıb  ·  {crystals} kristal qazanılıb',

@@ -140,6 +140,9 @@ export class ShopScreen implements Screen {
   }
 
   enter(): void {
+    // PERF-11: the boot initialises the store at idle; a shop opened before that does it here (idempotent —
+    // the web fake is available at once, a native store as its init lands: `tabs` is re-read every frame)
+    void getStore().init();
     this.activeTab();
     this.relayout(); // FE-10: hit regions before the first painted frame
     const ids = visibleProducts(this.app.save).map((p) => p.id);

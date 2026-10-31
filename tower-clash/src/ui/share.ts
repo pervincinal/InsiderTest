@@ -6,7 +6,7 @@ import type { NativeShareResult } from '../native/share';
 import { shareImage } from '../native/share';
 import { isNative } from '../native/index';
 import { levelName, t } from './i18n';
-import type { ResultInfo } from './screens';
+import type { ResultInfo } from './result';
 
 /*
  * Share card flow (SHARE-1, GDD §7.6, POST_LAUNCH.md §6.2): the result screen's SHARE button
