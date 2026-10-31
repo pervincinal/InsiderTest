@@ -5,6 +5,7 @@ import type {
   AudioParamLike,
   BiquadFilterNodeLike,
   BufferSourceNodeLike,
+  CompressorNodeLike,
   GainNodeLike,
   OscillatorNodeLike,
 } from '../../src/audio/synth';
@@ -21,6 +22,10 @@ export class FakeParam implements AudioParamLike {
   }
   exponentialRampToValueAtTime(value: number, time: number): void {
     this.events.push({ kind: 'exp', value, time });
+  }
+  /** AUD-F6: drops the recorded events at or after `time` (as a real AudioParam forgets them). */
+  cancelScheduledValues(time: number): void {
+    for (let i = this.events.length - 1; i >= 0; i--) if (this.events[i]!.time >= time) this.events.splice(i, 1);
   }
 }
 
@@ -145,5 +150,23 @@ export class FakeAudioContext implements AudioContextLike {
     this.sources.length = 0;
     this.gains.length = 0;
     this.filters.length = 0;
+  }
+}
+
+export class FakeCompressor extends FakeNode implements CompressorNodeLike {
+  threshold = new FakeParam();
+  knee = new FakeParam();
+  ratio = new FakeParam();
+  attack = new FakeParam();
+  release = new FakeParam();
+}
+
+/** AUD-F6: a context with a DynamicsCompressor, so the mixer builds its limiter. */
+export class FakeMixContext extends FakeAudioContext {
+  readonly compressors: FakeCompressor[] = [];
+  createDynamicsCompressor(): FakeCompressor {
+    const c = new FakeCompressor();
+    this.compressors.push(c);
+    return c;
   }
 }

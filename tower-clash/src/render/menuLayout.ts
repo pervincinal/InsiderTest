@@ -69,23 +69,31 @@ export const staysPut = (): number => 0;
 export const SETTINGS = Object.freeze({
   headerH: 100,
   back: { x: 18, y: 20, w: 140, h: 60 } as Rect,
-  card: { x: 50, y: 150, w: 620, h: 934 } as Rect,
+  card: { x: 50, y: 134, w: 620, h: 1008 } as Rect,
   rowH: 96,
   labelX: 86,
-  /** Row controls, top to bottom. */
-  sound: { x: 470, y: 216, w: 160, h: 56 } as Rect,
-  colorBlind: { x: 470, y: 312, w: 160, h: 56 } as Rect,
+  /**
+   * Row controls, top to bottom. AUD-F6 split Sound into Music (a new first row) and Effects (`sound`,
+   * the old toggle): the card starts 16 higher, every rect from `sound` down moved 80 and the gaps under
+   * the text size row shrank 44 in all (summary 8, RESET 6, the card's foot 8, the About card's gap 8),
+   * so the web About card still ends inside a 9:16 screen (1258 of 1280; worst case, support id + privacy
+   * options, 1400: the screen scrolls when it is taller than the screen).
+   */
+  music: { x: 470, y: 200, w: 160, h: 56 } as Rect,
+  /** Effects (the SFX + UI buses; the save field is still `settings.sound`). */
+  sound: { x: 470, y: 296, w: 160, h: 56 } as Rect,
+  colorBlind: { x: 470, y: 392, w: 160, h: 56 } as Rect,
   /** Three segments ≥ 88 wide each (AUD-U1: 44 pt at 360 wide). */
-  motion: { x: 356, y: 408, w: 274, h: 56 } as Rect,
+  motion: { x: 356, y: 488, w: 274, h: 56 } as Rect,
   /**
    * "How to play" row (FE-3): the whole row is the tap target (label left, chevron disc right). It
    * takes the slot the rules-v2 removal of the send ratio freed (y ≈ 504), so the language picker /
    * reset rects (mirrored by the e2e specs) keep their positions.
    */
-  howto: { x: 86, y: 500, w: 548, h: 64 } as Rect,
+  howto: { x: 86, y: 580, w: 548, h: 64 } as Rect,
   /** Language row: label line at `languageLabelY`, then a full-width picker (one segment per language, I18N). */
-  languageLabelY: 600,
-  language: { x: 86, y: 664, w: 548, h: 56 } as Rect,
+  languageLabelY: 680,
+  language: { x: 86, y: 744, w: 548, h: 56 } as Rect,
   /**
    * "Team colours" row (FE-14): a title line at `tonesLabelY` (with a swatch strip of the live set on
    * the right), then a full-width four-way picker (classic / vivid / royal / pastel, `TONE_SETS`). It
@@ -93,8 +101,8 @@ export const SETTINGS = Object.freeze({
    * and the About card moved down (worst case, About with support id + privacy options, ends at 1260
    * of 1280).
    */
-  tonesLabelY: 736,
-  tones: { x: 86, y: 786, w: 548, h: 56 } as Rect,
+  tonesLabelY: 816,
+  tones: { x: 86, y: 866, w: 548, h: 56 } as Rect,
   /**
    * "Text size" row (AUD-U2): label left, a 100 / 125 / 150 % segmented control right (three segments
    * ≥ 88 wide, AUD-U1), under a hairline at `textSizeSepY`. It goes under the team colours, so every
@@ -102,18 +110,18 @@ export const SETTINGS = Object.freeze({
    * with support id + privacy options, ends at 1350: the screen scrolls when it is taller than the
    * screen, settings.ts).
    */
-  textSizeSepY: 856,
-  textSize: { x: 356, y: 874, w: 274, h: 56 } as Rect,
+  textSizeSepY: 936,
+  textSize: { x: 356, y: 954, w: 274, h: 56 } as Rect,
   /** Centre line of the stars / coins summary above RESET. */
-  summaryY: 966,
-  reset: { x: 160, y: 996, w: 400, h: 64 } as Rect,
+  summaryY: 1038,
+  reset: { x: 160, y: 1062, w: 400, h: 64 } as Rect,
   confirm: {
     card: { x: 90, y: 470, w: 540, h: 320 } as Rect,
     yes: { x: 130, y: 676, w: 210, h: 72 } as Rect,
     no: { x: 380, y: 676, w: 210, h: 72 } as Rect,
   },
   /** About card under the settings card: version, support id (copy), privacy options (native). */
-  about: { x: 50, y: 1102, w: 620 },
+  about: { x: 50, y: 1152, w: 620 },
   aboutRowH: 62,
 });
 

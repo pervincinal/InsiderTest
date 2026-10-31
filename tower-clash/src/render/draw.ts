@@ -785,7 +785,7 @@ function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState
     });
   }
   drawWorldChips(ctx, pal, state, layout.chips);
-  fx?.drawMineMarks(ctx, pal, state.mines, layout.chips, nowMs, cam); // AUD-F2 reduced motion: the blasted mine's chip outlined
+  fx?.drawMarks(ctx, pal, state, layout, nowMs, cam); // lazy: AUD-F2 reduced-motion mine outlines, AUD-F3 Freeze / Overdrive looks
   const hintAt = ui.limitHint?.towerId ?? ui.selectedTowerId;
   if (hint && ui.limitHintText && hintAt) {
     const t = state.towers[hintAt];

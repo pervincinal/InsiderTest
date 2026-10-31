@@ -98,6 +98,7 @@ describe('onSimEvents → hit sound + haptic', () => {
     haptics = 0;
     const save = defaultSave();
     save.settings.sound = sound;
+    save.settings.music = false; // AUD-F6: the loop's voices stay out of the counts
     initAudio(save, { factory: () => ctx, persist: () => undefined, haptic: () => haptics++ });
     await loadSfxRecipes();
     if (unlock) unlockAudio();
@@ -185,7 +186,7 @@ describe('mine sound (AUD-F2)', () => {
   let ctx: FakeAudioContext;
   beforeEach(async () => {
     ctx = new FakeAudioContext();
-    initAudio(defaultSave(), { factory: () => ctx, persist: () => undefined, haptic: () => undefined });
+    initAudio({ ...defaultSave(), settings: { ...defaultSave().settings, music: false } }, { factory: () => ctx, persist: () => undefined, haptic: () => undefined });
     await loadSfxRecipes();
     unlockAudio();
   });

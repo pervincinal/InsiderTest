@@ -428,7 +428,7 @@ describe('active-state controls through a recording canvas (ART-15)', () => {
       const tones = out.filter((d) => inside(d, SETTINGS.tones));
       expect(tones.map((d) => d.text)).toEqual(['Classic', 'Vivid', 'Royal', 'Pastel']);
       expect(tones.map((d) => d.fill)).toEqual([pal.textDim, pal.textDim, pal.shopBuy.text, pal.textDim]);
-      for (const toggle of [SETTINGS.sound, SETTINGS.colorBlind]) {
+      for (const toggle of [SETTINGS.music, SETTINGS.sound, SETTINGS.colorBlind]) {
         const label = out.filter((d) => inside(d, toggle));
         expect(label).toHaveLength(1);
         expect(label[0]!.fill).toBe(pal.shopBuy.text);
@@ -442,6 +442,12 @@ describe('active-state controls through a recording canvas (ART-15)', () => {
       const off: Drawn[] = [];
       drawSettings(recordingView(recordingCtx(off, new Set<string>())), pal, settingsOpts({ soundOn: false, colorBlind: false }));
       expect(off.filter((d) => inside(d, SETTINGS.sound)).map((d) => d.fill)).toEqual([pal.textDim]);
+      expect(off.filter((d) => inside(d, SETTINGS.music)).map((d) => d.fill)).toEqual([pal.textDim]); // AUD-F6: absent musicOn follows soundOn
+      // AUD-F6: the two toggles are independent
+      const split: Drawn[] = [];
+      drawSettings(recordingView(recordingCtx(split, new Set<string>())), pal, settingsOpts({ soundOn: true, musicOn: false }));
+      expect(split.filter((d) => inside(d, SETTINGS.music)).map((d) => d.fill)).toEqual([pal.textDim]);
+      expect(split.filter((d) => inside(d, SETTINGS.sound)).map((d) => d.fill)).toEqual([pal.shopBuy.text]);
     });
 
     it(`${name}: the DAILY / WEEKLY card tab is the active-choice pair on both faces`, () => {
@@ -988,6 +994,7 @@ describe('AUD-U2 settings row subtitles stay left of their control', () => {
           const out: Drawn[] = [];
           drawSettings(recordingView(recordingCtx(out, new Set<string>(), undefined, fontMeasure)), DEFAULT_PALETTE, settingsOpts({ language: lang, textScale: k }));
           for (const [control, subKey] of [
+            [SETTINGS.music, 'settings.musicSub'],
             [SETTINGS.sound, 'settings.soundSub'],
             [SETTINGS.colorBlind, 'settings.colorBlindSub'],
             [SETTINGS.motion, 'settings.motionSub'],

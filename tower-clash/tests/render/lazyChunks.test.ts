@@ -95,6 +95,7 @@ describe('sfx recipes chunk', () => {
   it('play is silent (false) until the recipes are in, then schedules voices', async () => {
     const ctx = new FakeAudioContext();
     const save = defaultSave();
+    save.settings.music = false; // AUD-F6: the music loop's voices stay out of the counts
     initAudio(save, { factory: () => ctx, persist: () => undefined });
     expect(unlockAudio()).toBe(true);
     // the same tick: the chunk started by initAudio / unlockAudio cannot have landed yet

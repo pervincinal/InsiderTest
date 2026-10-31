@@ -8,7 +8,11 @@
  */
 import type { Owner, SimEvent } from '../sim/types';
 import type { CaptureKind, HitState, SfxName, SfxOptions } from './sfx';
-import { sendPitchHz } from './sfx';
+import { sendPitchHz } from './sfxRules';
+import { routeSfx } from './mixer';
+
+/** AUD-F6: the event mapping, arrival detector and rate limits ride in this chunk (src/audio/sfx.ts loads it). */
+export * from './sfxRules';
 import type { AudioBufferLike, AudioContextLike, BlipOptions, GainNodeLike, NoiseOptions, Synth } from './synth';
 
 const ATTACK_S = 0.004;
@@ -52,6 +56,7 @@ export function playHits(
 
 /** Schedule the voices of `name` on `s` (the caller has checked the context, mute and rate limit). */
 export function playRecipe(s: Synth, name: SfxName, opts: SfxOptions): void {
+  s.route = routeSfx(s, name, opts); // AUD-F6: every voice below plays into the UI or SFX bus (src/audio/mixer.ts), ducking the music first when it should
   switch (name) {
     case 'send':
       blip(s, sendPitchHz(opts.count ?? 1), 60, 'triangle', { gain: 0.22 });
@@ -120,7 +125,51 @@ export function playRecipe(s: Synth, name: SfxName, opts: SfxOptions): void {
       sweep(s, 240, 48, 320, 'triangle', { gain: 0.4, delayS: 0.02 });
       noiseBurst(s, 220, 1500, { gain: 0.26, delayS: 0.02 });
       return;
+    case 'freeze':
+      // AUD-F3: a glassy descending shimmer — four high sines each gliding down a fifth, 60 ms apart, on a
+      // falling diminished chord (E7 C#7 A#6 G6: cold, and none of `upgrade`'s notes), over a 260 ms breath
+      // of high-passed "frost" air; ends at 380 ms
+      [2637, 2217.5, 1864.7, 1568].forEach((hz, i) => sweep(s, hz, hz / 1.5, 200, 'sine', { gain: 0.1, delayS: i * 0.06 }));
+      noiseBurst(s, 260, 6000, { gain: 0.05, filter: 'highpass' });
+      return;
+    case 'overdrive':
+      // AUD-F3: a rising three-note brass-ish swell — G4 B4 D5 on sawtooths whose low-pass opens with a
+      // slow attack (`swell`), the last held; the opposite gesture to Freeze's falling glass; ends at 380 ms
+      [392, 493.9, 587.3].forEach((hz, i) => swell(s, hz, i === 2 ? 200 : 140, 50, { gain: 0.14, delayS: i * 0.09 }));
+      return;
   }
+}
+
+/**
+ * AUD-F3 brass-ish note of `ms`: a sawtooth through a low-pass that opens 1.5 → 6 × the pitch over a
+ * linear `riseMs` swell (the gain rises with it, not the 4 ms click of `blip`) and closes to 2 × on the
+ * exponential release.
+ */
+function swell(s: Synth, freq: number, ms: number, riseMs: number, opts: BlipOptions = {}): void {
+  const live = s.live();
+  if (!live) return;
+  const { ctx, master } = live;
+  const t0 = ctx.currentTime + (opts.delayS ?? 0);
+  const tr = t0 + riseMs / 1000;
+  const t1 = t0 + ms / 1000;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(FLOOR, t0);
+  g.gain.linearRampToValueAtTime(opts.gain ?? 0.2, tr);
+  g.gain.exponentialRampToValueAtTime(FLOOR, t1);
+  g.connect(master);
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.setValueAtTime(freq * 1.5, t0);
+  filter.frequency.linearRampToValueAtTime(freq * 6, tr);
+  filter.frequency.exponentialRampToValueAtTime(freq * 2, t1);
+  filter.Q.setValueAtTime(1.2, t0);
+  filter.connect(g);
+  const osc = ctx.createOscillator();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(freq, t0);
+  osc.connect(filter);
+  osc.start(t0);
+  osc.stop(t1);
 }
 
 function playCapture(s: Synth, kind: CaptureKind): void {

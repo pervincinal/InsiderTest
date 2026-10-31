@@ -12,6 +12,8 @@ export interface AudioParamLike {
   setValueAtTime(value: number, time: number): unknown;
   linearRampToValueAtTime(value: number, time: number): unknown;
   exponentialRampToValueAtTime(value: number, time: number): unknown;
+  /** Optional so minimal fakes compile; every real AudioParam has it (AUD-F6 ducking re-plans from `time`). */
+  cancelScheduledValues?(time: number): unknown;
 }
 
 export interface AudioNodeLike {
@@ -60,6 +62,22 @@ export interface AudioContextLike {
   createBiquadFilter(): BiquadFilterNodeLike;
   createBuffer(channels: number, length: number, sampleRate: number): AudioBufferLike;
   createBufferSource(): BufferSourceNodeLike;
+  /** AUD-F6 limiter (src/audio/mixer.ts). Optional so minimal fakes compile; without it master goes straight out. */
+  createDynamicsCompressor?(): CompressorNodeLike;
+}
+
+/** The DynamicsCompressor fields the AUD-F6 limiter sets. */
+export interface CompressorNodeLike extends AudioNodeLike {
+  threshold: AudioParamLike;
+  knee: AudioParamLike;
+  ratio: AudioParamLike;
+  attack: AudioParamLike;
+  release: AudioParamLike;
+}
+
+/** AUD-F6: the bus mixer (src/audio/mixer.ts, lazy) once built; `apply()` re-reads the Music / Effects flags. */
+export interface MixHandle {
+  apply(): void;
 }
 
 export type AudioContextFactory = () => AudioContextLike | null;
@@ -97,6 +115,14 @@ export class Synth {
   private mutedFlag = false;
   /** True while the context is suspended by `setBackground(true)`. */
   private pausedByPage = false;
+  /** AUD-F6: the Music setting is off (`muted` is the Effects setting: the SFX + UI buses). */
+  musicOff = false;
+  /** AUD-F6: the bus mixer, built by src/audio/mixer.ts on the first sound or music start. */
+  mix: MixHandle | null = null;
+  /** AUD-F6: audio-clock time of the last play-screen frame (`onSimFrame`); the music's pulse layer plays while it is recent. */
+  playAt = -1;
+  /** AUD-F6: the bus the sound being scheduled plays into (src/audio/mixer.ts `routeSfx`); null = master. */
+  route: GainNodeLike | null = null;
 
   constructor(private readonly factory: AudioContextFactory) {}
 
@@ -109,9 +135,10 @@ export class Synth {
     return this.mutedFlag;
   }
 
+  /** Effects on / off (AUD-F6: the SFX + UI bus gains; master stays at its level for the music). */
   setMuted(muted: boolean): void {
     this.mutedFlag = muted;
-    if (this.master && this.ctx) this.master.gain.setValueAtTime(muted ? 0 : MASTER_GAIN, this.ctx.currentTime);
+    this.mix?.apply();
   }
 
   /** Current time of the context in seconds (0 before unlock). Used for rate limiting. */
@@ -135,7 +162,7 @@ export class Synth {
       if (!ctx) return false;
       this.ctx = ctx;
       this.master = ctx.createGain();
-      this.master.gain.value = this.mutedFlag ? 0 : MASTER_GAIN;
+      this.master.gain.value = MASTER_GAIN;
       this.master.connect(ctx.destination);
       // A started silent buffer is the classic iOS unlock: it flips the context to running.
       try {
@@ -173,9 +200,16 @@ export class Synth {
     }
   }
 
-  /** Context + master when a sound would actually be produced right now, else null (the voices in src/audio/recipes.ts). */
+  /** Context + master once unlocked, whatever the settings (src/audio/mixer.ts builds the buses on it). */
+  graph(): Voice | null {
+    return this.ctx && this.master ? { ctx: this.ctx, master: this.master } : null;
+  }
+
+  /**
+   * Context + the output of the sound being scheduled when it would actually be produced right now, else
+   * null (the voices in src/audio/recipes.ts). The output is the bus `playRecipe` routed it to (`route`, AUD-F6).
+   */
   live(): Voice | null {
-    if (!this.ctx || !this.master || this.mutedFlag) return null;
-    return { ctx: this.ctx, master: this.master };
+    return this.mutedFlag || !this.ctx || !this.master ? null : { ctx: this.ctx, master: this.route ?? this.master };
   }
 }

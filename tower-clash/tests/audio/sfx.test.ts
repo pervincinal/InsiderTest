@@ -4,36 +4,25 @@ import { createState } from '../../src/sim/create';
 import type { SimEvent } from '../../src/sim/types';
 import { defaultSave } from '../../src/ui/save';
 import type { SaveData } from '../../src/ui/save';
-import {
-  ArrivalTracker,
-  RATE_LIMIT_S,
-  SEND_PITCH_CAP,
-  initAudio,
-  isAudioUnlocked,
-  isMuted,
-  loadSfxRecipes,
-  onSimEvents,
-  onSimFrame,
-  playSfx,
-  sendPitchHz,
-  setMuted,
-  sfxForEvents,
-  toggleMuted,
-  unlockAudio,
-} from '../../src/audio/index';
+import { effectsOn, initAudio, isAudioUnlocked, isMuted, loadSfxRecipes, musicOn, onSimEvents, onSimFrame, playSfx, setMuted, toggleMuted, unlockAudio } from '../../src/audio/index';
+// AUD-F6: the rules are the lazy recipes chunk's (src/audio/sfxRules.ts)
+import { ArrivalTracker, RATE_LIMIT_S, SEND_PITCH_CAP, sendPitchHz, sfxForEvents } from '../../src/audio/sfxRules';
 import type { SfxName } from '../../src/audio/index';
 import { FakeAudioContext } from './fakeAudio';
 
-const ALL: SfxName[] = ['send', 'arrive', 'capture', 'upgrade', 'unitDied', 'artillery', 'won', 'lost', 'button', 'refuse', 'stalemate', 'hit', 'mine'];
+const ALL: SfxName[] = ['send', 'arrive', 'capture', 'upgrade', 'unitDied', 'artillery', 'won', 'lost', 'button', 'refuse', 'stalemate', 'hit', 'mine', 'freeze', 'overdrive'];
 
 let ctx: FakeAudioContext;
 let save: SaveData;
 let persisted: SaveData[];
 
-async function setup(sound = true): Promise<void> {
+/** `music`: the Music setting (AUD-F6) — off by default so the loop's voices stay out of these counts; null = absent (a pre-split save). */
+async function setup(sound = true, music: boolean | null = false): Promise<void> {
   ctx = new FakeAudioContext();
   save = defaultSave();
   save.settings.sound = sound;
+  if (music === null) delete save.settings.music;
+  else save.settings.music = music;
   persisted = [];
   initAudio(save, { factory: () => ctx, persist: (s) => persisted.push(s) });
   // the recipes are a lazy chunk (src/audio/recipes.ts); the tests below play synchronously
@@ -73,32 +62,50 @@ describe('unlock', () => {
 
 describe('mute', () => {
   it('starts muted when settings.sound is false and plays nothing', async () => {
-    await setup(false);
+    await setup(false, null);
     unlockAudio();
-    expect(isMuted()).toBe(true);
+    expect(isMuted()).toBe(true); // a save from before AUD-F6 (no `music`): Sound off → Music off too
+    expect(musicOn()).toBe(false);
     expect(playSfx('capture', { capture: 'gain' })).toBe(false);
     expect(ctx.voices()).toEqual([]);
   });
 
-  it('setMuted persists to save.settings.sound and gates the synth', () => {
+  it('setMuted (Effects) persists to save.settings.sound and gates the synth', async () => {
+    await setup(true, null); // Music absent = follows Sound (on)
     unlockAudio();
     setMuted(true);
     expect(save.settings.sound).toBe(false);
+    expect(save.settings.music).toBe(true); // AUD-F6: the first change pins both flags
     expect(persisted.length).toBe(1);
+    expect(effectsOn()).toBe(false);
+    expect(musicOn()).toBe(true);
+    expect(isMuted()).toBe(false); // the music still plays: the speaker is not "muted"
     expect(playSfx('won')).toBe(false);
     expect(ctx.voices()).toEqual([]);
-    // master gain dropped to 0 at the current time
-    const master = ctx.gains[0]!;
-    expect(master.gain.events.at(-1)).toEqual({ kind: 'set', value: 0, time: 0 });
 
     setMuted(true); // no change → no extra write
     expect(persisted.length).toBe(1);
 
-    expect(toggleMuted()).toBe(false);
+    setMuted(false);
     expect(save.settings.sound).toBe(true);
     expect(persisted.length).toBe(2);
     expect(playSfx('won')).toBe(true);
     expect(ctx.voices().length).toBeGreaterThan(0);
+  });
+
+  it('toggleMuted (the title / HUD / pause speaker) silences both, then turns both on (AUD-F6)', async () => {
+    await setup(true, true);
+    unlockAudio();
+    expect(toggleMuted()).toBe(true);
+    expect(save.settings).toMatchObject({ sound: false, music: false });
+    expect(effectsOn() || musicOn()).toBe(false);
+    expect(toggleMuted()).toBe(false);
+    expect(save.settings).toMatchObject({ sound: true, music: true });
+    // anything audible counts as "on": Effects off with Music on → the speaker silences both
+    setMuted(true);
+    expect(isMuted()).toBe(false);
+    expect(toggleMuted()).toBe(true);
+    expect(save.settings).toMatchObject({ sound: false, music: false });
   });
 });
 
@@ -344,5 +351,72 @@ describe('v3 sounds (ART-9)', () => {
     for (const n of notes) expect(capture).not.toContain(n.hz);
     expect(notes.map((n) => n.hz)).not.toContain(sendPitchHz(1));
     expect(RATE_LIMIT_S.stalemate).toBeUndefined(); // fires once per link anyway (StalemateWatch)
+  });
+});
+
+describe('booster casts (AUD-F3)', () => {
+  beforeEach(() => unlockAudio());
+
+  /** Every voice of `name` played on a fresh clock: oscillators (start pitch, end pitch, type, start), noise sources, filters. */
+  function cast(name: SfxName) {
+    ctx.clear();
+    ctx.currentTime += 1;
+    const filters = ctx.filters.length;
+    expect(playSfx(name)).toBe(true);
+    const notes = ctx.oscillators.map((o) => ({ from: o.frequency.events[0]!.value, to: o.frequency.events.at(-1)!.value, type: o.type, at: o.startAt! }));
+    return { notes, noise: ctx.sources.length, filters: ctx.filters.slice(filters), longest: longestVoiceS() };
+  }
+
+  /** The `upgrade` arpeggio's notes: neither booster may sound like it any more. */
+  const upgradeHz = (): number[] => cast('upgrade').notes.map((n) => n.from);
+
+  it('freeze: a glassy descending shimmer — 4 high sines each gliding down, later ones lower, plus a high-passed air; ≤ 400 ms', () => {
+    const up = upgradeHz();
+    const { notes, noise, filters, longest } = cast('freeze');
+    expect(notes).toHaveLength(4);
+    expect(noise).toBe(1);
+    expect(notes.every((n) => n.type === 'sine' && n.to < n.from && n.from >= 1500)).toBe(true);
+    for (let i = 1; i < 4; i++) {
+      expect(notes[i]!.from).toBeLessThan(notes[i - 1]!.from);
+      expect(notes[i]!.at).toBeGreaterThan(notes[i - 1]!.at);
+    }
+    expect(filters.map((f) => f.type)).toEqual(['highpass']);
+    expect(longest).toBeGreaterThan(0.3);
+    expect(longest).toBeLessThanOrEqual(0.4);
+    for (const n of notes) expect(up).not.toContain(n.from);
+  });
+
+  it('overdrive: a rising three-note brass-ish swell — sawtooths through opening low-passes, slow attack; ≤ 400 ms', () => {
+    const up = upgradeHz();
+    const gains = ctx.gains.length;
+    const { notes, noise, filters, longest } = cast('overdrive');
+    expect(notes).toHaveLength(3);
+    expect(noise).toBe(0);
+    expect(notes.every((n) => n.type === 'sawtooth')).toBe(true);
+    for (let i = 1; i < 3; i++) {
+      expect(notes[i]!.from).toBeGreaterThan(notes[i - 1]!.from);
+      expect(notes[i]!.at).toBeGreaterThan(notes[i - 1]!.at);
+    }
+    expect(filters).toHaveLength(3);
+    for (const f of filters) {
+      expect(f.type).toBe('lowpass');
+      const hz = f.frequency.events.map((e) => e.value);
+      expect(hz[1]).toBeGreaterThan(hz[0]!); // opens…
+      expect(hz[2]).toBeLessThan(hz[1]!); // …and closes
+    }
+    // a swell, not a click: the attack ramp takes ≥ 40 ms (blip's is 4 ms)
+    for (const g of ctx.gains.slice(gains)) {
+      const set = g.gain.events.find((e) => e.kind === 'set')!;
+      const rise = g.gain.events.find((e) => e.kind === 'linear')!;
+      expect(rise.time - set.time).toBeGreaterThanOrEqual(0.04);
+    }
+    expect(longest).toBeGreaterThan(0.3);
+    expect(longest).toBeLessThanOrEqual(0.4);
+    for (const n of notes) expect(up).not.toContain(n.from);
+  });
+
+  it('neither is rate-limited (one cast per booster run; the bar refuses a second while active)', () => {
+    expect(RATE_LIMIT_S.freeze).toBeUndefined();
+    expect(RATE_LIMIT_S.overdrive).toBeUndefined();
   });
 });

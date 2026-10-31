@@ -20,7 +20,10 @@ import { LANGUAGES, t } from '../ui/i18n';
  */
 
 export interface SettingsOpts {
+  /** Effects on (AUD-F6: the SFX + UI buses, `settings.sound`). */
   soundOn: boolean;
+  /** AUD-F6: Music on (absent = `soundOn`). */
+  musicOn?: boolean;
   colorBlind: boolean;
   reducedMotion: MotionPref;
   language: Language;
@@ -180,8 +183,10 @@ export function drawSettings(view: View, pal: Palette, o: SettingsOpts): void {
   ctx.translate(0, a.top - (o.scroll ?? 0)); // AUD-U2: the body scrolls when it is taller than the screen
   const card = SETTINGS.card;
   drawCard(ctx, pal, card);
-  // rows
-  settingsRow(ctx, pal, SETTINGS.sound, t('settings.sound'), t('settings.soundSub'));
+  // rows: Music and Effects (AUD-F6: the old Sound row split in two)
+  settingsRow(ctx, pal, SETTINGS.music, t('settings.music'), t('settings.musicSub'));
+  drawToggle(ctx, pal, SETTINGS.music, o.musicOn ?? o.soundOn, o.pressed === SETTINGS.music);
+  settingsRow(ctx, pal, SETTINGS.sound, t('settings.effects'), t('settings.soundSub'));
   drawToggle(ctx, pal, SETTINGS.sound, o.soundOn, o.pressed === SETTINGS.sound);
   const cbLabel = t('settings.colorBlind');
   const cbW = settingsRow(ctx, pal, SETTINGS.colorBlind, cbLabel, t('settings.colorBlindSub'));

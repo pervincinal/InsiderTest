@@ -157,7 +157,7 @@ describe('mine blast (reduced motion)', () => {
     const chips = [chipOf(state, 0), chipOf(state, 1)];
     const frame = (t: number) => {
       const { ctx, calls } = recCtx();
-      fx.drawMineMarks(ctx, DEFAULT_PALETTE, state.mines, chips, t, FLAT);
+      fx.drawMarks(ctx, DEFAULT_PALETTE, state, { chips, badges: new Map(), bodies: new Map() }, t, FLAT);
       return calls;
     };
     for (const t of [1000, 1150, 1299]) {
@@ -179,7 +179,7 @@ describe('mine blast (reduced motion)', () => {
     state.mines[0]!.charges = 0;
     fx.onEvents([mineDeath('enemy1')], state, DEFAULT_PALETTE, 1000);
     const { ctx, calls } = recCtx();
-    fx.drawMineMarks(ctx, DEFAULT_PALETTE, state.mines, [], 1100, FLAT);
+    fx.drawMarks(ctx, DEFAULT_PALETTE, state, { chips: [], badges: new Map(), bodies: new Map() }, 1100, FLAT);
     const e = calls.find((c) => c.fn === 'ellipse');
     expect(e?.args.slice(0, 2)).toEqual([360, 700]);
     expect(calls.filter((c) => c.fn === 'stroke')).toHaveLength(2);
@@ -190,7 +190,7 @@ describe('mine blast (reduced motion)', () => {
     const fx = new ParticleSystem(false);
     fx.onEvents([mineDeath('player')], state, DEFAULT_PALETTE, 1000);
     const { ctx, calls } = recCtx();
-    fx.drawMineMarks(ctx, DEFAULT_PALETTE, state.mines, [chipOf(state, 0)], 1100, FLAT);
+    fx.drawMarks(ctx, DEFAULT_PALETTE, state, { chips: [chipOf(state, 0)], badges: new Map(), bodies: new Map() }, 1100, FLAT);
     expect(calls).toHaveLength(0);
   });
 });

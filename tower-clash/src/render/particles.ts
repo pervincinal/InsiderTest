@@ -1,11 +1,11 @@
-import type { GameState, Mine, Owner, SimEvent, Tower } from '../sim/types';
+import type { GameState, Owner, SimEvent, Tower } from '../sim/types';
 import { C } from '../sim/constants';
 import type { Palette, Tones } from './palette';
 import { DEFAULT_PALETTE, shade } from './palette';
 import { towerTop } from './sprites';
 import type { Camera } from './camera';
 import { playCamera, proj, projAngle, unproj } from './camera';
-import type { PlacedChip } from './worldChips';
+import type { WorldLayout } from './worldChips';
 import { artilleryMuzzle } from './sprites';
 import { reducedMotionOverride } from '../ui/motion';
 import { chunkBackoff, loadChunk } from '../lazyChunk';
@@ -129,6 +129,8 @@ export interface BurstHost {
   takeLandToken(nowMs: number): boolean;
   kick(x: number, y: number, colors: readonly string[], size: number, k: number): void;
   death(x: number, y: number, light?: string, dark?: string): void;
+  /** The badge's under-fire jolt (px, 0 under reduced motion) — AUD-F3's badge tint follows it. */
+  badgeHit(towerId: string, nowMs: number): number;
 }
 
 /**
@@ -144,9 +146,22 @@ export interface EconomyBursts {
   draw(ctx: CanvasRenderingContext2D, p: Particle, t: number, fade: number): void;
   /** AUD-F2: a unit (`own`: the player's) killed by a mine at (x, y) — the blast at the nearest mine of `state` (false: no mine, nothing done). */
   mine(host: BurstHost, state: GameState, x: number, y: number, own: boolean, pal: Palette, nowMs: number): boolean;
-  /** AUD-F2 reduced motion: outline the chips of the mines in `host.marks` (`ParticleSystem.drawMineMarks`). */
-  marks(host: BurstHost, ctx: CanvasRenderingContext2D, pal: Palette, mines: readonly Mine[], chips: readonly PlacedChip[], nowMs: number, cam: Camera): void;
+  /**
+   * After the badges and chips (`ParticleSystem.drawMarks`): AUD-F2 reduced motion — outline the chips of
+   * the mines in `host.marks`; AUD-F3 — Freeze / Overdrive on the towers they hold (rims, crystals,
+   * chevrons, badge tint), while `state.boosters` has any; AUD-F5b — the muster at the gate of every
+   * new link until its first soldier is out.
+   */
+  marks(host: BurstHost, ctx: CanvasRenderingContext2D, pal: Palette, state: MarksState, layout: MarksLayout, nowMs: number, cam: Camera): void;
 }
+
+/**
+ * What `EconomyBursts.marks` reads of the state: the mines (AUD-F2), the boosters with the towers they hold
+ * (AUD-F3), and the links with their lanes and units (AUD-F5b muster).
+ */
+export type MarksState = Pick<GameState, 'mines' | 'boosters' | 'towers' | 'time' | 'modifiers' | 'links' | 'roads' | 'units'>;
+/** …and of the frame's world layout (draw.ts `playLayout`): the placed chips and badges, and the towers' drawn bodies. */
+export type MarksLayout = Pick<WorldLayout, 'chips' | 'badges' | 'bodies'>;
 
 const ECONOMY_CHUNK = 'particlesEconomy';
 let economy: EconomyBursts | null = null;
@@ -398,9 +413,12 @@ export class ParticleSystem implements BurstHost {
     }
   }
 
-  /** AUD-F2 reduced motion: the just-blasted mines' chips outlined (lazy chunk); call after the chips are drawn (draw.ts `drawWorld`). */
-  drawMineMarks(ctx: CanvasRenderingContext2D, pal: Palette, mines: readonly Mine[], chips: readonly PlacedChip[], nowMs: number, cam: Camera): void {
-    if (this.marks.size) economy?.marks(this, ctx, pal, mines, chips, nowMs, cam);
+  /**
+   * Lazy-chunk world marks, after the badges and chips are drawn (draw.ts `drawWorld`): the AUD-F2
+   * reduced-motion mine outlines and the AUD-F3 Freeze / Overdrive looks (nothing until the chunk is in).
+   */
+  drawMarks(ctx: CanvasRenderingContext2D, pal: Palette, state: MarksState, layout: MarksLayout, nowMs: number, cam: Camera): void {
+    economy?.marks(this, ctx, pal, state, layout, nowMs, cam);
   }
 
   /**
