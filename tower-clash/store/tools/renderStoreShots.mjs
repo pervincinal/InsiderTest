@@ -489,10 +489,18 @@ async function withSeeds(label, attempts, fn, { required = true } = {}) {
 const FRAMES = {
   title: async () => {}, // fresh context: the title demo is already animating
 
-  // level 1 on a fresh save: tutorial ring + "Tap your tower" bubble + the lesson banner
+  // level 1 on a fresh save: tutorial ring + "Tap your tower" bubble. Since AUD-B11 (build 25) the lesson
+  // card holds the sim at t = 0 until the first input and the bubble only appears once the card has faded
+  // (250 ms), so the card is dismissed the way the first tap does (`startMatch`, PUB-37) and the frame is the
+  // bubble with the card gone; the sim then runs ~1 s, the home tower is still unselected.
   tutorial: async (page) => {
     await page.evaluate(() => window.__towerclash.loadLevel(1));
     await page.waitForTimeout(700);
+    await page.evaluate(() => window.__towerclash.startMatch());
+    await page
+      .waitForFunction(() => window.__towerclash.getTutorialHint() !== null, null, { timeout: 5000 })
+      .catch(() => undefined);
+    await page.waitForTimeout(500); // bubble fully in, ring pulse running
     const hint = await page.evaluate(() => window.__towerclash.getTutorialHint());
     if (!hint) throw new Error('level 1: tutorial hint not visible on a fresh save');
   },
