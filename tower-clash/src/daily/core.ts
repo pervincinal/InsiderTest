@@ -8,8 +8,11 @@
  * Pure: no Date here except converting a passed Date to its key.
  */
 
-/** The challenge unlocks once the player has cleared level `UNLOCK_AFTER_LEVEL`. */
-export const UNLOCK_AFTER_LEVEL = 8;
+/**
+ * The challenge unlocks once the player has cleared level `UNLOCK_AFTER_LEVEL` (GDD §7.2; 8 until
+ * AUD-B15, 2026-11-01: by 16 the fortress and artillery the pool 9–50 is built on have been taught).
+ */
+export const UNLOCK_AFTER_LEVEL = 16;
 
 /** Rewards for the first win of the day (ECONOMY.md §3.x): base + per star. */
 export const REWARD = Object.freeze({ gold: 30, goldPerStar: 10, crystals: 5 });

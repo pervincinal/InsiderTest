@@ -284,8 +284,13 @@ export interface IapProductDef {
   /** For crystal packs: bonus over the $0.99 base rate, as a fraction (0.1 = +10 %). */
   readonly bonusPct?: number;
   readonly availability: 'always' | 'once' | 'liveops';
-  /** Listed only once the player has cleared this level id (ECONOMY.md §4: Starter Pack after level 5); owners always see it. */
+  /** Listed only once the player has cleared this level id (ECONOMY.md §4: Starter Pack after level 8); owners always see it. */
   readonly minClearedLevel?: number;
+  /**
+   * Not listed in the player's first session (ECONOMY.md §4, AUD-B14): the app start at which the save
+   * had no level won yet (`AdSession.winsAtStart` 0). Owners always see it.
+   */
+  readonly notFirstSession?: boolean;
   /** Shown only when the listed product is owned (e.g. premium_upgrade replaces premium_bundle). */
   readonly requiresOwned?: string;
   readonly hiddenWhenOwned?: readonly string[];
@@ -306,7 +311,8 @@ export const IAP_PRODUCTS = [
     tier: 3,
     grants: { crystals: 400, gold: 400, skins: ['helmet_bronze'] },
     availability: 'once',
-    minClearedLevel: 5,
+    minClearedLevel: 8,
+    notFirstSession: true,
   },
   {
     id: 'remove_ads',

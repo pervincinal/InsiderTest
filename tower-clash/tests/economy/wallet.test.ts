@@ -123,7 +123,7 @@ describe('grantProduct', () => {
 
   it('visibleProducts keeps owned packs (shown as OWNED), swaps premium bundle for the upgrade, hides LiveOps', () => {
     const ids = () => visibleProducts(save).map((p) => p.id);
-    for (let lv = 1; lv <= 5; lv++) save.stars[String(lv)] = 1; // past the Starter Pack gate
+    for (let lv = 1; lv <= 8; lv++) save.stars[String(lv)] = 1; // past the Starter Pack gate (level 8, a later session)
     expect(ids()).toEqual(['crystals_100', 'crystals_550', 'crystals_1200', 'crystals_2600', 'crystals_7000', 'starter_pack', 'remove_ads', 'premium_bundle']);
     grantProduct(save, 'remove_ads', 'tx-r');
     expect(ids()).toContain('premium_upgrade'); // nobody pays for no-ads twice
@@ -135,25 +135,28 @@ describe('grantProduct', () => {
     expect(ids()).not.toContain('weekend_pack');
   });
 
-  it('the Starter Pack is listed only after level 5 is cleared (ECONOMY.md §4, ECON-12 (3)); an owner always sees it', () => {
-    const listed = () => visibleProducts(save).some((p) => p.id === 'starter_pack');
-    expect(IAP_PRODUCTS.find((p) => p.id === 'starter_pack')?.minClearedLevel).toBe(5);
+  it('the Starter Pack is listed only after level 8 is cleared and never in the first session (ECONOMY.md §4, AUD-B14); an owner always sees it', () => {
+    const listed = (firstSession = false) => visibleProducts(save, firstSession).some((p) => p.id === 'starter_pack');
+    expect(IAP_PRODUCTS.find((p) => p.id === 'starter_pack')).toMatchObject({ minClearedLevel: 8, notFirstSession: true });
     expect(highestClearedLevel(save)).toBe(0);
     expect(listed()).toBe(false);
-    for (let lv = 1; lv <= 4; lv++) save.stars[String(lv)] = 3;
-    expect(highestClearedLevel(save)).toBe(4);
+    for (let lv = 1; lv <= 7; lv++) save.stars[String(lv)] = 3;
+    expect(highestClearedLevel(save)).toBe(7);
+    expect(listed()).toBe(false); // level 5 (the pre-AUD-B14 gate) and 7: not yet
+    save.stars['8'] = 0; // played, never won: not cleared
     expect(listed()).toBe(false);
-    save.stars['5'] = 0; // played, never won: not cleared
-    expect(listed()).toBe(false);
-    save.stars['5'] = 1;
-    expect(highestClearedLevel(save)).toBe(5);
-    expect(listed()).toBe(true);
-    // the other bundles never had a gate
+    save.stars['8'] = 1;
+    expect(highestClearedLevel(save)).toBe(8);
+    expect(listed()).toBe(true); // a later session
+    expect(listed(true)).toBe(false); // the session that started with no level won: held back, whatever was cleared since
+    // the other bundles never had a gate, in either session
     const fresh = defaultSave();
-    expect(visibleProducts(fresh).map((p) => p.id)).toEqual(['crystals_100', 'crystals_550', 'crystals_1200', 'crystals_2600', 'crystals_7000', 'remove_ads', 'premium_bundle']);
-    // restored on a fresh install before level 5: shown as OWNED, not hidden
+    const others = ['crystals_100', 'crystals_550', 'crystals_1200', 'crystals_2600', 'crystals_7000', 'remove_ads', 'premium_bundle'];
+    expect(visibleProducts(fresh).map((p) => p.id)).toEqual(others);
+    expect(visibleProducts(save, true).map((p) => p.id)).toEqual(others);
+    // restored on a fresh install before level 8, in its first session: shown as OWNED, not hidden
     grantProduct(fresh, 'starter_pack');
-    expect(visibleProducts(fresh).some((p) => p.id === 'starter_pack')).toBe(true);
+    expect(visibleProducts(fresh, true).some((p) => p.id === 'starter_pack')).toBe(true);
   });
 
   it('restorePurchases grants owned non-consumables idempotently and ignores consumables', async () => {

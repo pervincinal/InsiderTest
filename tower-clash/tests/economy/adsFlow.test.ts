@@ -161,6 +161,14 @@ describe('interstitial and defeats (AUD-B7)', () => {
     for (let id = 1; id <= 6; id++) play(id, 'won');
     expect(interstitialBlockedBy(session, save, T0, true)).toBeNull();
   });
+
+  it('winsAtStart is the win count at app start and stays fixed for the session (the Starter Pack first-session gate, AUD-B14)', async () => {
+    expect(session.winsAtStart).toBe(0); // a first session
+    for (let id = 1; id <= 9; id++) play(id, 'won');
+    expect(await maybeShowInterstitial(session, save, T0 + 600_000, createFakeAds())).toBe(true);
+    expect(session.winsAtStart).toBe(0); // wins and ads this session do not make it a later one
+    expect(createAdSession(save.adCounters.levelsCompleted).winsAtStart).toBe(9); // the next app start
+  });
 });
 
 describe('rewarded placements (ECONOMY.md §5.2)', () => {

@@ -1,6 +1,7 @@
 import type { PlayerModifiers } from '../sim/types';
 import { DEFAULT_MODIFIERS } from '../sim/types';
 import { LEVEL_META } from '../levels/index';
+import type { LevelMeta } from '../levels/index';
 
 /*
  * Daily Challenge (GDD §7): one deterministic run per UTC day. The day key picks a level from the
@@ -151,12 +152,61 @@ export function isMondayKey(dayKey: string): boolean {
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === dayKey && d.getUTCDay() === 1;
 }
 
-/** The weekly challenge for a Monday key; throws on a non-Monday or malformed key. */
+/**
+ * The cut-over Monday of the weekly cycle permutation (AUD-B13, GDD §8.1): week 0 of block 0. Every
+ * week before it keeps the v1 draw byte-for-byte (saves hold weekly results by week key, the
+ * TestFlight plan lists past weeks); from it on, levels come from one permutation per 18-week block.
+ */
+export const WEEKLY_CYCLE_FROM = '2026-11-09';
+
+function weeklyPool(): readonly LevelMeta[] {
+  return LEVEL_META.filter((m) => m.id >= WEEKLY_POOL_FROM && m.id <= POOL_TO);
+}
+
+/** Week index of a Monday key counted from `WEEKLY_CYCLE_FROM` (0 = the cut-over week, negative before it). */
+export function weekIndexOf(weekKey: string): number {
+  return (dayNumberOf(weekKey) - dayNumberOf(WEEKLY_CYCLE_FROM)) / 7;
+}
+
+/** The v1 level draw (2026-09-20 … 2026-11-08): `pool[FNV(weekKey + "#week") mod 18]`. Serves every key before the cut-over. */
+export function legacyWeeklyLevelId(weekKey: string): number {
+  const levels = weeklyPool();
+  return levels[hashDayKey(`${weekKey}#week`) % levels.length]!.id;
+}
+
+/**
+ * The level of week index `i ≥ 0` (AUD-B13): block `b = floor(i / 18)`, position `i mod 18` of
+ * `seededOrder(pool, FNV("weekcycle#" + b))` — the daily's DAILY-4 construction, so no level repeats
+ * inside a block. Boundary rule: when the block's first level equals the level of the week before the
+ * block (block 0: the v1 draw of the Monday before the cut-over; later blocks: the last level of the
+ * previous block's order, which the rule never touches), positions 0 and 1 of the block swap. The
+ * previous block's last level is read from its *raw* order, so the rule is O(1) and never chains.
+ */
+function weeklyLevelAt(i: number): LevelMeta {
+  const levels = weeklyPool();
+  const size = levels.length;
+  const block = Math.floor(i / size);
+  const pos = i % size;
+  const order = seededOrder(levels, hashDayKey(`weekcycle#${block}`));
+  if (pos <= 1 && size > 2) {
+    const before = block === 0 ? legacyWeeklyLevelId(dayKeyOfNumber(dayNumberOf(WEEKLY_CYCLE_FROM) - 7)) : seededOrder(levels, hashDayKey(`weekcycle#${block - 1}`))[size - 1]!.id;
+    if (order[0]!.id === before) [order[0], order[1]] = [order[1]!, order[0]!];
+  }
+  return order[pos]!;
+}
+
+/**
+ * The weekly challenge for a Monday key; throws on a non-Monday or malformed key. The level is the
+ * v1 hash draw before `WEEKLY_CYCLE_FROM` and the cycle permutation from it on (`weeklyLevelAt`); seed
+ * and twist are the v1 construction on every key: `seed = (FNV(weekKey + "#week") mod 1e6) + 1`,
+ * `twist = non-plain TWISTS[FNV(weekKey + "#weektwist") mod 4]`.
+ */
 export function weeklyFor(weekKey: string): WeeklyChallenge {
   if (!isMondayKey(weekKey)) throw new Error(`weekly: not a Monday key ${weekKey}`);
-  const levels = LEVEL_META.filter((m) => m.id >= WEEKLY_POOL_FROM && m.id <= POOL_TO);
+  const i = weekIndexOf(weekKey);
+  const levelId = i < 0 ? legacyWeeklyLevelId(weekKey) : weeklyLevelAt(i).id;
+  const level = weeklyPool().find((m) => m.id === levelId)!;
   const h = hashDayKey(`${weekKey}#week`);
-  const level = levels[h % levels.length]!;
   const twists = TWISTS.filter((t) => t.id !== 'plain');
   const twist = twists[hashDayKey(`${weekKey}#weektwist`) % twists.length]!;
   return { weekKey, levelId: level.id, seed: (h % 1_000_000) + 1, twist, targetMs: level.star3 };

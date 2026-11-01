@@ -24,6 +24,11 @@ export interface AdSession {
    * defeat's result screen never brings an interstitial closer).
    */
   winsAtLastAd: number;
+  /**
+   * Levels won when the app started (fixed for the session). 0 = the player's first session — the
+   * Starter Pack is not listed in it (`notFirstSession`, ECONOMY.md §4, AUD-B14).
+   */
+  readonly winsAtStart: number;
   /** Wall-clock ms of the last ad of any kind (-Infinity before the first). */
   lastAdAtMs: number;
   /** A rewarded video was watched on the result screen currently showing. */
@@ -35,7 +40,7 @@ export interface AdSession {
 
 /** `winsSoFar`: the save's `adCounters.levelsCompleted` when the session starts (the app passes its save's). */
 export function createAdSession(winsSoFar = 0): AdSession {
-  return { interstitialsShown: 0, winsAtLastAd: winsSoFar, lastAdAtMs: -Infinity, rewardedOnResult: false, lastRewardedAtMs: {}, rewardedShown: 0 };
+  return { interstitialsShown: 0, winsAtLastAd: winsSoFar, winsAtStart: winsSoFar, lastAdAtMs: -Infinity, rewardedOnResult: false, lastRewardedAtMs: {}, rewardedShown: 0 };
 }
 
 /* ---------- provider selection (debug / e2e override) ---------- */
