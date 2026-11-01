@@ -54,7 +54,7 @@ interface DrawnText {
 }
 type RecWindow = Window & { __qaTexts: { t: string; dx: number; dy: number }[] | null };
 
-/** Level 8 cleared (Starter Pack would be listed after level 5 with a store) and ≥ 200 crystals. */
+/** Level 8 cleared (Starter Pack would be listed with a store, in a later session — AUD-B14) and ≥ 200 crystals. */
 function seededSave(): Record<string, unknown> {
   const stars: Record<string, number> = {};
   for (let id = 1; id <= 8; id++) stars[String(id)] = 3;

@@ -11,7 +11,8 @@ import { clientPoint } from './helpers/tap';
  * a phone. (`page.touchscreen` only taps.)
  *   (i)   drag own tower (home) → neutral tower (mid): a player stream home → mid appears;
  *   (ii)  swipe from empty ground across that stream: it is cut (live, before the finger lifts);
- *   (iii) the level 2 tutorial's "stop the stream" hint disappears after the swipe-cut.
+ *   (iii) the level 2 tutorial's "stop the stream" hint disappears after the swipe-cut;
+ *   (iv)  AUD-U6: a double tap on a target keeps the stream the first tap started; a tap after 400 ms stops it.
  * Coordinates come from the level JSON (never imported from src/, see smoke.spec.ts); hint texts
  * from the running page (`getText`). Every touch point is converted inside a requestAnimationFrame
  * (e2e/helpers/tap.ts `clientPoint`), so the play screen has painted before the finger lands.
@@ -68,6 +69,16 @@ class Finger {
 
   async end(): Promise<void> {
     await this.send('touchEnd');
+  }
+
+  /** `n` taps on logical point `l`, `gapMs` apart (the point converted once, so the taps follow fast). */
+  async taps(l: { x: number; y: number }, n = 1, gapMs = 0): Promise<void> {
+    const c = await clientPoint(this.page, l.x, l.y);
+    for (let i = 0; i < n; i++) {
+      if (i > 0 && gapMs > 0) await this.page.waitForTimeout(gapMs); // ok: the gap between the taps of a double tap is what is under test
+      await this.send('touchStart', c);
+      await this.send('touchEnd');
+    }
   }
 }
 
@@ -145,6 +156,31 @@ test.describe('touch drag-to-link and swipe-to-cut (BUG-33)', () => {
     await finger.end();
     await expect.poll(() => playerLinks(page), { message: 're-link after the cut' }).toContainEqual({ from: 'home', to: 'side' });
 
+    expect(pageErrors).toEqual([]);
+  });
+
+  test('AUD-U6: a double tap on a target keeps the stream it started; a tap after 400 ms stops it', async ({ page }) => {
+    const pageErrors: string[] = [];
+    page.on('pageerror', (err) => pageErrors.push(String(err)));
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.__towerclash?.getTutorialHint === 'function');
+    expect(await page.evaluate((seed) => window.__towerclash.loadLevel(2, seed), SEED)).toBe(true);
+    await expect.poll(() => screen(page)).toBe('play');
+    await page.evaluate(() => window.__towerclash.startMatch());
+    await expect.poll(() => simTime(page)).toBeGreaterThan(0);
+
+    const finger = new Finger(page, await page.context().newCDPSession(page));
+    const home = towerAt('home');
+    const side = towerAt('side');
+    await finger.taps(home); // select
+    // tap, and a quick second tap on the same target (a bounce / "tap harder" retry): one stream, still on
+    await finger.taps(side, 2, 60);
+    await page.waitForTimeout(250); // five sim ticks: an unlink would have landed
+    expect(await playerLinks(page), 'the second tap of a double tap is ignored').toEqual([{ from: 'home', to: 'side' }]);
+    // past LINK_REPEAT_GUARD_MS the same tap stops the stream, as before
+    await page.waitForTimeout(300);
+    await finger.taps(side);
+    await expect.poll(() => playerLinks(page), { message: 'a later tap on the target unlinks' }).toEqual([]);
     expect(pageErrors).toEqual([]);
   });
 });

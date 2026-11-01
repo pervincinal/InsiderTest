@@ -25,7 +25,7 @@ const SAVE_KEY = 'towerclash.save.v3';
 const RESULT_SHARE = { x: 230, y: 874, w: 260, h: 62 };
 const PNG_SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10];
 const DAY_A = '2026-09-27';
-const UNLOCK_AFTER_LEVEL = 8;
+const UNLOCK_AFTER_LEVEL = 16; // src/daily/core.ts (8 until AUD-B15)
 
 const LEVELS_DIR = new URL('../src/levels/', import.meta.url);
 function levelName(id: number): string {

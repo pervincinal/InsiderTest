@@ -5,7 +5,7 @@ import { shotPath } from './tools/shots';
 import { expectToast, recordToasts, toastMark } from './helpers/toasts';
 
 /*
- * Daily Challenge v1 (GDD §7): the level-map card is locked on a fresh save and opens once level 8
+ * Daily Challenge v1 (GDD §7): the level-map card is locked on a fresh save and opens once level 16
  * has a star; a tap starts today's challenge (fixed level, seed and twist); the first win of the day
  * pays `goldReward(stars)` gold + 5 crystals through the wallet and never touches the level's stars;
  * a replay the same day pays nothing; the card shows DONE; a win the next UTC day makes the streak 2.
@@ -24,7 +24,7 @@ const RESULT_NEXT = { x: 84, y: 780, w: 170, h: 72 };
 /** "Yesterday's map" row under the card (src/render/menuLayout.ts LEVEL_MAP.yesterday, DAILY-6). */
 const LEVEL_MAP_YESTERDAY = { x: 54, y: 222, w: 612, h: 56 };
 const REWARD = { gold: 30, goldPerStar: 10, crystals: 5 };
-const UNLOCK_AFTER_LEVEL = 8;
+const UNLOCK_AFTER_LEVEL = 16; // src/daily/core.ts (8 until AUD-B15, 2026-11-01)
 /** Day-3 streak milestone (src/daily/challenge.ts STREAK_MILESTONES). */
 const MILESTONE_DAY3 = 5;
 // Three consecutive days the reference player wins at the fixed seed (`npm run playtest -- --daily 2026-09-27 --days 3`).
@@ -75,7 +75,7 @@ async function winRunningChallenge(page: Page): Promise<void> {
 }
 
 test.describe('daily challenge', () => {
-  test('locked until level 8 has a star: the card explains, a tap does not start anything', async ({ page }) => {
+  test('locked until level 16 has a star: the card explains, a tap does not start anything', async ({ page }) => {
     const errors = await boot(page, { version: 3 }, DAY_A);
     await tapRect(page, TITLE_PLAY);
     await expect.poll(() => screen(page)).toBe('levelSelect');

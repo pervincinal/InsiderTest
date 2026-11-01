@@ -1,4 +1,6 @@
 import { readFileSync } from 'node:fs';
+/** AUD-U6: src/input/pointer.ts LINK_REPEAT_GUARD_MS (pointer.ts has parameter properties, which Playwright's loader cannot strip). */
+const LINK_REPEAT_GUARD_MS = 400;
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { Fingers } from './helpers/fingers';
@@ -224,6 +226,7 @@ async function provesHit(page: Page, f: Fingers, levelId: LevelId, id: string, b
     await f.tap(at(first));
     await f.tap(at(to));
     await expect.poll(() => playerLinks(page), { message: why }).toEqual([{ from, to }]);
+    await page.waitForTimeout(LINK_REPEAT_GUARD_MS + 50); // ok: AUD-U6 — an undo tap inside the 400 ms guard window is ignored by design
     await f.tap(at(to)); // the selection is still `from`: a second tap on the target stops the stream
     await expect.poll(() => playerLinks(page), { message: `${why}: undone` }).toEqual([]);
     await f.tap(at(from)); // deselect
@@ -240,6 +243,7 @@ async function provesHit(page: Page, f: Fingers, levelId: LevelId, id: string, b
     await f.tap(at(h));
     await f.tap(at(id));
     await expect.poll(() => playerLinks(page), { message: `tap ${h} then ${id}: the stream ends at ${id} (${id} took the tap)` }).toEqual([{ from: h, to: id }]);
+    await page.waitForTimeout(LINK_REPEAT_GUARD_MS + 50); // ok: AUD-U6 — an undo tap inside the 400 ms guard window is ignored by design
     await f.tap(at(id));
     await expect.poll(() => playerLinks(page), { message: `${h} → ${id} undone` }).toEqual([]);
     await f.tap(at(h));
@@ -353,6 +357,7 @@ for (const shape of SHAPES) {
         await f.tapClient(onRoof);
         if (sees(far.selector, far.id)) {
           await expect.poll(() => playerLinks(page), { message: `a tap on ${far.id}'s roof: ${far.selector} → ${far.id}` }).toEqual([{ from: far.selector, to: far.id }]);
+          await page.waitForTimeout(LINK_REPEAT_GUARD_MS + 50); // ok: AUD-U6 — an undo tap inside the 400 ms guard window is ignored by design
           await f.tap(farAt);
           await expect.poll(() => playerLinks(page)).toEqual([]);
         } else {

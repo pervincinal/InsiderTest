@@ -46,7 +46,7 @@ const RESULT_SHARE = { x: 230, y: 874, w: 260, h: 62 };
 const PNG_SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10];
 /** A daily key the shipped picker serves (share.spec.ts / daily.spec.ts DAY_A). */
 const DAY_KEY = '2026-09-27';
-const UNLOCK_AFTER_LEVEL = 8;
+const UNLOCK_AFTER_LEVEL = 16; // src/daily/core.ts (8 until AUD-B15)
 const TWISTS = ['plain', 'lean', 'fastFeet', 'thinWalls', 'reinforced'] as const;
 
 /** src/render/shareCard.ts geometry (SHARE_W × SHARE_H, SHARE_LAYOUT.card, drawInfoCard maxW). */
