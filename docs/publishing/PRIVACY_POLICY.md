@@ -1,13 +1,13 @@
 # Tower Clash — Privacy Policy / Məxfilik Siyasəti
 
-**Version 2.1 · Last updated: 2026-09-14** · **Versiya 2.1 · Son yenilənmə: 14.09.2026**
+**Version 2.2 · Last updated: 2026-11-01** · **Versiya 2.2 · Son yenilənmə: 01.11.2026**
 
 Tower Clash exists in two forms, and they handle data differently. Please read the section for the version you use:
 
 - **Part A — Web / PWA version** (played in a browser or installed from the browser to the home screen): stores progress on your device only; no ads, no purchases, no network calls after loading.
 - **Part B — Mobile app versions** (installed from Google Play or the Apple App Store, package `com.pervincinal.towerclash`): the same game, plus optional in-app purchases and advertising, which involve two service providers (Google AdMob and RevenueCat).
 
-This page is hosted publicly (planned address: `https://pervincinal.github.io/InsiderTest/privacy.html`) and linked from both store listings. Version history: 1.0 (2026-09-13, web-only wording); 2.0 (2026-09-13, adds Part B for the store apps); 2.1 (2026-09-14, iOS: no tracking prompt, non-personalised ads only).
+This page is hosted publicly (planned address: `https://pervincinal.github.io/InsiderTest/privacy.html`) and linked from both store listings. Version history: 1.0 (2026-09-13, web-only wording); 2.0 (2026-09-13, adds Part B for the store apps); 2.1 (2026-09-14, iOS: no tracking prompt, non-personalised ads only); 2.2 (2026-11-01, adds "Diagnostics (optional)": an off-by-default log kept on the device only).
 
 ---
 
@@ -23,7 +23,7 @@ This page is hosted publicly (planned address: `https://pervincinal.github.io/In
 - It does not connect to the internet after the first page load; it works fully offline.
 - It does not ask for or use any device permission (no camera, microphone, contacts, location, storage, notifications).
 - It does not show advertising and contains no advertising SDK.
-- It does not use analytics, crash reporting or any third-party SDK.
+- It does not use analytics, crash reporting or any third-party SDK. (The optional diagnostics log described under "Diagnostics (optional)" below stays on the device and is not analytics: nothing is ever sent.)
 - It has no accounts, sign-in, chat, friends lists or leaderboards.
 - It has no real-money purchases. Nothing in the web version asks for payment.
 - It does not use cookies or tracking identifiers.
@@ -75,7 +75,7 @@ There are no subscriptions and no random paid items (no loot boxes).
 
 - No account, sign-in, name, e-mail, phone number, contacts or photos.
 - No precise location (no location permission is requested).
-- No analytics or behavioural tracking beyond what the ad and purchase SDKs above need to work.
+- No analytics or behavioural tracking beyond what the ad and purchase SDKs above need to work. The optional on-device diagnostics log (below) is not sent to anyone by the app.
 - No data is sold. The only recipients are Google (ads, Play Billing), Apple (App Store payments) and RevenueCat (receipt validation), each for the purpose described.
 
 #### B.5 Retention
@@ -101,11 +101,19 @@ Tower Clash is not directed at children under 13 (or the higher age of digital c
 
 Data in transit between the app and Google / RevenueCat uses HTTPS (TLS). The app stores no payment details. Anonymous identifiers are only ever generated on the device.
 
+### Diagnostics (optional)
+
+*Added 2026-11-01 (policy version 2.2). Applies to the web version and the mobile apps alike.*
+
+The game has an optional diagnostics log. It is **off by default**; nothing is recorded until you switch it on yourself in Settings → About → **Diagnostics** ("Kept on this phone, never sent"). While it is on, the game adds one short row each time a level ends: the time (to the minute), the build, the level, the mode, the attempt number, the outcome (won, lost, retreat or level skip), how long the level lasted, the stars, whether it was a first clear, whether a continue was used, how many boosters were used (a count, not which ones) and your text-size setting. The row holds no name, e-mail, device or advertising identifier, location or any other identifier. The log keeps at most 400 rows (the oldest are dropped) and is stored only on your device, in the game's own storage under its own key, next to your progress.
+
+**The app never transmits the log.** It makes no network request for it; no server, no analytics service and no ad or purchase SDK ever receives it. This is why the promise above (no analytics, no tracking) stays true with Diagnostics on. If you want to share the log with the developer, for example to go with a bug report, you do it by hand: Settings → About → **COPY LOG** puts the log on your clipboard as plain text, and you paste it into an e-mail yourself (address below) or not at all. The copied text is the rows plus a short header line made of what the game already knows about the screen it runs on: the build, the device’s user agent string (operating system and device class, the same on every phone of that model), the screen size in pixels, the pixel ratio, your text size, the language and the number of rows, then a line of column names. None of these identifies you or your phone, and the header is built when you tap COPY LOG, not stored. **CLEAR LOG** on the same card deletes the log; *Settings → Reset progress* deletes it together with your save; uninstalling the app (or clearing the browser's site data for the web version) deletes it with everything else.
+
 ### Changes to this policy
 
 If a future version changes what is collected (for example online leaderboards), this page is updated before that version ships and the version number and "last updated" date change. Material changes for the mobile apps are also summarised in the store "What's new" text.
 
-Changelog: 2.1 (2026-09-14) — the iOS app never asks for tracking permission (Apple's App Tracking Transparency prompt was removed) and always requests non-personalised ads; B.2, B.6 and B.7 re-worded accordingly. 2.0 (2026-09-13) — Part B (mobile apps: ads, purchases, RevenueCat) added. 1.0 (2026-09-13) — first version, web only.
+Changelog: 2.2 (2026-11-01) — new section "Diagnostics (optional)": an off-by-default log of finished levels, kept only on the device, never transmitted, copied by hand if the player chooses; Part A and B.4 point to it; the no-analytics and no-tracking statements are unchanged. 2.1 (2026-09-14) — the iOS app never asks for tracking permission (Apple's App Tracking Transparency prompt was removed) and always requests non-personalised ads; B.2, B.6 and B.7 re-worded accordingly. 2.0 (2026-09-13) — Part B (mobile apps: ads, purchases, RevenueCat) added. 1.0 (2026-09-13) — first version, web only.
 
 ### Contact
 
@@ -121,7 +129,7 @@ Tower Clash iki formada mövcuddur və onlar məlumatla fərqli davranır. İsti
 - **A hissəsi — Veb / PWA versiyası** (brauzerdə oynanır və ya brauzerdən ana ekrana quraşdırılır): irəliləyiş yalnız cihazınızda saxlanılır; reklam, alış və yükləndikdən sonra şəbəkə sorğusu yoxdur.
 - **B hissəsi — Mobil tətbiq versiyaları** (Google Play və ya Apple App Store-dan quraşdırılır, paket `com.pervincinal.towerclash`): eyni oyun, üstəgəl könüllü tətbiqdaxili alışlar və reklamlar; bunlar iki xidmət təminatçısını (Google AdMob və RevenueCat) əhatə edir.
 
-Bu səhifə açıq şəkildə yerləşdirilir (planlaşdırılan ünvan: `https://pervincinal.github.io/InsiderTest/privacy.html`) və hər iki mağaza səhifəsindən link verilir. Versiya tarixçəsi: 1.0 (13.09.2026, yalnız veb); 2.0 (13.09.2026, mağaza tətbiqləri üçün B hissəsi əlavə olunub); 2.1 (14.09.2026, iOS: izləmə sorğusu yoxdur, yalnız fərdiləşdirilməmiş reklam).
+Bu səhifə açıq şəkildə yerləşdirilir (planlaşdırılan ünvan: `https://pervincinal.github.io/InsiderTest/privacy.html`) və hər iki mağaza səhifəsindən link verilir. Versiya tarixçəsi: 1.0 (13.09.2026, yalnız veb); 2.0 (13.09.2026, mağaza tətbiqləri üçün B hissəsi əlavə olunub); 2.1 (14.09.2026, iOS: izləmə sorğusu yoxdur, yalnız fərdiləşdirilməmiş reklam); 2.2 (01.11.2026, "Diaqnostika (könüllü)" əlavə olunub: standart olaraq söndürülmüş, yalnız cihazda saxlanılan jurnal).
 
 ### A hissəsi — Veb / PWA versiyası
 
@@ -133,7 +141,7 @@ Bu səhifə açıq şəkildə yerləşdirilir (planlaşdırılan ünvan: `https:
 - İlk yüklənmədən sonra internetə qoşulmur; tam oflayn işləyir.
 - Heç bir cihaz icazəsi istəmir və istifadə etmir (kamera, mikrofon, kontaktlar, məkan, yaddaş, bildirişlər yoxdur).
 - Reklam göstərmir və heç bir reklam SDK-sı yoxdur.
-- Analitika, xəta hesabatı və ya üçüncü tərəf SDK-sı istifadə etmir.
+- Analitika, xəta hesabatı və ya üçüncü tərəf SDK-sı istifadə etmir. (Aşağıdakı "Diaqnostika (könüllü)" bölməsində təsvir olunan könüllü jurnal cihazda qalır və analitika deyil: heç nə göndərilmir.)
 - Hesab, giriş, çat, dost siyahısı və ya liderlər cədvəli yoxdur.
 - Real pulla alış yoxdur. Veb versiyasında heç nə ödəniş istəmir.
 - Kuki və ya izləmə identifikatorları istifadə etmir.
@@ -185,7 +193,7 @@ Abunəlik yoxdur, pullu təsadüfi əşyalar (loot box) yoxdur.
 
 - Hesab, giriş, ad, e-poçt, telefon nömrəsi, kontaktlar və ya fotolar yoxdur.
 - Dəqiq məkan yoxdur (məkan icazəsi istənilmir).
-- Yuxarıdakı reklam və alış SDK-larının işləməsi üçün lazım olandan başqa analitika və ya davranış izləməsi yoxdur.
+- Yuxarıdakı reklam və alış SDK-larının işləməsi üçün lazım olandan başqa analitika və ya davranış izləməsi yoxdur. Cihazdakı könüllü diaqnostika jurnalını (aşağıda) tətbiq heç kimə göndərmir.
 - Heç bir məlumat satılmır. Yeganə alıcılar Google (reklam, Play Billing), Apple (App Store ödənişləri) və RevenueCat-dir (qəbz yoxlaması), hər biri təsvir olunan məqsəd üçün.
 
 #### B.5 Saxlama müddəti
@@ -211,11 +219,19 @@ Tower Clash 13 yaşdan kiçik uşaqlara (və ya ölkənizdəki daha yüksək rə
 
 Tətbiq ilə Google / RevenueCat arasındakı məlumat HTTPS (TLS) ilə ötürülür. Tətbiq ödəniş məlumatı saxlamır. Anonim identifikatorlar yalnız cihazda yaradılır.
 
+### Diaqnostika (könüllü)
+
+*01.11.2026 tarixində əlavə olunub (siyasət versiyası 2.2). Veb versiyaya da, mobil tətbiqlərə də şamil olunur.*
+
+Oyunda könüllü diaqnostika jurnalı var. O, **standart olaraq söndürülüb**; Parametrlər → Haqqında → **Diaqnostika** ("Bu telefonda saxlanılır, heç vaxt göndərilmir") bölməsində özünüz yandırana qədər heç nə yazılmır. Yandırılanda oyun hər səviyyə bitəndə bir qısa sətir əlavə edir: vaxt (dəqiqəyə qədər), build, səviyyə, rejim, cəhd nömrəsi, nəticə (qələbə, məğlubiyyət, geri çəkilmə və ya səviyyə keçidi), səviyyənin davametmə müddəti, ulduzlar, ilk keçid olub-olmaması, davam etmədən istifadə olunub-olunmaması, neçə gücləndiricinin işlədilməsi (yalnız sayı, hansı olduğu yox) və mətn ölçüsü parametriniz. Sətirdə ad, e-poçt, cihaz və ya reklam identifikatoru, məkan və ya digər identifikator yoxdur. Jurnal ən çox 400 sətir saxlayır (ən köhnələr atılır) və yalnız cihazınızda, oyunun öz yaddaşında, öz açarı altında, irəliləyişinizin yanında saxlanılır.
+
+**Tətbiq jurnalı heç vaxt ötürmür.** Bunun üçün şəbəkə sorğusu göndərmir; heç bir server, analitika xidməti, reklam və ya alış SDK-sı onu almır. Buna görə yuxarıdakı vəd (analitika yoxdur, izləmə yoxdur) Diaqnostika yanıq olanda da doğrudur. Jurnalı tərtibatçı ilə paylaşmaq istəsəniz, məsələn xəta bildirişinə əlavə üçün, bunu əllə edirsiniz: Parametrlər → Haqqında → **JURNALI KOPYALA** (COPY LOG) jurnalı sadə mətn kimi mübadilə buferinə kopyalayır, siz özünüz e-poçta yapışdırırsınız (ünvan aşağıda) və ya heç yapışdırmırsınız. Kopyalanan mətn sətirlər və oyunun işlədiyi ekran haqqında onsuz da bildiyi qısa başlıq sətridir: build, cihazın istifadəçi agenti sətri (əməliyyat sistemi və cihaz sinfi, eyni modelin hər telefonunda eynidir), ekran ölçüsü, piksel nisbəti, mətn ölçüsü, dil və sətirlərin sayı, sonra sütun adları sətri. Bunların heç biri sizi və ya telefonunuzu müəyyən etmir; başlıq JURNALI KOPYALA-ya toxunanda qurulur, saxlanılmır. Eyni kartdakı **JURNALI TƏMİZLƏ** (CLEAR LOG) jurnalı silir; *Parametrlər → İrəliləyişi sıfırla* onu yadda saxlanmış irəliləyişlə birlikdə silir; tətbiqi silmək (veb versiyada brauzerin sayt məlumatlarını təmizləmək) onu hər şeylə birlikdə silir.
+
 ### Bu siyasətdə dəyişikliklər
 
 Gələcək versiya toplananları dəyişsə (məsələn, onlayn liderlər cədvəli), həmin versiya çıxmazdan əvvəl bu səhifə yenilənir, versiya nömrəsi və "son yenilənmə" tarixi dəyişir. Mobil tətbiqlər üçün əhəmiyyətli dəyişikliklər mağazanın "Yeniliklər" mətnində də qeyd olunur.
 
-Dəyişikliklər tarixçəsi: 2.1 (14.09.2026) — iOS tətbiqi heç vaxt izləmə icazəsi istəmir (Apple-ın App Tracking Transparency sorğusu çıxarılıb) və həmişə fərdiləşdirilməmiş reklam sorğusu göndərir; B.2, B.6 və B.7 buna uyğun yenidən yazılıb. 2.0 (13.09.2026) — B hissəsi (mobil tətbiqlər: reklam, alışlar, RevenueCat) əlavə olunub. 1.0 (13.09.2026) — ilk versiya, yalnız veb.
+Dəyişikliklər tarixçəsi: 2.2 (01.11.2026) — yeni "Diaqnostika (könüllü)" bölməsi: standart olaraq söndürülmüş, bitmiş səviyyələrin jurnalı; yalnız cihazda saxlanılır, heç vaxt ötürülmür, oyunçu istəsə əllə kopyalanır; A hissəsi və B.4 ona istinad edir; analitika yoxdur və izləmə yoxdur ifadələri dəyişməyib. 2.1 (14.09.2026) — iOS tətbiqi heç vaxt izləmə icazəsi istəmir (Apple-ın App Tracking Transparency sorğusu çıxarılıb) və həmişə fərdiləşdirilməmiş reklam sorğusu göndərir; B.2, B.6 və B.7 buna uyğun yenidən yazılıb. 2.0 (13.09.2026) — B hissəsi (mobil tətbiqlər: reklam, alışlar, RevenueCat) əlavə olunub. 1.0 (13.09.2026) — ilk versiya, yalnız veb.
 
 ### Əlaqə
 
