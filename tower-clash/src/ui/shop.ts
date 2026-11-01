@@ -145,7 +145,7 @@ export class ShopScreen implements Screen {
     void getStore().init();
     this.activeTab();
     this.relayout(); // FE-10: hit regions before the first painted frame
-    const ids = visibleProducts(this.app.save).map((p) => p.id);
+    const ids = visibleProducts(this.app.save, this.app.ads.winsAtStart < 1).map((p) => p.id);
     void getStore()
       .getProducts(ids)
       .then((list) => {
@@ -225,7 +225,8 @@ export class ShopScreen implements Screen {
       out.crate = { rect: crateRect, cost: crate.costCrystals, charges: { ...crate.charges }, owned: { ...save.charges }, affordable: save.crystals >= crate.costCrystals };
       out.hits.push({ rect: crateRect, action: () => this.tapCrate(crateRect) });
       bottom = Math.max(bottom, crateRect.y + crateRect.h);
-      const bundles = visibleProducts(save).filter((p) => p.bonusPct === undefined);
+      // AUD-B14: no Starter Pack in a session that started with no level won (ECONOMY.md §4)
+      const bundles = visibleProducts(save, this.app.ads.winsAtStart < 1).filter((p) => p.bonusPct === undefined);
       bundles.forEach((p, idx) => {
         const i = idx + 1;
         const rect = shopRowRect(i);

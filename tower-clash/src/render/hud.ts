@@ -40,7 +40,7 @@ import { playCamera, proj } from './camera';
 import type { WorldLayout } from './worldChips';
 import { drawStreamArrow, frameWorldLayout, overlaps, selectedFootprint } from './worldChips';
 import type { ToastOpts } from './economyWidgets';
-import { drawToast, drawWallet } from './economyWidgets';
+import { drawToast, drawWallet, toastBox } from './economyWidgets';
 import type { HudOverlayDrawers } from './hudOverlays';
 import { ENGLISH_MENUS_CHUNK, currentLanguage, levelLesson, levelName, loadEnglishMenus, t } from '../ui/i18n';
 
@@ -78,7 +78,7 @@ export interface HudExtras {
   pressedBooster?: BoosterKind | null;
   /** Number of the player's active attack streams (`state.links` owned by the player), rules v2. */
   streams?: number;
-  /** Gold + crystal balances (drawn over the booster bar once the level is over; tap → shop). */
+  /** Gold + crystal balances (drawn over the booster bar once the level is over, in the disabled style: no tap, AUD-U10). */
   wallet?: { gold: number; crystals: number };
   /** Economy rows on the result card (ECONOMY.md §3.4, §3.5, §5.2). */
   result?: ResultExtras;
@@ -226,13 +226,14 @@ function pauseGlyph(ctx: CanvasRenderingContext2D, color: string, cx: number, cy
 /**
  * Active-streams pill (rules v2, where the SEND toggle used to be): caption, then "⇢ n". AUD-U2: the
  * caption at the 22 px floor (fitted to the pill, never squeezed); the pill sits in the bottom band,
- * so at a bigger text size the caption stops at 24 px and the number at 30.
+ * so at a bigger text size the caption stops at 24 px and the number at 30. AUD-U10: a read-out, so a
+ * label pill (ART_DIRECTION §4: no clay edge, no press state), not a button.
  */
 function drawStreamsPill(ctx: CanvasRenderingContext2D, ui: PlayUi, n: number): void {
   const pal = ui.palette;
   const r = HUD.streams;
-  drawButton(ctx, pal, r, '');
-  const cy = r.y + (r.h - 4) / 2;
+  drawPill(ctx, r, pal.paper);
+  const cy = r.y + r.h / 2;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = pal.textDim;
@@ -603,6 +604,31 @@ export function selectHintPill(ctx: CanvasRenderingContext2D, state: GameState, 
   return selectHintRect(box, a, card, selectHintAvoid(state, selectedId, cam, layout));
 }
 
+/**
+ * AUD-U11: what a play toast keeps clear of in `layout` (default this frame's): every tower's drawn body
+ * and badge, the selected tower's selection ring (`selectHintObstacles`) and the select hint the layout
+ * placed. Empty without a laid-out frame.
+ */
+export function playToastObstacles(state: GameState, selectedId: string | null, layout: WorldLayout | null = frameWorldLayout(state)): Rect[] {
+  const o = layout && selectHintObstacles(state, selectedId ?? '', playCamera(), layout);
+  const out = o ? [...o.fixed, ...o.badges] : [];
+  if (layout?.hint) out.push(layout.hint.rect);
+  return out;
+}
+
+/**
+ * AUD-U11: the centre y (`ToastOpts.y`) of a play toast `box` (`toastBox`), by the select hint's rules:
+ * the first of its two spots (`selectHintSpots`: just above the bottom band, then under the top band or
+ * the lesson card `card`) where the pill covers none of `obstacles` (`playToastObstacles`, within
+ * SELECT_HINT.clear; the 12 px fade-in rise happens while the pill is still transparent),
+ * else docked on the top HUD band, which holds no tower.
+ */
+export function playToastY(box: { w: number; h: number }, a: HudAnchors, card: Rect | null, obstacles: readonly Rect[]): number {
+  const { low, top } = selectHintSpots(box, a, card);
+  // the pill's rest top + h − 24 is its `y` (drawToast: the foot is TOAST.h / 2 under `y`)
+  return ([low, top].find((r) => selectHintCover(r, obstacles) === 0)?.y ?? a.top + Math.max(4, (HUD.topBar.h - box.h) / 2)) + box.h - 24;
+}
+
 /** Whether `drawHud` shows the select hint this frame: a tower selected while playing, and no airstrike targeting under way. */
 export function selectHintShown(ui: PlayUi): boolean {
   return ui.selectedTowerId !== null && ui.outcome === 'playing' && !(extrasOf(ui)?.targeting && !ui.paused);
@@ -669,13 +695,16 @@ export function drawHud(ctx: CanvasRenderingContext2D, state: GameState, view: V
     ctx.fillText(speed, tag.x + tag.w / 2, tag.y + tag.h / 2 + 1);
   }
 
-  // mute + pause buttons
+  // mute + pause buttons (AUD-U10: once the level is over the bands take no tap — disabled style, glyphs too)
+  const over = ui.outcome !== 'playing';
+  const off = { disabled: over };
+  if (over) ctx.globalAlpha = 0.45;
   const mb = HUD.mute;
   const muted = hud?.muted ?? false;
-  drawButton(ctx, pal, mb, '');
+  drawButton(ctx, pal, mb, '', off);
   drawSpeakerGlyph(ctx, muted ? pal.textDim : pal.ink, mb.x + mb.w / 2 - 2, mb.y + (mb.h - 4) / 2, 15, !muted);
   const pb = HUD.pause;
-  drawButton(ctx, pal, pb, '');
+  drawButton(ctx, pal, pb, '', off);
   pauseGlyph(ctx, pal.ink, pb.x + pb.w / 2, pb.y + (pb.h - 4) / 2, ui.paused);
 
   // lesson hint until the first input, then its short fade (`lessonCardLayout`, AUD-B11)
@@ -700,21 +729,24 @@ export function drawHud(ctx: CanvasRenderingContext2D, state: GameState, view: V
   // bottom band content, anchored to the bottom safe-area edge
   ctx.save();
   ctx.translate(0, a.bottom);
-  // bottom bar: streams · boosters · coins · menu (wallet replaces boosters + coins once the level is over)
+  // bottom bar: streams · boosters · coins · menu (wallet replaces boosters + coins once the level is over;
+  // AUD-U10: then the band takes no tap, so its wallet and MENU are drawn in the disabled style)
   drawStreamsPill(ctx, ui, hud?.streams ?? 0);
-  if (ui.outcome !== 'playing' && hud?.wallet) {
-    drawWallet(ctx, pal, HUD.wallet, hud.wallet.gold, hud.wallet.crystals, { pressed: hud.pressed === HUD.wallet });
+  if (over && hud?.wallet) {
+    ctx.globalAlpha = 0.45;
+    drawWallet(ctx, pal, HUD.wallet, hud.wallet.gold, hud.wallet.crystals);
   } else {
     if (hud) drawBoosterBar(ctx, ui, hud, nowMs);
     drawCoinPill(ctx, ui);
   }
-  drawButton(ctx, pal, HUD.menu, t('common.menu'), { fontPx: 22 });
+  drawButton(ctx, pal, HUD.menu, t('common.menu'), { ...off, fontPx: 22 });
   ctx.restore();
 
+  const cardRect = card ? { ...card.rect, y: card.rect.y + a.top } : null;
   if (hud?.targeting && ui.outcome === 'playing' && !ui.paused) drawTargeting(ctx, state, ui, nowMs, a.bottom);
   // selection hint: just above the bottom band, or where this frame's layout moved it off the towers (GD-5d, BUG-57)
   else if (ui.selectedTowerId && ui.outcome === 'playing') {
-    const pill = selectHintPill(ctx, state, ui.selectedTowerId, a, card ? { ...card.rect, y: card.rect.y + a.top } : null);
+    const pill = selectHintPill(ctx, state, ui.selectedTowerId, a, cardRect);
     const box = selectHintBox(ctx, selectHintPart(state, ui.selectedTowerId));
     drawPill(ctx, pill, pal.paper);
     ctx.fillStyle = pal.ink;
@@ -722,9 +754,9 @@ export function drawHud(ctx: CanvasRenderingContext2D, state: GameState, view: V
     const top = pill.y + (pill.h - box.lines.length * box.lineH) / 2;
     box.lines.forEach((l, i) => ctx.fillText(l, pill.x + pill.w / 2, top + box.lineH * (i + 0.5) + 1));
   }
-  // transient status while playing (free charge added, "not in the daily challenge"); overlays draw their own.
-  // It sits over the bottom band, so it moves with it.
-  if (hud?.toast && ui.outcome === 'playing' && !ui.paused) drawToast(ctx, pal, { ...hud.toast, y: (hud.toast.y ?? 1090) + a.bottom });
+  // transient status while playing (stalemate, free charge added, "not in the daily challenge"); overlays draw
+  // their own. AUD-U11: over the bottom band (moving with it) unless it would cover a tower or the select hint there
+  if (hud?.toast && ui.outcome === 'playing' && !ui.paused) drawToast(ctx, pal, { ...hud.toast, y: playToastY(toastBox(ctx, hud.toast.text), a, cardRect, playToastObstacles(state, ui.selectedTowerId)) });
   ctx.restore();
 }
 
@@ -749,8 +781,8 @@ export function hudKey(state: GameState, ui: PlayUi, nowMs: number): string {
       if (b.active && b.durationMs > 0) k += `:${nowMs}`;
     }
     if (hud.targeting) k += `|T${nowMs}`;
-    if (hud.toast) k += `|toast:${hud.toast.kind}:${hud.toast.t}:${hud.toast.y ?? ''}:${hud.toast.text}`;
-    if (hud.wallet && ui.outcome !== 'playing') k += `|w${hud.wallet.gold}:${hud.wallet.crystals}:${hud.pressed === HUD.wallet ? 1 : 0}`;
+    if (hud.toast) k += `|toast:${hud.toast.kind}:${hud.toast.t}:${hud.toast.text}`; // `t` changes every frame: its spot (`playToastY`) needs no key
+    if (hud.wallet && ui.outcome !== 'playing') k += `|w${hud.wallet.gold}:${hud.wallet.crystals}`;
   }
   return k;
 }

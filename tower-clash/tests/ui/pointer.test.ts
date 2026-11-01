@@ -4,7 +4,7 @@ import { createState } from '../../src/sim/create';
 import { applyCommand } from '../../src/sim/commands';
 import { C } from '../../src/sim/constants';
 import type { PointerPoint } from '../../src/input/pointer';
-import { LIMIT_HINT_MS, PlayGestures, decideLink } from '../../src/input/pointer';
+import { LIMIT_HINT_MS, LINK_REPEAT_GUARD_MS, PlayGestures, decideLink } from '../../src/input/pointer';
 
 /*
  * Rules v2 / v3 gestures (GDD §2.0 "Interaction", §2.0b rule 8): tap own tower = select; tap a
@@ -108,12 +108,13 @@ describe('PlayGestures (taps and drags → link / unlink commands)', () => {
       g.move(at(to));
       g.up(at(to));
     };
-    return { g, commands, tap, drag, at, clock: () => now };
+    const wait = (ms: number): void => void (now += ms);
+    return { g, commands, tap, drag, at, wait, clock: () => now };
   }
 
   it('tap own tower selects; tap a connected tower links; the same tap again unlinks', () => {
     const state = fixture();
-    const { g, commands, tap } = harness(state);
+    const { g, commands, tap, wait } = harness(state);
     tap('p');
     expect(g.selectedTowerId).toBe('p');
     expect(commands).toEqual([]);
@@ -121,6 +122,7 @@ describe('PlayGestures (taps and drags → link / unlink commands)', () => {
     expect(commands).toEqual([{ type: 'link', owner: 'player', from: 'p', to: 'e' }]);
     expect(g.selectedTowerId).toBe('p'); // the source stays selected
     expect(state.links.map((l) => l.to)).toEqual(['e']);
+    wait(LINK_REPEAT_GUARD_MS); // AUD-U6: the stop tap comes after the bounce guard
     tap('e');
     expect(commands[1]).toEqual({ type: 'unlink', owner: 'player', from: 'p', to: 'e' });
     expect(state.links).toEqual([]);

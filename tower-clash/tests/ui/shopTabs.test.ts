@@ -25,11 +25,11 @@ vi.mock('../../src/render/menusShop', () => ({
   drawShop: (_view: unknown, _pal: unknown, o: ShopOpts) => void drawn.push(o),
 }));
 
-function fakeApp(save: SaveData): App {
+function fakeApp(save: SaveData, ads = createAdSession()): App {
   return {
     view: {} as View,
     save,
-    ads: createAdSession(),
+    ads,
     palette: () => getPalette(false),
     goTitle() {},
     goLevels() {},
@@ -170,6 +170,16 @@ describe('shop screen with the store available (web fake store) is unchanged', (
       tap(shop, tabPoint(i, 4));
       expect(shop.currentTab).toBe(tab);
     });
+  });
+
+  it('Bundles: the Starter Pack waits for level 8 and a later session (ECONOMY.md §4, AUD-B14)', () => {
+    available = true;
+    const bundleIds = (wins: number) => lastDraw(new ShopScreen(fakeApp(save, createAdSession(wins)), 'bundles')).bundles.map((b) => b.id);
+    for (let id = 1; id <= 7; id++) save.stars[String(id)] = 2;
+    expect(bundleIds(7)).toEqual(['remove_ads', 'premium_bundle']); // level 7, a later session: not yet
+    save.stars['8'] = 1;
+    expect(bundleIds(0)).toEqual(['remove_ads', 'premium_bundle']); // level 8 cleared in the first session
+    expect(bundleIds(8)).toEqual(['starter_pack', 'remove_ads', 'premium_bundle']); // the next app start
   });
 });
 

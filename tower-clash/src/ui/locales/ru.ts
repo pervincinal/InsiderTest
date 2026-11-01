@@ -173,6 +173,15 @@ export const ru: Dictionary = {
   'settings.privacyFailed': 'Не удалось открыть настройки конфиденциальности',
   'settings.perfOn': 'Панель времени кадра включена',
   'settings.perfOff': 'Панель времени кадра выключена',
+  // AUD-B6: Settings → About → Diagnostics (the on-device log, src/ui/diagnostics.ts)
+  'settings.diagnostics': 'Диагностика',
+  'settings.diagnosticsSub': 'Хранится на телефоне, никуда не отправляется',
+  'settings.diagCount': 'Диагностика: {n} {n|событие|события|событий}',
+  'settings.copyLog': 'КОПИРОВАТЬ ЖУРНАЛ',
+  'settings.clearLog': 'ОЧИСТИТЬ ЖУРНАЛ',
+  'settings.logCopied': 'Журнал диагностики скопирован',
+  'settings.logCopyFailed': 'Не удалось скопировать журнал',
+  'settings.logCleared': 'Журнал диагностики очищен',
 
   'achievements.title': 'ДОСТИЖЕНИЯ',
   'achievements.summary': 'Открыто {unlocked} из {total}  ·  {crystals|получен|получено|получено} {crystals} {crystals|кристалл|кристалла|кристаллов}',

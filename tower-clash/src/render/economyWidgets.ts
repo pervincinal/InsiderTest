@@ -95,6 +95,13 @@ export function toastLines(ctx: CanvasRenderingContext2D, text: string): Numeral
   return lastWrap.wrap;
 }
 
+/** A toast's lines and its pill's size at the current text size (`drawToast`; AUD-U11 places the play screen's by it). */
+export function toastBox(ctx: CanvasRenderingContext2D, text: string): { wrap: NumeralWrap; w: number; h: number } {
+  const wrap = toastLines(ctx, text);
+  const m = toastMetrics();
+  return { wrap, w: Math.min(TOAST.maxW, wrap.width + TOAST.pad * 2), h: m.h + (wrap.lines.length - 1) * m.lineH };
+}
+
 /**
  * Transient status pill (purchase result, reward claimed, "not enough crystals").
  * ART-16 ruling: the amounts a toast carries ("Need 200 gold", "+150 gold · +20 crystals") are drawn
@@ -112,11 +119,9 @@ export function drawToast(ctx: CanvasRenderingContext2D, pal: Palette, o: ToastO
   if (alpha <= 0) return;
   ctx.save();
   ctx.globalAlpha = alpha;
-  const wrap = toastLines(ctx, o.text);
+  const { wrap, w, h } = toastBox(ctx, o.text);
   const textW = TOAST.maxW - TOAST.pad * 2;
-  const w = Math.min(TOAST.maxW, wrap.width + TOAST.pad * 2);
   const m = toastMetrics();
-  const h = m.h + (wrap.lines.length - 1) * m.lineH;
   const bottom = (o.y ?? 1090) + TOAST.h / 2 - (1 - fadeIn) * 12;
   const pill: Rect = { x: 360 - w / 2, y: bottom - h, w, h };
   // ART-15: info / success toasts on the active-choice blue (paper 7.1:1; the owner mid blue was

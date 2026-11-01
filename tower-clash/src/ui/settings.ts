@@ -1,8 +1,8 @@
 /**
  * Settings screen (M3-3 + I18N): music and effects (AUD-F6), colour-blind palette, reduced motion (auto/on/off
  * override), the "How to play" card (FE-3), UI language, the team-colour set (FE-14) and a two-step
- * reset of the progress; the About card shows the version, the store support id (COPY) and the ads
- * SDK's privacy options (native).
+ * reset of the progress; the About card shows the version, the store support id (COPY), the ads
+ * SDK's privacy options (native) and the opt-in Diagnostics log (AUD-B6: switch, COPY LOG, CLEAR LOG).
  * Every change persists immediately; BACK returns to the screen that opened it (title, or the
  * paused play screen). Loaded lazily with its drawing (PERF-1, src/ui/lazyScreens.ts).
  */
@@ -13,11 +13,13 @@ import { SETTINGS, SETTINGS_BANDS, bandToScreen, screenToBand, settingsAboutLayo
 import type { Rect } from '../render/widgets';
 import { hitRect, setTextScale } from '../render/widgets';
 import { segmentAt } from '../render/menuWidgets';
-import { LANGUAGE_SEGMENTS, MOTION_SEGMENTS, TEXT_SIZE_SEGMENTS, TONE_SEGMENTS, drawSettings } from '../render/menusSettings';
+import type { DiagAboutLayout } from '../render/menusSettings';
+import { LANGUAGE_SEGMENTS, MOTION_SEGMENTS, TEXT_SIZE_SEGMENTS, TONE_SEGMENTS, drawSettings, withDiagnostics } from '../render/menusSettings';
 import { loadToneSets, urlToneOverride } from '../render/palette';
 import type { PointerPoint } from '../input/pointer';
 import { dragThreshold } from '../input/pointer';
 import { resetProgress, writeSave } from './save';
+import { clearDiag, currentHints, diagCount, diagRows, diagText, resetDiag } from './diagnostics';
 import { applyMotionPref } from './motion';
 import { effectsOn, musicOn, playSfx, setMusicOn, setMuted } from '../audio/index';
 import type { AdsProvider } from '../economy/ads';
@@ -55,8 +57,10 @@ export class SettingsScreen implements Screen {
   /** About block: support id from the store and the ads SDK's privacy-options requirement (native only). */
   private supportId: string | null = null;
   private privacyRequired = false;
-  private about: SettingsAboutLayout = settingsAboutLayout(false, false);
+  private about: DiagAboutLayout = withDiagnostics(settingsAboutLayout(false, false), false);
   private versionRect: Rect = versionRowOf(this.about);
+  /** AUD-B6: rows in the diagnostics log (read when the screen opens, kept up to date by CLEAR / reset). */
+  private diagRowCount = 0;
   /** AUD-Q8: times (performance.now) of the recent taps on the version row. */
   private versionTaps: number[] = [];
   private privacyPending = false;
@@ -74,7 +78,25 @@ export class SettingsScreen implements Screen {
     private readonly app: App,
     private readonly back: () => void,
   ) {
+    this.diagRowCount = diagCount();
+    this.relayout();
     void this.probeNative();
+  }
+
+  /** AUD-B6: the Diagnostics switch is on (`settings.diagnostics`, off by default). */
+  get diagnosticsOn(): boolean {
+    return this.app.save.settings.diagnostics === true;
+  }
+
+  /** The About card's rows: COPY LOG / CLEAR LOG only while the log is on or holds rows. */
+  private relayout(): void {
+    this.about = withDiagnostics(settingsAboutLayout(this.supportId !== null, this.privacyRequired), this.diagnosticsOn || this.diagRowCount > 0);
+    this.versionRect = versionRowOf(this.about);
+  }
+
+  /** AUD-B6: the Diagnostics block's rects (layout px; e2e), and the row count it shows. */
+  get diagInfo(): { toggle: Rect; copy: Rect | null; clear: Rect | null; rows: number; on: boolean } {
+    return { toggle: this.about.diagToggle, copy: this.about.diagCopy, clear: this.about.diagClear, rows: this.diagRowCount, on: this.diagnosticsOn };
   }
 
   get isConfirming(): boolean {
@@ -110,8 +132,7 @@ export class SettingsScreen implements Screen {
     }
     this.supportId = typeof id === 'string' && id.length > 0 ? id : null;
     this.privacyRequired = privacy;
-    this.about = settingsAboutLayout(this.supportId !== null, this.privacyRequired);
-    this.versionRect = versionRowOf(this.about);
+    this.relayout();
   }
 
   /** AUD-Q8: the version row (layout px; e2e). */
@@ -181,6 +202,7 @@ export class SettingsScreen implements Screen {
       about: this.about,
       version: appVersion(),
       supportId: this.supportId,
+      diag: { on: this.diagnosticsOn, rows: this.diagRowCount },
       nowMs,
       pressed: this.pressed,
       toast: this.toast.opts(nowMs),
@@ -192,6 +214,9 @@ export class SettingsScreen implements Screen {
     const list = [SETTINGS.back, SETTINGS.music, SETTINGS.sound, SETTINGS.colorBlind, SETTINGS.motion, SETTINGS.howto, SETTINGS.language, SETTINGS.tones, SETTINGS.textSize, SETTINGS.reset];
     if (this.about.copy) list.push(this.about.copy);
     if (this.about.privacy) list.push(this.about.privacy);
+    list.push(this.about.diagToggle);
+    if (this.about.diagCopy) list.push(this.about.diagCopy);
+    if (this.about.diagClear) list.push(this.about.diagClear);
     list.push(this.versionRect); // last: COPY's tap area reaches up into the row and wins there
     return list;
   }
@@ -209,6 +234,30 @@ export class SettingsScreen implements Screen {
       () => this.toast.show(t('settings.copied'), 'ok', this.nowMs),
       () => this.toast.show(t('settings.copyFailed'), 'error', this.nowMs),
     );
+  }
+
+  /**
+   * AUD-B6 COPY LOG: the hints line, the column line and one CSV row per event to the clipboard (the
+   * support id's mechanism; a toast either way). Nothing leaves the phone unless the tester pastes it.
+   */
+  copyDiagLog(): void {
+    const clip = typeof navigator !== 'undefined' ? navigator.clipboard : undefined;
+    if (!clip || typeof clip.writeText !== 'function') {
+      this.toast.show(t('settings.copyUnavailable'), 'error', this.nowMs);
+      return;
+    }
+    clip.writeText(diagText(diagRows(), currentHints(this.app.save, currentLanguage()))).then(
+      () => this.toast.show(t('settings.logCopied'), 'ok', this.nowMs),
+      () => this.toast.show(t('settings.logCopyFailed'), 'error', this.nowMs),
+    );
+  }
+
+  /** AUD-B6 CLEAR LOG: no rows (the attempt counters stay); the actions hide while the switch is off. */
+  clearDiagLog(): void {
+    clearDiag();
+    this.diagRowCount = 0;
+    this.relayout();
+    this.toast.show(t('settings.logCleared'), 'ok', this.nowMs);
   }
 
   /** Open the ads SDK's privacy options form (UMP); no-op when the provider has none. */
@@ -280,7 +329,12 @@ export class SettingsScreen implements Screen {
     p.y = hit.y + 1; // a segmented control picks by x: its tap area reaches above / below the drawn row (AUD-U1)
     const save = this.app.save;
     if (this.confirming) {
-      if (hit === SETTINGS.confirm.yes) resetProgress(save);
+      if (hit === SETTINGS.confirm.yes) {
+        resetProgress(save);
+        resetDiag(); // AUD-B6 / TF-28: the diagnostics log and its attempt counters go with the progress
+        this.diagRowCount = 0;
+        this.relayout();
+      }
       this.confirming = false;
       playSfx('button');
       return;
@@ -313,6 +367,25 @@ export class SettingsScreen implements Screen {
     if (hit === this.about.privacy) {
       playSfx('button');
       this.openPrivacyOptions();
+      return;
+    }
+    if (hit === this.about.diagToggle) {
+      // AUD-B6: only `true` is stored (absent = off), as `perfOverlay`
+      if (this.diagnosticsOn) delete save.settings.diagnostics;
+      else save.settings.diagnostics = true;
+      writeSave(save);
+      this.relayout();
+      playSfx('button');
+      return;
+    }
+    if (hit === this.about.diagCopy) {
+      playSfx('button');
+      this.copyDiagLog();
+      return;
+    }
+    if (hit === this.about.diagClear) {
+      playSfx('button');
+      this.clearDiagLog();
       return;
     }
     if (hit === this.versionRect) {

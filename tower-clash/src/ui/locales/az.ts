@@ -173,6 +173,15 @@ export const az: Dictionary = {
   'settings.privacyFailed': 'Məxfilik seçimləri açılmadı',
   'settings.perfOn': 'Kadr vaxtı paneli açıqdır',
   'settings.perfOff': 'Kadr vaxtı paneli bağlıdır',
+  // AUD-B6: Settings → About → Diagnostics (the on-device log, src/ui/diagnostics.ts)
+  'settings.diagnostics': 'Diaqnostika',
+  'settings.diagnosticsSub': 'Bu telefonda saxlanılır, heç vaxt göndərilmir',
+  'settings.diagCount': 'Diaqnostika: {n} hadisə',
+  'settings.copyLog': 'JURNALI KOPYALA',
+  'settings.clearLog': 'JURNALI TƏMİZLƏ',
+  'settings.logCopied': 'Diaqnostika jurnalı kopyalandı',
+  'settings.logCopyFailed': 'Jurnal kopyalanmadı',
+  'settings.logCleared': 'Diaqnostika jurnalı təmizləndi',
 
   'achievements.title': 'NAİLİYYƏTLƏR',
   'achievements.summary': '{unlocked}/{total} açılıb  ·  {crystals} kristal qazanılıb',

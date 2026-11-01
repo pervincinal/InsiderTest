@@ -98,6 +98,12 @@ describe('unlock gate', () => {
     expect(challengeUnlocked(fresh)).toBe(false);
     fresh.stars[String(UNLOCK_AFTER_LEVEL)] = 1;
     expect(challengeUnlocked(fresh)).toBe(true);
+    // GDD §7.2 "Unlock" (AUD-B15, 2026-11-01: 8 → 16, once fortress and artillery are taught)
+    expect(UNLOCK_AFTER_LEVEL).toBe(16);
+    const at15 = defaultSave(); // levels 1–15 at 3★ (8 opened it before AUD-B15): still locked
+    for (let id = 1; id <= 15; id++) at15.stars[String(id)] = 3;
+    expect(challengeUnlocked(at15)).toBe(false);
+    expect(t('daily.locked', { n: UNLOCK_AFTER_LEVEL })).toBe('Clear level 16 to unlock');
   });
 });
 

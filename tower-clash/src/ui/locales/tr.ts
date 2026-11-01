@@ -173,6 +173,15 @@ export const tr: Dictionary = {
   'settings.privacyFailed': 'Gizlilik seçenekleri açılamadı',
   'settings.perfOn': 'Kare süresi paneli açık',
   'settings.perfOff': 'Kare süresi paneli kapalı',
+  // AUD-B6: Settings → About → Diagnostics (the on-device log, src/ui/diagnostics.ts)
+  'settings.diagnostics': 'Tanılama',
+  'settings.diagnosticsSub': 'Bu telefonda kalır, hiçbir yere gönderilmez',
+  'settings.diagCount': 'Tanılama: {n} olay',
+  'settings.copyLog': 'GÜNLÜĞÜ KOPYALA',
+  'settings.clearLog': 'GÜNLÜĞÜ TEMİZLE',
+  'settings.logCopied': 'Tanılama günlüğü kopyalandı',
+  'settings.logCopyFailed': 'Günlük kopyalanamadı',
+  'settings.logCleared': 'Tanılama günlüğü temizlendi',
 
   'achievements.title': 'BAŞARIMLAR',
   'achievements.summary': '{unlocked}/{total} açıldı  ·  {crystals} kristal kazanıldı',

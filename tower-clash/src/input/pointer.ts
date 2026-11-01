@@ -257,6 +257,12 @@ const DRAG_THRESHOLD = 14;
 export const LIMIT_HINT_MS = 900;
 /** How long a confirmation in the same bubble (`notify`, GD-5f `hint.supplyLine`) stays on screen. */
 export const NOTICE_HINT_MS = 2600;
+/**
+ * AUD-U6 (GDD §2.0b rule 8): a tap on the target of the stream the player's tap started less than this
+ * long ago (pointer clock) is ignored — a bounce or a "tap harder" retry must not stop it again. Later
+ * taps unlink as before; drags, swipe-cuts and taps on another target are never guarded.
+ */
+export const LINK_REPEAT_GUARD_MS = 400;
 
 export interface GestureOptions {
   getState(): GameState | null;
@@ -324,7 +330,8 @@ export function decideLink(state: GameState, from: string, to: string, allowUnli
 
 /**
  * Tap own tower = select; tap a tower with a clear lane from it = start a stream (or stop it when
- * that stream exists; refused with a hint at the link limit); tap a blocked tower = shake + hint;
+ * that stream exists — AUD-U6: not under LINK_REPEAT_GUARD_MS after the tap that started it; refused
+ * with a hint at the link limit); tap a blocked tower = shake + hint;
  * tap the selected tower again = deselect; tap empty = deselect; drag own tower → tower = link;
  * a drag that starts anywhere else (empty ground, a neutral or enemy tower) is a swipe: every player
  * stream its path crosses is cut on the spot (`unlink`, once per stream per swipe — BUG-33).
@@ -363,6 +370,8 @@ export class PlayGestures {
   private swipeY = 0;
   /** Streams (`from>to`) this swipe already cut: the sim applies the `unlink` on its next tick. */
   private readonly cut = new Set<string>();
+  /** AUD-U6: the stream (`from>to`) the last linking tap started, and that tap's time (not cleared by `reset`: a new match is far more than 400 ms away). */
+  private tapLink: { key: string; at: number } | null = null;
 
   constructor(private readonly opts: GestureOptions) {}
 
@@ -532,11 +541,19 @@ export class PlayGestures {
     if (old > 0) this.trail.splice(0, old);
   }
 
-  /** Apply `decideLink` for a gesture from `from` onto `to`: emit the command or raise a refusal hint. */
+  /**
+   * Apply `decideLink` for a gesture from `from` onto `to` (`allowUnlink`: a tap): emit the command or
+   * raise a refusal hint. AUD-U6: a tap on the stream its last linking tap started under
+   * LINK_REPEAT_GUARD_MS ago does nothing (before the sim's tick it would send the link twice, after it unlink).
+   */
   private act(state: GameState, from: string, to: string, nowMs: number, allowUnlink: boolean): void {
+    const key = `${from}>${to}`;
+    const g = this.tapLink;
+    if (allowUnlink && g?.key === key && nowMs - g.at < LINK_REPEAT_GUARD_MS) return;
     const d = decideLink(state, from, to, allowUnlink);
     switch (d.kind) {
       case 'link':
+        if (allowUnlink) this.tapLink = { key, at: nowMs };
         this.opts.onCommand({ type: 'link', owner: 'player', from, to });
         return;
       case 'unlink':

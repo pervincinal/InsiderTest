@@ -1,8 +1,7 @@
 import type { GameState, LevelDef } from '../sim/types';
 import { LEVEL_META, levelIndex } from '../levels/index';
 import type { View } from '../render/view';
-import { hudAnchors, toHudSpace } from '../render/view';
-import { CONFIRM, HUD, RESULT } from '../render/layout';
+import { CONFIRM, RESULT } from '../render/layout';
 import type { Rect } from '../render/widgets';
 import { hitRect } from '../render/widgets';
 import type { PointerPoint } from '../input/pointer';
@@ -26,6 +25,10 @@ import type { App, Screen } from './screens';
 import { ACHIEVEMENT_TOAST_MS, Toast, achievementToastText, appVersion } from './screens';
 import { loadChunk } from '../lazyChunk';
 import { maybeAskForReview } from '../native/review';
+import { logSkip } from './diagnostics';
+
+/** AUD-B6: the play screen books its diagnostics row through this chunk (src/ui/play.ts `present`). */
+export { logLevelEnd } from './diagnostics';
 
 /*
  * PERF-11: the result screen is a lazy chunk (src/ui/resultChunk.ts loads it). The play screen warms
@@ -53,6 +56,8 @@ export interface ResultInfo {
   resume?: () => boolean;
   /** AUD-B2 / A11: the player retreated from the stalemate card — a defeat with no Continue offer (GDD §2.4). */
   retreated?: boolean;
+  /** AUD-B6: a campaign result on a level that had no star before it (the diagnostics row's `first`). */
+  first?: boolean;
   /** Daily Challenge match (GDD §7): NEXT returns to the map, RETRY keeps the seed and twist. */
   challenge?: DailyChallenge;
   /** What the challenge result did (reward paid once, streak, best of the day). */
@@ -118,7 +123,7 @@ export function lastShareRecord(): ShareRecord | null {
 /**
  * Shows the frozen final frame under the win/lose overlay (drawn by drawGame) with the economy
  * offers: ×2 gold (rewarded), Reinforcements (crystals or rewarded), level skip (crystals) and the
- * wallet. Leaving the screen is where the level-break interstitial may fire (ECONOMY.md §5.1).
+ * wallet (a read-out: drawn disabled in the dimmed band, no tap — AUD-U10). Leaving the screen is where the level-break interstitial may fire (ECONOMY.md §5.1).
  */
 export class ResultScreen implements Screen {
   readonly name = 'result' as const;
@@ -286,7 +291,8 @@ export class ResultScreen implements Screen {
   private rects(): Rect[] {
     if (this.ask) return [CONFIRM.yes, CONFIRM.no];
     const ex = this.extras();
-    const list: Rect[] = [RESULT.retry, RESULT.menu, HUD.wallet, HUD.menu];
+    // AUD-U10: the dimmed bottom band's wallet and MENU are drawn disabled and take no tap (one MENU on screen)
+    const list: Rect[] = [RESULT.retry, RESULT.menu];
     if (this.won && this.info.ui.hasNext) list.push(RESULT.next);
     if (ex.doubleGold !== null && !ex.doubled) list.push(RESULT.extra);
     if (ex.skipCrystals !== null) list.push(RESULT.extra);
@@ -299,10 +305,9 @@ export class ResultScreen implements Screen {
     return list;
   }
 
-  /** `r` holds the point: the bottom band's rects (wallet, MENU) through `toHudSpace` — the band is anchored to the screen edge (BUG-34) — the card's as they are. */
+  /** `r` (a card rect) holds the point. */
   private hits(r: Rect, p: PointerPoint): boolean {
-    const h = r === HUD.wallet || r === HUD.menu ? toHudSpace(hudAnchors(this.app.view), p.x, p.y) : p;
-    return hitRect(this.app.view, r, h.x, h.y);
+    return hitRect(this.app.view, r, p.x, p.y);
   }
 
   down(p: PointerPoint): void {
@@ -344,9 +349,8 @@ export class ResultScreen implements Screen {
     const { ui } = this.info;
     if (this.ask) this.answer(hit === CONFIRM.yes);
     else if (hit === RESULT.retry) this.leave(() => this.retry());
-    else if (hit === RESULT.menu || hit === HUD.menu) this.leave(() => this.app.goLevels());
+    else if (hit === RESULT.menu) this.leave(() => this.app.goLevels());
     else if (hit === RESULT.next && ui.outcome === 'won' && ui.hasNext) this.leave(() => this.nextLevel());
-    else if (hit === HUD.wallet) this.app.goShop('crystals', () => this.app.go(this));
     else if (hit === RESULT.share || hit === RESULT.shareInline) void this.share();
     else if (hit === RESULT.howto) {
       playSfx('button');
@@ -412,10 +416,12 @@ export class ResultScreen implements Screen {
   skipLevel(): void {
     if (!this.skipOffered() || this.pending) return;
     const save = this.app.save;
+    const had = save.stars[String(this.info.level.id)] ?? 0;
     if (!buyLevelSkip(save, this.info.level.id)) {
       this.toast.show(t('result.notEnoughCrystals'), 'error', this.nowMs);
       return;
     }
+    logSkip(save, this.info, save.stars[String(this.info.level.id)] ?? 0, had === 0); // AUD-B6 (no-op while diagnostics is off)
     evaluateAchievements(save); // a skip changes the star table (never to 3★, but the rule is "after each result")
     playSfx('upgrade');
     this.leave(() => this.nextLevel());

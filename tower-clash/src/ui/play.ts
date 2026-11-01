@@ -26,7 +26,7 @@ import { starsFor, writeSave } from './save';
 import type { App, Screen, StartOptions } from './screens';
 import { Toast } from './screens';
 import type { ResultInfo } from './result';
-import { makeResultScreen, resultChunkFailures, warmResultChunk } from './resultChunk';
+import { loadResultChunk, makeResultScreen, resultChunkFailures, warmResultChunk } from './resultChunk';
 import type { Tutorial, TutorialStep } from './tutorial';
 import { stepTowerId, tutorialFor } from './tutorial';
 import { drawTutorial } from '../render/tutorialDraw';
@@ -245,6 +245,8 @@ export class PlayScreen implements Screen {
   private rewoundMs = 0;
   /** A rewarded video for a free booster charge is in flight (sim paused meanwhile). */
   private adPending = false;
+  /** AUD-B6: boosters this try paid for (charges or gold), for the diagnostics row. */
+  boosters = 0;
   readonly toast = new Toast();
   /** Stalemate hint bookkeeping (FE-1): fed by `landed` events, checked after every sim frame. */
   private readonly stalemate: StalemateWatch;
@@ -721,6 +723,7 @@ export class PlayScreen implements Screen {
       this.present({ state: this.state, level: this.level, ui, earnings: this.earnings, continued: this.continued, achievements, weekly: this.weekly, weeklyOutcome });
       return;
     }
+    const first = !this.app.save.stars[this.level.id]; // AUD-B6: before recordResult books the stars
     this.earnings = recordResult(this.app.save, this.level, outcome, elapsed);
     const achievements = evaluateAchievements(this.app.save, this.match);
     const ui = this.buildUi(); // after recordResult so the totals are final
@@ -735,6 +738,7 @@ export class PlayScreen implements Screen {
       // GDD §2.4: a Retreat is the player's choice to leave — no Continue offer on its result
       resume: this.retreated ? undefined : () => this.resumeFromSnapshot(),
       retreated: this.retreated || undefined,
+      first,
     });
   }
 
@@ -744,6 +748,9 @@ export class PlayScreen implements Screen {
    * PERF-11: either way only once the result chunk is in (`showResult`).
    */
   private present(info: ResultInfo): void {
+    // AUD-B6: the opt-in diagnostics row, booked with the result (src/ui/diagnostics.ts through the result chunk,
+    // normally in by now). Off — the default — never touches the chunk loader (PERF-11's back-off stays as it was).
+    if (this.app.save.settings.diagnostics) void loadResultChunk().then((m) => m.logLevelEnd(this.app.save, info, this), () => undefined);
     const now = this.retreated || prefersReducedMotion();
     const pending = { info, at: now ? this.nowMs - RESULT_BEAT_MS : this.nowMs, failures: 0 };
     if (!now || !this.showResult(pending)) this.pendingResult = pending;
@@ -839,9 +846,9 @@ export class PlayScreen implements Screen {
     if (save.charges[kind] > 0) {
       save.charges[kind] -= 1;
       writeSave(save);
-      return true;
-    }
-    return spendGold(save, boosterPrice(save, kind));
+    } else if (!spendGold(save, boosterPrice(save, kind))) return false;
+    this.boosters++;
+    return true;
   }
 
   /**

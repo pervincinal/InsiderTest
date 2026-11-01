@@ -39,8 +39,10 @@ export interface SettingsOpts {
   confirming: boolean;
   totalStars: number;
   coins: number;
-  /** About card: app version, optional support id (tap COPY) and the native privacy-options entry. */
-  about: SettingsAboutLayout;
+  /** About card: app version, optional support id (tap COPY), the native privacy-options entry and (AUD-B6, `withDiagnostics`) the Diagnostics block. */
+  about: SettingsAboutLayout | DiagAboutLayout;
+  /** AUD-B6: the Diagnostics switch and the log's row count (absent = the block is not drawn). */
+  diag?: { on: boolean; rows: number };
   version: string;
   supportId: string | null;
   nowMs: number;
@@ -139,6 +141,57 @@ function fitLine(ctx: CanvasRenderingContext2D, text: string, x: number, y: numb
 }
 
 /**
+ * AUD-B6: the About card's Diagnostics block under its other rows — a switch row ("Diagnostics", "Kept on
+ * this phone, never sent") and, while it is on or the log holds rows, the row count over COPY LOG /
+ * CLEAR LOG. Spaced so every tap area (≥ 88 layout px tall at 360 wide, AUD-U1) clears COPY's and
+ * PRIVACY OPTIONS' above it (tests/ui/touchTargets.test.ts). Lazy (settings chunk): the eager
+ * `settingsAboutLayout` stays as it was.
+ */
+export interface DiagAboutLayout extends SettingsAboutLayout {
+  diagToggle: Rect;
+  /** Centre line of the "Diagnostics: n events" line, or null when the actions are hidden. */
+  diagCountY: number | null;
+  diagCopy: Rect | null;
+  diagClear: Rect | null;
+}
+
+export const DIAG_ABOUT = Object.freeze({ toggleTop: 30, rowH: 116, buttonTop: 40, buttonH: 60, actionsH: 100, gap: 20 });
+
+export function withDiagnostics(about: SettingsAboutLayout, actions: boolean): DiagAboutLayout {
+  const card = about.card;
+  let y = card.y + card.h - 22; // the cursor after the card's last row
+  const diagToggle: Rect = { x: SETTINGS.music.x, y: y + DIAG_ABOUT.toggleTop, w: SETTINGS.music.w, h: SETTINGS.music.h };
+  y += DIAG_ABOUT.rowH;
+  let diagCountY: number | null = null;
+  let diagCopy: Rect | null = null;
+  let diagClear: Rect | null = null;
+  if (actions) {
+    diagCountY = y + 14;
+    const w = (card.w - 72 - DIAG_ABOUT.gap) / 2;
+    diagCopy = { x: SETTINGS.labelX, y: y + DIAG_ABOUT.buttonTop, w, h: DIAG_ABOUT.buttonH };
+    diagClear = { x: SETTINGS.labelX + w + DIAG_ABOUT.gap, y: y + DIAG_ABOUT.buttonTop, w, h: DIAG_ABOUT.buttonH };
+    y += DIAG_ABOUT.actionsH;
+  }
+  return { ...about, card: { ...card, h: y + 22 - card.y }, diagToggle, diagCountY, diagCopy, diagClear };
+}
+
+function drawDiagBlock(ctx: CanvasRenderingContext2D, pal: Palette, ab: DiagAboutLayout, o: SettingsOpts, diag: { on: boolean; rows: number }): void {
+  ctx.fillStyle = 'rgba(30, 42, 68, 0.1)';
+  ctx.fillRect(ab.card.x + 28, ab.diagToggle.y - DIAG_ABOUT.toggleTop + 6, ab.card.w - 56, 2);
+  settingsRow(ctx, pal, ab.diagToggle, t('settings.diagnostics'), t('settings.diagnosticsSub'), false);
+  drawToggle(ctx, pal, ab.diagToggle, diag.on, o.pressed === ab.diagToggle);
+  if (ab.diagCountY === null || !ab.diagCopy || !ab.diagClear) return;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = pal.textDim;
+  const x = SETTINGS.labelX;
+  fitLine(ctx, t('settings.diagCount', { n: diag.rows }), x, ab.diagCountY, ab.card.x + ab.card.w - 36 - x, 22, '500', 28);
+  drawButton(ctx, pal, ab.diagCopy, t('settings.copyLog'), { fontPx: 22, flat: true, pressed: o.pressed === ab.diagCopy });
+  const danger = pal.toastError.face; // as RESET PROGRESS: the UI's danger token
+  drawButton(ctx, pal, ab.diagClear, t('settings.clearLog'), { fontPx: 22, flat: true, border: danger, text: danger, pressed: o.pressed === ab.diagClear });
+}
+
+/**
  * About: "Tower Clash" with the version at the right of its line, "Progress is stored on this device"
  * under both (AUD-U2: the full card width, so the 22 px line fits every language), the store support
  * id with a COPY button, PRIVACY OPTIONS when the ads SDK asks for it.
@@ -172,6 +225,7 @@ function drawAboutCard(ctx: CanvasRenderingContext2D, pal: Palette, o: SettingsO
     ctx.fillRect(ab.card.x + 28, ab.privacy.y - 12, ab.card.w - 56, 2);
     drawButton(ctx, pal, ab.privacy, t('settings.privacy'), { fontPx: 22, pressed: o.pressed === ab.privacy });
   }
+  if (o.diag && 'diagToggle' in ab) drawDiagBlock(ctx, pal, ab, o, o.diag);
 }
 
 export function drawSettings(view: View, pal: Palette, o: SettingsOpts): void {

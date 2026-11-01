@@ -6,7 +6,7 @@ import { drawShop } from '../../src/render/menusShop';
 import { LEVEL_MAP, SETTINGS, SHOP, SHOP_TABS, settingsAboutLayout, shopBuyRect, shopConvertSegRect, shopPackRect, shopRowBuyRect, shopRowRect, shopSkinRect } from '../../src/render/menuLayout';
 import type { View } from '../../src/render/view';
 import type { SettingsOpts } from '../../src/render/menusSettings';
-import { TONE_SEGMENT_PX, TONE_SWATCH, drawSettings } from '../../src/render/menusSettings';
+import { TONE_SEGMENT_PX, TONE_SWATCH, drawSettings, withDiagnostics } from '../../src/render/menusSettings';
 import type { DailyCardOpts, LevelSelectOpts } from '../../src/render/menusLevels';
 import { COUNTDOWN_INSET, challengeRowLayout, countdownPillRect, drawLevelSelect, shortCountdown } from '../../src/render/menusLevels';
 import { TOAST, drawToast } from '../../src/render/economyWidgets';
@@ -1009,6 +1009,44 @@ describe('AUD-U2 settings row subtitles stay left of their control', () => {
               expect(d.x + fontMeasure(d.text, d.font), `${lang} ${k} "${d.text}"`).toBeLessThanOrEqual(control.x - 16 + 0.5);
             }
           }
+        }
+      }
+    } finally {
+      setTextScale(1);
+      await setLanguage('en');
+    }
+  });
+});
+
+/** AUD-B6: the About card's Diagnostics row holds the same rule, and its count line / buttons fit, in every locale × text size. */
+describe('AUD-B6 diagnostics row on the About card', () => {
+  it('subtitle at weight 500, ≥ 22 px, left of the switch; the count line inside the card; nothing clipped', async () => {
+    registerDictionary('az', az);
+    registerDictionary('ru', ru);
+    registerDictionary('tr', tr);
+    try {
+      for (const lang of ['en', 'az', 'ru', 'tr'] as const) {
+        await setLanguage(lang);
+        for (const k of TEXT_SCALES) {
+          setTextScale(k);
+          const about = withDiagnostics(settingsAboutLayout(true, true), true);
+          const out: Drawn[] = [];
+          drawSettings(recordingView(recordingCtx(out, new Set<string>(), undefined, fontMeasure)), DEFAULT_PALETTE, settingsOpts({ language: lang, textScale: k, about, supportId: 'rc-1', diag: { on: true, rows: 37 } }));
+          const control = about.diagToggle;
+          const sub = t('settings.diagnosticsSub');
+          const lines = out.filter((d) => d.x === SETTINGS.labelX && d.y >= control.y + 28 && d.y < control.y + 80 && sub.includes(d.text.replace(/…$/, '')));
+          expect(lines.length, `${lang} ${k}`).toBeGreaterThan(0);
+          expect(lines.map((d) => d.text).join(' '), `${lang} ${k}: the whole subtitle`).toBe(sub);
+          for (const d of lines) {
+            expect(d.weight, `${lang} ${k} "${d.text}"`).toBe(500);
+            expect(d.px, `${lang} ${k} "${d.text}"`).toBeGreaterThanOrEqual(22);
+            expect(d.x + fontMeasure(d.text, d.font), `${lang} ${k} "${d.text}"`).toBeLessThanOrEqual(control.x - 16 + 0.5);
+          }
+          const count = out.find((d) => d.text === t('settings.diagCount', { n: 37 }));
+          expect(count, `${lang} ${k}: the count line, unclipped`).toBeDefined();
+          expect(count!.px).toBeGreaterThanOrEqual(22);
+          expect(count!.x + fontMeasure(count!.text, count!.font)).toBeLessThanOrEqual(about.card.x + about.card.w - 36 + 0.5);
+          for (const label of [t('settings.copyLog'), t('settings.clearLog')]) expect(out.find((d) => d.text === label)?.px ?? 0, `${lang} ${k} ${label}: fitted, never under the 22 px floor`).toBeGreaterThanOrEqual(22);
         }
       }
     } finally {

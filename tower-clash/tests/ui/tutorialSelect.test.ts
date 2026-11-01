@@ -7,6 +7,7 @@ import type { SaveData } from '../../src/ui/save';
 import { defaultSave, setSaveStorageForTests } from '../../src/ui/save';
 import type { App } from '../../src/ui/screens';
 import { PlayScreen } from '../../src/ui/play';
+import { LINK_REPEAT_GUARD_MS } from '../../src/input/pointer';
 import { getLoadedLevel, loadAllLevels } from '../../src/levels/index';
 import { t } from '../../src/ui/i18n';
 
@@ -190,6 +191,7 @@ describe('tutorial steps set the selection their instruction assumes (BUG-50 / B
     frame(play);
     expect(play.tutorialStep()?.text).toBe(t('tutorial.stopToGrow'));
     expect(play.gestures.selectedTowerId).toBe('home');
+    now += LINK_REPEAT_GUARD_MS; // AUD-U6: a real capture takes seconds; the stop tap is past the double-tap guard
     tap(play, 'outpost');
     frame(play);
     expect(playerLinks(play)).toEqual([]);

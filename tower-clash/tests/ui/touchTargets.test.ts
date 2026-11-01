@@ -22,7 +22,7 @@ import { resultShareLayout } from '../../src/render/hud';
 import type { ResultExtras } from '../../src/render/hud';
 import type { Rect } from '../../src/render/widgets';
 import { hitArea, hitRect, minHit } from '../../src/render/widgets';
-import { LANGUAGE_SEGMENTS, MOTION_SEGMENTS, TEXT_SIZE_SEGMENTS, TONE_SEGMENTS } from '../../src/render/menusSettings';
+import { LANGUAGE_SEGMENTS, MOTION_SEGMENTS, TEXT_SIZE_SEGMENTS, TONE_SEGMENTS, withDiagnostics } from '../../src/render/menusSettings';
 import { CONVERSION_PACKS } from '../../src/economy/purchases';
 import { UPGRADE_DEFS } from '../../src/ui/upgrades';
 
@@ -100,7 +100,8 @@ type ResultCase = Pick<ResultExtras, 'share' | 'doubleGold' | 'doubled' | 'skipC
 
 /** ResultScreen.rects() for a result with these offers. */
 function result(won: boolean, hasNext: boolean, ex: ResultCase): Target[] {
-  const list: Target[] = [t('RESULT.retry', RESULT.retry), t('RESULT.menu', RESULT.menu), t('HUD.wallet', HUD.wallet, BOTTOM), t('HUD.menu', HUD.menu, BOTTOM)];
+  // AUD-U10: the dimmed band's wallet and MENU take no tap under the result (drawn disabled)
+  const list: Target[] = [t('RESULT.retry', RESULT.retry), t('RESULT.menu', RESULT.menu)];
   if (won && hasNext) list.push(t('RESULT.next', RESULT.next));
   if ((won && ex.doubleGold !== null && !ex.doubled) || (!won && ex.skipCrystals !== null)) list.push(t('RESULT.extra', RESULT.extra));
   const both = ex.continueCrystals !== null && ex.continueAd;
@@ -139,7 +140,8 @@ function settings(): Target[] {
   const top: readonly [number, number] = [0, SETTINGS_BANDS.topEnd];
   // AUD-U2: the body scrolls when it is taller than the screen (About with both rows ends at 1400 since AUD-F6): its band is the content
   const body: readonly [number, number] = [SETTINGS_BANDS.topEnd, 2000];
-  const about = settingsAboutLayout(true, true);
+  // AUD-B6: the About card's Diagnostics block (switch, COPY LOG, CLEAR LOG) under its other rows
+  const about = withDiagnostics(settingsAboutLayout(true, true), true);
   return [
     t('SETTINGS.back', SETTINGS.back, top),
     t('SETTINGS.music', SETTINGS.music, body), // AUD-F6
@@ -153,6 +155,9 @@ function settings(): Target[] {
     t('SETTINGS.reset', SETTINGS.reset, body),
     t('about.copy', about.copy!, body),
     t('about.privacy', about.privacy!, body),
+    t('about.diagToggle', about.diagToggle, body),
+    t('about.diagCopy', about.diagCopy!, body),
+    t('about.diagClear', about.diagClear!, body),
   ];
 }
 
@@ -255,6 +260,14 @@ describe('touch targets ≥ 44 pt, no overlapping tap areas (AUD-U1 / AUD-Q6)', 
       });
     }
   }
+
+  it('AUD-U10: read-outs are labels, never tap targets — no play / pause / result list holds the STREAMS or coin pill, the level chip or the timer; no result list the band\'s wallet or MENU', () => {
+    const labels = new Set<Rect>([HUD.streams, HUD.coins, HUD.levelChip, HUD.timer]);
+    for (const [screen, targets] of Object.entries(SCREENS)) {
+      for (const x of targets) expect(labels.has(x.r), `${screen}: ${x.name}`).toBe(false);
+      if (screen.startsWith('result')) for (const x of targets) expect(x.r === HUD.wallet || x.r === HUD.menu, `${screen}: ${x.name}`).toBe(false);
+    }
+  });
 
   it('a nested button (the DAILY / WEEKLY tabs) takes no more of its card than its own drawn row: the card body and centre stay the card\'s', () => {
     const drawn: Record<string, Rect> = { dailyTabDaily: LEVEL_MAP.dailyTabDaily, dailyTabWeekly: LEVEL_MAP.dailyTabWeekly };

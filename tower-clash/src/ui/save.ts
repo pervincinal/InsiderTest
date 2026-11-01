@@ -55,6 +55,12 @@ export interface Settings {
    * `true` survives a load.
    */
   perfOverlay?: boolean;
+  /**
+   * AUD-B6: the on-device diagnostics log (src/ui/diagnostics.ts; Settings → About → Diagnostics). Off by
+   * default; optional, so no schema bump: absent = off, only `true` survives a load. The log itself is
+   * under its own key (`towerclash.diag.v1`), never in the save.
+   */
+  diagnostics?: boolean;
 }
 
 /** One-time purchases the player owns (ECONOMY.md §4). */
@@ -348,6 +354,7 @@ export function normalizeSave(raw: unknown): SaveData {
     if (isToneSet(s.tones)) out.settings.tones = s.tones;
     if (s.textScale === 1 || s.textScale === 1.25 || s.textScale === 1.5) out.settings.textScale = s.textScale;
     if (s.perfOverlay === true) out.settings.perfOverlay = true;
+    if (s.diagnostics === true) out.settings.diagnostics = true;
   }
   return out;
 }

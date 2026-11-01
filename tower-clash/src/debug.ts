@@ -22,6 +22,8 @@ import { activeToneSet, biomeFor, toneSetsLoaded } from './render/palette';
 import { equippedSkin } from './economy/entitlements';
 import { audioSynth, effectsOn, musicOn } from './audio/index';
 import { busLevels, musicState } from './audio/inspect';
+import type { DiagRow } from './ui/diagnostics';
+import { clearDiag, currentHints, diagRows, diagText } from './ui/diagnostics';
 
 /*
  * Playwright / QA surface (`window.__towerclash`, PERF-6): a lazy chunk that main.ts installs once
@@ -47,6 +49,17 @@ export interface QaDebugExtras {
     getMusic(): ReturnType<typeof musicState>;
     settings(): { effects: boolean; music: boolean };
   };
+  /**
+   * AUD-B6 diagnostics log (src/ui/diagnostics.ts): `rows()` as stored, `text()` what COPY LOG puts on
+   * the clipboard, `clear()` = CLEAR LOG; `about()` the Settings screen's Diagnostics rects (layout px)
+   * and the count it shows, null on any other screen.
+   */
+  diag: {
+    rows(): DiagRow[];
+    text(): string;
+    clear(): void;
+    about(): { toggle: { x: number; y: number; w: number; h: number }; copy: { x: number; y: number; w: number; h: number } | null; clear: { x: number; y: number; w: number; h: number } | null; rows: number; on: boolean } | null;
+  };
 }
 
 let groundBuilds = 0;
@@ -57,6 +70,15 @@ export function installDebug(app: TowerClashApp): TowerClashDebug & QaDebugExtra
       getBuses: () => busLevels(audioSynth()),
       getMusic: () => musicState(audioSynth()),
       settings: () => ({ effects: effectsOn(), music: musicOn() }),
+    },
+    diag: {
+      rows: () => diagRows(),
+      text: () => diagText(diagRows(), currentHints(app.save, currentLanguage())),
+      clear: () => clearDiag(),
+      about: () => {
+        const L = app.lazy;
+        return L && app.current instanceof L.SettingsScreen ? app.current.diagInfo : null;
+      },
     },
     getGroundBuildMs: (flat = false) => {
       const play = app.current === app.play ? app.play : undefined;

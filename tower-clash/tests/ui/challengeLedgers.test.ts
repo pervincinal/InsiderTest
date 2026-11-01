@@ -17,16 +17,18 @@ import { LEVEL_META } from '../../src/levels/index';
 import { makeLevel } from '../helpers';
 
 /*
- * Daily and Weekly Challenge on the same level on the same day (QA 2026-09-21). Monday 2026-11-09 is
- * a day whose daily (`challengeFor`) and weekly (`weeklyFor`) both pick level 36 — the two pickers are
- * independent hashes, so this happens a few times a year. The two are separate ledgers
+ * Daily and Weekly Challenge on the same level on the same day (QA 2026-09-21). Monday 2027-09-27 is
+ * a day whose daily (`challengeFor`) and weekly (`weeklyFor`) both pick level 38 — the two pickers are
+ * independent, so this happens about once a year. (Until AUD-B13 the pin was 2026-11-09 → level 36
+ * twice; the weekly cycle permutation that starts on that Monday re-mapped it to level 42, and the
+ * next coincidence after the cut-over is 2027-09-27.) The two are separate ledgers
  * (`save.challenge` / `save.weekly`) under the same key string: each pays its own reward exactly
  * once, neither writes campaign stars, first-clear gold, milestones, defeats or achievements, a
  * replay of either pays nothing whatever the order, and the campaign clear of that level afterwards
  * is still a first clear.
  */
 
-const DAY = '2026-11-09';
+const DAY = '2027-09-27';
 const daily = challengeFor(DAY);
 const weekly = weeklyFor(DAY);
 const meta = LEVEL_META.find((m) => m.id === daily.levelId)!;
@@ -87,16 +89,16 @@ beforeEach(() => {
   save = defaultSave();
   save.gold = 100;
   save.crystals = 3;
-  for (let id = 1; id <= 32; id++) save.stars[String(id)] = 1; // both challenges unlocked; level 36 uncleared
+  for (let id = 1; id <= 32; id++) save.stars[String(id)] = 1; // both challenges unlocked; level 38 uncleared
 });
 
-describe('daily + weekly on the same level and day (2026-11-09 → level 36 twice)', () => {
+describe('daily + weekly on the same level and day (2027-09-27 → level 38 twice)', () => {
   it('pins the coincidence: same level, different seeds and twists, weekly target = the level clock', () => {
-    expect(daily.levelId).toBe(36);
-    expect(weekly.levelId).toBe(36);
+    expect(daily.levelId).toBe(38);
+    expect(weekly.levelId).toBe(38);
     expect(weekly.weekKey).toBe(DAY);
     expect(daily.seed).not.toBe(weekly.seed);
-    expect([daily.twist.id, weekly.twist.id]).toEqual(['fastFeet', 'lean']);
+    expect([daily.twist.id, weekly.twist.id]).toEqual(['plain', 'lean']);
     expect(weekly.targetMs).toBe(meta.star3);
   });
 
@@ -136,8 +138,8 @@ describe('daily + weekly on the same level and day (2026-11-09 → level 36 twic
     expect(recordWeeklyResult(save, weekly, level, 'lost', 90_000).won).toBe(false);
     expect(JSON.stringify(save)).toBe(snapshot);
 
-    // the campaign clear of level 36 afterwards is still a first clear, and the challenge ledgers do not move
-    const campaign = recordResult(save, level, 'won', 1_000, Date.UTC(2026, 10, 9, 12));
+    // the campaign clear of level 38 afterwards is still a first clear, and the challenge ledgers do not move
+    const campaign = recordResult(save, level, 'won', 1_000, Date.UTC(2027, 8, 27, 12));
     expect(campaign.stars).toBe(3);
     expect(campaign.gold).toBe(3 * EARN_RULES.goldPerStarFirstClear);
     expect(save.stars[KEY]).toBe(3);

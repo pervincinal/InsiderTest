@@ -106,6 +106,15 @@ export const enMenus = {
   'settings.privacyFailed': 'Could not open privacy options',
   'settings.perfOn': 'Frame-time overlay on',
   'settings.perfOff': 'Frame-time overlay off',
+  // AUD-B6: Settings → About → Diagnostics (the on-device log, src/ui/diagnostics.ts)
+  'settings.diagnostics': 'Diagnostics',
+  'settings.diagnosticsSub': 'Kept on this phone, never sent',
+  'settings.diagCount': 'Diagnostics: {n} {n|event|events}',
+  'settings.copyLog': 'COPY LOG',
+  'settings.clearLog': 'CLEAR LOG',
+  'settings.logCopied': 'Diagnostics log copied',
+  'settings.logCopyFailed': 'Could not copy the log',
+  'settings.logCleared': 'Diagnostics log cleared',
 
   'achievements.title': 'ACHIEVEMENTS',
   'achievements.summary': '{unlocked} of {total} unlocked  ·  {crystals} {crystals|crystal|crystals} earned',
