@@ -379,6 +379,7 @@ for (const shape of SHAPES) {
           .poll(() => playerLinks(page), { message: `1.25 × (roof + r) above ${far.id} hit nothing: ${far.selector} was deselected, so ${other} got selected and streams to ${u}` })
           .toEqual([{ from: other, to: u }]);
         expect((await limitHintsSeen(page)).slice(hintsBefore), 'the tap over the roof refused nothing (it hit no tower)').toEqual([]);
+        await page.waitForTimeout(LINK_REPEAT_GUARD_MS + 50); // ok: AUD-U6 — an undo tap inside the 400 ms guard window is ignored by design
         await f.tap(towerAt(id, u));
         await expect.poll(() => playerLinks(page)).toEqual([]);
         await f.tap(towerAt(id, other));
@@ -479,6 +480,7 @@ for (const shape of SHAPES) {
       await f.tapClient({ x: d.c.x + r - 4, y: d.c.y });
       if (sees(far.selector, far.id)) {
         await expect.poll(() => playerLinks(page), { message: `r − 4 beside ${far.id}: ${far.selector} → ${far.id}` }).toEqual([{ from: far.selector, to: far.id }]);
+        await page.waitForTimeout(LINK_REPEAT_GUARD_MS + 50); // ok: AUD-U6 — an undo tap inside the 400 ms guard window is ignored by design
         await f.tap(farAt);
         await expect.poll(() => playerLinks(page)).toEqual([]);
       } else {
