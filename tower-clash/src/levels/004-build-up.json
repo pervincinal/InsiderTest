@@ -8,15 +8,15 @@
   "lesson_az": "Qüllənin axınını dayandır, qoy dolsun: 25 əsgərdə özü yüksəlir, daha sürətli axıdır və iki axın aparır. Düşmən tısbağa kimi gizlənir: ondan çox istehsal et",
   "lesson_ru": "Останови поток башни и дай ей наполниться: при 25 бойцах она сама растёт, льёт быстрее и ведёт два потока. Враг сидит в обороне — перепроизведи его",
   "lesson_tr": "Kulenin akışını durdur, dolsun: 25 askerde kendi kendine yükselir, daha hızlı akıtır ve iki akış sürer. Düşman kaplumbağa: ondan çok üret",
-  "star3": 25000,
-  "star2": 130000,
+  "star3": 20000,
+  "star2": 65000,
   "enemies": [
     {"owner": "enemy1", "personality": "turtle", "aggression": 0.3}
   ],
   "towers": [
     {"id": "home", "x": 360, "y": 1120, "owner": "player", "units": 15, "level": 1, "kind": "barracks"},
-    {"id": "outpost", "x": 150, "y": 880, "owner": "neutral", "units": 5},
-    {"id": "mid", "x": 360, "y": 700, "owner": "neutral", "units": 6},
-    {"id": "foe", "x": 360, "y": 260, "owner": "enemy1", "units": 3, "level": 1, "kind": "barracks"}
+    {"id": "outpost", "x": 150, "y": 880, "owner": "neutral", "units": 2},
+    {"id": "mid", "x": 360, "y": 700, "owner": "neutral", "units": 5},
+    {"id": "foe", "x": 360, "y": 140, "owner": "enemy1", "units": 2, "level": 1, "kind": "barracks"}
   ]
 }

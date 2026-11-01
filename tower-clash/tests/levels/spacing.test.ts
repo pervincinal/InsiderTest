@@ -209,10 +209,10 @@ describe('LV-20: the shipped campaign', () => {
       expect(spacingWarnings(level), `level ${level.id}`).toEqual([]);
     }
     const reports = validateLevels(LEVELS);
-    expect(reports.filter((r) => r.topBadges.length > 0).map((r) => r.id)).toEqual([3, 5, 7, 8, 12, 13, 19, 23, 34, 36, 37, 38, 40, 45, 46, 48, 50]);
+    expect(reports.filter((r) => r.topBadges.length > 0).map((r) => r.id)).toEqual([3, 4, 5, 7, 8, 12, 13, 19, 23, 34, 36, 37, 38, 40, 45, 46, 48, 50]); // 4: AUD-B16 foe y 260 → 140
     // the warning count is back to the two pre-existing lane warnings (levels 32 and 48)
     expect(reports.filter((r) => r.warnings.length > 0).map((r) => r.id)).toEqual([32, 48]);
     const out = formatReport(reports);
-    expect(out).toMatch(/\n50 level\(s\) valid\. 2 with warnings\.\n17 level\(s\) have a tower whose badge moves off the roof \(expected since ART-24\)\.$/);
+    expect(out).toMatch(/\n50 level\(s\) valid\. 2 with warnings\.\n18 level\(s\) have a tower whose badge moves off the roof \(expected since ART-24\)\.$/);
   });
 });
