@@ -9,7 +9,7 @@
   "lesson_ru": "Стена перекрывает линию: сквозь камень поток не идёт, так что обойди её — начни справа, куда идёт враг, и сначала дави по этой стороне",
   "lesson_tr": "Duvar çizgiyi keser: taşın içinden akış geçmez, etrafından dolaş — düşmanın yürüdüğü sağdan başla ve önce o yandan bastır",
   "star3": 30000,
-  "star2": 75000,
+  "star2": 110000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.2}
   ],

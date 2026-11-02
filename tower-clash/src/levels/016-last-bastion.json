@@ -9,7 +9,7 @@
   "lesson_ru": "Два фронта против цитадели: бери ближние серые башни из дома и крепости, сначала правую; с пятью башнями возьми лагерь и пушки, затем сходись к цитадели",
   "lesson_tr": "Kaleye karşı iki cephe: evinden ve hisarından yakın gri kuleleri al, önce sağdakini; beş kuleyle kampı ve topları al, sonra hep birlikte kaleye yüklen",
   "star3": 20000,
-  "star2": 65000,
+  "star2": 75000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.5}
   ],
