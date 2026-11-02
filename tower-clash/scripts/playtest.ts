@@ -57,7 +57,7 @@
  * its target reversed (larger id first on an exact (neutral-first, lane length) tie) — the other side of
  * every mirror pair. `desc` prints only that line, `both` one extra `tie desc` row per level under the
  * default row; `asc` (default) is today's output byte for byte. With `--gate a-b --tie both` a level fails
- * when either order is under its share; `reclock.ts`'s star2 floor stays on the `asc` median.
+ * when either order is under its share; `reclock.ts`'s star2 floor is the slower of the two tie orders at K = 20 (AUD-B10; scripts/lib/reclockRule.ts).
  * `--tie-exempt a[,b]` (QA-30, with `--gate … --tie both`): those levels' `tie desc` rows print `exempt`
  * and leave the gate (ids must be in `NAIVE_TIE_EXEMPT`: levels cured by a tutorial steer); `asc` stays gated.
  * The flag rules live in scripts/lib/playtestArgs.ts (unit-tested); rng streams come from `rngsFor`,

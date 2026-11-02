@@ -238,15 +238,24 @@ const waitForWarm = (page: Page, cacheName: string) =>
     .poll(async () => (await cachedPaths(page))[cacheName] ?? [], { timeout: 20_000 })
     .toEqual(expect.arrayContaining([expect.stringMatching(LEVEL1_CHUNK), expect.stringMatching(MENU_CHUNK), expect.stringMatching(DEBUG_CHUNK), expect.stringMatching(AI_CHUNK)]));
 /**
- * Share of a coarse sample of the game canvas that is painted (opaque and not black). The title
- * fills the whole canvas, so a booted shell reads well above 0.9; an unbooted one (entry chunk
- * missing) leaves the canvas at 0. Used where `window.__towerclash` cannot exist (its lazy chunk
- * is not cached), so the boot is judged by the pixels, not the debug surface.
+ * Share of a coarse sample of the screen that is painted (opaque and not black): the ground layer under
+ * the game canvas, composited the way the page stacks them (AUD-Q11: the idle title paints its sea and
+ * island on #ground once the lazy chunk is in, its whole frame on #game before). The title fills the
+ * whole screen, so a booted shell reads well above 0.9; an unbooted one (entry chunk missing) leaves
+ * both canvases at 0. Used where `window.__towerclash` cannot exist (its lazy chunk is not cached), so
+ * the boot is judged by the pixels, not the debug surface.
  */
 const paintedShare = (page: Page) =>
   page.evaluate(() => {
-    const canvas = document.getElementById('game');
-    if (!(canvas instanceof HTMLCanvasElement) || canvas.width === 0 || canvas.height === 0) return 0;
+    const game = document.getElementById('game');
+    if (!(game instanceof HTMLCanvasElement) || game.width === 0 || game.height === 0) return 0;
+    const canvas = document.createElement('canvas');
+    canvas.width = game.width;
+    canvas.height = game.height;
+    for (const id of ['ground', 'game']) {
+      const layer = document.getElementById(id);
+      if (layer instanceof HTMLCanvasElement && layer.width > 0) canvas.getContext('2d')?.drawImage(layer, 0, 0);
+    }
     const ctx = canvas.getContext('2d');
     if (!ctx) return 0;
     const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;

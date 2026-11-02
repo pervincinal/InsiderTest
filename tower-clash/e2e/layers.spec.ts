@@ -93,7 +93,9 @@ test.describe('PERF-3 canvas layers', () => {
     expect(await page.evaluate(() => [...document.querySelectorAll('#app canvas')].map((c) => c.id))).toEqual(['ground', 'game', 'hud']);
     expect(await hitElementId(page, MAP.w / 2, MAP.h / 2)).toBe('game');
     expect(await hitElementId(page, 20, 20)).toBe('game'); // letterbox corner too: the canvases cover the viewport
-    await expectHudBlank(page, 'title');
+    // AUD-Q11: the idle title keeps its static UI on the HUD layer (its island on #ground) once the lazy chunk is in
+    await expect.poll(async () => (await stats(page, 'hud')).opaque, { message: 'title: static UI on the HUD layer' }).toBeGreaterThan(0);
+    expect(await hitElementId(page, MAP.w / 2, MAP.h / 2)).toBe('game');
     // a real touch on PLAY (Pixel 5 project: hasTouch) opens the level map
     const c = await toClient(page, TITLE_PLAY.x + TITLE_PLAY.w / 2, TITLE_PLAY.y + TITLE_PLAY.h / 2);
     await page.touchscreen.tap(c.x, c.y);

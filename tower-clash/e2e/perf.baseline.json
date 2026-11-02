@@ -32,43 +32,43 @@
       }
     },
     "container": {
-      "sha": "2fa8509",
-      "date": "2026-10-31",
-      "source": "npm run perf:baseline, 5 runs of e2e/perf.spec.ts's frame tests (median per scene) on the agents' 4-core container (load 6-10 from parallel agent runs), 2fa8509 + the uncommitted 2026-10-31 sprint tree incl. AUD-Q8",
+      "sha": "e3a9796",
+      "date": "2026-11-02",
+      "source": "npm run perf:baseline, 5 runs of e2e/perf.spec.ts's frame tests (median per scene) on the agents' 4-core container, e3a9796 + the uncommitted 2026-11-02 tree incl. AUD-Q11 (layered idle title, baked wordmark)",
       "runs": 5,
-      "calibMs": 22.02,
+      "calibMs": 17.93,
       "scenes": {
         "level50": {
-          "workMs": 26.68,
-          "norm": 1.2422,
+          "workMs": 19.66,
+          "norm": 1.0843,
           "samples": [
-            1.2422,
-            1.2494,
-            1.307,
-            1.1277,
-            1.1954
+            1.1602,
+            1.0843,
+            1.0428,
+            1.0529,
+            1.1769
           ]
         },
         "title": {
-          "workMs": 37.84,
-          "norm": 1.72,
+          "workMs": 4.29,
+          "norm": 0.2401,
           "samples": [
-            1.8779,
-            1.6427,
-            1.7349,
-            1.72,
-            1.6196
+            0.2451,
+            0.2401,
+            0.2378,
+            0.2212,
+            0.2527
           ]
         },
         "shop": {
-          "workMs": 25.63,
-          "norm": 1.1911,
+          "workMs": 19.96,
+          "norm": 1.0965,
           "samples": [
-            1.159,
-            1.2183,
-            1.1264,
-            1.1911,
-            1.2082
+            1.1506,
+            1.0689,
+            1.0965,
+            1.0048,
+            1.3313
           ]
         }
       }

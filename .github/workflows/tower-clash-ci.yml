@@ -286,3 +286,57 @@ jobs:
             tower-clash/test-results
           if-no-files-found: ignore
           retention-days: 7
+
+  # AUD-Q12 (2026-11-02): the long-session memory soak. The `soak` Playwright project (playwright.config.ts:
+  # Chromium on the 430 × 932 DPR-3 phone metrics, `--enable-precise-memory-info`) runs e2e/soak.spec.ts on one
+  # worker: every level 1 → 50 back to back on one page at ×10 with the reference player (no reload), then levels
+  # 1–10 again (lap 2), post-GC JS heap / Nodes / Documents / canvases sampled every 10 levels — fails when the heap
+  # after level 50 or lap 2 exceeds level 10's × 1.25 + 4 MB, Nodes / Documents drift > 20, a level never reaches
+  # a result or the page throws —
+  # and MM-4's three canvas backing stores under the native / web / no DPR cap. Prints `[soak]` table rows and
+  # `::notice` lines (`[soak-summary]`, `[soak-canvas]`) on the check run. Not in the chromium shards (their
+  # testIgnore), in parallel with them (no `needs:`), its own build, port and output dir like a shard. Required
+  # with the CI group in scripts/ciStatus.mjs (REQUIRED_TOGETHER). Measured 2026-11-02 locally (4 cores): levels
+  # 1–50 + MM-4 in 5.4 min at load ≈ 1–3; with lap 2, 8.4 min at load 23–31 (other agents' runs) — ≈ 6.5 min
+  # expected on an idle runner, inside the 15-minute step (docs/BACKLOG.md AUD-Q12 has the table).
+  e2e-soak:
+    name: e2e (soak)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CI: true
+    defaults:
+      run:
+        working-directory: tower-clash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tower-clash/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser e2e (soak, levels 1-50 at x10 + MM-4 canvases)
+        timeout-minutes: 15
+        run: PW_PORT=4195 PW_OUTPUT=test-results/soak npx playwright test --project=soak --workers=1
+
+      - name: Upload Playwright report, traces and screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-e2e-soak
+          path: |
+            tower-clash/playwright-report
+            tower-clash/test-results
+          if-no-files-found: ignore
+          retention-days: 7

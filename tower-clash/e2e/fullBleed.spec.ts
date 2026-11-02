@@ -54,13 +54,23 @@ const PHONES = [
 type Rgb = readonly number[];
 const dist = (a: Rgb, b: Rgb) => Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!, a[2]! - b[2]!);
 
-/** RGBA of the four corner pixels (2 device px in) of one of the stacked canvases. */
-function corners(page: Page, id: 'game' | 'ground' | 'hud'): Promise<{ tl: number[]; tr: number[]; bl: number[]; br: number[] }> {
+/**
+ * RGBA of the four corner pixels (2 device px in) of one of the stacked canvases, or of the three
+ * composited in their stacking order (`screen`: the idle title spreads its frame over them, AUD-Q11).
+ */
+function corners(page: Page, id: 'game' | 'ground' | 'hud' | 'screen'): Promise<{ tl: number[]; tr: number[]; bl: number[]; br: number[] }> {
   return page.evaluate(
     (cid) =>
       new Promise((resolve) =>
         requestAnimationFrame(() => {
-          const c = document.getElementById(cid) as HTMLCanvasElement;
+          let c = document.getElementById(cid) as HTMLCanvasElement;
+          if (cid === 'screen') {
+            const game = document.getElementById('game') as HTMLCanvasElement;
+            c = document.createElement('canvas');
+            c.width = game.width;
+            c.height = game.height;
+            for (const layer of ['ground', 'game', 'hud']) c.getContext('2d')!.drawImage(document.getElementById(layer) as HTMLCanvasElement, 0, 0);
+          }
           const ctx = c.getContext('2d')!;
           const at = (x: number, y: number) => Array.from(ctx.getImageData(x, y, 1, 1).data);
           resolve({ tl: at(2, 2), tr: at(c.width - 3, 2), bl: at(2, c.height - 3), br: at(c.width - 3, c.height - 3) });
@@ -121,7 +131,7 @@ for (const phone of PHONES) {
       // the map is letterboxed: its top edge sits well below the screen's top edge
       const top = await toClient(page, 0, 0);
       expect(top.y).toBeGreaterThan(phone.safe.top + 20);
-      const title = await corners(page, 'game');
+      const title = await corners(page, 'screen');
       expectSea(title.tl, SEA_TOP, 'title top-left');
       expectSea(title.tr, SEA_TOP, 'title top-right');
       expectSea(title.bl, SEA_BOTTOM, 'title bottom-left');

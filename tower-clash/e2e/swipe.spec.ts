@@ -12,7 +12,9 @@ import { clientPoint } from './helpers/tap';
  *   (i)   drag own tower (home) → neutral tower (mid): a player stream home → mid appears;
  *   (ii)  swipe from empty ground across that stream: it is cut (live, before the finger lifts);
  *   (iii) the level 2 tutorial's "stop the stream" hint disappears after the swipe-cut;
- *   (iv)  AUD-U6: a double tap on a target keeps the stream the first tap started; a tap after 400 ms stops it.
+ *   (iv)  AUD-U6: a double tap on a target keeps the stream the first tap started; a tap after 400 ms stops it;
+ *   (v)   AUD-U8: a slash that starts on home's own hit disc, crosses home → side and is released on empty
+ *         ground cuts that stream on release (a drag from an own tower released off every tower is a swipe).
  * Coordinates come from the level JSON (never imported from src/, see smoke.spec.ts); hint texts
  * from the running page (`getText`). Every touch point is converted inside a requestAnimationFrame
  * (e2e/helpers/tap.ts `clientPoint`), so the play screen has painted before the finger lands.
@@ -125,12 +127,12 @@ test.describe('touch drag-to-link and swipe-to-cut (BUG-33)', () => {
     ]);
     await expect.poll(() => hint(page), { message: 'side → foe completes step 2; the stop step shows' }).toBe(stopStream);
 
-    // a drag along the stream from the own tower again is still "link" (a no-op on an existing stream), never a cut
+    // a drag out of the own tower beside its stream, released on empty ground without crossing it, cuts nothing (AUD-U8)
     await finger.start(home);
-    await finger.slide(home, { x: (home.x + side.x) / 2, y: (home.y + side.y) / 2 - 4 }, 6);
+    await finger.slide(home, { x: (home.x + side.x) / 2, y: (home.y + side.y) / 2 - 30 }, 6);
     await finger.end();
     await page.waitForTimeout(200); // two sim ticks: an unlink would have landed
-    expect(await playerLinks(page), 'a drag from an own tower never cuts').toEqual([
+    expect(await playerLinks(page), 'a drag from an own tower that crosses no stream never cuts').toEqual([
       { from: 'home', to: 'side' },
       { from: 'side', to: 'foe' },
     ]);
@@ -181,6 +183,41 @@ test.describe('touch drag-to-link and swipe-to-cut (BUG-33)', () => {
     await page.waitForTimeout(300);
     await finger.taps(side);
     await expect.poll(() => playerLinks(page), { message: 'a later tap on the target unlinks' }).toEqual([]);
+    expect(pageErrors).toEqual([]);
+  });
+
+  test('AUD-U8: a slash that starts on home\'s disc across home → side, released on empty ground, cuts the stream', async ({ page }) => {
+    const pageErrors: string[] = [];
+    page.on('pageerror', (err) => pageErrors.push(String(err)));
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.__towerclash?.getTutorialHint === 'function');
+    expect(await page.evaluate((seed) => window.__towerclash.loadLevel(2, seed), SEED)).toBe(true);
+    await expect.poll(() => screen(page)).toBe('play');
+    await page.evaluate(() => window.__towerclash.startMatch());
+    await expect.poll(() => simTime(page)).toBeGreaterThan(0);
+
+    const finger = new Finger(page, await page.context().newCDPSession(page));
+    const home = towerAt('home');
+    const side = towerAt('side');
+    await finger.start(home);
+    await finger.slide(home, side, 10);
+    await finger.end();
+    await expect.poll(() => playerLinks(page), { message: 'the drag home → side opens a stream' }).toEqual([{ from: 'home', to: 'side' }]);
+
+    // 50 px from home's centre (inside its 57 px hit disc), above the lane; down across it ≈ 50 px out of home; off every disc
+    const start = { x: home.x + 40, y: home.y - 30 };
+    const end = { x: home.x + 70, y: home.y + 50 };
+    await finger.start(start);
+    await finger.slide(start, end, 8);
+    await expect
+      .poll(() => page.evaluate(() => window.__towerclash.getDrag()), { message: 'it starts on home: a drag (band up), not a swipe' })
+      .toMatchObject({ fromId: 'home', hoverTowerId: null });
+    await page.waitForTimeout(200); // four sim ticks: a live cut would have landed
+    expect(await playerLinks(page), 'nothing is cut while the finger is down: the release decides').toEqual([{ from: 'home', to: 'side' }]);
+    await finger.end();
+    await expect.poll(() => playerLinks(page), { message: 'released on empty ground: the stream it crossed is cut' }).toEqual([]);
+    expect(await page.evaluate(() => window.__towerclash.getDrag())).toBeNull();
+    expect(await screen(page)).toBe('play');
     expect(pageErrors).toEqual([]);
   });
 });

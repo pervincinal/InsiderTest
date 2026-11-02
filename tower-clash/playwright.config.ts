@@ -155,7 +155,7 @@ export default defineConfig({
       // Default project: `npm run e2e` (smoke, content, economy, perf). Mobile-sized Chromium.
       name: 'chromium',
       use: { ...devices['Pixel 5'] },
-      testIgnore: /(webview|pwa|webkit)\.spec\.ts$/,
+      testIgnore: /(webview|pwa|webkit|soak)\.spec\.ts$/,
     },
     {
       /**
@@ -204,6 +204,26 @@ export default defineConfig({
         launchOptions: {},
       },
       testMatch: /webkit\.spec\.ts$/,
+    },
+    {
+      /**
+       * AUD-Q12: the long-session memory soak, `npm run e2e:soak` (one worker): every level back to back at
+       * ×10 on one page, post-GC heap / Nodes / Documents / canvases sampled every 10 levels, plus MM-4's
+       * canvas backing stores under the three DPR caps. Chromium on the stakeholder's phone metrics (430 × 932
+       * CSS px, DPR 3, touch, the gestures430 iPhone UA), so the canvases are the size MM-4 is about.
+       * `--enable-precise-memory-info` makes `performance.memory` exact (it is bucketed without it). Only
+       * e2e/soak.spec.ts runs here; `chromium` ignores it, so the shards never run it. CI job `e2e (soak)`.
+       */
+      name: 'soak',
+      use: {
+        viewport: { width: 430, height: 932 },
+        deviceScaleFactor: 3,
+        isMobile: true,
+        hasTouch: true,
+        userAgent: IPHONE_UA,
+        launchOptions: { ...launchOptions, args: ['--enable-precise-memory-info'] },
+      },
+      testMatch: /soak\.spec\.ts$/,
     },
   ],
   webServer: {

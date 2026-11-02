@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { tapRect } from './helpers/tap';
+import { tapHud, tapRect } from './helpers/tap';
 import { shotPath } from './tools/shots';
 import { expectToast, recordToasts, toastMark } from './helpers/toasts';
 
@@ -33,6 +33,12 @@ const DAY_B = '2026-09-28';
 const DAY_C = '2026-09-29';
 /** The day before DAY_A: level 50, Reinforced (GDD §7.2 pins); the reference player wins it at the fixed seed. */
 const YESTERDAY_A = '2026-09-26';
+/** AUD-B8: the OVERDRIVE disc (src/render/layout.ts BOOSTERS) and its list price (GDD §2.6), no discount on these saves. */
+const BOOSTER_OVERDRIVE = { x: 217, y: 1186, w: 66, h: 88 };
+const OVERDRIVE_GOLD = 30;
+/** Monday of DAY_A's week (the weekly opens after level 32, src/daily/challenge.ts WEEKLY_UNLOCK_AFTER_LEVEL). */
+const WEEK_OF_A = '2026-09-21';
+const WEEKLY_UNLOCK_AFTER_LEVEL = 32;
 
 // AUD-Q15: e2e/tools/shots.ts picks the tracked folder (default run) or <PW_OUTPUT>/__screenshots__
 const shot = (page: Page, name: string) => page.screenshot({ path: shotPath(name), scale: 'css' });
@@ -227,6 +233,41 @@ test.describe('daily challenge', () => {
     expect((await save(page)).challenge.milestones).toEqual([3]);
     expect(errors).toEqual([]);
   });
+  test('AUD-B8: a booster bought with gold fires in the daily and the first win pays as usual; the weekly still refuses one', async ({ page }) => {
+    const stars: Record<string, number> = {};
+    for (let id = 1; id <= WEEKLY_UNLOCK_AFTER_LEVEL; id++) stars[String(id)] = 1;
+    const errors = await boot(page, { version: 3, stars, gold: 200, crystals: 3 }, DAY_A);
+    await page.evaluate((key) => window.__towerclash.setWeekKey(key), WEEK_OF_A);
+    const boosters = () => page.evaluate(() => (window.__towerclash.getState()?.boosters ?? []).filter((b) => b.owner === 'player').map((b) => b.type));
+    const coins = () => page.evaluate(() => window.__towerclash.getCoins());
+
+    // the daily: OVERDRIVE is drawn and tappable, paid in gold, and reaches the sim
+    await page.evaluate(() => void window.__towerclash.daily.start());
+    await expect.poll(() => screen(page)).toBe('play');
+    await tapHud(page, BOOSTER_OVERDRIVE);
+    await expect.poll(coins, { message: 'the booster is bought with gold' }).toBe(200 - OVERDRIVE_GOLD);
+    await expect.poll(boosters).toEqual(['overdrive']);
+    await shot(page, 'aud-b8-daily-booster');
+    await winRunningChallenge(page);
+    const result = (await page.evaluate(() => window.__towerclash.getResult()))!;
+    expect(result.coinsEarned).toBe(REWARD.gold + REWARD.goldPerStar * result.stars);
+    expect(result.crystalsEarned).toBe(REWARD.crystals);
+    const after = await save(page);
+    expect(after.gold).toBe(200 - OVERDRIVE_GOLD + result.coinsEarned);
+    expect(after.crystals).toBe(3 + REWARD.crystals);
+
+    // the weekly: the same tap buys nothing — the "not in the weekly" toast, no gold, no booster in the sim
+    await page.evaluate(() => void window.__towerclash.weekly.start());
+    await expect.poll(() => screen(page)).toBe('play');
+    expect((await page.evaluate(() => window.__towerclash.getState()))?.levelId).toBe((await page.evaluate(() => window.__towerclash.weekly.get())).challenge.levelId);
+    const beforeTap = await toastMark(page);
+    await tapHud(page, BOOSTER_OVERDRIVE);
+    await expectToast(page, await page.evaluate(() => window.__towerclash.getText('weekly.noBoosters')), { since: beforeTap, screen: 'play' });
+    expect(await coins()).toBe(after.gold);
+    expect(await boosters()).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+
   test("yesterday's map (DAILY-6): the row offers yesterday's challenge as practice — no gold, no streak, no ledger write", async ({ page }) => {
     const stars: Record<string, number> = {};
     for (let id = 1; id <= UNLOCK_AFTER_LEVEL; id++) stars[String(id)] = 1;

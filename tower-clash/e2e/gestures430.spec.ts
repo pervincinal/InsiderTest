@@ -16,7 +16,8 @@ import { hudClientPoint } from './helpers/tap';
  *
  *   BUG-33  drag own tower → tower links; a swipe from empty ground (or a foreign tower) across an own
  *           stream cuts it live, even as a fast flick of one to three move events; a drag that starts
- *           on an own tower never cuts; a `pointercancel` mid-drag finishes the drag where the finger
+ *           on an own tower cuts only when released on empty ground (AUD-U8: then it is a swipe and the
+ *           own streams its path crossed are cut); a `pointercancel` mid-drag finishes the drag where the finger
  *           last was; the level 2 tutorial's stop step clears on a cut, and a step nobody completes
  *           gives way after 20 s (src/ui/tutorial.ts TUTORIAL_STEP_TIMEOUT_MS).
  *   BUG-34  the pause button and MENU sit on the bands anchored to the safe edges and take taps there.
@@ -26,7 +27,8 @@ import { hudClientPoint } from './helpers/tap';
  *           links nothing (BUG-38; RELAY-1 replaced the old `hint.full` refusal: a full tower that
  *           streams onward relays, so a stream into it is a plain link).
  *   and their interplay: a drag from one own tower across another own tower's stream (band up, nothing
- *   cut, nothing linked on empty ground), a drag released on empty ground, two fingers at once.
+ *   cut while the finger is down; released on empty ground nothing links and, AUD-U8, that stream is cut),
+ *   a drag released on empty ground, two fingers at once.
  *
  * Coordinates come from the level JSON (never imported from src/, see smoke.spec.ts); texts from the
  * running page (`getText`); every touch point is converted inside a requestAnimationFrame
@@ -280,7 +282,7 @@ test.describe('touch gestures on a 430×932 iPhone-class screen, DPR 3, safe ins
     expect(errors).toEqual([]);
   });
 
-  test('BUG-33: swipes across the stream cut it — slow, and as 1-, 2- and 3-move flicks, from empty ground or a neutral tower; a drag that starts on the own tower never cuts', async ({ page }) => {
+  test('BUG-33: swipes across the stream cut it — slow, and as 1-, 2- and 3-move flicks, from empty ground or a neutral tower; a drag that starts on the own tower cuts only on its release on empty ground (AUD-U8)', async ({ page }) => {
     const errors = await boot(page, CLEARED);
     await startLevel(page, 2);
     const f = new Fingers(page, await page.context().newCDPSession(page));
@@ -299,14 +301,17 @@ test.describe('touch gestures on a 430×932 iPhone-class screen, DPR 3, safe ins
     };
 
     await link('drag home → mid links');
-    // a drag that starts on the own tower and runs along / beside its stream and off to the side: a drag, never a cut
+    // a drag that starts on the own tower and runs along / beside its stream and off to the side: a drag (band up),
+    // no cut while the finger is down; AUD-U8: released on empty ground it is a swipe, the stream it crossed is cut
     await f.start(home);
     await f.slide(home, { x: home.x + 6, y }, 4);
     await f.slide({ x: home.x + 6, y }, left, 6);
     await expect.poll(() => drag(page), { message: 'from the own tower it is a drag (band up)' }).toMatchObject({ fromId: 'home' });
-    await f.end();
     await page.waitForTimeout(200);
-    expect(await playerLinks(page), 'a drag from the own tower across its own stream cuts nothing').toEqual([{ from: 'home', to: 'mid' }]);
+    expect(await playerLinks(page), 'a drag from the own tower across its own stream cuts nothing while the finger is down').toEqual([{ from: 'home', to: 'mid' }]);
+    await f.end();
+    await expect.poll(() => playerLinks(page), { message: 'AUD-U8: released on empty ground, the crossed stream is cut' }).toEqual([]);
+    await link('re-link before the slow swipe');
 
     // slow swipe from empty ground: cut live, before the finger lifts
     await f.start(left);
@@ -331,7 +336,7 @@ test.describe('touch gestures on a 430×932 iPhone-class screen, DPR 3, safe ins
     expect(errors).toEqual([]);
   });
 
-  test('BUG-33 × BUG-35 with two own towers (level 8): a drag from homeW across homeE\'s stream shows the band and cuts nothing; released on nE it links; one swipe cuts both streams', async ({ page }) => {
+  test('BUG-33 × BUG-35 with two own towers (level 8): a drag from homeW across homeE\'s stream shows the band and cuts nothing while down, cuts it released on empty ground (AUD-U8); released on nE it links; one swipe cuts both streams', async ({ page }) => {
     const errors = await boot(page, CLEARED);
     await startLevel(page, 8);
     const f = new Fingers(page, await page.context().newCDPSession(page));
@@ -356,9 +361,13 @@ test.describe('touch gestures on a 430×932 iPhone-class screen, DPR 3, safe ins
     });
     expect(await playerLinks(page), 'crossing the own stream mid-drag cuts nothing').toEqual([{ from: 'homeE', to: 'nE' }]);
     await f.end();
-    await page.waitForTimeout(200);
-    expect(await playerLinks(page), 'released on empty ground: no new stream, homeE → nE intact').toEqual([{ from: 'homeE', to: 'nE' }]);
+    // AUD-U8: released on empty ground the drag is a swipe: no new stream, and homeE → nE (crossed) is cut
+    await expect.poll(() => playerLinks(page), { message: 'released on empty ground: no new stream, the crossed homeE → nE cut' }).toEqual([]);
     expect(await drag(page)).toBeNull();
+    await f.start(homeE);
+    await f.slide(homeE, nE, 8);
+    await f.end();
+    await expect.poll(() => playerLinks(page), { message: 'homeE → nE again' }).toEqual([{ from: 'homeE', to: 'nE' }]);
 
     // homeW → nE: the band snaps on nE (its own tower's target) and the release adds the second stream
     await f.start(homeW);

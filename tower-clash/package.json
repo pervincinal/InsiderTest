@@ -24,6 +24,7 @@
     "e2e:webview": "npm run build && playwright test --project=android-webview",
     "e2e:pwa": "npm run build && playwright test --project=pwa",
     "e2e:webkit": "npm run build && playwright test --project=webkit-iphone",
+    "e2e:soak": "npm run build && playwright test --project=soak --workers=1",
     "cap:sync": "npm run build && cap sync",
     "android:build": "npm run cap:sync && cd android && ./gradlew assembleDebug",
     "ios:open": "npm run cap:sync && cap open ios",
