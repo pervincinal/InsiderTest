@@ -247,7 +247,9 @@ jobs:
   # The same 5 tests pass on Chromium with the same metrics, 31 s (2026-10-31, scratch run); WebKit itself first runs here.
   e2e-webkit:
     name: e2e (webkit)
-    runs-on: ubuntu-latest
+    # ubuntu-24.04 pinned: on 2026-11-02 ubuntu-latest moved to 26.04 (resolute), where Playwright 1.47's WebKit
+    # apt deps (libicu74, libvpx9, libx264-164) have no candidate and `playwright install --with-deps webkit` exits 100.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       CI: true
