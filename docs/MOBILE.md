@@ -533,6 +533,8 @@ Reverting to option B (personalised ads on iOS) would need: the ATT call back in
 4. The plugin does not answer within 1.5 s → the game starts from the WebView copy; the mirror is switched off for that launch only if switching it on could overwrite a good native copy with an empty game.
 A save written by a newer version (read-only, AUD-Q3) is never mirrored over; "Reset progress" is mirrored, so a reset stays a reset.
 
+**Writes the WebView refuses (AUD-Q10, 2026-11-02, Frontend; GDD §4 "Save").** `src/ui/save.ts` hands every committed save to the mirror *before* `localStorage.setItem`, once per write — so when the WebView copy cannot be written (quota, storage disabled) the native copy still carries the newest progress and the restore rule above brings it back at the next launch (case 2: the WebView copy is then older or unreadable; a *readable but older* WebView copy still wins — the known limit below). The game retries a refused write once after 100 ms, then shows "Progress could not be saved — free up space or check storage settings" on the title and the result footer until a write lands; a WebView whose `getItem` throws at boot plays read-only from a default and mirrors nothing, so a default can never overwrite the native copy. Tests: `tests/native/saveMirror.test.ts` ("mirrors a write that localStorage refused"), `tests/ui/saveFailing.test.ts`.
+
 **What survives what** (expected; the "on device" column is what TF-00 / TF-17b and the open items below still have to confirm):
 
 | Event | WebView copy | Native copy | Result | On device |
