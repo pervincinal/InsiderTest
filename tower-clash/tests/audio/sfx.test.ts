@@ -1,3 +1,5 @@
+import { readFileSync, readdirSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { makeLevel } from '../helpers';
 import { createState } from '../../src/sim/create';
@@ -8,9 +10,12 @@ import { effectsOn, initAudio, isAudioUnlocked, isMuted, loadSfxRecipes, musicOn
 // AUD-F6: the rules are the lazy recipes chunk's (src/audio/sfxRules.ts)
 import { ArrivalTracker, RATE_LIMIT_S, SEND_PITCH_CAP, sendPitchHz, sfxForEvents } from '../../src/audio/sfxRules';
 import type { SfxName } from '../../src/audio/index';
+import { ARRIVE_TIMBRES, STAR_CHORDS, variation } from '../../src/audio/recipes';
 import { FakeAudioContext } from './fakeAudio';
 
-const ALL: SfxName[] = ['send', 'arrive', 'capture', 'upgrade', 'unitDied', 'artillery', 'won', 'lost', 'button', 'refuse', 'stalemate', 'hit', 'mine', 'freeze', 'overdrive'];
+/** AUD-F8: the menu / result sounds (≤ 500 ms; the older ones stay ≤ 400 ms). */
+const F8_F9: SfxName[] = ['purchase', 'reward', 'unlock', 'achievement', 'tally', 'won', 'lost'];
+const ALL: SfxName[] = ['send', 'arrive', 'capture', 'upgrade', 'unitDied', 'artillery', 'button', 'refuse', 'stalemate', 'hit', 'mine', 'freeze', 'overdrive', 'tankArrive', ...F8_F9];
 
 let ctx: FakeAudioContext;
 let save: SaveData;
@@ -80,7 +85,7 @@ describe('mute', () => {
     expect(effectsOn()).toBe(false);
     expect(musicOn()).toBe(true);
     expect(isMuted()).toBe(false); // the music still plays: the speaker is not "muted"
-    expect(playSfx('won')).toBe(false);
+    expect(playSfx('won', { step: 0, count: 1 })).toBe(false);
     expect(ctx.voices()).toEqual([]);
 
     setMuted(true); // no change → no extra write
@@ -89,7 +94,7 @@ describe('mute', () => {
     setMuted(false);
     expect(save.settings.sound).toBe(true);
     expect(persisted.length).toBe(2);
-    expect(playSfx('won')).toBe(true);
+    expect(playSfx('won', { step: 0, count: 1 })).toBe(true);
     expect(ctx.voices().length).toBeGreaterThan(0);
   });
 
@@ -168,16 +173,17 @@ describe('send pitch', () => {
 });
 
 describe('durations', () => {
-  it('every sound except won/lost ends within 400 ms', () => {
+  it('every sound ends within 400 ms, the AUD-F8 / F9 menu and result sounds within 500 ms; none has more than 5 voices', () => {
     unlockAudio();
     for (const name of ALL) {
       ctx.clear();
       ctx.currentTime += 1; // defeat rate limits
-      expect(playSfx(name, { count: 5, capture: 'gain' })).toBe(true);
+      expect(playSfx(name, { count: 5, capture: 'gain', step: 4 })).toBe(true); // `step` 4 of 5 stars: the held last chord
       const longest = longestVoiceS();
       expect(longest, name).toBeGreaterThan(0);
-      if (name === 'won' || name === 'lost') expect(longest, name).toBeGreaterThan(0.4);
-      else expect(longest, name).toBeLessThanOrEqual(0.4);
+      expect(longest, name).toBeLessThanOrEqual(F8_F9.includes(name) ? 0.5 : 0.4);
+      expect(ctx.voices().length, name).toBeLessThanOrEqual(5); // freeze: 4 sines + its frost air
+      if (F8_F9.includes(name) || name === 'tankArrive') expect(ctx.voices().length, name).toBeLessThanOrEqual(4);
     }
     for (const kind of ['loss', 'other'] as const) {
       ctx.clear();
@@ -187,17 +193,37 @@ describe('durations', () => {
     }
   });
 
-  it('won is a 4-note rising fanfare, lost a descending line', () => {
+  it('AUD-F9: won is one rising chord per star (the last earned held over C4), lost one low chord; the outcome tick has no voice', () => {
     unlockAudio();
-    playSfx('won');
-    const wonNotes = ctx.oscillators.filter((o) => o.type === 'triangle').map((o) => o.frequency.events[0]!.value);
-    expect(wonNotes.length).toBe(4);
-    for (let i = 1; i < 4; i++) expect(wonNotes[i]).toBeGreaterThan(wonNotes[i - 1]!);
-    ctx.clear();
-    playSfx('lost');
-    const lostNotes = ctx.oscillators.map((o) => o.frequency.events[0]!.value);
-    expect(lostNotes.length).toBe(4);
-    for (let i = 1; i < 4; i++) expect(lostNotes[i]).toBeLessThan(lostNotes[i - 1]!);
+    const chord = (name: SfxName, opts: { step?: number; count?: number }) => {
+      ctx.clear();
+      ctx.currentTime += 1;
+      expect(playSfx(name, opts)).toBe(true);
+      return { hz: ctx.oscillators.map((o) => o.frequency.events[0]!.value), types: ctx.oscillators.map((o) => o.type), longest: longestVoiceS(), at: ctx.oscillators.map((o) => o.startAt! - ctx.currentTime) };
+    };
+    const tops: number[] = [];
+    for (let i = 0; i < 3; i++) {
+      const c = chord('won', { step: i, count: 3 });
+      expect(c.at.every((t) => t === 0), 'a chord, not an arpeggio').toBe(true);
+      expect(c.hz.slice(0, 2)).toEqual([...STAR_CHORDS[i]!]);
+      expect(c.types.slice(0, 2)).toEqual(['triangle', 'triangle']);
+      expect(c.hz.length).toBe(i < 2 ? 2 : 3);
+      expect(c.longest).toBeCloseTo(i < 2 ? 0.22 : 0.48, 9);
+      if (i === 2) expect(c.hz[2]).toBe(261.6); // the 3rd star resolves over C4
+      tops.push(Math.max(...c.hz));
+    }
+    expect(tops[1]).toBeGreaterThan(tops[0]!);
+    expect(tops[2]).toBeGreaterThan(tops[1]!);
+    // 1★: its one chord is the held one
+    const one = chord('won', { step: 0, count: 1 });
+    expect(one.hz).toEqual([...STAR_CHORDS[0]!, 261.6]);
+    expect(one.longest).toBeCloseTo(0.48, 9);
+    const lost = chord('lost', { step: 0 });
+    expect(lost.hz).toEqual([220, 261.6, 329.6, 110]);
+    expect(lost.at.every((t) => t === 0)).toBe(true);
+    expect(Math.max(...lost.hz)).toBeLessThan(Math.min(...STAR_CHORDS[0]!)); // lower than any star chord
+    // the sim's outcome tick (no `step`): the capture's chime is its sound, the stingers follow the card
+    for (const name of ['won', 'lost'] as const) expect(chord(name, {}).hz).toEqual([]);
   });
 });
 
@@ -237,6 +263,13 @@ describe('event → sfx mapping', () => {
       'won',
       'lost',
     ]);
+  });
+
+  it('AUD-F10: the player\'s own tank landing maps to one tankArrive (a soldier\'s, or a foe\'s, does not)', () => {
+    const landed = (owner: 'player' | 'enemy1', weight: number, hostile: boolean): SimEvent => ({ type: 'landed', towerId: 'a', owner, weight, hostile });
+    const names = (evs: SimEvent[]) => sfxForEvents(evs, 'player', towers).map((c) => c.name);
+    expect(names([landed('player', 5, false), landed('player', 5, true)])).toEqual(['tankArrive', 'tankArrive']);
+    expect(names([landed('player', 1, false), landed('enemy1', 5, true), landed('enemy1', 5, false)])).toEqual([]);
   });
 
   it('onSimEvents plays the mapped sounds through the player', () => {
@@ -418,5 +451,121 @@ describe('booster casts (AUD-F3)', () => {
   it('neither is rate-limited (one cast per booster run; the bar refuses a second while active)', () => {
     expect(RATE_LIMIT_S.freeze).toBeUndefined();
     expect(RATE_LIMIT_S.overdrive).toBeUndefined();
+  });
+});
+
+/*
+ * AUD-F8: `upgrade` was the sound of a tower level-up, every shop purchase, rewarded charges, continues, the
+ * daily reward, achievements and the level skip. Each of those now has its own recipe.
+ */
+describe('AUD-F8 purchase / reward / unlock / achievement', () => {
+  beforeEach(() => unlockAudio());
+
+  function notes(name: SfxName) {
+    ctx.clear();
+    ctx.currentTime += 1;
+    expect(playSfx(name)).toBe(true);
+    return { hz: ctx.oscillators.map((o) => o.frequency.events[0]!.value), noise: ctx.sources.length, voices: ctx.voices().length, longest: longestVoiceS(), at: ctx.oscillators.map((o) => o.startAt! - ctx.currentTime) };
+  }
+
+  it('exist with ≤ 4 voices and ≤ 500 ms each, and share no first note with each other or with `upgrade`', () => {
+    const up = notes('upgrade').hz;
+    const firsts = new Set<number>();
+    for (const name of ['purchase', 'reward', 'unlock', 'achievement'] as const) {
+      const n = notes(name);
+      expect(n.voices, name).toBeGreaterThan(0);
+      expect(n.voices, name).toBeLessThanOrEqual(4);
+      expect(n.longest, name).toBeLessThanOrEqual(0.5);
+      expect(up, name).not.toContain(n.hz[0]);
+      expect(firsts.has(n.hz[0]!), name).toBe(false);
+      firsts.add(n.hz[0]!);
+    }
+  });
+
+  it('purchase: a short bright clink (two high triangles + a metal tick, < 250 ms); reward: a rising sparkle', () => {
+    const p = notes('purchase');
+    expect(p.noise).toBe(1);
+    expect(p.hz.every((hz) => hz > 1900)).toBe(true);
+    expect(p.longest).toBeLessThan(0.25);
+    const r = notes('reward');
+    const glide = ctx.oscillators[0]!.frequency.events;
+    expect(glide.at(-1)!.value).toBeGreaterThan(glide[0]!.value); // rises
+    expect(r.at[2]!).toBeGreaterThan(r.at[1]!);
+  });
+
+  it('unlock: two bell notes falling (≠ the stalemate\'s rising fourth); achievement: three rising notes', () => {
+    const u = notes('unlock');
+    const fundamentals = u.hz.filter((_, i) => i % 2 === 0);
+    expect(fundamentals).toHaveLength(2);
+    expect(fundamentals[1]).toBeLessThan(fundamentals[0]!);
+    const a = notes('achievement');
+    const call = a.hz.slice(0, 3);
+    expect(call[1]).toBeGreaterThan(call[0]!);
+    expect(call[2]).toBeGreaterThan(call[1]!);
+    [0, 0.09, 0.18].forEach((t, i) => expect(a.at[i]).toBeCloseTo(t, 9));
+  });
+
+  it('`upgrade` is the tower level-up only: no playSfx(\'upgrade\') under src/, and the event mapping emits it for an own tower\'s upgrade alone', () => {
+    const src = resolve(new URL('../../src/', import.meta.url).pathname);
+    const files = readdirSync(src, { recursive: true }).map(String).filter((f) => f.endsWith('.ts'));
+    const callers = files.filter((f) => /playSfx\(\s*'upgrade'/.test(readFileSync(join(src, f), 'utf8')));
+    expect(callers).toEqual([]);
+    const rules = readFileSync(join(src, 'audio/sfxRules.ts'), 'utf8');
+    expect(rules.match(/name: 'upgrade'/g)).toHaveLength(1);
+    // the routed call sites use the new names
+    const uses = (name: string) => files.filter((f) => readFileSync(join(src, f), 'utf8').includes(`playSfx('${name}')`)).map((f) => f.split('\\').join('/')).sort();
+    expect(uses('purchase')).toEqual(['ui/shop.ts']);
+    expect(uses('reward')).toEqual(['ui/play.ts', 'ui/result.ts', 'ui/screens.ts']);
+    expect(uses('unlock')).toEqual(['ui/result.ts']);
+    expect(uses('achievement')).toEqual(['ui/achievements.ts']);
+  });
+});
+
+/*
+ * AUD-F10: a tank landing (the player's own) is `arrive`'s timbre a fifth lower over a 60 ms thud; it takes
+ * two of `arrive`'s ten slots a second and swallows the frame's light tap.
+ */
+describe('AUD-F10 tank landing', () => {
+  beforeEach(() => unlockAudio());
+
+  it('plays the arrive timbre a fifth lower plus a 60 ms triangle thud (2 voices)', () => {
+    ctx.currentTime = 1;
+    expect(playSfx('tankArrive')).toBe(true);
+    const [tone, thud] = ctx.oscillators;
+    const v = variation('tankArrive', 0);
+    const k = Math.pow(2, v.cents / 1200);
+    expect(ctx.voices()).toHaveLength(2);
+    expect(tone!.frequency.events[0]!.value).toBeCloseTo((ARRIVE_TIMBRES[0]![1] / 1.5) * k, 6);
+    expect(thud!.type).toBe('triangle');
+    expect(thud!.stopAt! - thud!.startAt!).toBeCloseTo(0.06, 9);
+    expect(thud!.frequency.events[0]!.value).toBeGreaterThan(150); // above the phone-speaker floor
+  });
+
+  it('counts as two arrive slots: the next light tap waits 200 ms', () => {
+    ctx.currentTime = 1;
+    expect(playSfx('tankArrive')).toBe(true);
+    expect(playSfx('arrive')).toBe(false); // the same frame's soldier
+    ctx.currentTime = 1.15;
+    expect(playSfx('arrive')).toBe(false);
+    ctx.currentTime = 1.2;
+    expect(playSfx('arrive')).toBe(true);
+    // a soldier's tap just before does not silence the tank (one per tank)
+    ctx.currentTime = 2;
+    expect(playSfx('arrive')).toBe(true);
+    ctx.currentTime = 2.05;
+    expect(playSfx('tankArrive')).toBe(true);
+    expect(playSfx('tankArrive')).toBe(false); // two tanks in one tick: one heavy tap
+  });
+
+  it('through the facade: the tank\'s landed event plays it, the frame\'s arrival tap for the same unit stays out', () => {
+    const state = createState(makeLevel(), 1);
+    state.units.push({ id: 7, owner: 'player', kind: 'tank', weight: 5, roadId: 'e-p', from: 'p', to: 'e', progress: 0.99, speed: 100 });
+    onSimFrame(state);
+    ctx.clear();
+    state.units.length = 0;
+    onSimEvents([{ type: 'landed', towerId: 'e', owner: 'player', weight: 5, hostile: true }], state);
+    expect(ctx.voices()).toHaveLength(2);
+    onSimFrame(state);
+    expect(ctx.voices()).toHaveLength(2);
   });
 });

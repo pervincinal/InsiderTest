@@ -17,6 +17,9 @@ export const RATE_LIMIT_S: Readonly<Partial<Record<SfxName, number>>> = Object.f
   send: 0.05,
   refuse: 0.12, // a tap-spam of refusals is one thud per tap, never a rumble
   mine: 0.12, // a column walking over a mine is one blast per kill up to ≈ 8/s (`hit` is limited in recipes.ts `playHits`)
+  tankArrive: 0.2, // AUD-F10: two `arrive` slots — and it pushes `arrive`'s next slot out by the same (`rateOk`)
+  tally: 0.125, // AUD-F9: the gold count ticks ≤ 8/s
+  purchase: 0.08, // AUD-F8: a double tap on a buy button is one clink
 });
 
 /** Tolerance for clock arithmetic so a gap of exactly the limit is accepted. */
@@ -38,6 +41,9 @@ export function rateOk(last: Map<SfxName, number>, name: SfxName, now: number): 
   const at = last.get(name);
   if (at !== undefined && now - at < limit - LIMIT_EPS_S) return false;
   last.set(name, now);
+  // AUD-F10: a tank landing counts as two `arrive` slots — the next arrival tap waits 2 × its limit
+  // (so the soldier `onSimFrame` sees vanish in the same frame as the tank is not a second tap)
+  if (name === 'tankArrive') last.set('arrive', now + RATE_LIMIT_S.arrive!);
   return true;
 }
 
@@ -63,11 +69,16 @@ export function sfxForEvents(
         // AUD-F2: a mine kill has its own blast; artillery its shell; a clash the short crackle
         out.push({ name: ev.cause === 'clash' ? 'unitDied' : ev.cause });
         break;
-      case 'won':
-        out.push({ name: 'won' });
+      case 'landed':
+        // AUD-F10: the player's own tank landing (reinforcing or attacking) is one heavy tap; a soldier's
+        // landing is the arrival detector's light `arrive` (`onSimFrame`); a foe's on us is `hit` (`playHits`)
+        if (ev.owner === me && ev.weight > 1) out.push({ name: 'tankArrive' });
         break;
+      case 'won':
       case 'lost':
-        out.push({ name: 'lost' });
+        // AUD-F9: the outcome tick is the capture's chime (above); the stingers follow the result card
+        // (src/audio/resultCues.ts) — this call (no `step`) only ducks the music and drops its pulse
+        out.push({ name: ev.type });
         break;
     }
   }

@@ -24,6 +24,25 @@ export const MINE_MARK_MS = 300;
 /** The capture shake's length (particles.ts SHAKE_MS): a running shake stronger than the nudge is left alone. */
 const SHAKE_MS = 320;
 
+/**
+ * AUD-F10: a landing's impact ring by the landing unit's weight — a soldier (1) keeps the ART-23 18 px
+ * hostile / 9 px friendly ring, a tank (5) 26 / 13 px, linear between, capped at the tank's (× 26 / 18).
+ */
+export const LAND_RING_PX = 18;
+export const TANK_RING_PX = 26;
+export const FRIEND_RING_PX = 9;
+export function landingRingPx(weight: number, base: number = LAND_RING_PX): number {
+  const k = Math.max(0, Math.min(1, (weight - 1) / 4));
+  return base * (1 + k * (TANK_RING_PX / LAND_RING_PX - 1));
+}
+/** …and its ring pulses: a tank (weight ≥ 5) sends one extra, slower ring out behind the first. */
+export function landingPulses(weight: number): number {
+  return weight >= 5 ? 2 : 1;
+}
+/** The extra pulse: it starts at this fraction of the ring and lives TANK_PULSE_MS, so it trails the first ring out. */
+export const TANK_PULSE_SCALE = 0.55;
+export const TANK_PULSE_MS = 600;
+
 /** Start a `px` world shake unless the one running is still stronger (a 2 px nudge never cuts a capture's 6 px short). */
 function shakeBy(host: BurstHost, px: number, nowMs: number): void {
   const t = (nowMs - host.shakeAt) / SHAKE_MS;
@@ -33,6 +52,33 @@ function shakeBy(host: BurstHost, px: number, nowMs: number): void {
 }
 
 export const ECONOMY_BURSTS: EconomyBursts = {
+  /**
+   * AUD-F10: a tank lands on `t` (it used to burst like one soldier). Hostile: the impact ring in the
+   * attacker's colour at `landingRingPx` (26 px), an extra slower ring pulse in its lit tone, a bigger hit
+   * flash and six sparks; friendly: the reinforcement's faint ring at 13 px, the extra pulse and five sparks.
+   * One per tank — never refused by the per-tower interval or the shared landing bucket (it still takes a
+   * token), and it stamps the tower's ring time so the soldier-sized ring of the same landing (`landings`,
+   * the neutral path, `reinforce`) stays out. Reduced motion: nothing spawns (the badge jolt is `landings`').
+   */
+  tank(host, t, ev, pal, nowMs) {
+    if (ev.hostile) {
+      let rec = host.fire.get(t.id);
+      if (!rec) host.fire.set(t.id, (rec = { until: 0, hitAt: -Infinity, ringAt: -Infinity }));
+      rec.ringAt = nowMs;
+    } else host.friendAt.set(t.id, nowMs);
+    if (host.reducedMotion) return true;
+    host.takeLandToken(nowMs);
+    const lit = pal.ownerTones[ev.owner].lit;
+    const color = ev.hostile ? pal.owners[ev.owner] : lit;
+    const px = landingRingPx(ev.weight, ev.hostile ? LAND_RING_PX : FRIEND_RING_PX);
+    host.push(host.make('impact', t.x, t.y, color, ev.hostile ? 380 : 300, px));
+    for (let k = 1; k < landingPulses(ev.weight); k++) host.push(host.make('impact', t.x, t.y, lit, TANK_PULSE_MS, px * TANK_PULSE_SCALE));
+    if (ev.hostile) {
+      host.push(host.make('flash', t.x, t.y - 4, lit, 160, 13));
+      host.kick(t.x, t.y, [color, lit, color, '#fffaf0', lit, '#fffaf0'], 4.5, 1.25);
+    } else host.kick(t.x, t.y, [lit, '#fffaf0', lit, '#fffaf0', lit], 2.6, 0.8);
+    return true;
+  },
   /**
    * AUD-F2: a unit died on a mine at (x, y). The blast sits on the mine it crossed (the nearest one).
    * Gun-metal soot puffs at the victim; at the mine, for one token of the shared landing bucket, a

@@ -4,11 +4,13 @@
  * src/audio/sfx.ts imports this module on the first play (and `initAudio` / `unlockAudio` warm it
  * as soon as sound is on) so the eager bundle stays under its 80 kB budget. A play that arrives
  * before the chunk is in is skipped, never queued: a late click would be worse than none.
- * Every sound is ≤ 400 ms except `won`/`lost`. Nothing here touches the DOM.
+ * Every sound is ≤ 400 ms except the AUD-F8 / F9 menu and result sounds (≤ 500 ms). AUD-F7: every play
+ * but the identity sounds is detuned / levelled a little (`variation`), `arrive` and `unitDied` rotate
+ * over their timbres. Nothing here touches the DOM.
  */
-import type { Owner, SimEvent } from '../sim/types';
+import type { GameState, Owner, SimEvent } from '../sim/types';
 import type { CaptureKind, HitState, SfxName, SfxOptions } from './sfx';
-import { sendPitchHz } from './sfxRules';
+import { ArrivalTracker, sendPitchHz, sfxForEvents } from './sfxRules';
 import { routeSfx } from './mixer';
 
 /** AUD-F6: the event mapping, arrival detector and rate limits ride in this chunk (src/audio/sfx.ts loads it). */
@@ -54,43 +56,202 @@ export function playHits(
   }
 }
 
+/* ---------- AUD-F7: per-play variation ---------- */
+
+/** Every varied play is detuned within ±VARY_CENTS and levelled within ±VARY_DB of its recipe. */
+export const VARY_CENTS = 40;
+export const VARY_DB = 2;
+/**
+ * Never varied: the result stingers, `hit` (its knock is the rate-limited "they hit me" cue with its own tank
+ * pitch rule) and the booster casts (identity sounds).
+ */
+export const UNVARIED: ReadonlySet<SfxName> = new Set<SfxName>(['won', 'lost', 'hit', 'freeze', 'overdrive']);
+/** Level only — the pitch carries information: `send` rises with the unit count, `tally` with the gold count. */
+export const PITCH_LOCKED: ReadonlySet<SfxName> = new Set<SfxName>(['send', 'tally']);
+
+/** A 32-bit integer hash of (`i`, `salt`) in [0, 1) (murmur3's finaliser: neighbouring indices land far apart). */
+function hash01(i: number, salt: number): number {
+  let h = Math.imul(i + 1, 0x9e3779b1) ^ salt;
+  h = Math.imul(h ^ (h >>> 16), 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+/**
+ * The detune (cents) and level offset (dB) of the `index`-th play (0-based) of `name`: a pure function of the
+ * two (the name salts the hash, so two sounds' n-th plays are not detuned alike).
+ */
+export function variation(name: SfxName, index: number): { cents: number; db: number } {
+  if (UNVARIED.has(name)) return { cents: 0, db: 0 };
+  let salt = 0;
+  for (let k = 0; k < name.length; k++) salt = Math.imul(salt, 31) + name.charCodeAt(k);
+  return {
+    cents: PITCH_LOCKED.has(name) ? 0 : (hash01(index, salt ^ 0x51ed27) * 2 - 1) * VARY_CENTS,
+    db: (hash01(index, salt ^ 0x2f6b4d) * 2 - 1) * VARY_DB,
+  };
+}
+
+/** Plays so far per sound and synth (a new synth — `initAudio` — counts from 0 again); a tank landing counts as an `arrive`. */
+const plays = new WeakMap<Synth, Map<SfxName, number>>();
+function nextPlay(s: Synth, name: SfxName): number {
+  let m = plays.get(s);
+  if (!m) plays.set(s, (m = new Map()));
+  const key = name === 'tankArrive' ? 'arrive' : name;
+  const i = m.get(key) ?? 0;
+  m.set(key, i + 1);
+  return i;
+}
+
+/** The running play's pitch and gain factors (`playRecipe` sets them; every voice below applies them). */
+let pitchK = 1;
+let gainK = 1;
+
+/** AUD-F7: `arrive` rotates over three soft taps a pentatonic step apart (re / mi / la over 677 Hz): type, Hz, ms, gain. */
+export const ARRIVE_TIMBRES: readonly (readonly [OscillatorType, number, number, number])[] = [
+  ['sine', 760, 28, 0.08],
+  ['triangle', 677, 30, 0.07],
+  ['sine', 1014, 24, 0.065],
+];
+/** AUD-F7: `unitDied` alternates two noise colours: the warm low-passed crackle and a brighter band-passed one. */
+export const DEATH_NOISES: readonly (readonly [BiquadFilterType, number, number])[] = [
+  ['lowpass', 700, 0.14],
+  ['bandpass', 1600, 0.17],
+];
+/** AUD-F9: the fanfare over the three star pops — rising dyads of the C major triad (C5 E5, G5 C6, E6 G6). */
+export const STAR_CHORDS: readonly (readonly number[])[] = [
+  [523.3, 659.3],
+  [784, 1046.5],
+  [1318.5, 1568],
+];
+
+/** What the eager facade (src/audio/index.ts, its module state) hands the chunk per event batch and per frame. */
+export interface AudioHost {
+  player: { play(name: SfxName, opts?: SfxOptions): boolean };
+  /** Own-unit arrival detector, made here on the first batch / frame the chunk is in. */
+  arrivals: ArrivalTracker | null;
+  hits: HitState;
+  haptic: () => void;
+}
+
+/**
+ * `onSimEvents` (moved here from the eager facade, AUD-F10, to pay for the tank landing's render hook): the
+ * mapped sounds of one batch of sim events, and AUD-F1's knocks — being attacked knocks (and taps the phone)
+ * at most every 250 ms per tower and 6 times a second overall; there is no vibration setting, so the haptic
+ * follows the Effects setting.
+ */
+export function onEvents(m: AudioHost, events: readonly SimEvent[], state: Pick<GameState, 'towers'>): void {
+  (m.arrivals ??= new ArrivalTracker('player')).noteEvents(events);
+  for (const call of sfxForEvents(events, 'player', state.towers)) m.player.play(call.name, call.opts);
+  playHits(events, 'player', state.towers, m.hits, performance.now(), (weight) => {
+    m.player.play('hit', { weight });
+    m.haptic();
+  });
+}
+
+/** `onSimFrame`: the soft arrival tap for own units that landed since the last frame (one per frame, rate-limited). */
+export function onFrame(m: AudioHost, state: Pick<GameState, 'units'>): void {
+  if ((m.arrivals ??= new ArrivalTracker('player')).tick(state) > 0) m.player.play('arrive');
+}
+
 /** Schedule the voices of `name` on `s` (the caller has checked the context, mute and rate limit). */
 export function playRecipe(s: Synth, name: SfxName, opts: SfxOptions): void {
   s.route = routeSfx(s, name, opts); // AUD-F6: every voice below plays into the UI or SFX bus (src/audio/mixer.ts), ducking the music first when it should
+  const i = nextPlay(s, name);
+  const v = variation(name, i);
+  pitchK = Math.pow(2, v.cents / 1200);
+  gainK = Math.pow(10, v.db / 20);
+  voices(s, name, opts, i);
+  pitchK = gainK = 1;
+}
+
+/** The voices of the `i`-th play of `name`. */
+function voices(s: Synth, name: SfxName, opts: SfxOptions, i: number): void {
   switch (name) {
     case 'send':
       blip(s, sendPitchHz(opts.count ?? 1), 60, 'triangle', { gain: 0.22 });
       return;
-    case 'arrive':
-      blip(s, 760, 28, 'sine', { gain: 0.08 });
+    case 'arrive': {
+      const [type, hz, ms, gain] = ARRIVE_TIMBRES[i % 3]!;
+      blip(s, hz, ms, type, { gain });
+      return;
+    }
+    case 'tankArrive': {
+      // AUD-F10: the same rotation a fifth lower and a little firmer, over a 60 ms triangle thud (above the
+      // phone-speaker floor, like `hit`'s tank knock) — 2 voices, ends at 60 ms
+      const [type, hz, ms, gain] = ARRIVE_TIMBRES[i % 3]!;
+      blip(s, hz / 1.5, ms + 12, type, { gain: gain * 1.4 });
+      sweep(s, 190, 80, 60, 'triangle', { gain: 0.16 });
+      return;
+    }
+    case 'purchase':
+      // AUD-F8: a coin clink — two bright triangles a fourth apart (B6, then E7 ringing) over a 14 ms
+      // high-passed metal tick; 3 voices, ends at 230 ms
+      blip(s, 1975.5, 50, 'triangle', { gain: 0.12 });
+      blip(s, 2637, 180, 'triangle', { gain: 0.12, delayS: 0.05 });
+      noiseBurst(s, 14, 5000, { gain: 0.06, filter: 'highpass' });
+      return;
+    case 'reward':
+      // AUD-F8: a short rising sparkle — a sine gliding C6 → C7 over 220 ms, two glints (E7, G7) on top and a
+      // breath of high-passed shimmer; 4 voices, ends at 250 ms (not `upgrade`'s stepped arpeggio)
+      sweep(s, 1046.5, 2093, 220, 'sine', { gain: 0.1 });
+      blip(s, 2637, 90, 'triangle', { gain: 0.06, delayS: 0.08 });
+      blip(s, 3136, 90, 'triangle', { gain: 0.06, delayS: 0.16 });
+      noiseBurst(s, 200, 7000, { gain: 0.03, filter: 'highpass', delayS: 0.05 });
+      return;
+    case 'unlock':
+      // AUD-F8: a two-note bell, "ding-dong" falling a major third (D6 → B♭5: none of `upgrade`'s A major
+      // notes), each a sine with a quiet inharmonic 2.76 × partial that dies first; 4 voices, ends at 460 ms
+      // (`stalemate` rises a fourth)
+      for (const [hz, d] of [
+        [1174.7, 0],
+        [932.3, 0.16],
+      ] as const) {
+        blip(s, hz, 300, 'sine', { gain: 0.16, delayS: d });
+        blip(s, hz * 2.76, 120, 'sine', { gain: 0.04, delayS: d });
+      }
+      return;
+    case 'achievement':
+      // AUD-F8: a three-note call G5 C6 E6 on triangles, 90 ms apart, the last held over a sine C5; 4 voices, ends at 480 ms
+      [784, 1046.5, 1318.5].forEach((hz, k) => blip(s, hz, k === 2 ? 300 : 110, 'triangle', { gain: 0.16, delayS: k * 0.09 }));
+      blip(s, 523.3, 300, 'sine', { gain: 0.1, delayS: 0.18 });
+      return;
+    case 'tally':
+      // AUD-F9: a soft tick per gold step of the count-up, climbing a semitone every second step from G6; 1 voice, 30 ms
+      blip(s, 1568 * Math.pow(2, Math.min(12, opts.step ?? 0) / 24), 30, 'sine', { gain: 0.06 });
       return;
     case 'capture':
       playCapture(s, opts.capture ?? 'other');
       return;
     case 'upgrade':
-      // Sparkle arpeggio: four quick sine notes stepping up a major chord.
+      // Sparkle arpeggio: four quick sine notes stepping up a major chord — the player's tower levelling up
+      // only (AUD-F8: purchases, rewards, unlocks and achievements have their own sounds below).
       [880, 1108.7, 1318.5, 1760].forEach((hz, i) => blip(s, hz, 120, 'sine', { gain: 0.16, delayS: i * 0.06 }));
       return;
-    case 'unitDied':
-      noiseBurst(s, 70, 700, { gain: 0.14 });
+    case 'unitDied': {
+      const [filter, hz, gain] = DEATH_NOISES[i % 2]!;
+      noiseBurst(s, 70, hz, { gain, filter });
       return;
+    }
     case 'artillery':
       sweep(s, 170, 40, 260, 'sine', { gain: 0.5 });
       noiseBurst(s, 120, 350, { gain: 0.25 });
       return;
-    case 'won':
-      // 4-note fanfare: C5 E5 G5 C6, the last held.
-      [523.3, 659.3, 784, 1046.5].forEach((hz, i) => {
-        const last = i === 3;
-        blip(s, hz, last ? 520 : 160, 'triangle', { gain: 0.3, delayS: i * 0.15 });
-        blip(s, hz / 2, last ? 520 : 160, 'sine', { gain: 0.14, delayS: i * 0.15 });
-      });
+    case 'won': {
+      // AUD-F9: one chord per earned star, on its pop (src/audio/resultCues.ts); the outcome tick (no `step`)
+      // has no voice. The last earned star's chord rings 480 ms over a sine C4 (1★ = that one chord), the
+      // others 220 ms; under reduced motion they sound together: a C major spread. ≤ 3 voices each
+      if (opts.step === undefined) return;
+      const last = opts.step >= (opts.count ?? 3) - 1;
+      for (const hz of STAR_CHORDS[Math.max(0, Math.min(2, opts.step))]!) blip(s, hz, last ? 480 : 220, 'triangle', { gain: 0.24 });
+      if (last) blip(s, 261.6, 480, 'sine', { gain: 0.16 });
       return;
+    }
     case 'lost':
-      // Descending minor: E5 D5 C5 A4, slowing down.
-      [659.3, 587.3, 523.3, 440].forEach((hz, i) =>
-        blip(s, hz, i === 3 ? 600 : 220, 'sawtooth', { gain: 0.14, delayS: i * 0.22 }),
-      );
+      // AUD-F9: a single low A minor chord as the defeat card lands — triangles A3 C4 E4 over a sine A2,
+      // 480 ms, 4 voices; the outcome tick (no `step`) has no voice (the capture-loss thud is its sound)
+      if (opts.step === undefined) return;
+      for (const hz of [220, 261.6, 329.6]) blip(s, hz, 480, 'triangle', { gain: 0.14 });
+      blip(s, 110, 480, 'sine', { gain: 0.12 });
       return;
     case 'button':
       blip(s, 1400, 24, 'square', { gain: 0.08 });
@@ -210,10 +371,10 @@ export function blip(s: Synth, freq: number, ms: number, type: OscillatorType = 
   const { ctx, master } = live;
   const t0 = ctx.currentTime + (opts.delayS ?? 0);
   const t1 = t0 + ms / 1000;
-  const env = envelope(ctx, master, t0, t1, opts.gain ?? 0.3);
+  const env = envelope(ctx, master, t0, t1, (opts.gain ?? 0.3) * gainK);
   const osc = ctx.createOscillator();
   osc.type = type;
-  osc.frequency.setValueAtTime(freq, t0);
+  osc.frequency.setValueAtTime(freq * pitchK, t0);
   osc.connect(env);
   osc.start(t0);
   osc.stop(t1);
@@ -226,11 +387,11 @@ export function sweep(s: Synth, from: number, to: number, ms: number, type: Osci
   const { ctx, master } = live;
   const t0 = ctx.currentTime + (opts.delayS ?? 0);
   const t1 = t0 + ms / 1000;
-  const env = envelope(ctx, master, t0, t1, opts.gain ?? 0.3);
+  const env = envelope(ctx, master, t0, t1, (opts.gain ?? 0.3) * gainK);
   const osc = ctx.createOscillator();
   osc.type = type;
-  osc.frequency.setValueAtTime(Math.max(1, from), t0);
-  osc.frequency.exponentialRampToValueAtTime(Math.max(1, to), t1);
+  osc.frequency.setValueAtTime(Math.max(1, from * pitchK), t0);
+  osc.frequency.exponentialRampToValueAtTime(Math.max(1, to * pitchK), t1);
   osc.connect(env);
   osc.start(t0);
   osc.stop(t1);
@@ -243,14 +404,14 @@ export function noiseBurst(s: Synth, ms: number, filterHz: number, opts: NoiseOp
   const { ctx, master } = live;
   const t0 = ctx.currentTime + (opts.delayS ?? 0);
   const t1 = t0 + ms / 1000;
-  const env = envelope(ctx, master, t0, t1, opts.gain ?? 0.3);
+  const env = envelope(ctx, master, t0, t1, (opts.gain ?? 0.3) * gainK);
   s.noise ??= makeNoiseBuffer(ctx);
   const src = ctx.createBufferSource();
   src.buffer = s.noise;
   src.loop = true;
   const filter = ctx.createBiquadFilter();
   filter.type = opts.filter ?? 'lowpass';
-  filter.frequency.setValueAtTime(filterHz, t0);
+  filter.frequency.setValueAtTime(filterHz * pitchK, t0); // AUD-F7: a detuned noise is a shifted cutoff
   filter.Q.setValueAtTime(0.7, t0);
   src.connect(filter);
   filter.connect(env);

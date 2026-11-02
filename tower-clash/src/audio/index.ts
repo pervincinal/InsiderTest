@@ -177,18 +177,9 @@ export function audioSynth(): Synth {
   return mod.synth;
 }
 
-/** Forward one batch of sim events (from `GameLoop.onEvents`). */
+/** Forward one batch of sim events (from `GameLoop.onEvents`): the mapped sounds and AUD-F1's knocks (recipes.ts `onEvents`). */
 export function onSimEvents(events: readonly SimEvent[], state: Pick<GameState, 'towers'>): void {
-  const c = fx();
-  if (!c) return;
-  (mod.arrivals ??= new c.ArrivalTracker('player')).noteEvents(events);
-  for (const call of c.sfxForEvents(events, 'player', state.towers)) mod.player.play(call.name, call.opts);
-  // AUD-F1: being attacked knocks (and taps the phone) at most every 250 ms per tower and 6 times a
-  // second overall; there is no vibration setting, so the haptic follows the Effects setting
-  c.playHits(events, 'player', state.towers, mod.hits, performance.now(), (weight) => {
-    mod.player.play('hit', { weight });
-    mod.haptic();
-  });
+  fx()?.onEvents(mod, events, state);
 }
 
 /** The recipes chunk while Effects are on (starting its load; the AUD-F1 haptic does not wait for the unlock), else null. */
@@ -199,8 +190,7 @@ function fx(): SfxChunk | null {
 /** Call once per frame after the loop advanced: plays the soft arrival tap for own units. */
 export function onSimFrame(state: Pick<GameState, 'units'>): void {
   mod.synth.playAt = mod.synth.now(); // AUD-F6: the music's pulse layer plays while frames come
-  const c = fx();
-  if (c && (mod.arrivals ??= new c.ArrivalTracker('player')).tick(state) > 0) mod.player.play('arrive');
+  fx()?.onFrame(mod, state);
 }
 
 /** Forget per-level tracking (call when a level starts). */

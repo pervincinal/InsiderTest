@@ -131,6 +131,10 @@ export interface BurstHost {
   death(x: number, y: number, light?: string, dark?: string): void;
   /** The badge's under-fire jolt (px, 0 under reduced motion) — AUD-F3's badge tint follows it. */
   badgeHit(towerId: string, nowMs: number): number;
+  /** AUD-F10: per tower, the last seen fire deadline and the last hostile landing / impact ring (`landings`)… */
+  readonly fire: Map<string, { until: number; hitAt: number; ringAt: number }>;
+  /** …and the last friendly landing burst (`reinforce`). */
+  readonly friendAt: Map<string, number>;
 }
 
 /**
@@ -144,6 +148,11 @@ export interface EconomyBursts {
   crystal(host: BurstHost, x: number, y: number, n: number, pal: Palette): void;
   /** Paint one `coin` / `gem` particle (`t` = age fraction, `fade` = 1 − t). */
   draw(ctx: CanvasRenderingContext2D, p: Particle, t: number, fade: number): void;
+  /**
+   * AUD-F10: a heavy unit (`ev.weight` > 1: a tank) lands on `t` — its landing burst scaled by the weight
+   * (always true: handled, so the soldier-sized burst of the same landing is skipped).
+   */
+  tank(host: BurstHost, t: Tower, ev: Extract<SimEvent, { type: 'landed' }>, pal: Palette, nowMs: number): boolean;
   /** AUD-F2: a unit (`own`: the player's) killed by a mine at (x, y) — the blast at the nearest mine of `state` (false: no mine, nothing done). */
   mine(host: BurstHost, state: GameState, x: number, y: number, own: boolean, pal: Palette, nowMs: number): boolean;
   /**
@@ -191,9 +200,9 @@ export class ParticleSystem implements BurstHost {
   private readonly dustAt = new Map<string, number>();
   private readonly stepAt = new Map<string, number>();
   /** Per tower: last seen `underFireUntilMs`, wall-clock of the last hostile landing and of the last impact ring. */
-  private readonly fire = new Map<string, { until: number; hitAt: number; ringAt: number }>();
+  readonly fire = new Map<string, { until: number; hitAt: number; ringAt: number }>();
   /** ART-23: last friendly landing burst per tower; the shared landing-burst bucket (`takeLandToken`). */
-  private readonly friendAt = new Map<string, number>();
+  readonly friendAt = new Map<string, number>();
   readonly marks = new Map<number, number>();
   private landAt = -Infinity;
   shakeAt = -Infinity;
@@ -550,6 +559,7 @@ export class ParticleSystem implements BurstHost {
           // the reinforcements and the hostile landings on neutral towers (never "under fire")
           const t = state.towers[ev.towerId];
           if (!t) break;
+          if (ev.weight > 1 && economy?.tank(this, t, ev, pal, nowMs)) break; // AUD-F10: a tank's burst, by weight (lazy chunk)
           if (!ev.hostile) this.reinforce(t.id, t.x, t.y, pal.ownerTones[ev.owner], nowMs);
           else if (t.owner === 'neutral') {
             let rec = this.fire.get(t.id);

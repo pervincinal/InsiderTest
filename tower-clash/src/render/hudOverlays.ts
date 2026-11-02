@@ -10,6 +10,7 @@ import { drawCrystal, drawGoldCoin, drawVideoGlyph } from './sprites';
 import { drawSpinner } from './economyWidgets';
 import { STALL, STALEMATE_CARD_S, hudClockOf, hudExtrasOf, resultShareLayout } from './hud';
 import { levelLesson, t } from '../ui/i18n';
+import { RESULT_TIMELINE as TL, easeOutBack, goldCountT, starPopT } from './resultTimeline';
 
 /*
  * Pause menu and result card (PERF-6): lazy chunk. hud.ts reaches this module only through
@@ -64,7 +65,7 @@ function drawResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: Pla
   const layout = resultShareLayout(hudExtrasOf(ui)?.result, won);
   const card = layout.card;
   // slide up with a bounce
-  const slide = (1 - easeOutBack(Math.min(1, since / 460))) * (Math.max(C.MAP_H, screenBottom) - card.y + 40);
+  const slide = (1 - easeOutBack(Math.min(1, since / TL.slideMs))) * (Math.max(C.MAP_H, screenBottom) - card.y + 40);
   ctx.save();
   ctx.translate(0, slide);
   drawCard(ctx, pal, card);
@@ -101,13 +102,10 @@ function drawResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: Pla
   // a defeat has no star row: the time sits a little higher and the tip block takes the stars' place (FE-4)
   ctx.fillText(timeLine, 360, card.y + (won ? 200 : 190));
 
-  // stars pop in one after another with a gold burst
+  // stars pop in one after another with a gold burst (AUD-F9: each earned one's chord lands on it, src/audio/resultCues.ts)
   if (won) {
     const starY = card.y + 272;
-    for (let i = 0; i < 3; i++) {
-      const t = (since - 420 - i * 260) / 380;
-      drawStarPop(ctx, pal, 360 + (i - 1) * 100, starY, 38, i < ui.stars, t);
-    }
+    for (let i = 0; i < 3; i++) drawStarPop(ctx, pal, 360 + (i - 1) * 100, starY, 38, i < ui.stars, starPopT(since, i));
   }
 
   const hud = hudExtrasOf(ui);
@@ -118,10 +116,10 @@ function drawResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: Pla
     const starRule = t('result.starRule', { t3: formatTime(ui.level.star3), t2: formatTime(ui.level.star2) });
     ctx.font = font(fitFontPx(ctx, starRule, 22, card.w - 60, '500'), '500', undefined, 30);
     ctx.fillText(starRule, 360, card.y + 326);
-    // gold counts up (a crystal reward sits beside it)
-    const countT = easeOutCubic((since - 900) / 800);
+    // gold counts up (a crystal reward sits beside it; AUD-F9: a soft tick per step)
+    const countT = goldCountT(since);
     const shown = Math.round(ui.coinsEarned * countT);
-    const pop = 1 + 0.12 * Math.max(0, 1 - Math.abs((since - 1700) / 180));
+    const pop = 1 + 0.12 * Math.max(0, 1 - Math.abs((since - TL.goldPopMs) / 180));
     const goldFont = font(34, 'bold', undefined, 40); // the rows around it are fixed: 40 px at most
     ctx.font = goldFont;
     const label = `+${shown}`;
@@ -386,19 +384,7 @@ export function drawStarPop(ctx: CanvasRenderingContext2D, pal: Palette, cx: num
   drawStar(ctx, pal, cx, cy, size, on, easeOutBack(u));
 }
 
-/** Ease-out with overshoot, for pop-in animations. t in 0..1. */
-export function easeOutBack(t: number): number {
-  const c1 = 1.70158;
-  const c3 = c1 + 1;
-  const u = Math.max(0, Math.min(1, t)) - 1;
-  return 1 + c3 * u * u * u + c1 * u * u;
-}
-
-/** Smooth ease-out (cubic). t in 0..1. */
-export function easeOutCubic(t: number): number {
-  const u = 1 - Math.max(0, Math.min(1, t));
-  return 1 - u * u * u;
-}
+/* `easeOutBack` / `easeOutCubic` live in src/render/resultTimeline.ts (AUD-F9: the timeline the result sounds follow). */
 
 /** Lightbulb (defeat tip): lit globe with three rays and a small base; `s` is roughly half the height. */
 export function drawBulbGlyph(ctx: CanvasRenderingContext2D, cx: number, cy: number, s: number, fill: string, outline: string): void {

@@ -3,7 +3,7 @@ import type { GameState } from '../sim/types';
 import type { Palette } from './palette';
 import { themeFor } from './palette';
 import type { View } from './view';
-import { hudAnchors } from './view';
+import { applyTransform, hudAnchors } from './view';
 import type { SeaColors } from './sea';
 import { drawSea } from './sea';
 import type { TerrainSpec } from './terrain';
@@ -90,18 +90,17 @@ export function blankLayer(layer: Layer | undefined): void {
   layer.key = '';
 }
 
-/** Logical (720×1280) transform on a layer context (mirrors view.ts `applyTransform` for `view.ctx`), optionally clipped to the map. */
+/** Logical (720×1280) transform on a layer context (view.ts `applyTransform`), optionally clipped to the map. */
 function logical(ctx: CanvasRenderingContext2D, view: View, clip: boolean): void {
-  const s = view.dpr * view.scale;
-  ctx.setTransform(s, 0, 0, s, view.dpr * view.offsetX, view.dpr * view.offsetY);
+  applyTransform(view, ctx);
   if (!clip) return;
   ctx.beginPath();
   ctx.rect(0, 0, C.MAP_W, C.MAP_H);
   ctx.clip();
 }
 
-/** Viewport part of the layer keys: the fit, the canvas size and the insets (the full-bleed margins and HUD anchors follow them). */
-function viewKey(view: View): string {
+/** Viewport part of the layer keys: the fit, the canvas size and the insets (the full-bleed margins and HUD anchors follow them; also the title's, titleIdle.ts). */
+export function viewKey(view: View): string {
   const i = view.insets;
   return `${view.dpr}|${view.scale}|${view.offsetX}|${view.offsetY}|${view.cssW}x${view.cssH}|${i.top},${i.bottom}`;
 }

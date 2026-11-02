@@ -32,6 +32,8 @@ export interface PlayUi {
   alpha: number;
   selectedTowerId: string | null;
   hoverTowerId: string | null;
+  /** AUD-F12: the own tower under a press not yet past the drag threshold (`PlayGestures.pressedTowerId`): its selection ring at 50 % alpha. */
+  pressedTowerId?: string | null;
   /** A drag from an own tower in progress: a line from that tower follows the finger (`PlayGestures.drag`). */
   drag?: { fromId: string; x: number; y: number };
   paused: boolean;
@@ -407,7 +409,7 @@ export function drawGuideLines(ctx: CanvasRenderingContext2D, pal: Palette, stat
   ctx.restore();
 }
 
-function drawGroundMarks(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, ui: PlayUi, nowMs: number, cam: Camera): void {
+export function drawGroundMarks(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState, ui: PlayUi, nowMs: number, cam: Camera): void {
   const motion = motionAllowed();
   // artillery ranges (the sim measures a circle in map units)
   for (const id in state.towers) {
@@ -443,6 +445,15 @@ function drawGroundMarks(ctx: CanvasRenderingContext2D, pal: Palette, state: Gam
     selectionRing(ctx, pal, cam, sel.x, sel.y, 54 + pulse * 4);
   }
   if (dragSrc && dragSrc.id !== sel?.id) selectionRing(ctx, pal, cam, dragSrc.x, dragSrc.y, 56);
+  // AUD-F12: a finger down on an own tower shows at once — the drag-source ring (r 56) at half alpha, which a
+  // drag then draws in full (a state, so reduced motion too); on the selected tower it lies over the pulsing
+  // ring. No press: the id is null / undefined and no tower has that key (cheaper than a guard, PERF budget).
+  const prs = state.towers[ui.pressedTowerId as string];
+  if (prs) {
+    ctx.globalAlpha = 0.5;
+    selectionRing(ctx, pal, cam, prs.x, prs.y, 56);
+    ctx.globalAlpha = 1;
+  }
   if (hov && origin && hov.id !== origin.id) {
     const road = state.roads[roadIdFor(origin.id, hov.id)];
     if (road) drawRubberBand(ctx, pal, proj(cam, origin.x, origin.y), proj(cam, hov.x, hov.y), nowMs, motion, true);

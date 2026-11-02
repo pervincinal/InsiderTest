@@ -29,7 +29,19 @@ export type SfxName =
   /** AUD-F3: the player casts Freeze (play.ts `useBooster`; was the `upgrade` arpeggio). */
   | 'freeze'
   /** AUD-F3: the player casts Overdrive (play.ts `useBooster`; was the `upgrade` arpeggio). */
-  | 'overdrive';
+  | 'overdrive'
+  /** AUD-F8: a shop purchase (product, crystal → gold, booster crate, skin, permanent upgrade): a coin clink. */
+  | 'purchase'
+  /** AUD-F8: something granted for free (rewarded video charge / gold, a Continue, the daily reward / chest): a rising sparkle. */
+  | 'reward'
+  /** AUD-F8: a level unlocked (the result's level skip): a two-note bell. */
+  | 'unlock'
+  /** AUD-F8: achievements unlocked (the achievements screen): a three-note call. */
+  | 'achievement'
+  /** AUD-F9: one step of the result card's gold count-up (src/audio/resultCues.ts; ≤ 8 a second). */
+  | 'tally'
+  /** AUD-F10: one of the player's tanks lands (sfxRules.ts `sfxForEvents`): `arrive` a fifth lower over a thud; it takes two `arrive` slots. */
+  | 'tankArrive';
 
 /** `gain`: we captured it; `loss`: an enemy took ours; `other`: an enemy took neutral/another enemy's. */
 export type CaptureKind = 'gain' | 'loss' | 'other';
@@ -41,6 +53,13 @@ export interface SfxOptions {
   capture?: CaptureKind;
   /** `hit`: the landing unit's weight (a tank, 5, knocks lower and longer). Default 1. */
   weight?: number;
+  /**
+   * AUD-F9 — `won` / `lost`: the result card's cue (src/audio/resultCues.ts): `won` = the chord of star
+   * `step` (0–2; `count` = the stars earned, the last one's chord is held over a low C); `lost` = 0, the
+   * low chord. Absent: the outcome tick itself (sfxRules.ts) — no voice, the music ducks for the result
+   * sequence and drops its pulse. `tally`: the gold count's tick index (its pitch climbs with it).
+   */
+  step?: number;
 }
 
 export interface SfxCall {

@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { audioSynth, initAudio, loadSfxRecipes, playSfx, setMusicOn, setMuted, toggleMuted, unlockAudio } from '../../src/audio/index';
 import type { SfxName } from '../../src/audio/index';
 import type { Mix } from '../../src/audio/mixer';
-import { BUS_DB, DUCK, LIMITER, busFor, dbToGain, duckFor, duckLevel } from '../../src/audio/mixer';
+import { BUS_DB, DUCK, LIMITER, OUTCOME_HOLD_S, busFor, dbToGain, duckFor, duckLevel } from '../../src/audio/mixer';
+import { resultCues } from '../../src/audio/resultCues';
+import { RESULT_BEAT_MS } from '../../src/ui/play';
 import { busLevels } from '../../src/audio/inspect';
 import { RATE_LIMIT_S } from '../../src/audio/sfxRules';
 import { defaultSave } from '../../src/ui/save';
@@ -32,8 +34,8 @@ async function setup(music = false): Promise<Mix> {
   return m;
 }
 
-const PLAY: SfxName[] = ['send', 'arrive', 'capture', 'upgrade', 'unitDied', 'artillery', 'won', 'lost', 'hit', 'mine', 'freeze', 'overdrive'];
-const UI: SfxName[] = ['button', 'refuse', 'stalemate'];
+const PLAY: SfxName[] = ['send', 'arrive', 'capture', 'upgrade', 'unitDied', 'artillery', 'won', 'lost', 'hit', 'mine', 'freeze', 'overdrive', 'tally', 'tankArrive'];
+const UI: SfxName[] = ['button', 'refuse', 'stalemate', 'purchase', 'reward', 'unlock', 'achievement'];
 
 describe('graph', () => {
   it('master → limiter → trim → destination; SFX / UI into master; music → duck → master', async () => {
@@ -87,7 +89,7 @@ describe('bus routing', () => {
     for (const name of [...PLAY, ...UI]) {
       ctx.clear();
       ctx.currentTime += 1;
-      expect(playSfx(name, { capture: 'gain', count: 3 }), name).toBe(true);
+      expect(playSfx(name, { capture: 'gain', count: 3, step: 0 }), name).toBe(true); // `step`: the result card's chord (AUD-F9)
       // the envelope gains are the ones that feed a bus or master (filters and sources feed envelopes)
       const outs = ctx.gains.filter((g) => g.connections.length > 0).map((g) => g.connections[0]);
       expect(outs.length, name).toBeGreaterThan(0);
@@ -112,8 +114,8 @@ describe('bus routing', () => {
     expect(busLevels(audioSynth())).toMatchObject({ sfx: db('sfx'), ui: db('ui'), music: db('music') });
   });
 
-  it('the hit / mine / capture rate limits stay as they were (AUD-F1 / F2)', () => {
-    expect(RATE_LIMIT_S).toEqual({ arrive: 0.1, unitDied: 0.08, artillery: 0.1, send: 0.05, refuse: 0.12, mine: 0.12 });
+  it('the hit / mine / capture rate limits stay as they were (AUD-F1 / F2); AUD-F8–F10 add the tank, the gold tick and the clink', () => {
+    expect(RATE_LIMIT_S).toEqual({ arrive: 0.1, unitDied: 0.08, artillery: 0.1, send: 0.05, refuse: 0.12, mine: 0.12, tankArrive: 0.2, tally: 0.125, purchase: 0.08 });
     expect(RATE_LIMIT_S.capture).toBeUndefined();
   });
 });
@@ -132,9 +134,12 @@ describe('ducking (fake clock)', () => {
     expect(duckFor('capture', { capture: 'loss' })).toBe(0.3);
     expect(duckFor('capture', { capture: 'other' })).toBeNull(); // an enemy taking a neutral: no pumping
     expect(duckFor('stalemate')).toBe(0.3);
-    expect(duckFor('won')).toBeCloseTo(0.97); // the fanfare's length
-    expect(duckFor('lost')).toBeCloseTo(1.26);
-    for (const n of ['send', 'arrive', 'hit', 'mine', 'button', 'refuse', 'upgrade', 'freeze', 'overdrive'] as const) expect(duckFor(n), n).toBeNull();
+    // AUD-F9: the outcome tick holds the duck over the beat and the card's cues; each card cue is a short duck inside it
+    expect(duckFor('won')).toBeCloseTo(2.3);
+    expect(duckFor('lost')).toBeCloseTo(1.25);
+    for (const n of ['won', 'lost', 'tally'] as const) expect(duckFor(n, { step: 0 }), n).toBe(DUCK.holdS);
+    for (const n of ['send', 'arrive', 'tankArrive', 'hit', 'mine', 'button', 'refuse', 'upgrade', 'freeze', 'overdrive', 'purchase', 'reward', 'unlock', 'achievement'] as const)
+      expect(duckFor(n), n).toBeNull();
     expect(D).toBeCloseTo(0.501, 3); // −6 dB
   });
 
@@ -174,12 +179,24 @@ describe('ducking (fake clock)', () => {
     expect(duckEvents().find((e) => e.time === 2.625)?.value).toBeCloseTo((1 + D) / 2, 6);
   });
 
-  it('a result stinger holds the duck for its length and marks the match ended (the pulse layer drops)', () => {
+  it('the outcome tick holds the duck over the result sequence and marks the match ended (the pulse layer drops); the card cues do not', () => {
     ctx.currentTime = 5;
     playSfx('won');
-    expect(m.plan?.until).toBeCloseTo(5.97, 9);
+    expect(m.plan?.until).toBeCloseTo(7.3, 9);
     expect(m.ended).toBe(true);
-    expect(duckEvents().at(-1)).toEqual({ kind: 'linear', value: 1, time: 6.22 });
+    expect(duckEvents().at(-1)).toEqual({ kind: 'linear', value: 1, time: 7.55 });
+    m.ended = false;
+    ctx.currentTime = 6.2; // a star chord inside the hold: no new `ended`, the hold is not shortened
+    playSfx('won', { step: 1, count: 3 });
+    expect(m.ended).toBe(false);
+    expect(m.plan?.until).toBeCloseTo(7.3, 9);
+  });
+
+  it('the outcome holds cover the 600 ms beat plus the card\'s last cue (+ the defeat chord\'s ring)', () => {
+    const lastCue = (won: boolean) => Math.max(...resultCues({ won, stars: 3, coins: 500 }).map((c) => c.atMs));
+    expect(OUTCOME_HOLD_S.won! * 1000).toBeGreaterThanOrEqual(RESULT_BEAT_MS + lastCue(true));
+    expect(OUTCOME_HOLD_S.won! * 1000).toBeLessThanOrEqual(RESULT_BEAT_MS + 1700 + 50); // the count ends at 1 700 ms
+    expect(OUTCOME_HOLD_S.lost! * 1000).toBeGreaterThanOrEqual(RESULT_BEAT_MS + lastCue(false) + 470);
   });
 
   it('sounds that do not duck leave the duck gain alone', () => {

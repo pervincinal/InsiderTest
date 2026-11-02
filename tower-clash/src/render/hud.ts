@@ -78,6 +78,8 @@ export interface HudExtras {
   pressedBooster?: BoosterKind | null;
   /** Number of the player's active attack streams (`state.links` owned by the player), rules v2. */
   streams?: number;
+  /** AUD-U9: a first-time save on levels 1–4 (`PlayScreen.bare`): no booster bar and no coin pill. */
+  bare?: boolean;
   /** Gold + crystal balances (drawn over the booster bar once the level is over, in the disabled style: no tap, AUD-U10). */
   wallet?: { gold: number; crystals: number };
   /** Economy rows on the result card (ECONOMY.md §3.4, §3.5, §5.2). */
@@ -731,11 +733,13 @@ export function drawHud(ctx: CanvasRenderingContext2D, state: GameState, view: V
   ctx.translate(0, a.bottom);
   // bottom bar: streams · boosters · coins · menu (wallet replaces boosters + coins once the level is over;
   // AUD-U10: then the band takes no tap, so its wallet and MENU are drawn in the disabled style)
-  drawStreamsPill(ctx, ui, hud?.streams ?? 0);
+  // AUD-U9 (GDD §4): level 1 has no second stream to count, so no STREAMS pill; a first-time save's levels 1–4
+  // no booster bar and no coin pill
+  if (ui.level.id > 1) drawStreamsPill(ctx, ui, hud?.streams ?? 0);
   if (over && hud?.wallet) {
     ctx.globalAlpha = 0.45;
     drawWallet(ctx, pal, HUD.wallet, hud.wallet.gold, hud.wallet.crystals);
-  } else {
+  } else if (!hud?.bare) {
     if (hud) drawBoosterBar(ctx, ui, hud, nowMs);
     drawCoinPill(ctx, ui);
   }

@@ -275,10 +275,10 @@ export function applyDeviceTransform(view: View): void {
   view.ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
 }
 
-/** Set the matrix so drawing happens in logical map units. */
-export function applyTransform(view: View): void {
+/** Set the matrix so drawing happens in logical map units (on `ctx`: a layer canvas of the same size, layers.ts). */
+export function applyTransform(view: View, ctx = view.ctx): void {
   const s = view.dpr * view.scale;
-  view.ctx.setTransform(s, 0, 0, s, view.dpr * view.offsetX, view.dpr * view.offsetY);
+  ctx.setTransform(s, 0, 0, s, view.dpr * view.offsetX, view.dpr * view.offsetY);
 }
 
 /** Clip drawing to the logical map rectangle (call after applyTransform, inside save/restore). */

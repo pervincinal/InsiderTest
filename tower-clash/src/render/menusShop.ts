@@ -91,6 +91,16 @@ export interface ShopUpgradeCard {
   affordable: boolean;
 }
 
+/** AUD-B8 (ECONOMY.md §3.7): gold → crystals under the complete tree, once a day. */
+export interface ShopTradeCard {
+  rect: Rect;
+  gold: number;
+  crystals: number;
+  /** Today's trade is made. */
+  done: boolean;
+  affordable: boolean;
+}
+
 /** Booster crate (ECONOMY.md §3.1): crystals → pre-paid charges of every booster. */
 export interface ShopCrateCard {
   rect: Rect;
@@ -130,6 +140,8 @@ export interface ShopOpts {
   skinHeaders: { label: string; y: number }[];
   skins: ShopSkinCard[];
   upgrades: ShopUpgradeCard[];
+  /** Gold → crystals row (upgrades tab, tree complete). */
+  trade?: ShopTradeCard | null;
   /** Booster crate row (bundles tab). */
   crate?: ShopCrateCard | null;
   /** Convert card (crystals tab). */
@@ -487,6 +499,27 @@ function drawUpgradeCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopUpg
   else drawBuyButton(ctx, pal, buy, String(c.cost), { glyph: 'gold', ink: pal.shopBuy, disabled: !c.affordable, pressed, fontPx: SHOP_NUMERAL_PX });
 }
 
+function drawTradeCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopTradeCard, o: ShopOpts): void {
+  const r = c.rect;
+  drawCard(ctx, pal, r, { radius: 22, edge: 5 });
+  const gy = r.y + r.h / 2 - 2;
+  drawGoldCoin(ctx, pal, r.x + 46, gy + 14, 16);
+  drawCrystal(ctx, pal, r.x + 84, gy - 12, 22);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = pal.ink;
+  const textX = r.x + 130;
+  const textW = r.w - 130 - SHOP.buyW - 36;
+  const title = t('shop.trade');
+  ctx.font = font(fitFontPx(ctx, title, 25, textW), 'bold', undefined, 30);
+  ctx.fillText(clipText(ctx, title, textW), textX, r.y + 36);
+  ctx.fillStyle = pal.textDim;
+  drawCardLines(ctx, [t('shop.tradeRate', { g: c.gold, c: c.crystals }), t('shop.tradeSub')], textX, r.y + 76, textW, 32);
+  const buy = shopRowBuyRect(r);
+  if (c.done) drawBuyButton(ctx, pal, buy, t('shop.tradeDone'), { disabled: true, fontPx: 22 });
+  else drawBuyButton(ctx, pal, buy, String(c.gold), { glyph: 'gold', ink: pal.shopBuy, disabled: !c.affordable, pressed: rectEq(o.pressed, buy) || rectEq(o.pressed, r), fontPx: SHOP_NUMERAL_PX });
+}
+
 /**
  * A dim footer under the last card (AUD-U2: 22 px, was 15): up to two 24 px-pitch lines across 640 px
  * from `y` down (the content keeps 60 px under the last card / RESTORE, ui/shop.ts), never squeezed.
@@ -526,6 +559,7 @@ export function drawShop(view: View, pal: Palette, o: ShopOpts): void {
   }
   for (const c of o.skins) drawSkinCard(ctx, pal, c, o);
   for (const c of o.upgrades) drawUpgradeCard(ctx, pal, c, o);
+  if (o.trade) drawTradeCard(ctx, pal, o.trade, o);
   if (o.restoreRect) {
     const rr = o.restoreRect;
     drawButton(ctx, pal, rr, o.pending === 'restore' ? '' : t('shop.restore'), { fontPx: 22, flat: true, pressed: rectEq(o.pressed, rr), disabled: !o.storeAvailable });
@@ -539,7 +573,7 @@ export function drawShop(view: View, pal: Palette, o: ShopOpts): void {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = pal.textDim;
-    const last = o.upgrades[o.upgrades.length - 1];
+    const last = o.trade ?? o.upgrades[o.upgrades.length - 1];
     if (last) drawFooter(ctx, t('shop.upgradesFooter'), last.rect.y + last.rect.h + 22);
   }
   o.particles?.draw(ctx, o.nowMs);

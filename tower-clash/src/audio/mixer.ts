@@ -33,22 +33,34 @@ export const LIMITER = Object.freeze({ thresholdDb: -6, knee: 0, ratio: 20, atta
 export const DUCK = Object.freeze({ db: -6, attackS: 0.02, holdS: 0.3, releaseS: 0.25 });
 const DUCK_GAIN = dbToGain(DUCK.db);
 
-/** Taps, menu clicks and toasts: the UI bus. Every other sound (and any recipe added later) is a play sound: SFX. */
-const UI_SOUNDS: ReadonlySet<SfxName> = new Set<SfxName>(['button', 'refuse', 'stalemate']);
+/** Taps, menu clicks and toasts (AUD-F8: the shop / reward / unlock / achievement toasts' sounds): the UI bus. Every other sound (and any recipe added later) is a play sound: SFX. */
+const UI_SOUNDS: ReadonlySet<SfxName> = new Set<SfxName>(['button', 'refuse', 'stalemate', 'purchase', 'reward', 'unlock', 'achievement']);
 /** Captures that duck the music (an enemy taking a neutral is a quiet blip: no duck, no pumping late in a match). */
 const DUCK_CAPTURES: ReadonlySet<CaptureKind> = new Set<CaptureKind>(['gain', 'loss']);
-/** The result stingers hold the duck for their own length (recipes.ts: the fanfare ≈ 0.97 s, the descent ≈ 1.26 s). */
-const STINGER_HOLD_S: Readonly<Partial<Record<SfxName, number>>> = Object.freeze({ won: 0.97, lost: 1.26 });
+/**
+ * AUD-F9: the outcome tick (`won` / `lost` without a `step`) holds the duck over the whole result sequence:
+ * the 600 ms result beat (src/ui/play.ts `RESULT_BEAT_MS`) plus the card's last cue (src/audio/resultCues.ts
+ * — the gold count ends at 1 700 ms; the defeat chord lands at 170 ms and rings 480 ms).
+ */
+export const OUTCOME_HOLD_S: Readonly<Partial<Record<SfxName, number>>> = Object.freeze({ won: 2.3, lost: 1.25 });
+/** Sounds that play over the result card (a star chord, the defeat chord, a gold tick): a short duck inside the outcome's. */
+const CARD_SOUNDS: ReadonlySet<SfxName> = new Set<SfxName>(['won', 'lost', 'tally']);
 
 export function busFor(name: SfxName): BusName {
   return UI_SOUNDS.has(name) ? 'ui' : 'sfx';
 }
 
-/** Seconds the music ducks for `name` (null: it does not duck): own / lost captures, the result stingers, the stalemate hint / card. */
+/** Seconds the music ducks for `name` (null: it does not duck): own / lost captures, the outcome and the result card's cues, the stalemate hint / card. */
 export function duckFor(name: SfxName, opts: SfxOptions = {}): number | null {
   if (name === 'capture') return DUCK_CAPTURES.has(opts.capture ?? 'other') ? DUCK.holdS : null;
   if (name === 'stalemate') return DUCK.holdS;
-  return STINGER_HOLD_S[name] ?? null;
+  if (isOutcome(name, opts)) return OUTCOME_HOLD_S[name]!;
+  return CARD_SOUNDS.has(name) ? DUCK.holdS : null;
+}
+
+/** AUD-F9: the outcome tick — `won` / `lost` from the sim event, before the result card's cues (which carry a `step`). */
+export function isOutcome(name: SfxName, opts: SfxOptions): boolean {
+  return (name === 'won' || name === 'lost') && opts.step === undefined;
 }
 
 /** One planned duck: the gain at `from` when it started at `start`, held at DUCK_GAIN until `until`. */
@@ -152,6 +164,6 @@ export function duck(s: Synth, holdS: number, end = false): void {
 /** recipes.ts `playRecipe`: the bus `name` plays into (null before unlock), ducking the music first when it should. */
 export function routeSfx(s: Synth, name: SfxName, opts: SfxOptions): GainNodeLike | null {
   const hold = duckFor(name, opts);
-  if (hold !== null) duck(s, hold, name === 'won' || name === 'lost');
+  if (hold !== null) duck(s, hold, isOutcome(name, opts));
   return mixer(s)?.[busFor(name)] ?? null;
 }

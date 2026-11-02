@@ -95,8 +95,7 @@ const GAP = 3;
 /** The texts src/ui/play.ts shows with `toast.show`. */
 const toasts = (): string[] => [
   t('hint.stalemate'),
-  t('daily.noBoosters'),
-  t('weekly.noBoosters'),
+  t('weekly.noBoosters'), // the daily has boosters since AUD-B8
   t('play.freeCharge', { kind: t('booster.overdrive') }),
   t('daily.yesterdayNoReward'),
   t('common.loadFailed'),

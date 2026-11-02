@@ -5,13 +5,15 @@ import type { View } from '../../src/render/view';
 import { getPalette } from '../../src/render/palette';
 import type { Rect } from '../../src/render/widgets';
 import { MIN_TEXT_PX } from '../../src/render/widgets';
-import { HUD, RESULT } from '../../src/render/layout';
+import { BOOSTERS, HUD, RESULT } from '../../src/render/layout';
 import type { HudPlayUi } from '../../src/render/hud';
 import { drawHud } from '../../src/render/hud';
 import { createAdSession } from '../../src/economy/adsFlow';
+import type { SaveData } from '../../src/ui/save';
 import { defaultSave, setSaveStorageForTests } from '../../src/ui/save';
 import type { App } from '../../src/ui/screens';
 import { ResultScreen } from '../../src/ui/result';
+import { PlayScreen } from '../../src/ui/play';
 import { t } from '../../src/ui/i18n';
 import { makeLevel } from '../helpers';
 
@@ -194,5 +196,108 @@ describe('AUD-U10: the result screen ignores the dimmed band', () => {
     screen.down(centre(RESULT.menu));
     screen.up(centre(RESULT.menu));
     await expect.poll(() => went).toEqual(['levels']);
+  });
+});
+
+/*
+ * AUD-U9 (GDD §4 "AUD-U9 2026-11-02"): progressive disclosure. Levels 1–4 on a save that never had gold
+ * (0 gold, level 1 not cleared) show no booster bar and no coin pill, and
+ * the booster rects take no tap (a hotkey neither); level 1 shows no STREAMS pill on any save (one
+ * stream is all it teaches). From level 5, or with any gold or level 1 cleared, everything is back.
+ */
+describe('AUD-U9: the play HUD discloses boosters, coins and STREAMS progressively', () => {
+  function playApp(save: SaveData): App {
+    return {
+      view: {} as View,
+      save,
+      ads: createAdSession(),
+      palette: () => getPalette(false),
+      goTitle() {},
+      goLevels() {},
+      goShop() {},
+      goAchievements() {},
+      startLevel: () => Promise.resolve(true),
+      go() {},
+      openSettings() {},
+      openHowTo() {},
+      setSpeed() {},
+      setLanguage() {},
+      dayKey: () => '2026-11-02',
+      weekKey: () => '2026-10-27',
+    };
+  }
+  const play = (id: number, edit: (s: SaveData) => void = () => undefined): PlayScreen => {
+    setSaveStorageForTests(null);
+    const save = defaultSave();
+    edit(save);
+    return new PlayScreen(playApp(save), makeLevel({ id }), 1, 1);
+  };
+  const hudOf = (p: PlayScreen) => (p as unknown as { buildUi(): HudPlayUi }).buildUi().hud!;
+
+  it('a fresh save: levels 1–4 are bare (the HUD draws no bar), level 5 is not and lists all three', () => {
+    for (const id of [1, 2, 3, 4]) {
+      const p = play(id);
+      expect(p.bare, `level ${id}`).toBe(true);
+      expect(hudOf(p).bare).toBe(true);
+    }
+    const p5 = play(5);
+    expect(p5.bare).toBe(false);
+    expect(hudOf(p5).bare).toBe(false);
+    expect(hudOf(p5).boosters.map((b) => b.kind)).toEqual(['overdrive', 'freeze', 'airstrike']);
+  });
+
+  it('any gold, or level 1 cleared (its gold earned, then spent on boosters), shows the bar on 1–4', () => {
+    expect(play(2, (s) => void (s.gold = 10)).bare).toBe(false);
+    expect(play(3, (s) => void (s.stars['1'] = 1)).bare).toBe(false);
+    expect(play(2, (s) => void (s.stars['2'] = 3)).bare).toBe(true); // a skip past level 1 earned no gold
+    expect(hudOf(play(2, (s) => void (s.gold = 10))).bare).toBe(false);
+  });
+
+  it('bare: a tap on a booster rect or a booster hotkey does nothing (no command, no free-charge video, no targeting)', () => {
+    const p = play(1);
+    const sent: string[] = [];
+    vi.spyOn(p.loop, 'enqueue').mockImplementation((cmd) => void sent.push(cmd.type));
+    for (const k of ['overdrive', 'freeze', 'airstrike'] as const) {
+      const r = BOOSTERS[k];
+      const c = { x: r.x + r.w / 2, y: r.y + r.h / 2, id: 1, type: 'touch' as const, timeMs: 0 };
+      p.down(c);
+      p.up(c);
+      expect(p.useBooster(k)).toBe(false);
+    }
+    for (const key of ['1', '2', '3']) p.key({ key } as KeyboardEvent);
+    expect(sent).toEqual([]);
+    expect(p.loop.paused).toBe(false); // a rewarded video would hold the sim
+    expect(p.targeting).toBe(false);
+  });
+
+  /** The pills drawn and whether the booster bar was (its OVERDRIVE price chip text, 37 gold here). */
+  function hudFrame(id: number, bare: boolean): { pills: Rect[]; bar: boolean } {
+    calls.pills.length = 0;
+    const lvl = makeLevel({ id });
+    const ui = uiFor(lvl, 'playing');
+    const overdrive = { kind: 'overdrive' as const, cost: 37, charges: 0, affordable: false, adOffer: false, active: false, remainingMs: 0, durationMs: 0 };
+    ui.hud = { ...ui.hud!, boosters: [overdrive], bare };
+    const texts: { text: string; font: string }[] = [];
+    drawHud(recordingCtx(texts), { ...createState(lvl, 1), time: 10_000 }, VIEW, ui, 0);
+    return { pills: [...calls.pills], bar: texts.some((x) => x.text === '37') };
+  }
+
+  it('drawn: level 1 bare has no STREAMS pill, booster bar or coin pill; levels 2–4 bare keep STREAMS; level 5 draws all three', () => {
+    let f = hudFrame(1, true);
+    expect(f.pills).not.toContain(HUD.streams);
+    expect(f.pills).not.toContain(HUD.coins);
+    expect(f.bar).toBe(false);
+    f = hudFrame(1, false); // a replay of level 1 with gold: bar and coins back, still no STREAMS
+    expect(f.pills).not.toContain(HUD.streams);
+    expect(f.pills).toContain(HUD.coins);
+    expect(f.bar).toBe(true);
+    f = hudFrame(4, true);
+    expect(f.pills).toContain(HUD.streams);
+    expect(f.pills).not.toContain(HUD.coins);
+    expect(f.bar).toBe(false);
+    f = hudFrame(5, false);
+    expect(f.pills).toContain(HUD.streams);
+    expect(f.pills).toContain(HUD.coins);
+    expect(f.bar).toBe(true);
   });
 });

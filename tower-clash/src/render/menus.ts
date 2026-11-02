@@ -146,10 +146,10 @@ export function headerBand(view: View, h: number): Rect {
   return { x: b.left, y: b.top, w: b.right - b.left + pad, h: h - b.top };
 }
 
-function drawDemoWorld(ctx: CanvasRenderingContext2D, pal: Palette, nowMs: number, withBadges: boolean, scene: DemoScene = DEMO_SCENE): void {
+/** The demo battle's moving part (the tower shadows under it are static: `drawTitle`'s ground). */
+function drawDemoWorld(ctx: CanvasRenderingContext2D, pal: Palette, nowMs: number, scene: DemoScene): void {
   const anim = motion();
   const towers = scene.towers;
-  for (const t of towers) drawTowerShadow(ctx, pal, t.x, t.y, t.kind, t.level);
   const t0 = anim ? nowMs / 1000 : 0;
   for (const col of DEMO_COLUMNS) {
     const road = scene.roads[col.road]!;
@@ -162,7 +162,7 @@ function drawDemoWorld(ctx: CanvasRenderingContext2D, pal: Palette, nowMs: numbe
     }
   }
   for (const t of towers) drawTowerSprite(ctx, pal, t, { nowMs, motion: anim });
-  if (withBadges) for (const t of towers) drawBadge(ctx, pal, t.x, t.y + badgeY(t.kind, t.level), String(t.units));
+  for (const t of towers) drawBadge(ctx, pal, t.x, t.y + badgeY(t.kind, t.level), String(t.units));
 }
 
 /** Gradient water with drifting sparkles (menus background; `scroll` parallaxes the sparkles). */
@@ -224,6 +224,8 @@ export interface TitleOpts {
   toast?: ToastOpts | null;
   /** Equipped terrain theme sprite id (`theme.*`); undefined = untinted. */
   theme?: string;
+  /** The app draws over this frame (the frame-time overlay): titleIdle.ts paints it whole, every frame (AUD-Q11). */
+  over?: boolean;
 }
 
 /**
@@ -251,11 +253,26 @@ function drawTitleGround(ctx: CanvasRenderingContext2D, view: View, pal: Palette
   piece(y, C.MAP_H, y + sh[g], C.MAP_H + sh[g]);
 }
 
-export function drawTitle(view: View, pal: Palette, o: TitleOpts): void {
-  const ctx = beginFrame(view, pal, terrainSea(pal, o.theme));
+/**
+ * The title frame (ART_DIRECTION §4). `parts` (AUD-Q11, bits): 1 the static ground (full-bleed sea,
+ * island, tower shadows), 2 what moves (marching columns, towers, badges, the wordmark's ground shadow,
+ * the daily chest), 4 the static UI, 8 the bobbing wordmark. All four on one context paint the
+ * single-canvas frame call for call, in its order; titleIdle.ts `paintTitle` spreads them over the
+ * ground / game / HUD canvases (the wordmark baked, titleIdle.ts `drawWord`).
+ */
+export function drawTitle(view: View, pal: Palette, o: TitleOpts, parts = 15, ctx = view.ctx): void {
+  ctx.save();
+  applyTransform(view, ctx);
   const sh = titleShifts(view);
-  drawTitleGround(ctx, view, pal, demoTerrain(o.theme), sh);
-  drawDemoWorld(ctx, pal, o.nowMs, true, demoScene(sh));
+  const scene = demoScene(sh);
+  const world = parts & 2;
+  const ui = parts & 4;
+  if (parts & 1) {
+    drawSea(ctx, view, terrainSea(pal, o.theme));
+    drawTitleGround(ctx, view, pal, demoTerrain(o.theme), sh);
+    for (const t of scene.towers) drawTowerShadow(ctx, pal, t.x, t.y, t.kind, t.level);
+  }
+  if (world) drawDemoWorld(ctx, pal, o.nowMs, scene);
   // FE-12: each group is drawn moved by its shift (a tall screen); on 9:16 the matrix is never touched
   const moved = sh !== NO_TITLE_SHIFTS;
   const base = moved ? ctx.getTransform() : null;
@@ -272,70 +289,78 @@ export function drawTitle(view: View, pal: Palette, o: TitleOpts): void {
   const bob = anim ? Math.sin(o.nowMs / 900) * 6 : 0;
   const bob2 = anim ? Math.sin(o.nowMs / 900 + 0.8) * 6 : 0;
   const blue = pal.owners.player;
-  // floating logo: the ground shadow shrinks as the letters lift
-  ctx.save();
-  ctx.fillStyle = pal.groundShadow;
-  ctx.beginPath();
-  ctx.ellipse(370, 540, 250 - bob * 3, 22 - bob * 0.8, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-  withShadow(
-    ctx,
-    () => {
-      // the wordmark is the brand: Fredoka in every UI language (FONT), like the share card's header
-      drawExtrudedText(ctx, 'TOWER', 360, 372 + bob, 112, { face: pal.paper, side: shade(blue, -0.25), outline: pal.ink, depth: 8, family: FONT, exempt: 'wordmark' });
-      drawExtrudedText(ctx, 'CLASH', 360, 474 + bob2, 112, { face: blue, side: shade(blue, -0.45), outline: pal.ink, depth: 8, family: FONT, exempt: 'wordmark' });
-    },
-    14,
-    18,
-    0.22,
-  );
-  const tagline = t('title.tagline');
-  // AUD-U2: fitted to the 600 px pill (never squeezed), ≤ 32 px in its 46 px height
-  const taglineFont = font(fitFontPx(ctx, tagline, 22, 600 - 44, '500'), '500', undefined, 32);
-  ctx.font = taglineFont;
-  const subW = Math.min(600, Math.max(292, ctx.measureText(tagline).width + 44));
-  const sub: Rect = { x: 360 - subW / 2, y: 548, w: subW, h: 46 };
-  drawPill(ctx, sub, pal.paper);
-  ctx.fillStyle = pal.ink;
-  ctx.font = taglineFont;
-  ctx.fillText(tagline, 360, sub.y + sub.h / 2 + 1);
+  if (world) {
+    // floating logo: the ground shadow shrinks as the letters lift
+    ctx.save();
+    ctx.fillStyle = pal.groundShadow;
+    ctx.beginPath();
+    ctx.ellipse(370, 540, 250 - bob * 3, 22 - bob * 0.8, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  if (parts & 8) {
+    withShadow(
+      ctx,
+      () => {
+        // the wordmark is the brand: Fredoka in every UI language (FONT), like the share card's header
+        drawExtrudedText(ctx, 'TOWER', 360, 372 + bob, 112, { face: pal.paper, side: shade(blue, -0.25), outline: pal.ink, depth: 8, family: FONT, exempt: 'wordmark' });
+        drawExtrudedText(ctx, 'CLASH', 360, 474 + bob2, 112, { face: blue, side: shade(blue, -0.45), outline: pal.ink, depth: 8, family: FONT, exempt: 'wordmark' });
+      },
+      14,
+      18,
+      0.22,
+    );
+  }
+  if (ui) {
+    const tagline = t('title.tagline');
+    // AUD-U2: fitted to the 600 px pill (never squeezed), ≤ 32 px in its 46 px height
+    const taglineFont = font(fitFontPx(ctx, tagline, 22, 600 - 44, '500'), '500', undefined, 32);
+    ctx.font = taglineFont;
+    const subW = Math.min(600, Math.max(292, ctx.measureText(tagline).width + 44));
+    const sub: Rect = { x: 360 - subW / 2, y: 548, w: subW, h: 46 };
+    drawPill(ctx, sub, pal.paper);
+    ctx.fillStyle = pal.ink;
+    ctx.font = taglineFont;
+    ctx.fillText(tagline, 360, sub.y + sub.h / 2 + 1);
 
-  shiftTo(titleRectShift(sh, o.playRect));
-  drawButton(ctx, pal, o.playRect, t('title.play'), { fill: blue, fontPx: 46, pressed: o.pressed === o.playRect });
+    shiftTo(titleRectShift(sh, o.playRect));
+    drawButton(ctx, pal, o.playRect, t('title.play'), { fill: blue, fontPx: 46, pressed: o.pressed === o.playRect });
 
-  // settings row: gear · sound
-  // AUD-U2: glyph + 22 px label centred as a group, the label fitted (never squeezed; "…" only past the floor)
-  drawButton(ctx, pal, o.settingsRect, '', { pressed: o.pressed === o.settingsRect });
-  const rowY = (r: Rect): number => r.y + r.h / 2 - 1;
-  drawGlyphLabel(ctx, o.settingsRect, t('title.settings'), 28, (cx, cy) => drawGearGlyph(ctx, pal.ink, cx, cy, 14), pal.ink, 22, 32, rowY(o.settingsRect));
-  drawButton(ctx, pal, o.soundRect, '', { pressed: o.pressed === o.soundRect });
-  drawGlyphLabel(ctx, o.soundRect, o.soundOn ? t('title.soundOn') : t('title.soundOff'), 32, (cx, cy) => drawSpeakerGlyph(ctx, o.soundOn ? pal.ink : pal.textDim, cx - 3, cy, 17, o.soundOn), o.soundOn ? pal.ink : pal.textDim, 22, 32, rowY(o.soundRect));
+    // settings row: gear · sound
+    // AUD-U2: glyph + 22 px label centred as a group, the label fitted (never squeezed; "…" only past the floor)
+    drawButton(ctx, pal, o.settingsRect, '', { pressed: o.pressed === o.settingsRect });
+    const rowY = (r: Rect): number => r.y + r.h / 2 - 1;
+    drawGlyphLabel(ctx, o.settingsRect, t('title.settings'), 28, (cx, cy) => drawGearGlyph(ctx, pal.ink, cx, cy, 14), pal.ink, 22, 32, rowY(o.settingsRect));
+    drawButton(ctx, pal, o.soundRect, '', { pressed: o.pressed === o.soundRect });
+    drawGlyphLabel(ctx, o.soundRect, o.soundOn ? t('title.soundOn') : t('title.soundOff'), 32, (cx, cy) => drawSpeakerGlyph(ctx, o.soundOn ? pal.ink : pal.textDim, cx - 3, cy, 17, o.soundOn), o.soundOn ? pal.ink : pal.textDim, 22, 32, rowY(o.soundRect));
 
-  // shop: crystal glyph + label
-  drawButton(ctx, pal, o.shopRect, '', { pressed: o.pressed === o.shopRect });
-  drawCrystal(ctx, pal, o.shopRect.x + 40, o.shopRect.y + o.shopRect.h / 2 - 1, 15);
-  ctx.fillStyle = pal.ink;
-  ctx.font = font(24);
-  ctx.textAlign = 'center';
-  ctx.fillText(t('title.shop'), o.shopRect.x + o.shopRect.w / 2 + 12, o.shopRect.y + o.shopRect.h / 2 - 1);
-
-  // daily reward chest (bottom-right): open + pulsing when claimable, closed once claimed
+    // shop: crystal glyph + label
+    drawButton(ctx, pal, o.shopRect, '', { pressed: o.pressed === o.shopRect });
+    drawCrystal(ctx, pal, o.shopRect.x + 40, o.shopRect.y + o.shopRect.h / 2 - 1, 15);
+    ctx.fillStyle = pal.ink;
+    ctx.font = font(24);
+    ctx.textAlign = 'center';
+    ctx.fillText(t('title.shop'), o.shopRect.x + o.shopRect.w / 2 + 12, o.shopRect.y + o.shopRect.h / 2 - 1);
+  }
+  // daily reward chest (bottom-right): open + pulsing when claimable, closed once claimed. Clear of every
+  // other UI rect, so it moves with the world on the game canvas, under the HUD layer (AUD-Q11).
   shiftTo(titleRectShift(sh, o.dailyRect));
-  drawDailyChest(ctx, pal, o.dailyRect, o.daily, o.nowMs, o.pressed === o.dailyRect);
-  // trophy (bottom-left): achievements
-  drawTrophyButton(ctx, pal, o.achievementsRect, o.achievements, o.pressed === o.achievementsRect);
-
-  // wallet footer: stars · gold · crystals (tap → shop)
-  drawWallet(ctx, pal, o.walletRect, o.gold, o.crystals, { stars: o.totalStars, pressed: o.pressed === o.walletRect });
-  // language chip (top-right): "EN" · tap → next language
-  const lr = o.langRect;
-  shiftTo(titleRectShift(sh, lr));
-  drawButton(ctx, pal, lr, o.language.toUpperCase(), { fontPx: 22, flat: true, pressed: o.pressed === lr });
+  if (world) drawDailyChest(ctx, pal, o.dailyRect, o.daily, o.nowMs, o.pressed === o.dailyRect);
+  if (ui) {
+    // trophy (bottom-left): achievements
+    drawTrophyButton(ctx, pal, o.achievementsRect, o.achievements, o.pressed === o.achievementsRect);
+    // wallet footer: stars · gold · crystals (tap → shop)
+    drawWallet(ctx, pal, o.walletRect, o.gold, o.crystals, { stars: o.totalStars, pressed: o.pressed === o.walletRect });
+    // language chip (top-right): "EN" · tap → next language
+    const lr = o.langRect;
+    shiftTo(titleRectShift(sh, lr));
+    drawButton(ctx, pal, lr, o.language.toUpperCase(), { fontPx: 22, flat: true, pressed: o.pressed === lr });
+  }
   shiftTo(0);
   if (o.toast) drawToast(ctx, pal, o.toast);
   ctx.restore();
 }
+
 
 /** Treasure chest button with a "DAY n" tag and the reward on offer underneath. */
 function drawDailyChest(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, d: DailyChestOpts, nowMs: number, pressed: boolean): void {
