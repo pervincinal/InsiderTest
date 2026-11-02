@@ -156,7 +156,7 @@ describe('e2e/perf.baseline.json (AUD-Q8)', () => {
       expect(Object.keys(host.scenes).sort(), name).toEqual(['level50', 'shop', 'title']);
       for (const [scene, s] of Object.entries(host.scenes)) {
         expect(s.norm, `${name} ${scene}`).toBeCloseTo(s.workMs / host.calibMs, 1);
-        expect(s.norm, `${name} ${scene}`).toBeGreaterThan(0.5);
+        expect(s.norm, `${name} ${scene}`).toBeGreaterThan(0.1); // AUD-Q11: the layered idle title reads ≈ 0.24 on the container
         expect(s.norm, `${name} ${scene}`).toBeLessThan(3);
       }
     }

@@ -38,7 +38,7 @@ export class AchievementsScreen implements Screen {
   enter(): void {
     const text = achievementToastText(evaluateAchievements(this.app.save));
     if (text) {
-      playSfx('upgrade');
+      playSfx('achievement');
       this.toast.show(text, 'ok', performance.now(), 3500);
     }
   }

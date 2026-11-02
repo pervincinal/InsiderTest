@@ -4,7 +4,8 @@ import { aiModule } from './ui/ai';
 import type { TowerClashApp, TowerClashDebug } from './main';
 import { LEVEL_META, levelIndex } from './levels/index';
 import { fromHudSpace, hudAnchors, toClient } from './render/view';
-import { isLevelUnlocked } from './ui/save';
+import type { SaveStorage } from './ui/save';
+import { isLevelUnlocked, isSaveFailing, isSaveReadOnly, saveLoadIssue, setSaveStorageForTests } from './ui/save';
 import { ResultScreen, lastShareRecord } from './ui/result';
 import { lastReviewResult } from './native/review';
 import type { TranslationKey } from './ui/i18n';
@@ -63,6 +64,35 @@ export interface QaDebugExtras {
 }
 
 let groundBuilds = 0;
+
+/**
+ * AUD-Q10: `save.failWrites(n)` routes the save's writes through this wrapper of localStorage (the
+ * `setSaveStorageForTests` hook) that throws a QuotaExceededError for the next `n` `setItem` calls of
+ * the save key — each refused write costs one call and its 100 ms retry another — then passes writes
+ * through again. Reads are untouched, so the title still boots from the real save.
+ */
+const forced = { left: 0, thrown: 0 };
+
+function installFailingStorage(): void {
+  const real = (): Storage => localStorage;
+  const store: SaveStorage = {
+    getItem: (k) => real().getItem(k),
+    removeItem: (k) => real().removeItem(k),
+    key: (i) => real().key(i),
+    get length() {
+      return real().length;
+    },
+    setItem: (k, v) => {
+      if (forced.left > 0) {
+        forced.left -= 1;
+        forced.thrown += 1;
+        throw new DOMException('forced by __towerclash.save.failWrites', 'QuotaExceededError');
+      }
+      real().setItem(k, v);
+    },
+  };
+  setSaveStorageForTests(store);
+}
 
 export function installDebug(app: TowerClashApp): TowerClashDebug & QaDebugExtras {
   const extras: QaDebugExtras = {
@@ -223,6 +253,14 @@ export function installDebug(app: TowerClashApp): TowerClashDebug & QaDebugExtra
         const L = app.lazy;
         return L && app.current instanceof L.LevelSelectScreen ? app.current.getCardTab() : null;
       },
+    },
+    save: {
+      failWrites: (n) => {
+        forced.left = Math.max(0, Math.floor(n));
+        installFailingStorage();
+      },
+      status: () => ({ failing: isSaveFailing(), readOnly: isSaveReadOnly(), issue: saveLoadIssue(), forcedLeft: forced.left, thrown: forced.thrown }),
+      notice: () => app.lazy?.lastSaveNotice() ?? null,
     },
     economy: {
       getSave: () => app.save,

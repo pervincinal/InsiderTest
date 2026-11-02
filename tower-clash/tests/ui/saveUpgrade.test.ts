@@ -47,6 +47,7 @@ const KNOWN_KEYS = [
   'purchases',
   'milestones',
   'replayGold',
+  'goldTradeDay', // AUD-B8 (2026-11-02): build 7 never traded → ''
   'defeats',
   'skips',
   'achievements',

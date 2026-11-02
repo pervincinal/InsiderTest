@@ -7,6 +7,7 @@ import { TITLE } from '../render/layout';
 import type { Rect } from '../render/widgets';
 import { hitRect } from '../render/widgets';
 import { drawTitle } from '../render/menus';
+import type { TitleOpts } from '../render/menus';
 import { screenToTitle, titleRectShift, titleShifts, titleToScreen } from '../render/titleLayout';
 import type { ToastOpts } from '../render/economyWidgets';
 import type { PointerPoint } from '../input/pointer';
@@ -105,6 +106,8 @@ export interface App {
   /** AUD-Q8: the frame-time overlay's switch (main.ts; absent in test apps): on now, and switch it. */
   readonly perfOverlayOn?: boolean;
   setPerfOverlay?(on: boolean): void;
+  /** The lazy screens chunk once it is in (src/ui/lazyScreens.ts; absent in test apps): AUD-Q11's idle title painter. */
+  readonly lazy?: { paintTitle(view: View, pal: Palette, o: TitleOpts): void } | null;
 }
 
 /** Test/dev override of what the native providers report for the settings About block. */
@@ -252,7 +255,8 @@ export class TitleScreen implements Screen {
     const total = Object.values(save.stars).reduce((a, b) => a + b, 0);
     const daily = dailyStatus(save, Date.now());
     const adChest = this.adChestOffered();
-    drawTitle(view, this.app.palette(), {
+    // AUD-Q11: layered while idle once the lazy chunk is in
+    (this.app.lazy?.paintTitle ?? drawTitle)(view, this.app.palette(), {
       playRect: TITLE_PLAY,
       settingsRect: TITLE_SETTINGS,
       soundRect: TITLE_SOUND,
@@ -278,6 +282,7 @@ export class TitleScreen implements Screen {
       nowMs,
       pressed: this.pressed,
       toast: this.toast.opts(nowMs),
+      over: this.app.perfOverlayOn,
     });
   }
 
@@ -342,7 +347,7 @@ export class TitleScreen implements Screen {
     const save = this.app.save;
     const claimed = claimDaily(save, Date.now());
     if (claimed) {
-      playSfx('upgrade');
+      playSfx('reward');
       const parts = [claimed.gold > 0 ? t('amount.gold', { n: claimed.gold }) : '', claimed.crystals > 0 ? t('amount.crystals', { n: claimed.crystals }) : ''].filter(Boolean);
       this.toastClaim(t('title.dailyReward', { day: claimed.day, parts: parts.join(' · ') }));
       return;
@@ -354,7 +359,7 @@ export class TitleScreen implements Screen {
         if (!ok) return;
         const amount = DAILY_CHEST_PLACEMENT.reward.kind === 'crystals' ? DAILY_CHEST_PLACEMENT.reward.amount : 0;
         earnCrystals(save, amount);
-        playSfx('upgrade');
+        playSfx('reward');
         this.toastClaim(t('title.crystalChest', { n: amount }));
       });
       return;

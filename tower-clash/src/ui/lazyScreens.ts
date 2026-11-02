@@ -10,6 +10,8 @@ export { ShopScreen } from './shop';
 export { AchievementsScreen } from './achievements';
 export { SettingsScreen } from './settings';
 export { HowToScreen } from './howto';
-/** AUD-Q2 / AUD-Q3 save notices over the title (src/main.ts calls them once this chunk is in). */
-export { drawSaveNotice } from '../render/saveNotice';
+/** AUD-Q2 / AUD-Q3 / AUD-Q10 save notices over the title and the result footer (src/main.ts calls them once this chunk is in). */
+export { drawSaveNotice, lastSaveNotice } from '../render/saveNotice';
 export { noticeUnreadableSave } from './saveRecovery';
+/** AUD-Q11: the layered idle title (src/ui/screens.ts TitleScreen paints through it once this chunk is in). */
+export { paintTitle } from '../render/titleIdle';

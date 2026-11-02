@@ -34,7 +34,6 @@ export const enCore = {
   'daily.twist.fastFeet': 'Fast feet',
   'daily.twist.thinWalls': 'Thin walls',
   'daily.twist.reinforced': 'Reinforced',
-  'daily.noBoosters': 'Not in the daily challenge',
   'daily.newReady': 'New daily challenge is ready',
   'daily.milestone': 'Day {day} streak bonus · +{crystals} {crystals|crystal|crystals}',
   'daily.yesterdayNoReward': "Yesterday's map — no reward",

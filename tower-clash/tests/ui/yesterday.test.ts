@@ -208,6 +208,21 @@ describe('practice run (PlayScreen)', () => {
     expect(store.writes).toBe(0);
   });
 
+  it('AUD-B8: boosters work as in the daily — the only write is the price paid (gold), the result still pays nothing', () => {
+    save.gold = 100;
+    const shell = fakeApp(save);
+    const ch = yesterdayChallenge();
+    const play = new PlayScreen(shell.app, makeLevel({ star3: 30_000, star2: 60_000 }), ch.seed, 20, { challenge: ch, practice: true });
+    shell.app.go(play);
+    play.startMatch();
+    expect(play.useBooster('freeze')).toBe(true);
+    expect(save.gold).toBe(60);
+    winNow(play, { now: 0 });
+    const result = shell.current() as ResultScreen;
+    expect(result.info.daily).toMatchObject({ practice: true, gold: 0, crystals: 0 });
+    expect(save.gold).toBe(60);
+  });
+
   it('a loss writes nothing either', () => {
     const before = JSON.stringify(save);
     const out = practiceResult(yesterdayChallenge(), { star3: 30_000, star2: 60_000 }, 'lost', 40_000);

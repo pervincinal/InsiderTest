@@ -9,6 +9,7 @@ import type { App, Screen, StartOptions } from '../../src/ui/screens';
 import { ResultScreen } from '../../src/ui/result';
 import '../registerResult'; // PERF-11: the lazy result chunk is in
 import { PlayScreen, RESULT_BEAT_MS } from '../../src/ui/play';
+import type { HudPlayUi } from '../../src/render/hud';
 import type { DailyChallenge } from '../../src/daily/challenge';
 import { REWARD, STREAK_MILESTONES, TWISTS, UNLOCK_AFTER_LEVEL, goldReward } from '../../src/daily/challenge';
 import { challengeDone, challengeUnlocked, msToUtcMidnight, previousDayKey, recordChallengeResult, shownStreak } from '../../src/ui/daily';
@@ -20,7 +21,7 @@ import { suicideCommands } from '../../src/debug';
 /*
  * Daily Challenge (GDD §7) over the save and the play screen: the reward is paid once per UTC day,
  * a loss pays nothing, the streak counts consecutive days, the twist's modifiers replace the
- * commander upgrades and the boosters are off. No DOM: the app shell is a recorder.
+ * commander upgrades and the boosters are on (AUD-B8, 2026-11-02). No DOM: the app shell is a recorder.
  */
 
 const DAY = '2026-09-18';
@@ -276,21 +277,41 @@ describe('PlayScreen in challenge mode', () => {
     expect(normal.state.modifiers.startGarrisonBonus).toBeGreaterThan(0);
   });
 
-  it('boosters are off: nothing is bought, no booster reaches the sim', () => {
-    save.charges.overdrive = 2;
+  it('AUD-B8: boosters are on — the bar shows, a charge goes first, then gold at the normal (discounted) price; the twist stays the only modifier', () => {
+    save.charges.overdrive = 1;
+    save.upgrades = { booster_cost: 5, production: 3 }; // −25 % on the price; production must not reach the sim
     const shell = fakeApp(save);
-    const play = new PlayScreen(shell.app, makeLevel(), 5, 20, { challenge: challenge() });
+    const ch = challenge({ twist: LEAN });
+    const play = new PlayScreen(shell.app, makeLevel(), 5, 20, { challenge: ch });
     shell.app.go(play);
-    expect(play.useBooster('overdrive')).toBe(false);
-    expect(play.useBooster('freeze')).toBe(false);
-    expect(play.useBooster('airstrike')).toBe(false);
-    expect(play.targeting).toBe(false);
+    const bar = (play as unknown as { buildUi(): HudPlayUi }).buildUi().hud!.boosters;
+    expect(bar.map((b) => b.kind)).toEqual(['overdrive', 'freeze', 'airstrike']);
     play.startMatch();
-    play.update(250, 250);
-    play.update(0, 250 + RESULT_BEAT_MS); // AUD-F4 beat
-    expect(play.state.boosters).toEqual([]);
+    expect(play.useBooster('overdrive')).toBe(true); // the pre-paid charge
+    expect(save.charges.overdrive).toBe(0);
     expect(save.gold).toBe(100);
-    expect(save.charges.overdrive).toBe(2);
+    expect(play.useBooster('freeze')).toBe(true); // 40 × 0.75 = 30 gold
+    expect(save.gold).toBe(70);
+    play.update(250, 250); // the commands reach the sim on the next tick
+    expect(play.state.boosters.map((b) => b.type).sort()).toEqual(['freeze', 'overdrive']);
+    expect(play.boosters).toBe(2);
+    expect(play.state.modifiers).toEqual(LEAN.modifiers);
+  });
+
+  it('AUD-B8: a booster-assisted first win pays the normal daily reward once (no booster refund, no bonus)', () => {
+    const shell = fakeApp(save);
+    const level = makeLevel({ star3: 30_000, star2: 60_000 });
+    const play = new PlayScreen(shell.app, level, 5, 20, { challenge: challenge() });
+    shell.app.go(play);
+    play.startMatch();
+    expect(play.useBooster('overdrive')).toBe(true);
+    expect(save.gold).toBe(70);
+    const clock = { now: 0 };
+    winNow(play, clock);
+    const info = (shell.current() as ResultScreen).info;
+    expect(info.daily).toMatchObject({ firstWin: true, gold: goldReward(3), crystals: REWARD.crystals });
+    expect(save.gold).toBe(70 + goldReward(3));
+    expect(save.crystals).toBe(3 + REWARD.crystals);
   });
 
   it('a win goes through the daily path: reward once, no level stars, NEXT returns to the map, RETRY keeps the seed', async () => {

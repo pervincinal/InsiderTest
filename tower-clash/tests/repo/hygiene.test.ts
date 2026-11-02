@@ -189,7 +189,7 @@ describe('tower-clash/playwright.config.ts (BUG-16)', () => {
     expect(pwa).toMatch(/outputDir:\s*path\.join\(OUTPUT_DIR,\s*'pwa'\)/);
     expect(blocks.filter((p) => /retries:/.test(p))).toHaveLength(1);
     const chromium = blocks.find((p) => /name:\s*'chromium'/.test(p)) ?? '';
-    expect(chromium).toMatch(/testIgnore:\s*\/\(webview\|pwa\|webkit\)\\\.spec\\\.ts\$\//); // AUD-Q5: + webkit.spec.ts
+    expect(chromium).toMatch(/testIgnore:\s*\/\(webview\|pwa\|webkit\|soak\)\\\.spec\\\.ts\$\//); // AUD-Q5: + webkit.spec.ts; AUD-Q12: + soak.spec.ts
     expect(PW_CONFIG).toMatch(/process\.env\.PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS \?\?= '1'/);
     expect(E2E_SPECS).toContain('pwa.spec.ts');
     expect(readFileSync(new URL('pwa.spec.ts', E2E_DIR), 'utf8')).toMatch(/test\.use\(\{ serviceWorkers: 'allow' \}\)/);
@@ -538,7 +538,7 @@ describe('.github/workflows/tower-clash-ci.yml e2e shards (QA-26)', () => {
     expect(one).toEqual(expect.arrayContaining(['camera.spec.ts', 'gestures430.spec.ts', 'integrity/content.spec.ts', 'economy.spec.ts', 'daily.spec.ts']));
     expect(two).toEqual(expect.arrayContaining(['shopLayout.spec.ts', 'shareLocales.spec.ts', 'smoke.spec.ts', 'lazy.spec.ts', 'weekly.spec.ts', 'lessonFit.spec.ts']));
     // every chromium spec in exactly one shard
-    const chromium = E2E_SPECS.filter((f) => !/(webview|pwa|webkit)\.spec\.ts$/.test(f));
+    const chromium = E2E_SPECS.filter((f) => !/(webview|pwa|webkit|soak)\.spec\.ts$/.test(f));
     expect([...one, ...two].sort()).toEqual(chromium);
   }, 30_000);
 
@@ -551,7 +551,10 @@ describe('.github/workflows/tower-clash-ci.yml e2e shards (QA-26)', () => {
     // AUD-Q5: the WebKit job is required with them
     const webkit = /^ {4}name: (.*)\n/.exec(job('e2e-webkit'))?.[1];
     expect(webkit).toBe('e2e (webkit)');
-    expect(group).toEqual(['check + playtest + build + e2e', ...shards, webkit]);
+    // AUD-Q12: and the soak job
+    const soak = /^ {4}name: (.*)\n/.exec(job('e2e-soak'))?.[1];
+    expect(soak).toBe('e2e (soak)');
+    expect(group).toEqual(['check + playtest + build + e2e', ...shards, webkit, soak]);
   });
 });
 
@@ -651,6 +654,90 @@ describe('WebKit project and iOS simulator boot (AUD-Q5)', () => {
     expect(upload).toMatch(/\n {8}if: always\(\)\n/);
     expect(upload).toContain('name: tower-clash-ios-simulator-launch');
     expect(upload).toContain('path: ${{ runner.temp }}/simulator');
+  });
+});
+
+/*
+ * AUD-Q12 (2026-11-02): nothing measured memory over a long session. Guards:
+ * - playwright.config.ts has a `soak` project: Chromium (no browserName, the local headless shell's
+ *   launchOptions spread in) on the 430 × 932 DPR-3 phone with `--enable-precise-memory-info`, e2e/soak.spec.ts
+ *   only; `chromium` ignores the spec (the testIgnore pin above), so the shards never run it;
+ * - the spec soaks every level on one page (no reload, no `page.goto` inside the level loop), forces GC through
+ *   CDP and gates heap (× 1.25 + 4 MB over level 10, after level 50 and after a second lap of levels 1–10), Nodes / Documents (± 20) and page errors;
+ * - `npm run e2e:soak` builds and runs the project on one worker;
+ * - CI job `e2e (soak)`: own build, Chromium, the project on one worker on port 4195 / test-results/soak,
+ *   no `continue-on-error`, artefacts on failure, parallel to `verify` (the group pin above requires it).
+ */
+describe('soak project and CI job (AUD-Q12)', () => {
+  const CI = readWorkflow('tower-clash-ci.yml');
+  const job = (yaml: string, id: string): string => new RegExp(`\\n  ${id}:\\n([\\s\\S]*?)(?=\\n  [a-z][\\w-]*:\\n|$)`).exec(yaml)?.[1] ?? '';
+  const SOAK_SPEC = readFileSync(new URL('soak.spec.ts', E2E_DIR), 'utf8');
+  const PKG = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as { scripts: Record<string, string> };
+
+  it('the soak project: Chromium on the 430×932 DPR-3 phone with precise memory info, soak.spec.ts only', () => {
+    const projects = /\n  projects: \[([\s\S]*?)\n  \],/.exec(PW_CONFIG)?.[1] ?? '';
+    const block = projects.split(/\n    \{\n/).find((p) => /name:\s*'soak'/.test(p)) ?? '';
+    expect(block).not.toMatch(/browserName/);
+    expect(block).toMatch(/viewport: \{ width: 430, height: 932 \},/);
+    expect(block).toMatch(/deviceScaleFactor: 3,/);
+    expect(block).toMatch(/launchOptions: \{ \.\.\.launchOptions, args: \['--enable-precise-memory-info'\] \},/);
+    expect(block).toMatch(/testMatch: \/soak\\\.spec\\\.ts\$\//);
+    expect(block).not.toMatch(/retries:/);
+  });
+
+  it('the spec: every level on one page, CDP GC before each sample, the heap / DOM / page-error gates', () => {
+    const code = codeLines(SOAK_SPEC).map(({ line }) => line).join('\n');
+    expect(code).toContain("await cdp.send('HeapProfiler.collectGarbage');");
+    expect(code).toContain("await cdp.send('Performance.getMetrics')");
+    expect(code).toMatch(/const HEAP_GROWTH_RATIO = 1\.25;\nconst HEAP_SLACK_MB = 4;/);
+    expect(code).toMatch(/const DOM_SLACK = 20;/);
+    expect(code).toMatch(/const SOAK_SPEED = 10;/);
+    expect(code).toContain("expect(pageErrors, 'no uncaught page error over the whole session').toEqual([]);");
+    expect(code).toContain("expect(runs.map((r) => r.id), 'every authored level was played, then lap 2').toEqual(PLAY_ORDER);");
+    expect(code).toContain('const PLAY_ORDER = [...LEVEL_IDS, ...LEVEL_IDS.slice(0, LAP2_LEVELS)];');
+    // one boot for the whole soak: the level loop never navigates
+    const loop = /for \(const \[i, id\] of PLAY_ORDER\.entries\(\)\) \{([\s\S]*?)\n {4}\}\n/.exec(code)?.[1] ?? '';
+    expect(loop).toContain('tc.loadLevel(lid, seed)');
+    expect(loop).not.toMatch(/\.goto\(|\.reload\(|boot\(/);
+    expect(SOAK_SPEC).not.toMatch(/\btest\.(skip|fixme|only)\(/);
+  });
+
+  it('`npm run e2e:soak` builds, then runs the soak project on one worker', () => {
+    expect(PKG.scripts['e2e:soak']).toBe('npm run build && playwright test --project=soak --workers=1');
+  });
+
+  it('`--list --project=soak` lists the soak spec only, and chromium does not list it', () => {
+    const cli = fileURLToPath(new URL('../../node_modules/@playwright/test/cli.js', import.meta.url));
+    const list = (project: string): string[] => {
+      const r = spawnSync(process.execPath, [cli, 'test', `--project=${project}`, '--list'], {
+        cwd: fileURLToPath(new URL('../../', import.meta.url)),
+        encoding: 'utf8',
+        env: { ...process.env, CI: '', PW_OUTPUT: LIST_OUTPUT },
+      });
+      expect(r.status, r.stderr).toBe(0);
+      return [...r.stdout.matchAll(new RegExp(`\\[${project}\\] › (\\S+\\.spec\\.ts):\\d+`, 'g'))].map((m) => m[1]!);
+    };
+    const soak = list('soak');
+    expect(soak.length).toBeGreaterThanOrEqual(1);
+    expect(new Set(soak)).toEqual(new Set(['soak.spec.ts']));
+    expect(list('chromium')).not.toContain('soak.spec.ts');
+  }, 30_000);
+
+  it('CI job `e2e (soak)`: own build, Chromium, the project on one worker on port 4195, artefacts on failure', () => {
+    const sk = job(CI, 'e2e-soak');
+    expect(sk).toContain('    name: e2e (soak)\n');
+    expect(sk).not.toMatch(/\n    needs:/);
+    const r = runBlocks(sk).map((b) => b.run.trim());
+    const at = (cmd: string) => r.indexOf(cmd);
+    const RUN = 'PW_PORT=4195 PW_OUTPUT=test-results/soak npx playwright test --project=soak --workers=1';
+    expect(at('npm ci')).toBeGreaterThanOrEqual(0);
+    expect(at('npm run build')).toBeGreaterThan(at('npm ci'));
+    expect(at('npx playwright install --with-deps chromium')).toBeGreaterThan(at('npm run build'));
+    expect(at(RUN)).toBeGreaterThan(at('npx playwright install --with-deps chromium'));
+    expect(stepText(sk, 'Browser e2e (soak, levels 1-50 at x10 + MM-4 canvases)')).not.toMatch(/continue-on-error/);
+    expect(stepText(sk, 'Upload Playwright report, traces and screenshots')).toMatch(/\n {8}if: failure\(\)\n[\s\S]*name: playwright-report-e2e-soak\n/);
+    // the soak project runs in this job only
+    expect(runBlocks(CI).map((b) => b.run.trim()).filter((x) => x.includes('--project=soak'))).toEqual([RUN]);
   });
 });
 

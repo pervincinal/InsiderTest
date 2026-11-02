@@ -9,6 +9,7 @@ import type { App, Screen, StartOptions } from '../../src/ui/screens';
 import { ResultScreen } from '../../src/ui/result';
 import '../registerResult'; // PERF-11: the lazy result chunk is in
 import { PlayScreen, RESULT_BEAT_MS } from '../../src/ui/play';
+import type { HudPlayUi } from '../../src/render/hud';
 import type { WeeklyChallenge } from '../../src/daily/challenge';
 import { TWISTS, WEEKLY_BEST_KEEP, WEEKLY_REWARD, WEEKLY_UNLOCK_AFTER_LEVEL, weekKeyOf, weeklyFor } from '../../src/daily/challenge';
 import { msToNextMonday, previousWeekKey, recordWeeklyResult, shownWeekStreak, weeklyDone, weeklyTargetDone, weeklyUnlocked } from '../../src/ui/weekly';
@@ -293,6 +294,8 @@ describe('PlayScreen in weekly mode', () => {
     expect(play.state.seed).toBe(4242);
     expect(play.useBooster('overdrive')).toBe(false);
     expect(play.useBooster('airstrike')).toBe(false);
+    // AUD-B8 (2026-11-02): the daily got boosters; the weekly's fixed 3★ ladder stays booster-free — no bar
+    expect((play as unknown as { buildUi(): HudPlayUi }).buildUi().hud!.boosters).toEqual([]);
     play.startMatch();
     play.update(250, 250);
     play.update(0, 250 + RESULT_BEAT_MS); // AUD-F4 beat

@@ -62,8 +62,8 @@ describe('translation keys used by src/', () => {
     expect(templates.size).toBeGreaterThanOrEqual(2);
   });
 
-  it('keys chosen by a ternary inside t(...) are scanned (weekly / daily chip and noBoosters)', () => {
-    for (const k of ['weekly.noBoosters', 'daily.noBoosters', 'weekly.chip', 'daily.chip']) expect(literal.has(k), k).toBe(true);
+  it('keys chosen by a ternary inside t(...) are scanned (weekly / daily chip; weekly.noBoosters — the daily has boosters since AUD-B8)', () => {
+    for (const k of ['weekly.noBoosters', 'weekly.chip', 'daily.chip']) expect(literal.has(k), k).toBe(true);
   });
 
   it('every runtime-built key family has an expansion in this test', () => {

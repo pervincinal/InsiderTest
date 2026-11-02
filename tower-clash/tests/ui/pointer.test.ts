@@ -327,3 +327,56 @@ describe('PlayGestures (taps and drags → link / unlink commands)', () => {
     expect(g.selectedTowerId).toBeNull();
   });
 });
+
+/*
+ * AUD-F12: a press state. Selection still happens on `up`, but from `down` on an own tower
+ * `pressedTowerId` names it (the renderer draws its ring at half alpha) until the finger lifts, the
+ * press is cancelled or it moves past the drag threshold. A press on a foreign tower or empty ground
+ * (a swipe start) is never "pressed".
+ */
+describe('PlayGestures.pressedTowerId (AUD-F12)', () => {
+  function gestures() {
+    const state = fixture();
+    const g = new PlayGestures({ getState: () => state, onCommand: (cmd) => void applyCommand(state, cmd) });
+    const at = (id: string, dx = 0): PointerPoint => ({ id: 1, x: state.towers[id]!.x + dx, y: state.towers[id]!.y, timeMs: 1000 });
+    return { g, at };
+  }
+
+  it('set on down on an own tower, held under the threshold, cleared on up (which still selects)', () => {
+    const { g, at } = gestures();
+    expect(g.pressedTowerId).toBeNull();
+    g.down(at('p'));
+    expect(g.pressedTowerId).toBe('p');
+    expect(g.selectedTowerId).toBeNull(); // selection semantics unchanged: on up
+    g.move(at('p', 4));
+    expect(g.pressedTowerId).toBe('p');
+    g.up(at('p', 4));
+    expect(g.pressedTowerId).toBeNull();
+    expect(g.selectedTowerId).toBe('p');
+  });
+
+  it('cleared on cancel and once the press moves past the drag threshold', () => {
+    const { g, at } = gestures();
+    g.down(at('p'));
+    g.cancel();
+    expect(g.pressedTowerId).toBeNull();
+    g.down(at('p'));
+    g.move(at('p', 60));
+    expect(g.pressedTowerId).toBeNull(); // a drag now: the rubber band takes over
+    g.move(at('p', 2)); // back over the tower: still a drag, no press state
+    expect(g.pressedTowerId).toBeNull();
+    g.up(at('p', 2));
+  });
+
+  it('never set for a press on a foreign tower or on empty ground', () => {
+    const { g, at } = gestures();
+    for (const id of ['e', 'n']) {
+      g.down(at(id));
+      expect(g.pressedTowerId, id).toBeNull();
+      g.up(at(id));
+    }
+    g.down({ id: 1, x: 360, y: 640, timeMs: 1000 });
+    expect(g.pressedTowerId).toBeNull();
+    g.up({ id: 1, x: 360, y: 640, timeMs: 1000 });
+  });
+});

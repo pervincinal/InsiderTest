@@ -334,7 +334,10 @@ export function decideLink(state: GameState, from: string, to: string, allowUnli
  * with a hint at the link limit); tap a blocked tower = shake + hint;
  * tap the selected tower again = deselect; tap empty = deselect; drag own tower → tower = link;
  * a drag that starts anywhere else (empty ground, a neutral or enemy tower) is a swipe: every player
- * stream its path crosses is cut on the spot (`unlink`, once per stream per swipe — BUG-33).
+ * stream its path crosses is cut on the spot (`unlink`, once per stream per swipe — BUG-33). AUD-U8: a
+ * drag from an own tower released on empty ground (no tower under the finger) is a swipe too — every
+ * player stream its path crossed is cut on release, with the same trail; released on a tower it links
+ * (or, on its start tower, is a tap) and cuts nothing.
  * Only ever produces sim commands for owner 'player'.
  */
 export class PlayGestures {
@@ -368,8 +371,13 @@ export class PlayGestures {
   /** End of the swipe polyline so far (the down point until the first move past the threshold). */
   private swipeX = 0;
   private swipeY = 0;
-  /** Streams (`from>to`) this swipe already cut: the sim applies the `unlink` on its next tick. */
-  private readonly cut = new Set<string>();
+  /**
+   * Streams (`from>to`) this press crossed. A swipe cut them live (the sim applies the `unlink` on its
+   * next tick); a drag from an own tower only cuts them if it ends on empty ground (AUD-U8, `up`).
+   */
+  private readonly cut = new Map<string, StreamRef>();
+  /** AUD-U8: the path of a drag from an own tower (its last TRAIL_MAX points): the slash trail if it ends as a cut. */
+  private readonly path: TrailPoint[] = [];
   /** AUD-U6: the stream (`from>to`) the last linking tap started, and that tap's time (not cleared by `reset`: a new match is far more than 400 ms away). */
   private tapLink: { key: string; at: number } | null = null;
 
@@ -391,12 +399,16 @@ export class PlayGestures {
     this.moved = false;
     this.pointerDown = false;
     this.swipe = false;
-    this.cut.clear();
   }
 
   /** A press is under way and has moved past the drag threshold. */
   get dragging(): boolean {
     return this.pointerDown && this.moved;
+  }
+
+  /** AUD-F12: the own tower a press is on, from `down` until lift / cancel / the drag threshold (the renderer's half-alpha ring); null otherwise. */
+  get pressedTowerId(): string | null {
+    return this.moved || this.swipe ? null : this.downTowerId; // `swipe`: the press is off an own tower; no press: `downTowerId` is null
   }
 
   down(p: PointerPoint): void {
@@ -412,19 +424,24 @@ export class PlayGestures {
     this.swipeX = p.x;
     this.swipeY = p.y;
     this.cut.clear();
+    this.path.length = 0;
   }
 
-  /** Extend the swipe polyline to `p`: cut every player stream the new piece crosses (live), grow the trail. */
-  private swipeTo(state: GameState, p: PointerPoint): void {
+  /**
+   * Extend the press's polyline to `p`, noting every player stream the new piece crosses, and grow
+   * `trail`. On the slash trail (a swipe) each crossed stream is cut on the spot; on `path` (a drag from
+   * an own tower, AUD-U8) the cut waits for the release.
+   */
+  private swipeTo(state: GameState, p: PointerPoint, trail = this.trail): void {
     for (const s of streamsCrossed(state, { x: this.swipeX, y: this.swipeY }, p)) {
       const key = `${s.from}>${s.to}`;
       if (this.cut.has(key)) continue;
-      this.cut.add(key);
-      this.opts.onCommand({ type: 'unlink', owner: 'player', from: s.from, to: s.to });
+      this.cut.set(key, s);
+      if (trail === this.trail) this.opts.onCommand({ type: 'unlink', owner: 'player', ...s });
     }
-    if (this.trail.length === 0) this.trail.push({ x: this.swipeX, y: this.swipeY, t: p.timeMs });
-    this.trail.push({ x: p.x, y: p.y, t: p.timeMs });
-    if (this.trail.length > TRAIL_MAX) this.trail.splice(0, this.trail.length - TRAIL_MAX);
+    if (trail.length === 0) trail.push({ x: this.swipeX, y: this.swipeY, t: p.timeMs });
+    trail.push({ x: p.x, y: p.y, t: p.timeMs });
+    if (trail.length > TRAIL_MAX) trail.splice(0, trail.length - TRAIL_MAX);
     this.swipeX = p.x;
     this.swipeY = p.y;
   }
@@ -445,6 +462,7 @@ export class PlayGestures {
       const t = hitTower(state, p.x, p.y, TOWER_HIT_RADIUS, this.opts.hitProjection?.());
       this.hoverTowerId = t && t.id !== src.id && connectedRoad(state, src.id, t.id) ? t.id : null;
       this.drag = { fromId: src.id, x: p.x, y: p.y };
+      this.swipeTo(state, p, this.path); // AUD-U8: a cut if it ends on empty ground
     } else {
       this.hoverTowerId = null;
       this.drag = null;
@@ -456,8 +474,8 @@ export class PlayGestures {
     const state = this.opts.getState();
     const downTowerId = this.downTowerId;
     const moved = this.moved;
-    // the last piece of a swipe (the finger may lift without a final move event at this point)
-    if (state && this.pointerDown && moved && this.swipe && (p.x !== this.swipeX || p.y !== this.swipeY)) this.swipeTo(state, p);
+    // the last piece of a swipe / drag path (the finger may lift without a final move event at this point)
+    if (state && this.pointerDown && moved && (p.x !== this.swipeX || p.y !== this.swipeY)) this.swipeTo(state, p, this.swipe ? this.trail : this.path);
     this.hoverTowerId = null;
     this.clearPress();
     if (!state) return;
@@ -470,6 +488,10 @@ export class PlayGestures {
       if (target && target.id !== src.id) {
         this.selectedTowerId = src.id;
         this.act(state, src.id, target.id, p.timeMs, false);
+      } else if (!target) {
+        // AUD-U8: released on empty ground it was a slash: cut the own streams its path crossed, as a swipe
+        for (const s of this.cut.values()) this.opts.onCommand({ type: 'unlink', owner: 'player', ...s });
+        if (this.cut.size) this.trail.splice(0, TRAIL_MAX, ...this.path.map((q) => ({ ...q, t: p.timeMs })));
       }
       // AUD-U3: released on its own start tower it is a tap that jittered past the slop (select / deselect)
       if (!tapBack || target?.id !== src.id) return;

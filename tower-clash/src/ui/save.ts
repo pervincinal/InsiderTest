@@ -10,6 +10,13 @@
  * that is not written over the entry until the player changes something (`writeSaveAtBoot` waits,
  * `writeSave` does not); a save from a newer schema is played from memory and never written
  * (`isSaveReadOnly`). Every write of the v3 key goes through `putSave`; `onSaveWritten` observes it.
+ *
+ * Failed writes (AUD-Q10, GDD §4 "Save" 2026-11-02): a `setItem` that throws (QuotaExceededError,
+ * SecurityError, no storage) is retried once after `SAVE_RETRY_MS`; when that throws too the session
+ * is `isSaveFailing()` — the title and the result screen show "Progress could not be saved" until a
+ * later write lands — and the game plays on from memory. A getter that throws at boot (storage
+ * disabled) does not boot a writable default over a save that may exist: the session is read-only
+ * *and* failing (`saveLoadIssue()` = `blocked`), nothing writes the key and nothing is mirrored.
  */
 export const SAVE_KEY = 'towerclash.save.v3';
 export const SAVE_KEY_V2 = 'towerclash.save.v2';
@@ -170,6 +177,8 @@ export interface SaveData {
   milestones: string[];
   /** Replay "drill pay" earned today (daily cap). */
   replayGold: { day: string; earned: number };
+  /** AUD-B8: local day of the last gold → crystals trade (`GOLD_TRADE`, once a day); '' = never. No schema bump. */
+  goldTradeDay: string;
   /** Consecutive defeats per level id (reset by a win); unlocks the level-skip offer. */
   defeats: Record<string, number>;
   /** Level-skip slots already used (`skipSlotOf`, src/economy/wallet.ts): a band index 0..5, or 100 + level id for a learning level's own slot. */
@@ -201,6 +210,7 @@ export function defaultSave(): SaveData {
     purchases: [],
     milestones: [],
     replayGold: { day: '', earned: 0 },
+    goldTradeDay: '',
     defeats: {},
     skips: [],
     achievements: { unlocked: [] },
@@ -340,6 +350,7 @@ export function normalizeSave(raw: unknown): SaveData {
   out.purchases = stringList(raw.purchases);
   out.milestones = stringList(raw.milestones);
   if (isRecord(raw.replayGold)) out.replayGold = { day: dayString(raw.replayGold.day), earned: nonNegInt(raw.replayGold.earned) ?? 0 };
+  out.goldTradeDay = dayString(raw.goldTradeDay);
   out.defeats = countMap(raw.defeats);
   out.skips = intList(raw.skips);
   if (isRecord(raw.achievements)) out.achievements = { unlocked: stringList(raw.achievements.unlocked) };
@@ -374,14 +385,24 @@ export interface SaveStorage {
 /** Prefix of the corrupt-save copies: `towerclash.save.v3.bad.<Date.now()>` (AUD-Q2). */
 export const SAVE_BACKUP_PREFIX = `${SAVE_KEY}.bad.`;
 
-/** What the last `loadSaveFrom` met: an unreadable v3 entry (`corrupt`: `kept` = a copy exists) or a newer schema. */
-export type SaveLoadIssue = { kind: 'corrupt'; kept: boolean } | { kind: 'newer'; version: number } | null;
+/**
+ * What the last `loadSaveFrom` met: an unreadable v3 entry (`corrupt`: `kept` = a copy exists), a newer
+ * schema, or a storage whose getter threw / is missing (`blocked`, AUD-Q10: read-only and failing).
+ */
+export type SaveLoadIssue = { kind: 'corrupt'; kept: boolean } | { kind: 'newer'; version: number } | { kind: 'blocked' } | null;
+
+/** The one retry of a write that threw (AUD-Q10): a quota error from a burst of writes often clears by then. Literal in `setItem` (eager bytes). */
+export const SAVE_RETRY_MS = 100;
 
 let loadIssue: SaveLoadIssue = null;
 /** A newer-schema save is loaded: nothing may write the v3 key this session (AUD-Q3). */
 let readOnly = false;
 /** The v3 key holds an unreadable original: boot-time writes (`writeSaveAtBoot`) wait for the player's first change. */
 let holdingOriginal = false;
+/** A write and its retry both threw (or the getter did at boot): the "could not be saved" notice is up (AUD-Q10). */
+let failing = false;
+/** The retry timer of the newest refused JSON (cleared by every later attempt; a fired one is harmless to clear). */
+let retry: ReturnType<typeof setTimeout> | undefined;
 const writeListeners = new Set<(json: string) => void>();
 
 export function saveLoadIssue(): SaveLoadIssue {
@@ -394,9 +415,18 @@ export function isSaveReadOnly(): boolean {
 }
 
 /**
+ * True while localStorage refuses the save (AUD-Q10): the last write *and* its retry threw, or the getter
+ * threw at boot. Cleared by the next write that lands. The notice (src/render/saveNotice.ts) reads it.
+ */
+export function isSaveFailing(): boolean {
+  return failing;
+}
+
+/**
  * Native-mirror hook (AUD-Q4, src/native/): `fn` receives the exact JSON of every save the game
  * commits — each `writeSave` and the one-time v1 / v2 migration — whether or not localStorage then
- * accepted it (quota, storage disabled), so a mirror can be the copy that survives. Never called while
+ * accepted it (quota, storage disabled: the listeners run *before* `setItem`, once per write — the
+ * AUD-Q10 retry does not notify again), so a mirror can be the copy that survives. Never called while
  * the save is read-only or held at boot (nothing is committed then). Register before `loadSave()` to
  * see a migration write. A throwing listener is ignored. Returns the unsubscribe function.
  */
@@ -405,20 +435,35 @@ export function onSaveWritten(fn: (json: string) => void): () => void {
   return () => void writeListeners.delete(fn);
 }
 
-/** The one write of the v3 key: refused when read-only; listeners first, then the store. True iff the store took it. */
+/**
+ * The one write of the v3 key: refused when read-only; listeners first, then the store. True iff the
+ * store took it at once; false when it threw — the same JSON is retried once after `SAVE_RETRY_MS`
+ * (a newer write meanwhile replaces the retry, or cancels it by landing) and a retry that throws too
+ * turns `isSaveFailing()` on (AUD-Q10). The in-memory save plays on either way.
+ */
 function putSave(store: SaveStorage | null, data: unknown): boolean {
   if (readOnly) return false;
+  const json = JSON.stringify(data);
   try {
-    const json = JSON.stringify(data);
-    try {
-      for (const fn of writeListeners) fn(json);
-    } catch {
-      /* a broken mirror must not stop the local write */
-    }
+    for (const fn of writeListeners) fn(json);
+  } catch {
+    /* a broken mirror must not stop the local write */
+  }
+  return setItem(store, json, true);
+}
+
+/** `store.setItem` under the retry rule above (`first`: this is the write itself, not its retry). */
+function setItem(store: SaveStorage | null, json: string, first: boolean): boolean {
+  clearTimeout(retry);
+  try {
     store!.setItem(SAVE_KEY, json);
+    failing = false;
     return true;
   } catch {
-    return false; /* no storage, private mode, quota: play on without persistence */
+    /* no storage, private mode, quota */
+    if (first) retry = setTimeout(() => setItem(store, json, false), 100); // SAVE_RETRY_MS
+    else failing = true;
+    return false;
   }
 }
 
@@ -481,20 +526,32 @@ export function saveStorage(): SaveStorage | null {
  * - an unreadable v3 entry (bad JSON, or not a save-shaped object) is copied to a backup key and a
  *   default is returned; the entry itself stays until the player's first change (`writeSave`);
  * - a v3 entry with `version > SAVE_VERSION` (a newer build wrote it) is read as far as this build
- *   understands it and the session turns read-only: nothing writes the key, its bytes stay as found.
+ *   understands it and the session turns read-only: nothing writes the key, its bytes stay as found;
+ * - a `store` of null, or a getter that throws (AUD-Q10 `blocked`), is read-only *and* failing: a default
+ *   is played from memory, nothing writes the key, nothing is mirrored (a default must not overwrite the
+ *   native copy either), and the "could not be saved" notice is up for the session.
  */
 export function loadSaveFrom(store: SaveStorage | null, nowMs = Date.now()): SaveData {
   loadIssue = null;
   readOnly = false;
   holdingOriginal = false;
-  if (!store) return defaultSave();
+  failing = false;
+  let v3: string | null;
   try {
-    const v3 = store.getItem(SAVE_KEY);
+    v3 = store!.getItem(SAVE_KEY);
+  } catch {
+    // AUD-Q10: no storage, or its getter threw (SecurityError: storage disabled) — a save may well exist
+    // under the key, so no default is ever written over it: read-only from memory, with the notice
+    readOnly = failing = true;
+    loadIssue = { kind: 'blocked' };
+    return defaultSave();
+  }
+  try {
     if (v3) {
       const raw = readableSave(v3);
       if (!raw) {
         holdingOriginal = true;
-        loadIssue = { kind: 'corrupt', kept: keepOriginal(store, v3, nowMs) };
+        loadIssue = { kind: 'corrupt', kept: keepOriginal(store!, v3, nowMs) }; // non-null: the getter above ran
         return defaultSave();
       }
       if (typeof raw.version === 'number' && raw.version > SAVE_VERSION) {
@@ -503,7 +560,7 @@ export function loadSaveFrom(store: SaveStorage | null, nowMs = Date.now()): Sav
       }
       return normalizeSave(raw);
     }
-    const older = store.getItem(SAVE_KEY_V2) ?? store.getItem(SAVE_KEY_V1);
+    const older = store!.getItem(SAVE_KEY_V2) ?? store!.getItem(SAVE_KEY_V1);
     if (!older) return defaultSave();
     const migrated = normalizeSave(JSON.parse(older));
     putSave(store, migrated); // a refused write (quota) plays on with the migrated copy in memory

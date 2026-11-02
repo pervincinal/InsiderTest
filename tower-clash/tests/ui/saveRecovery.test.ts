@@ -234,7 +234,7 @@ describe('AUD-Q3: a save from a newer version is read-only', () => {
     expect(onDisk.version).toBe(4);
     expect(onDisk.cloudId).toBe('abc-123');
     expect(onDisk.seasonPass).toEqual({ tier: 7, xp: 1234 });
-    expect(Object.keys(onDisk)).toHaveLength(22);
+    expect(Object.keys(onDisk)).toHaveLength(23); // the build-7 fixture's 21 keys (goldTradeDay since AUD-B8) + the two v4 extras
     expect(heard).toEqual([]); // the native mirror is not fed a downgraded copy either
     off();
   });

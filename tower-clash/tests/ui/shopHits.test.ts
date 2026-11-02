@@ -5,7 +5,7 @@ import type { Rect } from '../../src/render/widgets';
 import { SHOP, shopRowRect, shopSkinRect } from '../../src/render/menuLayout';
 import { createAdSession } from '../../src/economy/adsFlow';
 import { getStore } from '../../src/economy/store';
-import { CRYSTAL_SERVICES } from '../../src/economy/catalog';
+import { CRYSTAL_SERVICES, GOLD_TRADE } from '../../src/economy/catalog';
 import type { SaveData } from '../../src/ui/save';
 import { defaultSave, setSaveStorageForTests } from '../../src/ui/save';
 import type { App } from '../../src/ui/screens';
@@ -121,6 +121,33 @@ describe('shop hit regions without a painted frame (FE-10)', () => {
     shop.enter();
     shop.wheel(300);
     expect(shop.scrollY).toBe(300);
+    expect(draws).toBe(0);
+  });
+});
+
+describe('gold → crystals row under the complete tree (AUD-B8)', () => {
+  const maxTree = () => Object.fromEntries(UPGRADE_DEFS.map((d) => [d.id, d.maxTier]));
+  /** Tap a content-space rect with the content scrolled to the bottom (the row sits under the five tracks). */
+  const tapScrolled = (shop: ShopScreen, r: Rect): void => {
+    shop.wheel(10_000);
+    tap(shop, { ...r, y: r.y - shop.scrollY });
+  };
+
+  it('no row while a track is short of its cap; with the tree complete one tap trades once, the second toasts', () => {
+    save.gold = 2_000;
+    const shop = new ShopScreen(fakeApp(save), 'upgrades');
+    shop.enter();
+    tapScrolled(shop, shopRowRect(UPGRADE_DEFS.length));
+    expect(save).toMatchObject({ gold: 2_000, crystals: 0 });
+
+    save.upgrades = maxTree();
+    const done = new ShopScreen(fakeApp(save), 'upgrades');
+    done.enter();
+    tapScrolled(done, shopRowRect(UPGRADE_DEFS.length));
+    expect(save).toMatchObject({ gold: 2_000 - GOLD_TRADE.gold, crystals: GOLD_TRADE.crystals });
+    tapScrolled(done, shopRowRect(UPGRADE_DEFS.length));
+    expect(save).toMatchObject({ gold: 2_000 - GOLD_TRADE.gold, crystals: GOLD_TRADE.crystals });
+    expect(done.toast.opts(0)?.text).toBe('One trade a day · come back tomorrow');
     expect(draws).toBe(0);
   });
 });

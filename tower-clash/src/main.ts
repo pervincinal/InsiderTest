@@ -15,8 +15,9 @@ import { warmHudOverlays } from './render/hud';
 import { equippedSkin } from './economy/entitlements';
 import { attachPointer } from './input/pointer';
 import type { PointerPoint } from './input/pointer';
-import type { SaveData } from './ui/save';
-import { currentLevelIndex, isSaveReadOnly, loadSave, saveLoadIssue, writeSave, writeSaveAtBoot } from './ui/save';
+import type { SaveData, SaveLoadIssue } from './ui/save';
+import type { SaveNoticeRecord } from './render/saveNotice';
+import { currentLevelIndex, isSaveFailing, isSaveReadOnly, loadSave, saveLoadIssue, writeSave, writeSaveAtBoot } from './ui/save';
 import type { App, NativeInfoOverride, QueuedToast, Screen, StartOptions } from './ui/screens';
 import { TitleScreen, beginMapFrame, endMapFrame, handOverToasts } from './ui/screens';
 import { PlayScreen } from './ui/play';
@@ -210,6 +211,14 @@ export interface TowerClashDebug {
     setNativeInfo(info: NativeInfoOverride | null): void;
     /** What the settings About block shows, or null when not on the settings screen. */
     getAboutInfo(): { version: string; supportId: string | null; privacyOptions: boolean } | null;
+  };
+  /** AUD-Q10 save-write failures (src/ui/save.ts): force them, read the session's state and the notice drawn. */
+  save: {
+    /** The next `n` localStorage writes of the save (retries count) throw a QuotaExceededError; 0 heals. */
+    failWrites(n: number): void;
+    status(): { failing: boolean; readOnly: boolean; issue: SaveLoadIssue; forcedLeft: number; thrown: number };
+    /** The last save notice drawn (screen, text, pill), or null when none was drawn yet. */
+    notice(): SaveNoticeRecord | null;
   };
 }
 
@@ -689,15 +698,17 @@ export class TowerClashApp implements App {
     this.lastFrame = now;
     this.insets.tick(); // no-op after the first INSET_PROBE_FRAMES frames
     this.current.update?.(dt, now);
-    if (this.current.name !== 'play') {
+    if (this.current.name !== 'play' && this.current.name !== 'title') {
       // menus paint their own background; nothing may paint over them, and a stale ground (old level /
-      // theme) must not survive into the next match
+      // theme) must not survive into the next match (the title paints or blanks its own, AUD-Q11)
       blankLayer(this.view.layers?.hud);
       blankLayer(this.view.layers?.ground);
     }
     this.current.draw(this.view, now);
-    // AUD-Q3: a newer build's save is played read-only; the title says so for as long as it lasts
-    if (this.current.name === 'title' && isSaveReadOnly()) this.lazy?.drawSaveNotice(this.view, this.palette());
+    // AUD-Q3 / AUD-Q10: a newer build's save is played read-only, or localStorage refuses the save — the
+    // title (and, for failing writes, the result footer) says so for as long as it lasts
+    const name = this.current.name;
+    if ((name === 'title' || name === 'result') && (isSaveFailing() || isSaveReadOnly())) this.lazy?.drawSaveNotice(this.view, this.palette(), name);
     this.perf?.frame(this, now); // AUD-Q8: over everything the screen drew
     this.preloadLazy(); // after the first paint; a no-op from then on
     requestAnimationFrame((f) => this.frame(f));

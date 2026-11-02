@@ -89,6 +89,9 @@ const playHud = (): Target[] => [
   t('HUD.menu', HUD.menu, BOTTOM),
 ];
 
+/** AUD-U9: a first-time save on levels 1–4 draws no booster bar, and its rects take no tap (`PlayScreen.bare`). */
+const playHudBare = (): Target[] => playHud().filter((x) => !x.name.startsWith('BOOSTERS.'));
+
 const pauseCard = (): Target[] => [
   t('HUD.pause', HUD.pause, TOP),
   t('HUD.mute', HUD.mute, TOP),
@@ -200,6 +203,7 @@ const OFFERS_NONE: ResultCase = { share: true, doubleGold: null, doubled: false,
 
 const SCREENS: Record<string, Target[]> = {
   'play HUD': playHud(),
+  'play HUD, first-time save on levels 1–4 (AUD-U9)': playHudBare(),
   'pause card': pauseCard(),
   'result: win, ×2 gold, share row': result(true, true, { ...OFFERS_NONE, doubleGold: 40 }),
   'result: win, share inline': result(true, true, OFFERS_NONE),

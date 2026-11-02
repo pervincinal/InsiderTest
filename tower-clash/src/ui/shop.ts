@@ -14,15 +14,15 @@ import { segmentAt } from '../render/menuWidgets';
 import { dragThreshold } from '../input/pointer';
 import type { ShopTab } from '../render/menuLayout';
 import { SHOP, SHOP_BANDS, bandToScreen, bandedContentBottom, screenToBand, shopBuyRect, shopConvertSegRect, shopPackRect, shopRowRect, shopSkinRect, shopTabsFor } from '../render/menuLayout';
-import type { ShopBundleCard, ShopConvertCard, ShopCrateCard, ShopPackCard, ShopSkinCard, ShopUpgradeCard } from '../render/menusShop';
+import type { ShopBundleCard, ShopConvertCard, ShopCrateCard, ShopPackCard, ShopSkinCard, ShopTradeCard, ShopUpgradeCard } from '../render/menusShop';
 import { drawShop } from '../render/menusShop';
 import { ParticleSystem } from '../render/particles';
 import type { PointerPoint } from '../input/pointer';
 import type { IapProductDef, SkinDef } from '../economy/catalog';
 import { getStore } from '../economy/store';
 import { spendCrystals } from '../economy/wallet';
-import { CONVERSION_PACKS, buyBoosterCrate, conversionGold, convertCrystals, grantProduct, restorePurchases } from '../economy/purchases';
-import { CONVERSION, CRYSTAL_SERVICES } from '../economy/catalog';
+import { CONVERSION_PACKS, buyBoosterCrate, conversionGold, convertCrystals, goldTradeState, grantProduct, restorePurchases, tradeGold } from '../economy/purchases';
+import { CONVERSION, CRYSTAL_SERVICES, GOLD_TRADE } from '../economy/catalog';
 import { ownsProduct, shopSkins, skinFamily, spriteSkinId, visibleProducts } from '../economy/entitlements';
 import { UPGRADE_DEFS, upgradeTier } from './upgrades';
 import { UPGRADE_GLYPH, buyUpgrade, upgradeCost, upgradeEffectText } from './shopUpgrades';
@@ -59,6 +59,8 @@ interface Layout {
   skinHeaders: { label: string; y: number }[];
   skins: ShopSkinCard[];
   upgrades: ShopUpgradeCard[];
+  /** AUD-B8: the gold → crystals row under the tree, once it is complete. */
+  trade: ShopTradeCard | null;
   restoreRect: Rect | null;
   hits: Hit[];
   contentHeight: number;
@@ -188,7 +190,7 @@ export class ShopScreen implements Screen {
   private layout(): Layout {
     const save = this.app.save;
     this.activeTab();
-    const out: Layout = { packs: [], convert: null, crate: null, bundles: [], skinHeaders: [], skins: [], upgrades: [], restoreRect: null, hits: [], contentHeight: 0 };
+    const out: Layout = { packs: [], convert: null, crate: null, bundles: [], skinHeaders: [], skins: [], upgrades: [], trade: null, restoreRect: null, hits: [], contentHeight: 0 };
     let bottom: number = SHOP.contentTop;
     if (this.tab === 'crystals') {
       const packs = visibleProducts(save).filter((p) => p.bonusPct !== undefined);
@@ -278,6 +280,14 @@ export class ShopScreen implements Screen {
         if (cost !== null) out.hits.push({ rect, action: () => this.tapUpgrade(d.id, rect) });
         bottom = Math.max(bottom, rect.y + rect.h);
       });
+      // AUD-B8: the tree is complete → gold keeps a job (ECONOMY.md §3.7)
+      const state = goldTradeState(save);
+      if (state !== 'locked') {
+        const rect = shopRowRect(UPGRADE_DEFS.length);
+        out.trade = { rect, gold: GOLD_TRADE.gold, crystals: GOLD_TRADE.crystals, done: state === 'done', affordable: state === 'ready' };
+        out.hits.push({ rect, action: () => this.tapTrade(rect) });
+        bottom = rect.y + rect.h;
+      }
       bottom += 40;
     }
     if (this.tab === 'crystals' || this.tab === 'bundles') {
@@ -354,6 +364,7 @@ export class ShopScreen implements Screen {
       skinHeaders: lay.skinHeaders,
       skins: lay.skins,
       upgrades: lay.upgrades,
+      trade: lay.trade,
       restoreRect: lay.restoreRect,
       storeAvailable: getStore().isAvailable(),
       pending: this.pending,
@@ -501,7 +512,7 @@ export class ShopScreen implements Screen {
       return false;
     }
     this.burst(granted.crystals > 0 ? 'crystal' : 'gold', rect);
-    playSfx('upgrade');
+    playSfx('purchase');
     const parts = [
       granted.crystals > 0 ? t('amount.crystals', { n: granted.crystals }) : '',
       granted.gold > 0 ? t('amount.gold', { n: granted.gold }) : '',
@@ -567,7 +578,7 @@ export class ShopScreen implements Screen {
     }
     const card = this.layout().convert?.rect;
     if (card) this.burst('gold', card);
-    playSfx('upgrade');
+    playSfx('purchase');
     this.toast.show(t('shop.toast.converted', { crystals, gold }), 'ok', this.nowMs);
     return true;
   }
@@ -593,7 +604,7 @@ export class ShopScreen implements Screen {
       return false;
     }
     this.burst('crystal', rect);
-    playSfx('upgrade');
+    playSfx('purchase');
     this.toast.show(t('shop.toast.crateAdded', { o: added.overdrive, f: added.freeze, a: added.airstrike }), 'ok', this.nowMs);
     return true;
   }
@@ -627,7 +638,7 @@ export class ShopScreen implements Screen {
     save.skins.equipped[family] = skin.id;
     writeSave(save);
     this.burst('crystal', rect);
-    playSfx('upgrade');
+    playSfx('purchase');
     this.toast.show(t('shop.toast.skinUnlocked', { name: skinName(skin) }), 'ok', this.nowMs);
     return true;
   }
@@ -641,6 +652,19 @@ export class ShopScreen implements Screen {
     playSfx('button');
   }
 
+  /** AUD-B8: one tap, like an upgrade (gold, no confirm card); once a day. */
+  private tapTrade(rect: Rect): void {
+    const state = goldTradeState(this.app.save);
+    const crystals = tradeGold(this.app.save);
+    if (crystals === null) {
+      this.toast.show(state === 'done' ? t('shop.toast.tradeDone') : t('shop.toast.needGold', { n: GOLD_TRADE.gold }), 'error', this.nowMs);
+      return;
+    }
+    this.burst('crystal', rect);
+    playSfx('purchase');
+    this.toast.show(t('shop.toast.traded', { g: GOLD_TRADE.gold, c: crystals }), 'ok', this.nowMs);
+  }
+
   private tapUpgrade(id: string, rect: Rect): void {
     const cost = upgradeCost(this.app.save, id);
     if (cost === null) return;
@@ -649,7 +673,7 @@ export class ShopScreen implements Screen {
       return;
     }
     this.burst('gold', rect);
-    playSfx('upgrade');
+    playSfx('purchase');
     const def = UPGRADE_DEFS.find((d) => d.id === id)!;
     const tier = upgradeTier(this.app.save, id);
     this.toast.show(t('shop.toast.upgraded', { name: upgradeName(def), tier, effect: upgradeEffectText(def, tier) }), 'ok', this.nowMs);

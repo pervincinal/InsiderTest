@@ -9,6 +9,7 @@ import { drawGame } from '../render/draw';
 import type { HudPlayUi, ResultExtras } from '../render/hud';
 import { hudOverlaysLoaded, resultShareLayout } from '../render/hud';
 import { playSfx } from '../audio/index';
+import { ResultCuePlayer, resultCues } from '../audio/resultCues';
 import { canShowRewarded, maybeShowInterstitial, onResultShown, showRewarded } from '../economy/adsFlow';
 import type { ResultEarnings } from '../economy/wallet';
 import { buyLevelSkip, earnGold, skipAvailable, spendCrystals } from '../economy/wallet';
@@ -141,12 +142,16 @@ export class ResultScreen implements Screen {
   private readonly defeatCount: number;
   /** AUD-U5: the crystal spend waiting on the confirm card (`CONFIRM`), or null. */
   private ask: 'continue' | 'skip' | null = null;
+  /** AUD-F9: the card's sounds (star chords, gold ticks, the defeat chord) on the card's clock, from its first frame (`cueAt`). */
+  private readonly cues: ResultCuePlayer;
+  private cueAt = -1;
 
   constructor(
     private readonly app: App,
     readonly info: ResultInfo,
   ) {
     this.defeatCount = noteResult(info.level.id, info.ui.outcome === 'won');
+    this.cues = new ResultCuePlayer(resultCues({ won: info.ui.outcome === 'won', stars: info.ui.stars, coins: info.ui.coinsEarned }));
   }
 
   enter(): void {
@@ -286,6 +291,9 @@ export class ResultScreen implements Screen {
       hud.toast = this.toast.opts(nowMs);
     }
     drawGame(view.ctx, this.info.state, view, ui, nowMs);
+    // AUD-F9: the card's clock as hud.ts runs it (its first frame; settled at once under reduced motion)
+    if (this.cueAt < 0) this.cueAt = nowMs;
+    this.cues.tick(ui.particles?.reducedMotion ? Infinity : nowMs - this.cueAt, playSfx);
   }
 
   private rects(): Rect[] {
@@ -380,7 +388,7 @@ export class ResultScreen implements Screen {
       this.info.ui.coinsEarned += gained;
       this.info.ui.coinsTotal = this.app.save.gold;
       this.info.ui.particles?.coinBurst(360, RESULT.extra.y, 14, this.app.palette());
-      playSfx('upgrade');
+      playSfx('reward');
       this.toast.show(t('amount.gold', { n: gained }), 'ok', this.nowMs);
     });
   }
@@ -388,7 +396,7 @@ export class ResultScreen implements Screen {
   /** Paid continue: rewind and resume; if the snapshot ring cannot serve one, restart with the bonus garrison. */
   private reinforce(): void {
     if (this.info.resume?.()) return;
-    playSfx('upgrade');
+    playSfx('reward');
     void this.app.startLevel(this.info.level.id, undefined, { reinforcements: true });
   }
 
@@ -423,7 +431,7 @@ export class ResultScreen implements Screen {
     }
     logSkip(save, this.info, save.stars[String(this.info.level.id)] ?? 0, had === 0); // AUD-B6 (no-op while diagnostics is off)
     evaluateAchievements(save); // a skip changes the star table (never to 3★, but the rule is "after each result")
-    playSfx('upgrade');
+    playSfx('unlock'); // AUD-F8: the next level opens
     this.leave(() => this.nextLevel());
   }
 

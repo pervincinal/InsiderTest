@@ -253,12 +253,21 @@ export class PlayScreen implements Screen {
   /** Debug (e2e): throw every garrison at the enemy each AI tick so the level is lost quickly. */
   /** Facts about this match for the achievement rules (ECON-4), collected from sim events. */
   readonly match: MatchSummary = emptyMatch();
-  /** Daily Challenge match (GDD §7): fixed twist modifiers, no upgrades, boosters and continues off. */
+  /** Daily Challenge match (GDD §7): fixed twist modifiers, no upgrades or continues; boosters on (AUD-B8). */
   readonly challenge: DailyChallenge | null;
   /** Weekly Challenge match (GDD §8): the same fixed-match rules as `challenge`, booked per week. */
   readonly weekly: WeeklyChallenge | null;
   /** Yesterday's map (DAILY-6): `challenge` is yesterday's and the result writes nothing. */
   readonly practice: boolean;
+  /**
+   * AUD-U9 (GDD §4): levels 1–4 (never a daily / weekly: their pool starts at 9) on a save that never had
+   * gold — 0 gold and level 1 not cleared (its first win pays gold, so a clear with 0 gold left means it
+   * was spent on boosters): no booster bar and no coin pill, and a tap on a booster rect or a booster
+   * hotkey does nothing (`useBooster`). Fixed for the match (gold only changes through a booster, or at
+   * the result). Pre-paid charges are not checked: before the first win they can only come from the
+   * 60-crystal crate, and they are kept for the bar's first showing.
+   */
+  readonly bare: boolean;
 
   constructor(
     private readonly app: App,
@@ -272,6 +281,7 @@ export class PlayScreen implements Screen {
     this.practice = opts.practice === true && this.challenge !== null;
     if (this.practice) this.toast.show(t('daily.yesterdayNoReward'), 'ok', performance.now(), 3200);
     this.continued = opts.reinforcements === true && !this.fixed;
+    this.bare = level.id < 5 && !app.save.gold && !app.save.stars[1];
     this.loop = new GameLoop({
       beforeTick: (s) => this.runAi(s),
       onEvents: (ev) => {
@@ -427,7 +437,7 @@ export class PlayScreen implements Screen {
     this.loop.load(restored); // also drops queued commands and unpauses
     this.ring.record(this.snapshot()); // the abandoned future is forgotten; the rewound state is the new base
     resetAudioLevel();
-    playSfx('upgrade');
+    playSfx('reward');
     this.app.go(this);
     return true;
   }
@@ -637,7 +647,7 @@ export class PlayScreen implements Screen {
     };
   }
 
-  /** A daily or weekly challenge: equal for everyone (no upgrades, boosters, continue, skip; NEXT → the map). */
+  /** A daily or weekly challenge: equal for everyone (no upgrades, continue, skip; NEXT → the map). Boosters: weekly only off. */
   private get fixed(): boolean {
     return this.challenge !== null || this.weekly !== null;
   }
@@ -648,7 +658,8 @@ export class PlayScreen implements Screen {
     const twist = this.challenge?.twist ?? this.weekly?.twist;
     return {
       hud: {
-        boosters: this.fixed ? [] : allBoosterStatus(this.state, this.wallet()),
+        boosters: this.weekly ? [] : allBoosterStatus(this.state, this.wallet()), // AUD-B8: the daily has them
+        bare: this.bare,
         challenge: twist ? { twist: t(`daily.twist.${twist.id}`), weekly: this.weekly !== null } : undefined,
         targeting: this.targeting,
         muted: isMuted(),
@@ -667,6 +678,7 @@ export class PlayScreen implements Screen {
       alpha: this.loop.alpha,
       selectedTowerId: this.gestures.selectedTowerId,
       hoverTowerId: this.gestures.hoverTowerId,
+      pressedTowerId: this.gestures.pressedTowerId,
       drag: this.gestures.drag ?? undefined,
       swipeTrail: this.gestures.trail,
       paused: this.loop.paused,
@@ -857,9 +869,9 @@ export class PlayScreen implements Screen {
    * booster with a rewarded video on offer starts the "free charge" flow instead (ECONOMY.md §5.2).
    */
   useBooster(kind: BoosterKind): boolean {
-    if (this.loop.paused || this.over || this.stallUp) return false;
-    if (this.fixed) {
-      this.toast.show(t(this.weekly ? 'weekly.noBoosters' : 'daily.noBoosters'), 'error', this.nowMs);
+    if (this.loop.paused || this.over || this.stallUp || this.bare) return false;
+    if (this.weekly) {
+      this.toast.show(t('weekly.noBoosters'), 'error', this.nowMs);
       return false;
     }
     const status = boosterStatus(this.state, kind, this.wallet());
@@ -893,7 +905,7 @@ export class PlayScreen implements Screen {
     if (ok) {
       this.app.save.charges[kind] += 1;
       writeSave(this.app.save);
-      playSfx('upgrade');
+      playSfx('reward');
       this.toast.show(t('play.freeCharge', { kind: t(`booster.${kind}`) }), 'ok', this.nowMs);
     }
     return ok;
