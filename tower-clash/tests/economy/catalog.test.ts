@@ -10,6 +10,7 @@ import {
   CURRENCIES,
   EARN_RULES,
   ENERGY_SYSTEM,
+  GOLD_TRADE,
   IAP_PRODUCTS as IAP_PRODUCTS_CONST,
   INTERSTITIAL_RULES,
   SKINS,
@@ -156,12 +157,23 @@ describe('economy catalog (docs/ECONOMY.md)', () => {
     expect(ACHIEVEMENTS.find((a) => a.id === 'grand_campaign')).toMatchObject({ label: 'Clear level 50', crystals: 10 });
   });
 
-  it('conversion is crystals → gold only and the currencies map to save fields', () => {
+  it('conversion is crystals → gold (the way back is GOLD_TRADE, AUD-B8) and the currencies map to save fields', () => {
     expect(CONVERSION.goldPerCrystal).toBeGreaterThan(0);
     expect('crystalsPerGold' in CONVERSION).toBe(false);
     expect(CURRENCIES.gold.saveField).toBe('gold');
     expect(CURRENCIES.crystals.kind).toBe('hard');
     expect(ENERGY_SYSTEM).toBeNull();
+  });
+
+  it('AUD-B8 (ECONOMY.md §3.7): the way back is GOLD_TRADE only, 800 → 5, a deliberately poor rate inside the §6 10 % ceiling', () => {
+    expect(GOLD_TRADE).toEqual({ gold: 800, crystals: 5 });
+    const goldPerCrystalBack = GOLD_TRADE.gold / GOLD_TRADE.crystals; // 160
+    expect(goldPerCrystalBack).toBeGreaterThanOrEqual(30 * CONVERSION.goldPerCrystal); // a round trip keeps < 4 %
+    // §6: the faithful daily + weekly player (≈ 166 gold a day after the tree, 13.45 crystals a day) and the
+    // mastery line (≈ 152.5, 12.0) may not gain more than 10 % crystals a day from the trade, boosters or not
+    expect(166.1 / goldPerCrystalBack).toBeLessThanOrEqual(0.1 * 13.45);
+    expect(152.5 / goldPerCrystalBack).toBeLessThanOrEqual(0.1 * 12.0);
+    expect(130 / goldPerCrystalBack).toBeLessThanOrEqual(0.1 * 11.55);
   });
 
   it('crystal-priced services: the booster crate is a discount, skins are cosmetic and exclusives are not sold', () => {

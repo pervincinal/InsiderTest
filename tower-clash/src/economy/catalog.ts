@@ -32,12 +32,18 @@ export const CURRENCIES = {
   crystals: { id: 'crystals', kind: 'hard', label: 'Crystals', saveField: 'crystals' },
 } as const satisfies Record<CurrencyId, CurrencyDef>;
 
-/** Crystals → gold only; gold → crystals never (ECONOMY.md §2). */
+/** Crystals → gold (ECONOMY.md §2); the way back is `GOLD_TRADE` only. */
 export const CONVERSION = {
   goldPerCrystal: 5,
   /** Offered pack sizes in crystals; gold granted = size × goldPerCrystal. */
   packsCrystals: [20, 100, 500],
 } as const;
+
+/**
+ * AUD-B8 (ECONOMY.md §3.7): gold → crystals, once a day, only with every Commander track at its cap —
+ * the late gold sink. 160 gold a crystal (32 × CONVERSION's way) so crystals stay scarce (§6: +≤ 10 %).
+ */
+export const GOLD_TRADE = { gold: 800, crystals: 5 } as const;
 
 // ---------------------------------------------------------------------------------------------
 // Earn rules

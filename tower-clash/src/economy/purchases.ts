@@ -11,10 +11,10 @@
 import type { BoosterCharges, SaveData } from '../ui/save';
 import { writeSave } from '../ui/save';
 import type { IapProductDef } from './catalog';
-import { CONVERSION, CRYSTAL_SERVICES, IAP_PRODUCTS } from './catalog';
+import { COMMANDER_UPGRADES, CONVERSION, CRYSTAL_SERVICES, GOLD_TRADE, IAP_PRODUCTS } from './catalog';
 import type { StoreProvider } from './store';
 import { getStore } from './store';
-import { spendCrystals } from './wallet';
+import { dayKey, earnCrystals, spendCrystals, spendGold } from './wallet';
 
 /* ---------- crystal sinks: gold conversion, booster crate ---------- */
 
@@ -27,8 +27,8 @@ export function conversionGold(crystals: number): number {
 export const CONVERSION_PACKS: readonly number[] = CONVERSION.packsCrystals;
 
 /**
- * Crystals → gold, one catalog pack at a time (gold → crystals never exists). Returns the gold
- * added, or null (nothing changes) when the pack is not offered or unaffordable.
+ * Crystals → gold, one catalog pack at a time (the way back is `tradeGold`, at a far worse rate).
+ * Returns the gold added, or null (nothing changes) when the pack is not offered or unaffordable.
  */
 export function convertCrystals(save: SaveData, crystals: number): number | null {
   if (!CONVERSION_PACKS.includes(crystals)) return null;
@@ -37,6 +37,33 @@ export function convertCrystals(save: SaveData, crystals: number): number | null
   save.gold += gold;
   writeSave(save);
   return gold;
+}
+
+/* ---------- gold → crystals: the late gold sink (AUD-B8, ECONOMY.md §3.7) ---------- */
+
+/** Every Commander track at its cap (ECONOMY.md §3.2): the gold trade is listed only then. */
+export function treeComplete(save: SaveData): boolean {
+  return COMMANDER_UPGRADES.every((d) => (save.upgrades[d.id] ?? 0) >= d.maxTier);
+}
+
+/** `locked` until the tree is complete, `done` once today's trade is made, `short` under `GOLD_TRADE.gold`. */
+export type GoldTradeState = 'locked' | 'done' | 'short' | 'ready';
+
+export function goldTradeState(save: SaveData, nowMs = Date.now()): GoldTradeState {
+  if (!treeComplete(save)) return 'locked';
+  if (save.goldTradeDay === dayKey(nowMs)) return 'done';
+  return save.gold < GOLD_TRADE.gold ? 'short' : 'ready';
+}
+
+/**
+ * `GOLD_TRADE.gold` gold → `GOLD_TRADE.crystals` crystals, once per local day (the replay cap's day),
+ * tree complete only. Returns the crystals added, or null (nothing changes).
+ */
+export function tradeGold(save: SaveData, nowMs = Date.now()): number | null {
+  if (goldTradeState(save, nowMs) !== 'ready' || !spendGold(save, GOLD_TRADE.gold)) return null;
+  save.goldTradeDay = dayKey(nowMs);
+  earnCrystals(save, GOLD_TRADE.crystals); // persists the day too
+  return GOLD_TRADE.crystals;
 }
 
 /**

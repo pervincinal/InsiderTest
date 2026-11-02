@@ -2,13 +2,13 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { SaveData } from '../../src/ui/save';
 import { SAVE_KEY, SAVE_KEY_V2, defaultSave, loadSaveFrom, resetProgress, setSaveStorageForTests } from '../../src/ui/save';
 import { claimDaily, dailyStatus, dayKey, earnCrystals, earnGold, payMilestones, recordResult, spendCrystals, spendGold } from '../../src/economy/wallet';
-import { CONVERSION_PACKS, buyBoosterCrate, conversionGold, convertCrystals, grantProduct, restorePurchases } from '../../src/economy/purchases';
+import { CONVERSION_PACKS, buyBoosterCrate, conversionGold, convertCrystals, goldTradeState, grantProduct, restorePurchases, tradeGold, treeComplete } from '../../src/economy/purchases';
 import { boosterDiscount, boosterPrice, equippedSkin, highestClearedLevel, interstitialsDisabled, ownsProduct, shopSkins, skinFamily, spriteSkinId, visibleProducts } from '../../src/economy/entitlements';
 import { HELMET_SKINS, ROOF_SKINS, THEME_IDS } from '../../src/render/sprites';
 import { modifiersFromSave, upgradeTier } from '../../src/ui/upgrades';
 import { commanderSummary } from '../../src/ui/upgradesSummary';
 import { buyUpgrade, upgradeCost } from '../../src/ui/shopUpgrades';
-import { CONVERSION, CRYSTAL_SERVICES, EARN_RULES, IAP_PRODUCTS, SKINS } from '../../src/economy/catalog';
+import { COMMANDER_UPGRADES, CONVERSION, CRYSTAL_SERVICES, EARN_RULES, GOLD_TRADE, IAP_PRODUCTS, SKINS } from '../../src/economy/catalog';
 import type { StoreProvider } from '../../src/economy/store';
 import { makeLevel } from '../helpers';
 
@@ -69,11 +69,60 @@ describe('crystals → gold conversion (ECONOMY.md §2)', () => {
     expect(written).toEqual(expect.objectContaining({ gold: small * CONVERSION.goldPerCrystal, crystals: mid - small }));
   });
 
-  it('never converts gold into crystals (no such function; balances only move one way)', () => {
+  it('convertCrystals never turns gold into crystals (the way back is tradeGold, AUD-B8)', () => {
     save.gold = 10_000;
     expect(convertCrystals(save, CONVERSION_PACKS[0]!)).toBeNull();
     expect(save.crystals).toBe(0);
     expect(save.gold).toBe(10_000);
+  });
+});
+
+describe('gold → crystals trade (AUD-B8, ECONOMY.md §3.7)', () => {
+  const maxTree = (): Record<string, number> => Object.fromEntries(COMMANDER_UPGRADES.map((d) => [d.id, d.maxTier as number]));
+
+  it('is locked until every Commander track is at its cap — one tier short is still locked', () => {
+    save.gold = 10_000;
+    const tiers = maxTree();
+    tiers.booster_cost = tiers.booster_cost! - 1;
+    save.upgrades = tiers;
+    expect(treeComplete(save)).toBe(false);
+    expect(goldTradeState(save, NOON)).toBe('locked');
+    expect(tradeGold(save, NOON)).toBeNull();
+    expect(save).toMatchObject({ gold: 10_000, crystals: 0, goldTradeDay: '' });
+    save.upgrades = maxTree();
+    expect(treeComplete(save)).toBe(true);
+    expect(goldTradeState(save, NOON)).toBe('ready');
+  });
+
+  it('800 gold → 5 crystals once per local day, persisted; short of gold = nothing; the next day trades again', () => {
+    save.upgrades = maxTree();
+    save.gold = GOLD_TRADE.gold - 1;
+    expect(goldTradeState(save, NOON)).toBe('short');
+    expect(tradeGold(save, NOON)).toBeNull();
+    save.gold = GOLD_TRADE.gold * 3;
+    expect(tradeGold(save, NOON)).toBe(5);
+    expect(save).toMatchObject({ gold: GOLD_TRADE.gold * 2, crystals: 5, goldTradeDay: dayKey(NOON) });
+    const written = JSON.parse(store.dump()[SAVE_KEY]!) as SaveData;
+    expect(written).toMatchObject({ gold: GOLD_TRADE.gold * 2, crystals: 5, goldTradeDay: dayKey(NOON) });
+    expect(goldTradeState(save, NOON + 3_600_000)).toBe('done');
+    expect(tradeGold(save, NOON + 3_600_000)).toBeNull(); // same day: refused, nothing moves
+    expect(save).toMatchObject({ gold: GOLD_TRADE.gold * 2, crystals: 5 });
+    expect(tradeGold(save, NOON + DAY)).toBe(5);
+    expect(save).toMatchObject({ gold: GOLD_TRADE.gold, crystals: 10, goldTradeDay: dayKey(NOON + DAY) });
+  });
+
+  it('the day survives a reload, a bad day key loads as never, and a progress reset clears it with the tree', () => {
+    save.upgrades = maxTree();
+    save.gold = GOLD_TRADE.gold;
+    tradeGold(save, NOON);
+    const loaded = loadSaveFrom(store);
+    expect(loaded.goldTradeDay).toBe(dayKey(NOON));
+    expect(goldTradeState(loaded, NOON)).toBe('done');
+    store.setItem(SAVE_KEY, JSON.stringify({ ...loaded, goldTradeDay: 'tomorrow' }));
+    expect(loadSaveFrom(store).goldTradeDay).toBe('');
+    resetProgress(save);
+    expect(save.goldTradeDay).toBe('');
+    expect(goldTradeState(save, NOON)).toBe('locked');
   });
 });
 
