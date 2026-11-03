@@ -31,7 +31,13 @@
  *   3b. stack — an idle tower (a free link, no target of its own) joins a siege we already run when its
  *      stream lands and brings the fall forward (`STACK_MIN_GAIN_MS`);
  *   4. supply — a capped keep (top level at capacity: it makes nothing, streaming costs it nothing) pours
- *      into the friendly neighbour nearest the front that is not full.
+ *      into the friendly neighbour nearest the front that is not full;
+ *   5. probe (AUD-A9) — a capped keep with a slot nobody wanted opens the plain plan (no anticipated
+ *      shields) on an enemy tower: the shields the planner assumes cost it nothing to test.
+ * Anticipation (rules 3 and 3b) is off against a *passive* tower — one our streams have run into for
+ * `SHIELD_WATCH_MS` since it last streamed back on such a lane (`playerMemory.ts`, the one thing the
+ * bot keeps between ticks; deterministic per match): an enemy that never defends is read as such
+ * instead of planned against forever (AUD-A9: level 4 froze with every tower L3/100).
  * A tower with no takeable target stays unlinked and grows toward its next level (faster stream, one
  * more link); the `grower` — the highest, rearmost own tower below its top level — is kept out of
  * captures so that at least one keep reaches L2/L3 (`GROWER_MIN_TOWERS`).
@@ -39,6 +45,7 @@
 import type { Command, GameState, Link, Tower } from '../sim/index';
 import { Rng, capacityOf, isLinked, isUnderFire } from '../sim/index';
 import { atMaxLevel, contestHeld, contestOf, genPerSecond, hopsToOpponent, isCapped, isEnemyOwner, ownedTowers, siegeOf, underSiege, type Plan } from './common';
+import { isPassive, observePlayer, playerMemoryFor } from './playerMemory';
 import { activeLinks, attack, defend, isReinforcement, isShield, issueUnlink, maintain, newCtx, reclaimForAttack, stack, supply, type Ctx, type RuleTrace } from './tactics';
 
 export type { RuleTrace };
@@ -207,6 +214,11 @@ export function referencePlayerCommands(state: GameState, _rng: Rng, trace?: Rul
   const hops = hopsToOpponent(state, OWNER);
   const keep = grower(state, hops);
   const own = ownedTowers(state, OWNER);
+  // AUD-A9: shields are anticipated from every enemy tower but a passive one (under our streams for
+  // SHIELD_WATCH_MS without streaming back) — the one thing the bot remembers between ticks.
+  const memory = playerMemoryFor(state);
+  observePlayer(memory, state, OWNER);
+  const anticipate = (t: Tower): boolean => !isPassive(memory, t.id);
 
   for (const t of own) maintain(ctx, t, { hopelessMs: HOPELESS_MS, keepSupply, contestMarginMs: CONTEST_MARGIN_MS });
   for (const t of own) defend(ctx, t, { counterMs: COUNTER_PLAN_MS, reclaimReinforcement: true, finishMs: FINISH_MS });
@@ -236,13 +248,23 @@ export function referencePlayerCommands(state: GameState, _rng: Rng, trace?: Rul
     sources: (t) => t.id !== growing?.id,
     lastResort: (t) => t.id === keep?.id,
     reclaim,
-    anticipate: true,
+    anticipate,
   });
   // Rule 3b: idle towers (a free link, nothing of their own to take) join the sieges already running.
   // The growing keep stays out (measured 2026-09-22: letting it join enemy sieges cost 14 and 41 about
   // 4 s at 20 seeds) — except when the enemies are down to their last tower: nothing is left to grow for.
   const lastStand = enemyTowerCount(state) < GROW_FIRST_MIN_ENEMY_TOWERS;
-  stack(ctx, { sources: (t) => t.id !== growing?.id && (lastStand || t.id !== keep?.id), anticipate: true, contestMarginMs: CONTEST_MARGIN_MS });
+  stack(ctx, { sources: (t) => t.id !== growing?.id && (lastStand || t.id !== keep?.id), anticipate, contestMarginMs: CONTEST_MARGIN_MS });
   supply(ctx, hops);
+  // Rule 5 (AUD-A9): a capped keep with a slot nobody wanted probes with the plain plan — it makes
+  // nothing and a stream costs it nothing, so the shields the planner assumes cost nothing to test;
+  // the probe is what gives an enemy that never defends the occasion it needs to be read as passive.
+  attack(ctx, {
+    rule: 'probe',
+    planMs: ATTACK_PLAN_MS,
+    targets: (t) => isEnemyOwner(t.owner),
+    sources: (t) => isCapped(state, t),
+    anticipate: false,
+  });
   return ctx.cmds;
 }

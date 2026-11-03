@@ -389,8 +389,10 @@ export interface AttackConfig {
    * now. (Until 2026-09-22 every friendly neighbour with a free link was also assumed to reinforce the
    * target; with the corrected artillery model that made the bot too timid — under lean it never opened
    * on level 13 and lost 5/5 — and the enemies' own defence counters our sources before it reinforces.)
+   * A predicate decides per target (AUD-A9: the reference player plans plain against a *passive* tower,
+   * one its streams have run into for `SHIELD_WATCH_MS` since it last streamed back on such a lane).
    */
-  anticipate?: boolean;
+  anticipate?: boolean | ((target: Tower) => boolean);
   /**
    * A neutral is taken only when it can be held: the strongest rival neighbour with a free link streams
    * no faster than what our adjacent towers could pour into it after the capture.
@@ -446,6 +448,11 @@ export function anticipatedShield(state: GameState, target: Tower, link: Planned
   return [{ owner: target.owner, from: target.id, to: source.id }];
 }
 
+/** Whether a rule's `anticipate` setting plans against `target`'s shields (a flag, or a per-target predicate). */
+export function anticipates(setting: boolean | ((target: Tower) => boolean) | undefined, target: Tower): boolean {
+  return typeof setting === 'function' ? setting(target) : setting === true;
+}
+
 /** Strongest stream a rival neighbour with a free link could put on `tower` right now (weight/s). */
 export function strongestRivalRate(state: GameState, tower: Tower, owner: Owner): number {
   let best = 0;
@@ -489,7 +496,7 @@ export function attack(ctx: Ctx, cfg: AttackConfig): void {
       const adjacent = sources.filter((s) => roadBetween(state, s.id, id) && !hasLink(state, s.id, id) && !laneBarred(ctx, s.id, id)).sort(bySpeed(state, target, ctx.owner));
       const ordered = [...adjacent.filter((s) => !lastResort(s)), ...adjacent.filter((s) => lastResort(s))];
       const opts: SiegeOptions = { planned: ctx.planned, exclude: ctx.ended };
-      const onAdd = cfg.anticipate ? (link: PlannedLink, planned: readonly PlannedLink[]) => anticipatedShield(state, target, link, planned) : undefined;
+      const onAdd = anticipates(cfg.anticipate, target) ? (link: PlannedLink, planned: readonly PlannedLink[]) => anticipatedShield(state, target, link, planned) : undefined;
       const plan = siegePlan(state, ctx.owner, target, ordered, cfg.planMs, opts, onAdd);
       if (!plan) continue;
       // A contested neutral goes to whoever lands the flipping unit: only plans that win the race count,
@@ -549,8 +556,8 @@ export interface StackConfig {
   cap?: number;
   /** Which own towers may join (default: all); called with the target so a rule can keep a tower out of some sieges. */
   sources?: (tower: Tower, target: Tower) => boolean;
-  /** Judge the join against the target's anticipated shield on the new lane. */
-  anticipate?: boolean;
+  /** Judge the join against the target's anticipated shield on the new lane (a flag, or a per-target predicate as in `AttackConfig`). */
+  anticipate?: boolean | ((target: Tower) => boolean);
   /** A contested neutral is joined when the race stays ours within this margin (`contestHeld`; default 0). */
   contestMarginMs?: number;
 }
@@ -589,7 +596,7 @@ export function stack(ctx: Ctx, cfg: StackConfig = {}): void {
       if (!(after < before - STACK_MIN_GAIN_MS)) continue;
       // The defender can move a shield onto the new lane — but it has only so many: joining must never
       // make the siege slower under that shield (it then cancels this stream and frees another lane).
-      const reactions = cfg.anticipate ? anticipatedShield(state, target, link, ctx.planned) : [];
+      const reactions = anticipates(cfg.anticipate, target) ? anticipatedShield(state, target, link, ctx.planned) : [];
       if (reactions.length && siege(ctx, target, [...reactions, link]).fallsAtMs > before) continue;
       if (target.owner === 'neutral' && !contestHeld(contestOf(state, target, { planned: [...ctx.planned, link], exclude: ctx.ended }), ctx.owner, cfg.contestMarginMs ?? 0)) continue;
       if (!best || after < best.falls) best = { id, falls: after };

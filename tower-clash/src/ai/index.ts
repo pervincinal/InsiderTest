@@ -2,7 +2,8 @@
  * Public AI API (rules v3). Controllers are pure functions of (state, rng) and return commands only; the
  * caller applies them with `applyCommand` on every AI tick (`C.AI_TICK_MS`, see `isAiTick`). The enemies
  * also carry one deterministic memory per owner per match (`memory.ts`: standoff timers, AUD-A11) —
- * found from the match state by default, so a seed replays the same game everywhere.
+ * found from the match state by default, so a seed replays the same game everywhere; the reference
+ * player likewise (`playerMemory.ts`: which enemy towers have shown they never shield, AUD-A9).
  */
 import type { Command, EnemyDef, GameState, Owner } from '../sim/index';
 import { Rng } from '../sim/index';
@@ -70,6 +71,8 @@ export {
 export type { Neighbour, Siege, Flow, Plan, PlannedLink, Contest } from './common';
 export { STANDOFF_RELEASE_MS, memoryFor, newMemory, observe, barredLanes, laneKey } from './memory';
 export type { EnemyMemory } from './memory';
+export { SHIELD_WATCH_MS, playerMemoryFor, newPlayerMemory, observePlayer, isPassive } from './playerMemory';
+export type { PlayerMemory } from './playerMemory';
 
 /**
  * Commands for one enemy this AI tick, according to its personality and aggression. `memory` is the
