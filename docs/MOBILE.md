@@ -168,7 +168,7 @@ Prerequisites: Node 22, and the repo cloned. All commands run inside `tower-clas
 
 ```bash
 npm ci                 # install dependencies (includes Capacitor)
-npm run cap:sync       # build the web app into dist/ and copy it into android/ and ios/
+npm run cap:sync       # store build of the web app into dist/ (npm run build:native, §4.1), then copy it into android/ and ios/
 ```
 
 **Android (Android Studio, or just the SDK + JDK 21 — the AdMob / RevenueCat Kotlin modules do not build with JDK 17, §8.4):**
@@ -217,6 +217,21 @@ npm run version:sync    # rewrites versionName/versionCode (Android) and MARKETI
 npm run version:check   # exits 1 if the native files disagree with package.json (use in CI / before tagging)
 ```
 `version` is the user-visible "0.2.0"; `buildNumber` is the integer both stores require to increase with **every** upload (Google Play `versionCode`, App Store build number). Bump `buildNumber` for every upload even when `version` stays the same. `node scripts/syncVersion.mjs --code 7` overrides the number once without editing package.json.
+
+### 4.1 Build lanes: the store build, source maps, the debug surface (AUD-Q17 / AUD-Q18, 2026-11-03)
+
+There are two web builds. Both are made from the same code; they differ only in what is left out.
+
+| Command | Used by | Debug surface (`window.__towerclash`) | Source maps |
+|---|---|---|---|
+| `npm run build` | the web game, GitHub Pages, every Playwright e2e run, `npm run e2e*` | **included** (lazy `assets/debug-*.js` chunk) | generated in `dist/` without a reference (`sourcemap: 'hidden'`); Pages moves them out before upload |
+| `npm run build:native` | every iOS / Android lane: `tower-clash-android`, `tower-clash-android-release`, `tower-clash-ios`, `tower-clash-ios-release`, and locally `npm run cap:sync` / `android:build` / `ios:open` | **compiled out** — no `debug-*.js` file at all | moved from `dist/` to `sourcemaps/` (git-ignored) before `cap sync` |
+
+**Debug surface policy.** The debug surface is the test bed: Playwright uses it to read the game state, play levels quickly (`autoplay`, `autoLose`), and test the shop (`configureFakeStore`, `economy.grant(productId)` — which hands out any shop product for free). It stays in the web, Pages and e2e builds (nothing is bought on the web; the stakeholder's artifact does not use it). It must **never** be in an app that goes to the App Store or Google Play, because Safari's Web Inspector / Chrome's remote DevTools could reach it on a debuggable build. `npm run build:native` (`scripts/buildNative.mjs`) runs Vite with `VITE_DEBUG_SURFACE=0`; `vite.config.ts` turns that into `__DEBUG_SURFACE__ = false`, and `src/main.ts` then never loads `src/debug.ts`, so the chunk is not even written to `dist/`. An environment variable is used instead of a Vite "mode" on purpose: a custom mode would make Vite skip the `.env.production` file in which the release workflows put the store keys.
+
+**Source maps.** Maps translate a minified error stack back to the source lines. They are about 2.6 MB (of a 3.9 MB build) and are not needed by players, so they never ship: not inside the apps, not on Pages. Every lane uploads them as a run artifact named **`sourcemaps-<commit sha>`** (kept 30 days): open the workflow run on GitHub → **Artifacts** → `sourcemaps-…`. Use the one from the same run as the build you are debugging (the native and the web maps differ: the web build has the debug chunk). To move the maps out of any build by hand: `npm run sourcemaps:strip` (or `node scripts/stripSourcemaps.mjs --dist <dir> --out <dir>`).
+
+**Checks.** `npm run build:native` fails (exit 1) when a `debug-*.js` chunk, a `.map` file or a `sourceMappingURL` comment is left in `dist/`, so a broken store build stops before `cap sync`. `tests/repo/hygiene.test.ts` (AUD-Q17 / AUD-Q18) pins the scripts, the `__DEBUG_SURFACE__` guard in `src/main.ts`, and that every native workflow builds with `build:native` and uploads `sourcemaps-${{ github.sha }}` before `cap sync`. Nothing here needs a manual step.
 
 ## 5. What a real store release needs
 
@@ -315,7 +330,7 @@ About 15–20 minutes later the run page shows the artifacts **tower-clash-andro
 
 From then on every release run uploads: request runs with the file's `track` / `status` (draft unless the request says `completed`), tag and manual runs as a draft. The draft waits in Play Console for *Review release* → *Start rollout*.
 
-**What the job does** (`.github/workflows/tower-clash-android-release.yml`, ubuntu runner): secrets check (fails listing `ANDROID_KEYSTORE_BASE64` / `ANDROID_KEYSTORE_PASSWORD` if absent; reports the alias / key-password defaults; checks the shape of `PLAY_SERVICE_ACCOUNT_JSON` when set) → checkout + Node 22 → request file read on a request push (track / status; `closed` / `production` without the service account stop here) → `npm ci` → `npm run version:check` → tag must equal `tower-clash-v<package.json version>` when started by a tag → `.env.production` from `RC_ANDROID_KEY` / `ADMOB_ANDROID_INTERSTITIAL` / `ADMOB_ANDROID_REWARDED` and the `strings.xml` AdMob app id from `ADMOB_ANDROID_APP_ID` (exactly as the debug workflow, §8.3; warnings on track `production` when missing) → `npm run build` → `npx cap sync android` → JDK **21** (the AdMob / RevenueCat Kotlin modules need it — same as the debug job; JDK 17 does not build them) + Android SDK 36 / build-tools 36.0.0 + Gradle cache → keystore decoded to `$RUNNER_TEMP/release.jks` and opened with `keytool` (wrong password / alias fails here, in seconds) → `./gradlew bundleRelease assembleRelease` with `ANDROID_KEYSTORE_FILE` / `ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEY_ALIAS` (default `towerclash`) / `ANDROID_KEY_PASSWORD` (default = keystore password); the build fails if Gradle printed the debug-key fallback → **signature check**: `.aab` with `jarsigner -verify` + `keytool -printcert -jarfile` (bundles are JAR-signed; `apksigner` does not read `.aab`), `.apk` with `apksigner verify --print-certs` from the newest build-tools (minSdk 24 → v2/v3 signatures only, which `jarsigner` cannot see; if `apksigner` were missing the APK check is skipped with a warning); both certificates' SHA-256 must equal the keystore's → artifacts `tower-clash-android-<version>-<code>-aab` / `-apk` (files `tower-clash-<version>-<code>.aab` / `.apk`, 90 days) → optional Play upload (`r0adkll/upload-google-play@v1`, status draft / completed) → summary (says when the upload was skipped and which artifact to upload by hand) → keystore deleted. The defaults live in the workflow; `android/app/build.gradle` is unchanged and still falls back to the **debug** key when a variable is missing (local builds, forks), printing `Tower Clash: ANDROID_KEYSTORE_* not set …` — such an `.aab` installs but Play rejects it.
+**What the job does** (`.github/workflows/tower-clash-android-release.yml`, ubuntu runner): secrets check (fails listing `ANDROID_KEYSTORE_BASE64` / `ANDROID_KEYSTORE_PASSWORD` if absent; reports the alias / key-password defaults; checks the shape of `PLAY_SERVICE_ACCOUNT_JSON` when set) → checkout + Node 22 → request file read on a request push (track / status; `closed` / `production` without the service account stop here) → `npm ci` → `npm run version:check` → tag must equal `tower-clash-v<package.json version>` when started by a tag → `.env.production` from `RC_ANDROID_KEY` / `ADMOB_ANDROID_INTERSTITIAL` / `ADMOB_ANDROID_REWARDED` and the `strings.xml` AdMob app id from `ADMOB_ANDROID_APP_ID` (exactly as the debug workflow, §8.3; warnings on track `production` when missing) → `npm run build:native` (no debug surface, maps moved out; artifact `sourcemaps-<sha>`, §4.1) → `npx cap sync android` → JDK **21** (the AdMob / RevenueCat Kotlin modules need it — same as the debug job; JDK 17 does not build them) + Android SDK 36 / build-tools 36.0.0 + Gradle cache → keystore decoded to `$RUNNER_TEMP/release.jks` and opened with `keytool` (wrong password / alias fails here, in seconds) → `./gradlew bundleRelease assembleRelease` with `ANDROID_KEYSTORE_FILE` / `ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEY_ALIAS` (default `towerclash`) / `ANDROID_KEY_PASSWORD` (default = keystore password); the build fails if Gradle printed the debug-key fallback → **signature check**: `.aab` with `jarsigner -verify` + `keytool -printcert -jarfile` (bundles are JAR-signed; `apksigner` does not read `.aab`), `.apk` with `apksigner verify --print-certs` from the newest build-tools (minSdk 24 → v2/v3 signatures only, which `jarsigner` cannot see; if `apksigner` were missing the APK check is skipped with a warning); both certificates' SHA-256 must equal the keystore's → artifacts `tower-clash-android-<version>-<code>-aab` / `-apk` (files `tower-clash-<version>-<code>.aab` / `.apk`, 90 days) → optional Play upload (`r0adkll/upload-google-play@v1`, status draft / completed) → summary (says when the upload was skipped and which artifact to upload by hand) → keystore deleted. The defaults live in the workflow; `android/app/build.gradle` is unchanged and still falls back to the **debug** key when a variable is missing (local builds, forks), printing `Tower Clash: ANDROID_KEYSTORE_* not set …` — such an `.aab` installs but Play rejects it.
 
 **iOS (device / TestFlight / App Store builds) — `tower-clash-ios-release.yml`:**
 
@@ -345,7 +360,7 @@ Optional manual-signing fallback (all three or none; only if a Mac exported them
 | `APPLE_CERTIFICATE_PASSWORD` | the password chosen while exporting the `.p12` | — |
 | `APPLE_PROVISIONING_PROFILE_BASE64` | App Store provisioning profile for `com.pervincinal.towerclash`, base64 | developer.apple.com → Profiles → "+" → App Store → select the bundle id and the certificate → download `.mobileprovision`; `base64 -i profile.mobileprovision` |
 
-What the job does (`.github/workflows/tower-clash-ios-release.yml`): secrets check → `npm ci` → `npm run version:check` → `.env.production` + `GADApplicationIdentifier` from the `RC_IOS_KEY` / `ADMOB_IOS_*` secrets (§8.3, same as the simulator job) → `npm run build` → `npx cap sync ios` → `xcodebuild archive` (Release, `generic/platform=iOS`, `-allowProvisioningUpdates` + `-authenticationKeyPath/ID/IssuerID`, `DEVELOPMENT_TEAM`, `CODE_SIGN_STYLE=Automatic`) → `ExportOptions.plist` written in the job (`method app-store-connect` on Xcode ≥ 15.4, `signingStyle automatic`, `teamID`, `uploadSymbols true`, `manageAppVersionAndBuildNumber false`, `destination export`) → `-exportArchive` → `xcrun altool --validate-app` / `--upload-app -t ios --apiKey … --apiIssuer …` (the `.p8` is copied to `~/private_keys/` for altool) → fallback `-exportArchive` with `destination upload` → artifacts `tower-clash-ios-<version>-<build>-ipa` and `…-dSYMs` (90 days) → keys and keychain removed. The Xcode project itself needs no signing changes (`CODE_SIGN_STYLE = Automatic`, no `DEVELOPMENT_TEAM` committed).
+What the job does (`.github/workflows/tower-clash-ios-release.yml`): secrets check → `npm ci` → `npm run version:check` → `.env.production` + `GADApplicationIdentifier` from the `RC_IOS_KEY` / `ADMOB_IOS_*` secrets (§8.3, same as the simulator job) → `npm run build:native` (no debug surface, maps moved out; artifact `sourcemaps-<sha>`, §4.1) → `npx cap sync ios` → `xcodebuild archive` (Release, `generic/platform=iOS`, `-allowProvisioningUpdates` + `-authenticationKeyPath/ID/IssuerID`, `DEVELOPMENT_TEAM`, `CODE_SIGN_STYLE=Automatic`) → `ExportOptions.plist` written in the job (`method app-store-connect` on Xcode ≥ 15.4, `signingStyle automatic`, `teamID`, `uploadSymbols true`, `manageAppVersionAndBuildNumber false`, `destination export`) → `-exportArchive` → `xcrun altool --validate-app` / `--upload-app -t ios --apiKey … --apiIssuer …` (the `.p8` is copied to `~/private_keys/` for altool) → fallback `-exportArchive` with `destination upload` → artifacts `tower-clash-ios-<version>-<build>-ipa` and `…-dSYMs` (90 days) → keys and keychain removed. The Xcode project itself needs no signing changes (`CODE_SIGN_STYLE = Automatic`, no `DEVELOPMENT_TEAM` committed).
 
 **Repository variables (not secrets) — both release workflows:**
 
@@ -415,7 +430,7 @@ Placeholders in the repository (safe to commit; all empty/test by default):
 
 The App ID must never be an ad unit id (`~` vs `/`): a wrong app id crashes the app at startup on both platforms.
 
-For CI and local release builds, **environment variables override the config file** at `npm run build` time (Vite bakes them in), so the real values never need to be committed:
+For CI and local release builds, **environment variables override the config file** at `npm run build` / `npm run build:native` time (Vite bakes them in), so the real values never need to be committed:
 
 | GitHub secret / env var | Overrides |
 |---|---|
@@ -430,7 +445,7 @@ Snippet for the (future) release jobs — add before "Build web app":
 
 ```yaml
 - name: Build web app with store keys
-  run: npm run build
+  run: npm run build:native
   env:
     VITE_RC_IOS_KEY: ${{ secrets.RC_IOS_KEY }}
     VITE_RC_ANDROID_KEY: ${{ secrets.RC_ANDROID_KEY }}
@@ -525,6 +540,8 @@ Reverting to option B (personalised ads on iOS) would need: the ATT call back in
 | WebView copy (the one the game reads) | the WebView's `localStorage` of the app (iOS: WKWebView data under the app's `Library/`; Android: `app_webview/` in the app's data folder) | at once, on every change |
 | Native copy (new, native app only) | `@capacitor/preferences` — iOS `UserDefaults` of the app (`Library/Preferences/com.pervincinal.towerclash.plist`, key `CapacitorStorage.towerclash.save.v3`); Android `shared_prefs/CapacitorStorage.xml`, key `towerclash.save.v3` | the same text, at most **250 ms** after a change (one write for a burst of changes, newest wins) and **at once** when the app goes to the background or the app switcher |
 | Corrupt-save backup (frontend, AUD-Q2) | WebView `localStorage`, `towerclash.save.v3.bad.<time>` | when the game finds an unreadable WebView copy |
+
+**Origin pin (AUD-Q14, 2026-11-03, QA).** The WebView copy belongs to the web origin the shell serves `dist/` from — `capacitor://localhost` on iOS (the implicit `server.iosScheme` / `server.hostname` of `capacitor.config.ts`) and `https://localhost` on Android (`server.androidScheme: 'https'`, hostname implicit) — and the native copy to `appId`; a change to `server.hostname`, `server.iosScheme`, `server.androidScheme`, `server.url` or `appId` moves the game to a new origin / store where the old copies are unreachable and orphans every installed save, so `tests/native/origin.test.ts` pins all five (such a change needs a migration first).
 
 **At launch** (before the title appears, `startSaveMirror()` in `src/native/index.ts`, awaited in `boot()` of `src/main.ts`; the code is `src/native/saveMirror.ts`, a separate download chunk with the plugin, so the web/PWA build never loads either):
 1. The WebView copy is readable → it is used. If the native copy is empty or unreadable (the first launch after the update that added the mirror) it is filled from the WebView copy.
