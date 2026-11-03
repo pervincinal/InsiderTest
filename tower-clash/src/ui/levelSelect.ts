@@ -1,6 +1,6 @@
 /**
- * Level select (M1-3b): the winding path map. Opens centred on the current level; locked nodes
- * ignore taps; the header wallet and the commander chip open the shop. Loaded lazily with its
+ * Level select (M1-3b): the winding path map. Opens centred on the current level; a locked node
+ * shakes and toasts what opens it, a drag flings on (AUD-U18, ./fling.ts); the header wallet and the commander chip open the shop. Loaded lazily with its
  * drawing (PERF-1, src/ui/lazyScreens.ts) and preloaded right after the first frame.
  */
 import { C } from '../sim/constants';
@@ -26,6 +26,8 @@ import { REWARD, STREAK_MILESTONES, UNLOCK_AFTER_LEVEL, WEEKLY_REWARD, WEEKLY_UN
 import { challengeDone, challengeUnlocked, msToUtcMidnight, previousDayKey, shownStreak, yesterdayOffered } from './daily';
 import { msToNextMonday, shownWeekStreak, weeklyDone, weeklyTargetDone, weeklyUnlocked } from './weekly';
 import type { SaveData } from './save';
+import { Fling, SHAKE_MS, shakeOffset } from './fling';
+import { prefersReducedMotion } from '../render/particles';
 
 /* ---------- Level select: winding path map ---------- */
 
@@ -64,6 +66,11 @@ export class LevelSelectScreen implements Screen {
   private held = false;
   private dragging = false;
   private pressed: Rect | null = null;
+  /** AUD-U18: momentum after a drag; `caught` = this press stopped a fling, so its tap does nothing. */
+  private readonly fling = new Fling();
+  private caught = false;
+  /** AUD-U18: the locked node tapped last and when (its 200 ms shake). */
+  private shake: { index: number; at: number } | null = null;
   private readonly current: number;
   readonly toast = new Toast();
   private nowMs = 0;
@@ -232,9 +239,25 @@ export class LevelSelectScreen implements Screen {
     void this.app.startLevel(y.levelId, y.seed, { challenge: y, practice: true });
   }
 
+  /** Momentum scroll for this frame (AUD-U18); either end stops it (hard clamp). */
+  private stepFling(nowMs: number): void {
+    const d = this.fling.step(nowMs, this.app.view.scale);
+    if (d === 0) return;
+    const want = this.scroll + d;
+    this.setScroll(want);
+    if (this.scroll !== want) this.fling.stop();
+  }
+
+  /** The fling is moving (debug / e2e). */
+  get flinging(): boolean {
+    return this.fling.moving;
+  }
+
   draw(view: View, nowMs: number): void {
     this.nowMs = nowMs;
+    if (!this.held) this.stepFling(nowMs);
     this.setScroll(this.scroll); // the "Yesterday's map" row may have gone (rollover, a win): re-clamp
+    const sh = this.shake && nowMs - this.shake.at < SHAKE_MS ? this.shake : null;
     drawLevelSelect(view, this.app.palette(), {
       nodes: LEVEL_META.map((level, i) => ({
         id: level.id,
@@ -254,6 +277,7 @@ export class LevelSelectScreen implements Screen {
       nowMs,
       pressed: this.pressed,
       toast: this.toast.opts(nowMs),
+      shake: sh && { index: sh.index, dx: shakeOffset(nowMs - sh.at) },
     });
   }
 
@@ -263,10 +287,13 @@ export class LevelSelectScreen implements Screen {
     this.scrollAtDown = this.scroll;
     this.dragging = false;
     this.pressed = this.chromeAt(p);
+    // AUD-U18: a press on the path while it glides stops it there and acts on nothing
+    this.caught = this.fling.press(p.y, p.timeMs) && this.pressed === null;
   }
 
   move(p: PointerPoint): void {
     if (!this.held) return;
+    this.fling.track(p.y, p.timeMs);
     if (Math.abs(p.y - this.downY) > dragThreshold(this.app.view.scale)) {
       this.dragging = true;
       this.pressed = null;
@@ -279,7 +306,11 @@ export class LevelSelectScreen implements Screen {
     const wasDrag = this.dragging;
     this.held = false;
     this.dragging = false;
-    if (wasDrag) return;
+    if (wasDrag) {
+      this.fling.release(p.y, p.timeMs, this.app.view.scale, prefersReducedMotion());
+      return;
+    }
+    if (this.caught) return;
     // FE-11: the header block and the chip are hit-tested in layout space, each in its own band (they
     // move on a tall screen); the path's nodes with the plain logical point
     const hit = this.chromeAt(p);
@@ -316,12 +347,24 @@ export class LevelSelectScreen implements Screen {
       const level = LEVEL_META[i];
       if (level && hitRect(this.app.view, levelNodeRect(i, this.scroll), p.x, p.y)) {
         if (isLevelUnlocked(this.app.save, LEVEL_META, i)) void this.app.startLevel(level.id);
-        return; // locked: the tap does nothing
+        else this.lockedTap(i);
+        return;
       }
     }
   }
 
+  /**
+   * AUD-U18: a locked node shakes for 200 ms (not under reduced motion) and the toast names the level
+   * that opens it ("Clear level N to unlock", N = the node before it).
+   */
+  private lockedTap(i: number): void {
+    const prev = LEVEL_META[i - 1];
+    if (!prefersReducedMotion()) this.shake = { index: i, at: this.nowMs };
+    this.toast.show(t('map.locked', { n: prev?.id ?? 1 }), 'error', this.nowMs);
+  }
+
   wheel(dy: number): void {
+    this.fling.stop();
     this.setScroll(this.scroll + dy);
   }
 
@@ -329,9 +372,11 @@ export class LevelSelectScreen implements Screen {
     this.held = false;
     this.dragging = false;
     this.pressed = null;
+    this.fling.stop();
   }
 
   key(e: KeyboardEvent): void {
+    this.fling.stop();
     if (e.key === 'Escape') this.app.goTitle();
     else if (e.key === 'ArrowDown') this.setScroll(this.scroll + LEVEL_MAP.step);
     else if (e.key === 'ArrowUp') this.setScroll(this.scroll - LEVEL_MAP.step);

@@ -27,6 +27,8 @@ import type { Language } from './i18n';
 import { isLanguage } from './i18n';
 import type { ToneSet } from '../render/palette';
 import { isToneSet } from '../render/palette';
+import { LEVEL_META } from '../levels/index';
+import { LEARNING_LEVEL_IDS } from '../economy/catalog';
 
 /** Reduced-motion preference: `auto` follows the OS (`prefers-reduced-motion`), `on`/`off` override it. */
 export type MotionPref = 'auto' | 'on' | 'off';
@@ -181,7 +183,10 @@ export interface SaveData {
   goldTradeDay: string;
   /** Consecutive defeats per level id (reset by a win); unlocks the level-skip offer. */
   defeats: Record<string, number>;
-  /** Level-skip slots already used (`skipSlotOf`, src/economy/wallet.ts): a band index 0..5, or 100 + level id for a learning level's own slot. */
+  /**
+   * Level-skip slots already used (`skipSlotOf`, src/economy/wallet.ts): a band index 0..5 (the six
+   * `EARN_RULES.bands`), or 100 + level id for a learning level's own slot (`LEARNING_LEVEL_IDS`).
+   */
   skips: number[];
   /** Unlocked achievement ids (crystals are granted once, at unlock). Added without a schema bump. */
   achievements: AchievementState;
@@ -219,24 +224,28 @@ export function defaultSave(): SaveData {
   };
 }
 
+/** A plain object, as JSON.parse makes them (AUD-Q16: an array is not a record — `stars: [3, 3, 3]` is not levels 0, 1, 2). */
 function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null;
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
+
+/** A finite number floored and clamped at 0; null for anything else (`Number.isFinite` never coerces: a string is not a number). */
 function nonNegInt(v: unknown): number | null {
-  return typeof v === 'number' && Number.isFinite(v) ? Math.max(0, Math.floor(v)) : null;
+  return Number.isFinite(v) ? Math.max(0, Math.floor(v as number)) : null;
 }
 
 function stringList(v: unknown): string[] {
   return Array.isArray(v) ? [...new Set(v.filter((x): x is string => typeof x === 'string'))] : [];
 }
 
-function countMap(v: unknown, max = Infinity): Record<string, number> {
+/** Non-negative integer values clamped to `max`; with `keys`, only those keys survive (the rest are dropped). */
+function countMap(v: unknown, max = Infinity, keys?: readonly string[]): Record<string, number> {
   const out: Record<string, number> = {};
   if (!isRecord(v)) return out;
   for (const [k, raw] of Object.entries(v)) {
     const n = nonNegInt(raw);
-    if (n !== null) out[k] = Math.min(max, n);
+    if (n !== null && (!keys || keys.includes(k))) out[k] = Math.min(max, n);
   }
   return out;
 }
@@ -307,7 +316,10 @@ export function pruneChallengeBest<T>(best: Record<string, T>, keep = CHALLENGE_
 export function normalizeSave(raw: unknown): SaveData {
   const out = defaultSave();
   if (!isRecord(raw)) return out;
-  out.stars = countMap(raw.stars, 3);
+  // AUD-Q16: the only keys `stars` / `defeats` may carry — the campaign's level ids (`String(id)`); a local, so the
+  // minifier's top-level names stay as they are (eager bytes)
+  const levels = LEVEL_META.map((l) => l.id + '');
+  out.stars = countMap(raw.stars, 3, levels);
   out.gold = nonNegInt(raw.gold) ?? nonNegInt(raw.coins) ?? 0;
   out.crystals = nonNegInt(raw.crystals) ?? 0;
   if (isRecord(raw.entitlements)) {
@@ -351,8 +363,10 @@ export function normalizeSave(raw: unknown): SaveData {
   out.milestones = stringList(raw.milestones);
   if (isRecord(raw.replayGold)) out.replayGold = { day: dayString(raw.replayGold.day), earned: nonNegInt(raw.replayGold.earned) ?? 0 };
   out.goldTradeDay = dayString(raw.goldTradeDay);
-  out.defeats = countMap(raw.defeats);
-  out.skips = intList(raw.skips);
+  out.defeats = countMap(raw.defeats, Infinity, levels);
+  // AUD-Q16: only slots a skip can spend (wallet.ts `skipSlotOf`): a band index under 6 (`EARN_RULES.bands.length`, pinned by
+  // tests/ui/saveHostile.test.ts; a literal for the eager bytes) or `LEARNING_SKIP_SLOT_BASE` (100) + a learning level id
+  out.skips = intList(raw.skips).filter((n) => n < 6 || LEARNING_LEVEL_IDS.includes(n - 100));
   if (isRecord(raw.achievements)) out.achievements = { unlocked: stringList(raw.achievements.unlocked) };
   out.reviewAsked = raw.reviewAsked === true;
   if (isRecord(raw.settings)) {
@@ -475,7 +489,7 @@ function readableSave(text: string): Record<string, unknown> | null {
   } catch {
     return null;
   }
-  if (!isRecord(raw) || Array.isArray(raw)) return null;
+  if (!isRecord(raw)) return null;
   if ('version' in raw && typeof raw.version !== 'number') return null;
   return ['version', 'stars', 'gold', 'coins', 'settings'].some((k) => k in raw) ? raw : null;
 }
@@ -533,9 +547,7 @@ export function saveStorage(): SaveStorage | null {
  */
 export function loadSaveFrom(store: SaveStorage | null, nowMs = Date.now()): SaveData {
   loadIssue = null;
-  readOnly = false;
-  holdingOriginal = false;
-  failing = false;
+  readOnly = holdingOriginal = failing = false;
   let v3: string | null;
   try {
     v3 = store!.getItem(SAVE_KEY);

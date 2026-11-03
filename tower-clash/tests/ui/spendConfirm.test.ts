@@ -134,8 +134,11 @@ describe('result: CONTINUE and SKIP LEVEL confirm first (AUD-U5)', () => {
     expect(r.extras().confirm).toEqual({ kind: 'continue', crystals: CRYSTAL_SERVICES.continue.costCrystals, have: 50 });
     expect(save.crystals).toBe(50);
     // while the card is up only its two buttons take taps
-    tap(r, RESULT.retry);
+    // (AUD-U14: the defeat's top-row RETRY now lies under the card's own buttons; the continue row is outside it)
+    tap(r, continueRect(r));
+    tap(r, RESULT.extra);
     expect(starts).toEqual([]);
+    expect(r.extras().confirm?.kind).toBe('continue');
     tap(r, CONFIRM.no);
     expect(r.extras().confirm).toBeNull();
     expect(save.crystals).toBe(50);

@@ -166,11 +166,13 @@ describe('defeat tip (FE-4)', () => {
 describe('defeat tip geometry (layout.ts RESULT.tip / RESULT.howto)', () => {
   const BANNER_H = 158; // hud.ts drawResultCard
   const REINFORCEMENTS_LABEL_TOP = RESULT.continueSolo.y - 18 - 8; // 16 px label centred 18 px over the continue row
+  const RETRY_TOP = RESULT.loss.retry.y; // AUD-U14: a defeat's RETRY / MENU row sits between the tip and the Reinforcements label
 
   it('sits inside the card under the banner, ends above the Reinforcements label; the link sits right of the time line', () => {
     expect(inside(RESULT.tip, RESULT.card, 24)).toBe(true);
     expect(RESULT.tip.y).toBeGreaterThanOrEqual(RESULT.card.y + BANNER_H + 40);
-    expect(RESULT.tip.y + RESULT.tip.h).toBeLessThanOrEqual(REINFORCEMENTS_LABEL_TOP);
+    expect(RESULT.tip.y + RESULT.tip.h).toBeLessThanOrEqual(Math.min(RETRY_TOP, REINFORCEMENTS_LABEL_TOP));
+    expect(RESULT.loss.retry.y + RESULT.loss.retry.h).toBeLessThanOrEqual(REINFORCEMENTS_LABEL_TOP);
     // AUD-U1: at the tip's foot the link's 88-tall tap area ran into CONTINUE's — it moved under the banner, right of "Time 01:02"
     expect(inside(RESULT.howto, RESULT.card, 24)).toBe(true);
     expect(RESULT.howto.y).toBeGreaterThanOrEqual(RESULT.card.y + BANNER_H);
@@ -180,7 +182,7 @@ describe('defeat tip geometry (layout.ts RESULT.tip / RESULT.howto)', () => {
   });
 
   it('never overlaps another result-card target', () => {
-    for (const r of [RESULT.continueCrystals, RESULT.continueAd, RESULT.continueSolo, RESULT.next, RESULT.retry, RESULT.menu, RESULT.extra]) {
+    for (const r of [RESULT.continueCrystals, RESULT.continueAd, RESULT.continueSolo, RESULT.next, RESULT.retry, RESULT.menu, RESULT.loss.retry, RESULT.loss.menu, RESULT.extra]) {
       expect(overlaps(RESULT.tip, r)).toBe(false);
       expect(overlaps(RESULT.howto, r)).toBe(false);
     }

@@ -16,7 +16,8 @@ import type { ShopTab } from '../render/menuLayout';
 import { SHOP, SHOP_BANDS, bandToScreen, bandedContentBottom, screenToBand, shopBuyRect, shopConvertSegRect, shopPackRect, shopRowRect, shopSkinRect, shopTabsFor } from '../render/menuLayout';
 import type { ShopBundleCard, ShopConvertCard, ShopCrateCard, ShopPackCard, ShopSkinCard, ShopTradeCard, ShopUpgradeCard } from '../render/menusShop';
 import { drawShop } from '../render/menusShop';
-import { ParticleSystem } from '../render/particles';
+import { ParticleSystem, prefersReducedMotion } from '../render/particles';
+import { Fling } from './fling';
 import type { PointerPoint } from '../input/pointer';
 import type { IapProductDef, SkinDef } from '../economy/catalog';
 import { getStore } from '../economy/store';
@@ -101,6 +102,8 @@ export class ShopScreen implements Screen {
   private scrollAtDown = 0;
   private held = false;
   private dragging = false;
+  /** AUD-U18: momentum after a drag (a press that stops it presses nothing). */
+  private readonly fling = new Fling();
   private pressed: Rect | null = null;
   private pending: string | null = null;
   /** Selected conversion pack (index into CONVERSION_PACKS) and the pending confirmation. */
@@ -165,6 +168,7 @@ export class ShopScreen implements Screen {
     if (!this.tabs.includes(tab)) return;
     this.tab = tab;
     this.scroll = 0;
+    this.fling.stop();
     this.pressed = null;
     this.confirmConvert = null;
     this.relayout(); // FE-10: a tap right after the switch hits the new tab's cards, painted or not
@@ -343,9 +347,21 @@ export class ShopScreen implements Screen {
     return this.scroll;
   }
 
+  /** The fling is moving (debug / e2e). */
+  get flinging(): boolean {
+    return this.fling.moving;
+  }
+
   draw(view: View, nowMs: number): void {
     this.nowMs = nowMs;
     const lay = this.relayout();
+    // AUD-U18: momentum; either end stops it (hard clamp)
+    const d = this.held ? 0 : this.fling.step(nowMs, this.app.view.scale);
+    if (d !== 0) {
+      const want = this.scroll + d;
+      this.setScroll(want);
+      if (this.scroll !== want) this.fling.stop();
+    }
     this.setScroll(this.scroll);
     drawShop(view, this.app.palette(), {
       tab: this.tab,
@@ -401,8 +417,10 @@ export class ShopScreen implements Screen {
     this.scrollAtDown = this.scroll;
     this.dragging = false;
     const l = this.toLayout(p.x, p.y);
+    // AUD-U18: a press on the list while it glides stops it there and buys / equips nothing
+    const caught = this.fling.press(p.y, p.timeMs);
     if (this.on(SHOP.back, l)) this.pressed = SHOP.back;
-    else this.pressed = this.contentHit(l)?.rect ?? null;
+    else this.pressed = caught ? null : (this.contentHit(l)?.rect ?? null);
   }
 
   move(p: PointerPoint): void {
@@ -411,6 +429,7 @@ export class ShopScreen implements Screen {
       return;
     }
     if (!this.held) return;
+    this.fling.track(p.y, p.timeMs);
     if (Math.abs(p.y - this.downY) > dragThreshold(this.app.view.scale)) {
       this.dragging = true;
       this.pressed = null;
@@ -430,7 +449,10 @@ export class ShopScreen implements Screen {
     const wasDrag = this.dragging;
     this.held = false;
     this.dragging = false;
-    if (wasDrag) return;
+    if (wasDrag) {
+      this.fling.release(p.y, p.timeMs, this.app.view.scale, prefersReducedMotion());
+      return;
+    }
     const l = this.toLayout(p.x, p.y);
     if (this.on(SHOP.back, l)) {
       this.back();
@@ -454,6 +476,7 @@ export class ShopScreen implements Screen {
   }
 
   wheel(dy: number): void {
+    this.fling.stop();
     this.setScroll(this.scroll + dy);
   }
 
@@ -461,6 +484,7 @@ export class ShopScreen implements Screen {
     this.held = false;
     this.dragging = false;
     this.pressed = null;
+    this.fling.stop();
   }
 
   key(e: KeyboardEvent): void {
@@ -469,6 +493,7 @@ export class ShopScreen implements Screen {
       else if (e.key === 'Enter') this.confirmConversion();
       return;
     }
+    this.fling.stop();
     if (e.key === 'Escape') this.back();
     else if (e.key === 'ArrowDown') this.setScroll(this.scroll + 120);
     else if (e.key === 'ArrowUp') this.setScroll(this.scroll - 120);

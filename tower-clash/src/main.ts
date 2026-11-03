@@ -788,8 +788,9 @@ async function boot(): Promise<void> {
   onLanguageChange((code) => void waitForFonts(code, 800)); // warm the Nunito faces when switching to Russian
   const app = new TowerClashApp(canvas, save);
   registerServiceWorker();
-  // the Playwright surface is a lazy chunk (PERF-6): installed after the first paint, off the eager bundle
-  whenIdle(() => void loadChunk('debug', () => import('./debug')).then((m) => void (window.__towerclash = m.installDebug(app))).catch(() => undefined));
+  // the Playwright surface is a lazy chunk (PERF-6): installed after the first paint, off the eager bundle;
+  // compiled out of the store builds (AUD-Q18: `__DEBUG_SURFACE__` is false under `npm run build:native`)
+  if (__DEBUG_SURFACE__) whenIdle(() => void loadChunk('debug', () => import('./debug')).then((m) => void (window.__towerclash = m.installDebug(app))).catch(() => undefined));
 }
 
 void boot();

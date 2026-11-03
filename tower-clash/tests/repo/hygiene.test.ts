@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { readFileSync, readdirSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -988,5 +988,114 @@ describe('PERF-11 lazy chunks: result screen and store boot', () => {
   it('scripts/checkBundle.mjs keeps the 82 kB budget', () => {
     const script = readFileSync(new URL('../../scripts/checkBundle.mjs', import.meta.url), 'utf8');
     expect(script).toMatch(/\nconst DEFAULT_GZIP_BUDGET = 82 \* 1024;\n/);
+  });
+});
+
+/*
+ * AUD-Q17: source maps are generated hidden and never ship (not in the iOS / Android bundles that
+ * `cap sync` copies from dist/, not on Pages) — CI keeps them as the `sourcemaps-<sha>` artifact.
+ * AUD-Q18: the debug surface (`economy.grant()`, `configureFakeStore`, `autoplay`, …) is compiled
+ * out of the Capacitor builds by `npm run build:native`; the web / Pages / e2e builds keep it.
+ */
+describe('native store build: no source maps, no debug surface (AUD-Q17, AUD-Q18)', () => {
+  const ROOT = new URL('../../', import.meta.url);
+  const read = (f: string): string => readFileSync(new URL(f, ROOT), 'utf8');
+  const PKG = JSON.parse(read('package.json')) as { scripts: Record<string, string> };
+  const NATIVE_WORKFLOWS = ['tower-clash-android.yml', 'tower-clash-android-release.yml', 'tower-clash-ios.yml', 'tower-clash-ios-release.yml'];
+  const MAPS_ARTIFACT = /name: sourcemaps-\$\{\{ github\.sha \}\}\n\s+path: tower-clash\/sourcemaps\n\s+if-no-files-found: error\n\s+retention-days: 30\n/;
+
+  it('vite.config.ts: hidden source maps, and __DEBUG_SURFACE__ false only under VITE_DEBUG_SURFACE=0', () => {
+    const config = read('vite.config.ts');
+    expect(config).toMatch(/\n    sourcemap: 'hidden',\n/);
+    expect(config).toContain("const debugSurface = process.env.VITE_DEBUG_SURFACE !== '0';");
+    expect(config).toContain('__DEBUG_SURFACE__: JSON.stringify(debugSurface),');
+    expect(read('src/env.d.ts')).toContain('declare const __DEBUG_SURFACE__: boolean;');
+  });
+
+  it('src/main.ts loads the debug chunk from exactly one import(), behind the __DEBUG_SURFACE__ guard', () => {
+    const SRC = fileURLToPath(new URL('src/', ROOT));
+    const loaders = readdirSync(SRC, { recursive: true })
+      .map(String)
+      .filter((f) => f.endsWith('.ts') && /\bimport\(\s*'\.{1,2}\/(?:[\w/]*\/)?debug'\s*\)/.test(readFileSync(path.join(SRC, f), 'utf8')));
+    expect(loaders).toEqual(['main.ts']);
+    expect(read('src/main.ts')).toMatch(/\n  if \(__DEBUG_SURFACE__\) whenIdle\(\(\) => void loadChunk\('debug', \(\) => import\('\.\/debug'\)\)/);
+  });
+
+  it('`npm run build:native` sets VITE_DEBUG_SURFACE=0, strips the maps and fails on a debug chunk or a left map; cap:sync uses it', () => {
+    expect(PKG.scripts['build:native']).toBe('tsc --noEmit && node scripts/buildNative.mjs');
+    expect(PKG.scripts['sourcemaps:strip']).toBe('node scripts/stripSourcemaps.mjs');
+    expect(PKG.scripts['cap:sync']).toBe('npm run build:native && cap sync');
+    expect(PKG.scripts.build).toBe('tsc --noEmit && vite build'); // the web / e2e build keeps the surface
+    const script = read('scripts/buildNative.mjs');
+    expect(script).toContain("env: { ...process.env, VITE_DEBUG_SURFACE: '0' },");
+    expect(script).toContain('stripSourcemaps(outDir, maps)');
+    expect(script).toContain('/^debug-.*\\.js$/');
+    expect(script).toContain("f.endsWith('.map')");
+    expect(read('.gitignore').split('\n')).toContain('sourcemaps');
+  });
+
+  it('stripSourcemaps moves every .map out of the build (same paths) and fails on a sourceMappingURL comment', () => {
+    const script = fileURLToPath(new URL('scripts/stripSourcemaps.mjs', ROOT));
+    const dir = path.join(tmpdir(), `tc-strip-${process.pid}-${Date.now()}`);
+    const dist = path.join(dir, 'dist');
+    const out = path.join(dir, 'maps');
+    const write = (f: string, text: string): void => {
+      mkdirSync(path.dirname(f), { recursive: true });
+      writeFileSync(f, text);
+    };
+    try {
+      write(path.join(dist, 'index.html'), '<script src="./assets/index-a.js"></script>');
+      write(path.join(dist, 'assets/index-a.js'), 'console.log(1);\n');
+      write(path.join(dist, 'assets/index-a.js.map'), '{"version":3}');
+      write(path.join(dist, 'assets/nested/ai-b.js.map'), '{"version":3}');
+      const ok = spawnSync(process.execPath, [script, '--dist', dist, '--out', out], { encoding: 'utf8' });
+      expect(ok.status, ok.stderr).toBe(0);
+      expect(ok.stdout).toContain('moved 2 map(s)');
+      const left = readdirSync(dist, { recursive: true }).map(String);
+      expect(left.filter((f) => f.endsWith('.map'))).toEqual([]);
+      expect(readFileSync(path.join(out, 'assets/nested/ai-b.js.map'), 'utf8')).toBe('{"version":3}');
+
+      write(path.join(dist, 'assets/index-a.js'), 'console.log(1);\n//# sourceMappingURL=index-a.js.map\n');
+      const bad = spawnSync(process.execPath, [script, '--dist', dist, '--out', out], { encoding: 'utf8' });
+      expect(bad.status).toBe(1);
+      expect(bad.stderr).toContain('assets/index-a.js');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it.each(NATIVE_WORKFLOWS)('%s builds with build:native and uploads sourcemaps-<sha> before cap sync', (file) => {
+    const yaml = readWorkflow(file);
+    const runs = runBlocks(yaml);
+    expect(runs.filter((b) => b.step === 'Build web app').map((b) => b.run)).toEqual(['npm run build:native\n']);
+    expect(runs.some((b) => /\bnpm run build(?!:)|\bvite build\b/.test(b.run)), 'no other web build in a native lane').toBe(false);
+    const upload = stepText(yaml, 'Upload source maps');
+    expect(upload).toContain('uses: actions/upload-artifact@v4');
+    expect(upload).toMatch(MAPS_ARTIFACT);
+    const at = (needle: string): number => yaml.indexOf(needle);
+    expect(at('- name: Upload source maps')).toBeGreaterThan(at('run: npm run build:native'));
+    expect(at('npx cap sync')).toBeGreaterThan(at('- name: Upload source maps'));
+  });
+
+  it('tower-clash-pages.yml strips the maps after the build, keeps them as sourcemaps-<sha>, and only then uploads dist/', () => {
+    const yaml = readWorkflow('tower-clash-pages.yml');
+    expect(runBlocks(yaml).filter((b) => b.step === 'Strip source maps').map((b) => b.run)).toEqual(['npm run sourcemaps:strip\n']);
+    expect(stepText(yaml, 'Upload source maps')).toMatch(MAPS_ARTIFACT);
+    const at = (needle: string): number => yaml.indexOf(needle);
+    expect(at('- name: Strip source maps')).toBeGreaterThan(at('run: npm run build\n'));
+    expect(at('uses: actions/upload-pages-artifact')).toBeGreaterThan(at('- name: Upload source maps'));
+  });
+
+  it('the bundle check, the service worker and the e2e specs never depend on a .map file', () => {
+    const E2E = fileURLToPath(new URL('e2e/', ROOT));
+    const files: [string, string][] = [
+      ['scripts/checkBundle.mjs', read('scripts/checkBundle.mjs')],
+      ['public/sw.js', read('public/sw.js')],
+      ...readdirSync(E2E, { recursive: true })
+        .map(String)
+        .filter((f) => /\.(?:ts|mjs)$/.test(f))
+        .map((f): [string, string] => [`e2e/${f}`, readFileSync(path.join(E2E, f), 'utf8')]),
+    ];
+    for (const [name, text] of files) expect(text, name).not.toMatch(/\.(?:js|css)\.map\b|['"`]\.map['"`]|\*\.map\b|\\\.map\b|sourceMappingURL/);
   });
 });

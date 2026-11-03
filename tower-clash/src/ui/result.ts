@@ -10,6 +10,8 @@ import type { HudPlayUi, ResultExtras } from '../render/hud';
 import { hudOverlaysLoaded, resultShareLayout } from '../render/hud';
 import { playSfx } from '../audio/index';
 import { ResultCuePlayer, resultCues } from '../audio/resultCues';
+import { walletShown } from '../render/resultTimeline';
+import { hudAnchors } from '../render/view';
 import { canShowRewarded, maybeShowInterstitial, onResultShown, showRewarded } from '../economy/adsFlow';
 import type { ResultEarnings } from '../economy/wallet';
 import { buyLevelSkip, earnGold, skipAvailable, spendCrystals } from '../economy/wallet';
@@ -284,9 +286,16 @@ export class ResultScreen implements Screen {
     this.nowMs = nowMs;
     const ui = this.info.ui;
     const hud = ui.hud;
+    // AUD-F14: the wallet holds the pre-match balance until the card's count-up starts, then counts in step with it
+    const since = ui.particles?.reducedMotion ? Infinity : this.cueAt < 0 ? 0 : nowMs - this.cueAt;
     if (hud) {
       hud.result = this.extras();
-      hud.wallet = { gold: this.app.save.gold, crystals: this.app.save.crystals };
+      const won = this.won;
+      hud.wallet = {
+        gold: walletShown(since, this.app.save.gold, won ? ui.coinsEarned : 0),
+        crystals: walletShown(since, this.app.save.crystals, won ? hud.result.crystalsEarned : 0),
+        bottom: hudAnchors(view).bottom,
+      };
       hud.pressed = this.pressed;
       hud.toast = this.toast.opts(nowMs);
     }
@@ -300,7 +309,9 @@ export class ResultScreen implements Screen {
     if (this.ask) return [CONFIRM.yes, CONFIRM.no];
     const ex = this.extras();
     // AUD-U10: the dimmed bottom band's wallet and MENU are drawn disabled and take no tap (one MENU on screen)
-    const list: Rect[] = [RESULT.retry, RESULT.menu];
+    // AUD-U14: a defeat's RETRY / MENU sit on the top row and it has no NEXT (not drawn)
+    const b = this.won ? RESULT : RESULT.loss;
+    const list: Rect[] = [b.retry, b.menu];
     if (this.won && this.info.ui.hasNext) list.push(RESULT.next);
     if (ex.doubleGold !== null && !ex.doubled) list.push(RESULT.extra);
     if (ex.skipCrystals !== null) list.push(RESULT.extra);
@@ -356,8 +367,8 @@ export class ResultScreen implements Screen {
     if (!hit || !this.hits(hit, p) || this.pending || this.leaving) return;
     const { ui } = this.info;
     if (this.ask) this.answer(hit === CONFIRM.yes);
-    else if (hit === RESULT.retry) this.leave(() => this.retry());
-    else if (hit === RESULT.menu) this.leave(() => this.app.goLevels());
+    else if (hit === RESULT.retry || hit === RESULT.loss.retry) this.leave(() => this.retry());
+    else if (hit === RESULT.menu || hit === RESULT.loss.menu) this.leave(() => this.app.goLevels());
     else if (hit === RESULT.next && ui.outcome === 'won' && ui.hasNext) this.leave(() => this.nextLevel());
     else if (hit === RESULT.share || hit === RESULT.shareInline) void this.share();
     else if (hit === RESULT.howto) {

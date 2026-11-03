@@ -9,7 +9,11 @@ import { recordWeeklyResult, shownWeekStreak, weeklyDone, weeklyTargetDone } fro
 import type { WeeklyChallenge } from '../../src/daily/challenge';
 import { TWISTS, WEEKLY_REWARD, dayNumberOf, isMondayKey } from '../../src/daily/challenge';
 import { challengeFor, weeklyFor } from '../../src/daily/challenge';
-import { setSaveStorageForTests } from '../../src/ui/save';
+import { isLevelUnlocked, isReadableSaveText, setSaveStorageForTests } from '../../src/ui/save';
+import { LEVEL_META } from '../../src/levels/index';
+import { EARN_RULES, LEARNING_LEVEL_IDS } from '../../src/economy/catalog';
+import { levelsCleared, skipSlotOf } from '../../src/economy/wallet';
+import { readFileSync } from 'node:fs';
 
 /*
  * Save normalisation against hostile / stale input (QA review of the week's schema additions:
@@ -248,5 +252,80 @@ describe('save.weekly normalisation (hostile input, interplay with the daily cha
     expect(Object.keys(copied.weekly.best).sort()).toEqual([PREV, MON]);
     assertSaneNumbers(copied);
     expect(roundTrip(copied)).toEqual(copied);
+  });
+});
+
+/* ---------- AUD-Q16 (QA 2026-11-03): wrong-type maps are rejected, unknown keys dropped, values kept in range ---------- */
+
+describe('AUD-Q16: stars / defeats / skips keep only what the game can have written', () => {
+  const ids = LEVEL_META.map((l) => String(l.id));
+  const memStore = () => {
+    const mem = new Map<string, string>();
+    return { mem, store: { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v), removeItem: (k: string) => void mem.delete(k) } };
+  };
+
+  it('an array is not a record: `stars: [3, 3, 3]` is not levels 0, 1, 2 — nor is any other map block read by its indexes', () => {
+    const s = normalizeSave({ version: 3, stars: [3, 3, 3], defeats: [1, 2], upgrades: [5], adCounters: { rewardedByPlacement: [5] }, challenge: { best: [{ stars: 3, timeMs: 1 }] }, entitlements: [true], skins: [['roof_slate']], settings: ['x'] });
+    expect(s).toEqual(defaultSave());
+    expect(s.stars).toEqual({});
+    // an array under the v3 key is still no save at all (kept aside as corrupt), an object with array blocks still is one
+    expect(isReadableSaveText('[]')).toBe(false);
+    expect(isReadableSaveText('{"stars":[3,3,3]}')).toBe(true);
+    expect(roundTrip(s)).toEqual(s);
+  });
+
+  it('a v2 save with `stars` as an array migrates to no stars: level 2 stays locked instead of 0..2 reading as cleared', () => {
+    const { mem, store } = memStore();
+    mem.set(SAVE_KEY_V2, JSON.stringify({ version: 2, stars: [3, 3, 3], coins: 10 }));
+    const s = loadSaveFrom(store);
+    expect(s.stars).toEqual({});
+    expect(s.gold).toBe(10);
+    expect(isLevelUnlocked(s, LEVEL_META, 1)).toBe(false);
+    expect(JSON.parse(mem.get(SAVE_KEY)!)).toEqual(s);
+  });
+
+  it('star and defeat keys must be campaign level ids (canonical `String(id)`, 1..50); every other key is dropped', () => {
+    const bad = ['0', '51', '-1', '01', '1.0', '1e1', ' 1', '1 ', 'x', '', 'NaN', 'Infinity', 'constructor', '__proto__'];
+    const stars: Record<string, number> = Object.fromEntries(bad.map((k) => [k, 3]));
+    stars['7'] = 2;
+    const defeats: Record<string, number> = Object.fromEntries(bad.map((k) => [k, 4]));
+    defeats['7'] = 4;
+    const s = normalizeSave({ stars, defeats });
+    expect(s.stars).toEqual({ '7': 2 });
+    expect(s.defeats).toEqual({ '7': 4 });
+    expect(levelsCleared(s)).toBe(1);
+    expect(({} as { polluted?: number }).polluted).toBeUndefined();
+    // every real id survives, in the order given
+    expect(ids).toHaveLength(50);
+    const all = normalizeSave({ stars: Object.fromEntries(ids.map((k) => [k, 1])), defeats: Object.fromEntries(ids.map((k) => [k, 2])) });
+    expect(Object.keys(all.stars)).toEqual(ids);
+    expect(Object.keys(all.defeats)).toEqual(ids);
+    expect(levelsCleared(all)).toBe(50);
+    expect(roundTrip(all)).toEqual(all);
+  });
+
+  it('star values are clamped to 0..3 (an out-of-range number is never a 4th star); defeats to a non-negative integer', () => {
+    const s = normalizeSave({ stars: { '1': 9, '2': -1, '3': 2.9, '4': NaN, '5': Infinity, '6': '3', '7': true, '8': null, '9': 3, '10': -0 }, defeats: { '1': -3, '2': 2.5, '3': 1e300, '4': 'many', '5': [1] } });
+    expect(s.stars).toEqual({ '1': 3, '2': 0, '3': 2, '9': 3, '10': 0 });
+    expect(s.defeats).toEqual({ '1': 0, '2': 2, '3': 1e300 });
+    for (const n of Object.values(s.stars)) expect(Number.isInteger(n) && n >= 0 && n <= 3, String(n)).toBe(true);
+    assertSaneNumbers(s);
+    expect(roundTrip(s)).toEqual(s);
+  });
+
+  it('skips keep only the slots a skip can spend: the six band indexes 0..5 and 100 + a learning level id', () => {
+    // save.ts pins the band count as a literal (eager bytes): a seventh band must bump both, and the doc comment says 0..5
+    expect(EARN_RULES.bands).toHaveLength(6);
+    expect(LEARNING_LEVEL_IDS).toEqual([23, 27, 32]);
+    expect(readFileSync(new URL('../../src/ui/save.ts', import.meta.url), 'utf8')).toMatch(/a band index 0\.\.5 \(the six/);
+    const slots = new Set(LEVEL_META.map((l) => skipSlotOf(l.id)));
+    expect([...slots].sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4, 5, 123, 127, 132]);
+    const s = normalizeSave({ skips: [5, 6, 7, 99, 100, 101, 123, 127, 132, 133, 150, 200, -1, 1.5, '0', 0, 0, 1e300, NaN, 4] });
+    expect(s.skips).toEqual([5, 123, 127, 132, 0, 1, 4]); // −1 → 0 and 1.5 → 1 are floored first (as before); 6, 7, 99–101, 133+ are no slot
+    expect(s.skips.every((n) => slots.has(n))).toBe(true);
+    const every = normalizeSave({ skips: [...slots] });
+    expect(new Set(every.skips)).toEqual(slots);
+    expect(normalizeSave({ skips: { 0: 1 } }).skips).toEqual([]); // an object is not a list
+    expect(roundTrip(every)).toEqual(every);
   });
 });

@@ -104,7 +104,9 @@ type ResultCase = Pick<ResultExtras, 'share' | 'doubleGold' | 'doubled' | 'skipC
 /** ResultScreen.rects() for a result with these offers. */
 function result(won: boolean, hasNext: boolean, ex: ResultCase): Target[] {
   // AUD-U10: the dimmed band's wallet and MENU take no tap under the result (drawn disabled)
-  const list: Target[] = [t('RESULT.retry', RESULT.retry), t('RESULT.menu', RESULT.menu)];
+  // AUD-U14: a defeat's RETRY / MENU sit on the top row (RESULT.loss) and it has no NEXT
+  const { retry, menu } = won ? RESULT : RESULT.loss;
+  const list: Target[] = [t('RESULT.retry', retry), t('RESULT.menu', menu)];
   if (won && hasNext) list.push(t('RESULT.next', RESULT.next));
   if ((won && ex.doubleGold !== null && !ex.doubled) || (!won && ex.skipCrystals !== null)) list.push(t('RESULT.extra', RESULT.extra));
   const both = ex.continueCrystals !== null && ex.continueAd;
