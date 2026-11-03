@@ -4,6 +4,7 @@ import type { Page } from '@playwright/test';
 import { Fingers } from './helpers/fingers';
 import type { XY } from './helpers/fingers';
 import { hudClientPoint } from './helpers/tap';
+import { expectToast, recordToasts } from './helpers/toasts';
 
 /*
  * QA-22: the gesture regression net for the real-device fixes, on the stakeholder's phone class —
@@ -54,6 +55,9 @@ const HUD = { pause: { x: 636, y: 18, w: 66, h: 60 }, menu: { x: 586, y: 1196, w
 const OVERDRIVE = { x: 217, y: 1186, w: 66, h: 88 };
 // src/render/layout.ts — PAUSE.menu (the band's MENU opens the pause card, AUD-U4)
 const PAUSE_MENU = { x: 370, y: 860, w: 170, h: 72 };
+// src/render/layout.ts — TITLE.play; src/render/menuLayout.ts — LEVEL_MAP path (node i at top + i·step, x 360 + amp·sin(2πi / period))
+const TITLE_PLAY = { x: 180, y: 640, w: 360, h: 96 };
+const LEVEL_MAP_PATH = { top: 260, step: 150, amp: 185, period: 5 };
 /** src/sim/constants.ts CAPACITY[2] × FORTRESS_CAPACITY_MUL: a level-2 fortress (its top level) holds 75. */
 const FORTRESS_L2_CAPACITY = 75;
 
@@ -671,6 +675,73 @@ test.describe('touch gestures on a 430×932 iPhone-class screen, DPR 3, safe ins
     await f.start(mid);
     await f.end();
     await expect.poll(() => playerLinks(page)).toEqual([{ from: 'home', to: 'mid' }]);
+    expect(errors).toEqual([]);
+  });
+
+  test('AUD-U18: the level map flings on after a real touch drag, slows and stops; a locked node toasts what opens it', async ({ page }) => {
+    // levels 1–10 cleared: 11 is open, 12 is the first locked node
+    const stars = Object.fromEntries(Array.from({ length: 10 }, (_, i) => [String(i + 1), 3]));
+    await recordToasts(page);
+    const errors = await boot(page, { version: 3, gold: 0, stars });
+    const f = new Fingers(page, await page.context().newCDPSession(page));
+    await f.start({ x: TITLE_PLAY.x + TITLE_PLAY.w / 2, y: TITLE_PLAY.y + TITLE_PLAY.h / 2 });
+    await f.end();
+    await expect.poll(() => screen(page)).toBe('levelSelect');
+    await page.evaluate(() => window.__towerclash.setLevelSelectScroll(600));
+    // a quick upward drag on the path: 4 frame-synced moves, 300 layout px. The page records the
+    // scroll offset every frame and the lift's time (pointerup), so the glide is read off the page's own clock.
+    await page.evaluate(() => {
+      const w = window as unknown as { __scrollLog: [number, number][]; __liftAt: number };
+      w.__scrollLog = [];
+      w.__liftAt = -1;
+      window.addEventListener('pointerup', () => (w.__liftAt = performance.now()), { capture: true, once: true });
+      const t0 = performance.now();
+      const tick = (): void => {
+        w.__scrollLog.push([performance.now(), window.__towerclash.getLevelSelectScroll()]);
+        if (performance.now() - t0 < 12_000) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+    const a = { x: 360, y: 900 };
+    const b = { x: 360, y: 600 };
+    await f.start(a);
+    await f.slide(a, b, 4);
+    await f.end();
+    await page.screenshot({ path: test.info().outputPath('aud-u18-fling-mid-430.png') });
+    await page.waitForTimeout(4000); // ok: the page records every frame meanwhile; the glide is read off its own clock
+    const { log, liftAt } = await page.evaluate(() => {
+      const w = window as unknown as { __scrollLog: [number, number][]; __liftAt: number };
+      return { log: w.__scrollLog, liftAt: w.__liftAt };
+    });
+    expect(liftAt).toBeGreaterThan(0);
+    const before = log.filter(([t]) => t <= liftAt);
+    const after = log.filter(([t]) => t > liftAt).map(([, y]) => y);
+    const atLift = before[before.length - 1]![1];
+    expect(atLift, 'the drag itself moved the map').toBeGreaterThan(600 + 200);
+    const moving = after.filter((y, k) => y !== (k === 0 ? atLift : after[k - 1]));
+    expect(moving.length, 'the map keeps moving for several frames after the finger lifted').toBeGreaterThanOrEqual(3);
+    for (let k = 1; k < after.length; k++) expect(after[k]!).toBeGreaterThanOrEqual(after[k - 1]!); // one way, no bounce
+    const end = after[after.length - 1]!;
+    expect(end).toBeGreaterThan(atLift + 20);
+    expect(end - atLift, 'a fling, not a runaway: well under a full map').toBeLessThan(3000);
+    // it stopped: the last half second of frames is still (a glide from ≈ 2–10 px / ms lasts ≈ 1.5–2 s)
+    const tail = log.filter(([t]) => t > log[log.length - 1]![0] - 500).map(([, y]) => y);
+    expect(new Set(tail).size, 'the glide has stopped').toBe(1);
+    const scroll = () => page.evaluate(() => window.__towerclash.getLevelSelectScroll());
+
+    // a locked node: no level starts, the toast names the level that opens it
+    const i = 11; // level 12
+    const node = { x: 360 + LEVEL_MAP_PATH.amp * Math.sin((i * Math.PI * 2) / LEVEL_MAP_PATH.period), y: LEVEL_MAP_PATH.top + i * LEVEL_MAP_PATH.step };
+    await page.evaluate((y) => window.__towerclash.setLevelSelectScroll(y), node.y - 700);
+    const at = await scroll();
+    await f.start({ x: node.x, y: node.y - at });
+    await f.end();
+    const expected = await text(page, 'map.locked');
+    expect(expected).toContain('{n}');
+    await expectToast(page, expected!.replace('{n}', '11'), { screen: 'levelSelect' });
+    await page.waitForTimeout(250);
+    expect(await screen(page)).toBe('levelSelect');
+    expect(await scroll()).toBe(at);
     expect(errors).toEqual([]);
   });
 });

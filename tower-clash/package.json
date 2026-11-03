@@ -9,6 +9,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "build:native": "tsc --noEmit && node scripts/buildNative.mjs",
+    "sourcemaps:strip": "node scripts/stripSourcemaps.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src tests scripts",
@@ -25,7 +27,7 @@
     "e2e:pwa": "npm run build && playwright test --project=pwa",
     "e2e:webkit": "npm run build && playwright test --project=webkit-iphone",
     "e2e:soak": "npm run build && playwright test --project=soak --workers=1",
-    "cap:sync": "npm run build && cap sync",
+    "cap:sync": "npm run build:native && cap sync",
     "android:build": "npm run cap:sync && cd android && ./gradlew assembleDebug",
     "ios:open": "npm run cap:sync && cap open ios",
     "icons:render": "tsx scripts/renderIcons.ts",

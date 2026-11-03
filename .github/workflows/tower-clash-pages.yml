@@ -44,6 +44,19 @@ jobs:
       - name: Build
         run: npm run build
 
+      # AUD-Q17: Pages does not serve the source maps (`sourcemap: 'hidden'` — nothing references
+      # them); they move out of dist/ before the upload and are kept as a CI artifact only.
+      - name: Strip source maps
+        run: npm run sourcemaps:strip
+
+      - name: Upload source maps
+        uses: actions/upload-artifact@v4
+        with:
+          name: sourcemaps-${{ github.sha }}
+          path: tower-clash/sourcemaps
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

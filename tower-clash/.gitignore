@@ -1,5 +1,7 @@
 node_modules
 dist
+# source maps moved out of dist/ by scripts/stripSourcemaps.mjs (AUD-Q17; CI artifact sourcemaps-<sha>)
+sourcemaps
 test-results
 playwright-report
 

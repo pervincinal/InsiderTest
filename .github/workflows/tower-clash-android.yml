@@ -89,8 +89,19 @@ jobs:
           sed -i "s#ca-app-pub-3940256099942544~3347511713#${ADMOB_ANDROID_APP_ID}#" android/app/src/main/res/values/strings.xml
           grep -q "$ADMOB_ANDROID_APP_ID" android/app/src/main/res/values/strings.xml
 
+      # AUD-Q18 / AUD-Q17: the store build — no debug surface chunk (`__DEBUG_SURFACE__` false), and the
+      # .map files moved from dist/ to sourcemaps/ so `cap sync` copies a map-free bundle (the script
+      # fails when either is left). The maps are kept as a CI artifact only (docs/MOBILE.md §4.1).
       - name: Build web app
-        run: npm run build
+        run: npm run build:native
+
+      - name: Upload source maps
+        uses: actions/upload-artifact@v4
+        with:
+          name: sourcemaps-${{ github.sha }}
+          path: tower-clash/sourcemaps
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Sync web build into the Android project
         run: npx cap sync android

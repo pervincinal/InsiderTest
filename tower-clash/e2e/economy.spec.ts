@@ -66,7 +66,7 @@ const HELMET_SEED_CRYSTALS = 200;
 const HELMET_SCROLL = 400; // brings helmet rows 2–3 (Crusader, Spartan) into the 1280 px view
 type HelmetRecWindow = Window & { __qaTexts: { t: string; dx: number; dy: number }[] | null; __qaFills: Set<string> | null };
 // src/render/layout.ts — RESULT
-const RESULT = { next: { x: 84, y: 780, w: 170, h: 72 }, menu: { x: 466, y: 780, w: 170, h: 72 }, continueAd: { x: 368, y: 696, w: 268, h: 62 }, howto: { x: 466, y: 494, w: 170, h: 44 } };
+const RESULT = { next: { x: 84, y: 780, w: 170, h: 72 }, menu: { x: 466, y: 780, w: 170, h: 72 }, continueAd: { x: 368, y: 784, w: 268, h: 64 }, howto: { x: 466, y: 494, w: 170, h: 44 } };
 // src/render/menuLayout.ts — HOWTO.close
 const HOWTO_CLOSE = { x: 180, y: 1054, w: 360, h: 72 };
 // AUD-Q15: e2e/tools/shots.ts picks the tracked folder (default run) or <PW_OUTPUT>/__screenshots__
@@ -558,7 +558,7 @@ test.describe('economy', () => {
       await tapRect(page, RESULT.continueAd); // lands on nothing
       await page.waitForTimeout(300);
       expect(await screen(page)).toBe('result');
-      // NEXT is disabled on a defeat: a tap on it does nothing
+      // AUD-U14: a defeat draws no NEXT; with no continue left, its old slot takes no tap
       await tapRect(page, RESULT.next);
       await page.waitForTimeout(200);
       expect(await screen(page)).toBe('result');
