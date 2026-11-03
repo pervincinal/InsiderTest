@@ -420,3 +420,24 @@ export function shopConvertSegRect(card: Rect): Rect {
 export function shopRowBuyRect(row: Rect): Rect {
   return { x: row.x + row.w - SHOP.buyW - 18, y: row.y + row.h / 2 - SHOP.buyH / 2, w: SHOP.buyW, h: SHOP.buyH };
 }
+
+/** A menu header's title slot (AUD-U13): between BACK's right edge and `right`, at most `px` (× text size), its middle at y 50. */
+export interface HeaderSlot {
+  back: Rect;
+  right: number;
+  px: number;
+}
+
+/**
+ * AUD-U13: every menu header's title slot. The title is fitted to the gap between BACK and the wallet
+ * (level map, shop) or, on a header without one, the band's edge mirrored from BACK (achievements) or
+ * BACK's mirror image (settings, how-to: the title stays on the screen's centre line) — menuWidgets.ts
+ * `headerTitle`; guard tests/render/headerTitle.test.ts.
+ */
+export const MENU_HEADERS = Object.freeze({
+  levels: { back: LEVEL_MAP.back, right: LEVEL_MAP.wallet.x, px: 40 },
+  shop: { back: SHOP.back, right: SHOP.wallet.x, px: 40 },
+  achievements: { back: ACHIEVEMENTS_LAYOUT.back, right: 720 - ACHIEVEMENTS_LAYOUT.back.x, px: 34 },
+  settings: { back: SETTINGS.back, right: 720 - SETTINGS.back.x - SETTINGS.back.w, px: 40 },
+  howto: { back: HOWTO.back, right: 720 - HOWTO.back.x - HOWTO.back.w, px: 40 },
+} satisfies Record<string, HeaderSlot>);

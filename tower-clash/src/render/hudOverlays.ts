@@ -2,7 +2,7 @@ import type { GameState } from '../sim/types';
 import { C } from '../sim/constants';
 import type { Palette } from './palette';
 import { shade } from './palette';
-import { CONFIRM, PAUSE, RESULT } from './layout';
+import { CONFIRM, HUD, PAUSE, RESULT } from './layout';
 import type { Rect } from './widgets';
 import { MIN_TEXT_PX, clipText, drawButton, drawCard, drawGlyphLabel, drawExtrudedText, drawGearGlyph, drawSpeakerGlyph, drawStar, fitFontPx, fitTextLines, font, formatTime, getTextScale, innerHighlight, roundRect, textPx } from './widgets';
 import type { PlayUi } from './draw';
@@ -10,7 +10,7 @@ import { drawCrystal, drawGoldCoin, drawVideoGlyph } from './sprites';
 import { drawSpinner } from './economyWidgets';
 import { STALL, STALEMATE_CARD_S, hudClockOf, hudExtrasOf, resultShareLayout } from './hud';
 import { levelLesson, t } from '../ui/i18n';
-import { RESULT_TIMELINE as TL, easeOutBack, goldCountT, starPopT } from './resultTimeline';
+import { RESULT_TIMELINE as TL, WALLET_COINS, easeOutBack, goldCountT, starPopT, walletCoinT } from './resultTimeline';
 
 /*
  * Pause menu and result card (PERF-6): lazy chunk. hud.ts reaches this module only through
@@ -111,6 +111,7 @@ function drawResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: Pla
   const hud = hudExtrasOf(ui);
   const ex = hud?.result;
   const pressed = hud?.pressed ?? null;
+  let coinFrom: { x: number; y: number } | null = null;
   if (won) {
     ctx.fillStyle = pal.textDim;
     const starRule = t('result.starRule', { t3: formatTime(ui.level.star3), t2: formatTime(ui.level.star2) });
@@ -126,6 +127,7 @@ function drawResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: Pla
     const labelW = ctx.measureText(label).width;
     const crystals = ex?.crystalsEarned ?? 0;
     const cx = crystals > 0 ? 260 : 360;
+    coinFrom = { x: cx - labelW / 2 - 24, y: card.y + 376 + slide };
     ctx.save();
     ctx.translate(cx, card.y + 376);
     ctx.scale(pop, pop);
@@ -173,7 +175,7 @@ function drawResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: Pla
     noteLines.lines.forEach((l, i) => ctx.fillText(l, 360, noteY + i * noteLines.lineH));
   } else {
     drawDefeatTip(ctx, pal, ex?.tip ?? levelLesson(ui.level), ex?.howto ?? false, pressed);
-    // Reinforcements: crystals and / or a rewarded video (ECONOMY.md §3.5)
+    // Reinforcements: crystals and / or a rewarded video (ECONOMY.md §3.5) — AUD-U14: outlined offers under RETRY
     if (ex && (ex.continueCrystals !== null || ex.continueAd)) {
       const both = ex.continueCrystals !== null && ex.continueAd;
       ctx.textAlign = 'center';
@@ -183,18 +185,20 @@ function drawResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: Pla
       ctx.fillText(clipText(ctx, reinf, card.w - 60), 360, RESULT.continueSolo.y - 18);
       if (ex.continueCrystals !== null) {
         const r = both ? RESULT.continueCrystals : RESULT.continueSolo;
-        drawOfferButton(ctx, pal, r, t('common.continue'), String(ex.continueCrystals), 'crystal', { pressed: pressed === r, pending: ex.pending, nowMs: since });
+        drawOfferButton(ctx, pal, r, t('common.continue'), String(ex.continueCrystals), 'crystal', { pressed: pressed === r, pending: ex.pending, nowMs: since, outline: true });
       }
       if (ex.continueAd) {
         const r = both ? RESULT.continueAd : RESULT.continueSolo;
-        drawOfferButton(ctx, pal, r, t('common.continue'), t('common.watch'), 'video', { pressed: pressed === r, pending: ex.pending, nowMs: since });
+        drawOfferButton(ctx, pal, r, t('common.continue'), t('common.watch'), 'video', { pressed: pressed === r, pending: ex.pending, nowMs: since, outline: true });
       }
       ctx.textAlign = 'center';
     }
   }
-  drawButton(ctx, pal, RESULT.next, t('common.next'), { fill: won ? pal.owners.player : undefined, disabled: !won || !ui.hasNext, fontPx: 26, pressed: pressed === RESULT.next });
-  drawButton(ctx, pal, RESULT.retry, t('common.retry'), { fontPx: 26, pressed: pressed === RESULT.retry });
-  drawButton(ctx, pal, RESULT.menu, t('common.menu'), { fontPx: 26, pressed: pressed === RESULT.menu });
+  // AUD-U14: a defeat draws no NEXT; its RETRY is the primary (blue) button on the top row, MENU beside it
+  const { retry, menu } = won ? RESULT : RESULT.loss;
+  if (won) drawButton(ctx, pal, RESULT.next, t('common.next'), { fill: pal.owners.player, disabled: !ui.hasNext, fontPx: 26, pressed: pressed === RESULT.next });
+  drawButton(ctx, pal, retry, t('common.retry'), { fill: won ? undefined : pal.owners.player, fontPx: 26, pressed: pressed === retry });
+  drawButton(ctx, pal, menu, t('common.menu'), { fontPx: 26, pressed: pressed === menu });
   if (ex) {
     if (won && ex.doubleGold !== null && !ex.doubled) {
       drawOfferButton(ctx, pal, RESULT.extra, t('result.doubleGold', { n: ex.doubleGold }), t('common.watch'), 'video', { pressed: pressed === RESULT.extra, pending: ex.pending, nowMs: since });
@@ -209,7 +213,27 @@ function drawResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: Pla
     if (layout.share) drawShareButton(ctx, pal, layout.share, pressed === layout.share, ex.sharing === true, since);
   }
   ctx.restore();
+  if (coinFrom && ui.coinsEarned > 0 && hud?.wallet) drawWalletCoins(ctx, pal, coinFrom, hud.wallet.bottom ?? 0, since);
   if (ex?.confirm) drawSpendConfirm(ctx, pal, ex.confirm, pressed);
+}
+
+/**
+ * AUD-F14: WALLET_COINS gold coins fly from the card's gold line to the wallet's coin (the bottom band, its anchor
+ * `bottom`) during the count-up — a quadratic bezier arcing out to the left, smoothstep-timed, `coinFlyMs` each
+ * (`walletCoinT`). Reduced motion: `since` is settled (10 000), so none flies — the wallet simply shows the total.
+ */
+function drawWalletCoins(ctx: CanvasRenderingContext2D, pal: Palette, from: { x: number; y: number }, bottom: number, since: number): void {
+  const w = HUD.wallet;
+  const to = { x: w.x + w.h / 2 + 2, y: w.y + w.h / 2 + bottom };
+  for (let i = 0; i < WALLET_COINS; i++) {
+    const k = walletCoinT(since, i);
+    if (k === null) continue;
+    const e = k * k * (3 - 2 * k);
+    const c = { x: Math.min(from.x, to.x) - 110 + i * 24, y: from.y + (to.y - from.y) * 0.3 };
+    const x = (1 - e) * (1 - e) * from.x + 2 * (1 - e) * e * c.x + e * e * to.x;
+    const y = (1 - e) * (1 - e) * from.y + 2 * (1 - e) * e * c.y + e * e * to.y;
+    drawGoldCoin(ctx, pal, x, y, 17 - 2 * e);
+  }
 }
 
 /**

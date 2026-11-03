@@ -4,7 +4,8 @@
  * system and spawns / paints the `coin` and `gem` kinds and mine kills through `ECONOMY_BURSTS`, so the
  * eager bundle stays under its budget. The other gameplay effects (capture chips, impacts, smoke,
  * planks) stay in particles.ts. AUD-F3: the Freeze / Overdrive looks on the towers they hold are drawn
- * here too, through `ParticleSystem.drawMarks` (nothing shows until the chunk is in).
+ * here too, through `ParticleSystem.drawMarks` (nothing shows until the chunk is in), as are (src/render/combatFx.ts)
+ * AUD-F11's artillery shots and barrels, AUD-F13's reduced-motion capture halo and AUD-F15's lost tower.
  */
 import type { Booster, Link, Tower } from '../sim/types';
 import { C } from '../sim/constants';
@@ -16,13 +17,12 @@ import type { Palette } from './palette';
 import { SOLDIER_DRAW_SCALE, TANK_DRAW_SCALE, TANK_RADIUS, WORLD_ZOOM } from './layout';
 import type { Rect } from './widgets';
 import { roundRect } from './widgets';
+import { combatFrame, drawTracer, shakeBy, shellShot, strikeShot, towerCaptured } from './combatFx';
 
 /** AUD-F2 mine blast: the world nudge (px) when the mine kills the player's unit, over the capture shake's 320 ms… */
 export const MINE_SHAKE_PX = 2;
 /** …and under reduced motion how long the blasted mine's chip stays outlined (ms). */
 export const MINE_MARK_MS = 300;
-/** The capture shake's length (particles.ts SHAKE_MS): a running shake stronger than the nudge is left alone. */
-const SHAKE_MS = 320;
 
 /**
  * AUD-F10: a landing's impact ring by the landing unit's weight — a soldier (1) keeps the ART-23 18 px
@@ -42,14 +42,6 @@ export function landingPulses(weight: number): number {
 /** The extra pulse: it starts at this fraction of the ring and lives TANK_PULSE_MS, so it trails the first ring out. */
 export const TANK_PULSE_SCALE = 0.55;
 export const TANK_PULSE_MS = 600;
-
-/** Start a `px` world shake unless the one running is still stronger (a 2 px nudge never cuts a capture's 6 px short). */
-function shakeBy(host: BurstHost, px: number, nowMs: number): void {
-  const t = (nowMs - host.shakeAt) / SHAKE_MS;
-  if (t >= 0 && t < 1 && host.shakeAmp * (1 - t) * (1 - t) > px) return;
-  host.shakeAt = nowMs;
-  host.shakeAmp = px;
-}
 
 export const ECONOMY_BURSTS: EconomyBursts = {
   /**
@@ -110,12 +102,18 @@ export const ECONOMY_BURSTS: EconomyBursts = {
     return true;
   },
 
+  /** AUD-F11 / F13 / F15: src/render/combatFx.ts. */
+  shell: shellShot,
+  strike: strikeShot,
+  captured: towerCaptured,
+
   /**
    * AUD-F2 reduced motion: a static outline (4 px mine red under a 1.5 px paper line) round the chip of
    * every mine that blew up in the last MINE_MARK_MS — the same on every frame, no fade — or, once the
    * mine is spent and has no chip, round the mine itself. AUD-F3: then the booster looks (`drawBoosterFx`).
    */
   marks(host, ctx, pal, state, layout, nowMs, cam) {
+    combatFrame(host, ctx, pal, state, layout, nowMs, cam);
     if (state.boosters.length) drawBoosterFx(host, ctx, pal, state, layout, nowMs, cam);
     if (state.links.length) drawMusters(host, ctx, pal, state, layout, cam);
     if (!host.marks.size) return;
@@ -191,6 +189,10 @@ export const ECONOMY_BURSTS: EconomyBursts = {
   },
 
   draw(ctx, p, t, fade) {
+    if (p.kind === 'tracer') {
+      drawTracer(ctx, p, t);
+      return;
+    }
     ctx.globalAlpha = Math.min(1, fade * 2.5);
     if (p.kind === 'coin') {
       // spinning coin: an ellipse whose width follows cos(rot), edge tone offset below

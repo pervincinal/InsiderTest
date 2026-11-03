@@ -3,9 +3,9 @@ import { shade } from './palette';
 import type { View } from './view';
 import { bleed, hudAnchors } from './view';
 import type { Rect } from './widgets';
-import { NUMERAL_PX, clipText, drawButton, drawCard, drawExtrudedText, drawGlassBand, drawNumeralLine, drawPill, drawStar, drawStars, fitFontPx, font, formatTime, numeralLineWidth, textPx, withShadow } from './widgets';
-import { drawFlag, drawLock } from './menuWidgets';
-import { LEVEL_MAP, levelNodeCentre, levelNodeRect } from './menuLayout';
+import { NUMERAL_PX, clipText, drawButton, drawCard, drawGlassBand, drawNumeralLine, drawPill, drawStar, drawStars, fitFontPx, font, formatTime, numeralLineWidth, textPx, withShadow } from './widgets';
+import { drawFlag, drawHeaderTitle, drawLock } from './menuWidgets';
+import { LEVEL_MAP, MENU_HEADERS, levelNodeCentre, levelNodeRect } from './menuLayout';
 import type { ToastOpts } from './economyWidgets';
 import { drawToast, drawWallet } from './economyWidgets';
 import { drawCrystal, drawGoldCoin } from './sprites';
@@ -84,6 +84,8 @@ export interface LevelSelectOpts {
   nowMs: number;
   pressed?: Rect | null;
   toast?: ToastOpts | null;
+  /** AUD-U18: a tapped locked node's shake — its index and x offset this frame. */
+  shake?: { index: number; dx: number } | null;
 }
 
 /**
@@ -582,7 +584,10 @@ export function drawLevelSelect(view: View, pal: Palette, o: LevelSelectOpts): v
   o.nodes.forEach((node, i) => {
     const y = levelNodeRect(i, 0).y;
     if (y < minY || y > maxY) return;
+    const dx = o.shake?.index === i ? o.shake.dx : 0;
+    ctx.translate(dx, 0);
     drawNode(ctx, pal, node, i, i === o.current, o.nowMs);
+    ctx.translate(-dx, 0);
   });
   ctx.restore();
 
@@ -593,8 +598,7 @@ export function drawLevelSelect(view: View, pal: Palette, o: LevelSelectOpts): v
   ctx.save();
   ctx.translate(0, a.top);
   drawButton(ctx, pal, o.backRect, t('common.back'), { fontPx: 24, pressed: o.pressed === o.backRect });
-  const title = t('levels.title');
-  drawExtrudedText(ctx, title, 290, 50, fitFontPx(ctx, title, 40, 220), { face: pal.paper, side: shade(pal.owners.player, -0.25), outline: pal.ink, depth: 4 });
+  drawHeaderTitle(ctx, pal, t('levels.title'), MENU_HEADERS.levels); // AUD-U13: fitted between BACK and the wallet
   drawWallet(ctx, pal, o.walletRect, o.gold, o.crystals, { pressed: o.pressed === o.walletRect });
   // daily challenge card, sticky under the header (tap → start)
   drawDailyCard(ctx, pal, LEVEL_MAP.daily, o.daily, o.pressed ?? null);

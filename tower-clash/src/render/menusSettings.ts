@@ -1,12 +1,12 @@
 import type { Palette, ToneSet } from './palette';
-import { TONE_SETS, shade } from './palette';
+import { TONE_SETS } from './palette';
 import type { View } from './view';
 import { bleedRect, hudAnchors } from './view';
 import type { Rect, TextScale } from './widgets';
-import { MIN_TEXT_PX, TEXT_SCALES, clipText, drawButton, drawCard, drawCoin, drawExtrudedText, drawGlassBand, drawStars, exemptFont, fitFontPx, fitTextLines, font, getTextScale } from './widgets';
-import { drawChevronDisc, drawSegmented, drawToggle, paletteGlyph } from './menuWidgets';
+import { MIN_TEXT_PX, TEXT_SCALES, clipText, drawButton, drawCard, drawCoin, drawGlassBand, drawStars, exemptFont, fitFontPx, fitTextLines, font, getTextScale } from './widgets';
+import { drawChevronDisc, drawHeaderTitle, drawSegmented, drawToggle, paletteGlyph } from './menuWidgets';
 import type { SettingsAboutLayout } from './menuLayout';
-import { SETTINGS } from './menuLayout';
+import { MENU_HEADERS, SETTINGS } from './menuLayout';
 import type { ToastOpts } from './economyWidgets';
 import { drawToast } from './economyWidgets';
 import { beginFrame, drawWater, headerBand } from './menus';
@@ -330,8 +330,7 @@ export function drawSettings(view: View, pal: Palette, o: SettingsOpts): void {
   ctx.save();
   ctx.translate(0, a.top);
   drawButton(ctx, pal, SETTINGS.back, t('common.back'), { fontPx: 24, pressed: o.pressed === SETTINGS.back });
-  const title = t('settings.title');
-  drawExtrudedText(ctx, title, 360, 50, fitFontPx(ctx, title, 40, 380), { face: pal.paper, side: shade(pal.owners.player, -0.25), outline: pal.ink, depth: 4 });
+  drawHeaderTitle(ctx, pal, t('settings.title'), MENU_HEADERS.settings); // AUD-U13
   ctx.restore();
 
   if (o.confirming) {

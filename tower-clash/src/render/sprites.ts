@@ -38,6 +38,8 @@ export interface TowerDrawOptions {
   wipe?: { from: Owner; t: number };
   /** Artillery barrel direction (radians, screen space). Defaults to upper-right. */
   aim?: number;
+  /** AUD-F11: the barrel's recoil (px it slides back into the dome) just after a shot. */
+  recoil?: number;
   /** Cosmetic skin ids (shop). Unknown / missing ids draw the default look. */
   skin?: TowerSkin;
   /** Bypass the sprite cache (offscreen exports such as the share card draw at their own scale). */
@@ -877,7 +879,7 @@ function drawArtillery(ctx: CanvasRenderingContext2D, pal: Palette, tones: Tones
   });
   p.live(() => {
     // barrel tracks the last target; longer and heavier per level
-    barrel(ctx, pal, x, dy - ART_PIVOT_UP, o.aim ?? -0.6, ART_BARREL_LEN[k], [9, 10, 12][k]!);
+    barrel(ctx, pal, x, dy - ART_PIVOT_UP, o.aim ?? -0.6, ART_BARREL_LEN[k] - (o.recoil ?? 0), [9, 10, 12][k]!);
     gems(ctx, pal, x + (k >= 1 ? 4 : -2), y - bh * 0.45, level, o.nowMs, o.motion);
     flag(ctx, pal, tones, x - br + 3, y - bh - [26, 30, 34][k]!, [22, 26, 28][k]!, o.nowMs, o.motion);
   });

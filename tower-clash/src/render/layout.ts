@@ -58,10 +58,15 @@ export const RESULT = Object.freeze({
   next: { x: 84, y: 780, w: 170, h: 72 } as Rect,
   retry: { x: 275, y: 780, w: 170, h: 72 } as Rect,
   menu: { x: 466, y: 780, w: 170, h: 72 } as Rect,
-  continueCrystals: { x: 84, y: 696, w: 268, h: 62 } as Rect,
-  continueAd: { x: 368, y: 696, w: 268, h: 62 } as Rect,
-  /** Single centred continue button when only the crystal offer exists. */
-  continueSolo: { x: 180, y: 696, w: 360, h: 62 } as Rect,
+  /**
+   * AUD-U14 (defeat only): RETRY (primary, NEXT's slot folded in) + MENU on the top row; the continue
+   * offers (outlined) under them, RETRY's size when alone. Tap rows centred 712 / 816 / 905 (88 apart).
+   */
+  loss: { retry: { x: 84, y: 680, w: 361, h: 64 } as Rect, menu: { x: 466, y: 680, w: 170, h: 64 } as Rect },
+  continueCrystals: { x: 84, y: 784, w: 268, h: 64 } as Rect,
+  continueAd: { x: 368, y: 784, w: 268, h: 64 } as Rect,
+  /** The crystal offer alone (no video): under RETRY, same size. */
+  continueSolo: { x: 84, y: 784, w: 361, h: 64 } as Rect,
   /** ×2 gold (win) or skip level (defeat). */
   extra: { x: 150, y: 874, w: 420, h: 62 } as Rect,
   /**

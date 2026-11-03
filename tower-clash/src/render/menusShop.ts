@@ -11,7 +11,6 @@ import {
   drawCard,
   drawCrosshairGlyph,
   drawNumeralLine,
-  drawExtrudedText,
   drawGlassBand,
   drawPill,
   drawRoundButton,
@@ -20,12 +19,13 @@ import {
   fitTextLines,
   font,
   NUMERAL_PX,
+  numeralLineWidth,
   roundRect,
   textPx,
 } from './widgets';
-import { drawSegmented } from './menuWidgets';
+import { drawHeaderTitle, drawSegmented } from './menuWidgets';
 import type { ShopTab } from './menuLayout';
-import { SHOP, SHOP_TABS, bandedContentBottom, shopBuyRect, shopRowBuyRect } from './menuLayout';
+import { MENU_HEADERS, SHOP, SHOP_TABS, bandedContentBottom, shopBuyRect, shopRowBuyRect } from './menuLayout';
 import type { UpgradeKind } from './sprites';
 import type { ToastOpts } from './economyWidgets';
 import { drawSpinner, drawToast, drawWallet, formatAmount } from './economyWidgets';
@@ -173,9 +173,39 @@ const TAB_KEYS: Record<ShopTab, TranslationKey> = { crystals: 'shop.tab.crystals
 const SHOP_NUMERAL_PX = NUMERAL_PX;
 
 /**
+ * AUD-U15: the face and label of a disabled shop button (unaffordable price, no store, PACK ONLY, traded
+ * today) — a light grey at full opacity (`shade(panel, −0.1)`) with `textDimFrame`: 4.88:1 on the face,
+ * more at its lit top (tests/render/contrast.test.ts).
+ */
+export const disabledInk = (pal: Palette): ButtonInk => ({ face: shade(pal.panel, -0.1), text: pal.textDimFrame });
+
+/**
+ * AUD-U15: how much of a price the wallet lacks — `glyph` and "Need 40" (`shop.short`; numerals 24 px,
+ * words 22, ART-15) in ink, centred on `cx` with its baseline at `y`, ≤ `maxW` (shrinks to the floor,
+ * never squeezed). Returns the drawn width (glyph included). Nothing when nothing is missing.
+ */
+function drawShortfall(ctx: CanvasRenderingContext2D, pal: Palette, cx: number, y: number, maxW: number, n: number, glyph: 'gold' | 'crystal'): number {
+  if (!(n > 0)) return 0;
+  const text = t('shop.short', { n });
+  const glyphW = 28;
+  const w = Math.min(maxW - glyphW, numeralLineWidth(ctx, text, 22, NUMERAL_PX, 24));
+  const x0 = cx - (glyphW + w) / 2;
+  if (glyph === 'gold') drawGoldCoin(ctx, pal, x0 + 10, y - 8, 10);
+  else drawCrystal(ctx, pal, x0 + 10, y - 8, 11);
+  return glyphW + drawNumeralLine(ctx, text, x0 + glyphW, y, maxW - glyphW, pal.ink, 22, 'left', 24);
+}
+
+/**
+ * AUD-U15: the shortfall of an unaffordable row price (crate, upgrade, gold trade), centred over its
+ * button `buy`, in the buy column above it (the card's title, fitted to its text column, ends ≥ 8 px left of this ±10 px room; under
+ * the button a RU "Далее …" line at the floor can run on into it).
+ */
+const rowShortfall = (ctx: CanvasRenderingContext2D, pal: Palette, buy: Rect, n: number, glyph: 'gold' | 'crystal'): number => drawShortfall(ctx, pal, buy.x + buy.w / 2, buy.y - 14, buy.w + 20, n, glyph);
+
+/**
  * Price / action button: label with an optional currency glyph; spinner when pending. `ink` is a
  * coloured face with its label colour (`pal.shopBuy` / `pal.shopOwned`, ≥ 4.5:1, BUG-22); without
- * it the button is a paper face with ink text.
+ * it the button is a paper face with ink text; `disabled` takes `disabledInk`.
  */
 function drawBuyButton(
   ctx: CanvasRenderingContext2D,
@@ -184,9 +214,11 @@ function drawBuyButton(
   label: string,
   o: { glyph?: 'gold' | 'crystal'; ink?: ButtonInk; disabled?: boolean; pressed?: boolean; pending?: boolean; fontPx?: number; nowMs?: number },
 ): void {
-  drawButton(ctx, pal, r, '', { fill: o.ink?.face, disabled: o.disabled, pressed: o.pressed, fontPx: o.fontPx, flat: true });
+  // AUD-U15: a disabled button is a solid grey face with a ≥ 4.5:1 label (it was textDim on the 45 %-alpha face, ≈ 2.4:1)
+  const ink = o.disabled ? disabledInk(pal) : o.ink;
+  drawButton(ctx, pal, r, '', { fill: ink?.face, pressed: o.pressed, fontPx: o.fontPx, flat: true });
   const cy = r.y + (r.h - 4) / 2 + (o.pressed ? 3 : 0);
-  const text = o.disabled ? pal.textDim : (o.ink?.text ?? pal.ink);
+  const text = ink?.text ?? pal.ink;
   if (o.pending) {
     drawSpinner(ctx, text, r.x + r.w / 2, cy, Math.min(12, r.h * 0.25), o.nowMs ?? 0);
     return;
@@ -322,7 +354,20 @@ function drawSkinCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopSkinCa
     drawBuyButton(ctx, pal, buy, t('shop.packOnly'), { disabled: true, fontPx: 22 });
   } else {
     drawBuyButton(ctx, pal, buy, String(c.cost), { glyph: 'crystal', ink: pal.shopBuy, disabled: o.crystals < c.cost, pressed, fontPx: SHOP_NUMERAL_PX });
+    if (o.crystals < c.cost) drawSkinShortfall(ctx, pal, r, c.cost - o.crystals);
   }
+}
+
+/**
+ * AUD-U15: a skin card has no room under its price, so its shortfall is a paper tag in the card's
+ * top-right corner, over the preview's sky (like a pack's bonus ribbon).
+ */
+function drawSkinShortfall(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, n: number): void {
+  const text = t('shop.short', { n });
+  const w = Math.min(r.w - 20, numeralLineWidth(ctx, text, 22, NUMERAL_PX, 24) + 28 + 20);
+  const tag: Rect = { x: r.x + r.w - w - 10, y: r.y + 10, w, h: 36 };
+  drawPill(ctx, tag, pal.paper, pal.panelBorder, 2);
+  drawShortfall(ctx, pal, tag.x + tag.w / 2, tag.y + 26, tag.w - 16, n, 'crystal');
 }
 
 /** Three overlapping booster discs (bolt · snowflake · crosshair) as the crate's glyph. */
@@ -365,6 +410,7 @@ function drawCrateCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopCrate
     pressed: rectEq(o.pressed, buy) || rectEq(o.pressed, r),
     fontPx: SHOP_NUMERAL_PX,
   });
+  if (!c.affordable) rowShortfall(ctx, pal, buy, c.cost - o.crystals, 'crystal');
 }
 
 function drawConvertCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopConvertCard, o: ShopOpts): void {
@@ -396,11 +442,14 @@ function drawConvertCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopCon
   const w = ctx.measureText(label).width;
   ctx.fillText(label, cx + 10, r.y + 170);
   drawGoldCoin(ctx, pal, cx + 10 - w / 2 - 16, r.y + 170, 11);
-  drawBuyButton(ctx, pal, c.buyRect, t('shop.convert'), {
+  // AUD-U15: an unaffordable pack says what it lacks on the (disabled) button: "◆ Need 15"
+  const short = c.affordable ? 0 : c.crystals - o.crystals;
+  drawBuyButton(ctx, pal, c.buyRect, short > 0 ? t('shop.short', { n: short }) : t('shop.convert'), {
+    glyph: short > 0 ? 'crystal' : undefined,
     ink: pal.shopBuy,
     disabled: !c.affordable,
     pressed: rectEq(o.pressed, c.buyRect),
-    fontPx: 22,
+    fontPx: short > 0 ? SHOP_NUMERAL_PX : 22,
   });
 }
 
@@ -496,7 +545,10 @@ function drawUpgradeCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopUpg
   const buy = shopRowBuyRect(r);
   const pressed = rectEq(o.pressed, buy) || rectEq(o.pressed, r);
   if (c.cost === null) drawBuyButton(ctx, pal, buy, t('shop.max'), { ink: pal.shopOwned, fontPx: 22 });
-  else drawBuyButton(ctx, pal, buy, String(c.cost), { glyph: 'gold', ink: pal.shopBuy, disabled: !c.affordable, pressed, fontPx: SHOP_NUMERAL_PX });
+  else {
+    drawBuyButton(ctx, pal, buy, String(c.cost), { glyph: 'gold', ink: pal.shopBuy, disabled: !c.affordable, pressed, fontPx: SHOP_NUMERAL_PX });
+    if (!c.affordable) rowShortfall(ctx, pal, buy, c.cost - o.gold, 'gold');
+  }
 }
 
 function drawTradeCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopTradeCard, o: ShopOpts): void {
@@ -517,7 +569,10 @@ function drawTradeCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopTrade
   drawCardLines(ctx, [t('shop.tradeRate', { g: c.gold, c: c.crystals }), t('shop.tradeSub')], textX, r.y + 76, textW, 32);
   const buy = shopRowBuyRect(r);
   if (c.done) drawBuyButton(ctx, pal, buy, t('shop.tradeDone'), { disabled: true, fontPx: 22 });
-  else drawBuyButton(ctx, pal, buy, String(c.gold), { glyph: 'gold', ink: pal.shopBuy, disabled: !c.affordable, pressed: rectEq(o.pressed, buy) || rectEq(o.pressed, r), fontPx: SHOP_NUMERAL_PX });
+  else {
+    drawBuyButton(ctx, pal, buy, String(c.gold), { glyph: 'gold', ink: pal.shopBuy, disabled: !c.affordable, pressed: rectEq(o.pressed, buy) || rectEq(o.pressed, r), fontPx: SHOP_NUMERAL_PX });
+    if (!c.affordable) rowShortfall(ctx, pal, buy, c.gold - o.gold, 'gold');
+  }
 }
 
 /**
@@ -584,8 +639,7 @@ export function drawShop(view: View, pal: Palette, o: ShopOpts): void {
   ctx.save();
   ctx.translate(0, a.top);
   drawButton(ctx, pal, o.backRect, t('common.back'), { fontPx: 24, pressed: o.pressed === o.backRect });
-  const title = t('shop.title');
-  drawExtrudedText(ctx, title, 280, 50, fitFontPx(ctx, title, 40, 220), { face: pal.paper, side: shade(pal.owners.player, -0.25), outline: pal.ink, depth: 4 });
+  drawHeaderTitle(ctx, pal, t('shop.title'), MENU_HEADERS.shop); // AUD-U13: fitted between BACK and the wallet
   drawWallet(ctx, pal, o.walletRect, o.gold, o.crystals);
   const tabs = o.tabs ?? SHOP_TABS;
   drawSegmented(ctx, pal, o.tabsRect, tabs.map((tab) => ({ label: t(TAB_KEYS[tab]), value: tab })), tabs.indexOf(o.tab), 22);

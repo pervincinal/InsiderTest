@@ -37,9 +37,9 @@ interface AudioModule {
   arrivals: ArrivalTracker | null;
   save: SaveData | null;
   persist: (save: SaveData) => void;
-  /** AUD-F1: the hit limiter's state and the light haptic it fires (src/native `hapticCapture`; a no-op on the web). */
+  /** AUD-F1: the hit limiter's state and the light haptic it fires — medium for a lost tower, AUD-F15 (src/native `hapticCapture`; a no-op on the web). */
   hits: HitState;
-  haptic: () => void;
+  haptic: (medium?: boolean) => void;
   /** The page is hidden (`setAudioBackground`): no music. */
   hidden?: boolean;
 }
@@ -56,8 +56,8 @@ export interface InitAudioOptions {
   factory?: AudioContextFactory;
   /** How to persist the save after a mute change. Default: `writeSave`. */
   persist?: (save: SaveData) => void;
-  /** AUD-F1: the haptic a hit fires (tests). Default: src/native `hapticCapture`. */
-  haptic?: () => void;
+  /** AUD-F1: the haptic a hit fires (`medium`: a lost tower, AUD-F15; tests). Default: src/native `hapticCapture`. */
+  haptic?: (medium?: boolean) => void;
 }
 
 /** Bind audio to the save (mute = `!settings.sound`). Re-initialising replaces any previous state. */

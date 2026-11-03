@@ -30,7 +30,7 @@ export const HIT_GAP_MS = 170;
 /**
  * AUD-F1: being attacked. For every foe's landing on a tower `me` still owns after the tick, and every
  * capture that takes one of `me`'s towers (its last landing flipped it, so that landing no longer reads as
- * "on `me`"), call `fire(weight)` — unless the same tower fired within HIT_TOWER_MS or any tower within
+ * "on `me`"; AUD-F15: weight 0 — the capture's own `loss` thud is its sound, the haptic is medium), call `fire(weight)` — unless the same tower fired within HIT_TOWER_MS or any tower within
  * HIT_GAP_MS (wall clock `nowMs`; a refused hit is not recorded, so the next landing gets the slot).
  */
 export function playHits(
@@ -48,7 +48,10 @@ export function playHits(
     if (ev.type === 'landed' && ev.hostile && ev.owner !== me && towers[ev.towerId]?.owner === me) {
       id = ev.towerId;
       weight = ev.weight;
-    } else if (ev.type === 'capture' && ev.from === me) id = ev.towerId;
+    } else if (ev.type === 'capture' && ev.from === me) {
+      id = ev.towerId;
+      weight = 0;
+    }
     if (id === null || nowMs - st.last < HIT_GAP_MS || nowMs - (st.at.get(id) ?? -Infinity) < HIT_TOWER_MS) continue;
     st.last = nowMs;
     st.at.set(id, nowMs);
@@ -130,7 +133,8 @@ export interface AudioHost {
   /** Own-unit arrival detector, made here on the first batch / frame the chunk is in. */
   arrivals: ArrivalTracker | null;
   hits: HitState;
-  haptic: () => void;
+  /** `medium`: AUD-F15, a lost tower (a hit is light). */
+  haptic: (medium?: boolean) => void;
 }
 
 /**
@@ -143,8 +147,8 @@ export function onEvents(m: AudioHost, events: readonly SimEvent[], state: Pick<
   (m.arrivals ??= new ArrivalTracker('player')).noteEvents(events);
   for (const call of sfxForEvents(events, 'player', state.towers)) m.player.play(call.name, call.opts);
   playHits(events, 'player', state.towers, m.hits, performance.now(), (weight) => {
-    m.player.play('hit', { weight });
-    m.haptic();
+    if (weight) m.player.play('hit', { weight });
+    m.haptic(!weight);
   });
 }
 
@@ -233,7 +237,10 @@ function voices(s: Synth, name: SfxName, opts: SfxOptions, i: number): void {
       return;
     }
     case 'artillery':
+      // the boom (a sub-bass sine glide) and its blast noise, and (AUD-F11) a 40 ms thump on a triangle under
+      // them — its harmonics carry the weight on a phone speaker that drops the sine; 3 voices, ends at 260 ms
       sweep(s, 170, 40, 260, 'sine', { gain: 0.5 });
+      sweep(s, 150, 60, 40, 'triangle', { gain: 0.32 });
       noiseBurst(s, 120, 350, { gain: 0.25 });
       return;
     case 'won': {
@@ -259,7 +266,7 @@ function voices(s: Synth, name: SfxName, opts: SfxOptions, i: number): void {
     case 'refuse':
       // Short low "thud" for a refused tap: a falling triangle (harmonics keep it audible on phone
       // speakers that drop everything under ~200 Hz) plus a soft knock of low-passed noise. Quieter
-      // than the capture-loss thud (0.45): a refusal is the player's own tap, not an event.
+      // than the capture-loss thud (AUD-F15: 0.34 + 0.4): a refusal is the player's own tap, not an event.
       sweep(s, 200, 70, 110, 'triangle', { gain: 0.2 });
       noiseBurst(s, 45, 420, { gain: 0.1 });
       return;
@@ -341,9 +348,12 @@ function playCapture(s: Synth, kind: CaptureKind): void {
       blip(s, 1046.5, 220, 'triangle', { gain: 0.28, delayS: 0.11 });
       return;
     case 'loss':
-      // Low thud.
-      sweep(s, 140, 45, 240, 'sine', { gain: 0.45 });
-      noiseBurst(s, 90, 250, { gain: 0.2 });
+      // AUD-F15: losing a tower — a short low thud: a falling triangle (harmonics above the phone-speaker floor;
+      // under `hit`'s 320 Hz knock, which no longer plays for a loss) over the old sub-sine body, shortened, and
+      // a low-passed knock; 3 voices, ends at 180 ms
+      sweep(s, 180, 60, 150, 'triangle', { gain: 0.34 });
+      sweep(s, 120, 45, 180, 'sine', { gain: 0.4 });
+      noiseBurst(s, 60, 300, { gain: 0.2 });
       return;
     case 'other':
       blip(s, 330, 90, 'triangle', { gain: 0.1 });

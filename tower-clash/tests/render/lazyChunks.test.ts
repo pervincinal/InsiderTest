@@ -106,7 +106,7 @@ describe('sfx recipes chunk', () => {
     expect(ctx.voices().length).toBe(1);
     expect(playSfx('capture', { capture: 'gain' })).toBe(true);
     expect(ctx.voices().length).toBe(3);
-    expect(playSfx('artillery')).toBe(true); // sweep + noise burst
-    expect(ctx.voices().length).toBe(5);
+    expect(playSfx('artillery')).toBe(true); // sweep + AUD-F11 thump + noise burst
+    expect(ctx.voices().length).toBe(6);
   });
 });

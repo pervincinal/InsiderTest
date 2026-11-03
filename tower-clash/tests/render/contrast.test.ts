@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ButtonInk, Palette } from '../../src/render/palette';
 import { COLOR_BLIND_PALETTE, DEFAULT_PALETTE, shade } from '../../src/render/palette';
 import type { ShopOpts } from '../../src/render/menusShop';
-import { drawShop } from '../../src/render/menusShop';
+import { disabledInk, drawShop } from '../../src/render/menusShop';
 import { LEVEL_MAP, SETTINGS, SHOP, SHOP_TABS, settingsAboutLayout, shopBuyRect, shopConvertSegRect, shopPackRect, shopRowBuyRect, shopRowRect, shopSkinRect } from '../../src/render/menuLayout';
 import type { View } from '../../src/render/view';
 import type { SettingsOpts } from '../../src/render/menusSettings';
@@ -305,6 +305,123 @@ describe('drawShop button labels (BUG-22)', () => {
       for (const d of states) expect(d.fill, `"${d.text}"`).toBe(pal.shopOwned.text);
     });
   }
+});
+
+/* ---------- AUD-U15: disabled buy buttons and the crystals / gold they lack ---------- */
+
+describe('disabled buy buttons (AUD-U15)', () => {
+  /** drawShop at `extra` with the game's font advances. */
+  const drawWith = (pal: Palette, tab: ShopOpts['tab'], extra: Partial<ShopOpts> = {}, faces = new Set<string>()): Drawn[] => {
+    const out: Drawn[] = [];
+    drawShop(recordingView(recordingCtx(out, faces, undefined, fontMeasure)), pal, { ...shopOpts(tab), ...extra });
+    return out;
+  };
+  const right = (d: Drawn): number => d.x + fontMeasure(d.text, d.font);
+  /** The runs of one numeral line ("Need " + "50") drawn inside `r`, joined in reading order. */
+  const lineIn = (drawn: Drawn[], r: { x: number; y: number; w: number; h: number }): { text: string; runs: Drawn[] } => {
+    const runs = drawn.filter((d) => inside(d, r)).sort((a, b) => a.x - b.x);
+    return { text: runs.map((d) => d.text).join(''), runs };
+  };
+
+  it('was textDim on the 45 %-alpha shopBuy face: 2.37:1', () => {
+    expect(contrast(DEFAULT_PALETTE.textDim, '#9aabda')).toBeCloseTo(2.37, 2);
+  });
+
+  for (const [name, pal] of PALETTES) {
+    it(`${name}: the disabled face is a solid light grey whose label is ≥ 4.5:1 on every face pixel`, () => {
+      const off = disabledInk(pal);
+      expect(off).toEqual({ face: '#e6e1d8', text: '#526078' });
+      expect(contrast(off.text, off.face)).toBeCloseTo(4.88, 2);
+      // a light face's gradient runs from shade(face, +0.10) down to the face
+      expect(contrast(off.text, shade(off.face, 0.1))).toBeGreaterThanOrEqual(contrast(off.text, off.face));
+      expect(worstOnFace(off)).toBeGreaterThanOrEqual(MIN_TEXT);
+      // the shortfall line is ink on the card / paper tag
+      expect(contrast(pal.ink, pal.panel)).toBeGreaterThanOrEqual(MIN_TEXT);
+      // still reads as a button on the card (its 4 px edge is shade(face, −0.38))
+      expect(contrast(shade(off.face, -0.38), pal.panel)).toBeGreaterThanOrEqual(3);
+    });
+
+    it(`${name}: unaffordable prices draw on the grey face in its label colour, and say what is missing`, () => {
+      const off = disabledInk(pal);
+      const faces = new Set<string>();
+      // skin 150 with 100 crystals: "150" on the grey face, "Need 50" on the card's corner tag
+      const skin = shopSkinRect(SHOP.row.y0, 1);
+      const skins = drawWith(pal, 'skins', { crystals: 100 }, faces);
+      const price = skins.find((d) => d.text === '150');
+      expect(price?.fill).toBe(off.text);
+      expect(price!.px).toBeGreaterThanOrEqual(24);
+      const tag = lineIn(skins, { x: skin.x, y: skin.y, w: skin.w, h: 50 });
+      expect(tag.text).toBe('Need 50');
+      for (const d of tag.runs) expect(d.fill).toBe(pal.ink);
+      expect(tag.runs.find((d) => d.text === '50')!.px).toBeGreaterThanOrEqual(24);
+      expect(right(tag.runs[tag.runs.length - 1]!)).toBeLessThanOrEqual(skin.x + skin.w - 10);
+      // upgrade 300 with 100 gold, crate 120 with 20 crystals: the line over the button, inside the buy column
+      const ups = drawWith(pal, 'upgrades', { gold: 100, upgrades: shopOpts('upgrades').upgrades.map((u) => ({ ...u, affordable: u.cost !== null && 100 >= u.cost })) }, faces);
+      const row = shopRowRect(1);
+      const upBuy = shopRowBuyRect(row);
+      expect(ups.find((d) => d.text === '300')?.fill).toBe(off.text);
+      const over = { x: upBuy.x - 10, y: row.y + 4, w: upBuy.w + 20, h: upBuy.y - row.y - 4 };
+      const upLine = lineIn(ups, over);
+      expect(upLine.text).toBe('Need 200');
+      // clear of the card's title and lines in the text column
+      for (const d of ups.filter((d) => d.y >= row.y && d.y <= row.y + row.h && d.x < over.x)) expect(right(d), `"${d.text}"`).toBeLessThanOrEqual(upLine.runs[0]!.x - 28);
+      const crates = drawWith(pal, 'bundles', { crystals: 20, crate: { ...shopOpts('bundles').crate!, affordable: false } }, faces);
+      expect(lineIn(crates, over).text).toBe('Need 100');
+      // the crystal → gold pack of 20 with 5 crystals: the disabled CONVERT button says "Need 15"
+      const conv = shopOpts('crystals').convert!;
+      const convert = drawWith(pal, 'crystals', { crystals: 5, convert: { ...conv, affordable: false } }, faces);
+      const need = convert.filter((d) => inside(d, conv.buyRect));
+      expect(need.map((d) => d.text)).toEqual(['Need 15']);
+      expect(need[0]!.fill).toBe(off.text);
+      expect(need[0]!.px).toBeGreaterThanOrEqual(24);
+      // no store: the pack price on the grey face, nothing "missing"
+      const packs = drawWith(pal, 'crystals', { storeAvailable: false }, faces);
+      expect(packs.find((d) => d.text === '$19.99')?.fill).toBe(off.text);
+      expect(packs.some((d) => d.text.startsWith('Need'))).toBe(false);
+      expect(faces).toContain(off.face);
+    });
+  }
+
+  it('the shortfall stays inside its room in every language at every text size (never squeezed)', async () => {
+    registerDictionary('az', az);
+    registerDictionary('ru', ru);
+    registerDictionary('tr', tr);
+    const pal = DEFAULT_PALETTE;
+    const skin = shopSkinRect(SHOP.row.y0, 1);
+    const upBuy = shopRowBuyRect(shopRowRect(1));
+    try {
+      for (const lang of ['en', 'az', 'ru', 'tr'] as const) {
+        await setLanguage(lang);
+        for (const k of TEXT_SCALES) {
+          setTextScale(k);
+          const where = `${lang} ${k * 100}%`;
+          // the widest shortfall a player meets: a 1 150-crystal skin from 0, a 2 500-gold tier from 0
+          const skins = drawWith(pal, 'skins', { crystals: 0, skins: shopOpts('skins').skins.map((s) => ({ ...s, cost: s.cost ? 1150 : 0 })) });
+          const tag = lineIn(skins, { x: skin.x, y: skin.y, w: skin.w, h: 50 }).runs;
+          expect(tag.length, where).toBeGreaterThan(0);
+          for (const d of tag) {
+            expect(d.maxW, where).toBeUndefined();
+            expect(d.x, `${where} "${d.text}"`).toBeGreaterThanOrEqual(skin.x + 10);
+            expect(right(d), `${where} "${d.text}"`).toBeLessThanOrEqual(skin.x + skin.w - 10 + 0.5);
+            expect(d.px).toBeGreaterThanOrEqual(22);
+          }
+          const ups = drawWith(pal, 'upgrades', { gold: 0, upgrades: shopOpts('upgrades').upgrades.map((u) => ({ ...u, cost: u.cost === null ? null : 2500, affordable: false })) });
+          const runs = lineIn(ups, { x: upBuy.x - 12, y: shopRowRect(1).y + 4, w: upBuy.w + 24, h: upBuy.y - shopRowRect(1).y - 4 }).runs;
+          expect(runs.length, where).toBeGreaterThan(0);
+          for (const d of runs) {
+            expect(d.maxW, where).toBeUndefined();
+            expect(d.x, `${where} "${d.text}"`).toBeGreaterThanOrEqual(upBuy.x - 10 - 0.5);
+            expect(right(d), `${where} "${d.text}"`).toBeLessThanOrEqual(upBuy.x + upBuy.w + 10 + 0.5);
+            expect(d.y, `${where}: above the button`).toBeLessThanOrEqual(upBuy.y - 8);
+            expect(d.px).toBeGreaterThanOrEqual(22);
+          }
+        }
+      }
+    } finally {
+      setTextScale(1);
+      await setLanguage('en');
+    }
+  });
 });
 
 /* ---------- ART-15: active-state controls, toasts, the two shop text lines ---------- */

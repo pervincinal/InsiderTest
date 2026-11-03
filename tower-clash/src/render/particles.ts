@@ -4,9 +4,7 @@ import type { Palette, Tones } from './palette';
 import { DEFAULT_PALETTE, shade } from './palette';
 import { towerTop } from './sprites';
 import type { Camera } from './camera';
-import { playCamera, proj, projAngle, unproj } from './camera';
 import type { WorldLayout } from './worldChips';
-import { artilleryMuzzle } from './sprites';
 import { reducedMotionOverride } from '../ui/motion';
 import { chunkBackoff, loadChunk } from '../lazyChunk';
 
@@ -121,6 +119,11 @@ export interface BurstHost {
   /** The world shake's start (wall clock) and peak px (`shake`). */
   shakeAt: number;
   shakeAmp: number;
+  /** AUD-F15: the shake's line (a unit vector: it jolts along it, toward the attacker), or null for the capture's loop. */
+  shakeDir: { x: number; y: number } | null;
+  /** AUD-F11: each artillery tower's drawn barrel aim (map radians, `aimOf`) and recoil (`recoil`: barrel px back, tower nudge). */
+  readonly aims: Map<string, number>;
+  readonly recoil: Map<string, { r: number; dx: number; dy: number }>;
   /** AUD-F2 reduced motion: wall clock of the last blast per mine (index into `state.mines`). */
   readonly marks: Map<number, number>;
   rnd(): number;
@@ -141,12 +144,12 @@ export interface BurstHost {
  * Purchase / reward bursts (`coin`, `gem`) and the AUD-F2 mine blast live in src/render/particlesEconomy.ts,
  * a lazy chunk: the first frame a system draws warms it, `coinBurst` / `crystalBurst` spawn through it
  * (on landing, in the rare case it is not in yet), `draw` paints those two kinds through it, and a mine
- * kill bursts / marks through it (a grey death puff until it is in).
+ * kill bursts / marks through it (a grey death puff until it is in), as does (AUD-F11) an artillery shot.
  */
 export interface EconomyBursts {
   coin(host: BurstHost, x: number, y: number, n: number, pal: Palette): void;
   crystal(host: BurstHost, x: number, y: number, n: number, pal: Palette): void;
-  /** Paint one `coin` / `gem` particle (`t` = age fraction, `fade` = 1 − t). */
+  /** Paint one `coin` / `gem` / (AUD-F11) shell `tracer` particle (`t` = age fraction, `fade` = 1 − t; screen space). */
   draw(ctx: CanvasRenderingContext2D, p: Particle, t: number, fade: number): void;
   /**
    * AUD-F10: a heavy unit (`ev.weight` > 1: a tank) lands on `t` — its landing burst scaled by the weight
@@ -155,6 +158,12 @@ export interface EconomyBursts {
   tank(host: BurstHost, t: Tower, ev: Extract<SimEvent, { type: 'landed' }>, pal: Palette, nowMs: number): boolean;
   /** AUD-F2: a unit (`own`: the player's) killed by a mine at (x, y) — the blast at the nearest mine of `state` (false: no mine, nothing done). */
   mine(host: BurstHost, state: GameState, x: number, y: number, own: boolean, pal: Palette, nowMs: number): boolean;
+  /** AUD-F11: an artillery kill — the shot of the gun that fired it (false: no gun in range, nothing done). */
+  shell(host: BurstHost, state: GameState, ev: Extract<SimEvent, { type: 'unitDied' }>, pal: Palette, nowMs: number): boolean;
+  /** A shell from (fromX, fromY) to (toX, toY), map space (the airstrike, `shot`): muzzle flash, tracer, hit flash and sparks. */
+  strike(host: BurstHost, fromX: number, fromY: number, toX: number, toY: number, color: string): void;
+  /** After `capture`: AUD-F13 (reduced motion: the badge halo) and AUD-F15 (the player lost `t`: crack flash, directional nudge). */
+  captured(host: BurstHost, state: GameState, t: Tower, ev: Extract<SimEvent, { type: 'capture' }>, nowMs: number): void;
   /**
    * After the badges and chips (`ParticleSystem.drawMarks`): AUD-F2 reduced motion — outline the chips of
    * the mines in `host.marks`; AUD-F3 — Freeze / Overdrive on the towers they hold (rims, crystals,
@@ -196,7 +205,8 @@ export class ParticleSystem implements BurstHost {
   private readonly ps: Particle[] = [];
   private readonly pulses = new Map<string, number>();
   private readonly captures = new Map<string, { at: number; from: Owner }>();
-  private readonly aims = new Map<string, number>();
+  readonly aims = new Map<string, number>();
+  readonly recoil = new Map<string, { r: number; dx: number; dy: number }>();
   private readonly dustAt = new Map<string, number>();
   private readonly stepAt = new Map<string, number>();
   /** Per tower: last seen `underFireUntilMs`, wall-clock of the last hostile landing and of the last impact ring. */
@@ -207,6 +217,7 @@ export class ParticleSystem implements BurstHost {
   private landAt = -Infinity;
   shakeAt = -Infinity;
   shakeAmp = SHAKE_PX;
+  shakeDir: { x: number; y: number } | null = null;
   private lastMs = 0;
   private salt = 1;
   private warmed = false;
@@ -294,18 +305,23 @@ export class ParticleSystem implements BurstHost {
     return HIT_PX * (1 - t) * Math.sin(t * Math.PI * 3);
   }
 
-  /** Where an artillery tower last fired (screen-space radians); undefined until it shoots. */
+  /** Where an artillery tower's barrel points (map radians; AUD-F11: eased toward its next target by the lazy chunk); undefined until it aims. */
   aimOf(towerId: string): number | undefined {
     return this.aims.get(towerId);
   }
 
-  /** Short decaying screen shake after the player captures a tower (SHAKE_PX) or loses a unit to a mine (2 px, AUD-F2); world only. */
+  /**
+   * Short decaying screen shake after the player captures a tower (SHAKE_PX) or loses a unit to a mine (2 px,
+   * AUD-F2) — or (AUD-F15, `shakeDir`) loses a tower: 2 px back and forth along the line to the attacker; world only.
+   */
   shake(nowMs: number): { dx: number; dy: number } {
     const t = (nowMs - this.shakeAt) / SHAKE_MS;
     if (t < 0 || t >= 1) return { dx: 0, dy: 0 };
     const a = this.shakeAmp * (1 - t) * (1 - t);
     const w = t * Math.PI * 2 * SHAKE_CYCLES;
-    return { dx: Math.sin(w) * a, dy: Math.cos(w * 0.8) * a * 0.5 };
+    const d = this.shakeDir;
+    const s = Math.sin(w) * a;
+    return d ? { dx: d.x * s, dy: d.y * s } : { dx: s, dy: Math.cos(w * 0.8) * a * 0.5 };
   }
 
   /* ----- spawners ----- */
@@ -322,6 +338,7 @@ export class ParticleSystem implements BurstHost {
     if (shake) {
       this.shakeAt = nowMs;
       this.shakeAmp = SHAKE_PX;
+      this.shakeDir = null;
     }
     const lit = tones?.lit ?? shade(color, 0.35);
     const dark = tones?.shade ?? shade(color, -0.25);
@@ -487,24 +504,10 @@ export class ParticleSystem implements BurstHost {
     }
   }
 
-  /** Muzzle flash at the barrel, tracer to the victim, hit spark on impact. */
+  /** Muzzle flash, tracer to the target, hit spark on impact (the airstrike's shells; through the lazy chunk). */
   shot(fromX: number, fromY: number, toX: number, toY: number, color: string): void {
     if (this.reducedMotion) return;
-    const flash = this.make('flash', fromX, fromY, '#fff2a8', 130, 12);
-    this.push(flash);
-    const tracer = this.make('tracer', fromX, fromY, '#fff6c8', 170, 3);
-    tracer.x2 = toX;
-    tracer.y2 = toY;
-    this.push(tracer);
-    const hit = this.make('flash', toX, toY, '#ffd166', 160, 7);
-    this.push(hit);
-    for (let i = 0; i < 5; i++) {
-      const p = this.make('spark', toX, toY, i % 2 ? color : '#ffd166', 280, 2.5);
-      p.vx = (this.rnd() - 0.5) * 160;
-      p.vy = -this.rnd() * 140;
-      p.gravity = 320;
-      this.push(p);
-    }
+    this.burst((b) => b.strike(this, fromX, fromY, toX, toY, color));
   }
 
   /**
@@ -551,7 +554,9 @@ export class ParticleSystem implements BurstHost {
       switch (ev.type) {
         case 'capture': {
           const t = state.towers[ev.towerId];
-          if (t) this.capture(t.x, t.y, pal.owners[ev.by], t.id, ev.from, nowMs, ev.by === 'player', pal.ownerTones[ev.by]);
+          if (!t) break;
+          this.capture(t.x, t.y, pal.owners[ev.by], t.id, ev.from, nowMs, ev.by === 'player', pal.ownerTones[ev.by]);
+          economy?.captured(this, state, t, ev, nowMs); // AUD-F13 reduced-motion halo, AUD-F15 a lost tower (lazy chunk)
           break;
         }
         case 'landed': {
@@ -569,24 +574,9 @@ export class ParticleSystem implements BurstHost {
           break;
         }
         case 'unitDied': {
-          // AUD-F2: a mine kill bursts at its mine (lazy chunk; the grey puff until it is in)
-          if (ev.cause === 'mine' && economy?.mine(this, state, ev.x, ev.y, ev.owner === 'player', pal, nowMs)) break;
+          // AUD-F2: a mine kill bursts at its mine, AUD-F11: an artillery kill is the gun's shot (lazy chunk; the grey puff until it is in)
+          if (ev.cause === 'mine' ? economy?.mine(this, state, ev.x, ev.y, ev.owner === 'player', pal, nowMs) : ev.cause === 'artillery' && economy?.shell(this, state, ev, pal, nowMs)) break;
           this.death(ev.x, ev.y);
-          if (ev.cause === 'artillery') {
-            const gun = nearestGun(state, ev.x, ev.y, ev.owner);
-            if (gun) {
-              const a = Math.atan2(ev.y - 6 - (gun.y - 26), ev.x - gun.x);
-              this.aims.set(gun.id, a);
-              // ART-22: the shell leaves the barrel as drawn — the projected gun plus the sprite's muzzle
-              // offset (at the aim draw.ts gives the barrel) × depth, in screen space, carried back to the
-              // map point that projects there (so the flash and the tracer's start sit on the muzzle)
-              const cam = playCamera();
-              const g = proj(cam, gun.x, gun.y);
-              const m = artilleryMuzzle(gun.level, projAngle(cam, gun.x, gun.y, a));
-              const o = unproj(cam, g.x + m.dx * g.s, g.y + m.dy * g.s);
-              this.shot(o.x, o.y, ev.x, ev.y - 6, pal.owners[gun.owner]);
-            }
-          }
           break;
         }
         case 'upgrade': {
@@ -740,20 +730,7 @@ export class ParticleSystem implements BurstHost {
           ctx.arc(p.x, p.y, p.size * (0.6 + t), 0, Math.PI * 2);
           ctx.fill();
           break;
-        case 'tracer': {
-          // both ends through the camera (a shell's flight is a straight line on the screen too)
-          const a = project ? project(p.x, p.y) : p;
-          const b = project ? project(p.x2, p.y2) : { x: p.x2, y: p.y2 };
-          ctx.globalAlpha = fade;
-          ctx.strokeStyle = p.color;
-          ctx.lineWidth = project ? p.size * project(p.x, p.y).s : p.size;
-          ctx.lineCap = 'round';
-          ctx.beginPath();
-          ctx.moveTo(a.x, a.y);
-          ctx.lineTo(b.x, b.y);
-          ctx.stroke();
-          break;
-        }
+        case 'tracer':
         case 'coin':
         case 'gem':
           economy?.draw(ctx, p, t, fade);
@@ -762,20 +739,4 @@ export class ParticleSystem implements BurstHost {
     }
     ctx.restore();
   }
-}
-
-/** The hostile artillery tower that most plausibly shelled a unit at (x, y). */
-function nearestGun(state: GameState, x: number, y: number, victim: Owner): Tower | null {
-  let best: Tower | null = null;
-  let bestD = C.ARTILLERY_RANGE + C.UNIT_SPEED * 0.1;
-  for (const id in state.towers) {
-    const t = state.towers[id]!;
-    if (t.kind !== 'artillery' || t.owner === 'neutral' || t.owner === victim) continue;
-    const d = Math.hypot(t.x - x, t.y - y);
-    if (d <= bestD) {
-      bestD = d;
-      best = t;
-    }
-  }
-  return best;
 }

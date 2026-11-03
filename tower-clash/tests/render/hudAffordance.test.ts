@@ -193,8 +193,8 @@ describe('AUD-U10: the result screen ignores the dimmed band', () => {
     }
     await new Promise((r) => setTimeout(r, 0));
     expect(went).toEqual([]);
-    screen.down(centre(RESULT.menu));
-    screen.up(centre(RESULT.menu));
+    screen.down(centre(RESULT.loss.menu)); // AUD-U14: a defeat's MENU is on the top row
+    screen.up(centre(RESULT.loss.menu));
     await expect.poll(() => went).toEqual(['levels']);
   });
 });

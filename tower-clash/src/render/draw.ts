@@ -753,11 +753,12 @@ function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState
     const shake = hint && !ui.limitHint?.towerId && ui.selectedTowerId === t.id && motion ? snapToDevice(hint.shake, dev) : 0;
     if (shake) ctx.translate(shake, 0);
     const aim = fx?.aimOf(t.id);
+    const kick = fx?.recoil.get(t.id); // AUD-F11: a gun's recoil — the barrel slides back, the tower nudges 1 px
     const look = standing(cam, t);
     // ART-24 zoom about the anchor through the canvas transform: on the flat map the PERF-4 cache bakes
     // every building at the one zoomed scale (crisp, no new keys); camera depth stays a draw-time scale
     ctx.save();
-    ctx.translate(look.x, look.y);
+    ctx.translate(look.x + (kick?.dx ?? 0), look.y + (kick?.dy ?? 0));
     ctx.scale(WORLD_ZOOM.tower, WORLD_ZOOM.tower);
     ctx.translate(-look.x, -look.y);
     drawTowerSprite(ctx, pal, look, {
@@ -768,6 +769,7 @@ function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState
       squash: fx?.towerSquash(t.id, nowMs) ?? 1,
       wipe: fx?.towerWipe(t.id, nowMs) ?? undefined,
       aim: aim === undefined ? undefined : projAngle(cam, t.x, t.y, aim),
+      recoil: kick?.r,
       skin: t.owner === 'player' ? skin : undefined,
       scale: look.s === 1 ? undefined : look.s,
     });

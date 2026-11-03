@@ -80,8 +80,12 @@ export interface HudExtras {
   streams?: number;
   /** AUD-U9: a first-time save on levels 1–4 (`PlayScreen.bare`): no booster bar and no coin pill. */
   bare?: boolean;
-  /** Gold + crystal balances (drawn over the booster bar once the level is over, in the disabled style: no tap, AUD-U10). */
-  wallet?: { gold: number; crystals: number };
+  /**
+   * Gold + crystal balances (drawn over the booster bar once the level is over, in the disabled style: no tap, AUD-U10);
+   * AUD-F14: counting in step with the result card, and `bottom` — the bottom band's anchor (`hudAnchors`) the
+   * card's coins fly to.
+   */
+  wallet?: { gold: number; crystals: number; bottom?: number };
   /** Economy rows on the result card (ECONOMY.md §3.4, §3.5, §5.2). */
   result?: ResultExtras;
   /** Result-card rect currently held down. */
@@ -479,7 +483,8 @@ export function selectHintText(part: 0 | 1): string {
 
 /**
  * AUD-U2 / U12: the select hint (`selectHintText`) at 22 px (× text size), never squeezed: one line
- * where it fits the 660 px text width, else wrapped between words; the pill is the widest line +
+ * where it fits the 660 px text width, else wrapped between words into at most two lines (every
+ * half fits one at 150 %, tests/render/selectHintFit.test.ts); the pill is the widest line +
  * 2 × `padX` (≤ 700) by lines × pitch + `padY`. Memoised per canvas on the font and text (drawn every
  * frame while a tower is selected). Leaves the hint font set on `ctx`.
  */
@@ -491,7 +496,7 @@ export function selectHintBox(ctx: CanvasRenderingContext2D, part: 0 | 1 = 0): S
   const hit = hintBoxes.get(ctx);
   if (hit?.key === key) return hit.box;
   const maxText = SELECT_HINT.maxW - 2 * SELECT_HINT.padX;
-  const lines = wrapText(ctx, text, maxText, 8);
+  const lines = wrapText(ctx, text, maxText, 2);
   const lineH = Math.round(textPx(SELECT_HINT.px, SELECT_HINT.maxPx) * 1.18);
   const w = Math.min(SELECT_HINT.maxW, Math.max(...lines.map((l) => ctx.measureText(l).width)) + 2 * SELECT_HINT.padX);
   const box = { lines, lineH, w, h: lines.length * lineH + SELECT_HINT.padY };
@@ -880,9 +885,11 @@ function drawPlainResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui
   ctx.font = font(30);
   ctx.fillText(t('result.time', { time: formatTime(clockOf(ui, state)) }), 360, card.y + (won ? 200 : 190), card.w - 60);
   if (won) drawStars(ctx, pal, 360, card.y + 272, ui.stars, 38);
-  drawButton(ctx, pal, RESULT.next, t('common.next'), { fill: won ? pal.owners.player : undefined, disabled: !won || !ui.hasNext, fontPx: 26, pressed: pressed === RESULT.next });
-  drawButton(ctx, pal, RESULT.retry, t('common.retry'), { fontPx: 26, pressed: pressed === RESULT.retry });
-  drawButton(ctx, pal, RESULT.menu, t('common.menu'), { fontPx: 26, pressed: pressed === RESULT.menu });
+  // AUD-U14: a defeat's RETRY / MENU are on the top row (RESULT.loss), RETRY blue, and it has no NEXT
+  const b = won ? RESULT : RESULT.loss;
+  if (won) drawButton(ctx, pal, RESULT.next, t('common.next'), { fill: pal.owners.player, disabled: !ui.hasNext, fontPx: 26, pressed: pressed === RESULT.next });
+  drawButton(ctx, pal, b.retry, t('common.retry'), { fill: won ? undefined : pal.owners.player, fontPx: 26, pressed: pressed === b.retry });
+  drawButton(ctx, pal, b.menu, t('common.menu'), { fontPx: 26, pressed: pressed === b.menu });
   // the offers the result screen hit-tests (ResultScreen.rects) stay visible as plain buttons
   const ex = extrasOf(ui)?.result;
   if (!ex) return;

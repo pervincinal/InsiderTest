@@ -149,7 +149,11 @@ export class Synth {
   /**
    * Create the context on first call and resume it if the browser started it suspended.
    * Must be called from a user gesture handler (pointerdown/keydown). Safe to call repeatedly.
-   * Returns true once a context exists.
+   * Returns true once a context exists. AUD-Q19: this is also what ends an iOS `interrupted` state
+   * (a phone call, Siri, an alarm, the rewarded video's own audio took the output) — WebKit resumes
+   * only inside a gesture; while it lasts the clock stands still, so the SFX player (src/audio/sfx.ts)
+   * refuses sounds and the music loop (src/audio/music.ts) schedules nothing, or they would play in a
+   * burst at this resume.
    */
   unlock(): boolean {
     if (!this.ctx) {

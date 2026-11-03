@@ -4,8 +4,9 @@ import { shade } from './palette';
 import type { View } from './view';
 import { hudAnchors } from './view';
 import type { Rect } from './widgets';
-import { clipText, drawButton, drawCard, drawExtrudedText, drawGlassBand, drawPill, drawRoundButton, drawTrophyGlyph, fitFontPx, font, roundRect } from './widgets';
-import { ACHIEVEMENTS_LAYOUT, bandedContentBottom } from './menuLayout';
+import { clipText, drawButton, drawCard, drawGlassBand, drawPill, drawRoundButton, drawTrophyGlyph, fitFontPx, font, roundRect } from './widgets';
+import { ACHIEVEMENTS_LAYOUT, MENU_HEADERS, bandedContentBottom } from './menuLayout';
+import { drawHeaderTitle } from './menuWidgets';
 import type { ToastOpts } from './economyWidgets';
 import { drawToast } from './economyWidgets';
 import { drawCrystal } from './sprites';
@@ -121,8 +122,7 @@ export function drawAchievements(view: View, pal: Palette, o: AchievementsOpts):
   ctx.save();
   ctx.translate(0, a.top);
   drawButton(ctx, pal, o.backRect, t('common.back'), { fontPx: 24, pressed: o.pressed === o.backRect });
-  const title = t('achievements.title');
-  drawExtrudedText(ctx, title, 430, 50, fitFontPx(ctx, title, 34, 500), { face: pal.paper, side: shade(pal.owners.player, -0.25), outline: pal.ink, depth: 4 });
+  drawHeaderTitle(ctx, pal, t('achievements.title'), MENU_HEADERS.achievements); // AUD-U13
   drawPill(ctx, L.summary, pal.paper);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';

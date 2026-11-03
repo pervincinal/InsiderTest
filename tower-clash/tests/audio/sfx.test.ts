@@ -569,3 +569,56 @@ describe('AUD-F10 tank landing', () => {
     expect(ctx.voices()).toHaveLength(2);
   });
 });
+
+describe('AUD-F11 artillery weight / AUD-F15 a lost tower', () => {
+  beforeEach(() => {
+    unlockAudio();
+  });
+
+  it('artillery: the boom and its noise over a 40 ms triangle thump (3 voices, ≤ 4)', () => {
+    ctx.currentTime = 1;
+    expect(playSfx('artillery')).toBe(true);
+    expect(ctx.voices()).toHaveLength(3);
+    const thump = ctx.oscillators.find((o) => o.type === 'triangle')!;
+    expect(thump.stopAt! - thump.startAt!).toBeCloseTo(0.04, 9);
+    expect(thump.frequency.events[0]!.value).toBeLessThan(200); // a low thump, not a click
+    expect(ctx.oscillators.find((o) => o.type === 'sine')!.frequency.events[0]!.value).toBeGreaterThan(150); // the boom is kept
+  });
+
+  it('capture loss: a short low thud — a falling triangle under the hit knock, ≤ 180 ms, 3 voices', () => {
+    ctx.currentTime = 1;
+    playSfx('capture', { capture: 'loss' });
+    expect(ctx.voices()).toHaveLength(3);
+    expect(longestVoiceS()).toBeLessThanOrEqual(0.18 + 1e-9);
+    const tri = ctx.oscillators.find((o) => o.type === 'triangle')!;
+    const start = tri.frequency.events[0]!.value;
+    expect(start).toBeGreaterThanOrEqual(150); // above the phone-speaker floor…
+    expect(start).toBeLessThan(320 * 0.67); // …and under even the tank's hit knock
+    expect(tri.frequency.events.at(-1)!.value).toBeLessThan(start / 2); // falling
+  });
+
+  it('losing a tower through the facade: the thud only (no hit knock) and a medium haptic', async () => {
+    const medium: (boolean | undefined)[] = [];
+    ctx = new FakeAudioContext();
+    const s = defaultSave();
+    s.settings.music = false;
+    initAudio(s, { factory: () => ctx, persist: () => undefined, haptic: (m) => medium.push(m) });
+    await loadSfxRecipes();
+    unlockAudio();
+    const state = createState(makeLevel(), 1);
+    state.towers.p!.owner = 'enemy1';
+    onSimEvents([{ type: 'capture', towerId: 'p', by: 'enemy1', from: 'player' }], state);
+    expect(ctx.voices()).toHaveLength(3);
+    expect(ctx.filters.map((f) => f.type)).not.toContain('bandpass'); // the knock's crack
+    expect(medium).toEqual([true]);
+    // a hostile landing still knocks, with a light haptic
+    state.towers.e!.owner = 'enemy1';
+    state.towers.p!.owner = 'player';
+    ctx.clear();
+    ctx.currentTime += 1;
+    await new Promise((r) => setTimeout(r, 300)); // the per-tower hit limit is on the wall clock
+    onSimEvents([{ type: 'landed', towerId: 'p', owner: 'enemy1', weight: 1, hostile: true }], state);
+    expect(ctx.filters.map((f) => f.type)).toContain('bandpass');
+    expect(medium).toEqual([true, false]);
+  });
+});

@@ -15,6 +15,12 @@ export const RESULT_TIMELINE = Object.freeze({
   goldMs: 900,
   goldCountMs: 800,
   goldPopMs: 1700,
+  /**
+   * AUD-F14: WALLET_COINS coins fly from the card's gold line to the wallet, each over `coinFlyMs`, the i-th
+   * leaving at `goldMs + i × coinGapMs` — so the last one lands as the count ends (900 + 2 × 250 + 300 = 1700).
+   */
+  coinFlyMs: 300,
+  coinGapMs: 250,
 });
 
 /** `easeOutBack`'s overshoot constant (hudOverlays.ts) and where the curve first reaches 1: 1 − c1 / (c1 + 1) ≈ 0.370. */
@@ -63,4 +69,23 @@ export function goldShown(since: number, coins: number): number {
 export function goldStepMs(n: number, coins: number): number {
   const T = RESULT_TIMELINE;
   return T.goldMs + T.goldCountMs * (1 - Math.cbrt(1 - Math.min(1, (n - 0.5) / coins)));
+}
+
+/** AUD-F14: how many coins fly to the wallet during the count-up. */
+export const WALLET_COINS = 3;
+
+/**
+ * AUD-F14: the wallet balance shown at `since` — `total` (the save's, the reward already in) less the part of
+ * `earned` the card has not counted yet: the pre-match balance until the count-up starts, then in step with
+ * the card's label (`goldShown`), the new total from its end on.
+ */
+export function walletShown(since: number, total: number, earned: number): number {
+  return Math.max(0, total - earned + goldShown(since, earned));
+}
+
+/** AUD-F14: coin `i`'s flight progress at `since` (0..1), or null while it is not in the air. */
+export function walletCoinT(since: number, i: number): number | null {
+  const T = RESULT_TIMELINE;
+  const k = (since - T.goldMs - i * T.coinGapMs) / T.coinFlyMs;
+  return k >= 0 && k < 1 ? k : null;
 }

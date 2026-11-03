@@ -67,7 +67,7 @@ export function startSaveMirror(): Promise<RestoreOutcome> {
     });
 }
 
-let haptics: { plugin: HapticsModule['Haptics']; light: HapticsModule['ImpactStyle']['Light'] } | null =
+let haptics: { plugin: HapticsModule['Haptics']; light: HapticsModule['ImpactStyle']['Light']; medium: HapticsModule['ImpactStyle']['Medium'] } | null =
   null;
 let lastHapticAt = -Infinity;
 const HAPTIC_MIN_INTERVAL_MS = 150;
@@ -106,7 +106,7 @@ export async function initNative(hooks: NativeHooks): Promise<void> {
   }
 
   if (hapticsMod.status === 'fulfilled') {
-    haptics = { plugin: hapticsMod.value.Haptics, light: hapticsMod.value.ImpactStyle.Light };
+    haptics = { plugin: hapticsMod.value.Haptics, light: hapticsMod.value.ImpactStyle.Light, medium: hapticsMod.value.ImpactStyle.Medium };
   } else {
     warn('@capacitor/haptics', hapticsMod.reason);
   }
@@ -136,16 +136,16 @@ export async function initNative(hooks: NativeHooks): Promise<void> {
 }
 
 /**
- * Light haptic tick for a tower capture. No-op on the web or before `initNative` finished;
- * rate-limited to one impact per 150 ms so mass captures do not turn into a continuous buzz.
+ * Light haptic tick for a tower capture (`medium`: AUD-F15, the player lost one). No-op on the web or before
+ * `initNative` finished; rate-limited to one impact per 150 ms so mass captures do not turn into a continuous buzz.
  */
-export function hapticCapture(): void {
+export function hapticCapture(medium = false): void {
   if (!haptics) return;
   const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
   if (now - lastHapticAt < HAPTIC_MIN_INTERVAL_MS) return;
   lastHapticAt = now;
   try {
-    haptics.plugin.impact({ style: haptics.light }).catch(() => undefined);
+    haptics.plugin.impact({ style: medium ? haptics.medium : haptics.light }).catch(() => undefined);
   } catch {
     /* haptics unavailable on this device — silently ignore */
   }

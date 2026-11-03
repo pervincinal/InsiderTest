@@ -122,8 +122,13 @@ export class MusicLoop {
     this.timer = setInterval(() => this.tick(), TICK_MS);
   }
 
-  /** Schedule every step that starts before now + LOOKAHEAD_S. */
+  /**
+   * Schedule every step that starts before now + LOOKAHEAD_S. Nothing while the OS holds the context (AUD-Q19,
+   * iOS `interrupted`: a call, Siri, an alarm): the clock stands still, and after the resume on the next gesture
+   * the late-wake-up rule below re-joins the grid at its next step instead of replaying what the hold skipped.
+   */
   tick(): void {
+    if (this.synth.context?.state === 'interrupted') return;
     const now = this.synth.now();
     const recent = now - this.synth.playAt < PLAY_GAP_S;
     if (!recent) this.mix.ended = false; // the result screen took over: the next match plays the pulse again

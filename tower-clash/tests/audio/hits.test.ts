@@ -31,9 +31,9 @@ function run(st: HitState, events: SimEvent[], nowMs: number): number[] {
 }
 
 describe('playHits (AUD-F1 limiter)', () => {
-  it('fires for a hostile landing on a player tower and for a lost player tower, with the landing weight', () => {
+  it('fires for a hostile landing on a player tower (the landing weight) and for a lost player tower (weight 0, AUD-F15)', () => {
     expect(run(fresh(), [land('a', 5)], 0)).toEqual([5]);
-    expect(run(fresh(), [{ type: 'capture', towerId: 'e', by: 'enemy1', from: 'player' }], 0)).toEqual([1]);
+    expect(run(fresh(), [{ type: 'capture', towerId: 'e', by: 'enemy1', from: 'player' }], 0)).toEqual([0]);
   });
 
   it('ignores reinforcements, landings on enemy / neutral towers and captures the player did not lose', () => {

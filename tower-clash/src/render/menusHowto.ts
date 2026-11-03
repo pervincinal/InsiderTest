@@ -4,9 +4,10 @@ import { shade } from './palette';
 import type { View } from './view';
 import { hudAnchors } from './view';
 import type { Rect } from './widgets';
-import { drawButton, drawCard, drawExtrudedText, drawGlassBand, fitFontPx, fitTextLines, font, getTextScale, roundRect, wrapText } from './widgets';
+import { drawButton, drawCard, drawGlassBand, fitTextLines, font, getTextScale, roundRect, wrapText } from './widgets';
 import { badgeY, drawBadge, drawSwordsPip, drawTowerShadow, drawTowerSprite } from './sprites';
-import { HOWTO, howtoIconRect, howtoRowRect, howtoRowShift } from './menuLayout';
+import { HOWTO, MENU_HEADERS, howtoIconRect, howtoRowRect, howtoRowShift } from './menuLayout';
+import { drawHeaderTitle } from './menuWidgets';
 import { beginFrame, drawWater, headerBand } from './menus';
 import type { TranslationKey } from '../ui/i18n';
 import { t } from '../ui/i18n';
@@ -347,8 +348,7 @@ export function drawHowTo(view: View, pal: Palette, o: HowToOpts): number[] {
   ctx.save();
   ctx.translate(0, a.top);
   drawButton(ctx, pal, HOWTO.back, t('common.back'), { fontPx: 24, pressed: o.pressed === HOWTO.back });
-  const title = t('howto.title');
-  drawExtrudedText(ctx, title, 360, 50, fitFontPx(ctx, title, 40, 380), { face: pal.paper, side: shade(pal.owners.player, -0.25), outline: pal.ink, depth: 4 });
+  drawHeaderTitle(ctx, pal, t('howto.title'), MENU_HEADERS.howto); // AUD-U13
   ctx.restore();
   ctx.restore();
   return counts;

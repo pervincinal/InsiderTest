@@ -26,7 +26,8 @@ import {
 import type { BadgeWant } from '../../src/render/worldChips';
 import { lessonCardLayout } from '../../src/render/hud';
 import type { PlayUi } from '../../src/render/draw';
-import { ParticleSystem } from '../../src/render/particles';
+import { ParticleSystem, loadEconomyBursts } from '../../src/render/particles';
+import { AIM_MS, aimAngle } from '../../src/render/combatFx';
 import { DEFAULT_PALETTE } from '../../src/render/palette';
 import { createState } from '../../src/sim/create';
 import type { GameState } from '../../src/sim/types';
@@ -416,7 +417,8 @@ describe('artillery shells leave the barrel under the camera (ART-22)', () => {
     ['mid', 640],
     ['near', 1100],
   ] as const) {
-    it(`the trace starts at the drawn muzzle (${name} gun)`, () => {
+    it(`the trace starts at the drawn muzzle (${name} gun)`, async () => {
+      await loadEconomyBursts(); // AUD-F11: the shot is the lazy chunk's
       const level = makeLevel({
         towers: [
           { id: 'p', x: 360, y: 1150, owner: 'player', units: 10, level: 1 },
@@ -424,25 +426,32 @@ describe('artillery shells leave the barrel under the camera (ART-22)', () => {
         ],
       });
       const state = createState(level, 1);
-      const fx = new ParticleSystem(false);
-      const shot = vi.spyOn(fx, 'shot');
       const ev = { type: 'unitDied' as const, x: 400, y: y + 60, owner: 'player' as const, cause: 'artillery' as const, roadId: 'g-p' };
-      fx.onEvents([ev], state, DEFAULT_PALETTE, 0);
-      expect(shot).toHaveBeenCalledTimes(1);
-      const [fromX, fromY, toX, toY] = shot.mock.calls[0]!;
-      expect([toX, toY]).toEqual([400, y + 54]);
+      const layout = { chips: [], badges: new Map(), bodies: new Map() };
+      // the tracer (screen space) of one unanticipated shot: it fires once the barrel has turned (AIM_MS)
+      const tracer = (): number[] => {
+        const fx = new ParticleSystem(false);
+        const make = vi.spyOn(fx, 'make');
+        fx.onEvents([ev], state, DEFAULT_PALETTE, 0);
+        fx.drawMarks(fakeCtx(), DEFAULT_PALETTE, state, layout, AIM_MS, playCamera());
+        expect(fx.aimOf('g')).toBeCloseTo(aimAngle({ x: 300, y }, 400, y + 60), 9);
+        const call = make.mock.calls.find((c) => c[0] === 'tracer')!;
+        const p = make.mock.results[make.mock.calls.indexOf(call)]!.value as { x2: number; y2: number };
+        return [call[1], call[2], p.x2, p.y2];
+      };
       const cam = playCamera();
+      const [fromX, fromY, toX, toY] = tracer();
+      const v = proj(cam, 400, y + 54);
+      expect(toX).toBeCloseTo(v.x, 9);
+      expect(toY).toBeCloseTo(v.y, 9);
       const g = proj(cam, 300, y);
-      const aim = fx.aimOf('g')!;
+      const aim = aimAngle({ x: 300, y }, 400, y + 60);
       const m = artilleryMuzzle(2, projAngle(cam, 300, y, aim));
-      const o = proj(cam, fromX, fromY);
-      expect(o.x).toBeCloseTo(g.x + m.dx * g.s, 6);
-      expect(o.y).toBeCloseTo(g.y + m.dy * g.s, 6);
+      expect(fromX).toBeCloseTo(g.x + m.dx * g.s, 6);
+      expect(fromY).toBeCloseTo(g.y + m.dy * g.s, 6);
       // on the flat map it is the plain sprite offset
       setTilt(0);
-      shot.mockClear();
-      fx.onEvents([ev], state, DEFAULT_PALETTE, 0);
-      const flat = shot.mock.calls[0]!;
+      const flat = tracer();
       const mf = artilleryMuzzle(2, aim);
       expect(flat[0]).toBeCloseTo(300 + mf.dx, 9);
       expect(flat[1]).toBeCloseTo(y + mf.dy, 9);

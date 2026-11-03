@@ -119,9 +119,10 @@ export class SfxPlayer {
 
   constructor(private readonly synth: Synth) {}
 
-  /** Returns true when the sound was actually scheduled (false: muted, no context, recipes not loaded yet, rate-limited). */
+  /** Returns true when the sound was actually scheduled (false: muted, no context, the OS holds the context (AUD-Q19), recipes not loaded yet, rate-limited). */
   play(name: SfxName, opts: SfxOptions = {}): boolean {
-    const c = this.synth.context && !this.synth.muted ? sfxNow() : null;
+    const v = this.synth.live(); // a context, Effects on
+    const c = v && v.ctx.state !== 'interrupted' ? sfxNow() : null;
     if (!c || !c.rateOk(this.last, name, this.synth.now())) return false;
     c.playRecipe(this.synth, name, opts);
     return true;

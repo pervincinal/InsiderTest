@@ -1,7 +1,8 @@
 import type { ButtonInk, Palette } from './palette';
 import { shade } from './palette';
 import type { Rect, Segment } from './widgets';
-import { BUTTON_EDGE, PRESS_DROP, SHADOW_INK, drawButton, drawRoundButton, fitFontPx, font, inRect, innerHighlight, roundRect } from './widgets';
+import { BUTTON_EDGE, PRESS_DROP, SHADOW_INK, clipText, drawButton, drawExtrudedText, drawRoundButton, fitFontPx, font, inRect, innerHighlight, roundRect, textPx } from './widgets';
+import type { HeaderSlot } from './menuLayout';
 import { t } from '../ui/i18n';
 
 /*
@@ -9,6 +10,43 @@ import { t } from '../ui/i18n';
  * widgets.ts so they stay off the eager chunk (scripts/checkBundle.mjs budget, PERF-1 / PERF-3 /
  * PERF-5). `drawStar` stays eager: the HUD's plain result card (`drawStars`) and the lazy result card's `drawStarPop` (hudOverlays.ts) draw through it.
  */
+
+/** AUD-U13: clear space between a header title's box and BACK / the wallet, and the title's extrusion depth (layout px). */
+export const HEADER_TITLE = Object.freeze({ pad: 10, depth: 4, y: 50 });
+
+/** A fitted header title (`headerTitle`): the text drawn (maybe ending in "…"), the size for `font()`, its centre x, and the box its outline and extrusion fill. */
+export interface HeaderTitle {
+  text: string;
+  px: number;
+  cx: number;
+  box: Rect;
+}
+
+/**
+ * AUD-U13 ("SƏVİYYƏLƏR" ran into the wallet): a menu header title fitted to its slot (`MENU_HEADERS`) —
+ * shrunk to the gap between BACK and `slot.right` less `pad` each side (`fitFontPx`, down to the 22 px
+ * floor), then cut with "…" (`clipText`). The box counts the ink outline (≥ 3 px, 12 % of the drawn size,
+ * half outside the glyphs) and the side layers `depth` to the lower right, and sits centred in the gap.
+ * Leaves the title font set.
+ */
+export function headerTitle(ctx: CanvasRenderingContext2D, title: string, slot: HeaderSlot): HeaderTitle {
+  const { pad, depth, y } = HEADER_TITLE;
+  const x0 = slot.back.x + slot.back.w + pad;
+  const gap = slot.right - pad - x0;
+  const line = (p: number): number => Math.max(3, textPx(p) * 0.12);
+  const px = fitFontPx(ctx, title, slot.px, gap - depth - line(slot.px));
+  ctx.font = font(px, '700');
+  const text = clipText(ctx, title, gap - depth - line(px));
+  const w = ctx.measureText(text).width + line(px) + depth;
+  const drawn = textPx(px);
+  return { text, px, cx: x0 + gap / 2 - depth / 2, box: { x: x0 + (gap - w) / 2, y: y - drawn * 0.6, w, h: drawn * 1.2 + depth } };
+}
+
+/** A menu header's clay title in its slot (AUD-U13, `headerTitle`). */
+export function drawHeaderTitle(ctx: CanvasRenderingContext2D, pal: Palette, title: string, slot: HeaderSlot): void {
+  const h = headerTitle(ctx, title, slot);
+  drawExtrudedText(ctx, h.text, h.cx, HEADER_TITLE.y, h.px, { face: pal.paper, side: shade(pal.owners.player, -0.25), outline: pal.ink, depth: HEADER_TITLE.depth });
+}
 
 /**
  * Segmented control on a clay button face: `active` segment is a raised blue pill with paper

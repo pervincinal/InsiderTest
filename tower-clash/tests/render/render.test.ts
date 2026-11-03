@@ -6,7 +6,7 @@ import { drawGuideLines, GUIDE_LINE_ALPHA, GUIDE_LINE_DASH, GUIDE_LINE_WIDTH, ro
 import type { TerrainSpec } from '../../src/render/terrain';
 import { getTerrain } from '../../src/render/terrain';
 import type { View } from '../../src/render/view';
-import { ParticleSystem, hostileAttackers } from '../../src/render/particles';
+import { ParticleSystem, hostileAttackers, loadEconomyBursts } from '../../src/render/particles';
 import { badgeY, drawBadge, towerTop } from '../../src/render/sprites';
 import { makeLevel } from '../helpers';
 import { createState } from '../../src/sim/create';
@@ -174,7 +174,8 @@ describe('sprites layout', () => {
 });
 
 describe('particles', () => {
-  it('spawns bursts and drains them over time', () => {
+  it('spawns bursts and drains them over time', async () => {
+    await loadEconomyBursts(); // the airstrike's shells (`shot`) spawn through the lazy chunk (AUD-F11)
     const ps = new ParticleSystem(false);
     ps.capture(100, 100, '#3b82f6');
     ps.death(10, 10);
