@@ -45,8 +45,20 @@ const CARD_TEXT_W = 620;
  * still fit CARD_MAX_LINES (column `@608`). A plain `widest <= 608` would fail about a third of all cards:
  * wrapping at 620 fills every line it can, and a 615 px line that moves one word down is harmless unless the
  * card grows a 4th line. The widest-line check stays at 620, and `slack` is printed against 620.
+ *
+ * QA-34 (2026-11-04): `LESSON_FIT_MARGIN=<px>` overrides the margin for one run, so a stricter probe needs no
+ * temp copy of this spec — the level designer's `LESSON_FIT_MARGIN=20 npx playwright test e2e/lessonFit.spec.ts`
+ * re-wraps at 600 px. Unset (CI, `npm run e2e`) it is DEFAULT_CARD_WRAP_MARGIN (tests/repo/hygiene.test.ts pins
+ * both the default and that no workflow sets the variable). A value that is not a whole number 0–200 fails the run.
  */
-const CARD_WRAP_MARGIN = 12;
+const DEFAULT_CARD_WRAP_MARGIN = 12;
+function cardMarginFromEnv(raw: string | undefined): number {
+  if (raw === undefined || raw.trim() === '') return DEFAULT_CARD_WRAP_MARGIN;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0 || n > 200) throw new Error(`LESSON_FIT_MARGIN must be a whole number of px 0–200, got ${JSON.stringify(raw)}`);
+  return n;
+}
+const CARD_WRAP_MARGIN = cardMarginFromEnv(process.env.LESSON_FIT_MARGIN);
 /** The 18 px fallback's wrap width (failing anyway: it is not the full size). */
 const CARD_FALLBACK_TEXT_W = 640;
 const CARD_PAD_X = 24;
@@ -162,7 +174,7 @@ test('QA-32: every lesson card fits — <= 3 lines at 20 px, no line past the te
   const top = HUD_MAP_TOP + anchors.top;
   const bottom = HUD_MAP_BOTTOM + anchors.bottom;
   const failures: string[] = [];
-  const table: string[] = [`[lesson-fit] 360x640 anchors top ${anchors.top} bottom ${anchors.bottom}; play band ${top}..${bottom}; rule: ${CARD_MAX_LINES} lines at ${CARD_PX} px, widest <= ${CARD_TEXT_W} px, still <= ${CARD_MAX_LINES} lines re-wrapped at ${CARD_TEXT_W} - ${CARD_WRAP_MARGIN} = ${CARD_TEXT_W - CARD_WRAP_MARGIN} px (column @${CARD_TEXT_W - CARD_WRAP_MARGIN}); bundle ${tBundle - t0} ms, boot ${tBoot - tBundle} ms, layout ${tLayout - tBoot} ms`];
+  const table: string[] = [`[lesson-fit] 360x640 anchors top ${anchors.top} bottom ${anchors.bottom}; play band ${top}..${bottom}; rule: ${CARD_MAX_LINES} lines at ${CARD_PX} px, widest <= ${CARD_TEXT_W} px, still <= ${CARD_MAX_LINES} lines re-wrapped at ${CARD_TEXT_W} - ${CARD_WRAP_MARGIN} = ${CARD_TEXT_W - CARD_WRAP_MARGIN} px (column @${CARD_TEXT_W - CARD_WRAP_MARGIN}${CARD_WRAP_MARGIN === DEFAULT_CARD_WRAP_MARGIN ? '' : `, LESSON_FIT_MARGIN=${CARD_WRAP_MARGIN} overrides the default ${DEFAULT_CARD_WRAP_MARGIN}`}); bundle ${tBundle - t0} ms, boot ${tBoot - tBundle} ms, layout ${tLayout - tBoot} ms`];
   table.push(`${'lvl'.padStart(3)} ${'lang'.padEnd(4)} ${'chars'.padStart(5)} ${'px'.padStart(2)} lines ${'widest'.padStart(6)} ${'slack'.padStart(5)} ${`@${CARD_TEXT_W - CARD_WRAP_MARGIN}`.padStart(4)}  card w x h, bottom`);
   for (const r of rows) {
     const widest = Math.max(...r.widths);

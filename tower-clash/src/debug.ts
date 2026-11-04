@@ -1,5 +1,6 @@
-import type { Command, GameState, Tower } from './sim/types';
-import { capacityOf, linksFrom, maxLinksOf, relaysOnward } from './sim/step';
+import type { Command, GameState, Owner, Tower } from './sim/types';
+import { C } from './sim/constants';
+import { hasOverdrive, linksFrom, streamIntervalMs } from './sim/step';
 import { aiModule } from './ui/ai';
 import type { TowerClashApp, TowerClashDebug } from './main';
 import { LEVEL_META, levelIndex } from './levels/index';
@@ -309,36 +310,128 @@ export function installDebug(app: TowerClashApp): TowerClashDebug & QaDebugExtra
 }
 
 /**
- * "Auto lose" (e2e, was PlayScreen.suicideCommands): a stream never drains its source under rules v3 and nothing
- * the player does can weaken an own tower, so the fastest defeat is to stop growing and let the
- * enemy come: every player tower with a free link streams into the strongest hostile tower it
- * has a clear lane to that is not already streaming back on that lane (a counter-stream would
- * cancel the attack 1:1 and protect us), else into a player neighbour. Growth pauses either way.
+ * Lose bot margin (AUD-F19): a fast tower's real stream (below) is cut once its enemy target holds fewer
+ * than this many units beyond what our walking units and our ribbons' next emissions will take, so the
+ * bot never flips an enemy tower (a flip at 0 needs one more landing than the garrison).
+ */
+export const LOSE_BOT_MARGIN = 2;
+
+function isEnemyOwner(owner: Owner): boolean {
+  return owner === 'enemy1' || owner === 'enemy2' || owner === 'enemy3';
+}
+
+/** Towers `id` has a lane to (rules v3: every clear pair of towers), sorted by id so the bot is deterministic. */
+function laneNeighbours(state: GameState, id: string): Tower[] {
+  const out: Tower[] = [];
+  for (const r of Object.values(state.roads)) {
+    const otherId = r.a === id ? r.b : r.b === id ? r.a : null;
+    const other = otherId ? state.towers[otherId] : undefined;
+    if (other) out.push(other);
+  }
+  return out.sort((p, q) => (p.id < q.id ? -1 : p.id > q.id ? 1 : 0));
+}
+
+/** Lane hops from every tower to the nearest enemy tower (absent = unreachable). */
+function hopsToEnemy(state: GameState): Map<string, number> {
+  const hops = new Map<string, number>();
+  const queue: string[] = [];
+  for (const t of Object.values(state.towers)) {
+    if (!isEnemyOwner(t.owner)) continue;
+    hops.set(t.id, 0);
+    queue.push(t.id);
+  }
+  for (let i = 0; i < queue.length; i++) {
+    const id = queue[i]!;
+    const d = hops.get(id)!;
+    for (const n of laneNeighbours(state, id)) {
+      if (hops.has(n.id)) continue;
+      hops.set(n.id, d + 1);
+      queue.push(n.id);
+    }
+  }
+  return hops;
+}
+
+/**
+ * True when a ribbon of `t` started now would emit before the next AI tick: its stream interval
+ * (÷ OVERDRIVE_MUL under the player's overdrive) is at most C.AI_TICK_MS — an L3 barracks (500 ms).
+ */
+export function emitsWithinAiTick(state: GameState, t: Tower): boolean {
+  const interval = streamIntervalMs(t, state) / (hasOverdrive(state, t.owner) ? C.OVERDRIVE_MUL : 1);
+  return interval <= C.AI_TICK_MS;
+}
+
+/**
+ * "Auto lose" (e2e `economy.autoLose()`, the continue / daily / weekly unit tests). AUD-F19 (2026-11-04):
+ * the previous line streamed every tower into its strongest hostile neighbour — neutrals included — and
+ * under rules v3 a stream never drains its source, so it captured neutrals, pinned the enemy's towers
+ * under fire and *won* levels 2, 4, 6, 7, 8, 22, 44, 50 (and froze 5). A player cannot weaken its own
+ * towers, so the loss has to come from the enemy: the bot must stop its own growth (a linked tower does
+ * not grow, rules v3 rule 5) while landing nothing anywhere. It does that with a **held ribbon**:
+ *
+ * - Every AI tick (C.AI_TICK_MS) each player tower drops its ribbons and opens one again. A new link starts
+ *   with an empty emission timer (`emitAccMs = 0`, sim/commands.ts `link`) and a tower's first unit leaves
+ *   one stream interval later — 1000 ms at L1, 700 ms at L2, ≥ 2000 ms for a tank factory, all longer than
+ *   the 500 ms the ribbon lives — so the tower stays linked (no growth, no auto-upgrade) and sends nothing:
+ *   no neutral is captured, no enemy tower is hurt or put under fire, no enemy stream is shielded.
+ * - The held ribbon goes to the strongest enemy neighbour that is not streaming at this tower (on that lane
+ *   the enemy AI would read our ribbon as a shield and give the attack up), else to the strongest neutral no
+ *   rival is taking (the AI would read a contest there), else to the own neighbour farthest from the enemy;
+ *   a tower with none of these keeps growing.
+ * - A tower whose ribbon would emit within one AI tick (`emitsWithinAiTick`: L3 barracks, overdrive) cannot be
+ *   held for free, so it runs a real stream into the strongest enemy tower on a clear lane (one that does not
+ *   stream back), never into a neutral, and cuts it once the target holds < LOSE_BOT_MARGIN beyond our walking
+ *   units and ribbons, or turned neutral / ours, or started streaming back; with no such target it is left
+ *   unlinked (an L3 is at or near its cap and gains little).
+ *
+ * Headless (seeds 1–3, ×1 sim, 2026-11-04): every level 1–50 is lost, levels 1–16 within 26–63 s (level 1's
+ * turtle comes for the frozen home at ≈ 51 s); tests/ui/autoLose.test.ts pins levels 2–8 under 90 s and that
+ * a held tower sends nothing. If the sim ever carries a link's timer over a re-link, that test fails first.
  */
 export function suicideCommands(state: GameState): Command[] {
   const cmds: Command[] = [];
-  const neighbours = (id: string): Tower[] => {
-    const out: Tower[] = [];
-    for (const r of Object.values(state.roads)) {
-      const otherId = r.a === id ? r.b : r.b === id ? r.a : null;
-      const other = otherId ? state.towers[otherId] : undefined;
-      if (other) out.push(other);
-    }
-    return out;
-  };
+  const hops = hopsToEnemy(state);
   const streamsInto = (from: string, to: string): boolean => state.links.some((l) => l.from === from && l.to === to);
-  for (const t of Object.values(state.towers)) {
-    if (t.owner !== 'player' || t.units <= 0 || linksFrom(state, t.id).length >= maxLinksOf(t)) continue;
-    let best: { to: string; score: number } | null = null;
-    for (const other of neighbours(t.id)) {
-      if (streamsInto(t.id, other.id) || streamsInto(other.id, t.id)) continue;
-      // RELAY-1: a stream into an own full tower that streams onward would be a supply line and feed the attack
-      if (other.owner === 'player' && other.units >= capacityOf(other, state) && relaysOnward(state, other)) continue;
-      // a hostile target first (the strongest, so our trickle matters least); a player neighbour only pauses growth
-      const score = other.owner === 'player' ? -1 : (other.owner === 'neutral' ? 0 : 1000) + other.units;
-      if (!best || score > best.score) best = { to: other.id, score };
+  // weight our walking units and our ribbons' next emissions will land on `to`
+  const pressure = (to: string): number => {
+    let w = 0;
+    for (const u of state.units) if (u.owner === 'player' && u.to === to) w += u.weight;
+    for (const l of state.links) {
+      if (l.owner !== 'player' || l.to !== to) continue;
+      const from = state.towers[l.from];
+      w += from && from.kind === 'tankFactory' && from.units >= C.TANK_WEIGHT ? C.TANK_WEIGHT : C.INFANTRY_WEIGHT;
     }
-    if (best) cmds.push({ type: 'link', owner: 'player', from: t.id, to: best.to });
+    return w;
+  };
+  const strongest = (towers: Tower[]): Tower | undefined => towers.reduce<Tower | undefined>((best, t) => (!best || t.units > best.units ? t : best), undefined);
+  for (const t of Object.values(state.towers)) {
+    if (t.owner !== 'player') continue;
+    const own = linksFrom(state, t.id).filter((l) => l.owner === 'player');
+    const lanes = laneNeighbours(state, t.id);
+    if (emitsWithinAiTick(state, t)) {
+      const fair = (to: Tower, extra: number): boolean => isEnemyOwner(to.owner) && !streamsInto(to.id, t.id) && to.units - pressure(to.id) - extra >= LOSE_BOT_MARGIN;
+      let kept = false;
+      for (const l of own) {
+        const to = state.towers[l.to];
+        if (!kept && to && fair(to, 0)) kept = true;
+        else cmds.push({ type: 'unlink', owner: 'player', from: t.id, to: l.to });
+      }
+      if (kept || t.units < 1) continue;
+      const target = strongest(lanes.filter((n) => fair(n, C.INFANTRY_WEIGHT)));
+      if (target) cmds.push({ type: 'link', owner: 'player', from: t.id, to: target.id });
+      continue;
+    }
+    for (const l of own) cmds.push({ type: 'unlink', owner: 'player', from: t.id, to: l.to });
+    if (t.units < 1) continue; // the sim refuses a link from an empty tower
+    const quiet = (n: Tower): boolean => !state.links.some((l) => l.to === n.id && l.owner !== 'player') && !state.units.some((u) => u.to === n.id && u.owner !== 'player');
+    const farthest = lanes
+      .filter((n) => n.owner === 'player')
+      .reduce<Tower | undefined>((best, n) => (!best || (hops.get(n.id) ?? Infinity) > (hops.get(best.id) ?? Infinity) ? n : best), undefined);
+    const hold =
+      strongest(lanes.filter((n) => isEnemyOwner(n.owner) && !streamsInto(n.id, t.id))) ??
+      strongest(lanes.filter((n) => n.owner === 'neutral' && quiet(n))) ??
+      farthest;
+    if (hold) cmds.push({ type: 'link', owner: 'player', from: t.id, to: hold.id });
   }
   return cmds;
 }

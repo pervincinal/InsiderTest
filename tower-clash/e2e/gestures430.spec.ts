@@ -691,29 +691,50 @@ test.describe('touch gestures on a 430×932 iPhone-class screen, DPR 3, safe ins
     // a quick upward drag on the path: 4 frame-synced moves, 300 layout px. The page records the
     // scroll offset every frame and the lift's time (pointerup), so the glide is read off the page's own clock.
     await page.evaluate(() => {
-      const w = window as unknown as { __scrollLog: [number, number][]; __liftAt: number };
+      const w = window as unknown as { __scrollLog: [number, number][]; __liftAt: number; __lastMoveAt: number };
       w.__scrollLog = [];
       w.__liftAt = -1;
+      w.__lastMoveAt = -1;
+      window.addEventListener('pointermove', () => w.__liftAt < 0 && (w.__lastMoveAt = performance.now()), { capture: true });
       window.addEventListener('pointerup', () => (w.__liftAt = performance.now()), { capture: true, once: true });
       const t0 = performance.now();
       const tick = (): void => {
         w.__scrollLog.push([performance.now(), window.__towerclash.getLevelSelectScroll()]);
-        if (performance.now() - t0 < 12_000) requestAnimationFrame(tick);
+        if (performance.now() - t0 < 30_000) requestAnimationFrame(tick);
       };
       requestAnimationFrame(tick);
     });
     const a = { x: 360, y: 900 };
     const b = { x: 360, y: 600 };
     await f.start(a);
-    await f.slide(a, b, 4);
-    await f.end();
+    // QA-34: the last move and the lift are queued together, so a loaded host cannot turn the fling into a rest-then-lift
+    await f.slideAndLift(a, b, 4);
     await page.screenshot({ path: test.info().outputPath('aud-u18-fling-mid-430.png') });
-    await page.waitForTimeout(4000); // ok: the page records every frame meanwhile; the glide is read off its own clock
-    const { log, liftAt } = await page.evaluate(() => {
-      const w = window as unknown as { __scrollLog: [number, number][]; __liftAt: number };
-      return { log: w.__scrollLog, liftAt: w.__liftAt };
+    // QA-34: wait on the page's own record until the glide has been still for 500 ms of page time (was a fixed 4 s
+    // sleep: with frames slower than FLING.maxStepMs the glide advances less per frame and outlasts it under load)
+    const STILL_MS = 500;
+    await expect
+      .poll(
+        () =>
+          page.evaluate((stillMs) => {
+            const w = window as unknown as { __scrollLog: [number, number][]; __liftAt: number };
+            const log = w.__scrollLog;
+            if (w.__liftAt < 0 || log.length === 0) return false;
+            const [tEnd, yEnd] = log[log.length - 1]!;
+            let k = log.length - 1;
+            while (k > 0 && log[k - 1]![1] === yEnd) k--;
+            return tEnd - Math.max(log[k]![0], w.__liftAt) >= stillMs;
+          }, STILL_MS),
+        { message: 'the glide comes to rest (page clock)', timeout: 25_000, intervals: [100] },
+      )
+      .toBe(true);
+    const { log, liftAt, lastMoveAt } = await page.evaluate(() => {
+      const w = window as unknown as { __scrollLog: [number, number][]; __liftAt: number; __lastMoveAt: number };
+      return { log: w.__scrollLog, liftAt: w.__liftAt, lastMoveAt: w.__lastMoveAt };
     });
     expect(liftAt).toBeGreaterThan(0);
+    // the input really was a moving finger at the lift (src/ui/fling.ts FLING.windowMs = 100 ms), on the page's clock
+    expect(liftAt - lastMoveAt, 'the last move reached the page within 100 ms of the lift').toBeLessThanOrEqual(100);
     const before = log.filter(([t]) => t <= liftAt);
     const after = log.filter(([t]) => t > liftAt).map(([, y]) => y);
     const atLift = before[before.length - 1]![1];

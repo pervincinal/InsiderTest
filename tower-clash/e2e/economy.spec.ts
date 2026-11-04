@@ -35,14 +35,25 @@ const CONVERT_SEG = { x: CONVERT_CARD.x + 16, y: CONVERT_CARD.y + 96, w: CONVERT
 const CONVERT_BUY = { x: CONVERT_CARD.x + 24, y: CONVERT_CARD.y + CONVERT_CARD.h - 54 - 16, w: CONVERT_CARD.w - 48, h: 54 };
 const CONVERT_CONFIRM = { yes: { x: 130, y: 676, w: 210, h: 72 }, no: { x: 380, y: 676, w: 210, h: 72 } };
 // src/render/layout.ts — TITLE.achievements / TITLE.settings, ACHIEVEMENTS_LAYOUT.back, settingsAboutLayout(true, true)
-// (SETTINGS.about.y = 1152 since the AUD-F6 Music row (1102 after AUD-U2, 1012 after FE-14): copy.y = 1152 + 22 + 62 + 31 − 24,
-// privacy.y = 1152 + 22 + 2·62 + 10 — the About card then ends at 1400, inside a Pixel 5's 1559 layout px, so no scroll;
+// (SETTINGS.about.y = 1344 since the AUD-U20 / AUD-F18 Vibration and Screen shake rows (1152 after AUD-F6, 1102 after AUD-U2,
+// 1012 after FE-14): copy.y = 1344 + 22 + 62 + 31 − 24, privacy.y = 1344 + 22 + 2·62 + 10 — the About card then ends at 1592,
+// past a Pixel 5's viewport, so the test scrolls the body to its foot first (`scrollToFoot`);
 // AUD-U1: privacy 320 wide so its tap area stays left of COPY's)
 const TITLE_ACHIEVEMENTS = { x: 18, y: 990, w: 128, h: 132 };
 const TITLE_SETTINGS = { x: 180, y: 776, w: 172, h: 64 };
 const ACHIEVEMENTS_BACK = { x: 18, y: 20, w: 140, h: 60 };
-const ABOUT_COPY = { x: 522, y: 1243, w: 118, h: 48 };
-const ABOUT_PRIVACY = { x: 200, y: 1308, w: 320, h: 60 };
+const ABOUT_COPY = { x: 522, y: 1435, w: 118, h: 48 };
+const ABOUT_PRIVACY = { x: 200, y: 1500, w: 320, h: 60 };
+
+/** Scroll the settings body to its foot (AUD-U2 scrolling) and wait until `r` is drawn inside the viewport. */
+async function scrollToFoot(page: Page, r: { x: number; y: number; w: number; h: number }): Promise<void> {
+  const vp = page.viewportSize()!;
+  await page.mouse.move(vp.width / 2, vp.height / 2);
+  await page.mouse.wheel(0, 3000);
+  await expect
+    .poll(async () => (await page.evaluate(([x, y]) => window.__towerclash.layoutToClient(x, y), [r.x + r.w / 2, r.y + r.h] as const)).y < vp.height - 4)
+    .toBe(true);
+}
 // src/economy/catalog.ts — CONVERSION, CRYSTAL_SERVICES.boosterCrate, ACHIEVEMENTS crystals
 const CONVERSION = { goldPerCrystal: 5, packs: [20, 100, 500] };
 const CRATE = { cost: 60, charges: { overdrive: 5, freeze: 3, airstrike: 2 } };
@@ -90,7 +101,7 @@ const DUSK_COST = 150;
 // after the full rewind window (~27 s of sim time) so the continue really goes back 20 s (tests/ui/continue.test.ts)
 const CONTINUE_REWIND_MS = 20_000;
 const REWIND_LEVEL = 15;
-const REWIND_SEED = 1; // the lose bot loses on seed 1 at ~135 s sim (RELAY-1, 2026-10-12: seed 2 now wins — full own towers relay its streams onward); was 2 under rules v2.1 + the level-15 retune
+const REWIND_SEED = 1; // AUD-F19 (2026-11-04): the held-ribbon lose bot loses every level 1–50; level 15 seed 1 falls at ≈ 34 s sim (browser), past the 22 s the rewind check needs. Kept on 15 (no reason to move a green test); was ≈ 135 s under the old streaming bot
 
 
 /** Tap segment `i` of a segmented control drawn with `drawSegmented` (4 px inset, equal widths). */
@@ -266,6 +277,7 @@ test.describe('economy', () => {
     await tapRect(page, TITLE_SETTINGS);
     await expect.poll(() => screen(page)).toBe('settings');
     await expect.poll(() => page.evaluate(() => window.__towerclash.economy.getAboutInfo())).toEqual({ version: web!.version, supportId: 'rc-test-1234', privacyOptions: true });
+    await scrollToFoot(page, ABOUT_PRIVACY);
     await tapRect(page, ABOUT_COPY);
     await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('rc-test-1234');
     await tapRect(page, ABOUT_PRIVACY); // the web ads provider has no form: a toast, never a crash

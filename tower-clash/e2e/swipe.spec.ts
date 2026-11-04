@@ -73,16 +73,40 @@ class Finger {
     await this.send('touchEnd');
   }
 
-  /** `n` taps on logical point `l`, `gapMs` apart (the point converted once, so the taps follow fast). */
-  async taps(l: { x: number; y: number }, n = 1, gapMs = 0): Promise<void> {
+  /** `n` taps on logical point `l`, one after the other (the point converted once, so the taps follow fast). */
+  async taps(l: { x: number; y: number }, n = 1): Promise<void> {
     const c = await clientPoint(this.page, l.x, l.y);
     for (let i = 0; i < n; i++) {
-      if (i > 0 && gapMs > 0) await this.page.waitForTimeout(gapMs); // ok: the gap between the taps of a double tap is what is under test
       await this.send('touchStart', c);
       await this.send('touchEnd');
     }
   }
+
+  /**
+   * QA-34: a double tap on `l` — both taps' four touch events are queued in one go (no round trip to the test
+   * process awaited in between), so the page gets them back to back however loaded the host is. The old
+   * `taps(l, 2, 60)` awaited each event plus a 60 ms sleep: on a loaded host (Days 44–46) the second tap
+   * reached the page more than LINK_REPEAT_GUARD_MS after the first and was, correctly, an unlink.
+   */
+  async doubleTap(l: { x: number; y: number }): Promise<void> {
+    const c = await clientPoint(this.page, l.x, l.y);
+    await Promise.all([this.send('touchStart', c), this.send('touchEnd'), this.send('touchStart', c), this.send('touchEnd')]);
+  }
 }
+
+/** src/input/pointer.ts LINK_REPEAT_GUARD_MS (AUD-U6): a tap on the stream its tap started under this long ago does nothing. */
+const LINK_REPEAT_GUARD_MS = 400;
+
+/** QA-34: record every pointerup's `performance.now()` on the page (the clock the gesture guard reads). */
+async function recordPointerUps(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const w = window as unknown as { __ups: number[] };
+    w.__ups = [];
+    window.addEventListener('pointerup', () => w.__ups.push(performance.now()), { capture: true });
+  });
+}
+const pointerUps = (page: Page) => page.evaluate(() => [...(window as unknown as { __ups: number[] }).__ups]);
+const pageNow = (page: Page) => page.evaluate(() => performance.now());
 
 test.describe('touch drag-to-link and swipe-to-cut (BUG-33)', () => {
   test('level 2: drag home → side links, a swipe across the stream cuts it live, the tutorial stop hint clears', async ({ page }) => {
@@ -175,12 +199,19 @@ test.describe('touch drag-to-link and swipe-to-cut (BUG-33)', () => {
     const home = towerAt('home');
     const side = towerAt('side');
     await finger.taps(home); // select
+    await recordPointerUps(page);
     // tap, and a quick second tap on the same target (a bounce / "tap harder" retry): one stream, still on
-    await finger.taps(side, 2, 60);
-    await page.waitForTimeout(250); // five sim ticks: an unlink would have landed
+    await finger.doubleTap(side);
+    await expect.poll(async () => (await pointerUps(page)).length, { message: 'both taps reached the page' }).toBe(2);
+    const [up1, up2] = await pointerUps(page);
+    // the page's own clock (the one the guard reads) saw a double tap, not two taps far apart
+    expect(up2! - up1!, 'the two taps reached the page within the guard').toBeLessThan(LINK_REPEAT_GUARD_MS);
+    // five sim ticks on the sim's own clock (not a wall-clock sleep): an unlink sent by the second tap would have landed
+    const t0 = await simTime(page);
+    await expect.poll(() => simTime(page)).toBeGreaterThanOrEqual(t0 + 250);
     expect(await playerLinks(page), 'the second tap of a double tap is ignored').toEqual([{ from: 'home', to: 'side' }]);
-    // past LINK_REPEAT_GUARD_MS the same tap stops the stream, as before
-    await page.waitForTimeout(300);
+    // past LINK_REPEAT_GUARD_MS on the page clock the same tap stops the stream, as before
+    await expect.poll(async () => (await pageNow(page)) - up1!, { intervals: [50] }).toBeGreaterThan(LINK_REPEAT_GUARD_MS + 50);
     await finger.taps(side);
     await expect.poll(() => playerLinks(page), { message: 'a later tap on the target unlinks' }).toEqual([]);
     expect(pageErrors).toEqual([]);

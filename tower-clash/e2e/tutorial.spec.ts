@@ -7,7 +7,7 @@ import type { Page } from '@playwright/test';
  * driven by real touch taps on a fresh save:
  *   level 1  "tap your tower" → "tap the grey tower" → stream started
  *   level 2  side first: "tap your tower, then the grey tower" (side) → (gated on the capture) "now tap
- *            the new tower, then the red one" (side → foe) → "swipe across the stream so your tower
+ *            the new tower, then the enemy tower" (side → foe) → "swipe across the stream so your tower
  *            grows" (home → side; here the second tap on the target, the swipe-cut is driven in
  *            swipe.spec.ts) → no supply-line step on that line. Mid first: the supply-line step comes
  *            up on mid once it is full and streams onward, and a relay link into it clears it.

@@ -98,6 +98,55 @@ test.describe('daily challenge', () => {
     expect(errors).toEqual([]);
   });
 
+  test('AUD-U23: the card counts down in local time — "New in 10h 24m", plus "(at 04:00)" where the clock is more than an hour off UTC (run with TZ=UTC and TZ=Asia/Baku)', async ({ page }) => {
+    // 13:36 UTC: 10 h 24 min to the UTC midnight rollover (GDD §7.2), wherever the device is
+    await page.clock.setFixedTime(new Date(`${DAY_A}T13:36:00Z`));
+    await page.addInitScript(() => {
+      const w = window as unknown as { __qaTexts: { t: string; x: number; y: number }[] | null };
+      w.__qaTexts = null;
+      const orig = CanvasRenderingContext2D.prototype.fillText;
+      CanvasRenderingContext2D.prototype.fillText = function (text: string, x: number, y: number, maxWidth?: number): void {
+        const m = this.getTransform();
+        if (w.__qaTexts && this.canvas.id === 'game') w.__qaTexts.push({ t: String(text), x: m.a * x + m.e, y: Math.round(m.d * y + m.f) });
+        if (maxWidth === undefined) orig.call(this, text, x, y);
+        else orig.call(this, text, x, y, maxWidth);
+      };
+    });
+    const lockedStars: Record<string, number> = {};
+    for (let id = 1; id < UNLOCK_AFTER_LEVEL; id++) lockedStars[String(id)] = 1;
+    const errors = await boot(page, { version: 3, stars: lockedStars, settings: { language: 'en' } }, DAY_A);
+    await tapRect(page, TITLE_PLAY);
+    await expect.poll(() => screen(page)).toBe('levelSelect');
+    // the line of drawn runs that starts with "New in " (the locked card's third line: room for the whole note)
+    const countdownLine = () =>
+      page.evaluate(async () => {
+        const w = window as unknown as { __qaTexts: { t: string; x: number; y: number }[] | null };
+        w.__qaTexts = [];
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        const runs = w.__qaTexts ?? [];
+        w.__qaTexts = null;
+        const head = runs.find((d) => d.t === 'New in ');
+        if (!head) return null;
+        const line = runs.filter((d) => d.y === head.y && d.x >= head.x);
+        const seen = new Set<string>();
+        return line
+          .filter((d) => !seen.has(`${d.x}|${d.t}`) && seen.add(`${d.x}|${d.t}`))
+          .sort((a, b) => a.x - b.x)
+          .map((d) => d.t)
+          .join('');
+      });
+    const offset = await page.evaluate(() => -new Date().getTimezoneOffset());
+    const local = (((offset % 1440) + 1440) % 1440) as number;
+    const at = `${String(Math.floor(local / 60)).padStart(2, '0')}:${String(local % 60).padStart(2, '0')}`;
+    const expected = Math.abs(offset) > 60 ? `New in 10h 24m (at ${at})` : 'New in 10h 24m';
+    await expect.poll(countdownLine).toBe(expected);
+    if (process.env.TZ === 'Asia/Baku') expect(expected).toBe('New in 10h 24m (at 04:00)');
+    if (process.env.TZ === 'UTC') expect(expected).toBe('New in 10h 24m');
+    expect(await countdownLine()).not.toContain('UTC');
+    await shot(page, 'aud-u23-daily-locked-countdown');
+    expect(errors).toEqual([]);
+  });
+
   test('unlocked: tap starts the fixed run; first win pays once, replay pays nothing, DONE badge, streak', async ({ page }) => {
     const stars: Record<string, number> = {};
     for (let id = 1; id <= UNLOCK_AFTER_LEVEL; id++) stars[String(id)] = 1;

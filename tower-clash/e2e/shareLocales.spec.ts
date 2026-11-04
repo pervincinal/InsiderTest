@@ -62,11 +62,12 @@ type Role = keyof typeof BASE_PX;
 const MIN_SCALE = 0.75;
 
 /**
- * Campaign defeat: level 15 seed 1 under `economy.autoLose()` (a v3 stream never drains its source, so
- * the "suicide" line *wins* many levels — 2, 4, 6, 7, 8, 22, 44, 50, the DAY_KEY daily level at seed 1 and,
- * since its AUD-B9 re-layout, 3 — and freezes on 5; level 15 loses deterministically at ≈ 135 s sim, as
- * economy.spec's rewind check relies on too). The longest names of all 50 levels are covered by the string
- * sweep, so the defeat card's own level name need not be a long one.
+ * Campaign defeat: level 15 seed 1 under `economy.autoLose()`. Before AUD-F19 (2026-11-04) the old
+ * streaming "suicide" line *won* many levels (2, 4, 6, 7, 8, 22, 44, 50, 3 after AUD-B9) and froze on 5, so
+ * this card had to use 15; the held-ribbon bot now loses every level 1–50 (tests/ui/autoLose.test.ts; level 15
+ * seed 1 falls at ≈ 34 s sim in the browser) and 15 stays only because economy.spec's rewind check uses
+ * the same level. The longest names of all 50 levels are covered by the string sweep, so the defeat
+ * card's own level name need not be a long one.
  */
 const LOSS_LEVEL = 15;
 const LOSS_SEED = 1;

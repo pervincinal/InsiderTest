@@ -686,7 +686,16 @@ test.describe('frame-time overlay (AUD-Q8, TF-13)', () => {
       await expect.poll(() => page.evaluate(() => window.__towerclash.getScreen())).toBe('settings');
       const row = await page.evaluate(() => window.__towerclash.perf.versionRow());
       expect(row, 'the settings screen exposes its version row').not.toBeNull();
-      return { x: row!.x + row!.w * 0.75, y: row!.y + row!.h / 2 }; // on the version text (right of "Tower Clash")
+      const at = { x: row!.x + row!.w * 0.75, y: row!.y + row!.h / 2 }; // on the version text (right of "Tower Clash")
+      // AUD-U20 / AUD-F18 (2026-11-04): the Vibration and Screen shake rows push the About card past a Pixel 5's
+      // viewport, so scroll the settings body (AUD-U2) until the version row is drawn inside it, as economy.spec does
+      const vp = page.viewportSize()!;
+      await page.mouse.move(vp.width / 2, vp.height / 2);
+      await page.mouse.wheel(0, 3000);
+      await expect
+        .poll(async () => (await page.evaluate(([x, y]) => window.__towerclash.layoutToClient(x, y), [at.x, row!.y + row!.h] as const)).y < vp.height - 4)
+        .toBe(true);
+      return at;
     };
     const taps = async (at: { x: number; y: number }, n: number): Promise<void> => {
       for (let i = 0; i < n; i++) await tapAt(page, at.x, at.y);

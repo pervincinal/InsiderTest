@@ -53,6 +53,28 @@ export class Fingers {
   }
 
   /**
+   * QA-34: slide finger `id` from `a` to `b` in `steps` frame-synced touchMoves and lift it, the last move and the
+   * lift queued together (no round trip to the test process between them). A fling reads the finger's last 100 ms
+   * (src/ui/fling.ts FLING.windowMs): with `slide` + `end` a loaded host could put more than that between the last
+   * move and the lift on the page's clock, and the page then (correctly) saw a finger that rested before lifting.
+   */
+  async slideAndLift(a: XY, b: XY, steps = 4, id = 1): Promise<void> {
+    if (steps < 1) throw new Error('slideAndLift needs at least one move');
+    for (let i = 1; i < steps; i++) {
+      const k = i / steps;
+      await this.moveTo({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k }, id);
+    }
+    const last = await clientPoint(this.page, b.x, b.y);
+    this.down.delete(id);
+    const tp = [{ x: last.x, y: last.y, id, radiusX: 4, radiusY: 4, force: 1 }];
+    const others = [...this.down].map(([oid, p]) => ({ x: p.x, y: p.y, id: oid, radiusX: 4, radiusY: 4, force: 1 }));
+    await Promise.all([
+      this.cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [...others, ...tp] }),
+      this.cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: tp }),
+    ]);
+  }
+
+  /**
    * Lift finger `id`. Chromium's CDP handler releases the points a touchEnd LISTS (an empty list
    * releases all of them) — measured: touchEnd listing the finger that stays down lifted that one —
    * so only the lifted finger's point goes in.
