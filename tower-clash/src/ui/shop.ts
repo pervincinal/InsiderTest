@@ -94,6 +94,24 @@ export function skinListed(skin: Pick<SkinDef, 'id' | 'source'>, owned: readonly
   return storeAvailable || skin.source === 'shop' || owned.includes(skin.id);
 }
 
+/**
+ * AUD-U25: the tab the player last picked in the shop this session (in memory, never saved). A shop
+ * opened without a tab (the title SHOP button, `App.goShop()`) opens on it, else on SKINS — not on
+ * the real-money CRYSTALS price list. A call site that names a tab (the wallet pills → CRYSTALS, the
+ * commander → UPGRADES, the debug hooks) opens on that tab and does not change the memory.
+ */
+let lastTab: ShopTab | null = null;
+
+/** The tab a shop opened without one shows (AUD-U25): the last one picked this session, else SKINS. */
+export function shopBrowseTab(): ShopTab {
+  return lastTab ?? 'skins';
+}
+
+/** Tests: forget the session's last tab (a new session). */
+export function resetShopTabMemory(): void {
+  lastTab = null;
+}
+
 export class ShopScreen implements Screen {
   readonly name = 'shop' as const;
   private tab: ShopTab;
@@ -118,7 +136,7 @@ export class ShopScreen implements Screen {
 
   constructor(
     private readonly app: App,
-    tab: ShopTab = 'crystals',
+    tab: ShopTab = shopBrowseTab(),
     private readonly back: () => void = () => app.goTitle(),
   ) {
     this.tab = tab;
@@ -166,7 +184,7 @@ export class ShopScreen implements Screen {
   /** Switch tabs; a hidden tab (store unavailable) is ignored. */
   setTab(tab: ShopTab): void {
     if (!this.tabs.includes(tab)) return;
-    this.tab = tab;
+    this.tab = lastTab = tab;
     this.scroll = 0;
     this.fling.stop();
     this.pressed = null;

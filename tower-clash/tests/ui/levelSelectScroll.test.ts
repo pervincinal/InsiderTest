@@ -26,7 +26,8 @@ import { tr } from '../../src/ui/locales/tr';
  */
 
 const drawn = vi.hoisted(() => ({ opts: null as LevelSelectOpts | null }));
-vi.mock('../../src/render/menusLevels', () => ({
+vi.mock('../../src/render/menusLevels', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/render/menusLevels')>()), // AUD-U23: CHALLENGE_PLAY_HIT
   drawLevelSelect: (_v: unknown, _p: unknown, o: LevelSelectOpts) => void (drawn.opts = o),
 }));
 

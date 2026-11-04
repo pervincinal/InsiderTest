@@ -82,7 +82,7 @@ export interface App {
   goTitle(): void;
   /** Open the level map; `notice` is shown as a toast on it (e.g. a stale Daily Challenge, BUG-9). */
   goLevels(notice?: string): void;
-  /** Open the shop on `tab`; BACK runs `back` (default: the title). */
+  /** Open the shop on `tab` (none: the session's last-picked tab, else SKINS — AUD-U25); BACK runs `back` (default: the title). */
   goShop(tab?: ShopTab, back?: () => void): void;
   /** Open the achievements screen; BACK runs `back` (default: the title). */
   goAchievements(back?: () => void): void;
@@ -322,7 +322,9 @@ export class TitleScreen implements Screen {
     if (this.on(TITLE_PLAY, p)) this.app.goLevels();
     else if (this.on(TITLE_SETTINGS, p)) this.app.openSettings(this);
     else if (this.on(TITLE_SOUND, p)) toggleMuted(); // persists settings.sound via the audio facade
-    else if (this.on(TITLE.shop, p) || this.on(TITLE.wallet, p)) this.app.goShop('crystals', () => this.app.goTitle());
+    // AUD-U25: SHOP browses (the last tab picked this session, else SKINS); the wallet pill is "buy crystals"
+    else if (this.on(TITLE.shop, p)) this.app.goShop(undefined, () => this.app.goTitle());
+    else if (this.on(TITLE.wallet, p)) this.app.goShop('crystals', () => this.app.goTitle());
     else if (this.on(TITLE.daily, p)) this.claimChest();
     else if (this.on(TITLE.achievements, p)) this.app.goAchievements(() => this.app.goTitle());
     else if (this.on(TITLE.lang, p)) {

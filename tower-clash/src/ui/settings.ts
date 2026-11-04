@@ -1,6 +1,7 @@
 /**
  * Settings screen (M3-3 + I18N): music and effects (AUD-F6), colour-blind palette, reduced motion (auto/on/off
- * override), the "How to play" card (FE-3), UI language, the team-colour set (FE-14) and a two-step
+ * override), the "How to play" card (FE-3), UI language, the team-colour set (FE-14), text size (AUD-U2),
+ * Vibration (AUD-U20) and Screen shake (AUD-F18) and a two-step
  * reset of the progress; the About card shows the version, the store support id (COPY), the ads
  * SDK's privacy options (native) and the opt-in Diagnostics log (AUD-B6: switch, COPY LOG, CLEAR LOG).
  * Every change persists immediately; BACK returns to the screen that opened it (title, or the
@@ -14,7 +15,9 @@ import type { Rect } from '../render/widgets';
 import { hitRect, setTextScale } from '../render/widgets';
 import { segmentAt } from '../render/menuWidgets';
 import type { DiagAboutLayout } from '../render/menusSettings';
-import { LANGUAGE_SEGMENTS, MOTION_SEGMENTS, TEXT_SIZE_SEGMENTS, TONE_SEGMENTS, drawSettings, withDiagnostics } from '../render/menusSettings';
+import { LANGUAGE_SEGMENTS, MOTION_SEGMENTS, SETTINGS_FEEL, TEXT_SIZE_SEGMENTS, TONE_SEGMENTS, drawSettings, withDiagnostics } from '../render/menusSettings';
+import { prefersReducedMotion } from '../render/particles';
+import { isNative } from '../native/index';
 import { loadToneSets, urlToneOverride } from '../render/palette';
 import type { PointerPoint } from '../input/pointer';
 import { dragThreshold } from '../input/pointer';
@@ -203,6 +206,10 @@ export class SettingsScreen implements Screen {
       version: appVersion(),
       supportId: this.supportId,
       diag: { on: this.diagnosticsOn, rows: this.diagRowCount },
+      haptics: s.haptics !== false,
+      hapticsNative: isNative(),
+      shake: s.shake !== false,
+      shakeReduced: prefersReducedMotion(),
       nowMs,
       pressed: this.pressed,
       toast: this.toast.opts(nowMs),
@@ -211,7 +218,7 @@ export class SettingsScreen implements Screen {
 
   private rects(): Rect[] {
     if (this.confirming) return [SETTINGS.confirm.yes, SETTINGS.confirm.no];
-    const list = [SETTINGS.back, SETTINGS.music, SETTINGS.sound, SETTINGS.colorBlind, SETTINGS.motion, SETTINGS.howto, SETTINGS.language, SETTINGS.tones, SETTINGS.textSize, SETTINGS.reset];
+    const list = [SETTINGS.back, SETTINGS.music, SETTINGS.sound, SETTINGS.colorBlind, SETTINGS.motion, SETTINGS.howto, SETTINGS.language, SETTINGS.tones, SETTINGS.textSize, SETTINGS_FEEL.haptics, SETTINGS_FEEL.shake, SETTINGS.reset];
     if (this.about.copy) list.push(this.about.copy);
     if (this.about.privacy) list.push(this.about.privacy);
     list.push(this.about.diagToggle);
@@ -420,6 +427,10 @@ export class SettingsScreen implements Screen {
         save.settings.textScale = seg;
         setTextScale(seg);
       }
+    } else if (hit === SETTINGS_FEEL.haptics) {
+      save.settings.haptics = save.settings.haptics === false; // AUD-U20: the capture / hit haptics read it (play.ts, audio/recipes.ts)
+    } else if (hit === SETTINGS_FEEL.shake) {
+      save.settings.shake = save.settings.shake === false; // AUD-F18: draw.ts drops the capture shake while it is false
     } else if (hit === SETTINGS.reset) {
       this.confirming = true;
       return;

@@ -18,7 +18,7 @@ const stateFor = (id: number) => createState(getLoadedLevel(id)!, 1);
 /** English hint texts (src/ui/locales/enTutorial.ts). */
 const TXT = {
   tapThenGrey: 'Tap your tower, then the grey tower',
-  goAround: 'Now tap the new tower, then the red one',
+  goAround: 'Now tap the new tower, then the enemy tower',
   stopStream: 'Swipe across the stream so your tower grows',
   supplyLine: 'A full tower passes soldiers on: stream into it',
   grabOther: 'Now take the other grey tower too',

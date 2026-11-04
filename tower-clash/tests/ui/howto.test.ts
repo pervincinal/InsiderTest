@@ -103,7 +103,7 @@ describe('entry points (layout.ts SETTINGS.howto, PAUSE.howto)', () => {
 
 describe('locale keys', () => {
   const dicts: Record<string, Record<string, string>> = { en, az, ru, tr };
-  const keys = ['howto.title', 'howto.1', 'howto.2', 'howto.3', 'howto.4', 'howto.5', 'howto.6', 'howto.close', 'settings.howto', 'settings.howtoSub', 'pause.howto'];
+  const keys = ['howto.title', 'howto.1', 'howto.2', 'howto.3', 'howto.4', 'howto.5', 'howto.6', 'howto.close', 'settings.howto', 'settings.howtoSub'];
 
   for (const [code, dict] of Object.entries(dicts)) {
     it(`${code}: every key present, each rule ≤ 120 characters with no unbreakable long word`, () => {
@@ -113,7 +113,9 @@ describe('locale keys', () => {
         expect(s.length, `${code} ${k}: ${s.length} chars`).toBeLessThanOrEqual(120);
         for (const word of s.split(/\s+/)) expect(word.length, `${code} ${k}: "${word}"`).toBeLessThanOrEqual(22);
       }
-      expect(dict['howto.title']).toBe(dict['pause.howto']);
+      // AUD-U24: one term — the card title / pause / result key is the settings row's label upper-cased
+      expect(dict['howto.title']).toBe(dict['settings.howto']!.toLocaleUpperCase(code));
+      expect(Object.keys(dict).filter((k) => /^(pause|result)\.howto$/.test(k))).toEqual([]);
     });
   }
 

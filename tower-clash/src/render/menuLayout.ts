@@ -69,7 +69,7 @@ export const staysPut = (): number => 0;
 export const SETTINGS = Object.freeze({
   headerH: 100,
   back: { x: 18, y: 20, w: 140, h: 60 } as Rect,
-  card: { x: 50, y: 134, w: 620, h: 1008 } as Rect,
+  card: { x: 50, y: 134, w: 620, h: 1200 } as Rect,
   rowH: 96,
   labelX: 86,
   /**
@@ -112,16 +112,22 @@ export const SETTINGS = Object.freeze({
    */
   textSizeSepY: 936,
   textSize: { x: 356, y: 954, w: 274, h: 56 } as Rect,
+  /*
+   * AUD-U20 / AUD-F18: the Vibration and Screen shake toggle rows (menusSettings.ts `SETTINGS_FEEL`, lazy) go
+   * under the text size, one 96 px row each, so every rect above keeps its place; the summary, RESET and
+   * the About card moved down 192 (worst case, About with support id + privacy options, ends at 1592: the
+   * screen scrolls).
+   */
   /** Centre line of the stars / coins summary above RESET. */
-  summaryY: 1038,
-  reset: { x: 160, y: 1062, w: 400, h: 64 } as Rect,
+  summaryY: 1230,
+  reset: { x: 160, y: 1254, w: 400, h: 64 } as Rect,
   confirm: {
     card: { x: 90, y: 470, w: 540, h: 320 } as Rect,
     yes: { x: 130, y: 676, w: 210, h: 72 } as Rect,
     no: { x: 380, y: 676, w: 210, h: 72 } as Rect,
   },
   /** About card under the settings card: version, support id (copy), privacy options (native). */
-  about: { x: 50, y: 1152, w: 620 },
+  about: { x: 50, y: 1344, w: 620 },
   aboutRowH: 62,
 });
 

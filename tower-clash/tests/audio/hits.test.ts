@@ -93,11 +93,12 @@ describe('onSimEvents → hit sound + haptic', () => {
   let haptics: number;
   let now: number;
 
-  async function setup(sound: boolean, unlock = true): Promise<void> {
+  async function setup(sound: boolean, unlock = true, vibration?: boolean): Promise<void> {
     ctx = new FakeAudioContext();
     haptics = 0;
     const save = defaultSave();
     save.settings.sound = sound;
+    if (vibration !== undefined) save.settings.haptics = vibration; // AUD-U20
     save.settings.music = false; // AUD-F6: the loop's voices stay out of the counts
     initAudio(save, { factory: () => ctx, persist: () => undefined, haptic: () => haptics++ });
     await loadSfxRecipes();
@@ -153,7 +154,17 @@ describe('onSimEvents → hit sound + haptic', () => {
     expect(hit.stopAt! - hit.startAt!).toBeLessThan(refuse.stopAt! - refuse.startAt!);
   });
 
-  it('muted (sound off): no knock and — no vibration setting exists — no haptic either', async () => {
+  it('AUD-U20: Settings → Vibration off: the knock still plays, no haptic; on (saved true) taps as the default does', async () => {
+    await setup(true, true, false);
+    onSimEvents([land('p')], state());
+    expect(ctx.voices().length).toBeGreaterThan(0);
+    expect(haptics).toBe(0);
+    await setup(true, true, true);
+    onSimEvents([land('p')], state());
+    expect(haptics).toBe(1);
+  });
+
+  it('muted (sound off): no knock and — the recipes chunk only runs with Effects on — no haptic either', async () => {
     await setup(false);
     onSimEvents([land('p')], state());
     expect(ctx.voices()).toHaveLength(0);

@@ -12,7 +12,7 @@ import { aiModule } from './ai';
 import type { View } from '../render/view';
 import { applyTransform, clipToMap, hudAnchors, toHudSpace } from '../render/view';
 import { drawGame } from '../render/draw';
-import { BOOSTERS, HUD, PAUSE, TOWER_HIT_RADIUS } from '../render/layout';
+import { BAND_TOWER_REACH, BOOSTERS, HUD, PAUSE, TOWER_HIT_RADIUS } from '../render/layout';
 import { playCamera, proj, unproj } from '../render/camera';
 import type { Rect } from '../render/widgets';
 import { hitRect } from '../render/widgets';
@@ -478,7 +478,7 @@ export class PlayScreen implements Screen {
     for (const ev of events) {
       if (ev.type === 'capture') {
         warmHudOverlays(); // the result card's chunk (PERF-6): a capture means an outcome is on its way
-        if (ev.by === 'player') hapticCapture();
+        if (ev.by === 'player' && this.app.save.settings.haptics !== false) hapticCapture(); // AUD-U20: Settings → Vibration
         if (ev.from === 'player') m.lostTower = true;
         const t = this.state.towers[ev.towerId];
         if (t && ev.by === 'player') {
@@ -691,6 +691,7 @@ export class PlayScreen implements Screen {
       coinsEarned: this.earnings.gold,
       coinsTotal: this.app.save.gold,
       particles: this.particles,
+      shake: this.app.save.settings.shake, // AUD-F18: Settings → Screen shake (absent = on)
     };
   }
 
@@ -846,6 +847,24 @@ export class PlayScreen implements Screen {
     return p.y >= HUD.mapTop + a.top && p.y <= HUD.mapBottom + a.bottom;
   }
 
+  /**
+   * AUD-U19 (GDD §4): a press where the gestures act — the world, or a band's BAND_TOWER_REACH px next
+   * to the map that is on no HUD tap rect and on a tower's hit area (a tower near the map's edge keeps its
+   * disc there). The HUD rects keep priority; the lesson card (hud.ts, y 108) lies on the map, below the strip.
+   */
+  private onWorld(p: PointerPoint): boolean {
+    if (this.inWorld(p)) return true;
+    const y = this.hudPoint(p).y; // the bands' moved edges mapped back onto HUD.mapTop / HUD.mapBottom (BUG-34)
+    return y >= HUD.mapTop - BAND_TOWER_REACH && y <= HUD.mapBottom + BAND_TOWER_REACH && !this.hudButtonAt(p) && !!this.towerAt(p);
+  }
+
+  /** The tower whose hit area (pointer.ts `hitTower`, through the play camera) is under screen point `p`, or null. */
+  private towerAt(p: PointerPoint) {
+    const w = this.toWorld(p);
+    const cam = playCamera();
+    return hitTower(this.state, w.x, w.y, TOWER_HIT_RADIUS, (x, y) => proj(cam, x, y));
+  }
+
   private boosterAt(p: PointerPoint): BoosterKind | null {
     const h = this.hudPoint(p);
     for (const k of BOOSTER_KINDS) if (hitRect(this.app.view, BOOSTERS[k], h.x, h.y)) return k;
@@ -936,7 +955,7 @@ export class PlayScreen implements Screen {
     if (hitRect(v, HUD.pause, h.x, h.y)) return 'pause';
     if (hitRect(v, HUD.mute, h.x, h.y)) return 'mute';
     if (hitRect(v, HUD.menu, h.x, h.y)) return 'menu';
-    return this.boosterAt(p);
+    return this.bare ? null : this.boosterAt(p); // AUD-U9: no bar drawn, no tap (AUD-U19: a tower under it takes the press)
   }
 
   /** A tap on HUD button `b` (pressed and released on it). AUD-U4: MENU opens the pause card (its MENU leaves). */
@@ -1018,7 +1037,7 @@ export class PlayScreen implements Screen {
       return;
     }
     this.pressedBooster = this.boosterAt(p);
-    if (!this.inWorld(p)) {
+    if (!this.onWorld(p)) {
       this.press = { kind: 'hud', button: this.hudButtonAt(p) };
       return;
     }
@@ -1072,10 +1091,8 @@ export class PlayScreen implements Screen {
     }
     if (!press || press.kind === 'card' || press.kind === 'stall') return; // BUG-37: a lift whose press nobody saw (or that began while paused) does nothing
     if (press.kind === 'target') {
-      if (this.targeting && this.inWorld(p)) {
-        const w = this.toWorld(p);
-        const cam = playCamera();
-        const t = hitTower(this.state, w.x, w.y, TOWER_HIT_RADIUS, (x, y) => proj(cam, x, y));
+      if (this.targeting && this.onWorld(p)) {
+        const t = this.towerAt(p);
         if (!t || !this.airstrike(t.id)) this.targeting = false; // tap elsewhere (or a non-enemy tower) cancels
       }
       return;

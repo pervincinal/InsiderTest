@@ -6,9 +6,11 @@ import { disabledInk, drawShop } from '../../src/render/menusShop';
 import { LEVEL_MAP, SETTINGS, SHOP, SHOP_TABS, settingsAboutLayout, shopBuyRect, shopConvertSegRect, shopPackRect, shopRowBuyRect, shopRowRect, shopSkinRect } from '../../src/render/menuLayout';
 import type { View } from '../../src/render/view';
 import type { SettingsOpts } from '../../src/render/menusSettings';
-import { TONE_SEGMENT_PX, TONE_SWATCH, drawSettings, withDiagnostics } from '../../src/render/menusSettings';
+import { SETTINGS_FEEL, TONE_SEGMENT_PX, TONE_SWATCH, drawSettings, withDiagnostics } from '../../src/render/menusSettings';
 import type { DailyCardOpts, LevelSelectOpts } from '../../src/render/menusLevels';
-import { COUNTDOWN_INSET, challengeRowLayout, countdownPillRect, drawLevelSelect, shortCountdown } from '../../src/render/menusLevels';
+import type { ChallengeCta } from '../../src/render/menusLevels';
+import { CHALLENGE_PLAY_HIT, COUNTDOWN_INSET, challengeCta, challengeRowLayout, countdownFit, countdownPillRect, drawLevelSelect, shortCountdown } from '../../src/render/menusLevels';
+import { challengeCountdown } from '../../src/ui/levelSelect';
 import { TOAST, drawToast } from '../../src/render/economyWidgets';
 import { FONT_RU, NUMERAL_PX, TEXT_SCALES, drawNumeralLine, numeralRuns, setTextScale, wrapNumeralText } from '../../src/render/widgets';
 import { registerDictionary, setLanguage, t } from '../../src/ui/i18n';
@@ -496,7 +498,7 @@ function settingsOpts(over: Partial<SettingsOpts> = {}): SettingsOpts {
 }
 
 function dailyOpts(tab: 'daily' | 'weekly', unlocked = true): DailyCardOpts {
-  const face = { unlocked, unlockLevel: 3, levelName: 'Twin Peaks', twist: 'Fog', gold: 60, crystals: 5, streak: 3, done: false, best: null, countdown: 'New in 12:34' };
+  const face = { unlocked, unlockLevel: 3, levelName: 'Twin Peaks', twist: 'Fog', gold: 60, crystals: 5, streak: 3, done: false, best: null, countdown: 'New in 12:34', countdownTime: '12:34' };
   return { ...face, nextBonus: [7, 10], tab, weekly: { ...face, target: false, targetMs: 90_000 }, yesterday: null };
 }
 
@@ -545,7 +547,8 @@ describe('active-state controls through a recording canvas (ART-15)', () => {
       const tones = out.filter((d) => inside(d, SETTINGS.tones));
       expect(tones.map((d) => d.text)).toEqual(['Classic', 'Vivid', 'Royal', 'Pastel']);
       expect(tones.map((d) => d.fill)).toEqual([pal.textDim, pal.textDim, pal.shopBuy.text, pal.textDim]);
-      for (const toggle of [SETTINGS.music, SETTINGS.sound, SETTINGS.colorBlind]) {
+      // AUD-U20 / AUD-F18: Vibration and Screen shake default on (absent = on)
+      for (const toggle of [SETTINGS.music, SETTINGS.sound, SETTINGS.colorBlind, SETTINGS_FEEL.haptics, SETTINGS_FEEL.shake]) {
         const label = out.filter((d) => inside(d, toggle));
         expect(label).toHaveLength(1);
         expect(label[0]!.fill).toBe(pal.shopBuy.text);
@@ -565,6 +568,11 @@ describe('active-state controls through a recording canvas (ART-15)', () => {
       drawSettings(recordingView(recordingCtx(split, new Set<string>())), pal, settingsOpts({ soundOn: true, musicOn: false }));
       expect(split.filter((d) => inside(d, SETTINGS.music)).map((d) => d.fill)).toEqual([pal.textDim]);
       expect(split.filter((d) => inside(d, SETTINGS.sound)).map((d) => d.fill)).toEqual([pal.shopBuy.text]);
+      // AUD-U20 / AUD-F18: saved off → OFF, dim
+      const feelOff: Drawn[] = [];
+      drawSettings(recordingView(recordingCtx(feelOff, new Set<string>())), pal, settingsOpts({ haptics: false, shake: false }));
+      expect(feelOff.filter((d) => inside(d, SETTINGS_FEEL.haptics)).map((d) => d.fill)).toEqual([pal.textDim]);
+      expect(feelOff.filter((d) => inside(d, SETTINGS_FEEL.shake)).map((d) => d.fill)).toEqual([pal.textDim]);
     });
 
     it(`${name}: the DAILY / WEEKLY card tab is the active-choice pair on both faces`, () => {
@@ -897,38 +905,83 @@ describe('ART-17 colour pairs', () => {
 describe('ART-17 through a recording canvas', () => {
   const r = LEVEL_MAP.daily;
   for (const [name, pal] of PALETTES) {
-    it(`${name}: the countdown pill draws its times 24 px bold, words 22 px, dim, centred inside the pill`, () => {
-      const pill = countdownPillRect(r);
-      // the pill takes the title row right of the WEEKLY tab: 306 px (was 250)
-      expect(pill).toEqual({ x: 370, y: r.y + 12, w: 306, h: 32 });
-      expect(pill.x).toBeGreaterThan(LEVEL_MAP.dailyTabWeekly.x + LEVEL_MAP.dailyTabWeekly.w);
-      for (const [tab, countdown] of [
-        ['daily', 'New in 12:34 (00:00 UTC)'],
-        ['daily', 'New in 20h (00:00 UTC)'],
-        ['weekly', 'New in 6d 23h (Mon 00:00 UTC)'],
+    it(`${name}: the countdown pill (between the tabs and the CTA) draws its times 24 px bold, words 22 px, dim, inside the pill`, () => {
+      const measure = recordingCtx([], new Set<string>(), undefined, fontMeasure);
+      for (const [tab, countdown, time] of [
+        ['daily', 'New in 12:34', '12:34'],
+        ['daily', 'New in 10h 24m', '10h 24m'],
+        ['daily', 'New in 10h 24m (at 04:00)', '10h 24m'],
+        ['weekly', 'New in 6d 23h (at Mon 04:00)', '6d 23h'],
       ] as const) {
         const base = dailyOpts(tab);
-        const daily = tab === 'daily' ? { ...base, countdown } : { ...base, weekly: { ...base.weekly, countdown } };
+        const daily = tab === 'daily' ? { ...base, countdown, countdownTime: time } : { ...base, weekly: { ...base.weekly, countdown, countdownTime: time } };
+        const face = tab === 'daily' ? daily : daily.weekly;
+        // AUD-U23: the pill runs from 8 px right of the WEEKLY tab to 8 px left of the ▶ PLAY pill
+        const cta = challengeCta(measure, r, face, false);
+        expect(cta.kind).toBe('play');
+        const pill = countdownPillRect(r, cta.rect.w);
+        expect(pill.x).toBe(LEVEL_MAP.dailyTabWeekly.x + LEVEL_MAP.dailyTabWeekly.w + 8);
+        expect(pill.x + pill.w).toBe(cta.rect.x - 8);
+        expect(pill).toMatchObject({ y: r.y + 12, h: 32 });
         const runs = drawCardWith(pal, daily).filter((d) => inside(d, pill));
-        // AUD-U2: words at 22 px; a countdown too long for the pill drops its reset note (`shortCountdown`)
+        // AUD-U2: words at 22 px; a countdown too long for the pill drops its local note, then its words
         const shown = runs.map((d) => d.text).join('');
-        expect([countdown, shortCountdown(countdown)], shown).toContain(shown);
+        const fit = countdownFit(measure, face, pill.w - COUNTDOWN_INSET * 2);
+        expect(fit?.text, countdown).toBe(shown);
+        expect([countdown, shortCountdown(countdown), time], shown).toContain(shown);
+        expect(fit!.clock).toBe(![countdown, shortCountdown(countdown)].includes(shown));
         expectNumeralLine(runs, shown, pal.textDim, 22);
-        // one run per clock: "12:34" and "00:00" are never split around a word-size colon
-        if (shown.includes('12:34') && shown.includes('00:00')) expect(runs.map((d) => d.text)).toEqual(['New in ', '12:34', ' (', '00:00', ' UTC)']);
-        // centred, inside the inset, numerals' cap height (0.72 em) inside the 32 px pill
+        // inside the inset (after the clock glyph when the words went), numerals' cap height inside the 32 px pill
         const left = runs[0]!.x;
         const right = left + drawnWidth(runs);
-        expect((left + right) / 2).toBeCloseTo(pill.x + pill.w / 2, 5);
-        expect(left).toBeGreaterThanOrEqual(pill.x + COUNTDOWN_INSET);
+        expect(left).toBeGreaterThanOrEqual(pill.x + COUNTDOWN_INSET + (fit!.clock ? 18 : 0));
         expect(right).toBeLessThanOrEqual(pill.x + pill.w - COUNTDOWN_INSET);
+        if (!fit!.clock) expect((left + right) / 2).toBeCloseTo(pill.x + pill.w / 2, 5);
         const y = runs[0]!.y;
         expect(y - 0.72 * NUMERAL_PX).toBeGreaterThanOrEqual(pill.y + 2);
         expect(y).toBeLessThanOrEqual(pill.y + pill.h - 4);
       }
-      // DONE keeps its 176 px gold badge (no number on it)
-      const done = drawCardWith(pal, { ...dailyOpts('daily'), done: true, best: { stars: 3, timeMs: 61_000 } });
-      expect(done.filter((d) => inside(d, pill) && NUMERAL.test(d.text))).toEqual([]);
+      // the 12:34 form keeps its words in English: "New in " + one run for the clock
+      const open = drawCardWith(pal, dailyOpts('daily'));
+      const cta = challengeCta(measure, r, dailyOpts('daily'), false);
+      expect(open.filter((d) => inside(d, countdownPillRect(r, cta.rect.w))).map((d) => d.text)).toEqual(['New in ', '12:34']);
+    });
+
+    it(`${name}: the CTA pill (AUD-U23) — ▶ PLAY on the active-choice pair, DONE ink on gold, LOCKED dim on the tab frame — right of the title row, inside its tap area`, () => {
+      const measure = recordingCtx([], new Set<string>(), undefined, fontMeasure);
+      const cases: [DailyCardOpts, string, string, ChallengeCta['kind']][] = [
+        [dailyOpts('daily'), 'PLAY', pal.shopBuy.text, 'play'],
+        [dailyOpts('weekly'), 'PLAY', pal.shopBuy.text, 'play'],
+        [{ ...dailyOpts('daily'), done: true, best: { stars: 3, timeMs: 61_000 } }, 'DONE', pal.ink, 'done'],
+        [dailyOpts('daily', false), 'LOCKED', pal.textDimFrame, 'locked'],
+        [dailyOpts('weekly', false), 'LOCKED', pal.textDimFrame, 'locked'],
+      ];
+      for (const [daily, label, ink, kind] of cases) {
+        const face = daily.tab === 'weekly' ? daily.weekly : daily;
+        const cta = challengeCta(measure, r, face, false);
+        expect(cta.kind).toBe(kind);
+        expect(cta.rect.x + cta.rect.w).toBe(r.x + r.w - 14);
+        expect(cta.rect).toMatchObject({ y: r.y + 12, h: 32 });
+        expect(cta.rect.w).toBeLessThanOrEqual(176);
+        // the drawn pill sits inside the right column the tap area covers
+        expect(cta.rect.x).toBeGreaterThanOrEqual(CHALLENGE_PLAY_HIT.x);
+        expect(cta.rect.y).toBeGreaterThanOrEqual(CHALLENGE_PLAY_HIT.y);
+        expect(cta.rect.y + cta.rect.h).toBeLessThanOrEqual(CHALLENGE_PLAY_HIT.y + CHALLENGE_PLAY_HIT.h);
+        const fills = new Set<string>();
+        const out: Drawn[] = [];
+        drawLevelSelect(recordingView(recordingCtx(out, new Set<string>(), fills, fontMeasure)), pal, levelSelectOpts(daily));
+        const drawn = out.filter((d) => inside(d, cta.rect));
+        expect(drawn.map((d) => d.text)).toEqual([label]);
+        expect(drawn[0]!.fill).toBe(ink);
+        expect(drawn[0]!.px).toBe(24);
+        expect(drawn[0]!.maxW).toBeUndefined();
+        if (kind === 'play') expect(fills).toContain(pal.shopBuy.face);
+        if (kind === 'done') expect(fills).toContain(pal.gold);
+      }
+      // the pairs: ≥ 4.5:1 on the flat face and on drawPill's white top highlight
+      expect(worstOnFace(pal.shopBuy)).toBeGreaterThanOrEqual(MIN_TEXT);
+      expect(contrast(pal.ink, pal.gold)).toBeGreaterThanOrEqual(MIN_TEXT);
+      expect(contrast(pal.textDimFrame, tabFrame(pal))).toBeGreaterThanOrEqual(MIN_TEXT);
     });
 
     it(`${name}: the reward line draws its amounts 24 px bold, words 22 px ink, on the streak pill's baseline`, () => {
@@ -979,7 +1032,7 @@ describe('ART-17 through a recording canvas', () => {
 
     it(`${name}: the card does not grow — every line stays on its 104 px face, over the same map`, () => {
       expect(LEVEL_MAP.daily).toEqual({ x: 30, y: 112, w: 660, h: 104 });
-      for (const daily of [dailyOpts('daily'), dailyOpts('weekly'), dailyOpts('daily', false), { ...dailyOpts('weekly'), weekly: { ...dailyOpts('weekly').weekly, countdown: 'New in 6d 23h (Mon 00:00 UTC)' } }]) {
+      for (const daily of [dailyOpts('daily'), dailyOpts('weekly'), dailyOpts('daily', false), { ...dailyOpts('weekly'), weekly: { ...dailyOpts('weekly').weekly, countdown: 'New in 6d 23h (at Mon 04:00)', countdownTime: '6d 23h' } }, { ...dailyOpts('daily'), done: true, best: { stars: 3, timeMs: 61_000 } }]) {
         const card = drawCardWith(pal, daily).filter((d) => d.x >= r.x && d.x <= r.x + r.w && d.y >= r.y && d.y <= r.y + r.h + 40);
         expect(card.length).toBeGreaterThan(0);
         // baseline + a 0.22 em descent inside the face (the bottom 5 px are the clay edge)
@@ -1024,11 +1077,9 @@ describe('ART-17 through a recording canvas', () => {
 const TIGHT = new Set([
   // AUD-U2 (2026-10-30): words at 22 px; long countdowns drop their reset note and long rewards go
   // compact (menusLevels.ts `shortCountdown`, `challengeRowLayout`), so these fit with < 5 % to spare
-  'az countdown daily h',
+  // AUD-U23 (2026-11-04): the countdowns pick the longest form with room (`countdownFit`), so none is tight
   'az reward weekly',
   'en reward weekly',
-  'ru countdown daily mm:ss',
-  'tr countdown weekly h',
 ]);
 /** L10N-3: smallest word size of any line here (was 12 px, the helper's floor; AZ/RU/TR weekly hit 13–14 px). */
 /** AUD-U2: the words of a tight line never shrink below the 22 px text floor (render/widgets.ts MIN_TEXT_PX). */
@@ -1110,15 +1161,22 @@ describe('AUD-U2 settings row subtitles stay left of their control', () => {
           setTextScale(k);
           const out: Drawn[] = [];
           drawSettings(recordingView(recordingCtx(out, new Set<string>(), undefined, fontMeasure)), DEFAULT_PALETTE, settingsOpts({ language: lang, textScale: k }));
-          for (const [control, subKey] of [
-            [SETTINGS.music, 'settings.musicSub'],
-            [SETTINGS.sound, 'settings.soundSub'],
-            [SETTINGS.colorBlind, 'settings.colorBlindSub'],
-            [SETTINGS.motion, 'settings.motionSub'],
-            [SETTINGS.textSize, 'settings.textSizeSub'],
+          // AUD-U20 / AUD-F18: the native / reduced-motion subtitles of the two toggle rows, drawn on a second frame
+          const alt: Drawn[] = [];
+          drawSettings(recordingView(recordingCtx(alt, new Set<string>(), undefined, fontMeasure)), DEFAULT_PALETTE, settingsOpts({ language: lang, textScale: k, hapticsNative: true, shakeReduced: true }));
+          for (const [control, subKey, frame] of [
+            [SETTINGS.music, 'settings.musicSub', out],
+            [SETTINGS.sound, 'settings.soundSub', out],
+            [SETTINGS.colorBlind, 'settings.colorBlindSub', out],
+            [SETTINGS.motion, 'settings.motionSub', out],
+            [SETTINGS.textSize, 'settings.textSizeSub', out],
+            [SETTINGS_FEEL.haptics, 'settings.vibrationWeb', out],
+            [SETTINGS_FEEL.shake, 'settings.shakeSub', out],
+            [SETTINGS_FEEL.haptics, 'settings.vibrationSub', alt],
+            [SETTINGS_FEEL.shake, 'settings.shakeReduced', alt],
           ] as const) {
             const sub = t(subKey);
-            const lines = out.filter((d) => d.x === SETTINGS.labelX && d.y >= control.y + 28 && d.y < control.y + 80 && sub.includes(d.text.replace(/…$/, '')));
+            const lines = frame.filter((d) => d.x === SETTINGS.labelX && d.y >= control.y + 28 && d.y < control.y + 80 && sub.includes(d.text.replace(/…$/, '')));
             expect(lines.length, `${lang} ${k} ${subKey}`).toBeGreaterThan(0);
             for (const d of lines) {
               expect(d.weight, `${lang} ${k} "${d.text}"`).toBe(500);
@@ -1180,7 +1238,6 @@ describe('ART-17 locale fit at 360 px (720 logical)', () => {
     registerDictionary('tr', tr);
     const pal = DEFAULT_PALETTE;
     const r = LEVEL_MAP.daily;
-    const pill = countdownPillRect(r);
     const row = shopRowRect(1);
     const tierGeo = tierGeometry(row);
     const tight: string[] = [];
@@ -1189,15 +1246,20 @@ describe('ART-17 locale fit at 360 px (720 logical)', () => {
         await setLanguage(lang);
         // [id, drawn runs, nominal word px, room]
         const lines: [string, Drawn[], number, number][] = [];
-        const countdowns: [string, 'daily' | 'weekly', string][] = [
-          ['daily h', 'daily', t('daily.newIn', { h: 24 })],
-          ['daily mm:ss', 'daily', t('daily.newInTime', { time: '59:59' })],
-          ['weekly 6d', 'weekly', t('weekly.newInDays', { d: 6, h: 23 })],
-          ['weekly h', 'weekly', t('weekly.newIn', { h: 23 })],
+        // AUD-U23: local countdowns with the longest rollover notes (Baku +4 h, New York −5 h on the weekly's "Sun")
+        const H = 3_600_000;
+        const countdowns: [string, 'daily' | 'weekly', { full: string; time: string }][] = [
+          ['daily h', 'daily', challengeCountdown(23 * H + 59 * 60_000, 240, false)],
+          ['daily mm:ss', 'daily', challengeCountdown(59 * 60_000 + 59_000, 240, false)],
+          ['weekly 6d', 'weekly', challengeCountdown(6 * 24 * H + 23 * H, 240, true)],
+          ['weekly h', 'weekly', challengeCountdown(23 * H + 59 * 60_000, -300, true)],
         ];
-        for (const [id, tab, countdown] of countdowns) {
+        for (const [id, tab, c] of countdowns) {
           const base = dailyOpts(tab);
-          const open = tab === 'daily' ? { ...base, countdown } : { ...base, weekly: { ...base.weekly, countdown } };
+          const set = { countdown: c.full, countdownTime: c.time };
+          const open = tab === 'daily' ? { ...base, ...set } : { ...base, weekly: { ...base.weekly, ...set } };
+          const cta = challengeCta(recordingCtx([], new Set<string>(), undefined, fontMeasure), r, tab === 'daily' ? open : open.weekly, false);
+          const pill = countdownPillRect(r, cta.rect.w);
           lines.push([`countdown ${id}`, drawCardWith(pal, open).filter((d) => inside(d, pill)), 22, pill.w - COUNTDOWN_INSET * 2]);
           const locked = tab === 'daily' ? { ...open, unlocked: false } : { ...open, weekly: { ...open.weekly, unlocked: false } };
           lines.push([`locked countdown ${id}`, lineAt(drawCardWith(pal, locked), r.y + 91, r.x + 96, r.x + r.w), 22, LOCKED_ROOM]);

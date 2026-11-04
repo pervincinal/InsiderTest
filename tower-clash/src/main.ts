@@ -556,7 +556,7 @@ export class TowerClashApp implements App {
     });
   }
 
-  goShop(tab: ShopTab = 'crystals', back: () => void = () => this.goTitle()): void {
+  goShop(tab?: ShopTab, back: () => void = () => this.goTitle()): void {
     void this.openShop(tab, back);
   }
 
@@ -564,7 +564,8 @@ export class TowerClashApp implements App {
     void this.openAchievements(back);
   }
 
-  openShop(tab: ShopTab, back: () => void): Promise<void> {
+  /** `tab` undefined: the session's last-picked tab, else SKINS (AUD-U25, shop.ts `shopBrowseTab`). */
+  openShop(tab: ShopTab | undefined, back: () => void): Promise<void> {
     warmCosmetics(); // the shop previews every roof / helmet / theme: fetch both chunks alongside the screen
     return this.goLazy((L) => new L.ShopScreen(this, tab, back));
   }

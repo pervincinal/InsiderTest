@@ -44,8 +44,14 @@ export interface ChallengeCardFace {
   done: boolean;
   /** Best result today / this week, when won. */
   best: { stars: number; timeMs: number } | null;
-  /** Time to the next challenge, naming the reset ("New in 12:34 (00:00 UTC)" / "New in 3d 4h (Mon 00:00 UTC)"). */
+  /**
+   * Time to the next challenge in local terms (AUD-U23): "New in 10h 24m", plus the local rollover
+   * time where the device clock is more than an hour off UTC ("New in 10h 24m (at 04:00)",
+   * "New in 3d 4h (at Mon 04:00)"). The rollover itself stays UTC midnight / Monday (GDD §7.2 / §8.1).
+   */
   countdown: string;
+  /** The countdown's time alone ("10h 24m", "3d 4h", "12:34"): drawn after a clock glyph where the words do not fit. */
+  countdownTime: string;
 }
 
 /** Daily Challenge card (GDD §7), sticky under the header; carries the weekly face (GDD §8) behind its second tab. */
@@ -89,10 +95,10 @@ export interface LevelSelectOpts {
 }
 
 /**
- * Countdown pill (ART-17): from 8 px right of the WEEKLY tab to the card's 14 px right margin
- * (x 370–676, 306 px wide; it was 250), text inset 8 px a side. Its numbers are 24 px bold, so "New
- * in 6d 23h (Mon 00:00 UTC)" needs the whole title row beside the tabs; the DONE badge and the streak
- * pill keep the 176 px right column.
+ * Countdown pill (ART-17): from 8 px right of the WEEKLY tab to 8 px left of the CTA (AUD-U23: x 370
+ * to ≈ 554 beside ▶ PLAY; it took the whole 306 px row before), text inset 8 px a side. Its numbers
+ * are 24 px bold; a line too long drops its local rollover note, then its words (`countdownFit`).
+ * The streak pill keeps the 176 px right column.
  */
 const COUNTDOWN_GAP = 8;
 /** Room for the countdown inside its pill. */
@@ -134,10 +140,118 @@ function fitCardLine(ctx: CanvasRenderingContext2D, text: string, room: number, 
   return cardLineW(ctx, text) <= room ? text : short(text);
 }
 
-/** Countdown pill rect of the challenge card `r` (exported for the contrast / fit tests). */
-export function countdownPillRect(r: Rect): Rect {
+/**
+ * AUD-U23: the card's call to action, right of the title row on the card's 14 px margin — ▶ PLAY
+ * (the active-choice pair), ✓ DONE (gold, + the weekly's ★ pip) or a lock + LOCKED (the tab frame's
+ * dim pair) — as wide as its label at 24 px bold (≤ the 176 px right column, never under the 22 px
+ * floor). The whole card still taps; the pill's own tap area is `CHALLENGE_PLAY_HIT`.
+ */
+export interface ChallengeCta {
+  kind: 'play' | 'done' | 'locked';
+  label: string;
+  rect: Rect;
+  /** Label size handed to `font()` (24, or fitted down to 22). */
+  px: number;
+  /** The weekly's ★ pip after the label (3★ target crystals paid). */
+  pip: boolean;
+}
+const CTA_PAD = 14;
+const CTA_GLYPH = 18;
+const CTA_GLYPH_GAP = 6;
+const CTA_PIP = 26;
+/**
+ * The CTA's tap area in layout space (AUD-U23): the right column from under the wallet's padded tap
+ * area (it ends at y 94 on a 360 px phone) down over the card's middle row — 88 tall, 44 pt at
+ * 360 px. It reaches past the drawn pill, but everything it covers there is the card, which does
+ * the same thing (start the challenge, or explain the lock).
+ */
+export const CHALLENGE_PLAY_HIT: Rect = Object.freeze({ x: 500, y: 96, w: 176, h: 88 });
+
+/** The CTA of card `r` showing face `d` (`pip`: the weekly's paid 3★ target). Leaves `ctx.font` set to its label. */
+export function challengeCta(ctx: CanvasRenderingContext2D, r: Rect, d: ChallengeCardFace, pip: boolean): ChallengeCta {
+  const kind = !d.unlocked ? 'locked' : d.done ? 'done' : 'play';
+  const label = t(kind === 'locked' ? 'daily.lockedCta' : kind === 'done' ? 'daily.done' : 'daily.play');
+  const extra = CTA_PAD * 2 + CTA_GLYPH + CTA_GLYPH_GAP + (pip && kind === 'done' ? CTA_PIP : 0);
+  const px = fitFontPx(ctx, label, 24, CARD_RIGHT_W - extra, '700');
+  ctx.font = font(px, '700', undefined, CARD_MAX_PX);
+  const w = Math.min(CARD_RIGHT_W, Math.ceil(ctx.measureText(label).width) + extra);
+  return { kind, label, rect: { x: r.x + r.w - 14 - w, y: r.y + 12, w, h: 32 }, px, pip: pip && kind === 'done' };
+}
+
+/** Countdown pill rect of the challenge card `r` beside a CTA `ctaW` wide (exported for the contrast / fit tests). */
+export function countdownPillRect(r: Rect, ctaW: number): Rect {
   const x = LEVEL_MAP.dailyTabWeekly.x + LEVEL_MAP.dailyTabWeekly.w + COUNTDOWN_GAP;
-  return { x, y: r.y + 12, w: r.x + r.w - 14 - x, h: 32 };
+  return { x, y: r.y + 12, w: r.x + r.w - 14 - ctaW - COUNTDOWN_GAP - x, h: 32 };
+}
+
+/** Clock glyph before a bare countdown time (AUD-U23), CLOCK_W px across, centred on (cx, cy). */
+const CLOCK_W = 18;
+function drawClock(ctx: CanvasRenderingContext2D, colour: string, cx: number, cy: number): void {
+  ctx.save();
+  ctx.strokeStyle = colour;
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.arc(cx, cy, CLOCK_W / 2 - 1, 0, Math.PI * 2);
+  ctx.moveTo(cx, cy - 5);
+  ctx.lineTo(cx, cy);
+  ctx.lineTo(cx + 4, cy + 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/**
+ * What the countdown pill shows in `room` px (AUD-U23, AUD-U2: shorten, never squeeze): the whole
+ * line with its local rollover note, the line without it, the time alone after a clock glyph
+ * (`clock`), or the bare time; null when not even that fits.
+ */
+export function countdownFit(ctx: CanvasRenderingContext2D, d: Pick<ChallengeCardFace, 'countdown' | 'countdownTime'>, room: number): { text: string; clock: boolean } | null {
+  for (const text of [d.countdown, shortCountdown(d.countdown)]) if (cardLineW(ctx, text) <= room) return { text, clock: false };
+  const w = cardLineW(ctx, d.countdownTime);
+  if (CLOCK_W + 6 + w <= room) return { text: d.countdownTime, clock: true };
+  return w <= room ? { text: d.countdownTime, clock: false } : null;
+}
+
+/** The CTA pill: face, glyph, label (and the weekly's ★ pip). */
+function drawChallengeCta(ctx: CanvasRenderingContext2D, pal: Palette, cta: ChallengeCta, pressed: boolean): void {
+  const c = cta.rect;
+  const face = cta.kind === 'play' ? pal.shopBuy.face : cta.kind === 'done' ? pal.gold : shade(pal.paper, -0.08);
+  const ink = cta.kind === 'play' ? pal.shopBuy.text : cta.kind === 'done' ? pal.ink : pal.textDimFrame;
+  const edge = cta.kind === 'play' ? shade(face, -0.35) : cta.kind === 'done' ? pal.goldShade : undefined;
+  drawPill(ctx, c, pressed ? shade(face, -0.15) : face, edge, 2);
+  ctx.font = font(cta.px, '700', undefined, CARD_MAX_PX);
+  const labelW = Math.min(ctx.measureText(cta.label).width, c.w - CTA_PAD * 2 - CTA_GLYPH - CTA_GLYPH_GAP - (cta.pip ? CTA_PIP : 0));
+  const inner = CTA_GLYPH + CTA_GLYPH_GAP + labelW + (cta.pip ? CTA_PIP : 0);
+  const gx = c.x + (c.w - inner) / 2 + CTA_GLYPH / 2;
+  const cy = c.y + c.h / 2;
+  ctx.save();
+  if (cta.kind === 'play') {
+    // ▶ as a path (no font glyph): 14 wide, 16 tall, optically centred
+    ctx.fillStyle = ink;
+    ctx.beginPath();
+    ctx.moveTo(gx - 6, cy - 8);
+    ctx.lineTo(gx + 8, cy);
+    ctx.lineTo(gx - 6, cy + 8);
+    ctx.closePath();
+    ctx.fill();
+  } else if (cta.kind === 'done') {
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(gx - 7, cy);
+    ctx.lineTo(gx - 2, cy + 6);
+    ctx.lineTo(gx + 8, cy - 7);
+    ctx.stroke();
+  } else drawLock(ctx, ink, gx - 2, cy + 1, CTA_GLYPH); // its shackle runs wider than the body: 2 px back from the label
+  ctx.restore();
+  ctx.fillStyle = ink;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  const lx = gx + CTA_GLYPH / 2 + CTA_GLYPH_GAP;
+  ctx.fillText(clipText(ctx, cta.label, labelW + 0.5), lx, cy + 1);
+  if (cta.pip) drawStar(ctx, pal, lx + labelW + CTA_PIP / 2 + 2, cy, 10, true);
 }
 
 /** DAILY / WEEKLY segmented control in the card's title row (hit rects: `LEVEL_MAP.dailyTabDaily` / `dailyTabWeekly`). */
@@ -201,30 +315,25 @@ function drawDailyCard(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, o: 
   const textW = r.w - (left - r.x) - rightW - 24;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
-  // title row: the DAILY / WEEKLY tabs + the right-hand pill (DONE / countdown)
+  // title row: the DAILY / WEEKLY tabs, the countdown pill and the CTA (AUD-U23: ▶ PLAY / ✓ DONE / LOCKED)
   drawCardTabs(ctx, pal, o.tab, !d.unlocked, pressed);
   const pill: Rect = { x: r.x + r.w - rightW - 14, y: r.y + 12, w: rightW, h: 32 };
+  // the weekly's DONE carries a ★ pip once the 3★ target crystals are paid (GDD §8.2)
+  const cta = challengeCta(ctx, r, d, weekly && o.weekly.target);
+  drawChallengeCta(ctx, pal, cta, pressed === CHALLENGE_PLAY_HIT);
   if (d.unlocked) {
-    const done = d.done;
-    // The countdown names the reset ("New in 12:34 (00:00 UTC)", GDD §7.4), so its pill is wider
-    // than the DONE badge / streak column: it takes the title row beside the tabs.
-    const cd: Rect = done ? pill : countdownPillRect(r);
-    drawPill(ctx, cd, done ? pal.gold : pal.paper, done ? pal.goldShade : undefined, 2);
-    if (done) {
-      // the weekly's DONE badge carries a ★ pip once the 3★ target crystals are paid (GDD §8.2)
-      const pip = weekly && o.weekly.target;
-      const label = t('daily.done');
-      ctx.textAlign = 'center';
-      ctx.fillStyle = pal.ink;
-      ctx.font = font(fitFontPx(ctx, label, 22, cd.w - 20 - (pip ? 28 : 0), '700'), '700', undefined, CARD_MAX_PX);
-      ctx.fillText(label, cd.x + cd.w / 2 - (pip ? 12 : 0), cd.y + cd.h / 2 + 1);
-      if (pip) drawStar(ctx, pal, cd.x + cd.w - 26, cd.y + cd.h / 2, 10, true);
-      ctx.textAlign = 'left';
-    } else {
-      // ART-17: the time left and the reset time are 24 px bold numerals (dim on the paper pill,
-      // ≥ 4.5:1), the words 22 px (AUD-U2); a line too long for the pill drops its reset note
-      const room = cd.w - COUNTDOWN_INSET * 2;
-      drawNumeralLine(ctx, fitCardLine(ctx, d.countdown, room, shortCountdown), cd.x + cd.w / 2, cd.y + cd.h / 2 + 8, room, pal.textDim, CARD_WORD_PX, 'center', CARD_MAX_PX);
+    // ART-17: the time left (and the local rollover time) 24 px bold numerals dim on the paper pill
+    // (≥ 4.5:1), the words 22 px (AUD-U2), between the tabs and the CTA; a line too long for the
+    // pill drops its rollover note, then its words (a clock glyph before the time)
+    const cd = countdownPillRect(r, cta.rect.w);
+    const room = cd.w - COUNTDOWN_INSET * 2;
+    const fit = countdownFit(ctx, d, room);
+    if (fit) {
+      drawPill(ctx, cd, pal.paper, undefined, 2);
+      const lineW = (fit.clock ? CLOCK_W + 6 : 0) + cardLineW(ctx, fit.text);
+      const x0 = cd.x + (cd.w - lineW) / 2;
+      if (fit.clock) drawClock(ctx, pal.textDim, x0 + CLOCK_W / 2, cd.y + cd.h / 2);
+      drawNumeralLine(ctx, fit.text, x0 + (fit.clock ? CLOCK_W + 6 : 0), cd.y + cd.h / 2 + 8, room, pal.textDim, CARD_WORD_PX, 'left', CARD_MAX_PX);
     }
   }
   // line 2: level · twist, or the unlock hint
@@ -581,6 +690,13 @@ export function drawLevelSelect(view: View, pal: Palette, o: LevelSelectOpts): v
   const screen = bleed(view);
   const minY = o.scroll + screen.top - 120;
   const maxY = o.scroll + screen.bottom + 120;
+  // AUD-U26: the nodes (with their stars, flag and name pill) scroll under the sticky block, never
+  // through the glass header or the gap above the challenge card: clipped to the card's top edge
+  ctx.save();
+  ctx.beginPath();
+  const clipTop = o.scroll + hudAnchors(view).top + LEVEL_MAP.daily.y;
+  ctx.rect(screen.left, clipTop, screen.right - screen.left, maxY + 200 - clipTop);
+  ctx.clip();
   o.nodes.forEach((node, i) => {
     const y = levelNodeRect(i, 0).y;
     if (y < minY || y > maxY) return;
@@ -589,6 +705,7 @@ export function drawLevelSelect(view: View, pal: Palette, o: LevelSelectOpts): v
     drawNode(ctx, pal, node, i, i === o.current, o.nowMs);
     ctx.translate(-dx, 0);
   });
+  ctx.restore();
   ctx.restore();
 
   // fixed header: glass band, back, title, wallet — on the top safe-area edge of a tall screen, the

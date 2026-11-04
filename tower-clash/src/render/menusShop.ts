@@ -576,7 +576,13 @@ function drawTradeCard(ctx: CanvasRenderingContext2D, pal: Palette, c: ShopTrade
 }
 
 /**
- * A dim footer under the last card (AUD-U2: 22 px, was 15): up to two 24 px-pitch lines across 640 px
+ * Colour of the shop footers (AUD-U26): they sit on the sea, not on a card — `textDim` there was
+ * ≈ 3.7 : 1 on the light water; ink is ≥ 6 : 1 on every water tone (contrast.test.ts).
+ */
+export const FOOTER_INK = (pal: Palette): string => pal.ink;
+
+/**
+ * A footer under the last card (AUD-U2: 22 px, was 15): up to two 24 px-pitch lines across 640 px
  * from `y` down (the content keeps 60 px under the last card / RESTORE, ui/shop.ts), never squeezed.
  */
 function drawFooter(ctx: CanvasRenderingContext2D, text: string, y: number): void {
@@ -621,13 +627,13 @@ export function drawShop(view: View, pal: Palette, o: ShopOpts): void {
     if (o.pending === 'restore') drawSpinner(ctx, pal.ink, rr.x + rr.w / 2, rr.y + (rr.h - 4) / 2, 11, o.nowMs);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = pal.textDim;
+    ctx.fillStyle = FOOTER_INK(pal);
     drawFooter(ctx, o.storeAvailable ? t('shop.testStore') : t('shop.storeUnavailable'), rr.y + rr.h + 22);
   }
   if (o.tab === 'upgrades') {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = pal.textDim;
+    ctx.fillStyle = FOOTER_INK(pal);
     const last = o.trade ?? o.upgrades[o.upgrades.length - 1];
     if (last) drawFooter(ctx, t('shop.upgradesFooter'), last.rect.y + last.rect.h + 22);
   }

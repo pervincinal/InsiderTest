@@ -15,7 +15,7 @@ import {
 } from '../../src/render/palette';
 import { TEAM_TONES, TONE_PALETTES } from '../../src/render/teamTones';
 import { SETTINGS, settingsAboutLayout } from '../../src/render/menuLayout';
-import { TONE_SEGMENTS } from '../../src/render/menusSettings';
+import { SETTINGS_FEEL, TONE_SEGMENTS } from '../../src/render/menusSettings';
 import { en } from '../../src/ui/locales/en';
 import { az } from '../../src/ui/locales/az';
 import { ru } from '../../src/ui/locales/ru';
@@ -141,7 +141,7 @@ describe('save field settings.tones (optional, schema stays v3)', () => {
 });
 
 describe('settings layout (SETTINGS.tones)', () => {
-  it('the row sits under the language picker and above the summary / RESET, inside the card; About fits 9:16 on the web, scrolls into view with both native rows', () => {
+  it('the row sits under the language picker and above the summary / RESET, inside the card; About scrolls into view (AUD-U20 / AUD-F18: the two toggle rows pushed it past a 9:16 screen)', () => {
     const r = SETTINGS.tones;
     const card = SETTINGS.card;
     expect(r.x).toBe(SETTINGS.language.x);
@@ -152,7 +152,10 @@ describe('settings layout (SETTINGS.tones)', () => {
     // AUD-U2: the "Text size" row sits between the team colours and the summary
     expect(SETTINGS.textSizeSepY).toBeGreaterThanOrEqual(r.y + r.h + 12);
     expect(SETTINGS.textSize.y).toBeGreaterThanOrEqual(SETTINGS.textSizeSepY + 16);
-    expect(SETTINGS.summaryY - 12).toBeGreaterThanOrEqual(SETTINGS.textSize.y + SETTINGS.textSize.h + 12);
+    // AUD-U20 / AUD-F18: Vibration and Screen shake sit between the text size and the summary, a row (≥ 88: 44 pt at 360) apart
+    expect(SETTINGS_FEEL.haptics.y - SETTINGS.textSize.y).toBeGreaterThanOrEqual(88);
+    expect(SETTINGS_FEEL.shake.y - SETTINGS_FEEL.haptics.y).toBeGreaterThanOrEqual(88);
+    expect(SETTINGS.summaryY - 12).toBeGreaterThanOrEqual(SETTINGS_FEEL.shake.y + SETTINGS_FEEL.shake.h + 12);
     expect(SETTINGS.reset.y).toBeGreaterThanOrEqual(SETTINGS.summaryY + 12);
     expect(SETTINGS.reset.y + SETTINGS.reset.h).toBeLessThanOrEqual(card.y + card.h - 16);
     expect(r.y + r.h).toBeLessThanOrEqual(card.y + card.h);
@@ -165,9 +168,9 @@ describe('settings layout (SETTINGS.tones)', () => {
     ] as const) {
       const about = settingsAboutLayout(support, privacy);
       expect(about.card.y).toBeGreaterThanOrEqual(card.y + card.h + 8);
-      // the web About (version only) fits a 9:16 screen without scrolling; the native rows scroll into view (settings.ts maxScroll)
-      if (!support) expect(about.card.y + about.card.h, `about support=${support} privacy=${privacy}`).toBeLessThanOrEqual(1280 - 16);
-      else expect(about.card.y + about.card.h, `about support=${support} privacy=${privacy}`).toBeLessThanOrEqual(1280 + 120);
+      // the About card scrolls into view (settings.ts maxScroll): at most the two toggle rows (192) past 9:16 on the web, + 120 with the native rows
+      if (!support) expect(about.card.y + about.card.h, `about support=${support} privacy=${privacy}`).toBeLessThanOrEqual(1280 + 192 - 16);
+      else expect(about.card.y + about.card.h, `about support=${support} privacy=${privacy}`).toBeLessThanOrEqual(1280 + 192 + 120);
     }
   });
 });

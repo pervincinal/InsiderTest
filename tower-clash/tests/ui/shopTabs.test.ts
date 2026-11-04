@@ -10,7 +10,9 @@ import { getStore } from '../../src/economy/store';
 import type { SaveData } from '../../src/ui/save';
 import { defaultSave, setSaveStorageForTests } from '../../src/ui/save';
 import type { App } from '../../src/ui/screens';
-import { ShopScreen, skinListed } from '../../src/ui/shop';
+import { ShopScreen, resetShopTabMemory, shopBrowseTab, skinListed } from '../../src/ui/shop';
+import { TitleScreen } from '../../src/ui/screens';
+import { TITLE } from '../../src/render/layout';
 import { shopSkins } from '../../src/economy/entitlements';
 
 /*
@@ -73,6 +75,7 @@ beforeEach(() => {
   save = defaultSave();
   drawn.length = 0;
   available = false;
+  resetShopTabMemory(); // AUD-U25: every test starts a fresh session
   vi.spyOn(getStore(), 'isAvailable').mockImplementation(() => available);
 });
 
@@ -158,9 +161,11 @@ describe('shop screen with the store unavailable', () => {
 });
 
 describe('shop screen with the store available (web fake store) is unchanged', () => {
-  it('four tabs, Crystals by default, the four-segment row hit-tests as before', () => {
+  it('four tabs, Skins by default (AUD-U25), the four-segment row hit-tests as before', () => {
     available = true;
     const shop = new ShopScreen(fakeApp(save));
+    expect(shop.currentTab).toBe('skins');
+    tap(shop, tabPoint(0, 4));
     expect(shop.currentTab).toBe('crystals');
     const o = lastDraw(shop);
     expect(o.tabs).toEqual(['crystals', 'bundles', 'skins', 'upgrades']);
@@ -170,6 +175,33 @@ describe('shop screen with the store available (web fake store) is unchanged', (
       tap(shop, tabPoint(i, 4));
       expect(shop.currentTab).toBe(tab);
     });
+  });
+
+  it('AUD-U25: a shop opened without a tab shows the last tab picked this session, else Skins; a named tab does not move the memory', () => {
+    available = true;
+    expect(shopBrowseTab()).toBe('skins');
+    expect(new ShopScreen(fakeApp(save), 'crystals').currentTab).toBe('crystals'); // the wallet pill: buy crystals
+    expect(new ShopScreen(fakeApp(save)).currentTab).toBe('skins'); // opening on a named tab is not a pick
+    const shop = new ShopScreen(fakeApp(save));
+    tap(shop, tabPoint(3, 4));
+    expect(shop.currentTab).toBe('upgrades');
+    expect(new ShopScreen(fakeApp(save)).currentTab).toBe('upgrades');
+    shop.key({ key: 'ArrowRight' } as KeyboardEvent); // keys pick too (wraps to Crystals)
+    expect(new ShopScreen(fakeApp(save)).currentTab).toBe('crystals');
+    resetShopTabMemory(); // in memory only: a new session starts on Skins again
+    expect(new ShopScreen(fakeApp(save)).currentTab).toBe('skins');
+  });
+
+  it('AUD-U25: the title SHOP button browses (no tab), the title wallet pill opens Crystals', () => {
+    const calls: (ShopTab | undefined)[] = [];
+    const app = { ...fakeApp(save), goShop: (tab?: ShopTab) => void calls.push(tab) } as App;
+    const title = new TitleScreen(app);
+    const at = (r: Rect) => ({ x: r.x + r.w / 2, y: r.y + r.h / 2, id: 1, type: 'mouse' as const, timeMs: 0 });
+    title.down(at(TITLE.shop));
+    title.up(at(TITLE.shop));
+    title.down(at(TITLE.wallet));
+    title.up(at(TITLE.wallet));
+    expect(calls).toEqual([undefined, 'crystals']);
   });
 
   it('Bundles: the Starter Pack waits for level 8 and a later session (ECONOMY.md §4, AUD-B14)', () => {

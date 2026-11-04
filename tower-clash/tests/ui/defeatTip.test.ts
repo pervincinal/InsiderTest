@@ -151,14 +151,13 @@ describe('defeat tip (FE-4)', () => {
 
   it('locale keys exist in all four dictionaries with the agreed wording', () => {
     expect(en['result.tip']).toBe('Tip');
-    expect(en['result.howto']).toBe('HOW TO PLAY');
+    // AUD-U24: the result link is the How-to card's title key (one term: "NECƏ OYNANIR", not "NECƏ OYNAMALI")
+    expect(en['howto.title']).toBe('HOW TO PLAY');
     expect(az['result.tip']).toBe('Məsləhət');
-    expect(az['result.howto']).toBe('NECƏ OYNAMALI');
-    expect(ru['result.howto']).toBe(ru['howto.title']);
-    expect(tr['result.howto']).toBe(tr['howto.title']);
+    expect(az['howto.title']).toBe('NECƏ OYNANIR');
     for (const d of [en, az, ru, tr]) {
       expect(d['result.tip'].length).toBeGreaterThan(0);
-      expect(d['result.howto'].length).toBeLessThanOrEqual(16); // fits the 220 px link at 16 px
+      expect(d['howto.title'].length).toBeLessThanOrEqual(16); // fits the 220 px link at 16 px
     }
   });
 });

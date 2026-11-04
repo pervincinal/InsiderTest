@@ -862,7 +862,7 @@ function drawPlainPauseCard(ctx: CanvasRenderingContext2D, state: GameState, ui:
     [PAUSE.settings, t('pause.settings')],
     [PAUSE.retry, t('common.retry')],
     [PAUSE.menu, t('common.menu')],
-    [PAUSE.howto, t('pause.howto')],
+    [PAUSE.howto, t('howto.title')],
   ];
   for (const [r, label] of rows) drawButton(ctx, pal, r, label, { fill: r === PAUSE.resume ? pal.owners.player : undefined, fontPx: 24 });
 }
@@ -899,7 +899,7 @@ function drawPlainResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui
   if (ex.continueAd) offers.push([both ? RESULT.continueAd : RESULT.continueSolo, `${t('common.continue')} · ${t('common.watch')}`]);
   if (won && ex.doubleGold !== null && !ex.doubled) offers.push([RESULT.extra, `${t('result.doubleGold', { n: ex.doubleGold })} · ${t('common.watch')}`]);
   else if (!won && ex.skipCrystals !== null) offers.push([RESULT.extra, `${t('result.skipLevel')} · ${ex.skipCrystals}`]);
-  if (ex.howto) offers.push([RESULT.howto, t('result.howto')]);
+  if (ex.howto) offers.push([RESULT.howto, t('howto.title')]);
   if (layout.share) offers.push([layout.share, t('result.share')]);
   for (const [r, label] of offers) drawButton(ctx, pal, r, label, { fontPx: 22, flat: true, pressed: pressed === r });
 }

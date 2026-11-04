@@ -70,6 +70,13 @@ export interface Settings {
    * under its own key (`towerclash.diag.v1`), never in the save.
    */
   diagnostics?: boolean;
+  /**
+   * AUD-U20: Settings → Vibration (the capture / hit haptics, native only). Optional, so no schema bump:
+   * absent = on; a non-boolean is dropped on load.
+   */
+  haptics?: boolean;
+  /** AUD-F18: Settings → Screen shake (the capture shake of the world). Absent = on; reduced motion turns it off regardless. */
+  shake?: boolean;
 }
 
 /** One-time purchases the player owns (ECONOMY.md §4). */
@@ -373,7 +380,8 @@ export function normalizeSave(raw: unknown): SaveData {
     const s = raw.settings;
     if (typeof s.colorBlind === 'boolean') out.settings.colorBlind = s.colorBlind;
     if (typeof s.sound === 'boolean') out.settings.sound = s.sound;
-    if (typeof s.music === 'boolean') out.settings.music = s.music;
+    // AUD-F6 Music, AUD-U20 Vibration, AUD-F18 Screen shake: optional booleans (absent = on / = `sound`)
+    for (const k of ['music', 'haptics', 'shake'] as const) if (typeof s[k] === 'boolean') out.settings[k] = s[k];
     if (s.reducedMotion === 'auto' || s.reducedMotion === 'on' || s.reducedMotion === 'off') out.settings.reducedMotion = s.reducedMotion;
     if (isLanguage(s.language)) out.settings.language = s.language;
     if (isToneSet(s.tones)) out.settings.tones = s.tones;

@@ -19,10 +19,11 @@ import {
   shopTabsFor,
 } from '../../src/render/menuLayout';
 import { resultShareLayout } from '../../src/render/hud';
+import { CHALLENGE_PLAY_HIT } from '../../src/render/menusLevels';
 import type { ResultExtras } from '../../src/render/hud';
 import type { Rect } from '../../src/render/widgets';
 import { hitArea, hitRect, minHit } from '../../src/render/widgets';
-import { LANGUAGE_SEGMENTS, MOTION_SEGMENTS, TEXT_SIZE_SEGMENTS, TONE_SEGMENTS, withDiagnostics } from '../../src/render/menusSettings';
+import { LANGUAGE_SEGMENTS, MOTION_SEGMENTS, SETTINGS_FEEL, TEXT_SIZE_SEGMENTS, TONE_SEGMENTS, withDiagnostics } from '../../src/render/menusSettings';
 import { CONVERSION_PACKS } from '../../src/economy/purchases';
 import { UPGRADE_DEFS } from '../../src/ui/upgrades';
 
@@ -134,6 +135,8 @@ function levelMap(yesterday: boolean): Target[] {
     t('LEVEL_MAP.daily', LEVEL_MAP.daily, top),
     t('LEVEL_MAP.commander', LEVEL_MAP.commander, bottom),
   ];
+  // AUD-U23: the card's ▶ PLAY / DONE / LOCKED pill, tested before the card (the same action)
+  list.push(t('CHALLENGE_PLAY_HIT', CHALLENGE_PLAY_HIT, top, 'LEVEL_MAP.daily'));
   if (yesterday) list.push(t('LEVEL_MAP.yesterdayHit', LEVEL_MAP.yesterdayHit, top));
   return list;
 }
@@ -157,6 +160,8 @@ function settings(): Target[] {
     ...segments('SETTINGS.language', SETTINGS.language, LANGUAGE_SEGMENTS.length, body),
     ...segments('SETTINGS.tones', SETTINGS.tones, TONE_SEGMENTS.length, body),
     ...segments('SETTINGS.textSize', SETTINGS.textSize, TEXT_SIZE_SEGMENTS.length, body),
+    t('SETTINGS_FEEL.haptics', SETTINGS_FEEL.haptics, body), // AUD-U20
+    t('SETTINGS_FEEL.shake', SETTINGS_FEEL.shake, body), // AUD-F18
     t('SETTINGS.reset', SETTINGS.reset, body),
     t('about.copy', about.copy!, body),
     t('about.privacy', about.privacy!, body),
@@ -281,6 +286,16 @@ describe('touch targets ≥ 44 pt, no overlapping tap areas (AUD-U1 / AUD-Q6)', 
     for (const s of [0.5, scaleOf(430, 932)]) {
       for (const x of levelMap(true)) {
         if (!x.nestedIn) continue;
+        if (x.r === CHALLENGE_PLAY_HIT) {
+          // AUD-U23: the CTA does what the card does, so it may reach down over the card's middle row —
+          // but only in the right column, clear of the tabs and of the card's centre
+          const a = area(x, s);
+          expect(a.x, x.name).toBeGreaterThanOrEqual(LEVEL_MAP.dailyTabWeekly.x + LEVEL_MAP.dailyTabWeekly.w);
+          expect(a.x + a.w, x.name).toBeLessThanOrEqual(card.x + card.w);
+          expect(a.y + a.h, x.name).toBeLessThanOrEqual(card.y + card.h);
+          expect(a.x, 'card centre outside the CTA').toBeGreaterThan(card.x + card.w / 2);
+          continue;
+        }
         const d = drawn[x.name]!;
         const a = area(x, s);
         // inside the card the tap area is the drawn tab (its frame row), not the level · twist line under it

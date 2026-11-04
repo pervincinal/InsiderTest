@@ -146,6 +146,8 @@ export const WORLD_ZOOM = Object.freeze({ tower: 1.3, prop: 1.25, wall: 1.2, bad
 export const TOWER_RADIUS = 34;
 /** Tap target around a tower's base: 44 pt at design size, × the tower zoom (ART-24: 57). Extends up to the roof (pointer.ts `hitTower`). */
 export const TOWER_HIT_RADIUS = Math.round(44 * WORLD_ZOOM.tower);
+/** AUD-U19 (GDD §4): how far into a HUD band (logical px from the map's edge) a tower's hit area still takes a press that is on no HUD tap rect. */
+export const BAND_TOWER_REACH = 30;
 /** Lifetime of one point of the swipe-to-cut slash trail (BUG-33): the input layer drops it then, the renderer fades it over it. */
 export const SWIPE_TRAIL_MS = 220;
 export const UNIT_RADIUS = 6;

@@ -85,7 +85,11 @@ describe('tower-clash/e2e/lessonFit.spec.ts (QA-32)', () => {
   // so the cards wrapped to 4 lines at 18 px on CI while the guard was green here. Every 20 px card must still fit 3 lines
   // when the game's own wrapText re-wraps it at 620 − 12 = 608 px; the widest-line check stays at 620.
   it('re-wraps every 20 px card at 620 - 12 px with the game wrapText and still needs <= 3 lines (QA-33)', () => {
-    expect(src).toContain('const CARD_WRAP_MARGIN = 12;');
+    // QA-34 (2026-11-04): the margin is `LESSON_FIT_MARGIN` when set (the level designer's 20 px probe), 12 otherwise
+    expect(src).toContain('const DEFAULT_CARD_WRAP_MARGIN = 12;');
+    expect(src).toContain('const CARD_WRAP_MARGIN = cardMarginFromEnv(process.env.LESSON_FIT_MARGIN);');
+    expect(src).toContain("if (raw === undefined || raw.trim() === '') return DEFAULT_CARD_WRAP_MARGIN;");
+    expect(src).not.toMatch(/const CARD_WRAP_MARGIN = \d/);
     expect(src).toContain("export { font, wrapText } from './src/render/widgets';");
     expect(src).toContain('L.wrapText(ctx, text, marginW, Number.MAX_SAFE_INTEGER).length');
     expect(src).toContain('marginW: CARD_TEXT_W - CARD_WRAP_MARGIN');
@@ -94,6 +98,13 @@ describe('tower-clash/e2e/lessonFit.spec.ts (QA-32)', () => {
     expect(src).toContain('if (widest > textW) failures.push(');
     expect(src).toContain('(CARD_TEXT_W - widest).toFixed(0)');
     expect(src).not.toContain('widest > CARD_TEXT_W - CARD_WRAP_MARGIN');
+  });
+
+  it('QA-34: no workflow sets LESSON_FIT_MARGIN, so CI gates the cards at the default 12 px margin', () => {
+    const dir = fileURLToPath(new URL('../../../.github/workflows/', import.meta.url));
+    const yml = readdirSync(dir).filter((f) => /\.ya?ml$/.test(f));
+    expect(yml.length).toBeGreaterThan(0);
+    for (const f of yml) expect(readWorkflow(f), f).not.toContain('LESSON_FIT_MARGIN');
   });
 });
 

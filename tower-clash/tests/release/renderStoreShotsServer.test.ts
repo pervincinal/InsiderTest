@@ -5,7 +5,7 @@ import { createServer as createTcpServer, type AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PreviewError, portListeners, resolveDist, startPreview } from '../../store/tools/preview.mjs';
 
 /*
@@ -18,6 +18,28 @@ import { PreviewError, portListeners, resolveDist, startPreview } from '../../st
  * --outDir DIST`) prints vite's ready line and serves a fixed index, and writes a marker file when it
  * is launched, so "spawns nothing" is observable.
  */
+/*
+ * QA-34 (2026-11-04): under load (≈ 20 on the shared box, Days 44–46) these tests hit vitest's default 5 s test
+ * budget: each one starts one or two node processes (the stand-in vite, the real CLI with its imports), and a
+ * cold node start there takes seconds. The budgets are now proportional to a calibration taken when the file
+ * loads — the slower of two `node -e 0` starts on this host right now — instead of fixed: the test budget is
+ * max(20 s, 40 × calib) and the TIMEOUT case's ready-line budget max(800 ms, 4 × calib), so its stand-in has
+ * started (and written its marker) before startPreview gives up on it.
+ */
+async function nodeStartMs(): Promise<number> {
+  const t0 = performance.now();
+  await new Promise<void>((done, fail) => {
+    const c = spawn(process.execPath, ['-e', '0'], { stdio: 'ignore' });
+    c.on('error', fail);
+    c.on('close', () => done());
+  });
+  return performance.now() - t0;
+}
+const NODE_START_MS = Math.max(await nodeStartMs(), await nodeStartMs());
+const TEST_BUDGET_MS = Math.max(20_000, Math.ceil(40 * NODE_START_MS));
+const SILENT_READY_MS = Math.max(800, Math.ceil(4 * NODE_START_MS));
+vi.setConfig({ testTimeout: TEST_BUDGET_MS, hookTimeout: TEST_BUDGET_MS });
+
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const TOOL = join(ROOT, 'store/tools/renderStoreShots.mjs');
 const dirs: string[] = [];
@@ -185,7 +207,7 @@ describe('store/tools/preview.mjs — startPreview guards (BUG-49)', () => {
     const t = tmp();
     const vite = fakeVite(t, 'silent');
     const port = await freePort();
-    const e = await rejection(startPreview({ root: t, dist: fakeDist(t), port, viteBin: vite.bin, timeoutMs: 800 }));
+    const e = await rejection(startPreview({ root: t, dist: fakeDist(t), port, viteBin: vite.bin, timeoutMs: SILENT_READY_MS }));
     expect(e.code).toBe('TIMEOUT');
     expect(existsSync(vite.marker)).toBe(true);
   });

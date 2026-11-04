@@ -43,6 +43,12 @@ export interface SettingsOpts {
   about: SettingsAboutLayout | DiagAboutLayout;
   /** AUD-B6: the Diagnostics switch and the log's row count (absent = the block is not drawn). */
   diag?: { on: boolean; rows: number };
+  /** AUD-U20: Settings → Vibration (`settings.haptics`, absent = on); `hapticsNative` false = the web build, where the row says "Phone only". */
+  haptics?: boolean;
+  hapticsNative?: boolean;
+  /** AUD-F18: Settings → Screen shake (`settings.shake`, absent = on); `shakeReduced`: reduced motion is in force, so the subtitle says it is off anyway. */
+  shake?: boolean;
+  shakeReduced?: boolean;
   version: string;
   supportId: string | null;
   nowMs: number;
@@ -66,6 +72,14 @@ export const TONE_SEGMENTS: readonly { key: 'settings.tonesClassic' | 'settings.
 export const TONE_SEGMENT_PX = 22;
 /** AUD-U2 "Text size" picker: one segment per `TEXT_SCALES` step (100 / 125 / 150 %). */
 export const TEXT_SIZE_SEGMENTS: readonly TextScale[] = TEXT_SCALES;
+/**
+ * AUD-U20 / AUD-F18: the Vibration and Screen shake toggles, one SETTINGS.rowH row each under the text size
+ * (layout px; the eager `SETTINGS` moved the summary, RESET and the About card down to make room).
+ */
+export const SETTINGS_FEEL = Object.freeze({
+  haptics: { x: 470, y: 1050, w: 160, h: 56 } as Rect,
+  shake: { x: 470, y: 1146, w: 160, h: 56 } as Rect,
+});
 /** Swatch strip of the "Team colours" title line: dot radius and centre step (logical px). */
 export const TONE_SWATCH = Object.freeze({ r: 12, step: 30 });
 
@@ -300,7 +314,7 @@ export function drawSettings(view: View, pal: Palette, o: SettingsOpts): void {
   // text size (AUD-U2): hairline under the team colours, then a row like Reduced motion
   ctx.fillStyle = 'rgba(30, 42, 68, 0.1)';
   ctx.fillRect(card.x + 28, SETTINGS.textSizeSepY, card.w - 56, 2);
-  settingsRow(ctx, pal, SETTINGS.textSize, t('settings.textSize'), t('settings.textSizeSub'), false);
+  settingsRow(ctx, pal, SETTINGS.textSize, t('settings.textSize'), t('settings.textSizeSub'));
   drawSegmented(
     ctx,
     pal,
@@ -309,6 +323,12 @@ export function drawSettings(view: View, pal: Palette, o: SettingsOpts): void {
     TEXT_SIZE_SEGMENTS.indexOf(o.textScale ?? 1),
     22,
   );
+  // AUD-U20 / AUD-F18: Vibration and Screen shake (both default on)
+  const F = SETTINGS_FEEL;
+  settingsRow(ctx, pal, F.haptics, t('settings.vibration'), t(o.hapticsNative ? 'settings.vibrationSub' : 'settings.vibrationWeb'));
+  drawToggle(ctx, pal, F.haptics, o.haptics !== false, o.pressed === F.haptics);
+  settingsRow(ctx, pal, F.shake, t('settings.shake'), t(o.shakeReduced ? 'settings.shakeReduced' : 'settings.shakeSub'), false);
+  drawToggle(ctx, pal, F.shake, o.shake !== false, o.pressed === F.shake);
   // progress summary + reset
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';

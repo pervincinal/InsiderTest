@@ -135,20 +135,22 @@ export interface AudioHost {
   hits: HitState;
   /** `medium`: AUD-F15, a lost tower (a hit is light). */
   haptic: (medium?: boolean) => void;
+  /** AUD-U20: the save, for Settings → Vibration (`settings.haptics === false`: no haptic). */
+  save: { settings: { haptics?: boolean } } | null;
 }
 
 /**
  * `onSimEvents` (moved here from the eager facade, AUD-F10, to pay for the tank landing's render hook): the
  * mapped sounds of one batch of sim events, and AUD-F1's knocks — being attacked knocks (and taps the phone)
- * at most every 250 ms per tower and 6 times a second overall; there is no vibration setting, so the haptic
- * follows the Effects setting.
+ * at most every 250 ms per tower and 6 times a second overall. The haptic needs Effects on (this chunk only
+ * runs then) and Settings → Vibration on (AUD-U20).
  */
 export function onEvents(m: AudioHost, events: readonly SimEvent[], state: Pick<GameState, 'towers'>): void {
   (m.arrivals ??= new ArrivalTracker('player')).noteEvents(events);
   for (const call of sfxForEvents(events, 'player', state.towers)) m.player.play(call.name, call.opts);
   playHits(events, 'player', state.towers, m.hits, performance.now(), (weight) => {
     if (weight) m.player.play('hit', { weight });
-    m.haptic(!weight);
+    if (m.save?.settings.haptics !== false) m.haptic(!weight);
   });
 }
 

@@ -56,7 +56,7 @@ function drawPauseCard(ctx: CanvasRenderingContext2D, state: GameState, ui: Play
   ctx.textAlign = 'center';
   drawButton(ctx, pal, PAUSE.retry, t('common.retry'), { fontPx: 26 });
   drawButton(ctx, pal, PAUSE.menu, t('common.menu'), { fontPx: 26 });
-  drawButton(ctx, pal, PAUSE.howto, t('pause.howto'), { fontPx: 24 });
+  drawButton(ctx, pal, PAUSE.howto, t('howto.title'), { fontPx: 24 });
 }
 
 function drawResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: PlayUi, since: number, screenBottom: number = C.MAP_H): void {
@@ -333,7 +333,7 @@ function drawDefeatTip(ctx: CanvasRenderingContext2D, pal: Palette, text: string
   ctx.textAlign = 'center';
   ctx.fillStyle = pal.ink;
   fit.lines.forEach((l, i) => ctx.fillText(l, 360, r.y + 38 + i * fit.lineH));
-  if (howto) drawButton(ctx, pal, RESULT.howto, t('result.howto'), { fontPx: 22, flat: true, pressed: pressed === RESULT.howto });
+  if (howto) drawButton(ctx, pal, RESULT.howto, t('howto.title'), { fontPx: 22, flat: true, pressed: pressed === RESULT.howto });
 }
 
 /**

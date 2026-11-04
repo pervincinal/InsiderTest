@@ -15,7 +15,7 @@ import type { Rect } from '../render/widgets';
 import { formatTime, hitRect } from '../render/widgets';
 import { dragThreshold } from '../input/pointer';
 import type { DailyCardOpts, WeeklyCardOpts } from '../render/menusLevels';
-import { drawLevelSelect } from '../render/menusLevels';
+import { CHALLENGE_PLAY_HIT, drawLevelSelect } from '../render/menusLevels';
 import type { PointerPoint } from '../input/pointer';
 import { currentLevelIndex, isLevelUnlocked } from './save';
 import type { App, Screen } from './screens';
@@ -41,8 +41,37 @@ const OWN_HIT = new Map<Rect, Rect>([
 ]);
 /** A level's name in the UI language: the metadata carries English only, the translations are ../levels/names.ts (PERF-10). */
 const metaName = (meta: LevelMeta): string => levelName({ ...meta, ...LEVEL_NAMES[meta.id] });
-const HOUR_MS = 3_600_000;
+const MIN_MS = 60_000;
+const HOUR_MS = 60 * MIN_MS;
 const DAY_MS = 24 * HOUR_MS;
+
+/**
+ * The challenge card's countdown in local terms (AUD-U23). The rollover stays UTC midnight / Monday
+ * 00:00 UTC (GDD §7.2 / §8.1); only the display converts: the time left ("10h 24m", "3d 4h" on the
+ * weekly, "12:34" under an hour) and, where the device clock is more than an hour off UTC
+ * (`offsetMin` = local − UTC at the rollover, minutes), the local clock time of the rollover
+ * ("at 04:00", the weekly "at Mon 04:00" / "at Sun 19:00" west of UTC). Pure: the screen passes the offset.
+ */
+export function challengeCountdown(remainingMs: number, offsetMin: number, weekly: boolean): { full: string; time: string } {
+  const mins = Math.floor(remainingMs / MIN_MS);
+  const time =
+    weekly && remainingMs >= DAY_MS
+      ? t('weekly.dh', { d: Math.floor(remainingMs / DAY_MS), h: Math.floor((remainingMs % DAY_MS) / HOUR_MS) })
+      : remainingMs >= HOUR_MS
+        ? t('daily.hm', { h: Math.floor(mins / 60), m: mins % 60 })
+        : formatTime(remainingMs);
+  let note = '';
+  if (Math.abs(offsetMin) > 60) {
+    const local = ((Math.round(offsetMin) % 1440) + 1440) % 1440;
+    const clock = `${String(Math.floor(local / 60)).padStart(2, '0')}:${String(local % 60).padStart(2, '0')}`;
+    // Monday 00:00 UTC is still Monday east of UTC (up to +14 h) and Sunday west of it (down to −12 h)
+    note = weekly ? t('weekly.at', { day: t(offsetMin < 0 ? 'weekly.sun' : 'weekly.mon'), time: clock }) : t('daily.at', { time: clock });
+  }
+  return { full: t('daily.newIn', { time }) + note, time };
+}
+
+/** Local − UTC in minutes at epoch `ms` (the device's zone, DST included). */
+const localOffsetMin = (ms: number): number => -new Date(ms).getTimezoneOffset();
 
 export type CardTab = 'daily' | 'weekly';
 /** The challenge card's tab (GDD §8.2): remembered for the session only, never saved. */
@@ -114,7 +143,8 @@ export class LevelSelectScreen implements Screen {
     const band = bandAt(hudAnchors(this.app.view), bands, p.y);
     if (band === 'content') return null;
     const l = this.toLayout(p.x, p.y);
-    const rects = band === 'bottom' ? [LEVEL_MAP.commander] : [BACK, LEVEL_MAP.wallet, LEVEL_MAP.dailyTabDaily, LEVEL_MAP.dailyTabWeekly, LEVEL_MAP.daily];
+    // AUD-U23: the card's ▶ PLAY / ✓ DONE / LOCKED pill before the card it is drawn on (same action, its own press)
+    const rects = band === 'bottom' ? [LEVEL_MAP.commander] : [BACK, LEVEL_MAP.wallet, LEVEL_MAP.dailyTabDaily, LEVEL_MAP.dailyTabWeekly, CHALLENGE_PLAY_HIT, LEVEL_MAP.daily];
     if (band === 'top' && this.yesterday()) rects.push(LEVEL_MAP.yesterday);
     // AUD-U1: padded tap areas; the tabs' and the "Yesterday's map" row's are their own rects (`…Hit`)
     return rects.find((r) => hitRect(this.app.view, OWN_HIT.get(r) ?? r, l.x, l.y)) ?? null;
@@ -165,7 +195,7 @@ export class LevelSelectScreen implements Screen {
     const meta = getLevelMeta(ch.levelId);
     const now = Date.now();
     const remaining = msToUtcMidnight(now);
-    const countdown = remaining >= HOUR_MS ? t('daily.newIn', { h: Math.ceil(remaining / HOUR_MS) }) : t('daily.newInTime', { time: formatTime(remaining) });
+    const countdown = challengeCountdown(remaining, localOffsetMin(now + remaining), false);
     const y = this.yesterday();
     const yMeta = y ? getLevelMeta(y.levelId) : undefined;
     return {
@@ -179,26 +209,21 @@ export class LevelSelectScreen implements Screen {
       nextBonus: nextStreakMilestone(save, ch.dayKey),
       done: challengeDone(save, ch.dayKey),
       best: save.challenge.best[ch.dayKey] ?? null,
-      countdown,
+      countdown: countdown.full,
+      countdownTime: countdown.time,
       tab: cardTab,
       weekly: this.weeklyCard(now),
       yesterday: y ? { levelName: yMeta ? metaName(yMeta) : String(y.levelId), twist: t(`daily.twist.${y.twist.id}`) } : null,
     };
   }
 
-  /** The weekly face of the card (GDD §8.2): countdown to Monday 00:00 UTC in days, hours, then MM:SS. */
+  /** The weekly face of the card (GDD §8.2): countdown to Monday 00:00 UTC in days + hours, hours + minutes, then MM:SS (shown local, AUD-U23). */
   private weeklyCard(now: number): WeeklyCardOpts {
     const w = this.thisWeeks();
     const save = this.app.save;
     const meta = getLevelMeta(w.levelId);
     const remaining = msToNextMonday(now);
-    const days = Math.floor(remaining / DAY_MS);
-    const countdown =
-      days >= 1
-        ? t('weekly.newInDays', { d: days, h: Math.floor((remaining % DAY_MS) / HOUR_MS) })
-        : remaining >= HOUR_MS
-          ? t('weekly.newIn', { h: Math.ceil(remaining / HOUR_MS) })
-          : t('daily.newInTime', { time: formatTime(remaining) });
+    const countdown = challengeCountdown(remaining, localOffsetMin(now + remaining), true);
     return {
       unlocked: weeklyUnlocked(save),
       unlockLevel: WEEKLY_UNLOCK_AFTER_LEVEL,
@@ -211,7 +236,8 @@ export class LevelSelectScreen implements Screen {
       target: weeklyTargetDone(save, w.weekKey),
       targetMs: w.targetMs,
       best: save.weekly.best[w.weekKey] ?? null,
-      countdown,
+      countdown: countdown.full,
+      countdownTime: countdown.time,
     };
   }
 
@@ -332,7 +358,7 @@ export class LevelSelectScreen implements Screen {
       this.setScroll(this.scroll); // the row comes and goes with the tab: re-clamp
       return;
     }
-    if (hit === LEVEL_MAP.daily) {
+    if (hit === LEVEL_MAP.daily || hit === CHALLENGE_PLAY_HIT) {
       this.tapDaily();
       return;
     }

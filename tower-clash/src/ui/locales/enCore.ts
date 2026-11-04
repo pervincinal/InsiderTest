@@ -62,11 +62,11 @@ export const enCore = {
   'pause.sound': 'SOUND',
   'pause.muted': 'MUTED',
   'pause.settings': 'SETTINGS',
-  'pause.howto': 'HOW TO PLAY',
+  // AUD-U24: the one "How to play" key — the How-to card title, the pause button and the result link (settings.howto is its sentence case)
+  'howto.title': 'HOW TO PLAY',
 
   'result.victory': 'VICTORY',
   'result.defeat': 'DEFEAT',
-  'result.howto': 'HOW TO PLAY',
   'result.time': 'Time {time}',
   'result.doubleGold': '×2 GOLD  (+{n})',
   'result.skipLevel': 'SKIP LEVEL',

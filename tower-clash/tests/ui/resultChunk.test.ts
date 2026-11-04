@@ -11,7 +11,7 @@ import type { App, Screen } from '../../src/ui/screens';
 import { t } from '../../src/ui/i18n';
 import { setReducedMotionOverride } from '../../src/ui/motion';
 import { PlayScreen, RESULT_BEAT_MS } from '../../src/ui/play';
-import { resultChunkLoaded } from '../../src/ui/resultChunk';
+import { resultChunkFailures, resultChunkLoaded } from '../../src/ui/resultChunk';
 import { makeLevel } from '../helpers';
 
 /*
@@ -71,7 +71,15 @@ function winning(shell: ReturnType<typeof fakeApp>): PlayScreen {
   return play;
 }
 
-const flush = () => new Promise<void>((r) => setTimeout(r, 0));
+/*
+ * QA-34 (2026-11-04): flaky under load (Days 44–46). The test waited for the result module's real `import()`
+ * with `vi.waitFor`'s default 1 s budget inside vitest's default 5 s test budget, and for the constructor's failed
+ * warm with one `setTimeout(0)`. On a loaded host the first transform + import of src/ui/result.ts and its graph
+ * takes seconds. Now each wait polls the state it needs (the recorded failure, the loaded chunk) under a budget
+ * sized for a loaded host; the assertions are unchanged.
+ */
+const CHUNK_IMPORT_BUDGET_MS = 30_000;
+const POLL = { timeout: CHUNK_IMPORT_BUDGET_MS, interval: 10 } as const;
 const beat = (play: PlayScreen) => (play as unknown as { buildUi(): HudPlayUi }).buildUi().resultBeat;
 
 let save: SaveData;
@@ -92,7 +100,7 @@ describe('result chunk (PERF-11)', () => {
   it('a failed download holds the undimmed last frame with a toast; back leaves for the map; a retry after the back-off opens the result', async () => {
     const shell = fakeApp(save);
     const play = winning(shell); // the constructor's warm fails
-    await flush();
+    await vi.waitFor(() => expect(resultChunkFailures()).toBe(1), POLL);
     expect(resultChunkLoaded()).toBe(false);
     play.update(50, 1000);
     expect(play.over).toBe(true);
@@ -112,12 +120,12 @@ describe('result chunk (PERF-11)', () => {
     net.offline = false;
     clock += RETRY_AFTER_MS + 1;
     play.update(16, 5000);
-    await vi.waitFor(() => expect(resultChunkLoaded()).toBe(true));
+    await vi.waitFor(() => expect(resultChunkLoaded()).toBe(true), POLL);
     play.update(16, 5016);
     const result = shell.current();
     expect(result?.name).toBe('result');
     const { ResultScreen } = await import('../../src/ui/result');
     expect(result).toBeInstanceOf(ResultScreen);
     expect((result as InstanceType<typeof ResultScreen>).info.ui.outcome).toBe('won');
-  });
+  }, 2 * CHUNK_IMPORT_BUDGET_MS + 10_000);
 });
