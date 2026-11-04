@@ -180,7 +180,7 @@ describe('particles', () => {
     ps.capture(100, 100, '#3b82f6');
     ps.death(10, 10);
     ps.shot(0, 0, 50, 50, '#ef4444');
-    expect(ps.count).toBeGreaterThan(30);
+    expect(ps.count).toBeGreaterThan(25); // AUD-F17: a capture throws 8 chips (was 12)
     const ctx = fakeCtx();
     ps.draw(ctx, 1000);
     for (let t = 1016; t < 4000; t += 16) ps.draw(ctx, t);

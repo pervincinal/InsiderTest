@@ -3,6 +3,8 @@ import type { Biome } from '../../src/render/palette';
 import { BADGE_LIP, BIOME_LIGHT, COLOR_BLIND_PALETTE, DEFAULT_PALETTE, composite, litGround, rimOf, shade } from '../../src/render/palette';
 import {
   CAPTURE_CHIPS,
+  CAPTURE_CHIP_PX,
+  CAPTURE_CHIP_SPREAD,
   CAPTURE_FLASH_MS,
   FRIENDLY_LAND_MS,
   LAND_TOKENS_MAX,
@@ -131,9 +133,19 @@ describe('ART-23 combat juice', () => {
   it('a capture spawns the flash ring, the paper flash and CAPTURE_CHIPS chips thrown sideways; the badge flash fades', () => {
     const fx = new ParticleSystem(false);
     fx.capture(100, 500, tones.mid, 't', 'neutral', 1000, false, tones);
-    expect(CAPTURE_CHIPS).toBeGreaterThanOrEqual(8);
-    expect(CAPTURE_CHIPS).toBeLessThanOrEqual(12);
+    // AUD-F17: 8 chips at 1.4× the old 5–8 px (12 specks read as dust at 360 px), about the same paint
+    expect(CAPTURE_CHIPS).toBe(8);
     expect(fx.count).toBe(3 + CAPTURE_CHIPS + 8);
+    const chips = (fx as unknown as { ps: { kind: string; size: number }[] }).ps.filter((p) => p.kind === 'chip');
+    expect(chips).toHaveLength(8);
+    expect(CAPTURE_CHIP_PX).toBeCloseTo(5 * 1.4, 6);
+    expect(CAPTURE_CHIP_PX + CAPTURE_CHIP_SPREAD).toBeCloseTo(8 * 1.4, 6);
+    for (const c of chips) {
+      expect(c.size).toBeGreaterThanOrEqual(CAPTURE_CHIP_PX);
+      expect(c.size).toBeLessThanOrEqual(CAPTURE_CHIP_PX + CAPTURE_CHIP_SPREAD);
+    }
+    // the paint stays about the same: 8 × 1.4² ≈ 15.7 old-chip areas against 12 (≤ 1.35×)
+    expect((CAPTURE_CHIPS * 1.4 * 1.4) / 12).toBeLessThan(1.35);
     expect(fx.captureFlash('t', 1000)).toBe(1);
     expect(fx.captureFlash('t', 1000 + CAPTURE_FLASH_MS / 2)).toBeGreaterThan(0);
     expect(fx.captureFlash('t', 1000 + CAPTURE_FLASH_MS)).toBe(0);

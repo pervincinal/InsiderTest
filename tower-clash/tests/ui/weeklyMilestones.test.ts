@@ -208,7 +208,7 @@ describe('result toast (GDD §7.3 slot: achievement > daily milestone > week-str
     expect(result.info.weeklyOutcome).toMatchObject({ streak: 4, targetHit: true, milestone: 15, crystals: 35 });
     expect(result.info.achievements.unlocked).toEqual([]);
     expect(result.extras().crystalsEarned).toBe(35);
-    expect(result.toast.opts(performance.now())?.text).toBe(t('weekly.resultMilestone', { n: 4, crystals: 15 }));
+    expect(result.toast.heldToast()?.text).toBe(t('weekly.resultMilestone', { n: 4, crystals: 15 }));
     expect(t('weekly.resultMilestone', { n: 4, crystals: 15 })).toBe('Week streak 4 · +15 crystals');
   });
 
@@ -216,7 +216,7 @@ describe('result toast (GDD §7.3 slot: achievement > daily milestone > week-str
     save.weekly = { lastWinWeek: monday(0), streak: 1, best: {} };
     const result = winResult(monday(1));
     expect(result.info.weeklyOutcome).toMatchObject({ streak: 2, targetHit: true, milestone: 0, crystals: 20 });
-    expect(result.toast.opts(performance.now())?.text).toBe(t('weekly.resultTarget', { crystals: WEEKLY_REWARD.crystals }));
+    expect(result.toast.heldToast()?.text).toBe(t('weekly.resultTarget', { crystals: WEEKLY_REWARD.crystals }));
   });
 });
 

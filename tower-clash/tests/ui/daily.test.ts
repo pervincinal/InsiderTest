@@ -379,9 +379,9 @@ describe('PlayScreen in challenge mode', () => {
     expect(save.achievements.unlocked).toEqual(['challenge_streak_7']);
     expect(save.stars['999']).toBeUndefined();
     result.enter();
-    const now = performance.now();
-    expect(result.toast.opts(now)?.text).toBe(t('achievements.unlocked', { names: t('achievement.challenge_streak_7'), crystals: 10 }));
-    expect(result.toast.opts(now)?.text).not.toBe(t('daily.milestone', { day: 7, crystals: 20 }));
+    // AUD-F16: the slot's toast is held until the card's sequence ends
+    expect(result.toast.heldToast()?.text).toBe(t('achievements.unlocked', { names: t('achievement.challenge_streak_7'), crystals: 10 }));
+    expect(result.toast.heldToast()?.text).not.toBe(t('daily.milestone', { day: 7, crystals: 20 }));
     // a replay the same day pays nothing and grants nothing again
     const replay = new PlayScreen(shell.app, level, ch.seed, 20, { challenge: ch });
     shell.app.go(replay);

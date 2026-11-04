@@ -18,6 +18,8 @@ import { SOLDIER_DRAW_SCALE, TANK_DRAW_SCALE, TANK_RADIUS, WORLD_ZOOM } from './
 import type { Rect } from './widgets';
 import { roundRect } from './widgets';
 import { combatFrame, drawTracer, shakeBy, shellShot, strikeShot, towerCaptured } from './combatFx';
+import { drawOwnerEmblems } from './ownerEmblem';
+import { INTENT_MS, drawIntentGlyphs } from './intentGlyph';
 
 /** AUD-F2 mine blast: the world nudge (px) when the mine kills the player's unit, over the capture shake's 320 ms… */
 export const MINE_SHAKE_PX = 2;
@@ -111,11 +113,14 @@ export const ECONOMY_BURSTS: EconomyBursts = {
    * AUD-F2 reduced motion: a static outline (4 px mine red under a 1.5 px paper line) round the chip of
    * every mine that blew up in the last MINE_MARK_MS — the same on every frame, no fade — or, once the
    * mine is spent and has no chip, round the mine itself. AUD-F3: then the booster looks (`drawBoosterFx`).
+   * AUD-U17: every badge's owner emblem (star / pips) on its top rim, after the booster tint.
    */
-  marks(host, ctx, pal, state, layout, nowMs, cam) {
+  marks(host, ctx, pal, state, layout, nowMs, cam, ui) {
     combatFrame(host, ctx, pal, state, layout, nowMs, cam);
+    if (ui && state.time < INTENT_MS) drawIntentGlyphs(host, ctx, pal, state, layout, ui); // AUD-A10
     if (state.boosters.length) drawBoosterFx(host, ctx, pal, state, layout, nowMs, cam);
     if (state.links.length) drawMusters(host, ctx, pal, state, layout, cam);
+    drawOwnerEmblems(host, ctx, pal, state, layout, nowMs); // AUD-U17: who owns a badge, by shape (src/render/ownerEmblem.ts)
     if (!host.marks.size) return;
     const { mines } = state;
     const { chips } = layout;
@@ -422,8 +427,8 @@ function drawBadgeHalo(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect, kin
 /** The badge halo's offset from the pill (px): its 3.5 px line clears the owner stroke by ≈ 3 px. */
 export const BADGE_HALO_GAP = 6;
 
-/** A pill (round ends) `pad` px round `r`, added to the current path as a closed subpath (the clip's badge cut-outs). */
-function pillPath(ctx: CanvasRenderingContext2D, r: Rect, pad: number): void {
+/** A pill (round ends) `pad` px round `r`, added to the current path as a closed subpath (the clip's badge cut-outs; also AUD-A10's intent glyphs). */
+export function pillPath(ctx: CanvasRenderingContext2D, r: Rect, pad: number): void {
   const x = r.x - pad;
   const y = r.y - pad;
   const w = r.w + 2 * pad;

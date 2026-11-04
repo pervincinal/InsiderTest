@@ -46,6 +46,8 @@ export interface PlayUi {
   coinsTotal: number;
   /** Visual effects fed from sim events (optional: menus / tests draw without them). */
   particles?: ParticleSystem;
+  /** AUD-F18: Settings → Screen shake (`settings.shake`; absent = on): false = the capture shake does not move the world. Reduced motion turns it off either way. */
+  shake?: boolean;
   /** Equipped cosmetic skins; roof / helmet apply to the player's towers and soldiers only, the theme re-lights the ground. */
   skin?: TowerSkin;
   /**
@@ -201,7 +203,8 @@ function linkRoad(state: LinkedState, link: LinkLike): Road | undefined {
  * Every active link as a straight ribbon along its lane in the owner's colour with a 1 px ink
  * outline so it reads on every ground (ART-7: an outline-less 55 % coral turned tan over grass).
  * The player's is the lit tone at 72 % with a heavier arrowhead stroke so their own streams read
- * first; foreign ones the mid tone at 68 %. Paper chevrons march toward the target (frozen under
+ * first; foreign ones the mid tone at 68 %, beaded (AUD-U17: round dashes over the ink edge, so a
+ * stream's side reads without colour). Paper chevrons march toward the target (frozen under
  * reduced motion) and an arrowhead sits at the target end.
  * Opposite links on one lane are offset to their right so both read. Sources with ≥ 1 link get a
  * soft pulsing "streaming" ring on the ground (growth paused, rules v3). Drawn under units / towers.
@@ -273,8 +276,12 @@ export function drawLinks(ctx: CanvasRenderingContext2D, pal: Palette, state: Li
     ctx.stroke();
     ctx.globalAlpha = mine ? 0.72 : 0.68;
     ctx.strokeStyle = body;
-    ctx.lineWidth = LINK_WIDTH * ws;
+    const d = (ctx.lineWidth = LINK_WIDTH * ws);
+    // AUD-U17: a foreign stream's body is beaded (round dashes 2 widths long, 1 width of the ink edge between)
+    // so it tells from the player's solid one without colour (grayscale / low vision)
+    ctx.setLineDash(mine ? [] : [d, 2 * d]);
     ctx.stroke();
+    ctx.setLineDash([]);
     // ART-23 stream start: one bright pulse runs from the source to the target (STREAM_PULSE_MS)
     const k = motion ? linkPulse(l, nowMs) : 1;
     if (k < 1) {
@@ -798,7 +805,7 @@ function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState
     });
   }
   drawWorldChips(ctx, pal, state, layout.chips);
-  fx?.drawMarks(ctx, pal, state, layout, nowMs, cam); // lazy: AUD-F2 reduced-motion mine outlines, AUD-F3 Freeze / Overdrive looks
+  fx?.drawMarks(ctx, pal, state, layout, nowMs, cam, ui); // lazy: AUD-F2 reduced-motion mine outlines, AUD-F3 Freeze / Overdrive looks, AUD-A10 intent glyphs
   const hintAt = ui.limitHint?.towerId ?? ui.selectedTowerId;
   if (hint && ui.limitHintText && hintAt) {
     const t = state.towers[hintAt];
@@ -965,7 +972,7 @@ export function drawGame(ctx: CanvasRenderingContext2D, state: GameState, view: 
   const spec = terrainSpec(state, theme);
   // capture shake moves the whole world (not the HUD)
   const dev = view.dpr * view.scale;
-  const raw = motion ? (ui.particles?.shake(nowMs) ?? { dx: 0, dy: 0 }) : { dx: 0, dy: 0 };
+  const raw = motion && ui.shake !== false ? (ui.particles?.shake(nowMs) ?? { dx: 0, dy: 0 }) : { dx: 0, dy: 0 };
   const shake = { dx: snapToDevice(raw.dx, dev), dy: snapToDevice(raw.dy, dev) };
   const layers = layered && ui.outcome === 'playing' && !ui.paused ? view.layers : undefined;
   // ART-21: the tilted play camera (`?tilt=` override); the HUD and the overlays are not tilted

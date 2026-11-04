@@ -10,7 +10,7 @@ import type { HudPlayUi, ResultExtras } from '../render/hud';
 import { hudOverlaysLoaded, resultShareLayout } from '../render/hud';
 import { playSfx } from '../audio/index';
 import { ResultCuePlayer, resultCues } from '../audio/resultCues';
-import { walletShown } from '../render/resultTimeline';
+import { toastReleaseMs, walletShown } from '../render/resultTimeline';
 import { hudAnchors } from '../render/view';
 import { canShowRewarded, maybeShowInterstitial, onResultShown, showRewarded } from '../economy/adsFlow';
 import type { ResultEarnings } from '../economy/wallet';
@@ -24,7 +24,7 @@ import type { DailyOutcome } from './daily';
 import { restartLevel } from './daily';
 import type { WeeklyOutcome } from './weekly';
 import type { PreparedShare, ShareRecord } from './share';
-import type { App, Screen } from './screens';
+import type { App, QueuedToast, Screen } from './screens';
 import { ACHIEVEMENT_TOAST_MS, Toast, achievementToastText, appVersion } from './screens';
 import { loadChunk } from '../lazyChunk';
 import { maybeAskForReview } from '../native/review';
@@ -42,6 +42,39 @@ export { logLevelEnd } from './diagnostics';
  */
 
 /* ---------- Result ---------- */
+
+/**
+ * AUD-F16: the result screen's toast. The toast named on `enter` (an achievement, a milestone) is held
+ * (`hold`) until the card's sequence has ended (`toastReleaseMs`: after the gold count on a win, once the
+ * card has settled on a defeat; at once under reduced motion) instead of popping over the first star; then
+ * it takes the slot behind whatever shows (`release`). Leaving the screen first hands it over with the
+ * queue (`takeQueued`, FE-9), oldest first.
+ */
+export class ResultToast extends Toast {
+  private held: QueuedToast | null = null;
+
+  hold(item: QueuedToast): void {
+    this.held = item;
+  }
+
+  /** The held toast (null once released or handed over). */
+  heldToast(): QueuedToast | null {
+    return this.held;
+  }
+
+  release(nowMs: number): void {
+    const h = this.held;
+    this.held = null;
+    if (h) this.enqueue(h.text, h.kind, nowMs, h.durationMs);
+  }
+
+  override takeQueued(): QueuedToast[] {
+    const out = super.takeQueued();
+    if (this.held) out.unshift(this.held);
+    this.held = null;
+    return out;
+  }
+}
 
 export interface ResultInfo {
   state: GameState;
@@ -135,7 +168,7 @@ export class ResultScreen implements Screen {
   private doubled = false;
   private leaving = false;
   private nowMs = 0;
-  readonly toast = new Toast();
+  readonly toast = new ResultToast();
   /** A SHARE tap is being served (card drawing / share sheet open): further taps are ignored. */
   private sharing = false;
   /** The card for this result, drawn once (started on the SHARE press). */
@@ -172,7 +205,8 @@ export class ResultScreen implements Screen {
           : w?.targetHit
             ? t('weekly.resultTarget', { crystals: w.crystals - w.milestone })
             : null);
-    if (text) this.toast.show(text, 'ok', performance.now(), ACHIEVEMENT_TOAST_MS);
+    // AUD-F16: held until the card's sequence ends (`draw`); on a defeat in the neutral paper tone
+    if (text) this.toast.hold({ text, kind: this.okKind, durationMs: ACHIEVEMENT_TOAST_MS });
     if (this.shareOffered()) void loadShareChunk().catch(() => undefined); // warm: the tap's activation must not wait on the network
     void maybeAskForReview(this.info, this.app.save); // MM-9 rating prompt: off by default, never rejects
   }
@@ -209,7 +243,7 @@ export class ResultScreen implements Screen {
         const rec = await m.sendShare(prep);
         lastShare = rec;
         const text = m.shareToastText(rec.result);
-        if (text) this.toast.show(text, rec.result === 'unavailable' ? 'error' : 'ok', this.nowMs);
+        if (text) this.toast.show(text, rec.result === 'unavailable' ? 'error' : this.okKind, this.nowMs);
         return rec;
       })
       .catch(() => {
@@ -223,6 +257,11 @@ export class ResultScreen implements Screen {
 
   private get won(): boolean {
     return this.info.ui.outcome === 'won';
+  }
+
+  /** AUD-F16: a good-news toast's tone — the celebratory blue on a win, the neutral paper on a defeat. */
+  private get okKind(): 'ok' | 'note' {
+    return this.won ? 'ok' : 'note';
   }
 
   /**
@@ -297,6 +336,7 @@ export class ResultScreen implements Screen {
         bottom: hudAnchors(view).bottom,
       };
       hud.pressed = this.pressed;
+      if (since >= toastReleaseMs(won)) this.toast.release(nowMs);
       hud.toast = this.toast.opts(nowMs);
     }
     drawGame(view.ctx, this.info.state, view, ui, nowMs);

@@ -1,7 +1,7 @@
 import type { Palette } from './palette';
 import { shade } from './palette';
 import type { NumeralWrap, Rect } from './widgets';
-import { drawNumeralLine, drawPill, drawStars, fitFontPx, font, getTextScale, textPx, wrapNumeralText } from './widgets';
+import { drawNumeralLine, drawPill, drawStar, fitFontPx, font, getTextScale, textPx, wrapNumeralText } from './widgets';
 import { drawCrystal, drawGoldCoin } from './sprites';
 import { prefersReducedMotion } from './particles';
 import { reducedMotionOverride } from '../ui/motion';
@@ -47,7 +47,7 @@ export function drawWallet(ctx: CanvasRenderingContext2D, pal: Palette, r: Rect,
     const gy = cell.y + cell.h / 2;
     if (c.glyph === 'gold') drawGoldCoin(ctx, pal, gx, gy, cell.h * 0.3);
     else if (c.glyph === 'crystal') drawCrystal(ctx, pal, gx, gy, cell.h * 0.32);
-    else drawStars(ctx, pal, gx, gy, 1, cell.h * 0.24, [1, 0, 0]);
+    else drawStar(ctx, pal, gx, gy, cell.h * 0.24, true); // AUD-U26: on the glyph spot (drawStars' first of three sat one gap left, outside the pill)
     ctx.fillStyle = pal.ink;
     const amount = formatAmount(c.value);
     // AUD-U2: fitted to the pill (never squeezed), at most 62 % of its height at a bigger text size
@@ -67,7 +67,8 @@ export function formatAmount(n: number): string {
 
 export interface ToastOpts {
   text: string;
-  kind: 'ok' | 'error';
+  /** `note` (AUD-F16): the neutral paper tone — a result screen's toast after a defeat, not the celebratory blue. */
+  kind: 'ok' | 'error' | 'note';
   /** 0..1 progress of the toast's lifetime (fades in the first 10 % and out in the last 20 %). */
   t: number;
   /** Logical y of the pill centre (default 1090). */
@@ -125,8 +126,8 @@ export function drawToast(ctx: CanvasRenderingContext2D, pal: Palette, o: ToastO
   const bottom = (o.y ?? 1090) + TOAST.h / 2 - (1 - fadeIn) * 12;
   const pill: Rect = { x: 360 - w / 2, y: bottom - h, w, h };
   // ART-15: info / success toasts on the active-choice blue (paper 7.1:1; the owner mid blue was
-  // 4.35:1), errors on the alarm red with ink text (4.7:1; paper on it was 2.9:1)
-  const ink = o.kind === 'ok' ? pal.shopBuy : pal.toastError;
+  // 4.35:1), errors on the alarm red with ink text (4.7:1; paper on it was 2.9:1); AUD-F16 notes ink on paper
+  const ink = o.kind === 'ok' ? pal.shopBuy : o.kind === 'note' ? { face: pal.paper, text: pal.ink } : pal.toastError;
   drawPill(ctx, pill, ink.face, shade(ink.face, -0.35));
   // alphabetic baseline ≈ half the words' cap height under each line's centre (Fredoka caps ≈ 0.7 em)
   const base = Math.round(textPx(wrap.wordPx) * 0.33);

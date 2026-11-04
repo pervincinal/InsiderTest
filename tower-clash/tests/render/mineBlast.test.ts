@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { SimEvent } from '../../src/sim/types';
 import { makeLevel } from '../helpers';
 import { createState } from '../../src/sim/create';
@@ -8,6 +8,10 @@ import { LAND_TOKENS_MAX, ParticleSystem, loadEconomyBursts } from '../../src/re
 import { MINE_MARK_MS, MINE_SHAKE_PX } from '../../src/render/particlesEconomy';
 import type { PlacedChip } from '../../src/render/worldChips';
 import { mineChipRequest } from '../../src/render/worldChips';
+
+// AUD-U17's owner emblems ride the same marks pass (src/render/ownerEmblem.ts, tests/render/ownerEmblem.test.ts);
+// this file pins the other marks' draw calls, so the emblems are left out here
+vi.mock('../../src/render/ownerEmblem', () => ({ drawOwnerEmblems: () => undefined }));
 
 /*
  * AUD-F2: a mine blast reads as a mine — a mine-red flash, ring and sparks at the mine (one token of the

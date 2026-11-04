@@ -336,7 +336,7 @@ describe('PlayScreen in weekly mode', () => {
     expect(ex.crystalsEarned).toBe(20);
     // the target bonus is named in the toast slot (GDD §8.2)
     (result as ResultScreen).enter();
-    expect((result as ResultScreen).toast.opts(performance.now())?.text).toBe(t('weekly.resultTarget', { crystals: 20 }));
+    expect((result as ResultScreen).toast.heldToast()?.text).toBe(t('weekly.resultTarget', { crystals: 20 }));
 
     // NEXT (Enter) → the level map, never the next level
     (result as ResultScreen).key({ key: 'Enter' } as KeyboardEvent);
@@ -375,9 +375,9 @@ describe('PlayScreen in weekly mode', () => {
     expect(save.crystals).toBe(3 + WEEKLY_REWARD.crystals + 15 + 20);
     expect(save.achievements.unlocked).toEqual(['weekly_streak_4']);
     result.enter();
-    const now = performance.now();
-    expect(result.toast.opts(now)?.text).toBe(t('achievements.unlocked', { names: t('achievement.weekly_streak_4'), crystals: 20 }));
-    expect(result.toast.opts(now)?.text).not.toBe(t('weekly.resultTarget', { crystals: WEEKLY_REWARD.crystals }));
+    // AUD-F16: the slot's toast is held until the card's sequence ends
+    expect(result.toast.heldToast()?.text).toBe(t('achievements.unlocked', { names: t('achievement.weekly_streak_4'), crystals: 20 }));
+    expect(result.toast.heldToast()?.text).not.toBe(t('weekly.resultTarget', { crystals: WEEKLY_REWARD.crystals }));
     const replay = new PlayScreen(shell.app, level, w.seed, 20, { weekly: w });
     shell.app.go(replay);
     winNow(replay, { now: 1000 });

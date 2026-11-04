@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { makeLevel } from '../helpers';
 import { createState } from '../../src/sim/create';
 import { applyCommand } from '../../src/sim/commands';
@@ -11,6 +11,10 @@ import { ParticleSystem, loadEconomyBursts } from '../../src/render/particles';
 import type { MarksLayout } from '../../src/render/particles';
 import { towerBodyRect } from '../../src/render/worldChips';
 import { MUSTER_DOT_ALPHA } from '../../src/render/particlesEconomy';
+
+// AUD-U17's owner emblems ride the same marks pass (src/render/ownerEmblem.ts, tests/render/ownerEmblem.test.ts);
+// this file pins the other marks' draw calls, so the emblems are left out here
+vi.mock('../../src/render/ownerEmblem', () => ({ drawOwnerEmblems: () => undefined }));
 
 /*
  * AUD-F5b (GDD §2.3 "AUD-F5 2026-10-31"): the sim's first soldier of a new stream leaves one interval after

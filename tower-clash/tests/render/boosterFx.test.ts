@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { makeLevel } from '../helpers';
 import { createState } from '../../src/sim/create';
 import { applyCommand } from '../../src/sim/commands';
@@ -12,6 +12,10 @@ import { ParticleSystem, loadEconomyBursts } from '../../src/render/particles';
 import type { MarksLayout } from '../../src/render/particles';
 import { towerBodyRect } from '../../src/render/worldChips';
 import { BADGE_HALO_GAP, BOOSTER_FADE_MS, CHEVRON_MAX, CHEVRON_MS, FROST_CRYSTALS, boosterLook } from '../../src/render/particlesEconomy';
+
+// AUD-U17's owner emblems ride the same marks pass (src/render/ownerEmblem.ts, tests/render/ownerEmblem.test.ts);
+// this file pins the other marks' draw calls, so the emblems are left out here
+vi.mock('../../src/render/ownerEmblem', () => ({ drawOwnerEmblems: () => undefined }));
 
 /*
  * AUD-F3 (GDD §2.6): Freeze and Overdrive show on the towers they hold — a frost rim with ice ticks and

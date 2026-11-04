@@ -5,6 +5,7 @@ import { DEFAULT_PALETTE, shade } from './palette';
 import { towerTop } from './sprites';
 import type { Camera } from './camera';
 import type { WorldLayout } from './worldChips';
+import type { IntentUi } from './intentGlyph';
 import { reducedMotionOverride } from '../ui/motion';
 import { chunkBackoff, loadChunk } from '../lazyChunk';
 
@@ -75,8 +76,14 @@ export const LAND_TOKENS_MAX = 8;
 export const LAND_TOKENS_PER_S = 40;
 /** Capture: the badge's halo flash length (the stream-start pulse is draw.ts `STREAM_PULSE_MS`). */
 export const CAPTURE_FLASH_MS = 320;
-/** Capture chips (clay confetti in the new owner's tones) and upgrade fountain sparkles per event. */
-export const CAPTURE_CHIPS = 12;
+/**
+ * Capture chips (clay confetti in the new owner's tones) and upgrade fountain sparkles per event. AUD-F17: 8
+ * chips at 1.4× the old 5–8 px (7–11.2 map px ≈ 3–4.5 CSS px at 360 wide) instead of 12 specks, about the
+ * same paint; each chip's size is CAPTURE_CHIP_PX + rnd × CAPTURE_CHIP_SPREAD.
+ */
+export const CAPTURE_CHIPS = 8;
+export const CAPTURE_CHIP_PX = 7;
+export const CAPTURE_CHIP_SPREAD = 4.2;
 export const UPGRADE_SPARKLES = 14;
 
 /**
@@ -168,9 +175,11 @@ export interface EconomyBursts {
    * After the badges and chips (`ParticleSystem.drawMarks`): AUD-F2 reduced motion — outline the chips of
    * the mines in `host.marks`; AUD-F3 — Freeze / Overdrive on the towers they hold (rims, crystals,
    * chevrons, badge tint), while `state.boosters` has any; AUD-F5b — the muster at the gate of every
-   * new link until its first soldier is out.
+   * new link until its first soldier is out; AUD-A10 — the enemies' intent glyphs for the first 5 s of
+   * sim time (`ui`: the frame's play UI — its level and lesson-card hold; src/render/intentGlyph.ts);
+   * last, AUD-U17 — every badge's owner emblem (star / pips) on its top rim (src/render/ownerEmblem.ts).
    */
-  marks(host: BurstHost, ctx: CanvasRenderingContext2D, pal: Palette, state: MarksState, layout: MarksLayout, nowMs: number, cam: Camera): void;
+  marks(host: BurstHost, ctx: CanvasRenderingContext2D, pal: Palette, state: MarksState, layout: MarksLayout, nowMs: number, cam: Camera, ui?: IntentUi): void;
 }
 
 /**
@@ -350,7 +359,7 @@ export class ParticleSystem implements BurstHost {
       const side = i % 2 ? 1 : -1;
       const a = -Math.PI / 2 + side * (0.7 + this.rnd() * 0.75);
       const sp = 150 + this.rnd() * 150;
-      const p = this.make('chip', x + side * (8 + this.rnd() * 10), y - 34, i % 4 === 3 ? '#fffaf0' : i % 3 ? color : lit, 650 + this.rnd() * 300, 5 + this.rnd() * 3);
+      const p = this.make('chip', x + side * (8 + this.rnd() * 10), y - 34, i % 4 === 3 ? '#fffaf0' : i % 3 ? color : lit, 650 + this.rnd() * 300, 7 + this.rnd() * 4.2); // CAPTURE_CHIP_PX + rnd × CAPTURE_CHIP_SPREAD
       p.color2 = i % 4 === 3 ? shade('#fffaf0', -0.12) : dark;
       p.vx = Math.cos(a) * sp;
       p.vy = Math.sin(a) * sp * 0.6;
@@ -441,10 +450,11 @@ export class ParticleSystem implements BurstHost {
 
   /**
    * Lazy-chunk world marks, after the badges and chips are drawn (draw.ts `drawWorld`): the AUD-F2
-   * reduced-motion mine outlines and the AUD-F3 Freeze / Overdrive looks (nothing until the chunk is in).
+   * reduced-motion mine outlines, the AUD-F3 Freeze / Overdrive looks and the AUD-U17 owner emblems
+   * (nothing until the chunk is in).
    */
-  drawMarks(ctx: CanvasRenderingContext2D, pal: Palette, state: MarksState, layout: MarksLayout, nowMs: number, cam: Camera): void {
-    economy?.marks(this, ctx, pal, state, layout, nowMs, cam);
+  drawMarks(ctx: CanvasRenderingContext2D, pal: Palette, state: MarksState, layout: MarksLayout, nowMs: number, cam: Camera, ui?: IntentUi): void {
+    economy?.marks(this, ctx, pal, state, layout, nowMs, cam, ui);
   }
 
   /**

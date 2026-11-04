@@ -89,3 +89,18 @@ export function walletCoinT(since: number, i: number): number | null {
   const k = (since - T.goldMs - i * T.coinGapMs) / T.coinFlyMs;
   return k >= 0 && k < 1 ? k : null;
 }
+
+/** The result title's pop (hudOverlays.ts: from 120 ms over 380 ms) has settled by this. */
+export const TITLE_SETTLE_MS = 500;
+
+/**
+ * AUD-F16: when the card's sequence has ended and a held result toast (an achievement, a milestone) may take
+ * the slot — after the gold count on a win (`goldMs + goldCountMs` = 1 700 ms, the last coin landing in the
+ * wallet), once the sliding card and its DEFEAT title have settled on a defeat (500 ms: the title pops over
+ * 120 → 500, the card lands by 460). Reduced motion: the card is settled on its first frame (`since` is
+ * Infinity / 10 000 there), so the toast shows at once.
+ */
+export function toastReleaseMs(won: boolean): number {
+  const T = RESULT_TIMELINE;
+  return won ? T.goldMs + T.goldCountMs : Math.max(T.slideMs, TITLE_SETTLE_MS);
+}
