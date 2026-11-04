@@ -70,7 +70,10 @@ npm run check      # typecheck + lint + unit tests + level validation
 npm run playtest   # reference-player bot on every level
 npm run e2e        # Playwright smoke test (Chromium)
 npm run cap:sync   # copy dist/ into the android/ and ios/ Capacitor projects
+npm run build:native # store builds (iOS / Android): no debug tools, no source maps
 ```
+
+Build lanes: `npm run build` is the web / Pages / test build (it keeps the debug surface the e2e tests use); store builds go through `npm run build:native` (the `cap:sync`, `android:build` and `ios:open` scripts already do) — [`../docs/MOBILE.md`](../docs/MOBILE.md) §4.1.
 
 Store screenshots and the feature graphic are rendered from the real game: `npm run build && node store/tools/renderStoreShots.mjs` (Google Play set) or `--apple` (App Store 6.7" / 6.5" sets); `--all` renders both (`--dist=<dir>` serves a scratch build, `--out=<dir>` writes outside `store/`, `--port=<n>` must be a free port — the tool refuses to render from a server it did not start).
 
@@ -131,7 +134,7 @@ Hər push-dan sonra **tower-clash-android** GitHub Actions workflow-u imzasız d
 
 ## Mənbədən qurmaq
 
-Node 22 lazımdır. `tower-clash/` qovluğunda: `npm ci`, sonra `npm run dev` (yerli server), `npm run build` (istehsal build-i `dist/`-ə), `npm run check` (tip yoxlaması + lint + testlər + səviyyə yoxlaması), `npm run playtest` (bot bütün səviyyələri oynayır), `npm run e2e` (Playwright smoke testi).
+Node 22 lazımdır. `tower-clash/` qovluğunda: `npm ci`, sonra `npm run dev` (yerli server), `npm run build` (istehsal build-i `dist/`-ə), `npm run check` (tip yoxlaması + lint + testlər + səviyyə yoxlaması), `npm run playtest` (bot bütün səviyyələri oynayır), `npm run e2e` (Playwright smoke testi). Build zolaqları: `npm run build` veb / Pages / test build-idir (e2e testlərinin işlətdiyi debug səthi qalır); mağaza build-ləri (iOS / Android) `npm run build:native` ilə gedir — debug alətləri və source map olmadan (`cap:sync`, `android:build` və `ios:open` onu artıq çağırır); [`../docs/MOBILE.md`](../docs/MOBILE.md) §4.1.
 
 ## Müəlliflər və lisenziya
 

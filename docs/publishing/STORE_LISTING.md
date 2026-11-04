@@ -243,6 +243,8 @@ Review notes for App Review (paste into "Notes"; both variants are in `APP_STORE
 
 Sandbox tester: none required in either variant — all content is available without purchase; "Sign-in required" is No.
 
+Shop tab (2026-11-04, build 27): the shop opens on **SKINS** from the title screen (not on Crystals); in Variant A the Crystals and Bundles tabs, with Restore Purchases, are in the same tab row — say so if the reviewer asks where the purchases are.
+
 ---
 
 ## 3. ASO keyword list
@@ -350,6 +352,8 @@ Answer "Yes" to *Does your app collect or share any of the required user data ty
 | Personal info, financial info (card), precise location, contacts, photos, messages, health, files, audio, calendar | **No** | — | — | — | — | Payment cards are handled by Google Play, never seen by the app |
 
 **Diagnostics log (AUD-B6, 2026-11-01): no new data type, no new row.** The optional on-device log (off by default; one `level_end` row per finished level with the count of boosters used, no identifiers, at most 400 rows, only in the app's own storage; the text COPY LOG puts on the clipboard adds a header with the build, the user-agent string, viewport, pixel ratio, text size, language and row count — none is an identifier, and the header is built at copy time, not stored) is never transmitted by the app, and nothing leaves the device unless the player taps COPY LOG and pastes the text into an e-mail by hand. Data that stays on the device is not "collected" for this form, so no row is added; the "no gameplay analytics" statements stay true. Privacy policy v2.2, section "Diagnostics (optional)". If the log is ever sent automatically, this form, the App Privacy answers and the policy must change first.
+
+**Debug surface (AUD-Q18, 2026-11-03): no new data type, no new row.** The test hooks (`economy.grant`, `configureFakeStore`, `autoplay`, `autoLose`) are compiled out of store builds (`npm run build:native`; web / Pages / e2e keep them), so a store build has no free-purchase path and no `window.__towerclash` and no source maps (AUD-Q17).
 
 **Share card and In-App Review (PUB-16, 2026-10-08): no new data type, no new row.** The share image is drawn on the device and handed to Android's share sheet through the app's own `FileProvider` (the cache file `tower-clash-share.png`); the game transmits nothing, and data the user sends with another app of their choice is not collected by this app (Play's definition of "collected" is data transmitted off the device by the app). The Play In-App Review API is in the binary but disabled in 1.0.0 (`RATING_PROMPT` unset); even when enabled, Google shows its own review card and returns no rating or review content to the app — nothing to declare. Everything is answered "not linked to the user's identity" — there is no account. The SDK rows are what Google's and RevenueCat's SDK disclosure pages recommend as of my last knowledge; **the Mobile Engineer / stakeholder must re-check those two pages on submission day** (Google: "Play data disclosure requirements for the Google Mobile Ads SDK"; RevenueCat: "Google Play Data Safety" docs page).
 
