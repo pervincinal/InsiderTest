@@ -532,7 +532,18 @@ test.describe('economy', () => {
       },
       [REWIND_LEVEL, REWIND_SEED] as const,
     );
-    await expect.poll(() => screen(page), { timeout: 60_000, intervals: [250] }).toBe('result');
+    // CI run 118 (2026-11-04) timed out here still on 'play' while the same build loses level 15 seed 1 at
+    // 34.4 s sim in ≈ 2.5 s locally (headless shell and full Chromium alike): the poll now reports the
+    // sim clock, the booked outcome and the player's tower count, so a repeat says whether the sim
+    // stalled or the result screen never opened (PERF-11 chunk) — the assertion itself is unchanged
+    const progress = (): Promise<string> =>
+      page.evaluate(() => {
+        const d = window.__towerclash;
+        const st = d.getState();
+        const own = st ? Object.values(st.towers).filter((t) => t.owner === 'player').length : -1;
+        return `${d.getScreen()} sim=${d.economy.getClock()?.timeMs ?? '-'} outcome=${d.getResult()?.outcome ?? '-'} playerTowers=${own}`;
+      });
+    await expect.poll(progress, { timeout: 60_000, intervals: [250] }).toMatch(/^result /);
     expect((await page.evaluate(() => window.__towerclash.getResult()))?.outcome).toBe('lost');
     // FE-4 defeat tip: the level's lesson under the title; no HOW TO PLAY link on the first defeat of the session
     const firstResult = await page.evaluate(() => window.__towerclash.getResult());
