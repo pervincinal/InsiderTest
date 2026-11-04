@@ -9,13 +9,13 @@
   "lesson_ru": "Одна река, три брода: сначала дай дому дорасти до 25, затем возьми обе серые башни рядом, с обеих — башню у среднего брода, и никогда не дерись на обоих берегах сразу",
   "lesson_tr": "Tek nehir, üç geçit: önce evinin 25'e varmasını bekle, sonra yanındaki iki gri kuleyi, ortadaki geçitteki kuleyi de ikisinden al ve asla iki kıyıda aynı anda savaşma",
   "star3": 70000,
-  "star2": 140000,
+  "star2": 120000,
   "enemies": [
     {"owner": "enemy1", "personality": "rusher", "aggression": 0.6},
     {"owner": "enemy2", "personality": "opportunist", "aggression": 0.6}
   ],
   "towers": [
-    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 18, "level": 1, "kind": "barracks"},
+    {"id": "home", "x": 360, "y": 1170, "owner": "player", "units": 22, "level": 1, "kind": "barracks"},
     {"id": "w", "x": 150, "y": 1020, "owner": "neutral", "units": 4},
     {"id": "e", "x": 570, "y": 1020, "owner": "neutral", "units": 4},
     {"id": "mid", "x": 360, "y": 900, "owner": "neutral", "units": 8},

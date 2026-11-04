@@ -94,6 +94,7 @@ describe('reclock on today\'s JSON (K = 20)', () => {
     [5, 110_000],
     [7, 90_000],
     [11, 70_000],
+    [13, 80_000], // LV-1.0.1a (2026-11-04): outpost 3 → 6 u moved the floor to the JSON clock
     [16, 75_000],
     [26, 60_000],
     [45, 95_000],
@@ -108,7 +109,6 @@ describe('reclock on today\'s JSON (K = 20)', () => {
   // flagged by the level designer, left by the Producer (2★ gap < 8 of 20): listed, held at today's clock
   it.each([
     [10, 65_000, 70_000],
-    [13, 80_000, 85_000],
   ])('level %i is held at star2 %i (floor would be %i, not applied)', async (id, star2, floorMs) => {
     const level = (await loadLevel(id))!;
     expect(level.star2).toBe(star2);
