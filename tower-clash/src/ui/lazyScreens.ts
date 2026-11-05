@@ -15,3 +15,5 @@ export { drawSaveNotice, lastSaveNotice } from '../render/saveNotice';
 export { noticeUnreadableSave } from './saveRecovery';
 /** AUD-Q11: the layered idle title (src/ui/screens.ts TitleScreen paints through it once this chunk is in). */
 export { paintTitle } from '../render/titleIdle';
+/** AUD-U27: the menus' keyboard focus ring (src/main.ts keydown / pointerdown / frame call it once this chunk is in). */
+export { drawFocus, focusKey, focusState, hideFocus } from './focus';

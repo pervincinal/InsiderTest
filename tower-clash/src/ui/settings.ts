@@ -30,6 +30,8 @@ import { getAds } from '../economy/ads';
 import type { StoreProvider } from '../economy/store';
 import { getStore } from '../economy/store';
 import type { App, Screen } from './screens';
+import type { FocusItem } from './focus';
+import { onScreen, readingOrder, segmentRects } from './focus';
 import { Toast, appVersion } from './screens';
 import { currentLanguage, t } from './i18n';
 
@@ -226,6 +228,29 @@ export class SettingsScreen implements Screen {
     if (this.about.diagClear) list.push(this.about.diagClear);
     list.push(this.versionRect); // last: COPY's tap area reaches up into the row and wins there
     return list;
+  }
+
+  /**
+   * AUD-U27: the keyboard focus items where they are drawn — BACK, then the body's controls in reading
+   * order (one per segment of a picker), the About card's buttons; not the version row (a hidden switch).
+   * The reset confirm card: CANCEL first, then RESET.
+   */
+  focusRects(): FocusItem[] {
+    if (this.confirming) return [SETTINGS.confirm.no, SETTINGS.confirm.yes].map((r) => onScreen(this, r));
+    const a = hudAnchors(this.app.view);
+    const band = [SETTINGS.headerH + a.top, bleed(this.app.view).bottom] as const;
+    const segs: [Rect, number][] = [
+      [SETTINGS.motion, MOTION_SEGMENTS.length],
+      [SETTINGS.language, LANGUAGE_SEGMENTS.length],
+      [SETTINGS.tones, TONE_SEGMENTS.length],
+      [SETTINGS.textSize, TEXT_SIZE_SEGMENTS.length],
+    ];
+    const body = this.rects().filter((r) => r !== SETTINGS.back && r !== this.versionRect);
+    const split = body.flatMap((r) => {
+      const seg = segs.find(([s]) => s === r);
+      return seg ? segmentRects(r, seg[1]) : [r];
+    });
+    return [onScreen(this, SETTINGS.back), ...readingOrder(split).map((r) => onScreen(this, r, band))];
   }
 
   /** Copy the support id to the clipboard (toast either way). */

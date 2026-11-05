@@ -109,7 +109,7 @@ describe('Settings → Music / Effects rows', () => {
 
   it('Music is the first row, Effects the next, one row pitch apart', () => {
     expect(SETTINGS.music).toEqual({ x: 470, y: 200, w: 160, h: 56 });
-    expect(SETTINGS.sound).toEqual({ x: 470, y: 296, w: 160, h: 56 });
+    expect(SETTINGS.sound).toEqual({ x: 470, y: 288, w: 160, h: 56 }); // settings length (2026-11-05): rows 88 apart
     expect(SETTINGS.sound.y - SETTINGS.music.y).toBe(SETTINGS.rowH);
   });
 });

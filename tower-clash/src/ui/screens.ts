@@ -48,6 +48,12 @@ export interface Screen {
    */
   fromLayout?(x: number, y: number): { x: number; y: number };
   toLayout?(x: number, y: number): { x: number; y: number };
+  /**
+   * AUD-U27: the screen's tappable rects where they are drawn (screen logical px), in reading order, for
+   * the keyboard focus ring (src/ui/focus.ts; the title and the pause card are listed there). A `band`
+   * marks a scrolling list item and the screen y range it is seen in.
+   */
+  focusRects?(): readonly (Rect & { band?: readonly [number, number] })[];
 }
 
 /** Per-attempt options for `App.startLevel`. */

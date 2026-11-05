@@ -152,12 +152,20 @@ describe('settings layout (SETTINGS.tones)', () => {
     // AUD-U2: the "Text size" row sits between the team colours and the summary
     expect(SETTINGS.textSizeSepY).toBeGreaterThanOrEqual(r.y + r.h + 12);
     expect(SETTINGS.textSize.y).toBeGreaterThanOrEqual(SETTINGS.textSizeSepY + 16);
-    // AUD-U20 / AUD-F18: Vibration and Screen shake sit between the text size and the summary, a row (≥ 88: 44 pt at 360) apart
+    // AUD-U20 / AUD-F18: Vibration and Screen shake sit between the text size and RESET, a row (≥ 88: 44 pt at 360) apart
     expect(SETTINGS_FEEL.haptics.y - SETTINGS.textSize.y).toBeGreaterThanOrEqual(88);
     expect(SETTINGS_FEEL.shake.y - SETTINGS_FEEL.haptics.y).toBeGreaterThanOrEqual(88);
-    expect(SETTINGS.summaryY - 12).toBeGreaterThanOrEqual(SETTINGS_FEEL.shake.y + SETTINGS_FEEL.shake.h + 12);
-    expect(SETTINGS.reset.y).toBeGreaterThanOrEqual(SETTINGS.summaryY + 12);
+    // RESET's centre a row (≥ 88) under Screen shake's: their 88-tall tap areas do not overlap
+    expect(SETTINGS.reset.y + SETTINGS.reset.h / 2 - (SETTINGS_FEEL.shake.y + SETTINGS_FEEL.shake.h / 2)).toBeGreaterThanOrEqual(88);
     expect(SETTINGS.reset.y + SETTINGS.reset.h).toBeLessThanOrEqual(card.y + card.h - 16);
+    // settings length (2026-11-05): RESET is above a 9:16 screen's fold (360 × 640: 1280 layout px), with room to spare
+    expect(SETTINGS.reset.y + SETTINGS.reset.h).toBeLessThanOrEqual(1280 - 24);
+    // the stars / coins summary moved onto the confirm card, between its two lines and above its buttons
+    const c = SETTINGS.confirm;
+    expect(c.summaryY).toBeGreaterThan(c.card.y + 114 + 24);
+    expect(c.summaryY + 24).toBeLessThanOrEqual(c.card.y + 194 - 12);
+    expect(c.card.y + 194 + 24).toBeLessThanOrEqual(c.yes.y);
+    expect(c.yes.y + c.yes.h).toBeLessThanOrEqual(c.card.y + c.card.h - 24);
     expect(r.y + r.h).toBeLessThanOrEqual(card.y + card.h);
     // each segment is a ≥ 44 px wide target
     expect((r.w - 8) / TONE_SEGMENTS.length).toBeGreaterThanOrEqual(44);
@@ -168,9 +176,11 @@ describe('settings layout (SETTINGS.tones)', () => {
     ] as const) {
       const about = settingsAboutLayout(support, privacy);
       expect(about.card.y).toBeGreaterThanOrEqual(card.y + card.h + 8);
-      // the About card scrolls into view (settings.ts maxScroll): at most the two toggle rows (192) past 9:16 on the web, + 120 with the native rows
-      if (!support) expect(about.card.y + about.card.h, `about support=${support} privacy=${privacy}`).toBeLessThanOrEqual(1280 + 192 - 16);
-      else expect(about.card.y + about.card.h, `about support=${support} privacy=${privacy}`).toBeLessThanOrEqual(1280 + 192 + 120);
+      // the About card scrolls into view (settings.ts maxScroll); settings length (2026-11-05): it starts at the
+      // 9:16 fold, right under the settings card; it ends at 1386 on the web, 1528 with the native rows
+      expect(about.card.y).toBeLessThanOrEqual(1280);
+      if (!support) expect(about.card.y + about.card.h, `about support=${support} privacy=${privacy}`).toBeLessThanOrEqual(1386);
+      else expect(about.card.y + about.card.h, `about support=${support} privacy=${privacy}`).toBeLessThanOrEqual(1528);
     }
   });
 });

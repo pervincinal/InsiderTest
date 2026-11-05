@@ -13,6 +13,8 @@ import { drawHowTo } from '../render/menusHowto';
 import type { PointerPoint } from '../input/pointer';
 import { playSfx } from '../audio/index';
 import type { App, Screen } from './screens';
+import type { FocusItem } from './focus';
+import { onScreen } from './focus';
 
 export class HowToScreen implements Screen {
   readonly name = 'howto' as const;
@@ -48,6 +50,11 @@ export class HowToScreen implements Screen {
   /** Where layout point (x, y) is drawn (e2e: `layoutToClient`). */
   fromLayout(x: number, y: number): { x: number; y: number } {
     return bandToScreen(hudAnchors(this.app.view), HOWTO_BANDS, x, y);
+  }
+
+  /** AUD-U27: the keyboard focus items — BACK, then CLOSE. */
+  focusRects(): FocusItem[] {
+    return [HOWTO.back, HOWTO.close].map((r) => onScreen(this, r));
   }
 
   down(p: PointerPoint): void {

@@ -30,6 +30,8 @@ import { UPGRADE_GLYPH, buyUpgrade, upgradeCost, upgradeEffectText } from './sho
 import type { SkinFamily } from './save';
 import { writeSave } from './save';
 import type { App, Screen } from './screens';
+import type { FocusItem } from './focus';
+import { onScreen, readingOrder, screenBand, segmentRects } from './focus';
 import { Toast } from './screens';
 import { playSfx } from '../audio/index';
 import { t } from './i18n';
@@ -354,6 +356,25 @@ export class ShopScreen implements Screen {
   /** Where layout point (x, y) is drawn (e2e: `layoutToClient`). */
   fromLayout(x: number, y: number): { x: number; y: number } {
     return this.confirmConvert ? { x, y } : bandToScreen(hudAnchors(this.app.view), SHOP_BANDS, x, y);
+  }
+
+  /**
+   * AUD-U27: the keyboard focus items where they are drawn — BACK, the wallet, one per tab, then the
+   * active tab's cards and buttons in reading order (one per pack of the converter's picker), scrolled
+   * into the list's viewport when focused. The spend confirm card: CANCEL first, then SPEND.
+   */
+  focusRects(): FocusItem[] {
+    if (this.confirmConvert) {
+      const c = SHOP.convertConfirm;
+      return [c.no, c.yes].map((r) => onScreen(this, r));
+    }
+    const lay = this.relayout();
+    const seg = lay.convert?.segRect;
+    const content = this.hits.flatMap((h) => (h.rect === seg ? segmentRects(h.rect, CONVERSION_PACKS.length) : [h.rect]));
+    const band = screenBand(this, SHOP.contentTop, this.contentBottom());
+    const head = [SHOP.back, SHOP.wallet, ...segmentRects(SHOP.tabs, this.tabs.length)].map((r) => onScreen(this, r));
+    // content space → layout (the scroll) → screen
+    return [...head, ...readingOrder(content).map((r) => onScreen(this, { ...r, y: r.y - this.scroll }, band))];
   }
 
   setScroll(y: number): void {

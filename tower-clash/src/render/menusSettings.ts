@@ -74,11 +74,11 @@ export const TONE_SEGMENT_PX = 22;
 export const TEXT_SIZE_SEGMENTS: readonly TextScale[] = TEXT_SCALES;
 /**
  * AUD-U20 / AUD-F18: the Vibration and Screen shake toggles, one SETTINGS.rowH row each under the text size
- * (layout px; the eager `SETTINGS` moved the summary, RESET and the About card down to make room).
+ * (layout px; the eager `SETTINGS` keeps RESET one row under them, settings length 2026-11-05).
  */
 export const SETTINGS_FEEL = Object.freeze({
-  haptics: { x: 470, y: 1050, w: 160, h: 56 } as Rect,
-  shake: { x: 470, y: 1146, w: 160, h: 56 } as Rect,
+  haptics: { x: 470, y: 1014, w: 160, h: 56 } as Rect,
+  shake: { x: 470, y: 1102, w: 160, h: 56 } as Rect,
 });
 /** Swatch strip of the "Team colours" title line: dot radius and centre step (logical px). */
 export const TONE_SWATCH = Object.freeze({ r: 12, step: 30 });
@@ -141,7 +141,7 @@ function settingsRow(ctx: CanvasRenderingContext2D, pal: Palette, control: Rect,
   // hairline separator under the row
   if (separator) {
     ctx.fillStyle = 'rgba(30, 42, 68, 0.1)';
-    ctx.fillRect(SETTINGS.card.x + 28, control.y + SETTINGS.rowH - 22, SETTINGS.card.w - 56, 2);
+    ctx.fillRect(SETTINGS.card.x + 28, control.y + SETTINGS.rowH - 18, SETTINGS.card.w - 56, 2);
   }
   return titleW;
 }
@@ -329,16 +329,7 @@ export function drawSettings(view: View, pal: Palette, o: SettingsOpts): void {
   drawToggle(ctx, pal, F.haptics, o.haptics !== false, o.pressed === F.haptics);
   settingsRow(ctx, pal, F.shake, t('settings.shake'), t(o.shakeReduced ? 'settings.shakeReduced' : 'settings.shakeSub'), false);
   drawToggle(ctx, pal, F.shake, o.shake !== false, o.pressed === F.shake);
-  // progress summary + reset
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = pal.textDim;
-  const summary = t('settings.summary', { stars: o.totalStars, coins: o.coins });
-  ctx.font = font(fitFontPx(ctx, summary, 22, 480, '500'), '500', undefined, 28);
-  ctx.fillText(summary, 360 + 12, SETTINGS.summaryY);
-  const sw = ctx.measureText(summary).width;
-  drawStars(ctx, pal, 360 + 12 - sw / 2 - 22, SETTINGS.summaryY, 1, 10, [1, 0, 0]);
-  drawCoin(ctx, pal, 360 + 12 + sw / 2 + 22, SETTINGS.summaryY, 11);
+  // reset (settings length 2026-11-05: the stars / coins summary is on the confirm card, where the loss is decided)
   // the danger red is a UI token (`toastError.face` = the classic / colour-blind owner-1 mid), so a team-colour set never recolours it (FE-14)
   const danger = pal.toastError.face;
   drawButton(ctx, pal, SETTINGS.reset, t('settings.reset'), { fontPx: 24, border: danger, text: danger, pressed: o.pressed === SETTINGS.reset });
@@ -365,7 +356,17 @@ export function drawSettings(view: View, pal: Palette, o: SettingsOpts): void {
     fitLine(ctx, t('settings.resetTitle'), 360, c.card.y + 62, c.card.w - 40, 34, '700', 44);
     ctx.fillStyle = pal.textDim;
     fitLine(ctx, t('settings.resetLine1'), 360, c.card.y + 114, c.card.w - 40, 22, '500', 28);
-    fitLine(ctx, t('settings.resetLine2'), 360, c.card.y + 148, c.card.w - 40, 22, '500', 28);
+    // what the reset takes: the stars / coins summary (it sat over RESET until settings length, 2026-11-05)
+    const summary = t('settings.summary', { stars: o.totalStars, coins: o.coins });
+    ctx.font = font(fitFontPx(ctx, summary, 22, c.card.w - 120, '500'), '500', undefined, 28);
+    ctx.fillStyle = pal.ink;
+    ctx.fillText(summary, 360, c.summaryY);
+    const sw = ctx.measureText(summary).width;
+    // one star (drawStars' first of three, drawn one 2.6 × size step left of `cx`) and one coin, 20 px off the text
+    drawStars(ctx, pal, 360 - sw / 2 - 20 + 26, c.summaryY, 1, 10, [1, 0, 0]);
+    drawCoin(ctx, pal, 360 + sw / 2 + 20, c.summaryY, 11);
+    ctx.fillStyle = pal.textDim;
+    fitLine(ctx, t('settings.resetLine2'), 360, c.card.y + 194, c.card.w - 40, 22, '500', 28);
     drawButton(ctx, pal, c.yes, t('settings.resetYes'), { fill: pal.toastError.face, fontPx: 26, pressed: o.pressed === c.yes });
     drawButton(ctx, pal, c.no, t('common.cancel'), { fontPx: 26, pressed: o.pressed === c.no });
   }

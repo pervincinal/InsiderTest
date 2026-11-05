@@ -364,6 +364,15 @@ export class ResultScreen implements Screen {
     return list;
   }
 
+  /**
+   * AUD-U27: the keyboard focus items (the card's buttons, screen logical px; src/ui/focus.ts puts them in
+   * reading order — this chunk imports nothing of the menus' one); the spend card: CANCEL first, then SPEND.
+   */
+  focusRects(): Rect[] {
+    if (this.pending || this.leaving) return [];
+    return this.ask ? [CONFIRM.no, CONFIRM.yes] : [...new Set(this.rects())];
+  }
+
   /** `r` (a card rect) holds the point. */
   private hits(r: Rect, p: PointerPoint): boolean {
     return hitRect(this.app.view, r, p.x, p.y);

@@ -62,6 +62,11 @@ export interface QaDebugExtras {
     clear(): void;
     about(): { toggle: { x: number; y: number; w: number; h: number }; copy: { x: number; y: number; w: number; h: number } | null; clear: { x: number; y: number; w: number; h: number } | null; rows: number; on: boolean } | null;
   };
+  /**
+   * AUD-U27 keyboard focus (src/ui/focus.ts): whether the ring shows, the ringed item's index, the
+   * current screen's item count and the ringed rect (screen logical px); null before the lazy chunk is in.
+   */
+  getFocus(): { shown: boolean; index: number; count: number; rect: { x: number; y: number; w: number; h: number } | null } | null;
 }
 
 let groundBuilds = 0;
@@ -97,6 +102,7 @@ function installFailingStorage(): void {
 
 export function installDebug(app: TowerClashApp): TowerClashDebug & QaDebugExtras {
   const extras: QaDebugExtras = {
+    getFocus: () => app.lazy?.focusState(app) ?? null,
     audio: {
       getBuses: () => busLevels(audioSynth()),
       getMusic: () => musicState(audioSynth()),

@@ -19,6 +19,8 @@ import { CHALLENGE_PLAY_HIT, drawLevelSelect } from '../render/menusLevels';
 import type { PointerPoint } from '../input/pointer';
 import { currentLevelIndex, isLevelUnlocked } from './save';
 import type { App, Screen } from './screens';
+import type { FocusItem } from './focus';
+import { onScreen, readingOrder, screenBand } from './focus';
 import { Toast } from './screens';
 import { commanderSummary } from './upgradesSummary';
 import type { DailyChallenge, WeeklyChallenge } from '../daily/challenge';
@@ -148,6 +150,21 @@ export class LevelSelectScreen implements Screen {
     if (band === 'top' && this.yesterday()) rects.push(LEVEL_MAP.yesterday);
     // AUD-U1: padded tap areas; the tabs' and the "Yesterday's map" row's are their own rects (`…Hit`)
     return rects.find((r) => hitRect(this.app.view, OWN_HIT.get(r) ?? r, l.x, l.y)) ?? null;
+  }
+
+  /**
+   * AUD-U27: the keyboard focus items where they are drawn — the header block in reading order (what
+   * `chromeAt` tests; the challenge card through its ▶ pill, the card's own action — a tap at the card's
+   * centre can land on a tab), the path's nodes in level order (scrolled into the path's band when
+   * focused, through `wheel`), then the commander chip.
+   */
+  focusRects(): FocusItem[] {
+    const bands = levelMapBands(this.yesterday() !== null);
+    const top = [BACK, LEVEL_MAP.wallet, LEVEL_MAP.dailyTabDaily, LEVEL_MAP.dailyTabWeekly, CHALLENGE_PLAY_HIT];
+    if (this.yesterday()) top.push(LEVEL_MAP.yesterday);
+    const band = screenBand(this, bands.topEnd, bands.bottomStart);
+    const nodes = LEVEL_META.map((_, i): FocusItem => ({ ...levelNodeRect(i, this.scroll), band }));
+    return [...readingOrder(top).map((r) => onScreen(this, r)), ...nodes, onScreen(this, LEVEL_MAP.commander)];
   }
 
   setScroll(y: number): void {

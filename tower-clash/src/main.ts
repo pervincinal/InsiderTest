@@ -347,7 +347,10 @@ export class TowerClashApp implements App {
     });
     // WebAudio may only start inside a user gesture (iOS/Android WebView): unlock on the first
     // pointer/key, and keep trying on later gestures in case the context was suspended again.
-    canvas.addEventListener('pointerdown', () => unlockAudio());
+    canvas.addEventListener('pointerdown', () => {
+      unlockAudio();
+      this.lazy?.hideFocus(); // AUD-U27: pointer use hides the keyboard focus ring
+    });
     canvas.addEventListener(
       'wheel',
       (e) => {
@@ -359,6 +362,7 @@ export class TowerClashApp implements App {
     );
     window.addEventListener('keydown', (e) => {
       unlockAudio();
+      if (this.lazy?.focusKey(this, e)) return; // AUD-U27: Tab / arrows / Enter on the menus' focus ring (src/ui/focus.ts)
       if (e.key === ' ') e.preventDefault();
       if (e.key === 'm' || e.key === 'M') {
         toggleMuted();
@@ -706,6 +710,7 @@ export class TowerClashApp implements App {
       blankLayer(this.view.layers?.ground);
     }
     this.current.draw(this.view, now);
+    this.lazy?.drawFocus(this); // AUD-U27: the keyboard focus ring, only after a key press
     // AUD-Q3 / AUD-Q10: a newer build's save is played read-only, or localStorage refuses the save — the
     // title (and, for failing writes, the result footer) says so for as long as it lasts
     const name = this.current.name;

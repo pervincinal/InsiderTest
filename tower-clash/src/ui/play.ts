@@ -13,7 +13,7 @@ import type { View } from '../render/view';
 import { applyTransform, clipToMap, hudAnchors, toHudSpace } from '../render/view';
 import { drawGame } from '../render/draw';
 import { BAND_TOWER_REACH, BOOSTERS, HUD, PAUSE, TOWER_HIT_RADIUS } from '../render/layout';
-import { playCamera, proj, unproj } from '../render/camera';
+import { playCamera, proj, setPlayFit, unproj } from '../render/camera';
 import type { Rect } from '../render/widgets';
 import { hitRect } from '../render/widgets';
 import { ParticleSystem, prefersReducedMotion } from '../render/particles';
@@ -296,6 +296,7 @@ export class PlayScreen implements Screen {
     const twist = this.challenge?.twist ?? this.weekly?.twist;
     const modifiers = twist ? { ...twist.modifiers } : modifiersFromSave(app.save, this.continued ? CRYSTAL_SERVICES.continue.bonusInfantry : 0);
     this.loop.load(createState(level, seed, modifiers));
+    setPlayFit(this.state); // AUD-U21: the camera frames this level's content
     resetAudioLevel();
     const rngs = aiModule().rngsFor(seed, level.enemies);
     this.playerRng = rngs.player;

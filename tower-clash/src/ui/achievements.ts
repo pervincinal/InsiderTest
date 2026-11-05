@@ -17,6 +17,8 @@ import { ACHIEVEMENTS } from '../economy/catalog';
 import { achievementName } from './catalogText';
 import { achievementCrystalsEarned, achievementProgress, evaluateAchievements } from '../economy/achievements';
 import type { App, Screen } from './screens';
+import type { FocusItem } from './focus';
+import { onScreen } from './focus';
 import { Toast, achievementToastText } from './screens';
 
 export class AchievementsScreen implements Screen {
@@ -61,6 +63,11 @@ export class AchievementsScreen implements Screen {
   /** Where layout point (x, y) is drawn (e2e: `layoutToClient`). */
   fromLayout(x: number, y: number): { x: number; y: number } {
     return bandToScreen(hudAnchors(this.app.view), ACHIEVEMENTS_BANDS, x, y);
+  }
+
+  /** AUD-U27: the keyboard focus items — BACK (the rows are not buttons). */
+  focusRects(): FocusItem[] {
+    return [onScreen(this, ACHIEVEMENTS_LAYOUT.back)];
   }
 
   setScroll(y: number): void {
