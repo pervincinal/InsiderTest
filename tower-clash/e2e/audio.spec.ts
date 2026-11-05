@@ -17,7 +17,7 @@ const TITLE_SETTINGS = { x: 180, y: 776, w: 172, h: 64 };
 const TITLE_SOUND = { x: 368, y: 776, w: 172, h: 64 };
 const SETTINGS_BACK = { x: 18, y: 20, w: 140, h: 60 };
 const SETTINGS_MUSIC = { x: 470, y: 200, w: 160, h: 56 };
-const SETTINGS_EFFECTS = { x: 470, y: 296, w: 160, h: 56 };
+const SETTINGS_EFFECTS = { x: 470, y: 288, w: 160, h: 56 }; // settings length (2026-11-05): rows 88 apart
 // src/audio/mixer.ts — master 0.5, BUS_DB { sfx: 0, ui: 0, music: −10 }, LIMITER { thresholdDb: −6, ratio: 20 }
 const MUSIC_GAIN = Math.pow(10, -10 / 20);
 

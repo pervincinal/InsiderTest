@@ -57,7 +57,7 @@ const BOOT_NAV_TIMEOUT_MS = 10_000;
 const BOOT_SURFACE_TIMEOUT_MS = 10_000;
 const BOOT_ATTEMPTS = 2;
 
-async function boot(page: Page, seeded: Record<string, unknown> = { version: 3 }): Promise<string[]> {
+async function boot(page: Page, seeded: Record<string, unknown> = { version: 3 }, query = ''): Promise<string[]> {
   const pageErrors: string[] = [];
   page.on('pageerror', (err) => pageErrors.push(String(err)));
   await page.addInitScript(([key, data]) => localStorage.setItem(key, JSON.stringify(data)), [SAVE_KEY, seeded] as const);
@@ -66,7 +66,7 @@ async function boot(page: Page, seeded: Record<string, unknown> = { version: 3 }
   for (let attempt = 1; attempt <= BOOT_ATTEMPTS; attempt++) {
     let phase = `navigation (${BOOT_NAV_TIMEOUT_MS} ms)`;
     try {
-      await page.goto('/', { waitUntil: 'commit', timeout: BOOT_NAV_TIMEOUT_MS });
+      await page.goto(`/${query ? `?${query}` : ''}`, { waitUntil: 'commit', timeout: BOOT_NAV_TIMEOUT_MS });
       phase = `debug surface (${BOOT_SURFACE_TIMEOUT_MS} ms)`;
       await page.waitForFunction(() => typeof window.__towerclash?.loadLevel === 'function', undefined, { timeout: BOOT_SURFACE_TIMEOUT_MS });
       phase = 'title screen';
@@ -357,3 +357,73 @@ test.describe('lazy chunks under a failing network', () => {
     expect(errors).toEqual([]);
   });
 });
+
+/*
+ * AUD-U22 (docs/reviews/2026-10-29-audit-ux.md, P3): the `?tilt=0.72` perspective camera stays an A/B
+ * switch and never becomes the default on a 360-wide phone. Pinned on the two phone shapes as behaviour,
+ * not as scale values (AUD-U21 may change what the flat camera draws): without the flag the play camera
+ * is the flat map and its chunk (PERF-9, src/render/perspective.ts) is never even requested — not by the
+ * title's idle preload, not by a level start, not by the first play frames; with `?tilt=0.72` the same
+ * boot requests it before the play screen exists. tests/render/tiltDefault.test.ts pins the selection
+ * logic itself (URL / `setTilt` only, `TILT_DEFAULT` flat).
+ */
+const PERSPECTIVE_CHUNK = /\/assets\/perspective-[^/?]*\.js(\?.*)?$/;
+for (const shape of [
+  { name: '360x640', viewport: { width: 360, height: 640 }, dpr: 2.75 },
+  { name: '430x932', viewport: { width: 430, height: 932 }, dpr: 3 },
+]) {
+  test.describe(`AUD-U22 flat default on ${shape.name}`, () => {
+    test.use({ viewport: shape.viewport, deviceScaleFactor: shape.dpr, isMobile: true, hasTouch: true });
+
+    test('the perspective chunk is not fetched without ?tilt=; the play camera is flat; ?tilt=0.72 fetches it at the level start', async ({ page }) => {
+      const requests: string[] = [];
+      let aiAt = 0;
+      page.on('request', (r) => {
+        if (PERSPECTIVE_CHUNK.test(r.url())) requests.push(r.url());
+        if (AI_CHUNK.test(r.url()) && !aiAt) aiAt = Date.now();
+      });
+      const errors = await boot(page);
+      await expect.poll(() => aiAt, { message: 'idle preload ran (AI chunk requested)', timeout: 10_000 }).toBeGreaterThan(0);
+      await page.waitForTimeout(300); // the same whenIdle callback issues every preload (preloadCamera among them)
+      expect(requests, 'no perspective request from the title idle preload').toEqual([]);
+      expect(await page.evaluate(() => window.__towerclash.loadLevel(1, 1))).toBe(true);
+      await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
+      await expect.poll(() => simTime(page)).toBeGreaterThan(500);
+      expect(requests, 'no perspective request for a level start and its first frames').toEqual([]);
+      // the flat camera: the map's far-shore centre and the near edge map through the plain letterbox (ART-24),
+      // i.e. the x of a centre-column point never moves and y is affine in map y — the identity, not a homography
+      const probe = await page.evaluate(() => {
+        const d = window.__towerclash;
+        const a = d.toClient(360, 300);
+        const b = d.toClient(360, 700);
+        const c = d.toClient(360, 1100);
+        return { ax: a.x, bx: b.x, cx: c.x, dy1: b.y - a.y, dy2: c.y - b.y };
+      });
+      expect(probe.ax, 'centre column stays a column').toBeCloseTo(probe.bx, 6);
+      expect(probe.bx).toBeCloseTo(probe.cx, 6);
+      expect(probe.dy1, 'equal map steps are equal screen steps on the flat map').toBeCloseTo(probe.dy2, 6);
+      expect(errors).toEqual([]);
+
+      // control: the A/B flag requests the chunk (idle preload or the level start), before the play screen exists
+      const flagged: string[] = [];
+      page.on('request', (r) => {
+        if (PERSPECTIVE_CHUNK.test(r.url())) flagged.push(r.url());
+      });
+      const errors2 = await boot(page, { version: 3 }, 'tilt=0.72');
+      expect(await page.evaluate(() => window.__towerclash.loadLevel(1, 1))).toBe(true);
+      await expect.poll(() => screen(page)).toBe('play');
+      expect(flagged.length, '?tilt=0.72 fetches the perspective chunk').toBeGreaterThanOrEqual(1);
+      await page.evaluate(() => window.__towerclash.startMatch());
+      await expect.poll(() => simTime(page)).toBeGreaterThan(500);
+      const tilted = await page.evaluate(() => {
+        const d = window.__towerclash;
+        const a = d.toClient(360, 300);
+        const b = d.toClient(360, 700);
+        const c = d.toClient(360, 1100);
+        return { dy1: b.y - a.y, dy2: c.y - b.y };
+      });
+      expect(Math.abs(tilted.dy2 - tilted.dy1), 'the perspective camera foreshortens the far half').toBeGreaterThan(1);
+      expect(errors2).toEqual([]);
+    });
+  });
+}

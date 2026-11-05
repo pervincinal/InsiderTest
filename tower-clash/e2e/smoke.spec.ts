@@ -23,7 +23,7 @@ const TITLE_PLAY = { x: 180, y: 640, w: 360, h: 96 };
 const TITLE_SETTINGS = { x: 180, y: 776, w: 172, h: 64 };
 // src/render/layout.ts — SETTINGS (+ the language picker: one segment per language in src/ui/i18n.ts LANGUAGES order)
 // AUD-F6: `sound` is the Effects toggle (the save field kept its name), under the new Music row: every row below moved 80
-const SETTINGS = { back: { x: 18, y: 20, w: 140, h: 60 }, sound: { x: 470, y: 296, w: 160, h: 56 }, howto: { x: 86, y: 580, w: 548, h: 64 }, language: { x: 86, y: 744, w: 548, h: 56 } };
+const SETTINGS = { back: { x: 18, y: 20, w: 140, h: 60 }, sound: { x: 470, y: 288, w: 160, h: 56 }, howto: { x: 86, y: 552, w: 548, h: 64 }, language: { x: 86, y: 716, w: 548, h: 56 } }; // settings length (2026-11-05): rows 88 apart
 // src/render/menuLayout.ts — HOWTO (the "How to play" card, FE-3)
 const HOWTO = { back: { x: 18, y: 20, w: 140, h: 60 }, close: { x: 180, y: 1054, w: 360, h: 72 } };
 const LANGUAGE_ORDER = ['en', 'az', 'ru', 'tr'] as const;
@@ -255,7 +255,9 @@ test.describe('Tower Clash smoke', () => {
     await page.waitForTimeout(800);
     expect(await simTime(page), 'held by the lesson card').toBe(0);
     expect(await hint(page), 'no tutorial bubble while the lesson card is up').toBeNull();
-    await tapAt(page, 560, 600);
+    // AUD-U21: the screen point (560, 600) as a map point through the page's own camera (level 1 is zoomed to its content)
+    const grass = await page.evaluate(() => window.__towerclash.logicalToLayout(560, 600));
+    await tapAt(page, grass.x, grass.y);
     await expect.poll(() => simTime(page)).toBeGreaterThan(0);
     await expect.poll(() => hint(page)).toBe('Tap your tower');
     await page.waitForTimeout(300); // let the ring / arrow pulse once

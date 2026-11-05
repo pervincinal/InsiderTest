@@ -35,15 +35,16 @@ const CONVERT_SEG = { x: CONVERT_CARD.x + 16, y: CONVERT_CARD.y + 96, w: CONVERT
 const CONVERT_BUY = { x: CONVERT_CARD.x + 24, y: CONVERT_CARD.y + CONVERT_CARD.h - 54 - 16, w: CONVERT_CARD.w - 48, h: 54 };
 const CONVERT_CONFIRM = { yes: { x: 130, y: 676, w: 210, h: 72 }, no: { x: 380, y: 676, w: 210, h: 72 } };
 // src/render/layout.ts — TITLE.achievements / TITLE.settings, ACHIEVEMENTS_LAYOUT.back, settingsAboutLayout(true, true)
-// (SETTINGS.about.y = 1344 since the AUD-U20 / AUD-F18 Vibration and Screen shake rows (1152 after AUD-F6, 1102 after AUD-U2,
-// 1012 after FE-14): copy.y = 1344 + 22 + 62 + 31 − 24, privacy.y = 1344 + 22 + 2·62 + 10 — the About card then ends at 1592,
-// past a Pixel 5's viewport, so the test scrolls the body to its foot first (`scrollToFoot`);
+// (SETTINGS.about.y = 1280 since settings length, 2026-11-05: rows 88 apart, the summary on the reset confirm card (1344 after
+// the AUD-U20 / AUD-F18 Vibration and Screen shake rows, 1152 after AUD-F6, 1102 after AUD-U2, 1012 after FE-14):
+// copy.y = 1280 + 22 + 62 + 31 − 24, privacy.y = 1280 + 22 + 2·62 + 10 — the About card then ends at 1528 (+ the
+// Diagnostics row), past a Pixel 5's viewport, so the test scrolls the body to its foot first (`scrollToFoot`);
 // AUD-U1: privacy 320 wide so its tap area stays left of COPY's)
 const TITLE_ACHIEVEMENTS = { x: 18, y: 990, w: 128, h: 132 };
 const TITLE_SETTINGS = { x: 180, y: 776, w: 172, h: 64 };
 const ACHIEVEMENTS_BACK = { x: 18, y: 20, w: 140, h: 60 };
-const ABOUT_COPY = { x: 522, y: 1435, w: 118, h: 48 };
-const ABOUT_PRIVACY = { x: 200, y: 1500, w: 320, h: 60 };
+const ABOUT_COPY = { x: 522, y: 1371, w: 118, h: 48 };
+const ABOUT_PRIVACY = { x: 200, y: 1436, w: 320, h: 60 };
 
 /** Scroll the settings body to its foot (AUD-U2 scrolling) and wait until `r` is drawn inside the viewport. */
 async function scrollToFoot(page: Page, r: { x: number; y: number; w: number; h: number }): Promise<void> {
@@ -101,6 +102,8 @@ const DUSK_COST = 150;
 // after the full rewind window (~27 s of sim time) so the continue really goes back 20 s (tests/ui/continue.test.ts)
 const CONTINUE_REWIND_MS = 20_000;
 const REWIND_LEVEL = 15;
+// PERF-11: the result screen's lazy chunk (src/ui/resultChunk.ts), watched by the QA-35 poll diagnostics
+const RESULT_CHUNK = /\/assets\/result-[^/?]*\.js(\?.*)?$/;
 const REWIND_SEED = 1; // AUD-F19 (2026-11-04): the held-ribbon lose bot loses every level 1–50; level 15 seed 1 falls at ≈ 34 s sim (browser), past the 22 s the rewind check needs. Kept on 15 (no reason to move a green test); was ≈ 135 s under the old streaming bot
 
 
@@ -524,6 +527,24 @@ test.describe('economy', () => {
   test('defeat → CONTINUE (rewarded video) rewinds the level ~20 s with a free Freeze, once per attempt', async ({ page }) => {
     const errors = await boot(page, { version: 3, gold: 0, crystals: 0, stars: { '1': 1, '2': 1, '3': 1, '4': 1, '5': 1, '6': 1, '7': 1, '8': 1, '9': 1, '10': 1, '11': 1, '12': 1, '13': 1, '14': 1 } });
     await page.evaluate(() => window.__towerclash.economy.setAdsAvailable(true));
+    // QA-35: the result chunk's (PERF-11) network fate and the page's frame rate ride in the poll message below
+    const resultChunk: string[] = [];
+    page.on('response', (r) => {
+      if (RESULT_CHUNK.test(r.url())) resultChunk.push(`${r.status()}@${Math.round(performance.now())}`);
+    });
+    page.on('requestfailed', (r) => {
+      if (RESULT_CHUNK.test(r.url())) resultChunk.push(`failed(${r.failure()?.errorText ?? '?'})@${Math.round(performance.now())}`);
+    });
+    await page.evaluate(() => {
+      const w = window as unknown as { __qa35: { frames: number; at: number }; requestAnimationFrame: typeof requestAnimationFrame };
+      w.__qa35 = { frames: 0, at: performance.now() };
+      const raf = w.requestAnimationFrame.bind(window);
+      w.requestAnimationFrame = (cb) =>
+        raf((t) => {
+          w.__qa35.frames++;
+          cb(t);
+        });
+    });
     await page.evaluate(
       ([lvl, seed]) => {
         window.__towerclash.loadLevel(lvl, seed);
@@ -535,14 +556,32 @@ test.describe('economy', () => {
     // CI run 118 (2026-11-04) timed out here still on 'play' while the same build loses level 15 seed 1 at
     // 34.4 s sim in ≈ 2.5 s locally (headless shell and full Chromium alike): the poll now reports the
     // sim clock, the booked outcome and the player's tower count, so a repeat says whether the sim
-    // stalled or the result screen never opened (PERF-11 chunk) — the assertion itself is unchanged
+    // stalled or the result screen never opened (PERF-11 chunk) — the assertion itself is unchanged.
+    // QA-35 (2026-11-05, docs/BACKLOG.md Bugs): the loss itself never came late here — 2.4 s at ×1, 5.4 s at
+    // CPU 4×, 10.7 s at 8×, 21 s at 16×, 2.4 s beside 4 CPU hogs / on full Chromium / with an unlocked
+    // AudioContext (218 nodes/s) / with the result chunk 2 s late — but a CI-shaped run on this host (CI=1,
+    // 2 workers, camera.spec beside, load ≈ 13–26) hung one page's main thread on a play screen for good
+    // (content.spec level 40: `page.evaluate` never returned, "Test ended."; the screencast stopped on the
+    // first play frame; the idle preloads were never issued) — the same read-out run 118 gave this poll
+    // (the last value received, 'play', 60 s long). So the sample is bounded: an evaluate that does not
+    // answer within EVALUATE_HANG_MS is reported as a hung renderer instead of as the sim's last known
+    // screen, and the message carries the frames the page painted since the start (a starved or throttled
+    // rAF reads as a low rate; the sim advances ≤ 500 ms of sim per frame, src/ui/loop.ts
+    // MAX_TICKS_PER_FRAME) and every response the result chunk got (none = still in flight: `showResult`
+    // waits on it; a failure = the back-off retry path). The assertion and its budget are unchanged.
+    const EVALUATE_HANG_MS = 5_000;
     const progress = (): Promise<string> =>
-      page.evaluate(() => {
-        const d = window.__towerclash;
-        const st = d.getState();
-        const own = st ? Object.values(st.towers).filter((t) => t.owner === 'player').length : -1;
-        return `${d.getScreen()} sim=${d.economy.getClock()?.timeMs ?? '-'} outcome=${d.getResult()?.outcome ?? '-'} playerTowers=${own}`;
-      });
+      Promise.race([
+        page.evaluate(() => {
+          const d = window.__towerclash;
+          const st = d.getState();
+          const own = st ? Object.values(st.towers).filter((t) => t.owner === 'player').length : -1;
+          const q = (window as unknown as { __qa35: { frames: number; at: number } }).__qa35;
+          const fps = (q.frames / Math.max(1, performance.now() - q.at)) * 1000;
+          return `${d.getScreen()} sim=${d.economy.getClock()?.timeMs ?? '-'} outcome=${d.getResult()?.outcome ?? '-'} playerTowers=${own} frames=${q.frames} (${fps.toFixed(1)}/s) hidden=${document.hidden}`;
+        }),
+        new Promise<string>((resolve) => setTimeout(() => resolve(`RENDERER HUNG: page.evaluate did not answer within ${EVALUATE_HANG_MS} ms (QA-35)`), EVALUATE_HANG_MS)),
+      ]).then((s) => `${s} resultChunk=[${resultChunk.join(',')}]`);
     await expect.poll(progress, { timeout: 60_000, intervals: [250] }).toMatch(/^result /);
     expect((await page.evaluate(() => window.__towerclash.getResult()))?.outcome).toBe('lost');
     // FE-4 defeat tip: the level's lesson under the title; no HOW TO PLAY link on the first defeat of the session
