@@ -18,8 +18,8 @@
     {"id": "west", "x": 150, "y": 940, "owner": "neutral", "units": 4},
     {"id": "east", "x": 570, "y": 940, "owner": "neutral", "units": 4},
     {"id": "mid", "x": 250, "y": 620, "owner": "neutral", "units": 8},
-    {"id": "guns", "x": 360, "y": 760, "owner": "neutral", "units": 4, "kind": "artillery"},
-    {"id": "east2", "x": 570, "y": 560, "owner": "neutral", "units": 6},
+    {"id": "guns", "x": 420, "y": 760, "owner": "neutral", "units": 4, "kind": "artillery"},
+    {"id": "east2", "x": 570, "y": 560, "owner": "neutral", "units": 8},
     {"id": "outpost", "x": 360, "y": 480, "owner": "enemy1", "units": 6, "level": 1, "kind": "barracks"},
     {"id": "base", "x": 360, "y": 200, "owner": "enemy1", "units": 4, "level": 1, "kind": "barracks"}
   ],
