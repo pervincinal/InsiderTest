@@ -26,7 +26,11 @@ describe('perspective camera chunk (PERF-9)', () => {
     });
     const camera = await import('../../src/render/camera');
     expect(camera.playCamera()).toBe(camera.FLAT);
-    expect(camera.preloadCamera()).toBeNull(); // nothing asked for
+    // AUD-U21: the flat default asks for the content-fit chunk (render/fit.ts), never for the perspective one
+    const fit = camera.preloadCamera();
+    expect(fit).not.toBeNull();
+    await fit;
+    expect(camera.preloadCamera()).toBeNull(); // nothing more asked for
     expect(loads).toBe(0);
 
     camera.setTilt(camera.TILT_PERSPECTIVE);
@@ -83,7 +87,7 @@ function staticDeps(f: string): string[] {
 }
 
 describe('eager graph (PERF-9)', () => {
-  it('src/main.ts reaches neither render/perspective.ts nor any src/ai module statically', () => {
+  it('src/main.ts reaches neither render/perspective.ts, render/fit.ts nor any src/ai module statically', () => {
     const seen = new Set<string>();
     const stack = [join(SRC, 'main.ts')];
     while (stack.length) {
@@ -94,7 +98,8 @@ describe('eager graph (PERF-9)', () => {
     }
     expect(seen.size).toBeGreaterThan(50);
     expect(seen.has(join(SRC, 'render/camera.ts'))).toBe(true);
-    const lazy = [...seen].filter((f) => f === join(SRC, 'render/perspective.ts') || f.startsWith(join(SRC, 'ai') + '/')).map((f) => f.slice(SRC.length + 1));
+    // AUD-U21: the content fit (render/fit.ts) is a lazy chunk too
+    const lazy = [...seen].filter((f) => f === join(SRC, 'render/perspective.ts') || f === join(SRC, 'render/fit.ts') || f.startsWith(join(SRC, 'ai') + '/')).map((f) => f.slice(SRC.length + 1));
     expect(lazy).toEqual([]);
   });
 });

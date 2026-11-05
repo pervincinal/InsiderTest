@@ -1,6 +1,10 @@
 import { chunkBackoff, loadChunk } from '../lazyChunk';
 import { HUD } from './layout';
 import type { TiltPainters } from './perspective';
+import type { GameState } from '../sim/types';
+import type { View } from './view';
+import type { Palette } from './palette';
+import type { TerrainSpec } from './terrain';
 
 /*
  * ART-21 play camera ("Oyun helikopter view kimidir": the field read as a flat map seen straight
@@ -60,6 +64,8 @@ export interface Camera {
   horizonY(): number | undefined;
   /** The perspective painters (lazy chunk `perspective.ts`); undefined on the flat map. */
   readonly tilt?: TiltPainters;
+  /** AUD-U21: the content fit this camera is (the flat map zoomed and moved), undefined otherwise. */
+  readonly fit?: CameraFit;
 }
 
 /** A projected point and its depth scale. */
@@ -137,8 +143,43 @@ function requestedTilt(): number {
   return override ?? urlTilt() ?? TILT_DEFAULT;
 }
 
+/**
+ * AUD-U21 (GDD §4): the play camera fits the level's content, not the whole map — a uniform zoom `z`
+ * (1 .. 1.35) and an offset: map point (x, y) is drawn at (tx + z·x, ty + z·y) and standing things
+ * scale by z (`Projected.s`). The rule, its margins and the camera are the lazy chunk `fit.ts` (loaded
+ * with `preloadCamera` at the title's idle and before a level starts; until it is in, the whole map). The play screen
+ * names the level it shows (`setPlayFit`); the perspective camera (an A/B) and `?fit=0` (read by the
+ * chunk) frame the whole map as before.
+ */
+export interface Fit {
+  z: number;
+  tx: number;
+  ty: number;
+}
+
+/** A fit camera's `fit` (fit.ts): the zoom and offset, the ground it paints and the transform for the flat map's overlay (terrain.ts). */
+export interface CameraFit extends Fit {
+  /** Paint the ground: the part of the map the screen shows, cached at the zoomed resolution. Logical frame. */
+  ground(ctx: CanvasRenderingContext2D, view: View, pal: Palette, spec: TerrainSpec): void;
+  /** Apply the fit to `ctx` (map px → logical px). */
+  on(ctx: CanvasRenderingContext2D): void;
+}
+
+/** What a fit is computed from (a level's state). */
+export type FitContent = Pick<GameState, 'towers' | 'mines'>;
+
+const FIT_CHUNK = 'fit';
+let fitFor: ((c: FitContent) => Camera | null) | null = null;
+let fitCam: Camera | null = null;
+
+/** The level the play camera frames (its towers and mines), or null: the whole map (`?fit=0`: fit.ts `fitFor`). */
+export function setPlayFit(content: FitContent | null): void {
+  fitCam = content && fitFor ? fitFor(content) : null;
+}
+
 const CAMERA_CHUNK = 'perspective';
 let makeTilted: ((k: number) => Camera) | null = null;
+
 let cameraPromise: Promise<void> | null = null;
 
 /** Load the perspective camera chunk (idempotent; a failed fetch is forgotten so the next call retries). */
@@ -154,9 +195,28 @@ export function loadCamera(): Promise<void> {
   return cameraPromise;
 }
 
+let fitPromise: Promise<void> | null = null;
+
+/**
+ * Load the content-fit chunk (AUD-U21; idempotent, retried like `loadCamera`). Late (a slow download,
+ * after the level started): from the next level on, so the cached ground layer never goes stale.
+ */
+export function loadFit(): Promise<void> {
+  fitPromise ??= loadChunk(FIT_CHUNK, () => import('./fit'))
+    .then((m) => {
+      fitFor = m.fitFor;
+    })
+    .catch((err: unknown) => {
+      fitPromise = null;
+      throw err;
+    });
+  return fitPromise;
+}
+
 /** The chunk load a requested tilt still waits for, or null (flat map, or already in). Never rejects. */
 export function preloadCamera(): Promise<void> | null {
-  if (makeTilted || requestedTilt() === 1) return null;
+  if (requestedTilt() === 1) return fitFor ? null : loadFit().catch(() => undefined); // AUD-U21: the content fit
+  if (makeTilted) return null;
   return loadCamera().catch(() => undefined);
 }
 
@@ -168,7 +228,7 @@ const cams = new Map<number, Camera>();
  */
 export function playCamera(): Camera {
   const k = requestedTilt();
-  if (k === 1) return FLAT;
+  if (k === 1) return fitCam ?? FLAT; // AUD-U21: the level's content fit (the whole map until its chunk is in)
   if (!makeTilted) {
     if (!chunkBackoff(CAMERA_CHUNK)) void loadCamera().catch(() => undefined);
     return FLAT;

@@ -763,10 +763,12 @@ function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState
     const kick = fx?.recoil.get(t.id); // AUD-F11: a gun's recoil — the barrel slides back, the tower nudges 1 px
     const look = standing(cam, t);
     // ART-24 zoom about the anchor through the canvas transform: on the flat map the PERF-4 cache bakes
-    // every building at the one zoomed scale (crisp, no new keys); camera depth stays a draw-time scale
+    // every building at the one zoomed scale (crisp, no new keys); camera depth stays a draw-time scale.
+    // AUD-U21: a content fit's zoom (one for the level) goes in the transform too, so it bakes crisp
+    const fz = cam.fit ? look.s : 1;
     ctx.save();
     ctx.translate(look.x + (kick?.dx ?? 0), look.y + (kick?.dy ?? 0));
-    ctx.scale(WORLD_ZOOM.tower, WORLD_ZOOM.tower);
+    ctx.scale(WORLD_ZOOM.tower * fz, WORLD_ZOOM.tower * fz);
     ctx.translate(-look.x, -look.y);
     drawTowerSprite(ctx, pal, look, {
       nowMs,
@@ -778,7 +780,7 @@ function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState
       aim: aim === undefined ? undefined : projAngle(cam, t.x, t.y, aim),
       recoil: kick?.r,
       skin: t.owner === 'player' ? skin : undefined,
-      scale: look.s === 1 ? undefined : look.s,
+      scale: look.s === fz ? undefined : look.s,
     });
     ctx.restore();
     if (shake) ctx.translate(-shake, 0);
@@ -994,7 +996,9 @@ export function drawGame(ctx: CanvasRenderingContext2D, state: GameState, view: 
   const screen = bleed(view);
   ctx.save();
   ctx.beginPath();
-  ctx.rect(screen.left, 0, screen.right - screen.left, C.MAP_H);
+  // AUD-U21: a content fit's zoomed island reaches the screen's rows too (the HUD glass covers it as on 9:16)
+  const rows = cam.fit ? screen : { top: 0, bottom: C.MAP_H };
+  ctx.rect(screen.left, rows.top, screen.right - screen.left, rows.bottom - rows.top);
   ctx.clip();
   ctx.save();
   if (shake.dx || shake.dy) ctx.translate(shake.dx, shake.dy);

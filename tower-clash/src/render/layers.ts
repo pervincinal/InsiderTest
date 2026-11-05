@@ -119,7 +119,7 @@ export function paintGround(layer: Layer, view: View, pal: Palette, spec: Terrai
   ctx.save();
   logical(ctx, view, false);
   drawSea(ctx, view, sea, cam); // full bleed (BUG-34): covers the whole canvas, margins included
-  logical(ctx, view, true);
+  logical(ctx, view, !cam.fit); // AUD-U21: a content fit's island reaches past the map's rows
   drawTerrain(ctx, view, pal, spec, cam);
   ctx.restore();
   layer.key = key;

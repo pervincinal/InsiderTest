@@ -985,8 +985,8 @@ export function getTerrain(view: View, pal: Palette, spec: TerrainSpec, cam: Cam
  * frame: a tilted camera is baked into the image).
  */
 export function drawTerrain(ctx: CanvasRenderingContext2D, view: View, pal: Palette, spec: TerrainSpec, cam: Camera = FLAT): void {
-  const img = getTerrain(view, pal, spec, cam);
-  ctx.drawImage(img, 0, 0, C.MAP_W, C.MAP_H);
+  if (cam.fit) cam.fit.ground(ctx, view, pal, spec); // AUD-U21: the zoomed part of the map the screen shows (fit.ts)
+  else ctx.drawImage(getTerrain(view, pal, spec, cam), 0, 0, C.MAP_W, C.MAP_H);
 }
 
 /* ---------- animated layer: cloud shadows + water sparkles ---------- */
@@ -1067,6 +1067,8 @@ export function drawTerrainOverlay(
   const amb = ambientFor(spec);
   const theme = themeFor(spec.theme);
   const t = motion ? nowMs / 1000 : 0;
+  ctx.save();
+  cam.fit?.on(ctx); // AUD-U21: under a content fit the flat map's overlay, zoomed with the ground
   if (theme.ambient) {
     // theme wash over the cached ground only: buildings, units and badges stay untinted
     ctx.fillStyle = theme.ambient;
@@ -1103,4 +1105,5 @@ export function drawTerrainOverlay(
     ctx.fill();
   }
   ctx.globalAlpha = 1;
+  ctx.restore();
 }
