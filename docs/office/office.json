@@ -1,6 +1,6 @@
 {
   "board": {
-    "title": "Lövhə · 4 noyabr, gün 47",
+    "title": "Lövhə · 5 noyabr, gün 48",
     "stats": [
       {
         "b": "build 27",
@@ -11,19 +11,19 @@
         "s": "səviyyə bot ilə keçir"
       },
       {
-        "b": "2387",
-        "s": "unit test, e2e 183 + 4 + 4 + WebKit + soak"
+        "b": "2427",
+        "s": "unit test, e2e 186 + 4 + 4 + WebKit + soak"
       },
       {
-        "b": "28 / 29 + 54",
-        "s": "audit P1 bağlı, P2 / P3-dən 54 — qalan yalnız playtest-dən sonra"
+        "b": "28 / 29 + 59",
+        "s": "audit P1 bağlı, P2 / P3-dən 59 — qalan yalnız playtest-dən sonra"
       },
       {
-        "b": "22 gün",
+        "b": "23 gün",
         "s": "rəyin gözlənilir"
       }
     ],
-    "footer": "Mənbə: <code>.claude/agents/*.md</code> rol faylları, <code>docs/BACKLOG.md</code> və son hesabatlar (gün 45–47). Statuslar 4 noyabr vəziyyətidir."
+    "footer": "Mənbə: <code>.claude/agents/*.md</code> rol faylları, <code>docs/BACKLOG.md</code> və son hesabatlar (gün 46–48). Statuslar 5 noyabr vəziyyətidir."
   },
   "team": [
     {
@@ -42,19 +42,19 @@
         "build nömrəsi, commit və push"
       ],
       "recent": [
+        "Gün 48: audit günü 5 — yeddi agent; A3 memo, playtest vərəqi, 13-də boş oyunçu uduzur, kamera sığdırması, klaviatura; LV-12 / QA-36 biletləri",
         "Gün 47: audit P2 / P3 günü 4 — yeddi agent, 14 audit tapıntısı + 1.0.1 rıçaqları; reclock testi 13-ə uyğunlaşdırıldı",
-        "Gün 46: audit P2 / P3 günü 3 — yeddi agent, 19 tapıntı bağlandı",
-        "Gün 45: 11 tapıntı; CI runner dəyişikliyi (ubuntu 26.04) tutuldu"
+        "Gün 46: audit P2 / P3 günü 3 — yeddi agent, 19 tapıntı bağlandı"
       ],
-      "status": "Bu gün işlədi · sabah gün 48 (1.0.1 planı)"
+      "status": "Bu gün işlədi · sabah gün 49 (1.0.1 hazırlığı)"
     },
     {
       "id": "game-designer",
       "name": "Oyun dizayneri",
       "role": "Qaydalar və balans",
       "color": "#7c5cbf",
-      "tag": "gözləyir",
-      "cls": "wait",
+      "tag": "işlədi",
+      "cls": "",
       "does": "GDD-ni (qaydalar sənədi), balans sabitlərini və səviyyə zolaqlarını yazır. Hər dərs kartını \"karta hərfi əməl edən\" simulyasiya oyunçusu ilə yoxlayır və keçməyənləri yenidən yazmaq üçün level dizaynerinə dəqiq mətn verir.",
       "owns": [
         "docs/GDD.md",
@@ -62,11 +62,11 @@
         "GD-x baxışları"
       ],
       "recent": [
+        "Gün 48: insan playtest vərəqi — 15 səviyyə, bot saatları ilə cədvəl, mexaniki qaydalar (3★, 2★ döşəməsi, zolaq 5–6, A3 açarı); yalnız build 27+",
         "Gün 47: memo §4.1 rıçaqları (13 / 32 / 41) irəli çəkilib tətbiq olundu — 32: 14 → 18/20, 41: 17 → 20/20",
-        "Gün 46: çətinlik və ulduz memosu — sırasız 5 səviyyə, 1.0.1 rıçaqları, ulduz mükafatı 1.0-da dəyişmir; 11 köhnə iddia düzəldildi",
-        "Gün 45: öz qüllədən kəsmə, busterlər gündəlikdə, 2★ döşəməsi"
+        "Gün 46: çətinlik və ulduz memosu — sırasız 5 səviyyə, 1.0.1 rıçaqları, ulduz mükafatı 1.0-da dəyişmir; 11 köhnə iddia düzəldildi"
       ],
-      "status": "Gözləyir · B4 / B5 playtest-dən sonra"
+      "status": "Bu gün vərəq yazdı · B4 / B5 playtest-dən sonra"
     },
     {
       "id": "gameplay-engineer",
@@ -102,11 +102,11 @@
         "src/main.ts"
       ],
       "recent": [
+        "Gün 48: kamera səviyyə məzmununa sığır (1-ci səviyyə 35 % böyük, 2–50 eyni); klaviatura fokus halqası; tənzimləmələr 88 px sətir — SIFIRLA yenə görünür",
         "Gün 47: niyyət işarəsi (ox / qalxan / göz), mağaza KRİSTALLAR-da açılmır, \"Necə oynanır\" bir açar; HUD zolağında qüllə toxunuşu, Vibrasiya + Silkələnmə sətirləri; gündəlik kart yerli saat + OYNA pilləsi",
-        "Gün 46: RU ipucu, başlıqlar sığır, düymə kontrastı 2,4 → 4,9, \"düşmən axını\"; məğlubiyyət kartı YENİDƏN ilə; sürüşmə impulsu + bağlı düyün bildirişi",
-        "Gün 45: 1–4-də buster lenti gizli, basma halqası, öz qüllədən kəsmə, save bildirişi"
+        "Gün 46: RU ipucu, başlıqlar sığır, düymə kontrastı 2,4 → 4,9, \"düşmən axını\"; məğlubiyyət kartı YENİDƏN ilə; sürüşmə impulsu + bağlı düyün bildirişi"
       ],
-      "status": "Bu gün üç nəfər işlədi · sabah icebox / 1.0.1"
+      "status": "Bu gün iki nəfər işlədi · sabah LevelDef.ai"
     },
     {
       "id": "ai-engineer",
@@ -121,11 +121,11 @@
         "istinad oyunçusu, sadə oyunçu modeli"
       ],
       "recent": [
+        "Gün 48: \"cəbhə meyli\" prototipi (default söndürülü, 50 səviyyə eyni); 41–50-də oyunçuya pay 8 → 14 %, 49 / 50 yenə 20/20 → səviyyə-səviyyə açar tövsiyəsi",
         "Gün 46: bot qalxan qaldırmayan düşmənə qarşı donmur (4-cü səviyyə 0/10 → 10/10), medianlar byte-byte eyni",
-        "Gün 42: düşmən yaddaşı — 20 s duruşdan sonra xətti buraxır",
-        "Açıq: AUD-A12, A3–A8 (insan məlumatı lazımdır)"
+        "Gün 42: düşmən yaddaşı — 20 s duruşdan sonra xətti buraxır"
       ],
-      "status": "Bu gün işlədi · A3–A8 playtest-dən sonra"
+      "status": "Bu gün işlədi (fable) · A3 açarı playtest-dən sonra"
     },
     {
       "id": "level-designer",
@@ -140,11 +140,11 @@
         "dərs kartları (EN / AZ / RU / TR)"
       ],
       "recent": [
+        "Gün 48: 13-də guns 60 px şərqə + east2 8 u — boş oyunçu 20/20 uduzur (87 s), saatlar və qapılar dəyişmədi; 23 qəbul",
         "Gün 47: Q13 K = 20 ilə ölçüldü, 13 / 32 / 41 rıçaqları, 41 2★ 140 → 120 s; 5 kart düşməni işarə ilə adlandırır",
-        "Gün 45: güzgü cütlərində 2★ saatları",
-        "Gün 44: 4-cü səviyyə 108 → 65 s"
+        "Gün 45: güzgü cütlərində 2★ saatları"
       ],
-      "status": "Bu gün işlədi (fable) · 49 / 50 AI ilə (A3)"
+      "status": "Bu gün işlədi (fable) · LV-12 sabah"
     },
     {
       "id": "qa-engineer",
@@ -161,19 +161,19 @@
         "Bugs bölməsi"
       ],
       "recent": [
+        "Gün 48: run 118 kökü — render ilişməsi (ilk oyun kadrı), stack tutulmayıb, test 5 s-də \"RENDERER HUNG\" yazır; ?tilt default deyil (pin)",
         "Gün 47: autoLose botu 50/50 uduzur (əvvəl 37-sini udurdu); ikiqat toxunuş / sürüşmə / nəticə parçası testləri saata görə bərkidildi; LESSON_FIT_MARGIN",
-        "Gün 46: save massiv / naməlum id rədd edir; native mənşə bərkidildi; audio kəsilməsi — 2 real xəta düzəldildi, TF-31",
-        "Gün 45: yaddaş sınağı, reclock aləti"
+        "Gün 46: save massiv / naməlum id rədd edir; native mənşə bərkidildi; audio kəsilməsi — 2 real xəta düzəldildi, TF-31"
       ],
-      "status": "Bu gün işlədi (fable) · CI izləyir"
+      "status": "Bu gün işlədi (fable) · QA-35 tələsi CI-də"
     },
     {
       "id": "tech-artist",
       "name": "Tech artist",
       "role": "Görünüş və səs",
       "color": "#d4536b",
-      "tag": "işlədi",
-      "cls": "",
+      "tag": "gözləyir",
+      "cls": "wait",
       "does": "Vizual üslubu (palitra, qalaların və əsgərlərin çəkimi, zərrəciklər, ekran effektləri) və WebAudio ilə sintez olunan səsləri yaradır. Rəng-korluğu palitrası və \"az hərəkət\" rejimi onun qoruyucularındandır.",
       "owns": [
         "src/render/ effektlər, palitra",
@@ -185,7 +185,7 @@
         "Gün 46: artilleriya ağırlığı, \"az hərəkət\"də tutma halosu, cüzdan sayımı + uçan sikkələr, qüllə itirmə çatı + vibrasiya (eager −230 B)",
         "Gün 45: boş başlıq 31 → 4,5 ms; səs dəyişkənliyi, 4 yeni səs"
       ],
-      "status": "Bu gün işlədi · musiqi səviyyəsi telefonda dinlənməli"
+      "status": "Gözləyir · musiqi səviyyəsi telefonda dinlənməli"
     },
     {
       "id": "mobile-engineer",
@@ -223,9 +223,9 @@
         "fastlane/"
       ],
       "recent": [
+        "Gün 48: build 27 qeydlərinə gün 47, TestFlight bənd 13; hesabatdakı iki AZ sözü düzəldildi",
         "Gün 47: build 27 qeydlərinə gün 45–46 işləri, TestFlight planı bənd 13, README build:native",
-        "Gün 45: mağaza kadrı 02 yenidən",
-        "Gün 44: 52 kadr; məxfilik v2.2; TF-30; build 27 qeydləri"
+        "Gün 45: mağaza kadrı 02 yenidən"
       ],
       "status": "Bu gün işlədi (sonnet) · build 27 materialı hazırdır"
     },
@@ -264,10 +264,10 @@
       ],
       "recent": [
         "Apple PLA müqaviləsi — qəbul edilməyincə heç bir build yüklənmir; sonra build 27",
-        "Build 27 gələndə: 20 dəqiqəlik alt-plan + TF-13 / TF-30 / TF-31",
-        "Yeni defaultlar: kartlarda düşmən işarə ilə adlanır (bəli), 41-in 3★ 70 s qalır, Vibrasiya / Silkələnmə default açıq"
+        "Build 27 gələndə: 20 dəqiqəlik alt-plan + TF-13 / TF-30 / TF-31, sonra playtest vərəqi (~40 dəq, 15 səviyyə, TF-28-dən əvvəl)",
+        "Yeni defaultlar: A3 açarı səviyyə-səviyyə, tək oynayırsan nəticələr \"təklif\", kamera sığdırması açıq"
       ],
-      "status": "Səndə: Apple müqaviləsi + cihaz yoxlaması"
+      "status": "Səndə: Apple müqaviləsi + cihaz yoxlaması + playtest vərəqi"
     }
   ],
   "backlog": [
@@ -293,7 +293,7 @@
             "producer"
           ],
           "day": "build 26 gələndə",
-          "t": "Real telefonda heç vaxt yoxlama olmayıb: planın başındakı 20 dəqiqəlik \"ağır nasazlıq\" alt-planı və bir səhifəlik playtest protokolu. Nəticə yazılana qədər App Review-a göndərilmir."
+          "t": "Build 27 gələndə: 20 dəqiqəlik \"ağır nasazlıq\" alt-planı (TF-13 / TF-30 / TF-31) və insan playtest vərəqi (docs/reviews/2026-11-05-human-playtest-sheet.md, ~40 dəq, 15 səviyyə) — TF-28 sıfırlamasından əvvəl."
         },
         {
           "id": "Qərarlar",
@@ -307,75 +307,75 @@
       ]
     },
     {
-      "title": "Gün 47 — bağlandı (4 noyabr)",
+      "title": "Gün 48 — bağlandı (5 noyabr)",
       "items": [
         {
-          "id": "AUD-U17 / F17 / F16",
+          "id": "AUD-A3 prototip",
           "p": "p2",
           "own": [
-            "tech-artist"
+            "ai-engineer"
           ],
-          "day": "bağlı",
-          "t": "Nişanda sahib işarəsi, muncuqlu düşmən axını, böyük qığılcımlar, bildiriş sırası."
+          "day": "bağlı (memo)",
+          "t": "\"Cəbhə meyli\" default söndürülü; 41–50 pay 8 → 14 %, 49 / 50 qalır → səviyyə-səviyyə açar."
         },
         {
-          "id": "AUD-A10 / U16b / U24 / U25",
-          "p": "p2",
+          "id": "AUD-B4 / B5 vərəq",
+          "p": "p1",
           "own": [
-            "frontend-engineer"
+            "game-designer"
           ],
-          "day": "bağlı",
-          "t": "Niyyət işarəsi, dərslik sözü, \"Necə oynanır\", mağaza səkməsi."
+          "day": "bağlı (vərəq)",
+          "t": "İnsan playtest vərəqi: 15 səviyyə, mexaniki qaydalar, build 27+."
         },
         {
-          "id": "AUD-Q13 + LV-1.0.1a",
-          "p": "p2",
+          "id": "AUD-A15 / A14",
+          "p": "p3",
           "own": [
             "level-designer"
           ],
           "day": "bağlı",
-          "t": "K = 20 ölçmə; 13 / 32 / 41 rıçaqları; kartlarda işarə adları."
+          "t": "13-də boş oyunçu uduzur (87 s); 23 qəbul."
         },
         {
-          "id": "AUD-U19 / U20 / F18",
+          "id": "AUD-U21",
           "p": "p2",
           "own": [
             "frontend-engineer"
           ],
           "day": "bağlı",
-          "t": "HUD zolağında qüllə toxunuşu; Vibrasiya + Ekran silkələnməsi."
+          "t": "Kamera məzmuna sığır: 1-ci səviyyə 35 % böyük, 2–50 eyni."
         },
         {
-          "id": "AUD-U23 / U26",
+          "id": "AUD-U27 + tənzimləmələr",
           "p": "p3",
           "own": [
             "frontend-engineer"
           ],
           "day": "bağlı",
-          "t": "Gündəlik kart yerli saat + OYNA; mağaza alt mətni, cüzdan ulduzu, düyün kəsimi."
+          "t": "Klaviatura fokusu; SIFIRLA yenə qatın üstündə."
         },
         {
-          "id": "AUD-F19 + QA-34",
+          "id": "QA-35 / AUD-U22",
           "p": "p3",
           "own": [
             "qa-engineer"
           ],
-          "day": "bağlı",
-          "t": "autoLose botu 50/50 uduzur; e2e saat əsaslı bərkitmə."
+          "day": "bağlı / açıq",
+          "t": "Run 118 kökü render ilişməsi (tələ qurulub, QA-35 açıq); ?tilt default deyil."
         },
         {
-          "id": "PUB-38",
+          "id": "PUB-39",
           "p": "p3",
           "own": [
             "publisher"
           ],
           "day": "bağlı",
-          "t": "Build 27 qeydləri gün 45–46, TestFlight planı bənd 13."
+          "t": "Build 27 qeydləri gün 47."
         }
       ]
     },
     {
-      "title": "Gün 48",
+      "title": "Gün 49",
       "items": [
         {
           "id": "Build 27",
@@ -388,32 +388,34 @@
           "t": "Sorğu Apple müqaviləsi təsdiqlənəndə (native build xətti ilk dəfə)."
         },
         {
-          "id": "AUD-A3",
+          "id": "LevelDef.ai",
           "p": "p2",
           "own": [
-            "ai-engineer",
-            "level-designer"
+            "gameplay-engineer",
+            "frontend-engineer",
+            "ai-engineer"
           ],
-          "day": "gün 48",
-          "t": "49 / 50 yalnız AI ilə düzəlir (memo §4.2) — plan və ölçmə."
+          "day": "gün 49",
+          "t": "Səviyyə-səviyyə AI açarı (default söndürülü) — playtest siqnalına günlərlə cavab üçün."
         },
         {
-          "id": "B4 / B5 hazırlığı",
+          "id": "LV-12",
           "p": "p3",
           "own": [
-            "game-designer"
+            "level-designer",
+            "qa-engineer"
           ],
-          "day": "gün 48",
-          "t": "Saat cədvəli və playtest vərəqi — sənin oyunundan sonra tətbiq."
+          "day": "gün 49",
+          "t": "reclock-da insan saatı pinləri + GD-12 2★ döşəməsi."
         },
         {
-          "id": "Tənzimləmələr uzunluğu",
+          "id": "QA-35",
           "p": "p3",
           "own": [
-            "frontend-engineer"
+            "qa-engineer"
           ],
-          "day": "cihazdan sonra",
-          "t": "SIFIRLA 9:16-da sürüşmə tələb edir — narahat edərsə sətirlər birləşdirilir."
+          "day": "CI izləmə",
+          "t": "Render ilişməsi tələsi — növbəti qırmızıda stack."
         }
       ]
     },

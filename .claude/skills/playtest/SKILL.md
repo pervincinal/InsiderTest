@@ -33,7 +33,7 @@ Reading a weekly failure: (1) `4/5 < 90%` or a lost fixed seed → run the same 
 npm run playtest -- --naive --seeds 5                 # first-time human model on every level, react 4000 ms (informational)
 npm run playtest -- --naive --seeds 5 --react 8000    # slower hands
 npm run playtest -- --naive --seeds 5 --gate 1-16     # asc gate: exit 1 when a level of 1–8 wins < 4/5 or a level of 9–16 wins < 3/5
-npm run playtest -- --naive --seeds 5 --gate 1-16 --tie both --tie-exempt 3   # the CI step (QA-30): both tie orders, level 3's tie desc row exempt (GD-7h)
+npm run playtest -- --naive --seeds 5 --gate 1-16 --tie both   # the CI step (QA-30): both tie orders; no exemptions since AUD-B9 (NAIVE_TIE_EXEMPT is empty)
 npm run playtest -- --naive --level 12 --seeds 5 --gate 12-12   # one gated level (a-b must contain --level)
 ```
 `scripts/lib/naivePlayer.ts`: every `--react` ms (first action at 3 s) each own tower with a free link streams to its nearest non-own tower (neutral before enemy); it never unlinks, never boosts, and re-links a tower that lost its streams only after another reaction delay. One row per level (wins/K, stars, median, `holds` = ≥ 50 % wins, `star2?` = holds and median ≤ star2, `gate` = ok / FAIL / `-` outside the gated range) and the summary line `naive: N/50 levels won at >= 50 %, M within star2`. Without `--gate` the mode is informational (exit 0): levels 1–8 are expected to hold — a `NO` there is a level/design item for the Level Designer / Game Designer, traced with the losing seed before filing.
