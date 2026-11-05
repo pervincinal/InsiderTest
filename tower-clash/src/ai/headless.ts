@@ -6,7 +6,7 @@
  */
 import type { Command, GameState, LevelDef, Outcome, PlayerModifiers, Rng } from '../sim/index';
 import { C, DEFAULT_MODIFIERS, applyCommand, createState, getOutcome, step } from '../sim/index';
-import { rngsFor, runAiTick } from './index';
+import { rngsFor, runAiTick, type EnemyAiOptions } from './index';
 import { isAiTick } from './common';
 
 /** Sim-time budget for one headless match (GDD §3: every level is winnable in under 3 min). */
@@ -28,6 +28,8 @@ export interface RunOptions {
   modifiers?: Readonly<PlayerModifiers>;
   /** Sim-time budget, ms. */
   maxMs?: number;
+  /** Per-match enemy AI options (AUD-A3 opponent awareness). Default: none — the shipped behaviour. */
+  ai?: EnemyAiOptions;
 }
 
 /** Run one headless match. Both sides decide on the same snapshot; the player's commands land first, like a human tap. */
@@ -40,7 +42,7 @@ export function runHeadless(level: LevelDef, seed: number, player: PlayerBot, op
   while (outcome === 'playing' && state.time < maxMs) {
     if (isAiTick(state)) {
       const playerCmds = player ? player(state, rngs.player) : [];
-      const enemyCmds = runAiTick(state, rngs.enemies);
+      const enemyCmds = runAiTick(state, rngs.enemies, undefined, options.ai);
       for (const cmd of playerCmds) applyCommand(state, cmd);
       for (const cmd of enemyCmds) applyCommand(state, cmd);
     }

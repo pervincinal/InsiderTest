@@ -7,7 +7,7 @@
  */
 import type { Command, EnemyDef, GameState, Owner } from '../sim/index';
 import { Rng } from '../sim/index';
-import { opportunistCommands, rusherCommands, turtleCommands } from './personalities';
+import { opportunistCommands, rusherCommands, turtleCommands, type EnemyAiOptions } from './personalities';
 import { memoryFor, type EnemyMemory } from './memory';
 
 export {
@@ -41,7 +41,10 @@ export {
   TURTLE_MIN_LEVEL,
   DEFENCE_MIN_AGGRESSION,
   SUPPLY_FULL_UNITS,
+  FRONT_BIAS_S,
+  frontBiasMs,
 } from './personalities';
+export type { EnemyAiOptions } from './personalities';
 export {
   isAiTick,
   ownedTowers,
@@ -76,16 +79,17 @@ export type { PlayerMemory } from './playerMemory';
 
 /**
  * Commands for one enemy this AI tick, according to its personality and aggression. `memory` is the
- * enemy's per-match memory (default: the one kept for this state object, `memoryFor`).
+ * enemy's per-match memory (default: the one kept for this state object, `memoryFor`); `options` the
+ * per-match AI options (AUD-A3 opponent awareness; default: none — today's behaviour).
  */
-export function enemyCommands(state: GameState, enemy: EnemyDef, rng: Rng, memory: EnemyMemory = memoryFor(state, enemy.owner)): Command[] {
+export function enemyCommands(state: GameState, enemy: EnemyDef, rng: Rng, memory: EnemyMemory = memoryFor(state, enemy.owner), options?: EnemyAiOptions): Command[] {
   switch (enemy.personality) {
     case 'rusher':
-      return rusherCommands(state, enemy, rng, memory);
+      return rusherCommands(state, enemy, rng, memory, options);
     case 'turtle':
-      return turtleCommands(state, enemy, rng, memory);
+      return turtleCommands(state, enemy, rng, memory, options);
     case 'opportunist':
-      return opportunistCommands(state, enemy, rng, memory);
+      return opportunistCommands(state, enemy, rng, memory, options);
     default:
       return [];
   }
@@ -94,13 +98,14 @@ export function enemyCommands(state: GameState, enemy: EnemyDef, rng: Rng, memor
 /**
  * Commands for every enemy listed in the level, in level order. `rng` is either one shared stream or a
  * per-owner map (see `rngsFor`); an enemy without a stream in the map is skipped. `memories` (optional)
- * are the enemies' per-match memories by owner; default: the ones kept for this state object.
+ * are the enemies' per-match memories by owner; default: the ones kept for this state object. `options`
+ * (optional) are the per-match AI options, shared by every enemy.
  */
-export function runAiTick(state: GameState, rng: Rng | ReadonlyMap<Owner, Rng>, memories?: ReadonlyMap<Owner, EnemyMemory>): Command[] {
+export function runAiTick(state: GameState, rng: Rng | ReadonlyMap<Owner, Rng>, memories?: ReadonlyMap<Owner, EnemyMemory>, options?: EnemyAiOptions): Command[] {
   const cmds: Command[] = [];
   for (const enemy of state.enemies) {
     const r = rng instanceof Rng ? rng : rng.get(enemy.owner);
-    if (r) cmds.push(...enemyCommands(state, enemy, r, memories?.get(enemy.owner) ?? memoryFor(state, enemy.owner)));
+    if (r) cmds.push(...enemyCommands(state, enemy, r, memories?.get(enemy.owner) ?? memoryFor(state, enemy.owner), options));
   }
   return cmds;
 }

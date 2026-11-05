@@ -415,6 +415,14 @@ export interface AttackConfig {
    * guns' neutral is the level's stepping stone, and `defend` reinforces a retaken tower anyway.)
    */
   holdCost?: boolean;
+  /**
+   * Opponent awareness (AUD-A3 prototype, off unless the enemy's options say so): a per-target *front
+   * bias* in ms. A target with a bias is planned on a horizon of `planMs + bias` and ranked as if it fell
+   * `bias` sooner (`score − bias`), so the opponent's tower is preferred over a grey or a wounded rival
+   * that falls a little earlier, and is attacked at all when the plain horizon would not reach it.
+   * Everything else — `siegePlan`, the no-piling check, `MIN_ATTACK_MS`, the hopeless rule — is unchanged.
+   */
+  front?: (target: Tower) => number;
 }
 
 /**
@@ -478,6 +486,7 @@ export function attack(ctx: Ctx, cfg: AttackConfig): void {
   const maySource = cfg.sources ?? (() => true);
   const lastResort = cfg.lastResort ?? (() => false);
   const score = cfg.score ?? ((_t: Tower, p: Plan) => p.siege.fallsAtMs);
+  const front = cfg.front ?? (() => 0);
   const canOpen = (t: Tower): boolean => freeSlots(ctx, t, cap) > 0 || (cfg.reclaim !== undefined && cfg.reclaim(ctx, t) !== undefined);
   const rejected = new Set<string>();
 
@@ -490,14 +499,16 @@ export function attack(ctx: Ctx, cfg: AttackConfig): void {
     for (const id of [...targetIds].sort()) {
       if (rejected.has(id)) continue;
       const target = state.towers[id]!;
+      const bias = front(target);
+      const planMs = cfg.planMs + bias;
       const already = siege(ctx, target);
       const mine = state.links.some((l) => l.to === id && l.owner === ctx.owner && !ctx.ended.includes(l)) || ctx.planned.some((p) => p.to === id);
-      if (mine && already.fallsAtMs <= cfg.planMs) continue;
+      if (mine && already.fallsAtMs <= planMs) continue;
       const adjacent = sources.filter((s) => roadBetween(state, s.id, id) && !hasLink(state, s.id, id) && !laneBarred(ctx, s.id, id)).sort(bySpeed(state, target, ctx.owner));
       const ordered = [...adjacent.filter((s) => !lastResort(s)), ...adjacent.filter((s) => lastResort(s))];
       const opts: SiegeOptions = { planned: ctx.planned, exclude: ctx.ended };
       const onAdd = anticipates(cfg.anticipate, target) ? (link: PlannedLink, planned: readonly PlannedLink[]) => anticipatedShield(state, target, link, planned) : undefined;
-      const plan = siegePlan(state, ctx.owner, target, ordered, cfg.planMs, opts, onAdd);
+      const plan = siegePlan(state, ctx.owner, target, ordered, planMs, opts, onAdd);
       if (!plan) continue;
       // A contested neutral goes to whoever lands the flipping unit: only plans that win the race count,
       // and they are scored by when *we* get the tower (our flip, or our retake) — the rival's stream
@@ -510,7 +521,7 @@ export function attack(ctx: Ctx, cfg: AttackConfig): void {
           const contest = contestOf(state, target, { planned: [...ctx.planned, ...plan.links], exclude: ctx.ended });
           if (!contestHeld(contest, ctx.owner, cfg.contestMarginMs ?? 0)) continue;
           acquiredAt = contest.winner === ctx.owner ? contest.flipAtMs : contest.retake!.atMs;
-          if (acquiredAt > cfg.planMs) continue;
+          if (acquiredAt > planMs) continue;
           acquiredShift = acquiredAt - plan.siege.fallsAtMs;
         }
         if (cfg.holdCheck) {
@@ -525,7 +536,7 @@ export function attack(ctx: Ctx, cfg: AttackConfig): void {
         }
         if (cfg.holdCost && others > 0) acquiredShift += holdMs(state, target, ctx.owner, acquiredAt, allLinks(state, { planned: [...ctx.planned, ...plan.links], exclude: ctx.ended }));
       }
-      const sc = score(target, plan) + acquiredShift;
+      const sc = score(target, plan) + acquiredShift - bias;
       if (!best || sc < best.score) best = { target, plan, score: sc };
     }
     if (!best) return;
