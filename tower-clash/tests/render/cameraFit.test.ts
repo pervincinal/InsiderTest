@@ -1,6 +1,10 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { FLAT, loadCamera, loadFit, playCamera, proj, setPlayFit, setTilt, unproj } from '../../src/render/camera';
-import { FIT, fitBox, fitCamera, fitContent, groundRect } from '../../src/render/fit';
+import { FIT, fitBand, fitBox, fitCamera, fitContent, fitFor, groundRect } from '../../src/render/fit';
+import { hudAnchors } from '../../src/render/view';
+import type { View } from '../../src/render/view';
+import { drawSea, terrainSea } from '../../src/render/sea';
+import { DEFAULT_PALETTE } from '../../src/render/palette';
 import { HUD, TOWER_HIT_RADIUS, WORLD_ZOOM } from '../../src/render/layout';
 import { INTENT_GAP, INTENT_PX } from '../../src/render/intentGlyph';
 import { towerTop } from '../../src/render/sprites';
@@ -8,8 +12,10 @@ import { hitTower } from '../../src/input/pointer';
 import { createState } from '../../src/sim/index';
 import type { LevelDef } from '../../src/sim/types';
 import level1 from '../../src/levels/001-first-taps.json';
+import level9 from '../../src/levels/009-stone-walls.json';
 import level15 from '../../src/levels/015-the-citadel.json';
 import level25 from '../../src/levels/025-heavy-metal.json';
+import level41 from '../../src/levels/041-twin-rivers.json';
 import level50 from '../../src/levels/050-the-crown-reforged.json';
 
 /*
@@ -21,7 +27,7 @@ import level50 from '../../src/levels/050-the-crown-reforged.json';
  * is the letterbox scale × z. `?fit=0` and the perspective camera (`?tilt=`) frame the whole map.
  */
 
-const LEVELS = { 1: level1, 15: level15, 25: level25, 50: level50 } as unknown as Record<number, LevelDef>;
+const LEVELS = { 1: level1, 9: level9, 15: level15, 25: level25, 41: level41, 50: level50 } as unknown as Record<number, LevelDef>;
 /** Portrait phones (CSS px): the letterbox fit is width-limited on all three. */
 const PHONES = [
   { w: 360, h: 640 },
@@ -175,5 +181,131 @@ describe('content fit (AUD-U21)', () => {
       // about the screen's own pixel count (one map px of slack per edge), not the whole map × z²
       expect((r.w - 2) * (r.h - 2) * f.z * f.z, `${p.w}x${p.h}`).toBeLessThanOrEqual((p.w / scale) * (p.h / scale));
     }
+  });
+
+  describe('AUD-U21b: the real play band between the HUD bands', () => {
+    /** The letterbox of view.ts `resize` for a w × h CSS px screen with top / bottom safe-area insets. */
+    const screen = (w: number, h: number, top = 0, bottom = 0) => {
+      const usableH = Math.max(h / 2, h - top - bottom);
+      const scale = Math.min(w / 720, usableH / 1280);
+      return { cssW: w, cssH: h, scale, offsetX: (w - 720 * scale) / 2, offsetY: Math.min(top, h - usableH) + (usableH - 1280 * scale) / 2, insets: { top, right: 0, bottom, left: 0 } };
+    };
+    const IPHONE = screen(430, 932, 59, 34); // the stakeholder's iPhone 17 Pro Max
+    /** Yesterday's (AUD-U21) level 1 fit on the 9:16 band: pinned numbers. */
+    const L1 = { z: 1.35, tx: -4.5, ty: -467.235 };
+
+    it('the band is the 9:16 band moved out with the HUD anchors (top band bottom edge … bottom band top edge, same margins)', () => {
+      expect(fitBand()).toEqual({ top: FIT.top, bottom: FIT.bottom });
+      const a = hudAnchors(IPHONE);
+      expect(a.top).toBeCloseTo(-62.419, 3);
+      expect(a.bottom).toBeCloseTo(62.419, 3);
+      const band = fitBand(a);
+      // the margins from the HUD bands as they sit on the screen are the 9:16 ones
+      expect(band.top - (HUD.mapTop + a.top)).toBeCloseTo(FIT.top - HUD.mapTop, 9);
+      expect(HUD.mapBottom + a.bottom - band.bottom).toBeCloseTo(HUD.mapBottom - FIT.bottom, 9);
+      expect(band.top).toBeCloseTo(177.581, 3);
+      expect(band.bottom).toBeCloseTo(1226.419, 3);
+      // 9:16: no anchors, the very same band
+      expect(fitBand(hudAnchors(screen(360, 640)))).toEqual(fitBand());
+      expect(fitBand(hudAnchors(screen(720, 1280)))).toEqual(fitBand());
+    });
+
+    it('430 × 932 (insets 59 / 34): level 1 stays at the cap, centred in the real band (its centre is the 9:16 one: the bands move out evenly)', () => {
+      const b = fitBox(stateOf(1));
+      const a = hudAnchors(IPHONE);
+      const f = fitContent(b, a)!;
+      expect(f.z).toBe(FIT.cap); // the tall band alone would allow min(2.42, 1048.8 / 587.8) = 1.78: the cap holds
+      expect(f.tx).toBeCloseTo(L1.tx, 9);
+      expect(f.ty).toBeCloseTo(L1.ty, 6);
+      const band = fitBand(a);
+      expect(f.ty + (f.z * (b.y0 + b.y1)) / 2).toBeCloseTo((band.top + band.bottom) / 2, 6);
+      expect(IPHONE.scale * f.z).toBeCloseTo(0.806, 3); // CSS px per map px
+    });
+
+    it('a height-limited sparse box zooms further on the tall phone (same cap) and fills its band; a desktop is unchanged', () => {
+      const b = { x0: 300, y0: 300, x1: 420, y1: 300 + (FIT.bottom - FIT.top) / 1.1 }; // z 1.1 on 9:16
+      expect(fitContent(b)!.z).toBeCloseTo(1.1, 9);
+      const a = hudAnchors(IPHONE);
+      const f = fitContent(b, a)!;
+      const band = fitBand(a);
+      expect(f.z).toBeCloseTo((1.1 * (band.bottom - band.top)) / (FIT.bottom - FIT.top), 9); // ≈ 1.249
+      expect(f.z).toBeGreaterThan(1.24);
+      expect(f.ty + f.z * b.y0).toBeCloseTo(band.top, 6);
+      expect(f.ty + f.z * b.y1).toBeCloseTo(band.bottom, 6);
+      // uneven anchors: centred in the band, not on the map
+      const g = fitContent(b, { top: -100, bottom: 0 })!;
+      expect(g.ty + (g.z * (b.y0 + b.y1)) / 2).toBeCloseTo((FIT.top - 100 + FIT.bottom) / 2, 6);
+      expect(fitContent({ x0: 340, y0: 600, x1: 380, y1: 640 }, a)!.z).toBe(FIT.cap);
+      // a desktop (1280 × 800, height-limited letterbox): anchors 0, yesterday's fit
+      expect(hudAnchors(screen(1280, 800))).toEqual({ top: 0, bottom: 0 });
+      expect(fitContent(b, hudAnchors(screen(1280, 800)))).toEqual(fitContent(b));
+    });
+
+    it("regression pin: 360 × 640 and 393 × 851 give yesterday's level 1 numbers exactly", () => {
+      for (const p of [screen(360, 640), screen(393, 851), IPHONE]) {
+        const f = fitContent(fitBox(stateOf(1)), hudAnchors(p))!;
+        expect(f.z, `${p.cssW}x${p.cssH}`).toBe(L1.z);
+        expect(f.tx, `${p.cssW}x${p.cssH}`).toBeCloseTo(L1.tx, 9);
+        expect(f.ty, `${p.cssW}x${p.cssH}`).toBeCloseTo(L1.ty, 6);
+      }
+      // 9:16 is yesterday's rule to the bit
+      expect(fitContent(fitBox(stateOf(1)), hudAnchors(screen(360, 640)))).toEqual(fitContent(fitBox(stateOf(1))));
+    });
+
+    it('dense levels keep the whole map on the tall phones too (decided on the 9:16 band: no new zoom, never below 1)', () => {
+      const tall = screen(393, 851); // the tallest band here (anchors ∓139.5): level 41's box alone would reach 1.13 there
+      for (const id of [9, 15, 25, 41, 50]) {
+        for (const p of [IPHONE, tall]) {
+          expect(fitContent(fitBox(stateOf(id)), hudAnchors(p)), `level ${id} ${p.cssW}x${p.cssH}`).toBeNull();
+          setPlayFit(stateOf(id), () => hudAnchors(p));
+          expect(playCamera(), `level ${id}`).toBe(FLAT);
+        }
+      }
+    });
+
+    it('the play camera follows the anchors: one object while they stay, a new fit when they move; ?fit=0 and ?tilt= frame the whole map', async () => {
+      let a = hudAnchors(IPHONE);
+      setPlayFit(stateOf(1), () => a);
+      const cam = playCamera();
+      expect(cam).toBe(playCamera());
+      expect(cam.fit).toMatchObject(fitContent(fitBox(stateOf(1)), a)!);
+      a = { top: -100, bottom: 0 };
+      const moved = playCamera();
+      expect(moved).not.toBe(cam);
+      expect(moved.fit).toMatchObject(fitContent(fitBox(stateOf(1)), a)!);
+      // input goes through the same camera: a point projected and unprojected lands back
+      const at = proj(moved, 300, 900);
+      const back = unproj(moved, at.x, at.y);
+      expect(back.x).toBeCloseTo(300, 9);
+      expect(back.y).toBeCloseTo(900, 9);
+      expect(fitFor(stateOf(1))(a)).not.toBeNull();
+      vi.stubGlobal('location', { search: '?fit=0' });
+      expect(fitFor(stateOf(1))(a)).toBeNull();
+      setPlayFit(stateOf(1), () => a);
+      expect(playCamera()).toBe(FLAT);
+      vi.unstubAllGlobals();
+      await loadCamera();
+      setPlayFit(stateOf(1), () => a);
+      setTilt(0.72);
+      expect(playCamera().fit).toBeUndefined();
+    });
+
+    it('FE-A: on a wide screen the margin sea takes its gradient over the rows the fitted ground spans (no tint step at the ground image edge)', () => {
+      const grads: number[][] = [];
+      const ctx = new Proxy({} as Record<string, unknown>, {
+        get: (t, k: string) => (k === 'createLinearGradient' ? (...a: number[]) => (grads.push(a), { addColorStop: () => undefined }) : k in t ? t[k] : () => undefined),
+        set: (t, k: string, v: unknown) => ((t[k] = v), true),
+      }) as unknown as CanvasRenderingContext2D;
+      const desktop = { ...screen(1280, 800), dpr: 1 } as unknown as View;
+      const f = fitOf(1)!;
+      drawSea(ctx, desktop, terrainSea(DEFAULT_PALETTE, undefined), fitCamera(f));
+      expect(grads[0]).toEqual([0, f.ty, 0, f.ty + f.z * 1280]); // terrain.ts drawWater's 0..MAP_H, through the fit
+      drawSea(ctx, desktop, terrainSea(DEFAULT_PALETTE, undefined), FLAT);
+      drawSea(ctx, desktop, terrainSea(DEFAULT_PALETTE, undefined));
+      expect(grads.slice(1)).toEqual([
+        [0, 0, 0, 1280],
+        [0, 0, 0, 1280],
+      ]);
+    });
   });
 });

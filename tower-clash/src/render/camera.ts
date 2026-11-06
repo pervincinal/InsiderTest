@@ -2,7 +2,7 @@ import { chunkBackoff, loadChunk } from '../lazyChunk';
 import { HUD } from './layout';
 import type { TiltPainters } from './perspective';
 import type { GameState } from '../sim/types';
-import type { View } from './view';
+import type { HudAnchors, View } from './view';
 import type { Palette } from './palette';
 import type { TerrainSpec } from './terrain';
 
@@ -169,12 +169,18 @@ export interface CameraFit extends Fit {
 export type FitContent = Pick<GameState, 'towers' | 'mines'>;
 
 const FIT_CHUNK = 'fit';
-let fitFor: ((c: FitContent) => Camera | null) | null = null;
-let fitCam: Camera | null = null;
+let fitFor: ((c: FitContent) => (a?: HudAnchors) => Camera | null) | null = null;
+let fitCam: ((a?: HudAnchors) => Camera | null) | null = null;
+let fitBand: (() => HudAnchors) | undefined;
 
-/** The level the play camera frames (its towers and mines), or null: the whole map (`?fit=0`: fit.ts `fitFor`). */
-export function setPlayFit(content: FitContent | null): void {
+/**
+ * The level the play camera frames (its towers and mines), or null: the whole map (`?fit=0`: fit.ts
+ * `fitFor`). AUD-U21b: `band` gives the screen's HUD anchors (view.ts `hudAnchors`), read per call, so
+ * the fit fills the real play band between the HUD bands; without it, the 9:16 band.
+ */
+export function setPlayFit(content: FitContent | null, band?: () => HudAnchors): void {
   fitCam = content && fitFor ? fitFor(content) : null;
+  fitBand = band;
 }
 
 const CAMERA_CHUNK = 'perspective';
@@ -228,7 +234,7 @@ const cams = new Map<number, Camera>();
  */
 export function playCamera(): Camera {
   const k = requestedTilt();
-  if (k === 1) return fitCam ?? FLAT; // AUD-U21: the level's content fit (the whole map until its chunk is in)
+  if (k === 1) return fitCam?.(fitBand?.()) ?? FLAT; // AUD-U21: the level's content fit (the whole map until its chunk is in)
   if (!makeTilted) {
     if (!chunkBackoff(CAMERA_CHUNK)) void loadCamera().catch(() => undefined);
     return FLAT;

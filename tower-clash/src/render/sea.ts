@@ -78,7 +78,8 @@ export function drawSea(ctx: CanvasRenderingContext2D, view: View, sea: SeaColor
   const h = b.bottom - b.top + pad;
   if (sea.top === sea.bottom) ctx.fillStyle = sea.top;
   else {
-    const g = ctx.createLinearGradient(0, 0, 0, C.MAP_H);
+    // FE-A: under a content fit (AUD-U21) the rows the zoomed ground's own water spans, so a wide screen's side margins meet it without a tint step
+    const g = ctx.createLinearGradient(0, cam?.fit?.ty ?? 0, 0, cam?.fit ? cam.projY(C.MAP_H) : C.MAP_H);
     g.addColorStop(0, sea.top);
     g.addColorStop(1, sea.bottom);
     ctx.fillStyle = g;

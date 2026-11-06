@@ -5,7 +5,7 @@ import { WORLD_ZOOM } from './layout';
 import { themeFor } from './palette';
 import { towerTop } from './sprites';
 import { render } from './terrain';
-import type { View } from './view';
+import type { HudAnchors, View } from './view';
 
 /*
  * AUD-U21 (GDD §4 "AUD-U21 2026-11-05"): the play camera frames the level's content, not the whole
@@ -27,6 +27,16 @@ import type { View } from './view';
  *      bubble's room clear, `bottom` is HUD.mapBottom − 16 (the select hint's low spot sits over it);
  *   4. so nothing drawn leaves the band and the AUD-U19 band reach never meets a fitted tower.
  * Today (2026-11-05) only level 1 is sparse enough (z = 1.35); every other level spans the band.
+ *
+ * AUD-U21b (GDD §4 "AUD-U21b 2026-11-06"): the band is the real play band between the HUD bands as
+ * they sit on this screen (view.ts `hudAnchors`: the top band's bottom edge HUD.mapTop + a.top, the
+ * bottom band's top edge HUD.mapBottom + a.bottom), with the same margins: y FIT.top + a.top ..
+ * FIT.bottom + a.bottom (`fitBand`). On 9:16 (a = 0) nothing changes; on a tall phone (430 × 932,
+ * insets 59 / 34: a = ∓62.4) a height-limited sparse level zooms further, up to the same cap, centred
+ * in that band (the letterbox centres the map in the safe area, so the bands move out evenly and the
+ * centre stays). Whether a level is fitted at all is decided on the 9:16 band: a dense level keeps the
+ * whole map (FLAT) on every phone. Across, the band stays 720 wide (the letterbox is width-limited on a
+ * portrait phone; a wide screen's anchors are 0).
  */
 export const FIT = Object.freeze({ cap: 1.35, min: 1.04, side: 16, top: 240, bottom: 1164, half: 72, foot: 60, head: 81, mine: 30 });
 
@@ -44,11 +54,18 @@ export function fitBox(c: FitContent): { x0: number; y0: number; x1: number; y1:
   return b;
 }
 
-/** The fit for content box `b` (rules 2–3), or null when the whole map stays. */
-export function fitContent(b: { x0: number; y0: number; x1: number; y1: number }): Fit | null {
-  const z = Math.min(FIT.cap, (C.MAP_W - 2 * FIT.side) / (b.x1 - b.x0), (FIT.bottom - FIT.top) / (b.y1 - b.y0));
-  if (!(z >= FIT.min)) return null;
-  return { z, tx: (C.MAP_W - z * (b.x0 + b.x1)) / 2, ty: (FIT.top + FIT.bottom - z * (b.y0 + b.y1)) / 2 };
+/** The fit band (rule 3, AUD-U21b) for HUD anchors `a`: the 9:16 band moved out with the HUD bands. */
+export function fitBand(a: HudAnchors = { top: 0, bottom: 0 }): { top: number; bottom: number } {
+  return { top: FIT.top + a.top, bottom: FIT.bottom + a.bottom };
+}
+
+/** The fit for content box `b` in the band of HUD anchors `a` (rules 2–3), or null when the whole map stays (decided on the 9:16 band). */
+export function fitContent(b: { x0: number; y0: number; x1: number; y1: number }, a?: HudAnchors): Fit | null {
+  const zoom = (h: number): number => Math.min(FIT.cap, (C.MAP_W - 2 * FIT.side) / (b.x1 - b.x0), h / (b.y1 - b.y0));
+  if (!(zoom(FIT.bottom - FIT.top) >= FIT.min)) return null;
+  const { top, bottom } = fitBand(a);
+  const z = zoom(bottom - top);
+  return { z, tx: (C.MAP_W - z * (b.x0 + b.x1)) / 2, ty: (top + bottom - z * (b.y0 + b.y1)) / 2 };
 }
 
 /** The part of the map (whole map px, clamped to it) the screen shows through fit `f`: all the ground image needs. */
@@ -108,8 +125,21 @@ export function fitCamera(f: Fit): Camera {
 /** `?fit=0` in the page URL: the whole-map framing of before AUD-U21 (A/B screenshots). */
 export const fitOff = (): boolean => typeof location !== 'undefined' && /[?&]fit=0(&|$)/.test(location.search);
 
-/** The play camera for a level's content: its fit camera, or null (the whole map, FLAT; always under `?fit=0`). */
-export function fitFor(c: FitContent): Camera | null {
-  const f = fitOff() ? null : fitContent(fitBox(c));
-  return f && fitCamera(f);
+/**
+ * The play camera for a level's content, per HUD anchors: its fit camera, or null (the whole map, FLAT;
+ * always under `?fit=0`). The box is taken once (the level as it starts); the camera is one object
+ * while the anchors stay (a resize or late safe-area insets move them: a new fit for the new band).
+ */
+export function fitFor(c: FitContent): (a?: HudAnchors) => Camera | null {
+  const b = fitBox(c);
+  if (fitOff() || !fitContent(b)) return () => null;
+  let at: HudAnchors = { top: NaN, bottom: NaN };
+  let cam: Camera | null = null;
+  return (a = { top: 0, bottom: 0 }) => {
+    if (!cam || a.top !== at.top || a.bottom !== at.bottom) {
+      at = a;
+      cam = fitCamera(fitContent(b, a)!);
+    }
+    return cam;
+  };
 }
