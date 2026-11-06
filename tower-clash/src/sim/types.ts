@@ -43,6 +43,19 @@ export interface EnemyDef {
   aggression: number; // 0..1
 }
 
+/**
+ * Per-level enemy AI options (LV-13, 2026-11-06; AUD-A3 "opponent awareness", documented and applied in
+ * `src/ai/personalities.ts`). The sim never reads them: they ride on the level so that the client
+ * (`ui/play.ts`), the headless runner and every script read the same switch. **No shipped level sets
+ * them** — switching one on needs the AI engineer's memo (`docs/reviews/2026-11-05-ai-engagement.md` §6).
+ */
+export interface EnemyAiOptions {
+  /** Give the player's towers the front bias in `attack` (default false: today's behaviour). */
+  opponentAwareness?: boolean;
+  /** Per-personality front bias in seconds at aggression 1 (default `FRONT_BIAS_S`; measurement sweeps). */
+  frontBiasS?: Readonly<Record<Personality, number>>;
+}
+
 export interface LevelDef {
   id: number;
   name: string;
@@ -53,6 +66,8 @@ export interface LevelDef {
   towers: TowerDef[];
   obstacles?: ObstacleDef[];
   mines?: MineDef[];
+  /** LV-13: enemy AI options for this level only (validated by `npm run levels:check`); absent = today's enemies. */
+  ai?: EnemyAiOptions;
 }
 
 /* ---------- Runtime state ---------- */

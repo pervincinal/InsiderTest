@@ -175,6 +175,48 @@ export function validateEnemies(level: LevelDef): string[] {
   return errors;
 }
 
+/** Keys a level's `ai` block may carry (`EnemyAiOptions`, `src/sim/types.ts`). */
+export const AI_OPTION_KEYS: readonly string[] = ['opponentAwareness', 'frontBiasS'];
+/** Largest front bias a level may set, seconds at aggression 1 (the memo's sweeps went to 60; 120 is twice that). */
+export const MAX_FRONT_BIAS_S = 120;
+
+/**
+ * LV-13: the optional per-level enemy AI switch (`ai`, AUD-A3 opponent awareness). When present it must be an
+ * object with only the known keys: `opponentAwareness` a boolean, `frontBiasS` a seconds-per-personality
+ * record (every personality, finite, 0..`MAX_FRONT_BIAS_S`, no other keys). Absent = today's enemies.
+ */
+export function validateAi(level: LevelDef): string[] {
+  const ai: unknown = level.ai;
+  if (ai === undefined) return [];
+  if (typeof ai !== 'object' || ai === null || Array.isArray(ai)) return ['ai must be an object when present'];
+  const errors: string[] = [];
+  const block = ai as Record<string, unknown>;
+  for (const key of Object.keys(block)) {
+    if (!AI_OPTION_KEYS.includes(key)) errors.push(`ai.${key} is not an enemy AI option (${AI_OPTION_KEYS.join(', ')})`);
+  }
+  if (block.opponentAwareness !== undefined && typeof block.opponentAwareness !== 'boolean') {
+    errors.push(`ai.opponentAwareness must be a boolean (got ${String(block.opponentAwareness)})`);
+  }
+  const bias = block.frontBiasS;
+  if (bias !== undefined) {
+    if (typeof bias !== 'object' || bias === null || Array.isArray(bias)) {
+      errors.push('ai.frontBiasS must be an object of seconds per personality');
+    } else {
+      const record = bias as Record<string, unknown>;
+      for (const key of Object.keys(record)) {
+        if (!PERSONALITIES.includes(key)) errors.push(`ai.frontBiasS.${key} is not a personality (${PERSONALITIES.join(', ')})`);
+      }
+      for (const p of PERSONALITIES) {
+        const v = record[p];
+        if (!isFiniteNumber(v) || v < 0 || v > MAX_FRONT_BIAS_S) {
+          errors.push(`ai.frontBiasS.${p} must be a number of seconds in 0..${MAX_FRONT_BIAS_S} (got ${String(v)})`);
+        }
+      }
+    }
+  }
+  return errors;
+}
+
 export function validateTowers(level: LevelDef): string[] {
   const errors: string[] = [];
   const ids = new Set<string>();
@@ -619,6 +661,7 @@ export function validateLevel(level: LevelDef): string[] {
     ...validateTranslations(level),
     ...validateStars(level),
     ...validateEnemies(level),
+    ...validateAi(level),
     ...validateTowers(level),
     ...validateObstacles(level),
     ...validateMines(level),

@@ -28,13 +28,18 @@ export interface RunOptions {
   modifiers?: Readonly<PlayerModifiers>;
   /** Sim-time budget, ms. */
   maxMs?: number;
-  /** Per-match enemy AI options (AUD-A3 opponent awareness). Default: none — the shipped behaviour. */
+  /**
+   * Per-match enemy AI options (AUD-A3 opponent awareness). Default: the level's own `ai` (LV-13 —
+   * what the game client plays; no shipped level sets one), so every script reads the switch unasked;
+   * an explicit value wins (measurement sweeps).
+   */
   ai?: EnemyAiOptions;
 }
 
 /** Run one headless match. Both sides decide on the same snapshot; the player's commands land first, like a human tap. */
 export function runHeadless(level: LevelDef, seed: number, player: PlayerBot, options: RunOptions = {}): RunResult {
   const maxMs = options.maxMs ?? HEADLESS_MAX_MS;
+  const ai = options.ai ?? level.ai;
   const state = createState(level, seed, options.modifiers ?? DEFAULT_MODIFIERS);
   const rngs = rngsFor(seed, level.enemies);
   let ticks = 0;
@@ -42,7 +47,7 @@ export function runHeadless(level: LevelDef, seed: number, player: PlayerBot, op
   while (outcome === 'playing' && state.time < maxMs) {
     if (isAiTick(state)) {
       const playerCmds = player ? player(state, rngs.player) : [];
-      const enemyCmds = runAiTick(state, rngs.enemies, undefined, options.ai);
+      const enemyCmds = runAiTick(state, rngs.enemies, undefined, ai);
       for (const cmd of playerCmds) applyCommand(state, cmd);
       for (const cmd of enemyCmds) applyCommand(state, cmd);
     }

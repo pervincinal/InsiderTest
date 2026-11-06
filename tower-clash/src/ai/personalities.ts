@@ -24,7 +24,7 @@
  * a rival's stream cancels with nothing landing on either tower for `STANDOFF_RELEASE_MS` is dropped and
  * its lane left alone until something lands there again.
  */
-import type { Command, EnemyDef, GameState, Personality, Tower } from '../sim/index';
+import type { Command, EnemyAiOptions, EnemyDef, GameState, Personality, Tower } from '../sim/index';
 import { Rng, isUnderFire } from '../sim/index';
 import { clamp01, hopsToOpponent, isCapped, linksTo, skipsAction, type Plan } from './common';
 import { barredLanes, commit, memoryFor, observe, type EnemyMemory } from './memory';
@@ -77,14 +77,11 @@ export function planMsFor(personality: keyof typeof SIEGE_PLAN_S, aggression: nu
  * `stack`, `supply` and the rival parity races are as before, so an enemy still answers an attacker and
  * still takes a free grey when the player's tower is out of every reach. Off, every seed is byte-identical
  * to today (`tests/ai/opponentAwareness.test.ts`). Measurement and the 1.0.1 decision:
- * `docs/reviews/2026-11-05-ai-engagement.md`.
+ * `docs/reviews/2026-11-05-ai-engagement.md`. LV-13 (2026-11-06): the shape lives in `sim/types.ts` so a
+ * level may carry it (`LevelDef.ai`, validated by `levels:check`); the client and `runHeadless` read it
+ * from the level — none sets it today.
  */
-export interface EnemyAiOptions {
-  /** Give the player's towers the front bias in `attack` (default false: today's behaviour). */
-  opponentAwareness?: boolean;
-  /** Per-personality front bias in seconds at aggression 1 (default `FRONT_BIAS_S`; measurement sweeps). */
-  frontBiasS?: Readonly<Record<Personality, number>>;
-}
+export type { EnemyAiOptions };
 /** Front bias per personality at aggression 1, seconds (scaled by `0.5 + 0.5 × aggression`). */
 export const FRONT_BIAS_S: Readonly<Record<Personality, number>> = Object.freeze({ rusher: 20, opportunist: 10, turtle: 5 });
 
