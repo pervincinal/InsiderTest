@@ -296,7 +296,7 @@ export class PlayScreen implements Screen {
     const twist = this.challenge?.twist ?? this.weekly?.twist;
     const modifiers = twist ? { ...twist.modifiers } : modifiersFromSave(app.save, this.continued ? CRYSTAL_SERVICES.continue.bonusInfantry : 0);
     this.loop.load(createState(level, seed, modifiers));
-    setPlayFit(this.state); // AUD-U21: the camera frames this level's content
+    setPlayFit(this.state, () => hudAnchors(this.app.view)); // AUD-U21: the camera frames this level's content (AUD-U21b: in the real play band)
     resetAudioLevel();
     const rngs = aiModule().rngsFor(seed, level.enemies);
     this.playerRng = rngs.player;
@@ -450,7 +450,7 @@ export class PlayScreen implements Screen {
     const cmds: Command[] = [];
     for (const enemy of state.enemies) {
       const rng = this.enemyRngs.get(enemy.owner);
-      if (rng) cmds.push(...ai.enemyCommands(state, enemy, rng));
+      if (rng) cmds.push(...ai.enemyCommands(state, enemy, rng, undefined, this.level.ai)); // LV-13: the level's own switch (none set)
     }
     if (this.playerBot) cmds.push(...this.playerBot(state, this.playerRng));
     if (this.loseBot) cmds.push(...this.loseBot(state));
