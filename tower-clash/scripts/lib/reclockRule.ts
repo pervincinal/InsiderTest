@@ -14,14 +14,28 @@
  *   ≥ `twoStarGapMin(K)` (8 at K = 20); otherwise the row says `floor would be X — not applied` and the clock is
  *   held at the current `star2` (never lowered under it by the base). The filter decides nothing about the
  *   floor's value.
+ * - LV-12 (2026-11-06) human-clock pins: a `HUMAN` entry (`./reclockPins.ts`) replaces the bot's `star3` and / or
+ *   `star2` for that level (`applyHumanPin`); the row prints the pinned clock as `human-pinned` next to what the
+ *   bot would propose, and a pinned clock never counts towards `CHANGED`. A `star3` pin does not re-derive the
+ *   base `star2` (the 2 × rule keeps reading the bot's `star3`): pin `star2` too if the ladder should follow.
+ * - LV-12 GD-12 card-reader floor past 16 (GDD §3 "Star-2 floor after launch", AUD-B5 — reported, not applied
+ *   until the B5 switch): on 17–50 `star2` ≥ the shipped card's literal reader (`CARD_SPECS`, `./cardSpecs.ts`,
+ *   run through `runNaive` with the `--follow` spec; a level without a spec reads the plain naive line) — the
+ *   slower of its `asc` / `tie desc` medians at the run's K (AUD-B10's both-orders reading of the GDD's
+ *   "the `asc` row"), rounded up to the 5 s step, capped at 180 s, never below the reference player's `star2`
+ *   (`gd12Floor`). `--gd12` prints it with `BELOW` where today's clock is under it; only `--write --gd12-apply`
+ *   writes it, and never over a human-pinned `star2`.
  */
 import type { LevelDef, PlayerModifiers } from '../../src/sim/types';
 import { referencePlayerCommands } from '../../src/ai/referencePlayer';
 import { runHeadless } from '../../src/ai/headless';
 import { DEFAULT_POOL, inPool } from './daily';
 import type { PoolRange } from './daily';
-import { NAIVE_GATE_LAST, NAIVE_REACT_MS, runNaive } from './naivePlayer';
+import { NAIVE_GATE_LAST, NAIVE_REACT_MS, formatFollowSpec, parseFollowSpec, runNaive } from './naivePlayer';
 import type { NaiveRow } from './naivePlayer';
+import { MAX_LEVEL_ID } from './validateLevel';
+import type { CardSpec } from './cardSpecs';
+import type { HumanPin } from './reclockPins';
 
 /** The clock step: `star3` rounds to it, `star2` rounds up to it (GDD §3). */
 export const RECLOCK_STEP_MS = 5000;
@@ -199,4 +213,169 @@ export function reclockLevel(level: LevelDef, k: number): ReclockRow | undefined
     ...(floor ? { floor } : {}),
     same: star3 === level.star3 && star2 === level.star2,
   };
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// LV-12 (2026-11-06): human-clock pins and the GD-12 card-reader floor past 16.
+// ---------------------------------------------------------------------------------------------------------------
+
+/** First / last level of the GD-12 card-reader floor: everything past the naive gate (17–50). */
+export const GD12_FIRST_LEVEL = TIE_FLOOR_ALWAYS_LAST + 1;
+export const GD12_LAST_LEVEL = MAX_LEVEL_ID;
+
+/** What `reclock.ts --gd12-apply` prints (exit 1) without `--write`: the AUD-B5 switch is both flags. */
+export const GD12_APPLY_REFUSAL =
+  'reclock: --gd12-apply is the AUD-B5 switch and needs --write as well (`--write --gd12-apply`); without --write the GD-12 floor is reported only (--gd12). Nothing was run.';
+
+/** Does the GD-12 floor apply to this level? 17–50 (the levels item 10's naive floor does not cover). */
+export function gd12Applies(levelId: number): boolean {
+  return levelId >= GD12_FIRST_LEVEL && levelId <= GD12_LAST_LEVEL;
+}
+
+export interface Gd12Input {
+  /** The level's `star2` in its JSON today. */
+  currentStar2: number;
+  /** The reference player's proposed `star2` (base + tie floor) — the GD-12 floor never goes under it. */
+  refStar2: number;
+  asc: TieLine;
+  desc: TieLine;
+}
+
+export interface Gd12Verdict extends Gd12Input {
+  /** The card reader's floor: the slower of the two medians rounded up to the step, capped; undefined when no order won. */
+  floorMs: number | undefined;
+  /** Today's `star2` is under the floor (the GD-12 trigger's "2★ out of the card reader's reach"). */
+  below: boolean;
+  /** `star2` with the floor applied: max(`refStar2`, floor). */
+  star2: number;
+}
+
+/** The GD-12 floor from two card-reader tie lines (pure; see the module comment). */
+export function gd12Floor(input: Gd12Input): Gd12Verdict {
+  const floorMs = star2Floor(input.asc.medianMs, input.desc.medianMs);
+  const below = floorMs !== undefined && input.currentStar2 < floorMs;
+  const star2 = Math.max(input.refStar2, floorMs ?? 0);
+  return { ...input, floorMs, below, star2 };
+}
+
+export interface Gd12Line extends Gd12Verdict {
+  /** The spec as run (canonical `formatFollowSpec`), or undefined when the plain naive line stood in for a card without one. */
+  spec: string | undefined;
+  source: string;
+}
+
+/**
+ * Run the level's card reader in both tie orders at K (4 s reactions) and read the GD-12 floor from it. With no
+ * `card.spec` (today only level 26) the plain naive line stands in — `spec` is undefined and the row says so.
+ */
+export function gd12Line(level: LevelDef, k: number, card: CardSpec | undefined, currentStar2: number, refStar2: number): Gd12Line {
+  const follow = card?.spec !== undefined ? parseFollowSpec(card.spec) : undefined;
+  const asc = tieLineOf(runNaive(level, k, NAIVE_REACT_MS, follow, 'asc'));
+  const desc = tieLineOf(runNaive(level, k, NAIVE_REACT_MS, follow, 'desc'));
+  return {
+    ...gd12Floor({ currentStar2, refStar2, asc, desc }),
+    spec: follow ? formatFollowSpec(follow) : undefined,
+    source: card?.source ?? 'no entry in CARD_SPECS',
+  };
+}
+
+export interface ClockProposal {
+  star3: number;
+  star2: number;
+  /** The bot's own clocks where a pin or the GD-12 floor replaced them (for the row's "bot would"). */
+  bot3: number;
+  bot2: number;
+  pinned3: boolean;
+  pinned2: boolean;
+  /** The GD-12 floor raised `star2` (only under `--write --gd12-apply`, never over a `star2` pin). */
+  gd12Applied: boolean;
+  /** A pinned clock differs from the JSON: the pin is not CHANGED (never written over by the bot), the JSON is to be edited by hand. */
+  pinMismatch: boolean;
+}
+
+/** The bot's clocks with a human pin over them (a pinned clock is the pin; the other stays the bot's). */
+export function applyHumanPin(star3: number, star2: number, pin: HumanPin | undefined): ClockProposal {
+  const pinned3 = pin?.star3 !== undefined;
+  const pinned2 = pin?.star2 !== undefined;
+  return {
+    star3: pinned3 ? pin.star3! : star3,
+    star2: pinned2 ? pin.star2! : star2,
+    bot3: star3,
+    bot2: star2,
+    pinned3,
+    pinned2,
+    gd12Applied: false,
+    pinMismatch: false,
+  };
+}
+
+/**
+ * The clocks `reclock.ts` prints and writes for a row: the bot's, under the human pin, with the GD-12 floor on
+ * `star2` when `gd12Apply` (the AUD-B5 switch) and no `star2` pin. `changed` is false when only pinned clocks
+ * differ from the JSON — a pin is never a `CHANGED` row (it is what the JSON must already say).
+ */
+export function proposeClocks(row: Pick<ReclockRow, 'star3' | 'star2' | 'level'>, pin: HumanPin | undefined, gd12?: Gd12Verdict, gd12Apply = false): ClockProposal & { changed: boolean } {
+  const p = applyHumanPin(row.star3, row.star2, pin);
+  if (gd12 && gd12Apply && !p.pinned2 && gd12.floorMs !== undefined && gd12.star2 > p.star2) {
+    p.star2 = gd12.star2;
+    p.gd12Applied = true;
+  }
+  const changed = (!p.pinned3 && p.star3 !== row.level.star3) || (!p.pinned2 && p.star2 !== row.level.star2);
+  p.pinMismatch = (p.pinned3 && p.star3 !== row.level.star3) || (p.pinned2 && p.star2 !== row.level.star2);
+  return { ...p, changed };
+}
+
+const sec = (ms: number | undefined): string => (ms === undefined ? '—' : `${(ms / 1000).toFixed(1)}s`);
+const clock = (ms: number): string => `${ms / 1000}`;
+
+/** The `human-pinned` note of a row: ` [star3 human-pinned (sheet …): bot would 30]`; empty without a pin. */
+export function humanPinNote(p: ClockProposal, pin: HumanPin | undefined, json?: Pick<LevelDef, 'star3' | 'star2'>): string {
+  if (!pin || (!p.pinned3 && !p.pinned2)) return '';
+  const which = p.pinned3 && p.pinned2 ? 'star3/star2' : p.pinned3 ? 'star3' : 'star2';
+  const would = p.pinned3 && p.pinned2 ? `${clock(p.bot3)}/${clock(p.bot2)}` : p.pinned3 ? clock(p.bot3) : clock(p.bot2);
+  const off: string[] = [];
+  if (json && p.pinned3 && json.star3 !== p.star3) off.push(`star3 ${clock(json.star3)}`);
+  if (json && p.pinned2 && json.star2 !== p.star2) off.push(`star2 ${clock(json.star2)}`);
+  const mismatch = off.length > 0 ? `; PIN ≠ JSON (JSON says ${off.join(', ')} — edit the JSON by hand, the bot never writes over a pin)` : '';
+  return ` [${which} human-pinned (${pin.source}): bot would ${would}${mismatch}]`;
+}
+
+/** The GD-12 column of a row: ` gd12 [spec] asc/desc m/m (w/K, w/K) floor N BELOW|ok|applied`. */
+export function gd12Note(g: Gd12Line, k: number, applied: boolean): string {
+  const card = g.spec !== undefined ? `[${g.spec}]` : '[naive (no card spec)]';
+  const floor = g.floorMs === undefined ? 'floor —' : `floor ${clock(g.floorMs)}`;
+  const verdict = g.floorMs === undefined ? 'no win' : applied ? 'applied' : g.below ? 'BELOW' : 'ok';
+  return ` gd12 ${card} asc/desc ${sec(g.asc.medianMs)}/${sec(g.desc.medianMs)} (${g.asc.wins}/${k}, ${g.desc.wins}/${k}) ${floor} ${verdict}`;
+}
+
+export interface RowReport {
+  text: string;
+  changed: boolean;
+  /** The tie floor was held back by the 2★-gap filter. */
+  held: boolean;
+  pinned: boolean;
+  /** A pinned clock differs from the JSON (the row says `PIN ≠ JSON`). */
+  pinMismatch: boolean;
+}
+
+/** One reclock row as `scripts/reclock.ts` prints it (byte-identical to the pre-LV-12 row without a pin or `--gd12`). */
+export function formatReclockRow(row: ReclockRow, opts: { keep?: string | undefined; pin?: HumanPin | undefined; gd12?: Gd12Line | undefined; gd12Apply?: boolean } = {}): RowReport {
+  const { level, seeds } = row;
+  const p = proposeClocks(row, opts.pin, opts.gd12, opts.gd12Apply ?? false);
+  const losses = seeds - row.wins;
+  const naive = row.asc && row.desc ? ` naive asc/desc ${sec(row.asc.medianMs)}/${sec(row.desc.medianMs)} 2★ ${row.asc.twoStar}/${row.desc.twoStar}` : '';
+  const floor = row.floor?.eligible
+    ? row.floor.note
+      ? ` — ${row.floor.note}`
+      : row.floor.floorMs !== undefined
+        ? ` floor ${row.floor.floorMs / 1000}`
+        : ''
+    : '';
+  const gd12 = opts.gd12 ? gd12Note(opts.gd12, seeds, p.gd12Applied) : '';
+  const same = !p.changed;
+  const tail = same ? '' : opts.keep ? `\tKEPT (${opts.keep})` : '\tCHANGED';
+  const text =
+    `${level.id}\t${level.name.padEnd(22)}\t${row.wins}/${seeds}${losses ? ` (${losses} lost)` : ''}\tmedian ${sec(row.medianMs)}\tworst ${sec(row.worstMs)}\t` +
+    `${clock(level.star3)}/${clock(level.star2)} → ${clock(p.star3)}/${clock(p.star2)}${row.step ? ` ${row.step}` : ''}${humanPinNote(p, opts.pin, level)}${naive}${floor}${gd12}${tail}`;
+  return { text, changed: p.changed && !opts.keep, held: Boolean(row.floor?.note), pinned: p.pinned3 || p.pinned2, pinMismatch: p.pinMismatch };
 }
