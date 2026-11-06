@@ -25,6 +25,7 @@ description: How to author, name, validate and playtest Tower Clash levels (towe
   "mines": [ { "x": 360, "y": 400, "charges": 5 } ]      // kills the first 5 weight on any lane within 30 px
 }
 ```
+`ai` (optional, LV-13 2026-11-06): `{ "opponentAwareness": true, "frontBiasS": { "rusher": 20, "opportunist": 10, "turtle": 5 } }` switches the AUD-A3 opponent-awareness prototype on for this level only (both keys optional, seconds 0..120, no other keys; the client, `playtest`, every gate and `reclock.ts` read it) — **no shipped level sets it** and `tests/ai/levelAi.test.ts` fails the day one does: set it only on the AI engineer's memo (`docs/reviews/2026-11-05-ai-engagement.md` §6), update that test and the backlog in the same change, and re-clock the level.
 A lane joins two towers when their straight segment stays farther than `width / 2` from every obstacle segment (rock:
 radius `width / 2`, default 40) and farther than 48 px from every third tower's centre — a tower in the way blocks the
 line. Lanes are computed by `createState`; `scripts/lib/validateLevel.ts` reuses `src/sim/geometry.ts` so the check

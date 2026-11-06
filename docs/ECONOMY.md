@@ -199,7 +199,7 @@ No ad SDK. The `AdProvider` interface has a `NoAdsProvider` (all placements unav
 
 **What changed and why.** The v2 model (2026-09-18/20) assumed 2.2★ on every first clear. Under rules v3 all 50 star clocks were re-derived from the reference player's 20-seed medians (`star3` = 0.9 × median, `star2` = 2 × `star3`, GDD §3), and the tutorial `star2` was floored at the naive first-time line's median (levels 1–8, 2026-09-23). Measured today at `f8c1743`: the **naive first-time line** (`npm run playtest -- --naive --seeds 5`, 4 s reactions) wins 45/50 levels at ≥ 50 % and lands **70 stars over the 50 levels = 1.40★ per first clear** (1 × 3★, 18 × 2★, 31 × 1★); the **reference player** (`--seeds 5`: 17 / 233 / 0 / 0, median 2.0★) lands **102 stars = 2.04★**, which is the *mastery ceiling* this model uses for the returning player. Per band, first-time stars are 17 (tutorial: level 1 at 3★, 2–8 at 2★ — the floor works), 8 (9–16, all 1★), 9 (17–24; 22 at 2★; 23 is cleared on a retry at 1★), 8 (25–32, all 1★; 27 / 30 / 32 hold 2 / 3 / 1 of 5), 13 (33–40; 33, 36, 37, 39, 40 at 2★; 37 holds 1/5) and 15 (41–50; 42, 46, 47, 48, 50 at 2★; 41 holds 1/5). Two structural consequences: (a) from level 9 on the first-time player is a **1★ player** on 31 of 42 levels, because `star2` = 1.8 × the bot's median and the naive line takes 2–3 × the bot's time; (b) the 3★ earn sources — full band at 3★ (120 crystals), `stars_10` / `stars_20` / `stars_40` (40 crystals), 3★ hunting — sit *beyond the reference bot's own median by construction* (`star3` = 0.9 × its median), so they are long-tail for players faster than the bot and are **no longer counted** in the free-player checkpoints (the v2 model booked 40 of those crystals by day 15).
 
-**AUD-B19 re-measure (2026-11-03, Game Designer with the Monetization hat; memo `docs/reviews/2026-11-03-difficulty-and-stars.md` §5–§7 — not yet applied to the rows below, the Monetization Designer restates them).** At K = 20 over both tie orders the first-time line now lands **81.3 first-clear stars (1.63★)**, not the 70 (1.40★) booked here — ≈ +170 gold by day 15 (+7.5 %); ≥ 2★ shares per band 91 / 75 / 31 / 40 / 63 / 62 %. The steady-state "one new star a day" is a 2★ rung (3★ is under the bot's own median) and the open 2★ rungs past 16 last ≈ 17 days (≈ 8 with the AUD-B5 floor), after which the steady state reads ≈ 116 gold a day, not 130. Option (a) (2★ rung 25, 3★ rung 60) was measured at +22 % steady-state gold (+40 % by day 15) — outside the Producer's ±10 % rule, so **no star-gold change in 1.0** (default; decision pending); option (b) (a crystal per first 3★ past 16) pays the first-time line 0 and is not recommended.
+**AUD-B19 re-measure (2026-11-03, Game Designer with the Monetization hat; memo `docs/reviews/2026-11-03-difficulty-and-stars.md` §5–§7 — not yet applied to the rows below, the Monetization Designer restates them; restated from today's tree and re-run with the GD-12 floor in §6.4, 2026-11-06: 82.0★ → 90.8★ floored, day 15 +6.2 %, day 30 +1.7 %, gate passed).** At K = 20 over both tie orders the first-time line now lands **81.3 first-clear stars (1.63★)**, not the 70 (1.40★) booked here — ≈ +170 gold by day 15 (+7.5 %); ≥ 2★ shares per band 91 / 75 / 31 / 40 / 63 / 62 %. The steady-state "one new star a day" is a 2★ rung (3★ is under the bot's own median) and the open 2★ rungs past 16 last ≈ 17 days (≈ 8 with the AUD-B5 floor), after which the steady state reads ≈ 116 gold a day, not 130. Option (a) (2★ rung 25, 3★ rung 60) was measured at +22 % steady-state gold (+40 % by day 15) — outside the Producer's ±10 % rule, so **no star-gold change in 1.0** (default; decision pending); option (b) (a crystal per first 3★ past 16) pays the first-time line 0 and is not recommended.
 
 **Assumptions (kept from v2 unless noted).** ~4 levels per day (≈ 6 attempts), **50 levels in ≈ 15 days** (band 5 at 3–4 a day), two ×2-gold ads per day on the day's two best results, daily chest every day, 10 gold per star on first clear (`EARN_RULES.goldPerStarFirstClear`), 10 per improved star, drill pay 3 / star (cap 100). **First-clear stars: 1.40★ (first-time line) instead of 2.2★**; the ×2 ad therefore pays ≈ 14 gold a watch over the campaign instead of 22 (20 in the tutorial, 10–20 after). **Daily challenge: won on 60 % of active days** (the v2 tables used 70 %; 60 % is the soft-launch assumption for the 30-day model below), **1.3★ average** for the first-time line (the naive line's mean over the 9–50 pool is 1.26★) → 43 gold + 5 crystals per win, **26 gold + 3 crystals per active day**; 2.0★ (50 gold, 30 a day) on the mastery line; available from **day 5 (level 16 cleared at the end of day 4 — AUD-B15, 2026-11-01; day 3 / level 8 before)**; **0 / 2 / 11 / 26** eligible days at the 10 / 20 / 50-level / day-30 checkpoints (1 / 4 / 13 / 28 before). Streak milestones (§6.2) at 60 %: 0.4 × 0.6³ × 5 + 0.4 × 0.6⁷ × 20 ≈ **0.66 crystals a day** (≈ 7 by day 15, ≈ 17 over the month — 9 / 18 before AUD-B15; 30 at 70 %). **Weekly challenge (GDD §8): won in 40 % of eligible weeks**, 100 gold a win, from week 2 (level 32 cleared on day 8) → 1 week key by day 15, 3 by day 30 → 40 / 120 gold; the 20-crystal 3★ target is **0 for the first-time line** (never under `star3`) and ≈ 0.4 × 38 % ≈ 3 crystals a week on the mastery line (the bot reaches the target on ~10 of 26 weeks). Login reward, chest and ad caps unchanged.
 
@@ -430,6 +430,87 @@ describe('challenge achievements (ECON-10)', () => {
 ```
 
 Also: the existing "every catalog achievement can be granted exactly once" test sets `save.challenge.streak = 7`, `save.challenge.best = dayKeys(30)`, `save.weekly.streak = 4` and pins **145**; `tests/economy/catalog.test.ts` pins the sum at **145**; `tests/ui/i18n.test.ts` picks up the three `achievement.*` keys automatically; `tests/ui/daily.test.ts` / `weekly.test.ts` gain one assertion each that the result flow's grant is passed to the result screen (Frontend's files). Acceptance for POST_LAUNCH.md §6.2: unit tests green; the §6 checkpoints above unchanged within ±2 crystals; `npm run check`.
+
+### 6.4 GD-12 floor re-run (2026-11-06) — ECON-15: **day 15 +6.2 %, day 30 +1.7 % → inside ±10 %, gate passed; no price change**
+
+**Why.** AUD-B5 / GD-12 (GDD §3 "Star-2 floor after launch": 16 levels of 17–50, `star2` +5 … +30 s, `star3` unchanged) is adopted in 1.0 once this section's re-run keeps day-15 and day-30 cumulative gold within ±10 % of §6's restated rows (human playtest sheet `docs/reviews/2026-11-05-human-playtest-sheet.md` §C.2 item 1; Producer rule 2026-11-05). The Game Designer's bound was ≤ +174 (≤ +7.1 %) by day 15 and about 0 by day 30. Stakeholder defaults stand: **2★ stays 10 gold in 1.0, no price or catalog change**.
+
+**Step 1: §6 reproduced from code.** All inputs are code constants or the stated §6 assumptions. Stars: `EARN_RULES.goldPerStarFirstClear` 10 × 70 stars = 700. ×2 ads: 2 a day × 15 days × 14 gold, where 14 = one average first clear (1.40★ × 10, §6's convention) = 420. Login: `EARN_RULES.dailyReward` gold 20 / 30 / 40 / 0 / 60 / 80 / 100, so 15 days = 2 × 330 + 20 = 680 and days 16–30 = 690. Daily challenge: `REWARD` in `src/daily/core.ts` (30 + 10 / star, 5 crystals) × 60 % × 11 eligible days × 1.3★ = 283.8; days 16–30 add 15 × 0.6 × 43 = 387. Drill replays: 150 (10 a day, under `replayGoldDailyCap` 100). Weekly: `WEEKLY_REWARD.gold` 100 × 40 %, which is 40 by day 15 and +80 by day 30. Days 16–30 also book 450 in improvements and drills (30 a day: one new 2★ at `goldPerNewStar` 10 plus 20 of drills) and 300 in ads. Result: day 15 **2 273.8** (published ≈ 2 273), day 30 **4 180.8** (published ≈ 4 178; the gap is rounding). Crystals 420 / 592, as published.
+
+**Step 2: inputs measured today.** Tree `122d0e8`, K = 20, both tie orders, 4 s reactions.
+- `npm run playtest -- --naive --seeds 20 --tie both` (60 s) gives every level's naive star counts at today's clocks. This tree includes the LV-1.0.1a levers on 13 / 32 / 41, AUD-A15 on 13 and AUD-Q13's 41 `star2` 120.
+- The runner prints no per-seed times. A scratch script recorded the per-seed win times of the same runs on the 16 GD-12 levels: `runHeadless(level, seed, makeNaivePlayer({ tie }))`, read-only, no level JSON touched. It then counted the seeds won at or under the floored `star2`. On all 16 levels its counts at today's clock match the runner row for row.
+- No number in this section is bounded from the memo. The memo's §5.2 floor rows are reproduced exactly except **32**: 2★ at the floor 4 / 6 → **8 / 10**, after the LV-1.0.1a lever (`94b296c`).
+
+| Lvl | `star2` today → floor | ≥ 2★ `asc` / `desc` of 20, today | at the floor | First-clear ≥ 2★ share, today → floored | Δ expected stars |
+|---|---|---|---|---|---|
+| 17 | 50 → 55 | 2 / 3 | 10 / 11 | 12.5 → 52.5 % | +0.40 |
+| 18 | 60 → 65 | 0 / 0 | 3 / 2 | 0 → 12.5 % | +0.13 |
+| 19 | 50 → 55 | 8 / 6 | 18 / 15 | 35 → 82.5 % | +0.48 |
+| 21 | 50 → 60 | 0 / 0 | 6 / 12 | 0 → 45 % | +0.45 |
+| 23 | 75 → 85 | 5 / 11 | 14 / 16 | 40 → 75 % | +0.35 |
+| 24 | 60 → 70 | 1 / 3 | 18 / 19 | 10 → 92.5 % | +0.83 |
+| 25 | 40 → 50 | 0 / 0 | 14 / 14 | 0 → 70 % | +0.70 |
+| 28 | 70 → 80 | 2 / 0 | 16 / 18 | 5 → 85 % | +0.80 |
+| 29 | 50 → 65 | 0 / 0 | 13 / 8 | 0 → 52.5 % | +0.53 |
+| 32 | 80 → 90 | 5 / 4 | 8 / 10 | 22.5 → 45 % | +0.23 |
+| 34 | 60 → 80 | 0 / 0 | 19 / 17 | 0 → 90 % | +0.90 |
+| 35 | 50 → 65 | 1 / 0 | 13 / 13 | 2.5 → 65 % | +0.63 |
+| 38 | 50 → 70 | 0 / 0 | 5 / 4 | 0 → 22.5 % | +0.23 |
+| 43 | 60 → 70 | 0 / 0 | 15 / 14 | 0 → 72.5 % | +0.73 |
+| 44 | 50 → 80 | 0 / 0 | 19 / 19 | 0 → 95 % | +0.95 |
+| 49 | 50 → 70 | 0 / 0 | 9 / 9 | 0 → 45 % | +0.45 |
+
+**How the shares are counted.** A share is the mean of both tie orders. A lost seed counts as a 1★ retry (§6's convention). The naive line reaches 3★ only on level 1.
+
+**Band totals.** First-clear stars per band, today → floored: 16.3 / 14.4 / 10.5 → **13.1** / 11.4 → **13.6** / 13.0 → **14.8** / 16.5 → **18.6**. The ≥ 2★ shares are 91 / 80 / 31 → 64 / 42 → 70 / 63 → 84 / 65 → 86 %. Over 1–50 that is **82.0 stars (1.64★) today → 90.8 (1.82★) floored, +8.75**. The memo had 81.3 → 90.0. The daily pool (9–50) mean is **1.57★ → 1.77★**, against the 1.3★ that §6 books.
+
+**Step 3: the two columns.** Both use the §6 player model unchanged: 4 levels a day, level 16 at the end of day 4, 50 levels by day 15, two ×2 ads a day, the daily won on 60 % of eligible days. "Restated" uses today's measured rows with no floor. It differs from the sheet's 2 443 / 4 348 (§6 + 170) because it also restates the daily's stars.
+
+| Gold, first-time line | §6 published | Restated today (`122d0e8`) | **GD-12 floored** | Δ floored − restated |
+|---|---|---|---|---|
+| First-clear stars to day 15 | 700 (70★) | 820 (82.0★) | 908 (90.8★) | +88 |
+| ×2 ads to day 15 (§6 convention) | 420 | 492 | 545 | +53 |
+| Daily challenge to day 15 (11 eligible days) | 284 (1.3★) | 301 (1.57★) | 315 (1.77★) | +14 |
+| Login 680 + drills 150 + weekly 40 | 870 | 870 | 870 | 0 |
+| **Day 15 cumulative gold** | **2 273** | **2 484** | **2 637** | **+154 (+6.2 %)** |
+| Days 16–30: one new 2★ a day (runway = 2★ rungs still open past 16 after the first clears) | 15 rung-days | 15 (runway 16.7, to ≈ day 32) | **7.9** (runway to ≈ day 24; the other 7.1 days × 14 = −99) | −99 |
+| Days 16–30: daily challenge | 387 | 411 | 430 | +19 |
+| **Day 30 cumulative gold** | **4 178** | **4 415** | **4 488** | **+73 (+1.7 %)** |
+| Crystals, day 15 / day 30 | 420 / 592 | 420 / 592 | 420 / 592 | 0 / 0 |
+
+**What a "rung-day" costs.** The 14 gold is memo §5.3's reading. It is the 10-gold rung plus ≈ 4 of its ad, which moves to a drill result once the runway ends. That is the 130 → ≈ 116 a day step.
+
+**Sensitivities, every one inside the gate.**
+- **Ad method.** The memo's method (two ×2 ads on each day's two best results) gives day 15 **+130 (+5.3 %)**.
+- **Ceiling.** Every new first-clear 2★ doubled by an ad, plus the daily, gives day 15 **+189 (+7.6 %)**. This is the Game Designer's bound (+174) plus the daily's +14 it left out.
+- **Runway counted on 1–50.** Counting 1–16's open rungs too gives a runway of 19.0 → 10.2 and day 30 **+106 (+2.4 %)**. With the ceiling ads as well, day 30 is ≈ +141 (+3.2 %).
+- **Against the sheet's rows.** Against 2 443 / 4 348 (memo §5.3 restatement), the floored column is +7.9 % / +3.2 %.
+
+**Why day 30 is not 0.** The Game Designer's "same rungs paid earlier" holds for the rungs. Two things still put day 30 above 0:
+- Without the floor, 1.7 of the open rungs are still unpaid at day 30.
+- The daily challenge scores with the level's own clock, so the floor raises the daily's 2★ share on 16 of the 42 pool levels for all 26 eligible days. That adds ≈ +1.2 gold per eligible day, +33 by day 30.
+
+**Verdict.** Day 15 **+6.2 %** and day 30 **+1.7 %** against the restated rows. The worst corner is +7.6 % / +3.2 %. Both are within ±10 %, so **the economy half of sheet §C.2 is met**. B5 now waits only on the human half: at N = 1 it cannot refute, so the stakeholder default (adopt) stands the day the sheet lands. The floor then ships in a version update with a release note (GD-12 risk (iv)), with `scripts/reclock.ts` deriving the values.
+
+**Floor values are an upper bound.** This run uses the GDD table's floor values, which come from the recorded GD-8 … GD-11 reader rows. If `reclock.ts` re-derives a lower floor from today's readers (32's reader row predates LV-1.0.1a), fewer seeds land under it. The deltas above therefore bound the change from above.
+
+**What else moves (no price, constant or store-text change):**
+- **Crystals: nothing.** No crystal source reads 2★:
+  - level milestones count levels cleared;
+  - full-band 3★, `stars_10` / `stars_20` / `stars_40` and the weekly target read `star3`;
+  - the daily pays 5 a win flat.
+
+  So 420 / 592 and the steady-state 11.55 a day (ECON-14) stand.
+- **"One new star a day" (steady state).** The open 2★ rungs past 16 go from 16.7 to 7.9, so the runway ends at ≈ day 24 instead of ≈ day 32 (memo: 17.1 → 8.4). Gold a day while the runway lasts: §6 130, restated ≈ 130, floored ≈ 132, from the daily's 26 → 27.4 → 28.6 a day. After the runway it is ≈ 116 → ≈ 118. The 130 → 116 tail exists without the floor too; the floor moves it ≈ 8 days earlier and is not the gate (sheet §C.2).
+- **Daily challenge.** A first-time win pays 43 → 45.7 (restated) → 47.7 gold (floored). The daily's 2★ re-maps on 16 pool levels (GD-12 risk (iii)), and the weekly is unaffected (100 gold flat, target `star3`).
+- **Starter Pack.** The listing trigger is unchanged: level 8 cleared and not the first session (AUD-B14). The floor starts at 17. The "≈ 2× face value" badge is computed from the $0.99 crystal rate and is untouched. The value line "2 000 gold ≈ 13 days of free earnings" (152 a day, §6) reads ≈ 12.1 days on the restated rows (166 a day) and ≈ 11.4 floored (176 a day). The spender table is updated with the floor release, not before; this is no store claim.
+- **Commander tree (5 500).** The full tree comes at ≈ day 40 (§6) → ≈ day 39 on both columns (restated 39.2, floored 38.7). The first track maxed stays at ≈ day 8, ≈ 0.4 day earlier: +4.7 first-clear stars on levels 17–29 are ≈ +75 gold by day 8.
+
+**Reproduce.** All scratch files are under `/tmp/claude-0/-home-user-InsiderTest/27ff3ffe-c8bd-51f2-b6a9-550752bc37bb/scratchpad/econ6/`:
+- `naive20.txt`: the runner output.
+- `floor.mts` → `floor.txt`: per-seed times, run with `npx tsx floor.mts` from `tower-clash/` (21 s).
+- `model.mjs` → `model.txt`: every number above, run with `node model.mjs <dir>`.
 
 ## 7. Store compliance (hand to Publisher — `docs/publishing/STORE_LISTING.md` must change before Phase B ships)
 
