@@ -1,11 +1,13 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { Fingers } from './helpers/fingers';
 
 /*
  * LV-5 / launch checklist R1: the first-play tutorial of levels 1–4 (src/ui/tutorial.ts, GD-5a/b)
  * driven by real touch taps on a fresh save:
- *   level 1  "tap your tower" → "tap the grey tower" → stream started
+ *   level 1  "tap your tower" → "tap the grey tower" → stream started; FEEL-1-1: a real drag home → camp
+ *            ends the tutorial too (no "tap the grey tower" left behind, also after the capture)
  *   level 2  side first: "tap your tower, then the grey tower" (side) → (gated on the capture) "now tap
  *            the new tower, then the enemy tower" (side → foe) → "swipe across the stream so your tower
  *            grows" (home → side; here the second tap on the target, the swipe-cut is driven in
@@ -229,6 +231,28 @@ test.describe('tutorial levels 1–4 (LV-5 / checklist R1, GD-5a/b)', () => {
     await page.waitForTimeout(200);
     expect(await hint(page), 'level 1 has no further step').toBeNull();
 
+    expect(pageErrors).toEqual([]);
+  });
+
+  test('FEEL-1-1: level 1 by a real drag home → camp — the hint moves on and the tutorial completes', async ({ page }) => {
+    const pageErrors = await boot(page);
+    const T = await hintTexts(page);
+    await startLevel(page, 1);
+    await expect.poll(() => hint(page), { message: 'level 1 opens on step 1' }).toBe(T['tutorial.tapTower']);
+
+    const fingers = new Fingers(page, await page.context().newCDPSession(page));
+    const home = towerAt(1, 'home');
+    const camp = towerAt(1, 'camp');
+    await fingers.start(home);
+    await fingers.slide(home, camp, 10);
+    await fingers.end();
+    await expect.poll(() => playerLinks(page), { message: 'the drag opens home → camp' }).toEqual([{ from: 'home', to: 'camp' }]);
+    // before FEEL-1-1 "Now tap the grey tower" stayed 12+ s here (and obeying it cut the stream)
+    await expect.poll(() => hint(page), { message: 'the drag link completes the tutorial', timeout: 2_000 }).toBeNull();
+    expect(await page.evaluate(() => window.__towerclash.getTutorialStep()), 'both steps done').toBe(2);
+    await expect.poll(() => tower(page, 'camp').then((t) => t?.owner), { message: 'camp falls', timeout: 20_000 }).toBe('player');
+    expect(await hint(page), 'no hint after the capture').toBeNull();
+    expect(await playerLinks(page), 'the stream still runs').toEqual([{ from: 'home', to: 'camp' }]);
     expect(pageErrors).toEqual([]);
   });
 

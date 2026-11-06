@@ -89,6 +89,73 @@ describe('level 1 tutorial (rules v2: start a stream)', () => {
     expect(tut.current(state)).toBeNull();
     expect(tut.finished).toBe(true);
   });
+
+  /** Frames as the play screen runs them: one sim tick, then the per-frame `onSelect` with `sel`. Returns the bubble after each. */
+  const frames = (tut: Tutorial, state: GameState, sel: string | null, untilMs: number): (string | null)[] => {
+    const out: (string | null)[] = [];
+    while (state.time < untilMs) {
+      step(state);
+      tut.onSelect(sel, state);
+      tut.elapse(C.TICK_MS, state);
+      out.push(shown(tut, state));
+    }
+    return out;
+  };
+
+  it('FEEL-1-1: a drag home → camp (the link lands under step 0) ends the tutorial within one AI tick, with or without home selected', () => {
+    for (const sel of [null, 'home'] as const) {
+      const state = stateFor(1);
+      const tut = tutorialFor(1, 0)!;
+      expect(shown(tut, state)).toBe('Tap your tower');
+      issue(tut, state, link('home', 'camp')); // the drag's release: step 0 is current, its onCommand is not step 1's
+      const t0 = state.time;
+      const seen = frames(tut, state, sel, t0 + C.AI_TICK_MS);
+      expect(tut.finished, `sel ${sel}: done by ${C.AI_TICK_MS} ms after the link`).toBe(true);
+      // no "tap the grey tower" past the first frames: obeying it would tap camp and cut the stream
+      expect(seen.slice(2).every((h) => h === null), `sel ${sel}: ${seen.join(' | ')}`).toBe(true);
+    }
+  });
+
+  it('FEEL-1-1: a capture of camp clears the "tap the grey tower" step even with no stream running', () => {
+    const state = stateFor(1);
+    const tut = tutorialFor(1, 0)!;
+    tut.onSelect('home', state);
+    expect(shown(tut, state)).toBe('Now tap the grey tower — the stream keeps flowing');
+    tut.onSelect('home', state);
+    expect(tut.finished).toBe(false);
+    capture(state, 'camp');
+    tut.onSelect('home', state);
+    expect(tut.finished).toBe(true);
+  });
+
+  it('FEEL-1-1: drag-first trace — the bubble is gone from one AI tick after the link through the capture of camp', () => {
+    const state = stateFor(1);
+    const tut = tutorialFor(1, 0)!;
+    frames(tut, state, null, 1000);
+    issue(tut, state, link('home', 'camp'));
+    const linkAt = state.time;
+    const seen: { t: number; h: string | null }[] = [];
+    while (state.time < 30_000 && state.towers['camp']!.owner !== 'player') {
+      step(state);
+      tut.onSelect('home', state);
+      tut.elapse(C.TICK_MS, state);
+      seen.push({ t: state.time, h: shown(tut, state) });
+    }
+    expect(state.towers['camp']!.owner, 'camp falls to the stream').toBe('player');
+    expect(seen.filter((s) => s.t >= linkAt + C.AI_TICK_MS && s.h !== null)).toEqual([]);
+    expect(tut.finished).toBe(true);
+  });
+
+  it('steer unchanged (GD-7h rule): a stream into foe completes neither step; only camp does', () => {
+    const state = stateFor(1);
+    const tut = tutorialFor(1, 0)!;
+    issue(tut, state, link('home', 'foe'));
+    frames(tut, state, null, 1000);
+    expect(shown(tut, state), 'no selection, no camp: step 0 stays').toBe('Tap your tower');
+    frames(tut, state, 'home', 2000);
+    expect(shown(tut, state), 'home → foe is not the grey tower').toBe('Now tap the grey tower — the stream keeps flowing');
+    expect(tut.finished).toBe(false);
+  });
 });
 
 describe('level 2 tutorial (GD-5a: side first, the cut gated on the capture, conditional supply line)', () => {
@@ -122,6 +189,18 @@ describe('level 2 tutorial (GD-5a: side first, the cut gated on the capture, con
     tut.onCommand(link('home', 'side'), state);
     expect(shown(tut, state)).toBeNull(); // step 2 gated on the capture
     expect(tut.finished).toBe(false);
+  });
+
+  it('FEEL-1-1: step 1 settles on a home → side stream the step never saw as a command (not on home → mid)', () => {
+    const state = stateFor(2);
+    const tut = tutorialFor(2, 0)!;
+    applyCommand(state, link('home', 'mid'));
+    tut.onSelect(null, state);
+    expect(shown(tut, state)).toBe(TXT.tapThenGrey);
+    applyCommand(state, unlink('home', 'mid'));
+    applyCommand(state, link('home', 'side'));
+    tut.onSelect(null, state);
+    expect(tut.stepIndex).toBe(1);
   });
 
   it('the stop step stays hidden before side is captured, even with home → side streaming', () => {
@@ -355,6 +434,18 @@ describe('level 3 tutorial (GD-5b: take both free neutrals; GD-7h: the west-firs
     expect(shown(tut, state), 'step 2 waits for the capture').toBeNull();
     tut.onSelect('home', state);
     expect(tut.finished).toBe(false);
+  });
+
+  it('FEEL-1-1: step 1 settles on a home → east stream the step never saw as a command; steps 1–2 by state alone', () => {
+    const state = stateFor(3);
+    const tut = tutorialFor(3, 0)!;
+    applyCommand(state, link('home', 'east')); // any input path the tutorial did not see
+    tut.onSelect(null, state);
+    expect(tut.stepIndex, 'step 1 done by the stream').toBe(1);
+    capture(state, 'east');
+    applyCommand(state, link('east', 'west'));
+    tut.onSelect(null, state);
+    expect(tut.stepIndex, 'step 2 done by the stream into west').toBe(2);
   });
 
   it('GD-7h: home → west does not complete step 1 — it hides while that stream runs, and the west capture hands over to step 2 on east', () => {

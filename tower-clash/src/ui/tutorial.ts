@@ -110,6 +110,14 @@ export class Tutorial {
 export const isLink = (cmd: Command, from: string, to: string): boolean =>
   cmd.type === 'link' && cmd.owner === 'player' && cmd.from === from && cmd.to === to;
 
+/**
+ * FEEL-1-1: the goal of a "tap `from`, then `to`" step reached by any input path (a drag, the AUD-U8
+ * release on a tower, the keys, or a link made while an earlier step was current): a player stream
+ * `from` → `to` runs, or `to` is already ours. A step's `doneWhen` pairs this with its `onCommand`.
+ */
+export const reached = (s: GameState, from: string, to: string): boolean =>
+  s.towers[to]?.owner === 'player' || s.links.some((l) => l.owner === 'player' && l.from === from && l.to === to);
+
 /** A step whose `text` is translated on every read (shared with ./tutorialSteps.ts). */
 export function step(key: TranslationKey, rest: Omit<TutorialStep, 'text'>, params?: Record<string, number>): TutorialStep {
   return {
@@ -123,15 +131,18 @@ export function step(key: TranslationKey, rest: Omit<TutorialStep, 'text'>, para
 /*
  * GDD §3 "first-time line" 11 (GD-5): a step never asks for an action the level's naive line or
  * reference player would not take at that moment, and the first target is the uncontested one.
- *   level 1  the stream: tap your tower, then a target — it keeps flowing.
+ *   level 1  the stream: tap your tower, then a target — it keeps flowing. FEEL-1-1: both steps also
+ *            settle on home → camp running (or camp ours), so a drag link (made under step 0) leaves no
+ *            "tap the grey tower" behind, whose obeyed tap would cut the stream; still camp only (steer).
  * Levels 2–4 (go around + swipe-cut + supply line; both greys; stop → fill → L2) are a lazy chunk,
  * ./tutorialSteps.ts (PERF-10), registered here by `registerTutorialSteps` when it arrives
  * (./tutorialChunk.ts). Level 1 stays eager: the first launch never waits for a second fetch.
  */
+const camp = (s: GameState): boolean => reached(s, 'home', 'camp');
 const STEPS_BY_LEVEL: Record<number, () => TutorialStep[]> = {
   1: () => [
-    step('tutorial.tapTower', { towerId: 'home', onSelect: (sel) => sel === 'home' }),
-    step('tutorial.tapGrey', { towerId: 'camp', onCommand: (cmd) => isLink(cmd, 'home', 'camp') }),
+    step('tutorial.tapTower', { towerId: 'home', onSelect: (sel) => sel === 'home', doneWhen: camp }),
+    step('tutorial.tapGrey', { towerId: 'camp', onCommand: (cmd) => isLink(cmd, 'home', 'camp'), doneWhen: camp }),
   ],
 };
 

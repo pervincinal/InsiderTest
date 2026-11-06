@@ -3,7 +3,7 @@ import { C } from '../sim/constants';
 import { capacityOf, linksFrom, maxLinksOf, relaysOnward } from '../sim/step';
 import { roadIdFor } from '../sim/geometry';
 import type { TutorialStep } from './tutorial';
-import { isLink, step } from './tutorial';
+import { isLink, reached, step } from './tutorial';
 import { enTutorial } from './locales/enTutorial';
 
 /*
@@ -79,8 +79,9 @@ export const LATE_STEPS: Readonly<Record<number, () => TutorialStep[]>> = {
     step('tutorial.tapThenGrey', {
       towerId: 'side',
       onCommand: (cmd) => isLink(cmd, 'home', 'side'),
-      // the mid-first line at ×2 reaches a supply line (sim ≈ 33 s) before this step's 20 s timeout
-      doneWhen: (s) => supplyLineTarget(s) !== null,
+      // FEEL-1-1: home → side made by any input path (a drag, a release on side) or side ours; the
+      // mid-first line at ×2 reaches a supply line (sim ≈ 33 s) before this step's 20 s timeout
+      doneWhen: (s) => reached(s, 'home', 'side') || supplyLineTarget(s) !== null,
     }),
     step('tutorial.goAround', {
       towerId: 'foe',
@@ -139,8 +140,9 @@ export const LATE_STEPS: Readonly<Record<number, () => TutorialStep[]>> = {
       towerId: 'east',
       showWhen: (s) => !hasLink(s, 'home', 'west'),
       onCommand: (cmd) => isLink(cmd, 'home', 'east'),
-      // west first: the capture of west hands over to step 2 (pointing at east)
-      doneWhen: (s) => ownerIs(s, 'west', 'player'),
+      // west first: the capture of west hands over to step 2 (pointing at east); FEEL-1-1: home → east by
+      // any input path (or east ours) — still east only, home → west completes nothing (GD-7h steer)
+      doneWhen: (s) => ownerIs(s, 'west', 'player') || reached(s, 'home', 'east'),
     }),
     step('tutorial.grabOther', {
       towerId: otherGrey,
@@ -149,7 +151,8 @@ export const LATE_STEPS: Readonly<Record<number, () => TutorialStep[]>> = {
       select: (s) => (ownerIs(s, 'east', 'player') ? 'east' : 'west'),
       showWhen: (s) => (ownerIs(s, 'west', 'player') && ownerIs(s, 'east', 'neutral')) || (ownerIs(s, 'east', 'player') && ownerIs(s, 'west', 'neutral')),
       onCommand: (cmd, s) => isLinkInto(cmd, otherGrey(s)),
-      doneWhen: (s) => !ownerIs(s, 'west', 'neutral') && !ownerIs(s, 'east', 'neutral'),
+      // FEEL-1-1: a stream into the other grey made by any input path counts as the link command does
+      doneWhen: (s) => hasLinkInto(s, otherGrey(s)) || (!ownerIs(s, 'west', 'neutral') && !ownerIs(s, 'east', 'neutral')),
     }),
     // GD-7h, west line: free home's one stream. The ring is on west, the tap target: a ribbon anchor on
     // home → west (GD-5c) finds no clear bubble spot above home on the 430×932 / 360×640 screens
