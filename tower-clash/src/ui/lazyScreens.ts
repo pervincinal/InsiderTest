@@ -17,3 +17,5 @@ export { noticeUnreadableSave } from './saveRecovery';
 export { paintTitle } from '../render/titleIdle';
 /** AUD-U27: the menus' keyboard focus ring (src/main.ts keydown / pointerdown / frame call it once this chunk is in). */
 export { drawFocus, focusKey, focusState, hideFocus } from './focus';
+/** FEEL-1-6: the title ↔ menu slide (src/main.ts `go` / frame / input call it once this chunk is in); `afterDraw` also draws the focus ring, `keyIn` wraps `focusKey`. */
+export { afterDraw, keyIn, slideDone, slideHeld, startSlide } from './screenSlide';

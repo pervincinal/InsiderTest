@@ -66,6 +66,11 @@ export interface TowerClashDebug {
   getState(): GameState | null;
   getScreen(): Screen['name'];
   /**
+   * FEEL-1-6: false while the title ↔ menu slide runs (≈ 120 ms after the screen changed; input is not
+   * delivered meanwhile), true otherwise. Specs that tap or press right after a screen change poll it.
+   */
+  transitionDone(): boolean;
+  /**
    * Start a level; `seed` (optional) makes the run reproducible for tests. Resolves true once the
    * play screen is up (the level chunk may have to download first — PERF-2), false for an unknown
    * id or when another navigation won meanwhile. `autoplay()`, `setSpeed()` and `economy.autoLose()`
@@ -338,12 +343,13 @@ export class TowerClashApp implements App {
     this.setPerfOverlay(save.settings.perfOverlay === true || query.get('perf') === '1'); // AUD-Q8 (TF-13)
     void initNative({ onBack: () => this.onBack(), isTitleScreen: () => this.current.name === 'title' });
 
-    const forward = <K extends 'down' | 'move' | 'up'>(k: K) => (p: PointerPoint) => this.current[k]?.(p);
+    // FEEL-1-6: nothing reaches a screen while the title ↔ menu slide runs (src/ui/screenSlide.ts)
+    const forward = <K extends 'down' | 'move' | 'up' | 'cancel'>(k: K) => (p: PointerPoint) => this.lazy?.slideHeld(k) || this.current[k]?.(p);
     attachPointer(canvas, this.view, {
       down: forward('down'),
       move: forward('move'),
       up: forward('up'),
-      cancel: (p) => this.current.cancel?.(p),
+      cancel: forward('cancel'),
     });
     // WebAudio may only start inside a user gesture (iOS/Android WebView): unlock on the first
     // pointer/key, and keep trying on later gestures in case the context was suspended again.
@@ -356,13 +362,13 @@ export class TowerClashApp implements App {
       (e) => {
         e.preventDefault();
         const lines = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? window.innerHeight : 1;
-        this.current.wheel?.((e.deltaY * lines) / this.view.scale);
+        if (!this.lazy?.slideHeld('wheel')) this.current.wheel?.((e.deltaY * lines) / this.view.scale);
       },
       { passive: false },
     );
     window.addEventListener('keydown', (e) => {
       unlockAudio();
-      if (this.lazy?.focusKey(this, e)) return; // AUD-U27: Tab / arrows / Enter on the menus' focus ring (src/ui/focus.ts)
+      if (this.lazy?.keyIn(this, e)) return; // AUD-U27: Tab / arrows / Enter on the menus' focus ring (src/ui/focus.ts); FEEL-1-6: none during a slide
       if (e.key === ' ') e.preventDefault();
       if (e.key === 'm' || e.key === 'M') {
         toggleMuted();
@@ -405,6 +411,7 @@ export class TowerClashApp implements App {
   go(screen: Screen): void {
     const queued = this.current.toast?.takeQueued() ?? [];
     this.current.exit?.();
+    this.lazy?.startSlide(this, screen); // FEEL-1-6: title ↔ menu slide, from the outgoing frame
     this.current = screen;
     screen.enter?.();
     this.handOverToasts(queued);
@@ -491,7 +498,8 @@ export class TowerClashApp implements App {
     if (this.preloadQueued) return;
     this.preloadQueued = true;
     whenIdle(() => {
-      void this.loadLazy().catch(() => undefined);
+      // FEEL-1-6: then the shop's skin / theme previews (opening it fetched them), so a first SHOP is drawn in full at once
+      void this.loadLazy().then(() => warmCosmetics(), () => undefined);
       this.preloadLevel(LEVEL_META[currentLevelIndex(this.save, LEVEL_META)]?.id);
       void loadAi().catch(() => undefined); // PERF-9: the enemy AI, so the first PLAY is instant
       warmResultChunk(); // PERF-11: the result screen, in (and in the worker's cache) before the first outcome
@@ -710,7 +718,7 @@ export class TowerClashApp implements App {
       blankLayer(this.view.layers?.ground);
     }
     this.current.draw(this.view, now);
-    this.lazy?.drawFocus(this); // AUD-U27: the keyboard focus ring, only after a key press
+    this.lazy?.afterDraw(this, now); // FEEL-1-6: a running title ↔ menu slide; AUD-U27: the keyboard focus ring, only after a key press
     // AUD-Q3 / AUD-Q10: a newer build's save is played read-only, or localStorage refuses the save — the
     // title (and, for failing writes, the result footer) says so for as long as it lasts
     const name = this.current.name;

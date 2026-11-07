@@ -18,14 +18,14 @@ import type { Rect } from '../render/widgets';
 import { hitRect } from '../render/widgets';
 import { ParticleSystem, prefersReducedMotion } from '../render/particles';
 import type { HudPlayUi } from '../render/hud';
-import { STALEMATE_CARD_S, STALL, boosterColor, drawStallCard, hudOverlaysLoaded, lessonCardLayout, warmHudOverlays } from '../render/hud';
+import { STALEMATE_CARD_S, STALL, drawStallCard, hudOverlaysLoaded, lessonCardLayout, warmHudOverlays } from '../render/hud';
 import type { PointerPoint } from '../input/pointer';
 import { PlayGestures, hitTower } from '../input/pointer';
 import { GameLoop } from './loop';
 import { starsFor, writeSave } from './save';
 import type { App, Screen, StartOptions } from './screens';
 import { Toast } from './screens';
-import type { ResultInfo } from './result';
+import type { ResultInfo, ResultScreen } from './result';
 import { loadResultChunk, makeResultScreen, resultChunkFailures, warmResultChunk } from './resultChunk';
 import type { Tutorial, TutorialStep } from './tutorial';
 import { stepTowerId, tutorialFor } from './tutorial';
@@ -207,6 +207,8 @@ export class PlayScreen implements Screen {
   /** Airstrike targeting mode (M3-1): the next tap on an enemy tower fires, anywhere else cancels. */
   targeting = false;
   private pressedBooster: BoosterKind | null = null;
+  /** FEEL-1-5: the last booster cast (the HUD pops and bursts the button from `at`, the frame clock). */
+  private cast: { kind: BoosterKind; at: number } | null = null;
   /**
    * Where the current press began (BUG-36 / BUG-37): `world` = handed to the gestures (a tap / drag /
    * swipe there always ends through `gestures.up` / `cancel`, wherever the finger lifts); `hud` = on
@@ -235,8 +237,9 @@ export class PlayScreen implements Screen {
   /**
    * AUD-F4: the result waiting out `RESULT_BEAT_MS` from the outcome (`nowMs`) — and, PERF-11, for the
    * lazy result chunk when it is not in by then (`failures`: the chunk's download failures already toasted).
+   * FEEL-1-8: `screen`, built half way through the beat (`ResultScreen.warm`), is the one shown.
    */
-  private pendingResult: { info: ResultInfo; at: number; failures: number } | null = null;
+  private pendingResult: { info: ResultInfo; at: number; failures: number; screen?: ResultScreen | null } | null = null;
   /** This attempt already used its "Reinforcements" continue (ECONOMY.md §3.5) — offered once per attempt. */
   private continued: boolean;
   /** State + rng snapshots of the last `C.SNAPSHOT_CAPACITY_MS` of sim time, one per `C.SNAPSHOT_INTERVAL_MS`. */
@@ -497,7 +500,7 @@ export class PlayScreen implements Screen {
         if (t) this.effects.push({ x: t.x, y: t.y, color: pal.star, bornMs: this.nowMs, lifeMs: 350, kind: 'ring' });
       } else if (ev.type === 'linked') {
         if (ev.owner === 'player') {
-          playSfx('send'); // one tick per stream started (manual or autoplay)
+          // its `send` tick (manual or autoplay) is the recipes chunk's (sfxRules.ts, FEEL-1-9)
           if (linksFrom(this.state, ev.from).length >= TRIPLE_STREAM_LINKS) m.tripleStream = true;
           this.confirmSupplyLine(ev.from, ev.to);
         }
@@ -574,6 +577,8 @@ export class PlayScreen implements Screen {
     // AUD-F4: the result screen follows the outcome after the beat (PERF-11: once its chunk is in)
     const pending = this.pendingResult;
     if (pending && nowMs - pending.at >= RESULT_BEAT_MS) this.showResult(pending);
+    // FEEL-1-8: half way through the beat the card's first-frame work (share chunk, the drawer's first pass) is done off screen
+    else if (pending && nowMs - pending.at >= RESULT_BEAT_MS / 2) (pending.screen ??= makeResultScreen(this.app, pending.info))?.warm();
   }
 
   /**
@@ -581,8 +586,8 @@ export class PlayScreen implements Screen {
    * (`pendingResult` stays set, input stays ignored), re-request the chunk under the back-off and say
    * so once per failed download. Platform back leaves for the map after a failure (the result is booked).
    */
-  private showResult(pending: { info: ResultInfo; at: number; failures: number }): boolean {
-    const screen = makeResultScreen(this.app, pending.info);
+  private showResult(pending: { info: ResultInfo; at: number; failures: number; screen?: ResultScreen | null }): boolean {
+    const screen = pending.screen ?? makeResultScreen(this.app, pending.info);
     if (!screen) {
       warmResultChunk();
       const failures = resultChunkFailures();
@@ -665,6 +670,7 @@ export class PlayScreen implements Screen {
         targeting: this.targeting,
         muted: isMuted(),
         pressedBooster: this.pressedBooster,
+        cast: this.cast,
         streams: this.state.links.filter((l) => l.owner === 'player').length,
         wallet: { gold: this.app.save.gold, crystals: this.app.save.crystals },
         toast: this.toast.opts(this.nowMs),
@@ -909,6 +915,7 @@ export class PlayScreen implements Screen {
     this.targeting = false;
     if (!this.payBooster(kind)) return false;
     this.command({ type: 'booster', owner: 'player', booster: kind });
+    this.cast = { kind, at: this.nowMs };
     playSfx(kind); // AUD-F3: its own cast sound ('freeze' / 'overdrive'; airstrike returned above)
     return true;
   }
@@ -939,11 +946,9 @@ export class PlayScreen implements Screen {
     if (!this.payBooster('airstrike')) return false;
     this.command({ type: 'booster', owner: 'player', booster: 'airstrike', towerId });
     this.targeting = false;
-    const color = boosterColor(this.app.palette(), 'airstrike');
-    this.particles.shot(t.x + 40, t.y - 420, t.x, t.y - 30, color);
-    this.particles.shot(t.x - 30, t.y - 420, t.x + 6, t.y - 26, color);
-    for (let i = 0; i < 4; i++) this.particles.death(t.x + (i - 1.5) * 14, t.y - 10 - (i % 2) * 12);
-    playSfx('artillery');
+    // FEEL-1-2: its own chain (lazy render/combatFx.ts) — shell + shadow, impact, count-down, shake, medium haptic (AUD-U20)
+    this.particles.airstrike(t, this.app.palette(), this.nowMs, () => this.app.save.settings.haptics !== false && hapticCapture(true));
+    playSfx('airstrike');
     return true;
   }
 

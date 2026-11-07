@@ -140,6 +140,7 @@ export function installDebug(app: TowerClashApp): TowerClashDebug & QaDebugExtra
   const dbg: TowerClashDebug = {
     getState: () => app.play?.state ?? null,
     getScreen: () => app.current.name,
+    transitionDone: () => app.lazy?.slideDone() ?? true,
     loadLevel: (id, seed) => app.startLevel(id, seed),
     // the AI chunk is in whenever a play screen exists (startLevel awaits it); no static import of src/ai, so it stays one chunk (PERF-9)
     autoplay: () => app.withPlay((play) => play.setPlayerBot(aiModule().referencePlayerCommands)),

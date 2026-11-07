@@ -7,7 +7,7 @@ import { hitRect } from '../render/widgets';
 import type { PointerPoint } from '../input/pointer';
 import { drawGame } from '../render/draw';
 import type { HudPlayUi, ResultExtras } from '../render/hud';
-import { hudOverlaysLoaded, resultShareLayout } from '../render/hud';
+import { drawOverlays, hudOverlaysLoaded, resultShareLayout } from '../render/hud';
 import { playSfx } from '../audio/index';
 import { ResultCuePlayer, resultCues } from '../audio/resultCues';
 import { toastReleaseMs, walletShown } from '../render/resultTimeline';
@@ -207,8 +207,35 @@ export class ResultScreen implements Screen {
             : null);
     // AUD-F16: held until the card's sequence ends (`draw`); on a defeat in the neutral paper tone
     if (text) this.toast.hold({ text, kind: this.okKind, durationMs: ACHIEVEMENT_TOAST_MS });
-    if (this.shareOffered()) void loadShareChunk().catch(() => undefined); // warm: the tap's activation must not wait on the network
+    if (this.shareOffered()) void loadShareChunk().catch(() => undefined); // warm: the tap's activation must not wait on the network (normally in since the beat, FEEL-1-8)
     void maybeAskForReview(this.info, this.app.save); // MM-9 rating prompt: off by default, never rejects
+  }
+
+  /** FEEL-1-8: the next `warm` step. */
+  private warmStep = 0;
+
+  /**
+   * FEEL-1-8: what the card's entry frame would otherwise build, done during the AUD-F4 result beat instead — the
+   * play screen builds this screen half way through the beat and calls this on every frame after that, one
+   * step per call (later calls do nothing) so no beat frame takes it all: (0) the share chunk's import (its module-preload links,
+   * the fetch, the module's evaluation); (1) one pass of the card drawer on a 1 × 1 canvas over the settled
+   * card (title, time, stars or the defeat tip, offers, SHARE) — the drawer's code compiled, every label and the
+   * tip's line fitting measured at their font sizes. The pass reads a shallow copy of the match state, so the
+   * card's clock (`resultShownAt`, keyed by the state) still starts on the card's first real frame; no sound,
+   * toast, particle or wallet is touched, and the card timeline is unchanged.
+   */
+  warm(): void {
+    const step = this.warmStep++;
+    if (step === 0) {
+      if (this.shareOffered()) void loadShareChunk().catch(() => undefined);
+      return;
+    }
+    const hud = this.info.ui.hud;
+    if (step > 1 || !hud || !hudOverlaysLoaded() || typeof document === 'undefined') return;
+    const ctx = Object.assign(document.createElement('canvas'), { width: 1, height: 1 }).getContext('2d');
+    // frame clock 0 = the settled card (hud.ts `drawOverlays`: as under reduced motion)
+    const ui: HudPlayUi = { ...this.info.ui, resultBeat: undefined, hud: { ...hud, result: this.extras(), toast: null, pressed: null } };
+    if (ctx) drawOverlays(ctx, { ...this.info.state }, this.app.view, ui, 0);
   }
 
   /** SHARE (SHARE-1) is on every result except Yesterday's map — a practice run has no reward and nothing to prove. */
