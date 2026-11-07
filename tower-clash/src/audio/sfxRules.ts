@@ -20,6 +20,7 @@ export const RATE_LIMIT_S: Readonly<Partial<Record<SfxName, number>>> = Object.f
   tankArrive: 0.2, // AUD-F10: two `arrive` slots — and it pushes `arrive`'s next slot out by the same (`rateOk`)
   tally: 0.125, // AUD-F9: the gold count ticks ≤ 8/s
   purchase: 0.08, // AUD-F8: a double tap on a buy button is one clink
+  airstrike: 0.15, // FEEL-1-2: two strikes inside one whistle are one sound (its thud is the impact's)
 });
 
 /** Tolerance for clock arithmetic so a gap of exactly the limit is accepted. */
@@ -69,6 +70,10 @@ export function sfxForEvents(
         // AUD-F2: a mine kill has its own blast; artillery its shell; a clash the short crackle
         out.push({ name: ev.cause === 'clash' ? 'unitDied' : ev.cause });
         break;
+      case 'linked':
+        // one tick per stream `me` starts (manual or autoplay; was play.ts); FEEL-1-9: the pair softens a quick re-link
+        if (ev.owner === me) out.push({ name: 'send', opts: { pair: `${ev.from}>${ev.to}` } });
+        break;
       case 'landed':
         // AUD-F10: the player's own tank landing (reinforcing or attacking) is one heavy tap; a soldier's
         // landing is the arrival detector's light `arrive` (`onSimFrame`); a foe's on us is `hit` (`playHits`)
@@ -77,7 +82,7 @@ export function sfxForEvents(
       case 'won':
       case 'lost':
         // AUD-F9: the outcome tick is the capture's chime (above); the stingers follow the result card
-        // (src/audio/resultCues.ts) — this call (no `step`) only ducks the music and drops its pulse
+        // (src/audio/resultCues.ts) — this call (no `step`) plays the FEEL-1-3 sting (outcomeCues.ts), ducks the music and drops its pulse
         out.push({ name: ev.type });
         break;
     }

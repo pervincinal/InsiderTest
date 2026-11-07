@@ -115,7 +115,7 @@ describe('bus routing', () => {
   });
 
   it('the hit / mine / capture rate limits stay as they were (AUD-F1 / F2); AUD-F8–F10 add the tank, the gold tick and the clink', () => {
-    expect(RATE_LIMIT_S).toEqual({ arrive: 0.1, unitDied: 0.08, artillery: 0.1, send: 0.05, refuse: 0.12, mine: 0.12, tankArrive: 0.2, tally: 0.125, purchase: 0.08 });
+    expect(RATE_LIMIT_S).toEqual({ arrive: 0.1, unitDied: 0.08, artillery: 0.1, send: 0.05, refuse: 0.12, mine: 0.12, tankArrive: 0.2, tally: 0.125, purchase: 0.08, airstrike: 0.15 }); // FEEL-1-2 adds the airstrike
     expect(RATE_LIMIT_S.capture).toBeUndefined();
   });
 });

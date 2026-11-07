@@ -41,7 +41,9 @@ export type SfxName =
   /** AUD-F9: one step of the result card's gold count-up (src/audio/resultCues.ts; ≤ 8 a second). */
   | 'tally'
   /** AUD-F10: one of the player's tanks lands (sfxRules.ts `sfxForEvents`): `arrive` a fifth lower over a thud; it takes two `arrive` slots. */
-  | 'tankArrive';
+  | 'tankArrive'
+  /** FEEL-1-2: the player's airstrike lands (play.ts `airstrike`; was the gun's `artillery`): a 150 ms whistle, then a thud. */
+  | 'airstrike';
 
 /** `gain`: we captured it; `loss`: an enemy took ours; `other`: an enemy took neutral/another enemy's. */
 export type CaptureKind = 'gain' | 'loss' | 'other';
@@ -49,6 +51,8 @@ export type CaptureKind = 'gain' | 'loss' | 'other';
 export interface SfxOptions {
   /** `send`: number of units leaving (pitch rises with it, capped at SEND_PITCH_CAP). */
   count?: number;
+  /** FEEL-1-9 `send`: the stream's `from>to`; a re-link of the same pair within 2 s plays 4 dB softer. */
+  pair?: string;
   /** `capture`: which side the capture is for. Default 'other'. */
   capture?: CaptureKind;
   /** `hit`: the landing unit's weight (a tank, 5, knocks lower and longer). Default 1. */
@@ -56,8 +60,8 @@ export interface SfxOptions {
   /**
    * AUD-F9 — `won` / `lost`: the result card's cue (src/audio/resultCues.ts): `won` = the chord of star
    * `step` (0–2; `count` = the stars earned, the last one's chord is held over a low C); `lost` = 0, the
-   * low chord. Absent: the outcome tick itself (sfxRules.ts) — no voice, the music ducks for the result
-   * sequence and drops its pulse. `tally`: the gold count's tick index (its pitch climbs with it).
+   * low chord. Absent: the outcome tick itself (sfxRules.ts) — the FEEL-1-3 sting (src/audio/outcomeCues.ts),
+   * the music ducks for the result sequence and drops its pulse and tension layers. `tally`: the gold count's tick index (its pitch climbs with it).
    */
   step?: number;
 }

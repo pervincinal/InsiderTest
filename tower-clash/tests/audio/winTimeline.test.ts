@@ -144,11 +144,12 @@ describe('through the audio facade', () => {
     return ctx;
   }
 
-  it('the outcome tick plays the capture chime only; the card then plays a chord per star and the ticks', async () => {
+  it('the outcome tick plays the capture chime and the FEEL-1-3 sting; the card then plays a chord per star and the ticks', async () => {
     const ctx = await audio();
     const state = createState(makeLevel(), 1);
     onSimEvents([{ type: 'capture', towerId: 'e', by: 'player', from: 'enemy1' }, { type: 'won', timeMs: 30_000 }], state);
-    expect(ctx.oscillators.map((o) => o.frequency.events[0]!.value)).toHaveLength(2); // the gain chime's two notes, no fanfare
+    // the gain chime's two triangles and the sting's two sines, no star chord (the fanfare follows the card)
+    expect(ctx.oscillators.map((o) => o.type)).toEqual(['triangle', 'triangle', 'sine', 'sine']);
     ctx.clear();
     const p = new ResultCuePlayer(won(2, 12));
     for (let t = 0; t <= 2000; t += 16.7) {

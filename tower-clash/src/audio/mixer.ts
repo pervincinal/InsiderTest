@@ -88,7 +88,7 @@ export interface Mix extends MixHandle {
   /** A result stinger played: the music drops its pulse layer until the play screen goes away. */
   ended: boolean;
   /** The running music loop (src/audio/music.ts), read by src/audio/inspect.ts; null while it is stopped. */
-  loop: { readonly step: number; readonly pulse: boolean } | null;
+  loop: { readonly step: number; readonly pulse: boolean; readonly tension: boolean; readonly intensity: number } | null;
 }
 
 const set = (p: AudioParamLike, v: number): void => {

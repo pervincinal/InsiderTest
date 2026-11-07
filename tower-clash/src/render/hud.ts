@@ -11,7 +11,6 @@ import {
   drawButton,
   drawCard,
   drawCoin,
-  drawCooldownRing,
   drawCrosshairGlyph,
   drawGlassBand,
   drawPill,
@@ -76,6 +75,8 @@ export interface HudExtras {
   muted: boolean;
   /** Booster currently held down (pressed look). */
   pressedBooster?: BoosterKind | null;
+  /** FEEL-1-5: the last booster cast and its frame clock (`nowMs`): the button's pop + glint burst, lit before the sim's tick. */
+  cast?: { kind: BoosterKind; at: number } | null;
   /** Number of the player's active attack streams (`state.links` owned by the player), rules v2. */
   streams?: number;
   /** AUD-U9: a first-time save on levels 1–4 (`PlayScreen.bare`): no booster bar and no coin pill. */
@@ -267,7 +268,10 @@ function boosterGlyph(ctx: CanvasRenderingContext2D, kind: BoosterKind, color: s
 
 /**
  * Booster bar (M3-1): round clay buttons with an icon, a coin cost chip underneath, a cooldown
- * ring while the timed booster runs and a dimmed face when unaffordable / active.
+ * ring while the timed booster runs and a dimmed face when unaffordable / active. FEEL-1-5: once the lazy
+ * hudOverlays chunk is in (warmed at level start) it draws the disc — lit with its cooldown ring while the
+ * booster runs, popped and bursting on the cast frame (`HudOverlayDrawers.booster`); until then (a cast is all
+ * but impossible before it lands) the plain disc below, without the ring.
  */
 function drawBoosterBar(ctx: CanvasRenderingContext2D, ui: PlayUi, hud: HudExtras, nowMs: number): void {
   const pal = ui.palette;
@@ -280,21 +284,17 @@ function drawBoosterBar(ctx: CanvasRenderingContext2D, ui: PlayUi, hud: HudExtra
     const targeting = st.kind === 'airstrike' && hud.targeting;
     const usable = st.affordable && !st.active;
     const pressed = hud.pressedBooster === st.kind;
-    drawRoundButton(ctx, pal, cx, cy, r - 2, {
-      fill: targeting ? color : undefined,
-      border: targeting ? shade(color, -0.35) : undefined,
-      disabled: !usable && !targeting,
-      pressed,
-    });
-    const gy = cy + (pressed ? 3 : 0);
-    const face = targeting ? pal.paper : usable ? color : shade(pal.panel, -0.45);
-    boosterGlyph(ctx, st.kind, face, cx, gy, 17, targeting ? 'rgba(0,0,0,0)' : shade(color, -0.45));
-    if (st.active && st.durationMs > 0) {
-      const pulse = motionAllowed() ? 0.85 + 0.15 * Math.sin(nowMs / 160) : 1;
-      ctx.save();
-      ctx.globalAlpha = pulse;
-      drawCooldownRing(ctx, cx, cy, r + 2, st.remainingMs / st.durationMs, color);
-      ctx.restore();
+    if (overlays) overlays.booster(ctx, ui, st, cx, cy, nowMs, motionAllowed());
+    else {
+      drawRoundButton(ctx, pal, cx, cy, r - 2, {
+        fill: targeting ? color : undefined,
+        border: targeting ? shade(color, -0.35) : undefined,
+        disabled: !usable && !targeting,
+        pressed,
+      });
+      const gy = cy + (pressed ? 3 : 0);
+      const face = targeting ? pal.paper : usable ? color : shade(pal.panel, -0.45);
+      boosterGlyph(ctx, st.kind, face, cx, gy, 17, targeting ? 'rgba(0,0,0,0)' : shade(color, -0.45));
     }
     // cost chip under the disc: charges ("×2" on gold), a video glyph when a free charge is on offer,
     // otherwise the gold price
@@ -789,6 +789,7 @@ export function hudKey(state: GameState, ui: PlayUi, nowMs: number): string {
       k += `|${b.kind}${b.affordable ? 1 : 0}${b.active ? 1 : 0}${b.adOffer ? 1 : 0}:${b.charges}:${b.cost}`;
       if (b.active && b.durationMs > 0) k += `:${nowMs}`;
     }
+    if (hud.cast && nowMs - hud.cast.at < 400) k += `|c${nowMs}`; // FEEL-1-5: the cast's pop / burst animate
     if (hud.targeting) k += `|T${nowMs}`;
     if (hud.toast) k += `|toast:${hud.toast.kind}:${hud.toast.t}:${hud.toast.text}`; // `t` changes every frame: its spot (`playToastY`) needs no key
     if (hud.wallet && ui.outcome !== 'playing') k += `|w${hud.wallet.gold}:${hud.wallet.crystals}`;
@@ -799,6 +800,11 @@ export function hudKey(state: GameState, ui: PlayUi, nowMs: number): string {
 /* ---------- overlays ---------- */
 
 const overlayShownAt = new WeakMap<GameState, number>();
+/**
+ * FEEL-1-7: the frame clock of the result card's first frame for `state` (`drawOverlays` records it once the
+ * AUD-F4 beat is over), undefined until then — draw.ts starts the defeat veil from it.
+ */
+export const resultShownAt = (s: GameState): number | undefined => overlayShownAt.get(s);
 
 function dimWorld(ctx: CanvasRenderingContext2D, view: View, lost: boolean): void {
   // victory: blue-ink dim; defeat: a greyer, slightly desaturating veil — over the whole screen (BUG-34)

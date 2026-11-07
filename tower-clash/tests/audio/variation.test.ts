@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { initAudio, loadSfxRecipes, playSfx, unlockAudio } from '../../src/audio/index';
 import type { SfxName } from '../../src/audio/index';
-import { ARRIVE_TIMBRES, DEATH_NOISES, PITCH_LOCKED, UNVARIED, VARY_CENTS, VARY_DB, variation } from '../../src/audio/recipes';
+import { ARRIVE_TIMBRES, DEATH_NOISES, PITCH_LOCKED, SEND_TIMBRES, UNVARIED, VARY_CENTS, VARY_DB, variation } from '../../src/audio/recipes';
 import { RATE_LIMIT_S, sendPitchHz } from '../../src/audio/sfxRules';
 import { defaultSave } from '../../src/ui/save';
 import type { FakeGain } from './fakeAudio';
@@ -77,7 +77,7 @@ describe('variation()', () => {
   });
 
   it('exempts the stingers, hit and the booster casts; send and tally vary in level only', () => {
-    expect([...UNVARIED].sort()).toEqual(['freeze', 'hit', 'lost', 'overdrive', 'won']);
+    expect([...UNVARIED].sort()).toEqual(['airstrike', 'freeze', 'hit', 'lost', 'overdrive', 'won']); // FEEL-1-2: the airstrike is a booster identity sound
     for (const name of UNVARIED) for (let i = 0; i < 50; i++) expect(variation(name, i)).toEqual({ cents: 0, db: 0 });
     expect([...PITCH_LOCKED].sort()).toEqual(['send', 'tally']);
     for (const name of PITCH_LOCKED) {
@@ -154,7 +154,7 @@ describe('the played voices', () => {
       const { osc } = play('send', { count: 7 });
       expect(osc[0]!.frequency.events[0]!.value).toBe(sendPitchHz(7));
       peaks.push(peakOf(osc[0]!));
-      expect(db(peakOf(osc[0]!), 0.22)).toBeCloseTo(variation('send', i).db, 6);
+      expect(db(peakOf(osc[0]!), SEND_TIMBRES[i % 2]![2])).toBeCloseTo(variation('send', i).db, 6); // FEEL-1-9: two timbres
     }
     expect(new Set(peaks.map((p) => p.toFixed(5))).size).toBeGreaterThan(3);
   });

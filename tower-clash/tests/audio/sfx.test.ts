@@ -222,8 +222,12 @@ describe('durations', () => {
     expect(lost.hz).toEqual([220, 261.6, 329.6, 110]);
     expect(lost.at.every((t) => t === 0)).toBe(true);
     expect(Math.max(...lost.hz)).toBeLessThan(Math.min(...STAR_CHORDS[0]!)); // lower than any star chord
-    // the sim's outcome tick (no `step`): the capture's chime is its sound, the stingers follow the card
-    for (const name of ['won', 'lost'] as const) expect(chord(name, {}).hz).toEqual([]);
+    // the sim's outcome tick (no `step`): FEEL-1-3's two-voice sting (src/audio/outcomeCues.ts, tests/audio/outcomeSting.test.ts), never a star chord
+    for (const name of ['won', 'lost'] as const) {
+      const hz = chord(name, {}).hz;
+      expect(hz).toHaveLength(2);
+      for (const c of STAR_CHORDS) expect(hz).not.toEqual([...c]);
+    }
   });
 });
 

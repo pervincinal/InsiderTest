@@ -17,7 +17,7 @@ import type { Palette } from './palette';
 import { SOLDIER_DRAW_SCALE, TANK_DRAW_SCALE, TANK_RADIUS, WORLD_ZOOM } from './layout';
 import type { Rect } from './widgets';
 import { roundRect } from './widgets';
-import { combatFrame, drawTracer, shakeBy, shellShot, strikeShot, towerCaptured } from './combatFx';
+import { airstrikeFx, combatFrame, drawTracer, shakeBy, shellShot, strikeShown, towerCaptured } from './combatFx';
 import { drawOwnerEmblems } from './ownerEmblem';
 import { INTENT_MS, drawIntentGlyphs } from './intentGlyph';
 
@@ -104,9 +104,10 @@ export const ECONOMY_BURSTS: EconomyBursts = {
     return true;
   },
 
-  /** AUD-F11 / F13 / F15: src/render/combatFx.ts. */
+  /** AUD-F11 / F13 / F15, FEEL-1-2 (the airstrike and its badge count-down): src/render/combatFx.ts. */
   shell: shellShot,
-  strike: strikeShot,
+  strike: airstrikeFx,
+  shown: strikeShown,
   captured: towerCaptured,
 
   /**

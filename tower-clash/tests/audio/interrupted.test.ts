@@ -2,8 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { audioSynth, initAudio, loadSfxRecipes, playSfx, setAudioBackground, unlockAudio } from '../../src/audio/index';
 import type { Mix } from '../../src/audio/mixer';
 import { DUCK, dbToGain, duckLevel, mixer } from '../../src/audio/mixer';
-import { MusicLoop, STEP_S } from '../../src/audio/music';
+import { MusicLoop, STEP_S, TENSION } from '../../src/audio/music';
 import { Synth } from '../../src/audio/synth';
+import type { MatchView } from '../../src/audio/synth';
+import type { Link, Tower } from '../../src/sim/types';
 import { defaultSave } from '../../src/ui/save';
 import type { FakeGain, FakeOscillator } from './fakeAudio';
 import { FakeMixContext } from './fakeAudio';
@@ -187,5 +189,106 @@ describe('music loop under an interruption (scheduler on the fake clock)', () =>
     run(3.025, 4.0);
     expect([...new Set(starts())]).toEqual([3.1, 4.0]); // the first downbeat LEAD_S after the start (pad + bass), then step 3's bass
     expect(onGrid()).toBe(true);
+  });
+});
+
+/*
+ * FEEL-1-4: the tension layer under an interruption. Its hits ride the music's step loop and its fades are planned
+ * on step times, so the same rules hold: nothing (no hit, no fade, no intensity read) on a frozen clock, no burst of
+ * the skipped hits on the resume, the grid re-joined at its next step.
+ */
+describe('tension layer under an interruption (FEEL-1-4)', () => {
+  let ctx: FakeMixContext;
+  let synth: Synth;
+  let loop: MusicLoop;
+
+  /** A match the player is losing badly (intensity ≈ 0.96) and a calm one (≈ 0.05), at sim time `time`. */
+  const match = (hot: boolean, time: number): Required<MatchView> => ({
+    time,
+    towers: {
+      p: { owner: 'player', units: hot ? 10 : 90, underFireUntilMs: hot ? time + 500 : 0 } as Tower,
+      e: { owner: 'enemy1', units: hot ? 60 : 10, underFireUntilMs: 0 } as Tower,
+    },
+    links: hot ? [0, 1, 2].map(() => ({ owner: 'enemy1', from: 'e', to: 'p' }) as Link) : [],
+    units: [],
+  });
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    ctx = new FakeMixContext();
+    synth = new Synth(() => ctx);
+    synth.unlock();
+    loop = new MusicLoop(synth, mixer(synth)!);
+  });
+  afterEach(() => {
+    loop.stop();
+    vi.useRealTimers();
+  });
+
+  /** 25 ms wake-ups with a play frame of `hot` before each (sim time = clock time). */
+  function play(from: number, until: number, hot: boolean): void {
+    for (let i = Math.round(from / 0.025); i * 0.025 <= until + 1e-9; i++) {
+      ctx.currentTime = i * 0.025;
+      synth.playAt = ctx.currentTime;
+      synth.sim = match(hot, Math.round(ctx.currentTime * 20) * 50);
+      loop.tick();
+    }
+  }
+  const hits = (): number[] =>
+    [
+      ...ctx.oscillators.filter((o) => (o.connections[0] as FakeGain).connections[0] === loop.inputs[3]),
+      ...ctx.sources.filter((s) => (s.connections[0] as FakeGain).connections[0] === loop.inputs[4]),
+    ]
+      .map((v) => r6(v.startAt!))
+      .sort((a, b) => a - b);
+  const levelEvents = (): number => (loop.levels[3]!.gain as FakeGain['gain']).events.length + (loop.padTrim.gain as FakeGain['gain']).events.length;
+
+  it('a frozen clock schedules no hit and plans no fade, even when the match calms down during the hold; no burst on the resume', () => {
+    loop.start();
+    play(0, 3, true);
+    expect(loop.tension).toBe(true);
+    const [nHits, nEvents, step, x] = [hits().length, levelEvents(), loop.step, loop.intensity];
+    ctx.state = 'interrupted';
+    for (let i = 0; i < 40; i++) {
+      // frames keep coming (the clock does not move; the sim does): the match turns calm
+      synth.playAt = ctx.currentTime;
+      synth.sim = match(false, 3000 + i * 50);
+      loop.tick();
+    }
+    expect(hits()).toHaveLength(nHits);
+    expect(levelEvents()).toBe(nEvents);
+    expect(loop.step).toBe(step);
+    expect(loop.intensity).toBe(x); // not even read
+    expect(loop.tension).toBe(true);
+    ctx.state = 'running';
+    play(3.025, 3.6, true);
+    const after = hits().slice(nHits);
+    // one hit per step from the resume on, each on the grid and none before the resume (no burst)
+    expect(after.length).toBeGreaterThan(0);
+    for (const t of after) expect(t).toBeGreaterThanOrEqual(3.025);
+    expect(new Set(after).size).toBe(after.length);
+    for (let i = 1; i < after.length; i++) expect(after[i]! - after[i - 1]!).toBeCloseTo(STEP_S, 9);
+  });
+
+  it('a hold whose clock jumped: the skipped hits are not replayed, and a flip waits for the grid after the resume', () => {
+    loop.start();
+    play(0, 3, true);
+    const n = hits().length;
+    const events = (loop.levels[3]!.gain as FakeGain['gain']).events.length;
+    ctx.state = 'interrupted';
+    ctx.currentTime = 9.5; // a 6.5 s call
+    loop.tick();
+    expect(hits()).toHaveLength(n);
+    ctx.state = 'running';
+    play(9.5, 14, false); // back to a calm match: the layer fades out from a step after the resume
+    const after = hits().slice(n);
+    for (const t of after) expect(t).toBeGreaterThanOrEqual(9.5);
+    expect(after.length).toBeLessThan(Math.round((14 - 9.5) / STEP_S));
+    const lv = (loop.levels[3]!.gain as FakeGain['gain']).events.slice(events);
+    expect(loop.tension).toBe(false);
+    const fadeOut = lv.filter((e) => e.kind === 'linear' && e.value === 0);
+    expect(fadeOut).toHaveLength(1);
+    expect(fadeOut[0]!.time - TENSION.fadeS).toBeGreaterThanOrEqual(9.5);
+    expect(Math.max(...after)).toBeLessThan(fadeOut[0]!.time);
   });
 });

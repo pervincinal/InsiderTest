@@ -10,7 +10,7 @@ import { HUD, SOLDIER_DRAW_SCALE, SWIPE_TRAIL_MS, TANK_DRAW_SCALE, WORLD_ZOOM } 
 import type { Rect } from './widgets';
 import { font, roundRect, textPx } from './widgets';
 type XY = { x: number; y: number };
-import { SELECT_HINT, drawHud, drawOverlays, lessonCardLayout, selectHintBox, selectHintCover, selectHintPart, selectHintObstacles, selectHintScan, selectHintScore, selectHintShown, selectHintSpots, selectHintTutorialRoom } from './hud';
+import { SELECT_HINT, drawHud, drawOverlays, resultShownAt, lessonCardLayout, selectHintBox, selectHintCover, selectHintPart, selectHintObstacles, selectHintScan, selectHintScore, selectHintShown, selectHintSpots, selectHintTutorialRoom } from './hud';
 import type { BadgeWant, WorldLayout } from './worldChips';
 import { CARD_CLEAR, badgeScale, chipMinTop, drawWorldChips, layoutWorldChips, overlaps, placeBadges, setFrameWorldLayout, towerBodyRect, worldChipSpecs } from './worldChips';
 import { blankLayer, paintGround, paintHud } from './layers';
@@ -794,9 +794,10 @@ function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState
   const { badges, fire } = layout;
   for (const t of towers) {
     const b = badges.get(t.id)!;
-    const pop = badgePop(state, t.id, t.units, nowMs, motion);
+    const n = fx?.shown(t, nowMs) ?? t.units; // FEEL-1-2: an airstrike's count-down (≤ 250 ms, lazy)
+    const pop = badgePop(state, t.id, n, nowMs, motion);
     const by_ = fire.get(t.id) ? attackers.get(t.id) : undefined;
-    drawBadge(ctx, pal, b.rect.x + b.rect.w / 2, b.rect.y + b.rect.h / 2, String(t.units), t.units >= capacityOf(t), {
+    drawBadge(ctx, pal, b.rect.x + b.rect.w / 2, b.rect.y + b.rect.h / 2, String(n), t.units >= capacityOf(t), {
       stroke: pal.ownerTones[t.owner].shade,
       scale: pop * b.bs,
       underFire: fire.get(t.id) ? (by_ ? pal.owners[by_] : pal.ink) : undefined,
@@ -1022,9 +1023,12 @@ export function drawGame(ctx: CanvasRenderingContext2D, state: GameState, view: 
   // the slash follows the finger, not the shaking world (its points are map coordinates)
   if (ui.swipeTrail && ui.outcome === 'playing') drawSwipeTrail(ctx, pal, ui.swipeTrail, nowMs, motion, cam);
   ctx.restore(); // map clip off: the veil, the HUD bands and the overlays reach the screen edges
-  if (ui.outcome === 'lost') {
-    // defeat: the world goes a little grey and cold under the card (the margins' sea too)
-    ctx.fillStyle = 'rgba(120, 130, 150, 0.28)';
+  // defeat: the world goes a little grey and cold under the card (the margins' sea too). FEEL-1-7: not during the
+  // 600 ms result beat (the lost home's crack flash, thud and jolt read in colour) — from the card's first frame
+  // (`resultShownAt`) it ramps 0 → 0.28 over 300 ms with the dim and the card; reduced motion: at once
+  const shown = resultShownAt(state);
+  if (ui.outcome === 'lost' && shown !== undefined) {
+    ctx.fillStyle = `rgba(120,130,150,${motion && nowMs ? 0.28 * Math.min(1, (nowMs - shown) / 300) : 0.28})`;
     const r = bleedRect(view);
     ctx.fillRect(r.x, r.y, r.w, r.h);
   }

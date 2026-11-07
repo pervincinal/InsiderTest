@@ -175,11 +175,11 @@ describe('sprites layout', () => {
 
 describe('particles', () => {
   it('spawns bursts and drains them over time', async () => {
-    await loadEconomyBursts(); // the airstrike's shells (`shot`) spawn through the lazy chunk (AUD-F11)
+    await loadEconomyBursts(); // the economy bursts spawn through the lazy chunk (the airstrike: tests/render/airstrikeFx.test.ts)
     const ps = new ParticleSystem(false);
     ps.capture(100, 100, '#3b82f6');
     ps.death(10, 10);
-    ps.shot(0, 0, 50, 50, '#ef4444');
+    ps.coinBurst(0, 0, 4);
     expect(ps.count).toBeGreaterThan(25); // AUD-F17: a capture throws 8 chips (was 12)
     const ctx = fakeCtx();
     ps.draw(ctx, 1000);

@@ -2,13 +2,14 @@ import type { GameState } from '../sim/types';
 import { C } from '../sim/constants';
 import type { Palette } from './palette';
 import { shade } from './palette';
-import { CONFIRM, HUD, PAUSE, RESULT } from './layout';
+import { BOOSTERS, CONFIRM, HUD, PAUSE, RESULT } from './layout';
 import type { Rect } from './widgets';
-import { MIN_TEXT_PX, clipText, drawButton, drawCard, drawGlyphLabel, drawExtrudedText, drawGearGlyph, drawSpeakerGlyph, drawStar, fitFontPx, fitTextLines, font, formatTime, getTextScale, innerHighlight, roundRect, textPx } from './widgets';
+import { MIN_TEXT_PX, clipText, drawBoltGlyph, drawButton, drawCooldownRing, drawCrosshairGlyph, drawRoundButton, drawSnowflakeGlyph, drawCard, drawGlyphLabel, drawExtrudedText, drawGearGlyph, drawSpeakerGlyph, drawStar, fitFontPx, fitTextLines, font, formatTime, getTextScale, innerHighlight, roundRect, textPx } from './widgets';
 import type { PlayUi } from './draw';
 import { drawCrystal, drawGoldCoin, drawVideoGlyph } from './sprites';
 import { drawSpinner } from './economyWidgets';
-import { STALL, STALEMATE_CARD_S, hudClockOf, hudExtrasOf, resultShareLayout } from './hud';
+import { STALL, STALEMATE_CARD_S, boosterColor, hudClockOf, hudExtrasOf, resultShareLayout } from './hud';
+import type { BoosterStatus } from '../ui/boosters';
 import { levelLesson, t } from '../ui/i18n';
 import { RESULT_TIMELINE as TL, WALLET_COINS, easeOutBack, goldCountT, starPopT, walletCoinT } from './resultTimeline';
 
@@ -26,6 +27,11 @@ export interface HudOverlayDrawers {
   result(ctx: CanvasRenderingContext2D, state: GameState, ui: PlayUi, since: number, screenBottom?: number): void;
   /** AUD-B2 / A11 "Nothing is changing" card (`STALL` rects; `pressed`: the button held down). */
   stall(ctx: CanvasRenderingContext2D, ui: PlayUi, pressed: Rect | null): void;
+  /**
+   * FEEL-1-5: one booster disc of the bar at (cx, cy) — idle / unaffordable / targeting as before, lit while it
+   * runs, popped and bursting glints on its cast frame (`drawBoosterDisc`); hud.ts draws the cost chip.
+   */
+  booster(ctx: CanvasRenderingContext2D, ui: PlayUi, st: BoosterStatus, cx: number, cy: number, nowMs: number, motion: boolean): void;
 }
 
 function drawPauseCard(ctx: CanvasRenderingContext2D, state: GameState, ui: PlayUi): void {
@@ -458,4 +464,113 @@ function drawStallCard(ctx: CanvasRenderingContext2D, ui: PlayUi, pressed: Rect 
   drawButton(ctx, pal, STALL.retreat, t('stall.retreat'), { fontPx: 22, pressed: pressed === STALL.retreat });
 }
 
-export const HUD_OVERLAYS: HudOverlayDrawers = { pause: drawPauseCard, result: drawResultCard, stall: drawStallCard };
+/**
+ * FEEL-1-5 (feel pass 2026-11-06): the booster cast's moment at the button. On the cast frame the disc
+ * pops 1 → `popScale` → 1 over `popMs` (a half sine, peak at 75 ms) and `glints` four-point glints in the
+ * booster colour fly out of its rim, easing out over `burstMs` and fading over their last 60 %. Drawn on
+ * the HUD layer from the cast's clock (nothing spawned: the particle cap and the landing bucket are
+ * untouched). Reduced motion: hud.ts draws neither (the active colour swap alone).
+ */
+export const CAST_FX = Object.freeze({ popMs: 150, popScale: 1.12, burstMs: 360, glints: 8, travel: 30, size: 9 });
+
+/** The button's scale `age` ms after the cast: 1 outside 0..popMs, else 1 + (popScale − 1) · sin(π · age / popMs). */
+export function castPopScale(age: number): number {
+  return age >= 0 && age < CAST_FX.popMs ? 1 + (CAST_FX.popScale - 1) * Math.sin((Math.PI * age) / CAST_FX.popMs) : 1;
+}
+
+/** Glint `i` of the burst `age` ms after the cast round a disc of radius `r`: its offset, size and alpha (empty outside 0..burstMs). */
+export function castGlints(age: number, r: number): { dx: number; dy: number; size: number; alpha: number }[] {
+  const F = CAST_FX;
+  if (age < 0 || age >= F.burstMs) return [];
+  const k = age / F.burstMs;
+  const ease = 1 - (1 - k) ** 3;
+  const alpha = k < 0.4 ? 1 : 1 - (k - 0.4) / 0.6;
+  const out = [];
+  for (let i = 0; i < F.glints; i++) {
+    const a = ((i + 0.5) / F.glints) * Math.PI * 2;
+    // alternate long and short rays so the ring does not read as a stamped circle
+    const d = r + 2 + F.travel * ease * (i % 2 ? 0.7 : 1);
+    out.push({ dx: Math.cos(a) * d, dy: Math.sin(a) * d, size: F.size * (1 - 0.55 * k) * (i % 2 ? 0.8 : 1), alpha });
+  }
+  return out;
+}
+
+function drawCastBurst(ctx: CanvasRenderingContext2D, color: string, edge: string, cx: number, cy: number, r: number, age: number): void {
+  const glints = castGlints(age, r);
+  if (!glints.length) return;
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.strokeStyle = edge;
+  ctx.lineWidth = 2;
+  ctx.lineJoin = 'round';
+  ctx.globalAlpha = glints[0]!.alpha;
+  ctx.beginPath();
+  for (const g of glints) {
+    const x = cx + g.dx;
+    const y = cy + g.dy;
+    const s = g.size;
+    const w = s * 0.3;
+    ctx.moveTo(x, y - s);
+    ctx.lineTo(x + w, y - w);
+    ctx.lineTo(x + s, y);
+    ctx.lineTo(x + w, y + w);
+    ctx.lineTo(x, y + s);
+    ctx.lineTo(x - w, y + w);
+    ctx.lineTo(x - s, y);
+    ctx.lineTo(x - w, y - w);
+    ctx.closePath();
+  }
+  ctx.stroke();
+  ctx.fill();
+  ctx.restore();
+}
+
+/**
+ * FEEL-1-5: an active booster's look — the disc in the booster colour (as airstrike targeting already was) with
+ * a flat well of that colour deepened by `BOOSTER_WELL.shade` under a paper glyph, the cooldown ring round it:
+ * paper on the well 5.15 : 1 (overdrive #806820) / 9.51 : 1 (freeze #104861), the same on both palettes (gold
+ * and sky are shared). Lit from the cast frame (`HudExtras.cast`, before the sim's tick) to the booster's end.
+ */
+export const BOOSTER_WELL = Object.freeze({ shade: -0.5, r: 0.74, litMs: 200 });
+
+/** The well colour of an active booster of colour `color`. */
+export const boosterWell = (color: string): string => shade(color, BOOSTER_WELL.shade);
+
+function drawBoosterDisc(ctx: CanvasRenderingContext2D, ui: PlayUi, st: BoosterStatus, cx: number, cy: number, nowMs: number, motion: boolean): void {
+  const pal = ui.palette;
+  const hud = hudExtrasOf(ui);
+  const r = BOOSTERS.disc / 2;
+  const color = boosterColor(pal, st.kind);
+  const age = hud?.cast?.kind === st.kind ? nowMs - hud.cast.at : -1;
+  const lit = st.active || (age >= 0 && age < BOOSTER_WELL.litMs);
+  const hot = lit || (st.kind === 'airstrike' && !!hud?.targeting);
+  const usable = st.affordable && !lit;
+  const pressed = hud?.pressedBooster === st.kind;
+  const fx = motion && age >= 0;
+  const k = fx ? castPopScale(age) : 1;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(k, k);
+  ctx.translate(-cx, -cy);
+  drawRoundButton(ctx, pal, cx, cy, r - 2, { fill: hot ? color : undefined, border: hot ? shade(color, -0.35) : undefined, disabled: !usable && !hot, pressed });
+  const gy = cy + (pressed ? 3 : 0);
+  if (lit) {
+    ctx.beginPath();
+    ctx.arc(cx, gy, r * BOOSTER_WELL.r, 0, Math.PI * 2);
+    ctx.fillStyle = boosterWell(color);
+    ctx.fill();
+  }
+  const face = hot ? pal.paper : usable ? color : shade(pal.panel, -0.45);
+  const edge = hot ? undefined : shade(color, -0.45);
+  if (st.kind === 'overdrive') drawBoltGlyph(ctx, face, cx, gy, 17, edge);
+  else if (st.kind === 'freeze') drawSnowflakeGlyph(ctx, face, cx, gy, 17);
+  else drawCrosshairGlyph(ctx, face, cx, gy, 17);
+  if (lit && st.durationMs > 0) {
+    ctx.globalAlpha = motion ? 0.85 + 0.15 * Math.sin(nowMs / 160) : 1;
+    drawCooldownRing(ctx, cx, cy, r + 2, st.active ? st.remainingMs / st.durationMs : 1, color);
+  }
+  ctx.restore();
+  if (fx) drawCastBurst(ctx, color, shade(color, -0.45), cx, cy, r, age);
+}
+
+export const HUD_OVERLAYS: HudOverlayDrawers = { pause: drawPauseCard, result: drawResultCard, stall: drawStallCard, booster: drawBoosterDisc };

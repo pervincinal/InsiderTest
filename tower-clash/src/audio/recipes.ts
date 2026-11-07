@@ -12,6 +12,7 @@ import type { GameState, Owner, SimEvent } from '../sim/types';
 import type { CaptureKind, HitState, SfxName, SfxOptions } from './sfx';
 import { ArrivalTracker, sendPitchHz, sfxForEvents } from './sfxRules';
 import { routeSfx } from './mixer';
+import { playSting } from './outcomeCues';
 
 /** AUD-F6: the event mapping, arrival detector and rate limits ride in this chunk (src/audio/sfx.ts loads it). */
 export * from './sfxRules';
@@ -68,7 +69,7 @@ export const VARY_DB = 2;
  * Never varied: the result stingers, `hit` (its knock is the rate-limited "they hit me" cue with its own tank
  * pitch rule) and the booster casts (identity sounds).
  */
-export const UNVARIED: ReadonlySet<SfxName> = new Set<SfxName>(['won', 'lost', 'hit', 'freeze', 'overdrive']);
+export const UNVARIED: ReadonlySet<SfxName> = new Set<SfxName>(['won', 'lost', 'hit', 'freeze', 'overdrive', 'airstrike']);
 /** Level only — the pitch carries information: `send` rises with the unit count, `tally` with the gold count. */
 export const PITCH_LOCKED: ReadonlySet<SfxName> = new Set<SfxName>(['send', 'tally']);
 
@@ -121,6 +122,28 @@ export const DEATH_NOISES: readonly (readonly [BiquadFilterType, number, number]
   ['bandpass', 1600, 0.17],
 ];
 /** AUD-F9: the fanfare over the three star pops — rising dyads of the C major triad (C5 E5, G5 C6, E6 G6). */
+/** FEEL-1-9: `send` alternates a triangle-led and a square-led blip (type, ms, gain)… */
+export const SEND_TIMBRES: readonly (readonly [OscillatorType, number, number])[] = [
+  ['triangle', 60, 0.22],
+  ['square', 45, 0.1],
+];
+/** …and a re-link of the same `from>to` pair within RELINK_S of its last tick plays RELINK_DB softer. */
+export const RELINK_S = 2;
+export const RELINK_DB = -4;
+/** Per synth: the clock time of each pair's last `send`. */
+const sendAt = new WeakMap<Synth, Map<string, number>>();
+/** The `send` gain factor for `pair` now (1, or RELINK_DB for a quick re-link), recording this play. */
+function relinkGain(s: Synth, pair: string | undefined): number {
+  if (pair === undefined) return 1;
+  let m = sendAt.get(s);
+  if (!m) sendAt.set(s, (m = new Map()));
+  const now = s.now();
+  const last = m.get(pair);
+  m.set(pair, now);
+  return last !== undefined && now - last < RELINK_S ? Math.pow(10, RELINK_DB / 20) : 1;
+}
+/** FEEL-1-2: the airstrike's impact, after the whistle (render/combatFx.ts STRIKE_FALL_MS / 1000). */
+export const STRIKE_HIT_S = 0.15;
 export const STAR_CHORDS: readonly (readonly number[])[] = [
   [523.3, 659.3],
   [784, 1046.5],
@@ -173,8 +196,21 @@ export function playRecipe(s: Synth, name: SfxName, opts: SfxOptions): void {
 /** The voices of the `i`-th play of `name`. */
 function voices(s: Synth, name: SfxName, opts: SfxOptions, i: number): void {
   switch (name) {
-    case 'send':
-      blip(s, sendPitchHz(opts.count ?? 1), 60, 'triangle', { gain: 0.22 });
+    case 'send': {
+      // FEEL-1-9: the count pitch (level-only variation) on two alternating timbres; a re-link of the same pair
+      // within RELINK_S is RELINK_DB softer (it was one fixed blip on every re-link)
+      const [type, ms, gain] = SEND_TIMBRES[i % 2]!;
+      blip(s, sendPitchHz(opts.count ?? 1), ms, type, { gain: gain * relinkGain(s, opts.pair) });
+      return;
+    }
+    case 'airstrike':
+      // FEEL-1-2: the shell's whistle over the render chain's STRIKE_FALL_MS (a quiet sine falling 1.8 → 0.7 kHz),
+      // then at 150 ms the impact: a triangle thud 160 → 45 Hz (a phone speaker's harmonics), a sub sine
+      // 110 → 38 Hz and a low-passed blast noise — 4 voices, ends at 530 ms; not the gun's `artillery`
+      sweep(s, 1800, 700, 150, 'sine', { gain: 0.07 });
+      sweep(s, 160, 45, 260, 'triangle', { gain: 0.4, delayS: STRIKE_HIT_S });
+      sweep(s, 110, 38, 380, 'sine', { gain: 0.4, delayS: STRIKE_HIT_S });
+      noiseBurst(s, 300, 900, { gain: 0.3, delayS: STRIKE_HIT_S });
       return;
     case 'arrive': {
       const [type, hz, ms, gain] = ARRIVE_TIMBRES[i % 3]!;
@@ -247,9 +283,9 @@ function voices(s: Synth, name: SfxName, opts: SfxOptions, i: number): void {
       return;
     case 'won': {
       // AUD-F9: one chord per earned star, on its pop (src/audio/resultCues.ts); the outcome tick (no `step`)
-      // has no voice. The last earned star's chord rings 480 ms over a sine C4 (1★ = that one chord), the
+      // is FEEL-1-3's rising sting (2 sines, 250 ms). The last earned star's chord rings 480 ms over a sine C4 (1★ = that one chord), the
       // others 220 ms; under reduced motion they sound together: a C major spread. ≤ 3 voices each
-      if (opts.step === undefined) return;
+      if (opts.step === undefined) return playSting(s, 'won'); // FEEL-1-3: the outcome sting over the capture chime (outcomeCues.ts)
       const last = opts.step >= (opts.count ?? 3) - 1;
       for (const hz of STAR_CHORDS[Math.max(0, Math.min(2, opts.step))]!) blip(s, hz, last ? 480 : 220, 'triangle', { gain: 0.24 });
       if (last) blip(s, 261.6, 480, 'sine', { gain: 0.16 });
@@ -257,8 +293,8 @@ function voices(s: Synth, name: SfxName, opts: SfxOptions, i: number): void {
     }
     case 'lost':
       // AUD-F9: a single low A minor chord as the defeat card lands — triangles A3 C4 E4 over a sine A2,
-      // 480 ms, 4 voices; the outcome tick (no `step`) has no voice (the capture-loss thud is its sound)
-      if (opts.step === undefined) return;
+      // 480 ms, 4 voices; the outcome tick (no `step`) is FEEL-1-3's falling sting, after the capture-loss thud
+      if (opts.step === undefined) return playSting(s, 'lost'); // FEEL-1-3: the falling sting after the loss thud (outcomeCues.ts)
       for (const hz of [220, 261.6, 329.6]) blip(s, hz, 480, 'triangle', { gain: 0.14 });
       blip(s, 110, 480, 'sine', { gain: 0.12 });
       return;

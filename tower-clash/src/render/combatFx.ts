@@ -1,8 +1,9 @@
 /**
  * Combat feedback of the lazy particle chunk (ART_DIRECTION §5): AUD-F11 the artillery shot's anticipation
- * and weight, AUD-F13 the reduced-motion capture halo and AUD-F15 the player's lost tower. Imported only by
- * src/render/particlesEconomy.ts, so it rides in that lazy chunk: src/render/particles.ts reaches it through
- * `ECONOMY_BURSTS.shell` / `.captured` (from `onEvents`) and `.marks` (once a frame, after the badges).
+ * and weight, AUD-F13 the reduced-motion capture halo, AUD-F15 the player's lost tower and FEEL-1-2 the
+ * airstrike. Imported only by src/render/particlesEconomy.ts, so it rides in that lazy chunk: src/render/particles.ts
+ * reaches it through `ECONOMY_BURSTS.shell` / `.captured` (from `onEvents`), `.strike` / `.shown` (the airstrike
+ * and its badge count-down) and `.marks` (once a frame, after the badges).
  * Before the chunk is in an artillery kill is the grey death puff and the barrel holds its default aim.
  */
 import type { GameState, Owner, SimEvent, Tower } from '../sim/types';
@@ -13,6 +14,7 @@ import type { Camera } from './camera';
 import { playCamera, proj, projAngle, unproj } from './camera';
 import type { Palette } from './palette';
 import { artilleryMuzzle } from './sprites';
+import { boosterColor } from './hud';
 import type { Rect } from './widgets';
 import { roundRect } from './widgets';
 
@@ -65,11 +67,13 @@ interface CombatState {
   halos: Map<string, number>;
   flashes: { x: number; y: number; r: number; color: string }[];
   lost: Map<string, number>;
+  /** FEEL-1-2: the airstrikes of the last STRIKE_RM_MS, by tower. */
+  strikes: Map<string, Strike>;
 }
 const states = new WeakMap<BurstHost, CombatState>();
 function stateOf(host: BurstHost): CombatState {
   let s = states.get(host);
-  if (!s) states.set(host, (s = { guns: new Map(), pending: [], halos: new Map(), flashes: [], lost: new Map() }));
+  if (!s) states.set(host, (s = { guns: new Map(), pending: [], halos: new Map(), flashes: [], lost: new Map(), strikes: new Map() }));
   return s;
 }
 
@@ -199,24 +203,136 @@ export function shellShot(host: BurstHost, state: GameState, ev: Extract<SimEven
   return true;
 }
 
-/** The airstrike's shell (`ParticleSystem.shot`, map space): a muzzle flash, a 170 ms pale tracer, a hit flash and five sparks. */
-export function strikeShot(host: BurstHost, fromX: number, fromY: number, toX: number, toY: number, color: string): void {
-  const cam = playCamera();
-  const a = proj(cam, fromX, fromY);
-  const b = proj(cam, toX, toY);
-  host.push(host.make('flash', fromX, fromY, '#fff2a8', 130, 12));
-  const tr = host.make('tracer', a.x, a.y, '#fff6c8', 170, 3 * a.s);
-  tr.color2 = color;
-  tr.x2 = b.x;
-  tr.y2 = b.y;
-  host.push(tr);
-  host.push(host.make('flash', toX, toY, '#ffd166', 160, 7));
-  for (let i = 0; i < 5; i++) {
-    const p = host.make('spark', toX, toY, i % 2 ? color : '#ffd166', 280, 2.5);
-    p.vx = (host.rnd() - 0.5) * 160;
-    p.vy = -host.rnd() * 140;
-    p.gravity = 320;
-    host.push(p);
+/**
+ * FEEL-1-2 airstrike chain, from the targeting tap (wall clock; the sim applied −AIRSTRIKE_DAMAGE on the
+ * next tick): the shell whistles in and its shadow falls on the target for STRIKE_FALL_MS (draw-only
+ * anticipation), then the impact; the badge counts the loss down from STRIKE_FALL_MS to STRIKE_COUNT_MS and
+ * shows the sim's number from then on (`strikeShown`). The impact: the world slams STRIKE_SHAKE_PX down, the
+ * phone buzzes (medium), a paper core + gold flash, a 1.5 × landing ring (STRIKE_RING_PX) in the booster
+ * colour, 6 sparks and 6 soot puffs. Reduced motion: a static flash + ring for STRIKE_RM_MS from the tap,
+ * the badge at its number at once, no shadow, no shake.
+ */
+export const STRIKE_FALL_MS = 150;
+export const STRIKE_COUNT_MS = 250;
+export const STRIKE_SHAKE_PX = 3;
+export const STRIKE_RING_PX = 27;
+export const STRIKE_RM_MS = 300;
+/** Where the shell starts its dive, relative to its landing point on the plinth (logical px × depth). */
+const STRIKE_DIVE = { x: 120, y: -220 };
+
+/** One airstrike on a tower: when it was cast, the units and owner the tower had then. */
+interface Strike {
+  at: number;
+  from: number;
+  owner: Owner;
+  x: number;
+  y: number;
+}
+
+/** FEEL-1-2: an airstrike on `t` (play.ts `airstrike`, at the tap; `buzz`: the medium haptic, Settings → Vibration already applied). */
+export function airstrikeFx(host: BurstHost, t: Tower, pal: Palette, nowMs: number, buzz: () => void): void {
+  const cs = stateOf(host);
+  cs.strikes.set(t.id, { at: nowMs, from: t.units, owner: t.owner, x: t.x, y: t.y });
+  if (host.reducedMotion) return buzz();
+  const color = boosterColor(pal, 'airstrike');
+  const hitAt = nowMs + STRIKE_FALL_MS;
+  cs.pending.push({
+    at: hitAt,
+    fire: () => {
+      buzz();
+      shakeBy(host, STRIKE_SHAKE_PX, hitAt, { x: 0, y: 1 });
+      host.push(host.make('flash', t.x, t.y - 14, pal.gold, 170, 20));
+      host.push(host.make('flash', t.x, t.y - 14, '#fffaf0', 140, 12));
+      host.push(host.make('impact', t.x, t.y, color, 420, STRIKE_RING_PX));
+      host.kick(t.x, t.y, [color, pal.gold, '#fffaf0', color, pal.gold, '#fffaf0'], 4.5, 1.4);
+      for (const dx of [-16, 16]) host.death(t.x + dx, t.y - 2, '#d9dde3', pal.metal.lit); // soot: grey smoke either side
+    },
+  });
+}
+
+/**
+ * FEEL-1-2: the units `t`'s badge shows — while an airstrike on it counts down, the sim's number plus what is
+ * left of the loss (at most AIRSTRIKE_DAMAGE; the cast count until the impact, then linear to 0 by
+ * STRIKE_COUNT_MS), so it is never below the sim's number nor more than STRIKE_COUNT_MS late; the sim's number
+ * at once under reduced motion, after STRIKE_COUNT_MS and when the tower changed hands.
+ */
+export function strikeShown(host: BurstHost, t: Tower, nowMs: number): number {
+  const s = stateOf(host).strikes.get(t.id);
+  const k = s ? Math.max(0, (nowMs - s.at - STRIKE_FALL_MS) / (STRIKE_COUNT_MS - STRIKE_FALL_MS)) : 1;
+  if (!s || k >= 1 || host.reducedMotion || t.owner !== s.owner) return t.units;
+  return t.units + Math.round(Math.max(0, Math.min(C.AIRSTRIKE_DAMAGE, s.from - t.units)) * (1 - k));
+}
+
+/**
+ * FEEL-1-2, `combatFrame`: each strike's anticipation — a falling shell (ink-edged metal, booster-colour fins,
+ * a pale streak) dropping onto the roof, ease-in, and its shadow darkening and tightening round the plinth —
+ * or under reduced motion the static flash + ring; strikes are forgotten after STRIKE_RM_MS.
+ */
+function drawStrikes(ctx: CanvasRenderingContext2D, pal: Palette, strikes: Map<string, Strike>, nowMs: number, cam: Camera, motion: boolean): void {
+  const color = boosterColor(pal, 'airstrike');
+  for (const [id, s] of strikes) {
+    const e = nowMs - s.at;
+    if (e >= STRIKE_RM_MS || e < 0) {
+      if (e >= STRIKE_RM_MS) strikes.delete(id);
+      continue;
+    }
+    const p = proj(cam, s.x, s.y);
+    const z = p.s;
+    ctx.globalAlpha = 1;
+    if (!motion) {
+      ctx.fillStyle = pal.gold;
+      ctx.globalAlpha = 0.55;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y - 14 * z, 26 * z, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y + 3 * z, 44 * z, 20 * z, 0, 0, Math.PI * 2);
+      ctx.strokeStyle = pal.ink;
+      ctx.lineWidth = 7 * z;
+      ctx.stroke();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 4 * z;
+      ctx.stroke();
+      continue;
+    }
+    if (e >= STRIKE_FALL_MS) continue;
+    const k = e / STRIKE_FALL_MS;
+    // the shadow: wide and faint when the shell is high, tight and dark as it lands
+    ctx.fillStyle = pal.ink;
+    ctx.globalAlpha = 0.1 + 0.3 * k;
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y + 3 * z, (56 - 24 * k) * z, (25 - 11 * k) * z, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // the shell: diving in from the upper right (beside the badge, so a tower at the map's top edge shows it
+    // too) onto the plinth, accelerating (ease-in), nose first, a pale streak behind it
+    const f = 1 - k * k;
+    ctx.save();
+    ctx.translate(p.x + STRIKE_DIVE.x * f * z, p.y + (STRIKE_DIVE.y * f - 30) * z);
+    ctx.rotate(Math.atan2(-STRIKE_DIVE.y, -STRIKE_DIVE.x) - Math.PI / 2);
+    ctx.scale(z, z);
+    ctx.globalAlpha = 0.6;
+    ctx.strokeStyle = '#fffaf0';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(0, -64);
+    ctx.lineTo(0, -16);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(-10, -20);
+    ctx.lineTo(10, -20);
+    ctx.lineTo(0, -4);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 8, 14, 0, 0, Math.PI * 2);
+    ctx.fillStyle = pal.metal.mid;
+    ctx.fill();
+    ctx.strokeStyle = pal.ink;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.restore();
   }
 }
 
@@ -287,7 +403,8 @@ export function attackerTower(state: Pick<GameState, 'towers' | 'links'>, t: Tow
  * Once a frame, after the badges and chips (`ECONOMY_BURSTS.marks`): AUD-F11 the barrels — turned onto the
  * unit each gun will shoot once its cooldown is within AIM_MS, and the recoil of a recent shot — and the late
  * shots that are due; under reduced motion the one-frame shot flashes; AUD-F13 the reduced-motion capture
- * halos; AUD-F15 the lost towers' rims and cracks (clear of every badge and chip).
+ * halos; AUD-F15 the lost towers' rims and cracks and FEEL-1-2 the airstrikes' falling shells and shadows (or
+ * the reduced-motion flash + ring), clear of every badge and chip; a strike's impact is one of the due shots.
  */
 export function combatFrame(host: BurstHost, ctx: CanvasRenderingContext2D, pal: Palette, state: MarksState, layout: MarksLayout, nowMs: number, cam: Camera): void {
   const cs = stateOf(host);
@@ -311,7 +428,7 @@ export function combatFrame(host: BurstHost, ctx: CanvasRenderingContext2D, pal:
     cs.pending = cs.pending.filter((s) => s.at > nowMs);
     for (const s of due) s.fire();
   }
-  if (!cs.flashes.length && !cs.halos.size && !cs.lost.size) return;
+  if (!cs.flashes.length && !cs.halos.size && !cs.lost.size && !cs.strikes.size) return;
   ctx.save();
   // reduced motion: each shot flash shows for exactly one frame
   for (const f of cs.flashes) {
@@ -337,7 +454,7 @@ export function combatFrame(host: BurstHost, ctx: CanvasRenderingContext2D, pal:
       ctx.stroke();
     }
   }
-  if (cs.lost.size) {
+  if (cs.lost.size || cs.strikes.size) {
     ctx.beginPath();
     ctx.rect(-1e4, -1e4, 2e4, 2e4);
     for (const { rect: r } of layout.badges.values()) ctx.rect(r.x - 3, r.y - 3, r.w + 6, r.h + 6);
@@ -349,6 +466,7 @@ export function combatFrame(host: BurstHost, ctx: CanvasRenderingContext2D, pal:
       if (k >= 1) cs.lost.delete(id);
       else if (body && k >= 0) drawLost(ctx, pal, body, motion ? 1 - k * k : 1, motion);
     }
+    drawStrikes(ctx, pal, cs.strikes, nowMs, cam, motion);
   }
   ctx.restore();
 }

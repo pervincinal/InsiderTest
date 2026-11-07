@@ -167,8 +167,10 @@ export interface EconomyBursts {
   mine(host: BurstHost, state: GameState, x: number, y: number, own: boolean, pal: Palette, nowMs: number): boolean;
   /** AUD-F11: an artillery kill — the shot of the gun that fired it (false: no gun in range, nothing done). */
   shell(host: BurstHost, state: GameState, ev: Extract<SimEvent, { type: 'unitDied' }>, pal: Palette, nowMs: number): boolean;
-  /** A shell from (fromX, fromY) to (toX, toY), map space (the airstrike, `shot`): muzzle flash, tracer, hit flash and sparks. */
-  strike(host: BurstHost, fromX: number, fromY: number, toX: number, toY: number, color: string): void;
+  /** FEEL-1-2: an airstrike on `t` (`airstrike`): falling shell + shadow, then the impact (`buzz` = the haptic) and the badge count-down. */
+  strike(host: BurstHost, t: Tower, pal: Palette, nowMs: number, buzz: () => void): void;
+  /** FEEL-1-2: the units `t`'s badge shows (an airstrike's count-down, ≤ 250 ms; else `t.units`). */
+  shown(host: BurstHost, t: Tower, nowMs: number): number;
   /** After `capture`: AUD-F13 (reduced motion: the badge halo) and AUD-F15 (the player lost `t`: crack flash, directional nudge). */
   captured(host: BurstHost, state: GameState, t: Tower, ev: Extract<SimEvent, { type: 'capture' }>, nowMs: number): void;
   /**
@@ -514,10 +516,14 @@ export class ParticleSystem implements BurstHost {
     }
   }
 
-  /** Muzzle flash, tracer to the target, hit spark on impact (the airstrike's shells; through the lazy chunk). */
-  shot(fromX: number, fromY: number, toX: number, toY: number, color: string): void {
-    if (this.reducedMotion) return;
-    this.burst((b) => b.strike(this, fromX, fromY, toX, toY, color));
+  /** FEEL-1-2: the airstrike's chain on `t` (lazy render/combatFx.ts; `buzz` at the impact). */
+  airstrike(t: Tower, pal: Palette, nowMs: number, buzz: () => void): void {
+    this.burst((b) => b.strike(this, t, pal, nowMs, buzz));
+  }
+
+  /** FEEL-1-2: the units `t`'s badge shows (an airstrike counting down, lazy), else `t.units`. */
+  shown(t: Tower, nowMs: number): number {
+    return economy?.shown(this, t, nowMs) ?? t.units;
   }
 
   /**

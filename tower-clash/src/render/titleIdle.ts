@@ -40,6 +40,14 @@ const BEAT_SLACK_MS = 22;
 let worldAt = -1e9;
 
 /**
+ * FEEL-1-6: the next `paintTitle` paints the moving part whatever the beat — the menu slide (src/ui/screenSlide.ts)
+ * draws over the game canvas, so while it runs (and on the frame it settles) the title must not keep a skipped frame.
+ */
+export function repaintTitleNext(): void {
+  worldAt = -1e9;
+}
+
+/**
  * Everything a still title frame is drawn from, `nowMs` aside: the viewport, the resolved theme (a lazy
  * theme that lands repaints the ground), the tones, the text size, the font loads (a face that arrives
  * after the first paint repaints the labels), reduced motion and the screen's inputs.

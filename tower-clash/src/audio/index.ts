@@ -1,7 +1,7 @@
 import type { GameState, SimEvent } from '../sim/types';
 import type { SaveData } from '../ui/save';
 import { writeSave } from '../ui/save';
-import type { AudioContextFactory, AudioContextLike } from './synth';
+import type { AudioContextFactory, AudioContextLike, MatchView } from './synth';
 import { Synth } from './synth';
 import type { HitState, SfxChunk, SfxName, SfxOptions } from './sfx';
 import { SfxPlayer, loadSfxRecipes, sfxNow } from './sfx';
@@ -187,9 +187,10 @@ function fx(): SfxChunk | null {
   return mod.synth.muted ? null : sfxNow();
 }
 
-/** Call once per frame after the loop advanced: plays the soft arrival tap for own units. */
-export function onSimFrame(state: Pick<GameState, 'units'>): void {
+/** Call once per frame after the loop advanced: plays the soft arrival tap for own units; the music's tension layer reads the state (FEEL-1-4). */
+export function onSimFrame(state: MatchView): void {
   mod.synth.playAt = mod.synth.now(); // AUD-F6: the music's pulse layer plays while frames come
+  mod.synth.sim = state;
   fx()?.onFrame(mod, state);
 }
 

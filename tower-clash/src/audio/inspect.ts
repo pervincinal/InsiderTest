@@ -32,8 +32,8 @@ export function busLevels(s: Synth): BusLevels | null {
   };
 }
 
-/** Whether the music loop runs, its next step and whether the pulse layer is on. */
-export function musicState(s: Synth): { playing: boolean; step: number; pulse: boolean } {
+/** Whether the music loop runs, its next step, whether the pulse and (FEEL-1-4) tension layers are on, and the smoothed intensity. */
+export function musicState(s: Synth): { playing: boolean; step: number; pulse: boolean; tension: boolean; intensity: number } {
   const l = mixOf(s)?.loop ?? null;
-  return { playing: l !== null, step: l?.step ?? 0, pulse: l?.pulse ?? false };
+  return { playing: l !== null, step: l?.step ?? 0, pulse: l?.pulse ?? false, tension: l?.tension ?? false, intensity: l?.intensity ?? 0 };
 }

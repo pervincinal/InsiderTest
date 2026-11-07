@@ -5,6 +5,11 @@
  * first user gesture (`unlock`) because iOS/Android WebViews refuse to start audio otherwise.
  */
 
+import type { GameState } from '../sim/types';
+
+/** FEEL-1-4: what the music's tension layer reads of a match (the play screen's `GameState` satisfies it). */
+export type MatchView = Pick<GameState, 'units'> & Partial<Pick<GameState, 'towers' | 'links' | 'time'>>;
+
 /* ---------- structural subset of the WebAudio API (real nodes satisfy these) ---------- */
 
 export interface AudioParamLike {
@@ -123,6 +128,12 @@ export class Synth {
   playAt = -1;
   /** AUD-F6: the bus the sound being scheduled plays into (src/audio/mixer.ts `routeSfx`); null = master. */
   route: GainNodeLike | null = null;
+  /**
+   * FEEL-1-4: the match state of the last play-screen frame (`onSimFrame`), read by the music's tension layer
+   * (src/audio/music.ts `intensityOf`, once per AI tick); a frame without towers (tests) leaves it out. `declare`:
+   * no field initialiser in the eager bundle.
+   */
+  declare sim?: MatchView;
 
   constructor(private readonly factory: AudioContextFactory) {}
 
