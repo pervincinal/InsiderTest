@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import type { Rect } from './helpers/tap';
-import { tapRect } from './helpers/tap';
+import { settled, tapRect } from './helpers/tap';
 import { shotPath } from './tools/shots';
 
 /*
@@ -82,6 +82,7 @@ async function openSettings(page: Page): Promise<DiagAbout> {
  */
 async function scrollTo(page: Page, r: Rect): Promise<void> {
   const vp = page.viewportSize()!;
+  await settled(page); // FEEL-1-6: the wheel is not delivered during the title ↔ menu slide
   await page.mouse.move(vp.width / 2, vp.height / 2);
   await page.mouse.wheel(0, 3000);
   await expect

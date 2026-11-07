@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { tapRect } from './helpers/tap';
+import { settled, tapRect } from './helpers/tap';
 import { shotPath } from './tools/shots';
 
 /*
@@ -49,6 +49,7 @@ const ABOUT_PRIVACY = { x: 200, y: 1436, w: 320, h: 60 };
 /** Scroll the settings body to its foot (AUD-U2 scrolling) and wait until `r` is drawn inside the viewport. */
 async function scrollToFoot(page: Page, r: { x: number; y: number; w: number; h: number }): Promise<void> {
   const vp = page.viewportSize()!;
+  await settled(page); // FEEL-1-6: the wheel is not delivered during the title ↔ menu slide
   await page.mouse.move(vp.width / 2, vp.height / 2);
   await page.mouse.wheel(0, 3000);
   await expect
@@ -189,6 +190,7 @@ test.describe('economy', () => {
     await tapRect(page, TITLE_ACHIEVEMENTS);
     await expect.poll(() => screen(page)).toBe('achievements');
     expect((await save(page)).crystals).toBe(STARS_10_CRYSTALS); // re-entering grants nothing
+    await settled(page); // FEEL-1-6: keys during the title ↔ menu slide are not delivered
     await page.keyboard.press('Escape');
     await expect.poll(() => screen(page)).toBe('title');
     // first win → First victory (+5); the same win again unlocks nothing new
@@ -272,6 +274,7 @@ test.describe('economy', () => {
     expect(web?.version).toMatch(/^\d+\.\d+\.\d+/);
     expect(web?.supportId).toBeNull();
     expect(web?.privacyOptions).toBe(false);
+    await settled(page);
     await page.keyboard.press('Escape');
     await expect.poll(() => screen(page)).toBe('title');
     // native-like providers: both rows appear; COPY puts the id on the clipboard

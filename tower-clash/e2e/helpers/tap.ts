@@ -33,9 +33,22 @@ export interface Rect {
  */
 export function clientPoint(page: Page, lx: number, ly: number): Promise<{ x: number; y: number }> {
   return page.evaluate(
-    ([x, y]) => new Promise<{ x: number; y: number }>((resolve) => requestAnimationFrame(() => resolve(window.__towerclash.layoutToClient(x, y)))),
+    ([x, y]) =>
+      new Promise<{ x: number; y: number }>((resolve) => {
+        // FEEL-1-6: a title ↔ menu slide holds input back for ≈ 120 ms after the screen changed — poll frame by frame until it settles
+        const at = () => (window.__towerclash.transitionDone() ? requestAnimationFrame(() => resolve(window.__towerclash.layoutToClient(x, y))) : requestAnimationFrame(at));
+        at();
+      }),
     [lx, ly] as const,
   );
+}
+
+/**
+ * FEEL-1-6: resolve once no title ↔ menu slide runs — for keys and wheel events sent right after a screen change
+ * (taps through `clientPoint` wait for it themselves). Polls the page, never a fixed wait.
+ */
+export function settled(page: Page): Promise<unknown> {
+  return page.waitForFunction(() => window.__towerclash.transitionDone(), null, { timeout: 15_000 });
 }
 
 /** Tap a logical (720×1280) point once the current screen has painted. */

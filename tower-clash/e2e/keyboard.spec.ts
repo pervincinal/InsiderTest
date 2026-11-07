@@ -20,12 +20,14 @@ const SETTINGS_MUSIC = { x: 470, y: 200, w: 160, h: 56 };
 
 type Rect = { x: number; y: number; w: number; h: number };
 type FocusInfo = { shown: boolean; index: number; count: number; rect: Rect | null } | null;
-type Win = Window & { __towerclash: { getScreen(): string; getFocus(): FocusInfo; audio: { settings(): { effects: boolean; music: boolean } } } };
+type Win = Window & { __towerclash: { getScreen(): string; transitionDone(): boolean; getFocus(): FocusInfo; audio: { settings(): { effects: boolean; music: boolean } } } };
 
 const screen = (page: Page) => page.evaluate(() => (window as unknown as Win).__towerclash.getScreen());
 /** The ring's state after the current screen has painted a frame. */
 const focus = (page: Page) => page.evaluate(() => new Promise<FocusInfo>((r) => requestAnimationFrame(() => r((window as unknown as Win).__towerclash.getFocus()))));
 const music = (page: Page) => page.evaluate(() => (window as unknown as Win).__towerclash.audio.settings().music);
+/** FEEL-1-6: keys sent during the title ↔ menu slide (≈ 120 ms after the screen changed) are not delivered — wait for it to settle. */
+const settled = (page: Page) => page.waitForFunction(() => (window as unknown as Win).__towerclash.transitionDone(), null, { timeout: 15_000 });
 
 /** Press Tab until the ring is on `target` (at most `max` presses); returns the presses it took. */
 async function tabTo(page: Page, target: Rect, max = 20): Promise<number> {
@@ -54,6 +56,7 @@ test('Tab from the title to Settings, Enter opens it, Tab + Enter toggles Music,
 
   await page.keyboard.press('Enter');
   await expect.poll(() => screen(page)).toBe('settings');
+  await settled(page);
   // keyboard mode carries over: the settings screen opens with the ring on BACK
   await expect.poll(async () => (await focus(page))?.rect).toEqual(SETTINGS_BACK);
 
@@ -67,6 +70,7 @@ test('Tab from the title to Settings, Enter opens it, Tab + Enter toggles Music,
 
   await page.keyboard.press('Escape');
   await expect.poll(() => screen(page)).toBe('title');
+  await settled(page);
   expect(await focus(page)).toMatchObject({ shown: true, index: 0 });
 
   // a mouse press hides the ring (on the sea right of the island: no button there)

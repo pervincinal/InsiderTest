@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { tapAt, tapRect } from './helpers/tap';
+import { settled, tapAt, tapRect } from './helpers/tap';
 import { expectToast, recordToasts, toastMark, toastsSeen } from './helpers/toasts';
 
 /*
@@ -690,6 +690,7 @@ test.describe('frame-time overlay (AUD-Q8, TF-13)', () => {
       // AUD-U20 / AUD-F18 (2026-11-04): the Vibration and Screen shake rows push the About card past a Pixel 5's
       // viewport, so scroll the settings body (AUD-U2) until the version row is drawn inside it, as economy.spec does
       const vp = page.viewportSize()!;
+      await settled(page); // FEEL-1-6: the wheel is not delivered during the title ↔ menu slide
       await page.mouse.move(vp.width / 2, vp.height / 2);
       await page.mouse.wheel(0, 3000);
       await expect

@@ -31,7 +31,7 @@ interface Buses {
 }
 interface AudioDebug {
   getBuses(): Buses | null;
-  getMusic(): { playing: boolean; step: number; pulse: boolean };
+  getMusic(): { playing: boolean; step: number; pulse: boolean; tension: boolean; intensity: number };
   settings(): { effects: boolean; music: boolean };
 }
 
@@ -75,6 +75,8 @@ test.describe('AUD-F6 audio buses + music', () => {
     const on = (await buses(page))!;
     expect(on).toMatchObject({ master: 0.5, sfx: 1, ui: 1, duck: 1, limiter: { thresholdDb: -6, ratio: 20 } });
     expect(near(on.music, MUSIC_GAIN), `music bus ${on.music}`).toBe(true);
+    // FEEL-1-4: no tension layer off the play screen
+    expect(await music(page)).toMatchObject({ pulse: false, tension: false, intensity: 0 });
     // the loop advances on the audio clock
     const step0 = (await music(page)).step;
     await expect.poll(async () => (await music(page)).step).toBeGreaterThan(step0);
@@ -122,6 +124,43 @@ test.describe('AUD-F6 audio buses + music', () => {
     expect(await buses(page)).toMatchObject({ sfx: 1, ui: 1 });
     expect(await saved(page)).toMatchObject({ sound: true, music: true });
 
+    expect(errors).toEqual([]);
+  });
+
+  test('FEEL-1-4: the tension layer comes in while a match is being lost and leaves with the outcome', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(String(e)));
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.__towerclash?.loadLevel === 'function');
+    await expect.poll(() => screen(page)).toBe('title');
+    await tapRect(page, TITLE_SETTINGS); // the first gesture: unlock + music
+    await expect.poll(async () => (await music(page)).playing).toBe(true);
+    await tapRect(page, SETTINGS_BACK);
+    await expect.poll(() => screen(page)).toBe('title');
+    expect((await music(page)).tension).toBe(false);
+    // level 15 seed 1 under the auto-lose bot (lost at ≈ 34 s of sim time): the home falls under every enemy stream
+    await page.evaluate(() => {
+      window.__towerclash.loadLevel(15, 1);
+      window.__towerclash.setSpeed(3);
+      window.__towerclash.economy.autoLose();
+    });
+    await expect.poll(() => screen(page)).toBe('play');
+    let peak = 0;
+    await expect
+      .poll(
+        async () => {
+          const m = await music(page);
+          peak = Math.max(peak, m.intensity);
+          return m.tension;
+        },
+        { timeout: 30_000, message: `tension never came on (peak intensity ${peak.toFixed(2)})` },
+      )
+      .toBe(true);
+    expect(peak).toBeGreaterThanOrEqual(0.6);
+    // the outcome: the layer goes, and the result screen (no play frames) resets the intensity
+    await expect.poll(() => screen(page), { timeout: 45_000 }).toBe('result');
+    await expect.poll(async () => (await music(page)).tension).toBe(false);
+    await expect.poll(async () => (await music(page)).intensity).toBe(0);
     expect(errors).toEqual([]);
   });
 });

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { tapRect } from './helpers/tap';
+import { settled, tapRect } from './helpers/tap';
 
 /*
  * QA-20 regression (economy.spec.ts "booster crate …" failed after 17.1 s on 2026-10-10 under load).
@@ -92,6 +92,7 @@ test('a tap sent while the just-opened shop has not painted yet waits for its fi
   // the lazy screens chunk is in before the frames stop (openShop must not wait on the network here)
   await page.evaluate(() => window.__towerclash.economy.openShop('bundles'));
   await expect.poll(() => page.evaluate(() => window.__towerclash.getScreen())).toBe('shop');
+  await settled(page); // FEEL-1-6: keys during the title ↔ menu slide are not delivered
   await page.keyboard.press('Escape');
   await expect.poll(() => page.evaluate(() => window.__towerclash.getScreen())).toBe('title');
 

@@ -61,6 +61,8 @@ const toClient = (page: Page, lx: number, ly: number) =>
 
 /** Touch-tap a logical (720×1280) point — a real touchstart/touchend, not a synthetic mouse click. */
 async function touchAt(page: Page, lx: number, ly: number): Promise<void> {
+  // FEEL-1-6: a touch during the title ↔ menu slide (≈ 120 ms after the screen changed) is not delivered — poll until it settles
+  await page.waitForFunction(() => window.__towerclash.transitionDone(), null, { timeout: 15_000 });
   const c = await toClient(page, lx, ly);
   await page.touchscreen.tap(c.x, c.y);
 }
