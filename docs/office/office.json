@@ -1,6 +1,6 @@
 {
   "board": {
-    "title": "Lövhə · 7 noyabr, gün 50",
+    "title": "Lövhə · 8 noyabr, gün 51",
     "stats": [
       {
         "b": "build 27",
@@ -11,19 +11,19 @@
         "s": "səviyyə bot ilə keçir"
       },
       {
-        "b": "2540",
+        "b": "2553",
         "s": "unit test, e2e 188 + 4 + 4 + WebKit + soak"
       },
       {
-        "b": "9 / 9",
-        "s": "hiss tapıntıları (FEEL-1) bağlı; audit qalan yalnız playtest-dən sonra"
+        "b": "80,6 kB",
+        "s": "ilk yükləmə (büdcə 82) — bu gün −1,1 kB"
       },
       {
-        "b": "25 gün",
+        "b": "26 gün",
         "s": "rəyin gözlənilir"
       }
     ],
-    "footer": "Mənbə: <code>.claude/agents/*.md</code> rol faylları, <code>docs/BACKLOG.md</code> və son hesabatlar (gün 48–50). Statuslar 7 noyabr vəziyyətidir."
+    "footer": "Mənbə: <code>.claude/agents/*.md</code> rol faylları, <code>docs/BACKLOG.md</code> və son hesabatlar (gün 49–51). Statuslar 8 noyabr vəziyyətidir."
   },
   "team": [
     {
@@ -42,19 +42,19 @@
         "build nömrəsi, commit və push"
       ],
       "recent": [
+        "Gün 51: sakit gün — dörd agent; paket −1,1 kB, səs qarışığı ölçüldü, lint e2e-ni örtür",
         "Gün 50: hiss günü — altı agent, FEEL-1-2…9 hamısı bağlandı; kamera tavanı 1,35 qaldı",
-        "Gün 49: 1.0.1 hazırlığı — yeddi agent; AI açarı, saat pinləri, qərar skripti, §6 yoxlaması, hiss baxışı, dərslik xətası",
-        "Gün 48: audit günü 5 — yeddi agent; A3 memo, playtest vərəqi, 13-də boş oyunçu uduzur, kamera sığdırması, klaviatura; LV-12 / QA-36 biletləri"
+        "Gün 49: 1.0.1 hazırlığı — yeddi agent; AI açarı, saat pinləri, qərar skripti, §6 yoxlaması, hiss baxışı, dərslik xətası"
       ],
-      "status": "Bu gün işlədi · sabah gün 51 (sakit gün, eager qənaəti)"
+      "status": "Bu gün işlədi · sabah gün 52 (sakit rejim)"
     },
     {
       "id": "game-designer",
       "name": "Oyun dizayneri",
       "role": "Qaydalar və balans",
       "color": "#7c5cbf",
-      "tag": "işlədi",
-      "cls": "",
+      "tag": "gözləyir",
+      "cls": "wait",
       "does": "GDD-ni (qaydalar sənədi), balans sabitlərini və səviyyə zolaqlarını yazır. Hər dərs kartını \"karta hərfi əməl edən\" simulyasiya oyunçusu ilə yoxlayır və keçməyənləri yenidən yazmaq üçün level dizaynerinə dəqiq mətn verir.",
       "owns": [
         "docs/GDD.md",
@@ -66,7 +66,7 @@
         "Gün 48: insan playtest vərəqi — 15 səviyyə, bot saatları ilə cədvəl, mexaniki qaydalar (3★, 2★ döşəməsi, zolaq 5–6, A3 açarı); yalnız build 27+",
         "Gün 47: memo §4.1 rıçaqları (13 / 32 / 41) irəli çəkilib tətbiq olundu — 32: 14 → 18/20, 41: 17 → 20/20"
       ],
-      "status": "Bu gün ölçdü · B4 / B5 playtest-dən sonra"
+      "status": "Gözləyir · B4 / B5 playtest-dən sonra"
     },
     {
       "id": "gameplay-engineer",
@@ -102,11 +102,11 @@
         "src/main.ts"
       ],
       "recent": [
+        "Gün 51: ilk yükləmə 81,7 → 80,6 kB — gec ekranların köməkçiləri öz parçalarına; davranış dəyişməyib",
         "Gün 50: buster düyməsində pop + parıltı, rəngli aktiv vəziyyət; məğlubiyyət pərdəsi fasilədən sonra; menyu keçidi 120 ms; nəticə kartı fasilədə isinir (giriş kadrı 23,8 → 10,7 ms)",
-        "Gün 49: 1-ci səviyyədə sürüşdürmədən sonra qalan dərslik balonu düzəldildi (addımlar sim vəziyyətinə baxır); kamera zolağı HUD lövbərlərindən (hündür telefon); dəniz tikişi",
-        "Gün 48: kamera səviyyə məzmununa sığır (1-ci səviyyə 35 % böyük, 2–50 eyni); klaviatura fokus halqası; tənzimləmələr 88 px sətir — SIFIRLA yenə görünür"
+        "Gün 49: 1-ci səviyyədə sürüşdürmədən sonra qalan dərslik balonu düzəldildi (addımlar sim vəziyyətinə baxır); kamera zolağı HUD lövbərlərindən (hündür telefon); dəniz tikişi"
       ],
-      "status": "Bu gün iki nəfər işlədi · sabah eager qənaəti"
+      "status": "Bu gün işlədi · ehtiyat 1,4 kB"
     },
     {
       "id": "ai-engineer",
@@ -151,8 +151,8 @@
       "name": "QA mühəndisi",
       "role": "Testlər və CI",
       "color": "#2a7f9e",
-      "tag": "gözləyir",
-      "cls": "wait",
+      "tag": "işlədi",
+      "cls": "",
       "does": "Unit testləri, Playwright e2e dəstini və CI-ı saxlayır; hər səhvi təkrar istehsal edib reqressiya testi yazır. Bir tapıntı test olmadan bağlanmır: kart sığması, nişan düzümü, kadr vaxtı, save sınağı — hamısı avtomatdır.",
       "owns": [
         "tower-clash/tests/",
@@ -161,11 +161,11 @@
         "Bugs bölməsi"
       ],
       "recent": [
+        "Gün 51: lint e2e/ və konfiqləri örtür (+0,5 s), 4 ölü tip silindi, gigiyena pini",
         "Gün 49: reclock HUMAN pinləri + GD-12 döşəməsi (--gd12: 15 səviyyə altda); playtest:decide skripti (vərəq §C kod kimi, 22 test)",
-        "Gün 48: run 118 kökü — render ilişməsi (ilk oyun kadrı), stack tutulmayıb, test 5 s-də \"RENDERER HUNG\" yazır; ?tilt default deyil (pin)",
-        "Gün 47: autoLose botu 50/50 uduzur (əvvəl 37-sini udurdu); ikiqat toxunuş / sürüşmə / nəticə parçası testləri saata görə bərkidildi; LESSON_FIT_MARGIN"
+        "Gün 48: run 118 kökü — render ilişməsi (ilk oyun kadrı), stack tutulmayıb, test 5 s-də \"RENDERER HUNG\" yazır; ?tilt default deyil (pin)"
       ],
-      "status": "Gözləyir · CI izləyir, QA-35 tələsi"
+      "status": "Bu gün işlədi · CI izləyir"
     },
     {
       "id": "tech-artist",
@@ -181,11 +181,11 @@
         "docs/ART_DIRECTION.md"
       ],
       "recent": [
+        "Gün 51: ən pis səs yığını −6,3 dBFS (limiter 0 dB), sub-bass və stinq səviyyələri endirildi, 24 səslik tavan, bas variasiyası",
         "Gün 50: Hava zərbəsi effekt zənciri + airstrike səsi (eager −49 B); qələbə / məğlubiyyət stinq-i +0 ms; musiqi gərginlik qatı; send tembr növbəsi",
-        "Gün 49: hiss baxışı 8/14 → 11/14; 9 tapıntı (hava zərbəsi effekti, qələbə səsi, musiqi gərginliyi, buster düyməsi …)",
-        "Gün 47: nişanda sahib işarəsi (ulduz / nöqtələr), düşmən axını muncuqlu, 8 böyük qığılcım, bildiriş nəticə kartından sonra (eager +57 B)"
+        "Gün 49: hiss baxışı 8/14 → 11/14; 9 tapıntı (hava zərbəsi effekti, qələbə səsi, musiqi gərginliyi, buster düyməsi …)"
       ],
-      "status": "Bu gün iki nəfər işlədi · səs qatı telefonda dinlənməli"
+      "status": "Bu gün işlədi · dinamikdə dinləmə TF planında"
     },
     {
       "id": "mobile-engineer",
@@ -223,9 +223,9 @@
         "fastlane/"
       ],
       "recent": [
+        "Gün 51: build 27 qeydlərinə gün 50, TestFlight bənd 13 (9) dinləmə yoxlaması",
         "Gün 50: build 27 qeydlərinə gün 48–49, TestFlight bənd 13 (8)",
-        "Gün 48: build 27 qeydlərinə gün 47, TestFlight bənd 13; hesabatdakı iki AZ sözü düzəldildi",
-        "Gün 47: build 27 qeydlərinə gün 45–46 işləri, TestFlight planı bənd 13, README build:native"
+        "Gün 48: build 27 qeydlərinə gün 47, TestFlight bənd 13; hesabatdakı iki AZ sözü düzəldildi"
       ],
       "status": "Bu gün işlədi (sonnet) · build 27 materialı hazırdır"
     },
@@ -264,8 +264,8 @@
       ],
       "recent": [
         "Apple PLA müqaviləsi — qəbul edilməyincə heç bir build yüklənmir; sonra build 27",
-        "Build 27 gələndə: 20 dəqiqəlik alt-plan + TF-13 / TF-30 / TF-31, sonra playtest vərəqi (~40 dəq); yeni səs qatını dinamikdə dinlə",
-        "Yeni defaultlar: kamera tavanı 1,35, gərginlik qatı açıq, menyu keçidi 120 ms"
+        "Build 27 gələndə: 20 dəqiqəlik alt-plan + TF-13 / TF-30 / TF-31, playtest vərəqi (~40 dəq), dinamikdə dinləmə (bənd 13 (9))",
+        "Yeni defaultlar: səs tavanı 24, sub-bass və stinq səviyyələri endirildi"
       ],
       "status": "Səndə: Apple müqaviləsi + cihaz yoxlaması + playtest vərəqi"
     }
@@ -307,66 +307,48 @@
       ]
     },
     {
-      "title": "Gün 50 — bağlandı (7 noyabr)",
+      "title": "Gün 51 — bağlandı (8 noyabr)",
       "items": [
         {
-          "id": "FEEL-1-2 / 1-9",
-          "p": "p2",
-          "own": [
-            "tech-artist"
-          ],
-          "day": "bağlı",
-          "t": "Hava zərbəsi effekt zənciri + səsi; send tembr növbəsi."
-        },
-        {
-          "id": "FEEL-1-3 / 1-4",
-          "p": "p2",
-          "own": [
-            "tech-artist"
-          ],
-          "day": "bağlı",
-          "t": "Qələbə / məğlubiyyət stinq-i; musiqi gərginlik qatı."
-        },
-        {
-          "id": "FEEL-1-5 / 1-7",
+          "id": "PERF-12",
           "p": "p2",
           "own": [
             "frontend-engineer"
           ],
           "day": "bağlı",
-          "t": "Buster düyməsi basma anı + aktiv rəng; məğlubiyyət pərdəsi fasilədən sonra."
+          "t": "İlk yükləmə −1 114 B (80,6 kB), davranış dəyişməyib."
         },
         {
-          "id": "FEEL-1-6 / 1-8",
-          "p": "p3",
+          "id": "AUD-M1",
+          "p": "p2",
           "own": [
-            "frontend-engineer"
+            "tech-artist"
           ],
           "day": "bağlı",
-          "t": "Menyu keçidi 120 ms; nəticə kartı fasilədə isinir."
+          "t": "Səs yığını başlığı, 24 səslik tavan, bas variasiyası."
         },
         {
-          "id": "GD-13",
+          "id": "QA-37",
           "p": "p3",
           "own": [
-            "game-designer"
+            "qa-engineer"
           ],
-          "day": "bağlı (memo)",
-          "t": "Kamera tavanı 1,35 qalır."
+          "day": "bağlı",
+          "t": "Lint e2e/ və konfiqləri örtür."
         },
         {
-          "id": "PUB-40",
+          "id": "PUB-41",
           "p": "p3",
           "own": [
             "publisher"
           ],
           "day": "bağlı",
-          "t": "Build 27 qeydləri gün 48–49."
+          "t": "Build 27 qeydləri gün 50."
         }
       ]
     },
     {
-      "title": "Gün 51",
+      "title": "Gün 52",
       "items": [
         {
           "id": "Build 27",
@@ -379,13 +361,13 @@
           "t": "Sorğu Apple müqaviləsi təsdiqlənəndə (native build xətti ilk dəfə)."
         },
         {
-          "id": "Eager qənaəti",
+          "id": "Icebox qeydi",
           "p": "p3",
           "own": [
-            "frontend-engineer"
+            "game-designer"
           ],
-          "day": "gün 51",
-          "t": "main.ts withPlay / setFakeAds debug parçasına; büdcə 82 kB demək olar dolu."
+          "day": "gün 52",
+          "t": "Replay və 2 nəfərlik rejim üçün qısa dizayn qeydi (1.1 üçün)."
         },
         {
           "id": "QA-35",
