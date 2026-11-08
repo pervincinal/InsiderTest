@@ -5,13 +5,11 @@ import type { AdSession } from '../../src/economy/adsFlow';
 import {
   canShowRewarded,
   createAdSession,
-  createFakeAds,
-  interstitialBlockedBy,
-  maybeShowInterstitial,
-  onResultShown,
   rewardedRemaining,
   showRewarded,
 } from '../../src/economy/adsFlow';
+import { interstitialBlockedBy, maybeShowInterstitial, onResultShown } from '../../src/economy/interstitial';
+import { createFakeAds } from '../../src/economy/fakeAds';
 import { AD_PLACEMENTS, INTERSTITIAL_RULES } from '../../src/economy/catalog';
 import { noAds } from '../../src/economy/providers/noAds';
 import { recordResult } from '../../src/economy/wallet';

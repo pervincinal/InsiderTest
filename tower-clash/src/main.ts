@@ -33,8 +33,8 @@ import { drawSpinner } from './render/economyWidgets';
 import { initAudio, setAudioBackground, toggleMuted, unlockAudio } from './audio/index';
 import { initNative, startSaveMirror } from './native/index';
 import type { ShopTab } from './render/menuLayout';
-import type { AdSession, FakeAdsProvider } from './economy/adsFlow';
-import { createAdSession, createFakeAds, setAdsProvider } from './economy/adsFlow';
+import type { AdSession } from './economy/adsFlow';
+import { createAdSession } from './economy/adsFlow';
 import { getAds } from './economy/ads';
 import type { FakeStoreOptions } from './economy/providers/fakeStore';
 import type { GrantResult } from './economy/purchases';
@@ -298,7 +298,6 @@ export class TowerClashApp implements App {
   private readonly insets: ReturnType<typeof insetProbe>;
   speed = 1;
   play: PlayScreen | null = null;
-  fakeAds: FakeAdsProvider | null = null;
   lazy: LazyScreens | null = null;
   private lazyPromise: Promise<LazyScreens> | null = null;
   private preloadQueued = false;
@@ -339,7 +338,8 @@ export class TowerClashApp implements App {
     whenIdle(() => void loadChunk('store', () => import('./economy/store')).then((m) => m.getStore().init(), () => undefined));
     void getAds().init();
     const query = new URLSearchParams(window.location.search);
-    if (query.get('fakeads') === '1') this.setFakeAds(true, 1000);
+    // the dev ads provider is a lazy chunk (PERF-12): installed as soon as it is in, long before any ad can be asked for
+    if (query.get('fakeads') === '1') void loadChunk('fakeAds', () => import('./economy/fakeAds')).then((m) => m.setFakeAds(true, 1000), () => undefined);
     this.setPerfOverlay(save.settings.perfOverlay === true || query.get('perf') === '1'); // AUD-Q8 (TF-13)
     void initNative({ onBack: () => this.onBack(), isTitleScreen: () => this.current.name === 'title' });
 
@@ -670,31 +670,11 @@ export class TowerClashApp implements App {
     return play;
   }
 
-  /**
-   * Debug helper: run `fn` on the current play screen, or on the one a pending `startLevel` is
-   * about to create (Playwright calls `loadLevel(); autoplay()` back to back without awaiting).
-   * False when there is neither.
-   */
-  withPlay(fn: (play: PlayScreen) => void): boolean {
-    if (this.pendingStart) {
-      void this.pendingStart.then((play) => play && fn(play));
-      return true;
-    }
-    if (!this.play) return false;
-    fn(this.play);
-    return true;
-  }
-
   /** AUD-Q8: switch the frame-time overlay; its chunk is fetched on the first switch-on (the flag check is all the eager bundle holds). */
   setPerfOverlay(on: boolean): void {
     this.perfOverlayOn = on;
     if (!on) this.perf = null;
     else if (!this.perf) void loadChunk('perfOverlay', () => import('./ui/perfOverlay')).then((m) => void (this.perfOverlayOn && (this.perf ??= m.createPerfOverlay())), () => undefined);
-  }
-
-  setFakeAds(on: boolean, delayMs = 0): void {
-    this.fakeAds = on ? createFakeAds(delayMs) : null;
-    setAdsProvider(this.fakeAds);
   }
 
   /** The shop returns to the screen that opened it (result screens stay alive underneath). */

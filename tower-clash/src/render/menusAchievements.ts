@@ -10,7 +10,7 @@ import { drawHeaderTitle } from './menuWidgets';
 import type { ToastOpts } from './economyWidgets';
 import { drawToast } from './economyWidgets';
 import { drawCrystal } from './sprites';
-import { beginFrame, drawWater, headerBand } from './menus';
+import { beginFrame, drawWater, headerBand } from './menuFrame';
 import { t } from '../ui/i18n';
 
 /*

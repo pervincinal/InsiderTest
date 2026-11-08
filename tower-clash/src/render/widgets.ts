@@ -866,24 +866,6 @@ export function drawRoundButton(ctx: CanvasRenderingContext2D, pal: Palette, cx:
   ctx.restore();
 }
 
-/** Ring arc around a round button showing `fraction` (0..1) of a cooldown left, clockwise from 12 o'clock. */
-export function drawCooldownRing(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, fraction: number, color: string, track = 'rgba(30,42,68,0.18)'): void {
-  const f = Math.max(0, Math.min(1, fraction));
-  ctx.save();
-  ctx.lineCap = 'round';
-  ctx.lineWidth = 5;
-  ctx.strokeStyle = track;
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.stroke();
-  if (f > 0) {
-    ctx.strokeStyle = color;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * f);
-    ctx.stroke();
-  }
-  ctx.restore();
-}
 
 export interface Segment {
   label: string;

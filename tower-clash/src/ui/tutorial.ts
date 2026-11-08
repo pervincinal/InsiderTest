@@ -166,14 +166,3 @@ export function tutorialFor(levelId: number, stars: number): Tutorial | null {
   return make ? new Tutorial(make()) : null;
 }
 
-/* ---------- stream anchors (GD-5c): the ring and arrow of a step can point at a ribbon instead of a tower ---------- */
-
-/** Lane midpoint of the anchor's player stream (map coordinates), or null when there is no anchor / no such stream. */
-export function streamMidpoint(state: GameState, anchor: StreamAnchor | undefined): { x: number; y: number } | null {
-  if (!anchor) return null;
-  const link = state.links.find((l) => l.owner === 'player' && l.from === anchor.from && l.to === anchor.to);
-  const pts = link ? state.roads[link.roadId]?.points : undefined;
-  const a = pts?.[0];
-  const b = pts?.[pts.length - 1];
-  return a && b ? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } : null;
-}

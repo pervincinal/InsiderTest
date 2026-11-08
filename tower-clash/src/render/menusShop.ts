@@ -32,7 +32,7 @@ import { drawSpinner, drawToast, drawWallet, formatAmount } from './economyWidge
 import { drawCrystal, drawGoldCoin, drawTreasureChest } from './sprites';
 import { drawUpgradeGlyph } from './spritesShop';
 import { drawCrownBadge, drawCrystalCluster, drawNoAdsBadge, drawSkinPreview } from './spritesShop';
-import { beginFrame, drawWater, headerBand } from './menus';
+import { beginFrame, drawWater, headerBand } from './menuFrame';
 import type { TranslationKey } from '../ui/i18n';
 import { t } from '../ui/i18n';
 

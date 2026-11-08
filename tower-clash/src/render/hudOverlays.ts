@@ -4,7 +4,7 @@ import type { Palette } from './palette';
 import { shade } from './palette';
 import { BOOSTERS, CONFIRM, HUD, PAUSE, RESULT } from './layout';
 import type { Rect } from './widgets';
-import { MIN_TEXT_PX, clipText, drawBoltGlyph, drawButton, drawCooldownRing, drawCrosshairGlyph, drawRoundButton, drawSnowflakeGlyph, drawCard, drawGlyphLabel, drawExtrudedText, drawGearGlyph, drawSpeakerGlyph, drawStar, fitFontPx, fitTextLines, font, formatTime, getTextScale, innerHighlight, roundRect, textPx } from './widgets';
+import { MIN_TEXT_PX, clipText, drawBoltGlyph, drawButton, drawCrosshairGlyph, drawRoundButton, drawSnowflakeGlyph, drawCard, drawGlyphLabel, drawExtrudedText, drawGearGlyph, drawSpeakerGlyph, drawStar, fitFontPx, fitTextLines, font, formatTime, getTextScale, innerHighlight, roundRect, textPx } from './widgets';
 import type { PlayUi } from './draw';
 import { drawCrystal, drawGoldCoin, drawVideoGlyph } from './sprites';
 import { drawSpinner } from './economyWidgets';
@@ -574,3 +574,22 @@ function drawBoosterDisc(ctx: CanvasRenderingContext2D, ui: PlayUi, st: BoosterS
 }
 
 export const HUD_OVERLAYS: HudOverlayDrawers = { pause: drawPauseCard, result: drawResultCard, stall: drawStallCard, booster: drawBoosterDisc };
+
+/** Ring arc around a round button showing `fraction` (0..1) of a cooldown left, clockwise from 12 o'clock. */
+function drawCooldownRing(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, fraction: number, color: string, track = 'rgba(30,42,68,0.18)'): void {
+  const f = Math.max(0, Math.min(1, fraction));
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = track;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.stroke();
+  if (f > 0) {
+    ctx.strokeStyle = color;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * f);
+    ctx.stroke();
+  }
+  ctx.restore();
+}

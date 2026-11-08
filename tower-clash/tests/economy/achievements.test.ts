@@ -9,13 +9,12 @@ import {
   L3_LEVEL,
   SPEEDRUN_MS,
   WEEKLY_STREAK_TARGET,
-  achievementCrystalsEarned,
-  achievementProgress,
   achievementToast,
   emptyMatch,
   evaluateAchievements,
   threeStarLevels,
 } from '../../src/economy/achievements';
+import { achievementCrystalsEarned, achievementProgress } from '../../src/economy/achievementProgress';
 import { ACHIEVEMENTS } from '../../src/economy/catalog';
 import { LEVEL_META } from '../../src/levels/index';
 

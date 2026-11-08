@@ -3,6 +3,7 @@ import { C } from './sim/constants';
 import { hasOverdrive, linksFrom, streamIntervalMs } from './sim/step';
 import { aiModule } from './ui/ai';
 import type { TowerClashApp, TowerClashDebug } from './main';
+import type { PlayScreen } from './ui/play';
 import { LEVEL_META, levelIndex } from './levels/index';
 import { fromHudSpace, hudAnchors, toClient } from './render/view';
 import type { SaveStorage } from './ui/save';
@@ -13,6 +14,7 @@ import type { TranslationKey } from './ui/i18n';
 import { currentLanguage, hasEnglish, loadEnglishMenus, t } from './ui/i18n';
 import { loadTutorialSteps } from './ui/tutorialChunk';
 import { configureFakeStore } from './economy/providers/fakeStore';
+import { fakeAds, setFakeAds } from './economy/fakeAds';
 import { getStore } from './economy/store';
 import { grantProduct } from './economy/purchases';
 import { challengeFor, weekKeyOf, weeklyFor } from './daily/challenge';
@@ -100,6 +102,21 @@ function installFailingStorage(): void {
   setSaveStorageForTests(store);
 }
 
+/**
+ * Run `fn` on the current play screen, or on the one a pending `startLevel` is about to create
+ * (Playwright calls `loadLevel(); autoplay()` back to back without awaiting). False when there is
+ * neither. Lives here, not on the app (PERF-12): the debug surface is its only caller.
+ */
+function withPlay(app: TowerClashApp, fn: (play: PlayScreen) => void): boolean {
+  if (app.pendingStart) {
+    void app.pendingStart.then((play) => play && fn(play));
+    return true;
+  }
+  if (!app.play) return false;
+  fn(app.play);
+  return true;
+}
+
 export function installDebug(app: TowerClashApp): TowerClashDebug & QaDebugExtras {
   const extras: QaDebugExtras = {
     getFocus: () => app.lazy?.focusState(app) ?? null,
@@ -143,8 +160,8 @@ export function installDebug(app: TowerClashApp): TowerClashDebug & QaDebugExtra
     transitionDone: () => app.lazy?.slideDone() ?? true,
     loadLevel: (id, seed) => app.startLevel(id, seed),
     // the AI chunk is in whenever a play screen exists (startLevel awaits it); no static import of src/ai, so it stays one chunk (PERF-9)
-    autoplay: () => app.withPlay((play) => play.setPlayerBot(aiModule().referencePlayerCommands)),
-    startMatch: () => app.withPlay((play) => play.startMatch()),
+    autoplay: () => withPlay(app, (play) => play.setPlayerBot(aiModule().referencePlayerCommands)),
+    startMatch: () => withPlay(app, (play) => play.startMatch()),
     setSpeed: (n) => app.setSpeed(n),
     getSpeed: () => app.play?.loop.speed ?? app.speed,
     // On the play screen a map point is drawn through the tilted camera (ART-21, `PlayScreen.fromLayout`):
@@ -273,18 +290,18 @@ export function installDebug(app: TowerClashApp): TowerClashDebug & QaDebugExtra
     economy: {
       getSave: () => app.save,
       grant: (productId) => grantProduct(app.save, productId, `debug-${Date.now()}-${Math.random()}`),
-      setAdsAvailable: (on) => app.setFakeAds(on),
+      setAdsAvailable: (on) => setFakeAds(on),
       configureFakeStore: (opts) => configureFakeStore(opts),
       getAdStats: () => ({
         interstitialsShown: app.ads.interstitialsShown,
         rewardedShown: app.ads.rewardedShown,
-        fakeInterstitials: app.fakeAds?.interstitials ?? 0,
-        fakeRewarded: app.fakeAds?.rewarded ?? 0,
+        fakeInterstitials: fakeAds()?.interstitials ?? 0,
+        fakeRewarded: fakeAds()?.rewarded ?? 0,
       }),
       openShop: (tab) => app.openShop(tab, app.backFromShop()),
       autoLose: () => {
         if (!app.pendingStart && app.current !== app.play) return false;
-        return app.withPlay((play) => play.setLoseBot(suicideCommands));
+        return withPlay(app, (play) => play.setLoseBot(suicideCommands));
       },
       resultAction: (action) => {
         const cur = app.current;

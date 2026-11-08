@@ -13,8 +13,19 @@ import { playLayout } from './draw';
 import { lessonCardLayout, selectHintPill, selectHintShown } from './hud';
 import type { WorldLayout } from './worldChips';
 import { CARD_CLEAR, CHIP_GAP, frameWorldLayout, selectedFootprint } from './worldChips';
-import type { TutorialStep } from '../ui/tutorial';
-import { streamMidpoint } from '../ui/tutorial';
+import type { StreamAnchor, TutorialStep } from '../ui/tutorial';
+
+/* ---------- stream anchors (GD-5c): the ring and arrow of a step can point at a ribbon instead of a tower ---------- */
+
+/** Lane midpoint of the anchor's player stream (map coordinates). PERF-12: lives in this lazy chunk, its only caller (it was in src/ui/tutorial.ts), or null when there is no anchor / no such stream. */
+export function streamMidpoint(state: GameState, anchor: StreamAnchor | undefined): { x: number; y: number } | null {
+  if (!anchor) return null;
+  const link = state.links.find((l) => l.owner === 'player' && l.from === anchor.from && l.to === anchor.to);
+  const pts = link ? state.roads[link.roadId]?.points : undefined;
+  const a = pts?.[0];
+  const b = pts?.[pts.length - 1];
+  return a && b ? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } : null;
+}
 
 /*
  * GD-5c (GDD §3.11 d): where the first-play tutorial's bubble goes. The ring pulses on the step's

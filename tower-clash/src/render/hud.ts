@@ -196,15 +196,11 @@ function clockOf(ui: PlayUi, state: Pick<GameState, 'time'>): number {
   return (ui as HudPlayUi).clockMs ?? state.time;
 }
 
-/** The play screen's HUD extras on `ui`, for the lazy overlay chunk (src/render/hudOverlays.ts). */
-export function hudExtrasOf(ui: PlayUi): HudExtras | undefined {
-  return extrasOf(ui);
-}
-
-/** The match clock the overlay chunk shows (see `HudPlayUi.clockMs`). */
-export function hudClockOf(ui: PlayUi, state: Pick<GameState, 'time'>): number {
-  return clockOf(ui, state);
-}
+/**
+ * For the lazy overlay chunk (src/render/hudOverlays.ts): `hudExtrasOf` the play screen's HUD extras on `ui`,
+ * `hudClockOf` the match clock it shows (see `HudPlayUi.clockMs`). Aliases, not wrappers (PERF-12).
+ */
+export { extrasOf as hudExtrasOf, clockOf as hudClockOf };
 
 /** Booster accent colours: gold bolt, ice snowflake, red crosshair (all from the active palette). */
 export function boosterColor(pal: PlayUi['palette'], kind: BoosterKind): string {

@@ -8,7 +8,7 @@ import { drawButton, drawCard, drawGlassBand, fitTextLines, font, getTextScale, 
 import { badgeY, drawBadge, drawSwordsPip, drawTowerShadow, drawTowerSprite } from './sprites';
 import { HOWTO, MENU_HEADERS, howtoIconRect, howtoRowRect, howtoRowShift } from './menuLayout';
 import { drawHeaderTitle } from './menuWidgets';
-import { beginFrame, drawWater, headerBand } from './menus';
+import { beginFrame, drawWater, headerBand } from './menuFrame';
 import type { TranslationKey } from '../ui/i18n';
 import { t } from '../ui/i18n';
 

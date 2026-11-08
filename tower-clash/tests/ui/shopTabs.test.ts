@@ -13,7 +13,7 @@ import type { App } from '../../src/ui/screens';
 import { ShopScreen, resetShopTabMemory, shopBrowseTab, skinListed } from '../../src/ui/shop';
 import { TitleScreen } from '../../src/ui/screens';
 import { TITLE } from '../../src/render/layout';
-import { shopSkins } from '../../src/economy/entitlements';
+import { shopSkins } from '../../src/economy/shopListing';
 
 /*
  * PUB-14: without an available store (native 1.0.0 shipped with no IAP, RevenueCat unconfigured or

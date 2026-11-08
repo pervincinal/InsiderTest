@@ -1,6 +1,7 @@
 /**
- * Ad placement policy (ECONOMY.md §5) on top of the `AdsProvider` abstraction: interstitial gating
- * (`INTERSTITIAL_RULES`) and rewarded placements with daily caps + cooldowns (`AD_PLACEMENTS`).
+ * Ad placement policy (ECONOMY.md §5) on top of the `AdsProvider` abstraction: rewarded placements with
+ * daily caps + cooldowns (`AD_PLACEMENTS`) and the runtime provider override. The interstitial gating
+ * (`INTERSTITIAL_RULES`) is in interstitial.ts and the dev fake in fakeAds.ts, both lazy (PERF-12).
  * The session part lives in an `AdSession` object owned by the app; the per-day counters persist
  * in `save.adCounters`. Every decision takes an explicit `nowMs` so the rules unit-test without a
  * clock. Rewards themselves are granted by the caller (this module only says "the ad was watched").
@@ -12,8 +13,7 @@ import { writeSave } from '../ui/save';
 import type { AdsProvider } from './ads';
 import { getAds } from './ads';
 import type { AdPlacementDef } from './catalog';
-import { AD_PLACEMENTS, INTERSTITIAL_RULES } from './catalog';
-import { interstitialsDisabled } from './entitlements';
+import { AD_PLACEMENTS } from './catalog';
 import { dayKey } from './wallet';
 
 export interface AdSession {
@@ -54,93 +54,6 @@ export function setAdsProvider(provider: AdsProvider | null): void {
 
 export function currentAds(): AdsProvider {
   return override ?? getAds();
-}
-
-export interface FakeAdsProvider extends AdsProvider {
-  interstitials: number;
-  rewarded: number;
-  /** Whether the next rewarded videos fire their reward event (default true). */
-  rewardNext: boolean;
-}
-
-/** In-memory ads provider: always available, every interstitial "shows", rewarded videos reward at once. */
-export function createFakeAds(delayMs = 0): FakeAdsProvider {
-  const wait = (): Promise<void> => (delayMs > 0 ? new Promise((r) => setTimeout(r, delayMs)) : Promise.resolve());
-  const fake: FakeAdsProvider = {
-    interstitials: 0,
-    rewarded: 0,
-    rewardNext: true,
-    async init() {
-      /* nothing */
-    },
-    isAvailable: () => true,
-    async showInterstitial() {
-      await wait();
-      fake.interstitials += 1;
-      return true;
-    },
-    async showRewarded() {
-      await wait();
-      if (!fake.rewardNext) return { rewarded: false };
-      fake.rewarded += 1;
-      return { rewarded: true };
-    },
-    // No consent SDK in the fake: the Settings "Privacy options" entry stays hidden.
-    privacyOptionsRequired: async () => false,
-    showPrivacyOptions: async () => undefined,
-  };
-  return fake;
-}
-
-/* ---------- interstitial ---------- */
-
-/** Call once per result screen (win or loss) before deciding on an interstitial. */
-export function onResultShown(session: AdSession): void {
-  session.rewardedOnResult = false;
-}
-
-export type InterstitialBlock = 'disabled' | 'unavailable' | 'tooEarly' | 'defeatStreak' | 'notNth' | 'cooldown' | 'sessionCap' | 'rewarded';
-
-/** Longest defeat streak (`save.defeats`, the skip offer's count) on a level not yet cleared. */
-export function unclearedDefeatStreak(save: SaveData): number {
-  return Math.max(0, ...Object.entries(save.defeats).map(([id, n]) => (save.stars[id] ? 0 : n)));
-}
-
-/**
- * Why an interstitial may not fire now, or null when it may (ECONOMY.md §5.1). The one side effect:
- * a win count below the session's anchor (progress was reset) moves the anchor down to it.
- */
-export function interstitialBlockedBy(session: AdSession, save: SaveData, nowMs: number, available: boolean): InterstitialBlock | null {
-  session.winsAtLastAd = Math.min(session.winsAtLastAd, save.adCounters.levelsCompleted);
-  if (interstitialsDisabled(save)) return 'disabled';
-  if (!available) return 'unavailable';
-  if (save.adCounters.levelsCompleted <= INTERSTITIAL_RULES.minLevelsCompleted) return 'tooEarly';
-  if (unclearedDefeatStreak(save) >= INTERSTITIAL_RULES.noneFromDefeatStreak) return 'defeatStreak';
-  if (session.interstitialsShown >= INTERSTITIAL_RULES.sessionCap) return 'sessionCap';
-  if (INTERSTITIAL_RULES.skipAfterRewarded && session.rewardedOnResult) return 'rewarded';
-  if (save.adCounters.levelsCompleted - session.winsAtLastAd < INTERSTITIAL_RULES.everyNthCompletedLevel) return 'notNth';
-  if (nowMs - session.lastAdAtMs < INTERSTITIAL_RULES.minMsSinceLastAd) return 'cooldown';
-  return null;
-}
-
-/**
- * Show the level-break interstitial when every rule allows it. Resolves true iff an ad was shown;
- * never rejects, never blocks the caller's navigation on failure.
- */
-export async function maybeShowInterstitial(session: AdSession, save: SaveData, nowMs = Date.now(), ads: AdsProvider = currentAds()): Promise<boolean> {
-  if (interstitialBlockedBy(session, save, nowMs, ads.isAvailable())) return false;
-  let shown = false;
-  try {
-    shown = await ads.showInterstitial();
-  } catch {
-    shown = false;
-  }
-  if (shown) {
-    session.interstitialsShown += 1;
-    session.winsAtLastAd = save.adCounters.levelsCompleted;
-    session.lastAdAtMs = nowMs;
-  }
-  return shown;
 }
 
 /* ---------- rewarded ---------- */

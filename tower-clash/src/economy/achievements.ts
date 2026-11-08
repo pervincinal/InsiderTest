@@ -59,7 +59,7 @@ export const GRAND_CAMPAIGN_LEVEL = 50;
  * the campaign length (`LEVEL_META.length`, 40 when it was named), so new bands raise the bar
  * without touching the id in the save ledger or the catalog.
  */
-const STAR_TARGETS: Readonly<Record<string, number>> = { stars_10: 10, stars_20: 20, stars_40: LEVEL_META.length };
+export const STAR_TARGETS: Readonly<Record<string, number>> = { stars_10: 10, stars_20: 20, stars_40: LEVEL_META.length };
 
 /** `challenge_wins_30`: distinct UTC days with a daily win (`challenge.best` keeps one key per won day). */
 export const CHALLENGE_WINS_TARGET = 30;
@@ -74,23 +74,12 @@ export const WEEKLY_STREAK_TARGET = 4;
  * `best` is pruned to the newest `CHALLENGE_BEST_KEEP` keys, so its size is `min(30, win days)` only
  * while `CHALLENGE_BEST_KEEP >= 30` — asserted below so pruning can never hide the 30th key.
  */
-const COUNTERS: Readonly<Record<string, { target: number; value: (s: SaveData) => number }>> = {
+export const COUNTERS: Readonly<Record<string, { target: number; value: (s: SaveData) => number }>> = {
   challenge_streak_7: { target: CHALLENGE_STREAK_TARGET, value: (s) => s.challenge.streak },
   challenge_wins_30: { target: Math.min(CHALLENGE_WINS_TARGET, CHALLENGE_BEST_KEEP), value: (s) => Object.keys(s.challenge.best).length },
   weekly_streak_4: { target: WEEKLY_STREAK_TARGET, value: (s) => s.weekly.streak },
 };
 if (CHALLENGE_BEST_KEEP < CHALLENGE_WINS_TARGET) throw new Error(`CHALLENGE_BEST_KEEP (${CHALLENGE_BEST_KEEP}) must be >= ${CHALLENGE_WINS_TARGET} for challenge_wins_30`);
-
-export interface AchievementProgress {
-  id: string;
-  label: string;
-  crystals: number;
-  /** Progress toward `target` (binary goals are 0 or 1). */
-  current: number;
-  target: number;
-  /** Unlocked and paid. */
-  unlocked: boolean;
-}
 
 /** Number of levels at 3★. */
 export function threeStarLevels(save: SaveData): number {
@@ -133,18 +122,6 @@ function satisfied(save: SaveData, id: string, match?: MatchSummary): boolean {
   return match !== undefined && matchSatisfies(id, match);
 }
 
-/** Every catalog achievement with its progress and unlocked state, in catalog order. */
-export function achievementProgress(save: SaveData): AchievementProgress[] {
-  const stars = threeStarLevels(save);
-  return (ACHIEVEMENTS as readonly AchievementDef[]).map((a) => {
-    const unlocked = isUnlocked(save, a.id);
-    const counter = COUNTERS[a.id];
-    const target = STAR_TARGETS[a.id] ?? counter?.target ?? 1;
-    const current = STAR_TARGETS[a.id] !== undefined ? Math.min(target, stars) : counter ? Math.min(target, counter.value(save)) : unlocked ? 1 : 0;
-    return { id: a.id, label: a.label, crystals: a.crystals, current: unlocked ? target : current, target, unlocked };
-  });
-}
-
 export interface AchievementGrant {
   /** Newly unlocked achievements, catalog order. */
   unlocked: AchievementDef[];
@@ -169,11 +146,6 @@ export function evaluateAchievements(save: SaveData, match?: MatchSummary): Achi
   }
   if (out.unlocked.length) writeSave(save);
   return out;
-}
-
-/** Crystals paid so far by the unlocked achievements. */
-export function achievementCrystalsEarned(save: SaveData): number {
-  return (ACHIEVEMENTS as readonly AchievementDef[]).filter((a) => isUnlocked(save, a.id)).reduce((n, a) => n + a.crystals, 0);
 }
 
 /** Toast line for a grant: "Achievement unlocked: First victory · +5 crystals" (null when nothing). */

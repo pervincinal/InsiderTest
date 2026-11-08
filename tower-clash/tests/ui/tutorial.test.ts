@@ -8,7 +8,8 @@ import { capacityOf } from '../../src/sim/step';
 import { rngsFor, runAiTick } from '../../src/ai/index';
 import { isAiTick } from '../../src/ai/common';
 import type { Command, GameState } from '../../src/sim/types';
-import { TUTORIAL_STEP_TIMEOUT_MS, Tutorial, stepTowerId, streamMidpoint, tutorialFor } from '../../src/ui/tutorial';
+import { TUTORIAL_STEP_TIMEOUT_MS, Tutorial, stepTowerId, tutorialFor } from '../../src/ui/tutorial';
+import { streamMidpoint } from '../../src/render/tutorialBubble';
 // PERF-10: levels 2–4 are the lazy steps chunk (tests/setup.ts registers it, as the level start does in the game)
 import { supplyLineTarget } from '../../src/ui/tutorialSteps';
 

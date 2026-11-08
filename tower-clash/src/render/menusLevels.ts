@@ -10,7 +10,8 @@ import type { ToastOpts } from './economyWidgets';
 import { drawToast, drawWallet } from './economyWidgets';
 import { drawCrystal, drawGoldCoin } from './sprites';
 import { drawUpgradeGlyph } from './spritesShop';
-import { beginFrame, drawWater, headerBand, motion } from './menus';
+import { motion } from './menus';
+import { beginFrame, drawWater, headerBand } from './menuFrame';
 import { t } from '../ui/i18n';
 
 /*

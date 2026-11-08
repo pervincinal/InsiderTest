@@ -9,7 +9,7 @@ import type { SettingsAboutLayout } from './menuLayout';
 import { MENU_HEADERS, SETTINGS } from './menuLayout';
 import type { ToastOpts } from './economyWidgets';
 import { drawToast } from './economyWidgets';
-import { beginFrame, drawWater, headerBand } from './menus';
+import { beginFrame, drawWater, headerBand } from './menuFrame';
 import type { MotionPref } from '../ui/save';
 import type { Language } from '../ui/i18n';
 import { LANGUAGES, t } from '../ui/i18n';

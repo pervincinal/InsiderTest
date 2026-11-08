@@ -1679,31 +1679,12 @@ export function poly(ctx: CanvasRenderingContext2D, pts: readonly (readonly [num
   if (close) ctx.closePath();
 }
 
-/** Flat drop shadow of a round-ish glyph (upper-left key light → lower-right). */
-function glyphShadow(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, rx: number, ry = rx): void {
+/** Flat drop shadow of a round-ish glyph (upper-left key light → lower-right). Exported for spritesShop.ts `clayDisc` (PERF-12). */
+export function glyphShadow(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, rx: number, ry = rx): void {
   ctx.fillStyle = pal.objectShadow;
   ctx.beginPath();
   ctx.ellipse(x + rx * 0.14, y + ry * 0.24, rx, ry, 0, 0, TAU);
   ctx.fill();
-}
-
-/** Clay disc: shaded rim below, coloured face, inner top highlight. Base of the badges. */
-export function clayDisc(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, r: number, tones: Tones): void {
-  glyphShadow(ctx, pal, x, y, r);
-  ctx.fillStyle = tones.shade;
-  ctx.beginPath();
-  ctx.arc(x, y + r * 0.1, r, 0, TAU);
-  ctx.fill();
-  ctx.fillStyle = tones.mid;
-  ctx.beginPath();
-  ctx.arc(x, y, r, 0, TAU);
-  ctx.fill();
-  ctx.strokeStyle = tones.lit;
-  ctx.lineWidth = Math.max(1.5, r * 0.12);
-  ctx.lineCap = 'butt';
-  ctx.beginPath();
-  ctx.arc(x, y, r * 0.86, Math.PI * 0.85, Math.PI * 1.65);
-  ctx.stroke();
 }
 
 /** Gold clay coin: thick edge, lit / shade crescents, embossed inner disc, rim light and glint. */

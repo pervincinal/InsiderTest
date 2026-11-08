@@ -9,7 +9,26 @@ import { shade, themeFor, themedBiome } from './palette';
 import { drawBoltGlyph, roundRect } from './widgets';
 import { drawBush, drawDots, makeRng } from './terrain';
 import type { UpgradeKind } from './sprites';
-import { RIM, TAU, clayDisc, cone, drawCrystal, drawGoldCoin, drawTowerShadow, drawTowerSprite, drawUnitSprite, poly } from './sprites';
+import { RIM, TAU, cone, drawCrystal, drawGoldCoin, drawTowerShadow, drawTowerSprite, drawUnitSprite, glyphShadow, poly } from './sprites';
+
+/** Clay disc: shaded rim below, coloured face, inner top highlight. Base of the shop badges (PERF-12: only the shop draws it, so it lives in this lazy chunk). */
+function clayDisc(ctx: CanvasRenderingContext2D, pal: Palette, x: number, y: number, r: number, tones: Tones): void {
+  glyphShadow(ctx, pal, x, y, r);
+  ctx.fillStyle = tones.shade;
+  ctx.beginPath();
+  ctx.arc(x, y + r * 0.1, r, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = tones.mid;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = tones.lit;
+  ctx.lineWidth = Math.max(1.5, r * 0.12);
+  ctx.lineCap = 'butt';
+  ctx.beginPath();
+  ctx.arc(x, y, r * 0.86, Math.PI * 0.85, Math.PI * 1.65);
+  ctx.stroke();
+}
 
 const PILE: readonly { r: number; at: readonly (readonly [number, number])[] }[] = [
   { r: 0.5, at: [[0, 0]] },

@@ -1,15 +1,16 @@
 /**
- * Entitlement queries over the save (ECONOMY.md §4): which products are owned / visible, whether
- * interstitials are disabled, the combined booster discount and the equipped cosmetic skins.
+ * Entitlement queries over the save (ECONOMY.md §4): which products are owned, whether interstitials
+ * are disabled, the combined booster discount and the equipped cosmetic skins. What the shop lists is in
+ * shopListing.ts (the shop's lazy chunk, PERF-12).
  * Read-only helpers; the wallet is the only writer.
  *
  * Owned by the Frontend Engineer.
  */
 import { C } from '../sim/constants';
 import type { TowerSkin } from '../render/sprites';
-import type { SaveData, SkinFamily } from '../ui/save';
-import type { IapProductDef, SkinDef } from './catalog';
-import { ADVANTAGE_LIMIT, COMMANDER_UPGRADES, IAP_PRODUCTS, INTERSTITIAL_RULES, SKINS } from './catalog';
+import type { SaveData } from '../ui/save';
+import type { SkinDef } from './catalog';
+import { ADVANTAGE_LIMIT, COMMANDER_UPGRADES, INTERSTITIAL_RULES, SKINS } from './catalog';
 
 type BoosterKind = keyof typeof C.BOOSTER_COST;
 
@@ -31,26 +32,6 @@ export function highestClearedLevel(save: SaveData): number {
     if (stars >= 1 && Number.isInteger(id) && id > best) best = id;
   }
   return best;
-}
-
-/**
- * Products to list in the shop: `always` and unowned `once` products, minus the ones hidden by an
- * owned product, plus the ones whose `requiresOwned` is satisfied, minus the ones gated behind a
- * cleared level the player has not reached (`minClearedLevel`: the Starter Pack after level 8) or
- * held back in the first session (`notFirstSession`, AUD-B14: `firstSession` = the app started with
- * no level won, `AdSession.winsAtStart` 0) — an owner, e.g. after a restore on a fresh save, still
- * sees it as OWNED. LiveOps products wait for Phase C.
- */
-export function visibleProducts(save: SaveData, firstSession = false): IapProductDef[] {
-  const all: readonly IapProductDef[] = IAP_PRODUCTS;
-  const cleared = highestClearedLevel(save);
-  return all.filter((p) => {
-    if (p.availability === 'liveops') return false;
-    if (p.requiresOwned && !ownsProduct(save, p.requiresOwned)) return false;
-    if (p.hiddenWhenOwned?.some((id) => ownsProduct(save, id))) return false;
-    if ((cleared < (p.minClearedLevel ?? 0) || (firstSession && p.notFirstSession)) && !ownsProduct(save, p.id)) return false;
-    return true;
-  });
 }
 
 /** Commander booster track tier × 5 % plus the premium 10 %, capped at the advantage limit (30 %). */
@@ -91,21 +72,3 @@ export function equippedSkin(save: SaveData): TowerSkin {
   return { roof: pick(equipped.roof), helmet: pick(equipped.helmet), theme: pick(equipped.theme) };
 }
 
-/** Skins sold or shown in the shop: roofs, helmets and terrain themes (ECON-10), in catalog order. */
-export function shopSkins(): SkinDef[] {
-  return [...(SKINS as readonly SkinDef[])];
-}
-
-/** The family slot a catalog skin equips into (silhouette skins share the roof / helmet slot, M3-2). */
-export function skinFamily(skin: Pick<SkinDef, 'category'>): SkinFamily {
-  switch (skin.category) {
-    case 'towerRoof':
-    case 'towerShape':
-      return 'roof';
-    case 'unitHelmet':
-    case 'unitShape':
-      return 'helmet';
-    default:
-      return 'theme';
-  }
-}
