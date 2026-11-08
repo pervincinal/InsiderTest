@@ -36,7 +36,6 @@ function levelName(id: number): string {
 
 // AUD-Q15: e2e/tools/shots.ts picks the tracked folder (default run) or <PW_OUTPUT>/__screenshots__
 
-type R = { x: number; y: number; w: number; h: number };
 const screen = (page: Page) => page.evaluate(() => window.__towerclash.getScreen());
 
 interface Captured {

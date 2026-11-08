@@ -13,7 +13,7 @@
     "sourcemaps:strip": "node scripts/stripSourcemaps.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src tests scripts",
+    "lint": "eslint src tests scripts e2e playwright.config.ts vite.config.ts vitest.config.ts capacitor.config.ts eslint.config.js",
     "test": "vitest run",
     "levels:check": "tsx scripts/levelsCheck.ts",
     "levels:manifest": "tsx scripts/levelsManifest.ts",

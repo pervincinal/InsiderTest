@@ -39,8 +39,6 @@ const WEEK_B = '2026-09-28';
 // AUD-Q15: e2e/tools/shots.ts picks the tracked folder (default run) or <PW_OUTPUT>/__screenshots__
 const shot = (page: Page, name: string) => page.screenshot({ path: shotPath(name), scale: 'css' });
 
-type R = { x: number; y: number; w: number; h: number };
-
 interface SaveShape {
   gold: number;
   crystals: number;

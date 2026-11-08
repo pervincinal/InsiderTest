@@ -40,7 +40,6 @@ const LAST_WEEK = '2026-09-14';
 const SEED_CRYSTALS = 3;
 const SEED_GOLD = 100;
 
-type R = { x: number; y: number; w: number; h: number };
 type RecWindow = Window & { __qaResultTexts: string[] };
 
 interface SaveShape {

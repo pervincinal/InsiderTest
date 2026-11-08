@@ -980,6 +980,32 @@ describe('PERF-11 lazy chunks: result screen and store boot', () => {
     for (const f of ['ui/result.ts', 'native/review.ts', 'economy/store.ts', 'economy/providers/fakeStore.ts']) expect(eager.has(path.join(SRC, f)), f).toBe(false);
   });
 
+  // PERF-12: code only the debug surface or a lazy screen uses moved into modules of their chunks
+  it('PERF-12: the moved helpers stay out of the eager graph, and their old homes do not define them again', () => {
+    for (const f of ['economy/fakeAds.ts', 'economy/interstitial.ts', 'economy/achievementProgress.ts', 'economy/shopListing.ts', 'render/menuFrame.ts', 'render/tutorialBubble.ts', 'render/spritesShop.ts', 'render/hudOverlays.ts', 'debug.ts']) {
+      expect(eager.has(path.join(SRC, f)), f).toBe(false);
+    }
+    const defines = (f: string, name: string): boolean => new RegExp(`\\n(?:export )?(?:async )?function ${name}\\(`).test(src(f));
+    expect(defines('debug.ts', 'withPlay')).toBe(true);
+    expect(src('main.ts')).not.toMatch(/\n {2}(?:withPlay|setFakeAds)\(/);
+    expect(src('main.ts')).toContain("if (query.get('fakeads') === '1') void loadChunk('fakeAds', () => import('./economy/fakeAds'))");
+    for (const [f, name] of [
+      ['economy/adsFlow.ts', 'createFakeAds'],
+      ['economy/adsFlow.ts', 'maybeShowInterstitial'],
+      ['economy/adsFlow.ts', 'interstitialBlockedBy'],
+      ['economy/achievements.ts', 'achievementProgress'],
+      ['economy/entitlements.ts', 'visibleProducts'],
+      ['render/menus.ts', 'drawWater'],
+      ['render/menus.ts', 'beginFrame'],
+      ['render/menus.ts', 'headerBand'],
+      ['render/widgets.ts', 'drawCooldownRing'],
+      ['render/sprites.ts', 'clayDisc'],
+      ['ui/tutorial.ts', 'streamMidpoint'],
+    ] as const) {
+      expect(defines(f, name), `${f} ${name}`).toBe(false);
+    }
+  });
+
   it('the result chunk has one loader (src/ui/resultChunk.ts), warmed by the title idle preload and the play screen start', () => {
     const loaders = readdirSync(SRC, { recursive: true })
       .map(String)
@@ -1108,5 +1134,31 @@ describe('native store build: no source maps, no debug surface (AUD-Q17, AUD-Q18
         .map((f): [string, string] => [`e2e/${f}`, readFileSync(path.join(E2E, f), 'utf8')]),
     ];
     for (const [name, text] of files) expect(text, name).not.toMatch(/\.(?:js|css)\.map\b|['"`]\.map['"`]|\*\.map\b|\\\.map\b|sourceMappingURL/);
+  });
+});
+
+// QA-37 (2026-11-08): `npm run lint` covered src/ tests/ scripts/ only, so four dead `type R` aliases in
+// e2e/ specs (leftovers of QA-20's move of tapRect into e2e/helpers/tap.ts) were never seen by CI.
+describe('lint covers the e2e specs and runs in CI (QA-37)', () => {
+  const PKG = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as { scripts: Record<string, string> };
+  const ESLINT_CONFIG = readFileSync(new URL('../../eslint.config.js', import.meta.url), 'utf8');
+
+  it('the lint script lints src/, tests/, scripts/ and e2e/ (and the root config files)', () => {
+    const args = (PKG.scripts.lint ?? '').split(/\s+/);
+    expect(args[0]).toBe('eslint');
+    for (const dir of ['src', 'tests', 'scripts', 'e2e']) expect(args, dir).toContain(dir);
+    for (const f of ['playwright.config.ts', 'vite.config.ts', 'vitest.config.ts', 'capacitor.config.ts']) expect(args, f).toContain(f);
+  });
+
+  it('eslint.config.js ignores none of the linted folders', () => {
+    const ignores = /ignores:\s*\[([^\]]*)\]/.exec(ESLINT_CONFIG)?.[1] ?? '';
+    expect(ignores).not.toBe('');
+    for (const dir of ['src', 'tests', 'scripts', 'e2e']) expect(ignores, dir).not.toMatch(new RegExp(`['"]${dir}\\b`));
+  });
+
+  it('`npm run check` runs lint, and the CI verify job runs `npm run check`', () => {
+    expect(PKG.scripts.check).toMatch(/(?:^|&& )npm run lint(?: &&|$)/);
+    const runs = runBlocks(readWorkflow('tower-clash-ci.yml')).map((b) => b.run.trim());
+    expect(runs).toContain('npm run check');
   });
 });
