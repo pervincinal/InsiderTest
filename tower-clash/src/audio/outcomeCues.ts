@@ -14,6 +14,7 @@
  * `UNVARIED`). Nothing here touches the DOM.
  */
 import type { Synth } from './synth';
+import { trackVoice } from './mixer';
 
 /** One sting voice: wave, start Hz, end Hz (reached after `glideS`), peak gain. */
 export type StingVoice = readonly [OscillatorType, number, number, number];
@@ -37,8 +38,10 @@ export const OUTCOME_STING: Readonly<Record<'won' | 'lost', Sting>> = Object.fre
     glideS: 0.09,
     holdS: 0.12,
     voices: [
-      ['sine', 1396.9, 2093, 0.14],
-      ['sine', 2093, 3136, 0.14],
+      // AUD-M1: 0.14 → 0.11 (−2.1 dB): on the tick it starts phase-aligned with the chime (and in the worst case a
+      // send, an airstrike and a lost-tower thud); 2–3 kHz is where a phone speaker and the ear are most sensitive
+      ['sine', 1396.9, 2093, 0.11],
+      ['sine', 2093, 3136, 0.11],
     ],
   },
   lost: {
@@ -71,6 +74,7 @@ export function playSting(s: Synth, outcome: 'won' | 'lost'): void {
     g.gain.setValueAtTime(gain, t0 + st.holdS);
     g.gain.exponentialRampToValueAtTime(FLOOR, t1);
     g.connect(master);
+    trackVoice(s, t1); // AUD-M1: counts against the voice cap
     const o = ctx.createOscillator();
     o.type = type;
     o.frequency.setValueAtTime(from, t0);

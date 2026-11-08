@@ -11,7 +11,7 @@
 import type { GameState, Owner, SimEvent } from '../sim/types';
 import type { CaptureKind, HitState, SfxName, SfxOptions } from './sfx';
 import { ArrivalTracker, sendPitchHz, sfxForEvents } from './sfxRules';
-import { routeSfx } from './mixer';
+import { routeSfx, trackVoice, voiceRoom } from './mixer';
 import { playSting } from './outcomeCues';
 
 /** AUD-F6: the event mapping, arrival detector and rate limits ride in this chunk (src/audio/sfx.ts loads it). */
@@ -142,6 +142,14 @@ function relinkGain(s: Synth, pair: string | undefined): number {
   m.set(pair, now);
   return last !== undefined && now - last < RELINK_S ? Math.pow(10, RELINK_DB / 20) : 1;
 }
+/**
+ * AUD-M1: the sub sines under the lost-tower thud (120 → 45 Hz) and the airstrike's impact (110 → 38 Hz), were 0.4.
+ * A phone speaker barely plays under ≈ 150 Hz (the triangles over them carry the weight), yet the sine was the
+ * largest single contribution to the worst-case stack's peak (tests/audio/headroom.test.ts): −6.9 dB (with the won
+ * sting's −2.1 dB, src/audio/outcomeCues.ts) brings that stack under the limiter's threshold, so the limiter no
+ * longer touches the ducked music.
+ */
+export const SUB_GAIN = 0.18;
 /** FEEL-1-2: the airstrike's impact, after the whistle (render/combatFx.ts STRIKE_FALL_MS / 1000). */
 export const STRIKE_HIT_S = 0.15;
 export const STAR_CHORDS: readonly (readonly number[])[] = [
@@ -184,6 +192,7 @@ export function onFrame(m: AudioHost, state: Pick<GameState, 'units'>): void {
 
 /** Schedule the voices of `name` on `s` (the caller has checked the context, mute and rate limit). */
 export function playRecipe(s: Synth, name: SfxName, opts: SfxOptions): void {
+  if (!voiceRoom(s, name, opts)) return; // AUD-M1: the voice cap (src/audio/mixer.ts VOICE_CAP) skips the whole play
   s.route = routeSfx(s, name, opts); // AUD-F6: every voice below plays into the UI or SFX bus (src/audio/mixer.ts), ducking the music first when it should
   const i = nextPlay(s, name);
   const v = variation(name, i);
@@ -206,10 +215,11 @@ function voices(s: Synth, name: SfxName, opts: SfxOptions, i: number): void {
     case 'airstrike':
       // FEEL-1-2: the shell's whistle over the render chain's STRIKE_FALL_MS (a quiet sine falling 1.8 → 0.7 kHz),
       // then at 150 ms the impact: a triangle thud 160 → 45 Hz (a phone speaker's harmonics), a sub sine
-      // 110 → 38 Hz and a low-passed blast noise — 4 voices, ends at 530 ms; not the gun's `artillery`
+      // 110 → 38 Hz and a low-passed blast noise — 4 voices, ends at 530 ms; not the gun's `artillery`.
+      // AUD-M1: the sub sine 0.4 → SUB_GAIN (−6.9 dB): a phone speaker barely plays it, the stack's headroom paid for it
       sweep(s, 1800, 700, 150, 'sine', { gain: 0.07 });
       sweep(s, 160, 45, 260, 'triangle', { gain: 0.4, delayS: STRIKE_HIT_S });
-      sweep(s, 110, 38, 380, 'sine', { gain: 0.4, delayS: STRIKE_HIT_S });
+      sweep(s, 110, 38, 380, 'sine', { gain: SUB_GAIN, delayS: STRIKE_HIT_S });
       noiseBurst(s, 300, 900, { gain: 0.3, delayS: STRIKE_HIT_S });
       return;
     case 'arrive': {
@@ -304,7 +314,7 @@ function voices(s: Synth, name: SfxName, opts: SfxOptions, i: number): void {
     case 'refuse':
       // Short low "thud" for a refused tap: a falling triangle (harmonics keep it audible on phone
       // speakers that drop everything under ~200 Hz) plus a soft knock of low-passed noise. Quieter
-      // than the capture-loss thud (AUD-F15: 0.34 + 0.4): a refusal is the player's own tap, not an event.
+      // than the capture-loss thud (AUD-F15: 0.34 + its sub sine): a refusal is the player's own tap, not an event.
       sweep(s, 200, 70, 110, 'triangle', { gain: 0.2 });
       noiseBurst(s, 45, 420, { gain: 0.1 });
       return;
@@ -370,6 +380,7 @@ function swell(s: Synth, freq: number, ms: number, riseMs: number, opts: BlipOpt
   filter.frequency.exponentialRampToValueAtTime(freq * 2, t1);
   filter.Q.setValueAtTime(1.2, t0);
   filter.connect(g);
+  trackVoice(s, t1);
   const osc = ctx.createOscillator();
   osc.type = 'sawtooth';
   osc.frequency.setValueAtTime(freq, t0);
@@ -388,9 +399,9 @@ function playCapture(s: Synth, kind: CaptureKind): void {
     case 'loss':
       // AUD-F15: losing a tower — a short low thud: a falling triangle (harmonics above the phone-speaker floor;
       // under `hit`'s 320 Hz knock, which no longer plays for a loss) over the old sub-sine body, shortened, and
-      // a low-passed knock; 3 voices, ends at 180 ms
+      // a low-passed knock; 3 voices, ends at 180 ms. AUD-M1: the sub sine 0.4 → SUB_GAIN (−6.9 dB, see `SUB_GAIN`)
       sweep(s, 180, 60, 150, 'triangle', { gain: 0.34 });
-      sweep(s, 120, 45, 180, 'sine', { gain: 0.4 });
+      sweep(s, 120, 45, 180, 'sine', { gain: SUB_GAIN });
       noiseBurst(s, 60, 300, { gain: 0.2 });
       return;
     case 'other':
@@ -420,6 +431,7 @@ export function blip(s: Synth, freq: number, ms: number, type: OscillatorType = 
   const t0 = ctx.currentTime + (opts.delayS ?? 0);
   const t1 = t0 + ms / 1000;
   const env = envelope(ctx, master, t0, t1, (opts.gain ?? 0.3) * gainK);
+  trackVoice(s, t1);
   const osc = ctx.createOscillator();
   osc.type = type;
   osc.frequency.setValueAtTime(freq * pitchK, t0);
@@ -436,6 +448,7 @@ export function sweep(s: Synth, from: number, to: number, ms: number, type: Osci
   const t0 = ctx.currentTime + (opts.delayS ?? 0);
   const t1 = t0 + ms / 1000;
   const env = envelope(ctx, master, t0, t1, (opts.gain ?? 0.3) * gainK);
+  trackVoice(s, t1);
   const osc = ctx.createOscillator();
   osc.type = type;
   osc.frequency.setValueAtTime(Math.max(1, from * pitchK), t0);
@@ -453,6 +466,7 @@ export function noiseBurst(s: Synth, ms: number, filterHz: number, opts: NoiseOp
   const t0 = ctx.currentTime + (opts.delayS ?? 0);
   const t1 = t0 + ms / 1000;
   const env = envelope(ctx, master, t0, t1, (opts.gain ?? 0.3) * gainK);
+  trackVoice(s, t1);
   s.noise ??= makeNoiseBuffer(ctx);
   const src = ctx.createBufferSource();
   src.buffer = s.noise;

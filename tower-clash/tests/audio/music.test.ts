@@ -5,11 +5,12 @@ import { Synth } from '../../src/audio/synth';
 import type { Mix } from '../../src/audio/mixer';
 import { dbToGain, BUS_DB, mixer } from '../../src/audio/mixer';
 import { busLevels, musicState } from '../../src/audio/inspect';
-import { BPM, LOOKAHEAD_S, LOOP_STEPS, MusicLoop, PLAY_GAP_S, STEP_S, midiHz, notesAt } from '../../src/audio/music';
+import { BASS_LIFT, BPM, LOOKAHEAD_S, LOOP_STEPS, MusicLoop, PLAY_GAP_S, STEP_S, midiHz, notesAt, tensionAt } from '../../src/audio/music';
 import { audioSynth, initAudio, onSimFrame, playSfx, setAudioBackground, setMusicOn, setMuted, toggleMuted, unlockAudio } from '../../src/audio/index';
 import { defaultSave } from '../../src/ui/save';
 import type { FakeGain, FakeOscillator } from './fakeAudio';
 import { FakeMixContext } from './fakeAudio';
+import { dbfs, pathsTo, peakAbs, peakOf, render } from './envelope';
 
 /*
  * AUD-F6 music loop: 100 BPM, A minor (Am – F – C – G), pad / bass / pulse layers; a look-ahead
@@ -35,8 +36,27 @@ describe('the pattern', () => {
     expect(midiHz(69)).toBe(440);
   });
 
-  it('repeats exactly every 32 steps (the wrap is just the next bar)', () => {
-    for (let s = 0; s < LOOP_STEPS; s++) expect(notesAt(s + LOOP_STEPS)).toEqual(notesAt(s));
+  it('repeats every 32 steps but for the AUD-M1 bass lift; the whole repeats exactly every 64 (the wrap is just the next bar)', () => {
+    for (let s = 0; s < LOOP_STEPS; s++) {
+      const [a, b] = [notesAt(s), notesAt(s + LOOP_STEPS)];
+      expect(b.filter((n) => n.layer !== 1)).toEqual(a.filter((n) => n.layer !== 1)); // pad and pulse: every pass alike
+      for (let k = 2; k < 6; k++) expect(notesAt(s + k * LOOP_STEPS)).toEqual(notesAt(s + (k % 2) * LOOP_STEPS));
+    }
+  });
+
+  it('AUD-M1 variation: every second pass lifts the bass a fourth in bars 3–4 (C, G roots → F, C), same rhythm and lengths, at BASS_LIFT.gain', () => {
+    expect(BASS_LIFT).toEqual({ semitones: 5, fromBar: 2, everyLoops: 2, gain: 0.7 });
+    const bass = (from: number) =>
+      [...Array(LOOP_STEPS).keys()].flatMap((i) => notesAt(from + i).filter((n) => n.layer === 1).map((n) => ({ step: i, ...n })));
+    const [a, b] = [bass(0), bass(LOOP_STEPS)];
+    expect(b.map(({ step, dur }) => ({ step, dur }))).toEqual(a.map(({ step, dur }) => ({ step, dur })));
+    expect(b.map((n) => n.gain)).toEqual(a.map((n) => (n.step >= 16 ? 0.16 * BASS_LIFT.gain : 0.16)));
+    // bars 1–2 (Am, F) untouched; bars 3–4 a fourth up: C3 G3 C4 → F3 C4 F4, G2 D3 G3 → C3 G3 C4
+    expect(b.map((n, k) => n.midi - a[k]!.midi)).toEqual(a.map((n) => (n.step >= 16 ? 5 : 0)));
+    expect(a.filter((n) => n.step >= 16).map((n) => n.midi)).toEqual([48, 48, 55, 60, 43, 43, 50, 55]);
+    expect(b.filter((n) => n.step >= 16).map((n) => n.midi)).toEqual([53, 53, 60, 65, 48, 48, 55, 60]);
+    // the tension layer keeps its grid (it does not read the notes): a kick on every beat, a hat on every off-beat
+    for (let s = 0; s < 2 * LOOP_STEPS; s++) expect(tensionAt(s)).toBe(s % 2 ? 'hat' : 'kick');
   });
 
   it('every step has one pulse note; the bass plays on 1, the "and" of 2, 3 and the "and" of 4', () => {
@@ -126,6 +146,37 @@ describe('look-ahead scheduler (fake clock)', () => {
     const pads = notes(0);
     expect([...new Set(pads.map((p) => p.at))]).toEqual([0.1, 2.5, 4.9, 7.3, 9.7]);
     expect(pads.filter((p) => p.at === 9.7).map((p) => p.hz)).toEqual(pads.filter((p) => p.at === 0.1).map((p) => p.hz));
+  });
+
+  it('AUD-M1: the scheduled loop alternates (pass 2 lifts its bass in bars 3–4, pass 3 does not) and its peak is unchanged', () => {
+    loop.start();
+    const LOOP_S = LOOP_STEPS * STEP_S;
+    run(0, 5 * LOOP_S + 0.2, (now) => (synth.playAt = now)); // in play: the pulse on, passes 1–5
+    const bassAt = (k: number) => notes(1).filter((n) => n.at >= r6(loop.t0 + (k - 1) * LOOP_S) - 1e-9 && n.at < r6(loop.t0 + k * LOOP_S) - 1e-9);
+    const [p1, p2, p3] = [1, 2, 3].map(bassAt);
+    expect(p1!.length).toBe(16);
+    expect(p2!.map((n) => r6(n.at - LOOP_S))).toEqual(p1!.map((n) => n.at)); // same grid
+    expect(p3!.map((n) => n.hz)).toEqual(p1!.map((n) => n.hz)); // pass 3 = pass 1
+    expect(p2!.map((n, k) => Math.round(12 * Math.log2(n.hz / p1![k]!.hz)))).toEqual(p1!.map((_, k) => (k >= 8 ? 5 : 0)));
+    // the lifted notes at BASS_LIFT.gain, the others as they were
+    const bassGain = (from: number, to: number) =>
+      ctx.oscillators
+        .filter((o) => (o.connections[0] as FakeGain).connections[0] === loop.inputs[1] && o.startAt! >= from - 1e-9 && o.startAt! < to - 1e-9)
+        .map((o) => r6(Math.max(...(o.connections[0] as FakeGain).gain.events.map((e) => e.value))));
+    expect(bassGain(loop.t0 + LOOP_S, loop.t0 + 2 * LOOP_S)).toEqual(p1!.map((_, k) => (k >= 8 ? r6(0.16 * BASS_LIFT.gain) : 0.16)));
+    // the peak: the summed envelope (an upper bound) and the sampled signal at the master, plain passes (3, 5) vs lifted (2, 4)
+    const master = synth.graph()!.master;
+    const span = (k: number): [number, number] => [loop.t0 + (k - 1) * LOOP_S, loop.t0 + k * LOOP_S];
+    const env = (k: number) => peakOf(pathsTo(ctx.voices(), master), ...span(k), 0.001).peak;
+    const sampled = (k: number) => peakAbs(render(ctx.voices(), master, ...span(k), { sr: 24_000 }).master).peak;
+    const plain = { env: Math.max(env(3), env(5)), sampled: Math.max(sampled(3), sampled(5)) };
+    const lifted = { env: Math.max(env(2), env(4)), sampled: Math.max(sampled(2), sampled(4)) };
+    console.info(
+      `AUD-M1 music loop peak at the master (pulse on): summed envelope ${dbfs(plain.env).toFixed(2)} dBFS plain / ${dbfs(lifted.env).toFixed(2)} lifted; ` +
+        `sampled ${dbfs(plain.sampled).toFixed(2)} dBFS plain / ${dbfs(lifted.sampled).toFixed(2)} lifted`,
+    );
+    expect(lifted.env).toBeLessThanOrEqual(plain.env + 1e-9);
+    expect(dbfs(lifted.sampled) - dbfs(plain.sampled)).toBeLessThanOrEqual(0.1); // the 24 kHz sampling's own jitter
   });
 
   it('the pulse layer joins on the next downbeat once play frames come, and leaves within PLAY_GAP_S after they stop', () => {

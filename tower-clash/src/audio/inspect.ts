@@ -13,6 +13,10 @@ export interface BusLevels {
   music: number;
   duck: number;
   limiter: { thresholdDb: number; ratio: number } | null;
+  /** AUD-M1: SFX / UI voices scheduled or ringing now, the most at once since the mixer was built, and the plays the voice cap skipped. */
+  voices: number;
+  peakVoices: number;
+  capped: number;
 }
 
 const mixOf = (s: Synth): Mix | null => s.mix as Mix | null;
@@ -29,6 +33,9 @@ export function busLevels(s: Synth): BusLevels | null {
     music: m.music.gain.value,
     duck: m.duck.gain.value,
     limiter: m.limiter ? { thresholdDb: m.limiter.threshold.value, ratio: m.limiter.ratio.value } : null,
+    voices: m.ends.filter((e) => e > g.ctx.currentTime).length,
+    peakVoices: m.peak,
+    capped: m.capped,
   };
 }
 

@@ -33,6 +33,39 @@ export const LIMITER = Object.freeze({ thresholdDb: -6, knee: 0, ratio: 20, atta
 export const DUCK = Object.freeze({ db: -6, attackS: 0.02, holdS: 0.3, releaseS: 0.25 });
 const DUCK_GAIN = dbToGain(DUCK.db);
 
+/**
+ * AUD-M1 voice cap: SFX + UI voices scheduled or ringing at once (the music loop's ≤ 10 are its own budget). A sound
+ * that ducks the music (`duckFor`: own / lost captures, the outcome, the result card, the stalemate hint) may fill
+ * the cap; every other sound leaves `reserve` voices free for them. A play that does not fit is skipped whole (never
+ * a partial chord); the rate limits (sfxRules.ts) keep this rare — 20× autoplay never reaches it (tests/audio/voiceCap.test.ts).
+ */
+export const VOICE_CAP = Object.freeze({ max: 24, reserve: 8 });
+/** The most voices one play of each sound schedules (recipes.ts `voices`, outcomeCues.ts; pinned by tests/audio/voiceCap.test.ts). */
+export const VOICES: Readonly<Record<SfxName, number>> = Object.freeze({
+  send: 1,
+  arrive: 1,
+  capture: 3,
+  upgrade: 4,
+  unitDied: 1,
+  artillery: 3,
+  won: 3,
+  lost: 4,
+  button: 1,
+  refuse: 2,
+  stalemate: 2,
+  hit: 2,
+  mine: 3,
+  freeze: 5,
+  overdrive: 3,
+  purchase: 3,
+  reward: 4,
+  unlock: 4,
+  achievement: 4,
+  tally: 1,
+  tankArrive: 2,
+  airstrike: 4,
+});
+
 /** Taps, menu clicks and toasts (AUD-F8: the shop / reward / unlock / achievement toasts' sounds): the UI bus. Every other sound (and any recipe added later) is a play sound: SFX. */
 const UI_SOUNDS: ReadonlySet<SfxName> = new Set<SfxName>(['button', 'refuse', 'stalemate', 'purchase', 'reward', 'unlock', 'achievement']);
 /** Captures that duck the music (an enemy taking a neutral is a quiet blip: no duck, no pumping late in a match). */
@@ -89,6 +122,10 @@ export interface Mix extends MixHandle {
   ended: boolean;
   /** The running music loop (src/audio/music.ts), read by src/audio/inspect.ts; null while it is stopped. */
   loop: { readonly step: number; readonly pulse: boolean; readonly tension: boolean; readonly intensity: number } | null;
+  /** AUD-M1: the stop times of the SFX / UI voices scheduled so far (pruned as they end), the most at once, and the plays the cap skipped. */
+  ends: number[];
+  peak: number;
+  capped: number;
 }
 
 const set = (p: AudioParamLike, v: number): void => {
@@ -131,6 +168,9 @@ export function mixer(s: Synth): Mix | null {
     plan: null,
     ended: false,
     loop: null,
+    ends: [],
+    peak: 0,
+    capped: 0,
     apply() {
       const fx = s.muted ? 0 : 1;
       set(m.sfx.gain, fx * dbToGain(BUS_DB.sfx));
@@ -159,6 +199,32 @@ export function duck(s: Synth, holdS: number, end = false): void {
   p.linearRampToValueAtTime(1, until + DUCK.releaseS);
   m.plan = { start: now, from, until };
   if (end) m.ended = true;
+}
+
+/** AUD-M1: the SFX / UI voices still scheduled or ringing at `now` (drops the finished ones). */
+export function liveVoices(m: Mix, now: number): number {
+  let n = 0;
+  for (const e of m.ends) if (e > now) m.ends[n++] = e;
+  m.ends.length = n;
+  return n;
+}
+
+/** AUD-M1 recipes.ts `playRecipe`: may a play of `name` start now under VOICE_CAP? (Counts a skipped one in `capped`.) */
+export function voiceRoom(s: Synth, name: SfxName, opts: SfxOptions): boolean {
+  const m = mixer(s);
+  if (!m) return true;
+  const room = VOICE_CAP.max - (duckFor(name, opts) === null ? VOICE_CAP.reserve : 0);
+  if (liveVoices(m, s.now()) + VOICES[name] <= room) return true;
+  m.capped++;
+  return false;
+}
+
+/** AUD-M1: an SFX / UI voice was scheduled to stop at `end` (every voice of recipes.ts and outcomeCues.ts). */
+export function trackVoice(s: Synth, end: number): void {
+  const m = s.mix as Mix | null;
+  if (!m) return;
+  m.ends.push(end);
+  m.peak = Math.max(m.peak, liveVoices(m, s.now()));
 }
 
 /** recipes.ts `playRecipe`: the bus `name` plays into (null before unlock), ducking the music first when it should. */

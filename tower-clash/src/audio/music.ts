@@ -60,6 +60,15 @@ const BASS = [
   [4, 7, 0.5],
   [7, 12, 0.25],
 ];
+/**
+ * AUD-M1 (the 2026-11-06 FEEL-1 review's optional item): every second pass of the loop lifts the bass a fourth in
+ * bars 3–4 — C, G roots → F, C under the unchanged C and G pads (IV over I, then a C pedal under G: the phrase turns
+ * plagal) — so the 9.6 s phrase reads as a 19.2 s one. The pad, the pulse and the tension grid are unchanged. The
+ * lifted notes play `gain` × (−3.1 dB): a fourth higher they pass more of their triangle through the bass's 700 Hz
+ * low-pass (bar 3 sampled +0.7 dB over the loop's loudest bar at full gain) and a phone speaker plays them louder
+ * anyway; at 0.7 the 19.2 s phrase's sampled peak is the plain loop's (tests/audio/music.test.ts).
+ */
+export const BASS_LIFT = Object.freeze({ semitones: 5, fromBar: 2, everyLoops: 2, gain: 0.7 });
 /** Pulse: which chord tone each eighth plays (an octave up). */
 const ARP = [0, 2, 1, 2, 0, 2, 1, 2];
 const TYPES: OscillatorType[] = ['triangle', 'triangle', 'square'];
@@ -141,14 +150,18 @@ function noiseBuffer(ctx: AudioContextLike): AudioBufferLike {
   return b;
 }
 
-/** The notes that start on `step` (any non-negative integer; the pattern repeats every LOOP_STEPS). */
+/**
+ * The notes that start on `step` (any non-negative integer): the pattern repeats every LOOP_STEPS but for the bass,
+ * whose BASS_LIFT makes the whole repeat every 2 × LOOP_STEPS.
+ */
 export function notesAt(step: number): Note[] {
   const bar = Math.floor(step / 8) % 4;
   const i = step % 8;
   const chord = CHORDS[bar]!;
+  const lift = Math.floor(step / LOOP_STEPS) % BASS_LIFT.everyLoops && bar >= BASS_LIFT.fromBar ? BASS_LIFT.semitones : 0;
   const out: Note[] = [];
   if (i === 0) for (const midi of chord) out.push({ layer: 0, midi, dur: 9 * STEP_S, gain: 0.07 });
-  for (const [at, up, dur] of BASS) if (at === i) out.push({ layer: 1, midi: ROOTS[bar]! + up!, dur: dur!, gain: 0.16 });
+  for (const [at, up, dur] of BASS) if (at === i) out.push({ layer: 1, midi: ROOTS[bar]! + up! + lift, dur: dur!, gain: lift ? 0.16 * BASS_LIFT.gain : 0.16 });
   out.push({ layer: 2, midi: chord[ARP[i]!]! + 12, dur: 0.14, gain: i % 2 ? 0.035 : 0.05 });
   return out;
 }

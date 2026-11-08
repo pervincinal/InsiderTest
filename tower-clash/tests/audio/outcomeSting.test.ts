@@ -80,8 +80,9 @@ describe('the sting voices', () => {
     expect(playSfx('won')).toBe(true);
     const v = voices(ctx);
     expect(v).toEqual([
-      { type: 'sine', at: 0, end: 0.25, from: 1396.9, to: 2093, gain: 0.14 },
-      { type: 'sine', at: 0, end: 0.25, from: 2093, to: 3136, gain: 0.14 },
+      // AUD-M1: 0.14 → 0.11 (the worst-case stack's headroom, tests/audio/headroom.test.ts)
+      { type: 'sine', at: 0, end: 0.25, from: 1396.9, to: 2093, gain: 0.11 },
+      { type: 'sine', at: 0, end: 0.25, from: 2093, to: 3136, gain: 0.11 },
     ]);
     for (const x of v) expect(x.to / x.from).toBeCloseTo(1.5, 2); // a fifth up
     expect(v[1]!.from / v[0]!.from).toBeCloseTo(1.5, 2); // a fifth apart

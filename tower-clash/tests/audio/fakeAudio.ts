@@ -12,7 +12,16 @@ import type {
 
 /** Records automation so tests can read the scheduled values. */
 export class FakeParam implements AudioParamLike {
-  value = 0;
+  private v = 0;
+  /** AUD-M1: whether `value` was ever written (an unwritten param holds its WebAudio default: tests/audio/envelope.ts `render`). */
+  written = false;
+  get value(): number {
+    return this.v;
+  }
+  set value(x: number) {
+    this.v = x;
+    this.written = true;
+  }
   readonly events: { kind: 'set' | 'linear' | 'exp'; value: number; time: number }[] = [];
   setValueAtTime(value: number, time: number): void {
     this.events.push({ kind: 'set', value, time });
