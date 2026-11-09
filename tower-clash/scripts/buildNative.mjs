@@ -6,7 +6,8 @@
  *      (`window.__towerclash`, `economy.grant()` etc. do not exist in a store build);
  *   2. scripts/stripSourcemaps.mjs (AUD-Q17) — the `.map` files move to sourcemaps/, so
  *      `cap sync` copies a map-free dist/ into the apps;
- *   3. a check that the build really has neither (exit 1 otherwise).
+ *   3. a check that the build really has neither (exit 1 otherwise): no `debug-*.js`, no `.map`, no
+ *      `sourceMappingURL`, and no `__towerclash` in any shipped .js / .html (MM-16).
  * Same mode (`production`) as `npm run build`, so `.env.production` / `.env.local` still apply.
  *
  * Usage:  node scripts/buildNative.mjs [--outDir <dir>] [--maps <dir>]   (npm run build:native)
@@ -14,7 +15,7 @@
  *   --maps    move the maps here instead of sourcemaps/
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stripSourcemaps } from './stripSourcemaps.mjs';
@@ -44,7 +45,12 @@ const assets = join(outDir, 'assets');
 for (const f of existsSync(assets) ? readdirSync(assets) : []) {
   if (/^debug-.*\.js$/.test(f)) problems.push(`assets/${f}: the debug surface chunk is in a native build`);
 }
-for (const f of readdirSync(outDir, { recursive: true }).map(String)) if (f.endsWith('.map')) problems.push(`${f} left in the build`);
+for (const f of readdirSync(outDir, { recursive: true }).map(String)) {
+  if (f.endsWith('.map')) problems.push(`${f} left in the build`);
+  // MM-16: a static import of src/debug.ts would inline it into another chunk (no debug-*.js to catch);
+  // the window global it is published under must not appear in any shipped file either
+  else if (/\.(?:js|html)$/.test(f) && readFileSync(join(outDir, f), 'utf8').includes('__towerclash')) problems.push(`${f} mentions window.__towerclash (debug surface)`);
+}
 if (problems.length > 0) {
   console.error(`buildNative: FAIL\n  ${problems.join('\n  ')}`);
   process.exit(1);
