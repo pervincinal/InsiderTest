@@ -233,6 +233,32 @@ There are two web builds. Both are made from the same code; they differ only in 
 
 **Checks.** `npm run build:native` fails (exit 1) when a `debug-*.js` chunk, a `.map` file or a `sourceMappingURL` comment is left in `dist/`, so a broken store build stops before `cap sync`. `tests/repo/hygiene.test.ts` (AUD-Q17 / AUD-Q18) pins the scripts, the `__DEBUG_SURFACE__` guard in `src/main.ts`, and that every native workflow builds with `build:native` and uploads `sourcemaps-${{ github.sha }}` before `cap sync`. Nothing here needs a manual step.
 
+### 4.2 Build 27 readiness (2026-11-09, MM-16)
+
+A check of the native lane against the Day 47–51 changes (Vibration / Screen shake settings, airstrike haptic, music tension layer and outcome stings, the PERF-12 chunk moves, the 120 ms title ↔ menu slide, keyboard focus, and the gameplay engineer's SIM-R1 `getReplay()`, still uncommitted at the time of the check). `npm run build:native` was run into a scratch folder (`--outDir` / `--maps`; the shared `dist/` was not touched) on `3a6b636` plus the working tree. Results:
+
+| Check | Result |
+|---|---|
+| No `.map` file, no `sourceMappingURL` in the copied web assets (100 maps moved, 2.8 MB) | pass |
+| No debug surface: no `debug-*.js`, no `__towerclash` in any shipped file; `getReplay` / `serializeReplay` absent (they appear only in the web build's `debug-*.js`). `build:native` now also fails on a `__towerclash` string anywhere (MM-16), which catches a static import of `src/debug.ts` that the chunk-name check would miss | pass |
+| Native plugin chunks present and lazy: Haptics, AdMob (`admob-*.js` + plugin), RevenueCat (`revenueCat-*.js` + Purchases), plus StatusBar, ScreenOrientation, App, Preferences (save mirror), Share, InAppReview | pass |
+| Eager graph = the entry chunk alone (no static imports). `fakeAds-*.js` is in the build as a **lazy** file, loaded only for `?fakeads=1` — the app's WebView URL never carries a query, so it is unreachable in the app | pass (lazy file present) |
+| `interstitial.ts` now in the result chunk: it calls `currentAds()` from the entry, which the AdMob provider (`ads.ts` `init()` → `admob-*.js`) backs on the phone; `admob-*.js` holds `prepareInterstitial` / `showInterstitial` | pass |
+| Size of the web assets `cap sync` copies | **1 315 941 B (1.32 MB, 116 files)**; 1 316 087 B with the uncommitted SIM-R1 replay log — Day 46: 1.3 MB |
+| Vibration off → no `Haptics.impact` on capture (`play.ts`), hit / lost tower (`audio/recipes.ts`), airstrike (`play.ts` → `combatFx.ts`); on → medium on airstrike. Tests: `tests/ui/vibrationSetting.test.ts`, `tests/audio/hits.test.ts`, `tests/render/airstrikeFx.test.ts`; the bridge itself (light / medium style, web no-op, 150 ms limit, a failing impact) is new in `tests/native/haptics.test.ts` | pass |
+| iOS audio: the tension layer and the stings schedule nothing while the context is `interrupted` (`tests/audio/interrupted.test.ts` "tension layer under an interruption", stings go through the refused `won` / `lost` path); the first-tap unlock (`synth.ts` `unlock()`) is unchanged and every new voice starts only after it | pass |
+| Screen slide: the HUD canvas is hidden only while a slide runs and is shown again on the first frame after 120 ms, or when another navigation (also the Android back button) ends it — time-based, so returning from the background mid-slide also brings it back (`tests/ui/screenSlide.test.ts`) | pass |
+| Keyboard focus ring: drawn only after a key press, hidden on any pointer press — nothing changes for touch | pass |
+| Capacitor config, `android/`, `ios/`, plugin versions: unchanged since build 26 | pass |
+
+Nothing has to be fixed before build 27. One thing to know: the haptic limiter (one impact per 150 ms) takes the first request, so a light capture tick in the 150 ms before an airstrike's impact swallows the medium one (rare; not a blocker).
+
+**What remains for the Producer to request build 27** (MM-15 first: the Apple Program License Agreement must be accepted, or the run fails the same way as build 26):
+1. In `tower-clash/package.json` change `"config": { "buildNumber": 26 }` to `27`. (Build 26 never reached App Store Connect, so 26 would also still be accepted; 27 matches the "Build 27" release notes.)
+2. Run `cd tower-clash && npm run version:sync` (writes the number into the Android and iOS projects), then `npm run version:check`.
+3. In `tower-clash/release/ios-release.request` set `note=build 27 (1.0.0): …` and change `requested=` to the current UTC time (e.g. `requested=2026-11-09T12:00:00Z`).
+4. Commit the three changes together and push to `claude/tower-war-game-plan-weqwpb`; the push starts `tower-clash-ios-release.yml`.
+
 ## 5. What a real store release needs
 
 The game has no accounts and sends no saves anywhere. Since the monetization work (§8) the native apps **do** talk to the network: RevenueCat (purchase receipts), Google AdMob (ads, advertising id) and the stores' billing systems. The privacy policy, the Play "Data safety" form and the App Store "App Privacy" answers must say so (§8.6). The following are mandatory.
@@ -569,6 +595,17 @@ A save written by a newer version (read-only, AUD-Q3) is never mirrored over; "R
 **Known limit.** The native copy is used only when the WebView copy is missing or unreadable. If iOS kept an *older but readable* WebView copy (the kill landed between the two writes), that older copy is used and the next change overwrites the native one — the win is lost exactly as before. Choosing the newer of two readable copies needs a write counter inside the save (`writeSeq`, the audit's suggestion; a `src/ui/save.ts` change for the Frontend Engineer). TF-17b tells whether this happens on the stakeholder's phone.
 
 **Checking it by hand (team):** Android — `adb shell run-as com.pervincinal.towerclash cat shared_prefs/CapacitorStorage.xml` on a debug APK shows the native copy. iOS simulator — `xcrun simctl get_app_container booted com.pervincinal.towerclash data`, then `plutil -p Library/Preferences/com.pervincinal.towerclash.plist`. Tests: `tests/native/saveMirror.test.ts` (fake Preferences).
+
+### 8.10 Sound and vibration on the iPhone — what to listen for (build 27, MM-16)
+
+The app sets no audio-session category of its own (no `AVAudioSession` code, no `navigator.audioSession`, no background-audio mode in `Info.plist`): the WebView's default applies, and the game's sound starts on the first tap (`unlockAudio()` on pointer-down). Build 27 adds a music "tension" layer, short win / loss stings and a medium vibration on the airstrike. On the phone, check:
+1. **First tap.** Open the app with the sound on: silence until the first tap, then the click on that tap and the music within about a second. No crackle, no burst of queued sounds.
+2. **Tension layer.** In a close match (the enemy near your towers) a soft extra rhythm joins the music on the beat and leaves on the beat when the match calms down — never a jump or a stutter.
+3. **Stings.** On a win a short rising two-note chime right with the last capture; on a loss the low thud first, then a short falling sigh, both finished before the result chords.
+4. **Interruption.** During a match: ask Siri something, or let an alarm ring, or call the phone. Afterwards the game is silent until the next tap; on that tap the sound returns, the music joins on a beat — no burst of the sounds missed meanwhile (TF-31).
+5. **Background.** Press Home mid-match: the sound stops at once; back in the app it returns (at the latest on the first tap).
+6. **Ring / Silent switch and other apps.** Note whether the game is heard with the switch on silent, and whether music from another app (Spotify, Apple Music) keeps playing or stops when the game starts — write it in the report; the team has not chosen a behaviour yet, this tells us what the WebView does.
+7. **Vibration.** Settings → Vibration on: a light tick when you take a tower, a stronger one when you lose a tower and when an airstrike lands. Off: none of the three. (The Effects switch also silences the hit / lost-tower tick; the capture and airstrike ticks follow Vibration only.)
 
 ## 7. Open items
 
