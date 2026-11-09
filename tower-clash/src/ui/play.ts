@@ -2,6 +2,7 @@ import type { Command, GameState, LevelDef, Link, Outcome, SimEvent } from '../s
 import { Rng } from '../sim/rng';
 import { C } from '../sim/constants';
 import { SnapshotRing, applyContinue } from '../sim/snapshot';
+import type { ReplayEntry } from '../sim/replay';
 import { createState } from '../sim/create';
 import { linksFrom } from '../sim/step';
 import { laneStalemate } from '../sim/index';
@@ -190,6 +191,13 @@ export class PlayScreen implements Screen {
   private readonly particles = new ParticleSystem();
   private enemyRngs = new Map<string, Rng>();
   private playerRng: Rng;
+  /**
+   * SIM-R1 replay record of this match: every command the loop applied, in order, with its tick time
+   * (`sim/replay.ts` `ReplayEntry`; `a: 1` = produced by the AI hook — enemies, autoplay, the lose bot).
+   * A plain push per command; the debug surface (`getReplay`) serializes it on demand. After a Continue
+   * rewind the log keeps the abandoned future (v1: a continued record does not verify, `hasContinued`).
+   */
+  readonly replayLog: ReplayEntry[] = [];
   /** Debug-only command sources (src/debug.ts): the reference player (autoplay) and "auto lose"; null when off. */
   private playerBot: PlayerBot | null = null;
   private loseBot: ((state: GameState) => Command[]) | null = null;
@@ -287,6 +295,7 @@ export class PlayScreen implements Screen {
     this.bare = level.id < 5 && !app.save.gold && !app.save.stars[1];
     this.loop = new GameLoop({
       beforeTick: (s) => this.runAi(s),
+      onCommand: (c, t, a) => void this.replayLog.push({ t, c, a }),
       onEvents: (ev) => {
         this.particles.onEvents(ev, this.state, this.app.palette(), this.nowMs);
         this.onEvents(ev);

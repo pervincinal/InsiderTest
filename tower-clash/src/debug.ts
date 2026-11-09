@@ -1,10 +1,11 @@
 import type { Command, GameState, Owner, Tower } from './sim/types';
 import { C } from './sim/constants';
 import { hasOverdrive, linksFrom, streamIntervalMs } from './sim/step';
+import { parseReplay, replayOf, serializeReplay, verifyReplay } from './sim/replay';
 import { aiModule } from './ui/ai';
 import type { TowerClashApp, TowerClashDebug } from './main';
 import type { PlayScreen } from './ui/play';
-import { LEVEL_META, levelIndex } from './levels/index';
+import { LEVEL_META, levelIndex, loadLevel } from './levels/index';
 import { fromHudSpace, hudAnchors, toClient } from './render/view';
 import type { SaveStorage } from './ui/save';
 import { isLevelUnlocked, isSaveFailing, isSaveReadOnly, saveLoadIssue, setSaveStorageForTests } from './ui/save';
@@ -69,6 +70,18 @@ export interface QaDebugExtras {
    * current screen's item count and the ringed rect (screen logical px); null before the lazy chunk is in.
    */
   getFocus(): { shown: boolean; index: number; count: number; rect: { x: number; y: number; w: number; h: number } | null } | null;
+  /**
+   * SIM-R1 replay record v1 (`src/sim/replay.ts`) of the running (or just finished) match as JSON —
+   * level, seed, modifiers, rules id, every command with its tick, and the outcome + state hash at this
+   * moment — for bug reports and `npx tsx scripts/replay.ts <file.json>`. Null when no match exists.
+   */
+  getReplay(): string | null;
+  /**
+   * SIM-R1: re-run a replay record (the JSON of `getReplay()`, or a committed fixture) on this engine and
+   * compare it with its recorded outcome — `verifyReplay` of `src/sim/replay.ts` minus the state. The
+   * level chunk is loaded if needed. Rejects on a malformed record or an unknown level.
+   */
+  verifyReplay(json: string): Promise<{ hash: string; expected?: string; matches: boolean; rulesMatch: boolean; outcome: string; timeMs: number; reason?: string }>;
 }
 
 let groundBuilds = 0;
@@ -120,6 +133,17 @@ function withPlay(app: TowerClashApp, fn: (play: PlayScreen) => void): boolean {
 export function installDebug(app: TowerClashApp): TowerClashDebug & QaDebugExtras {
   const extras: QaDebugExtras = {
     getFocus: () => app.lazy?.focusState(app) ?? null,
+    getReplay: () => (app.play ? serializeReplay(replayOf(app.play.level, app.play.state, app.play.replayLog, app.play.hasContinued)) : null),
+    verifyReplay: async (json) => {
+      const replay = parseReplay(json);
+      const level = await loadLevel(replay.levelId);
+      if (!level) throw new Error(`verifyReplay: unknown level ${replay.levelId}`);
+      const { hash, expected, matches, rulesMatch, outcome, timeMs, reason } = verifyReplay(level, replay);
+      const out: Awaited<ReturnType<QaDebugExtras['verifyReplay']>> = { hash, matches, rulesMatch, outcome, timeMs };
+      if (expected !== undefined) out.expected = expected;
+      if (reason !== undefined) out.reason = reason;
+      return out;
+    },
     audio: {
       getBuses: () => busLevels(audioSynth()),
       getMusic: () => musicState(audioSynth()),

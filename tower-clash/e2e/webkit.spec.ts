@@ -23,7 +23,8 @@ import { IPHONE_UA, WEBKIT_RUNS, WEBKIT_SKIP_REASON } from './tools/webkit';
  *      the reference player wins (seed 1) → result screen, stars saved;
  *   3. the lesson-card hold through the debug surface (`startMatch` semantics, AUD-B11);
  *   4. Settings → Text size 150 % (AUD-U2): persisted, redrawn bigger, kept across a reload;
- *   5. the share card (SHARE-1): win level 1 → SHARE → one 1080 × 1350 PNG handed to `navigator.share`.
+ *   5. the share card (SHARE-1): win level 1 → SHARE → one 1080 × 1350 PNG handed to `navigator.share`;
+ *   6. (SIM-R1, 2026-11-09) the node-recorded replay fixture re-runs on WebKit to the recorded hash (cross-engine floats).
  * Tests 3–5 tap with the suite's shared helpers (e2e/helpers/tap.ts, mouse pointer), so a gap in WebKit's
  * touch emulation shows up in test 2 alone and does not hide the rest.
  *
@@ -366,6 +367,28 @@ test.describe('Tower Clash on WebKit, iPhone-class screen (AUD-Q5)', () => {
     expect(await page.evaluate(() => window.__towerclash.startMatch())).toBe(true);
     await expect.poll(() => simTime(page), { message: 'startMatch() releases the hold' }).toBeGreaterThan(0);
     await expect.poll(() => hint(page), { message: 'level 1 tutorial after the card' }).toBe('Tap your tower');
+    const own = gameErrors(errors);
+    expect(own.page).toEqual([]);
+    expect(own.console).toEqual([]);
+  });
+
+  test('replay record v1 (SIM-R1): the node-recorded fixture (level 15, seed 1) re-runs on WebKit to the recorded hash — cross-engine determinism', async ({ page }) => {
+    // The sim calls `Math.hypot` in five places and the spec does not require it correctly rounded (docs/reviews/2026-11-09-icebox-1.1.md
+    // §1 risk 1): V8 (node, Chromium — e2e/replay.spec.ts) and JavaScriptCore must land on the same final state for a replay to travel.
+    const errors = await boot(page);
+    await page.waitForFunction(() => typeof (window as unknown as { __towerclash: { verifyReplay?: unknown } }).__towerclash.verifyReplay === 'function');
+    const fixture = readFileSync(new URL('../tests/fixtures/replay-l15-s1.json', import.meta.url), 'utf8');
+    const recorded = (JSON.parse(fixture) as { outcome: { result: string; timeMs: number; hash: string } }).outcome;
+    const v = await page.evaluate(
+      (json) =>
+        (window as unknown as { __towerclash: { verifyReplay(j: string): Promise<{ hash: string; matches: boolean; rulesMatch: boolean; outcome: string; timeMs: number; reason?: string }> } }).__towerclash.verifyReplay(json),
+      fixture,
+    );
+    expect(v.rulesMatch, 'the build plays the rules the fixture was recorded with').toBe(true);
+    expect(v.timeMs).toBe(recorded.timeMs);
+    expect(v.outcome).toBe(recorded.result);
+    expect(v.hash, `WebKit hash ${v.hash} vs node hash ${recorded.hash} (${v.reason ?? 'ok'})`).toBe(recorded.hash);
+    expect(v.matches).toBe(true);
     const own = gameErrors(errors);
     expect(own.page).toEqual([]);
     expect(own.console).toEqual([]);

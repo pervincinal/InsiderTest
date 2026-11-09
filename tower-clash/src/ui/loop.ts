@@ -14,6 +14,12 @@ export interface LoopHooks {
    * emitted by the commands applied before each tick (`linked` / `unlinked`).
    */
   onEvents?(events: SimEvent[]): void;
+  /**
+   * SIM-R1 replay record: called right before every command is applied — the queued player commands
+   * (`ai` undefined) and the ones `beforeTick` returned (`ai` 1) — with the sim time of the tick it
+   * precedes. The arguments are a `sim/replay.ts` `ReplayEntry` (`{ t, c, a }`) as is.
+   */
+  onCommand?(cmd: Command, timeMs: number, ai: 1 | undefined): void;
 }
 
 /**
@@ -41,6 +47,12 @@ export class GameLoop {
     this.pending.push(cmd);
   }
 
+  /** Record (SIM-R1) then apply one command before the tick at `state.time`. */
+  private apply(state: GameState, cmd: Command, ai?: 1): void {
+    this.hooks.onCommand?.(cmd, state.time, ai);
+    applyCommand(state, cmd);
+  }
+
   /** Fraction of a tick elapsed since the last step (0..1). */
   get alpha(): number {
     return Math.min(1, this.acc / C.TICK_MS);
@@ -65,7 +77,7 @@ export class GameLoop {
 
     // Commands issued since the last frame apply before the first step.
     if (this.pending.length) {
-      for (const cmd of this.pending) applyCommand(state, cmd);
+      for (const cmd of this.pending) this.apply(state, cmd);
       this.pending = [];
     }
 
@@ -81,7 +93,7 @@ export class GameLoop {
     let ran = 0;
     for (let i = 0; i < ticks; i++) {
       const aiCmds = this.hooks.beforeTick?.(state);
-      if (aiCmds) for (const cmd of aiCmds) applyCommand(state, cmd);
+      if (aiCmds) for (const cmd of aiCmds) this.apply(state, cmd, 1);
       drain();
       step(state, C.TICK_MS);
       ran++;

@@ -39,3 +39,18 @@ export {
 } from './step';
 export { getOutcome } from './outcome';
 export { SnapshotRing, applyContinue, cloneState, deepCopy, SNAPSHOT_VERSION } from './snapshot';
+export {
+  REPLAY_VERSION,
+  fnv1a,
+  rulesId,
+  hashState,
+  newReplay,
+  recordInto,
+  replayOf,
+  finishReplay,
+  serializeReplay,
+  parseReplay,
+  runReplay,
+  verifyReplay,
+} from './replay';
+export type { Replay, ReplayEntry, ReplayOutcome, RunReplayOptions, VerifyResult } from './replay';
