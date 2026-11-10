@@ -9,7 +9,17 @@
  * that re-exports `logLevelEnd`; the level skip from src/ui/result.ts) and only while
  * `settings.diagnostics === true`. Yesterday's map (a practice run that books nothing) writes none.
  * Lazy: reached from the result, settings and debug chunks only (tests/ui/diagnostics.test.ts pins it).
+ *
+ * DIAG-2 (2026-11-10): a match's row also carries its SIM-R1 replay record (`replay`, src/sim/replay.ts;
+ * built here, in the lazy chunk, only while the switch is on), bounded: a record over `DIAG_REPLAY_MAX`
+ * is kept as `{ dropped: 'size', bytes }`, only the newest `DIAG_REPLAY_KEEP` rows that carry one keep
+ * it (older rows lose the field, the row stays). COPY LOG appends one `#replay <row> <json>` line per
+ * kept record, newest first while the text stays ≤ `DIAG_SHARE_MAX` (`diagShare`; the settings toast
+ * says when older ones were left out). tests/ui/diagnosticsReplay.test.ts.
  */
+import type { Replay, ReplayEntry } from '../sim/replay';
+import { replayOf, serializeReplay } from '../sim/replay';
+import type { GameState, LevelDef } from '../sim/types';
 import type { SaveData, SaveStorage } from './save';
 import { saveStorage } from './save';
 import type { ResultInfo } from './result';
@@ -18,6 +28,16 @@ import { appVersion } from './screens';
 export const DIAG_KEY = 'towerclash.diag.v1';
 /** Rows kept: the newest win, the oldest go. */
 export const DIAG_CAP = 400;
+
+/** DIAG-2: a serialized replay record longer than this (chars = bytes: the JSON is ASCII) is not kept. */
+export const DIAG_REPLAY_MAX = 32 * 1024;
+/** DIAG-2: rows that keep their `replay` field, newest first; older rows drop it. */
+export const DIAG_REPLAY_KEEP = 5;
+/** DIAG-2: COPY LOG's text stays at or under this many chars; the oldest replay lines go first. */
+export const DIAG_SHARE_MAX = 100 * 1024;
+
+/** DIAG-2: the row's replay record, or why it was not kept. */
+export type DiagReplay = Replay | { dropped: 'size'; bytes: number };
 
 export type DiagMode = 'campaign' | 'daily' | 'weekly';
 export type DiagOutcome = 'won' | 'lost' | 'retreat' | 'skip';
@@ -50,6 +70,8 @@ export interface DiagRow {
   boosters: number;
   /** `settings.textScale` (1, 1.25, 1.5). */
   textScale: number;
+  /** DIAG-2: the match's replay record (a played result only, not a skip; newest `DIAG_REPLAY_KEEP` rows). */
+  replay?: DiagReplay;
 }
 
 /** The stored value: attempt counters per key and the rows, oldest first. */
@@ -87,6 +109,24 @@ function isRow(r: unknown): r is DiagRow {
   );
 }
 
+/** DIAG-2: a stored `replay` field worth keeping (a v1 record's shape, or the size marker). */
+function isDiagReplay(r: unknown): r is DiagReplay {
+  if (!isRecord(r)) return false;
+  if (r.dropped === 'size') return nonNegInt(r.bytes);
+  return r.v === 1 && Number.isInteger(r.levelId) && typeof r.seed === 'number' && isRecord(r.modifiers) && typeof r.rules === 'string' && Array.isArray(r.commands);
+}
+
+/** DIAG-2: only the newest `DIAG_REPLAY_KEEP` rows that carry a `replay` keep it (the rows themselves stay). */
+function trimReplays(rows: DiagRow[]): void {
+  let kept = 0;
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const r = rows[i]!;
+    if (r.replay === undefined) continue;
+    if (kept < DIAG_REPLAY_KEEP && isDiagReplay(r.replay)) kept++;
+    else delete r.replay;
+  }
+}
+
 function emptyStore(): DiagStore {
   return { v: 1, n: {}, rows: [] };
 }
@@ -99,8 +139,9 @@ function readStore(store: SaveStorage | null): DiagStore {
     if (!isRecord(raw) || raw.v !== 1) return emptyStore();
     const n: Record<string, number> = {};
     if (isRecord(raw.n)) for (const [k, c] of Object.entries(raw.n)) if (nonNegInt(c)) n[k] = c;
-    const rows = Array.isArray(raw.rows) ? raw.rows.filter(isRow) : [];
-    return { v: 1, n, rows: rows.slice(-DIAG_CAP) };
+    const rows = Array.isArray(raw.rows) ? raw.rows.filter(isRow).slice(-DIAG_CAP) : [];
+    trimReplays(rows);
+    return { v: 1, n, rows };
   } catch {
     return emptyStore();
   }
@@ -154,6 +195,8 @@ export interface DiagEvent {
   first: boolean;
   continued: boolean;
   boosters: number;
+  /** DIAG-2: the match's replay record (absent: a skip, or a caller without a match). */
+  replay?: DiagReplay;
 }
 
 /** `2026-11-01T10:23Z`: the wall clock to the minute (no seconds). */
@@ -188,17 +231,45 @@ export function recordDiag(save: SaveData, ev: DiagEvent, nowMs = Date.now(), bu
     boosters: ev.boosters,
     textScale: save.settings.textScale ?? 1,
   };
+  if (ev.replay) row.replay = ev.replay;
   d.rows.push(row);
   if (d.rows.length > DIAG_CAP) d.rows.splice(0, d.rows.length - DIAG_CAP);
-  writeStore(store, d);
+  trimReplays(d.rows);
+  // DIAG-2: storage refused the log with its records (quota) — keep the rows without them
+  if (!writeStore(store, d) && d.rows.some((r) => r.replay)) {
+    for (const r of d.rows) delete r.replay;
+    writeStore(store, d);
+  }
   return row;
+}
+
+/** DIAG-2: what the row needs of the play screen to close its replay record (`PlayScreen` has it all). */
+export interface DiagMatch {
+  readonly match: { timeMs: number };
+  readonly boosters: number;
+  readonly level?: LevelDef;
+  readonly state?: GameState;
+  readonly replayLog?: readonly ReplayEntry[];
+  readonly hasContinued?: boolean;
+}
+
+/**
+ * DIAG-2: the match's record (`replayOf`, closed on the final state), or the size marker when its JSON is
+ * over `DIAG_REPLAY_MAX`; undefined without a match.
+ */
+export function diagReplayOf(play: DiagMatch, max = DIAG_REPLAY_MAX): DiagReplay | undefined {
+  if (!play.level || !play.state || !play.replayLog) return undefined;
+  const replay = replayOf(play.level, play.state, play.replayLog, play.hasContinued === true);
+  const bytes = serializeReplay(replay).length;
+  return bytes <= max ? replay : { dropped: 'size', bytes };
 }
 
 /**
  * The play screen's result (src/ui/play.ts `present`, after the save write): campaign, daily or
  * weekly; a Retreat is `retreat`. Yesterday's map writes nothing (it books nothing either).
+ * DIAG-2: the row carries the match's replay record (`diagReplayOf`) — built only past the switch check.
  */
-export function logLevelEnd(save: SaveData, info: ResultInfo, play: { readonly match: { timeMs: number }; readonly boosters: number }, nowMs = Date.now()): DiagRow | null {
+export function logLevelEnd(save: SaveData, info: ResultInfo, play: DiagMatch, nowMs = Date.now()): DiagRow | null {
   if (save.settings.diagnostics !== true || info.daily?.practice) return null;
   const won = info.ui.outcome === 'won';
   const mode: DiagMode = info.challenge ? 'daily' : info.weekly ? 'weekly' : 'campaign';
@@ -216,6 +287,7 @@ export function logLevelEnd(save: SaveData, info: ResultInfo, play: { readonly m
       first,
       continued: info.continued,
       boosters: play.boosters,
+      replay: diagReplayOf(play),
     },
     nowMs,
   );
@@ -259,12 +331,62 @@ function csvField(v: string | number | boolean): string {
 
 const oneLine = (s: string): string => s.replace(/[\r\n|]+/g, ' ').trim();
 
-/** COPY LOG: `# …` hints, the column line, then one CSV row per event (oldest first). */
-export function diagText(rows: readonly DiagRow[], h: DiagHints): string {
+/** DIAG-2: COPY LOG's text and how many replay records it carries / had to leave out for size. */
+export interface DiagShare {
+  text: string;
+  replays: number;
+  omitted: number;
+}
+
+/** DIAG-2: one replay line of COPY LOG: `#replay <row> <json>` (`row` = the CSV row's 1-based number). */
+const REPLAY_LINE = /^#replay (\d+) (\{.*\})$/;
+
+/**
+ * COPY LOG: `# …` hints, the column line, one CSV row per event (oldest first), then (DIAG-2) one
+ * `#replay <row> <json>` line per kept record, in row order — the newest records that fit in `max` chars;
+ * a `# replays omitted <n> (size)` line when older ones did not. CSV readers skip `#` lines.
+ */
+export function diagShare(rows: readonly DiagRow[], h: DiagHints, max = DIAG_SHARE_MAX): DiagShare {
   const head = `# Tower Clash diagnostics v1 | build ${oneLine(h.build)} | ua ${oneLine(h.ua)} | viewport ${h.viewport} | dpr ${h.dpr} | text ${Math.round(h.textScale * 100)}% | lang ${h.language} | events ${rows.length}`;
   const lines = [head, DIAG_COLUMNS.join(',')];
   for (const r of rows) lines.push(DIAG_COLUMNS.map((c) => csvField(r[c])).join(','));
-  return lines.join('\n');
+  const omitNote = 40; // room for the "# replays omitted n (size)" line
+  let size = lines.join('\n').length;
+  const picked: string[] = [];
+  let omitted = 0;
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const rep = rows[i]!.replay;
+    if (rep === undefined) continue;
+    const line = `#replay ${i + 1} ${JSON.stringify(rep)}`;
+    if (omitted === 0 && size + 1 + line.length + omitNote <= max) {
+      picked.unshift(line);
+      size += 1 + line.length;
+    } else omitted++;
+  }
+  lines.push(...picked);
+  if (omitted > 0) lines.push(`# replays omitted ${omitted} (size)`);
+  return { text: lines.join('\n'), replays: picked.length, omitted };
+}
+
+/** COPY LOG's text (`diagShare(…).text`). */
+export function diagText(rows: readonly DiagRow[], h: DiagHints): string {
+  return diagShare(rows, h).text;
+}
+
+/** DIAG-2: the replay lines of a COPY LOG text (row number and record / size marker), in text order. */
+export function parseDiagReplays(text: string): { row: number; replay: DiagReplay }[] {
+  const out: { row: number; replay: DiagReplay }[] = [];
+  for (const line of text.split(/\r?\n/)) {
+    const m = REPLAY_LINE.exec(line);
+    if (!m) continue;
+    try {
+      const replay: unknown = JSON.parse(m[2]!);
+      if (isDiagReplay(replay)) out.push({ row: Number(m[1]), replay });
+    } catch {
+      /* a line cut by the paste: skipped */
+    }
+  }
+  return out;
 }
 
 /** Split one CSV line (RFC 4180 quoting). */

@@ -22,7 +22,7 @@ import { loadToneSets, urlToneOverride } from '../render/palette';
 import type { PointerPoint } from '../input/pointer';
 import { dragThreshold } from '../input/pointer';
 import { resetProgress, writeSave } from './save';
-import { clearDiag, currentHints, diagCount, diagRows, diagText, resetDiag } from './diagnostics';
+import { clearDiag, currentHints, diagCount, diagRows, diagShare, resetDiag } from './diagnostics';
 import { applyMotionPref } from './motion';
 import { effectsOn, musicOn, playSfx, setMusicOn, setMuted } from '../audio/index';
 import type { AdsProvider } from '../economy/ads';
@@ -278,8 +278,9 @@ export class SettingsScreen implements Screen {
       this.toast.show(t('settings.copyUnavailable'), 'error', this.nowMs);
       return;
     }
-    clip.writeText(diagText(diagRows(), currentHints(this.app.save, currentLanguage()))).then(
-      () => this.toast.show(t('settings.logCopied'), 'ok', this.nowMs),
+    const share = diagShare(diagRows(), currentHints(this.app.save, currentLanguage())); // DIAG-2: ≤ 100 kB, newest replays first
+    clip.writeText(share.text).then(
+      () => this.toast.show(t(share.omitted > 0 ? 'settings.logCopiedTrimmed' : 'settings.logCopied'), 'ok', this.nowMs),
       () => this.toast.show(t('settings.logCopyFailed'), 'error', this.nowMs),
     );
   }

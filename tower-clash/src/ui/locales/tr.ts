@@ -190,6 +190,7 @@ export const tr: Dictionary = {
   'settings.copyLog': 'GÜNLÜĞÜ KOPYALA',
   'settings.clearLog': 'GÜNLÜĞÜ TEMİZLE',
   'settings.logCopied': 'Tanılama günlüğü kopyalandı',
+  'settings.logCopiedTrimmed': 'Günlük kopyalandı; eski maç kayıtları sığmadı',
   'settings.logCopyFailed': 'Günlük kopyalanamadı',
   'settings.logCleared': 'Tanılama günlüğü temizlendi',
 

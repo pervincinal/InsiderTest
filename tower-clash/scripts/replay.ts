@@ -11,6 +11,10 @@
  * it when a sim rule changes (the node test and the e2e read its hash).
  *
  * Get a record from the browser with `window.__towerclash.getReplay()` (debug surface; a JSON string).
+ *
+ * `npx tsx scripts/replay.ts --from-log <log.txt> [--row N] [--out file.json]` (DIAG-2, frontend; argument
+ * parsing only) — the file is a tester's pasted Diagnostics COPY LOG text: take its last `#replay <row> <json>`
+ * line (or row N's), write it with `--out`, and verify it as above.
  */
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -23,13 +27,23 @@ import { recordHeadless } from './lib/recordReplay';
 const DIR = join(import.meta.dirname, '..', 'src', 'levels');
 
 const args = process.argv.slice(2);
-const file = args.find((a) => !a.startsWith('--'));
+const file = args.find((a, i) => !a.startsWith('--') && args[i - 1] !== '--row' && args[i - 1] !== '--out' && args[i - 1] !== '--max-ms');
 const opt = (name: string, def: string): string => {
   const i = args.indexOf(name);
   return i >= 0 && args[i + 1] !== undefined ? args[i + 1]! : def;
 };
 const maxMs = Number(opt('--max-ms', '180000'));
 const recordAt = args.indexOf('--record');
+const fromLog = args.includes('--from-log');
+
+/** DIAG-2: the record JSON of a COPY LOG text — the last `#replay <row> {…}` line, or row `--row N`'s. */
+function replayFromLog(text: string, row: string): string {
+  const lines = text.split(/\r?\n/).filter((l) => /^#replay \d+ \{/.test(l) && (row === '' || l.startsWith(`#replay ${row} `)));
+  if (lines.length === 0) throw new Error(`no #replay line${row ? ` for row ${row}` : ''} in the log`);
+  const json = lines.at(-1)!.replace(/^#replay \d+ /, '');
+  if (json.includes('"dropped"')) throw new Error(`the record was not kept (${json})`);
+  return json;
+}
 
 /** The shipped level with `id` (the JSON files of src/levels, like scripts/reclock.ts reads them). */
 function loadLevelSync(id: number): LevelDef | undefined {
@@ -61,13 +75,16 @@ if (recordAt >= 0) {
 }
 
 if (!file) {
-  console.error('usage: npx tsx scripts/replay.ts <file.json> [--max-ms N] | --record <level> <seed> [--out file.json]');
+  console.error('usage: npx tsx scripts/replay.ts <file.json> [--max-ms N] | --from-log <log.txt> [--row N] [--out file.json] | --record <level> <seed> [--out file.json]');
   process.exit(2);
 }
 
 let replay: Replay;
 try {
-  replay = parseReplay(readFileSync(file, 'utf8'));
+  const text = readFileSync(file, 'utf8');
+  const json = fromLog ? replayFromLog(text, opt('--row', '')) : text;
+  replay = parseReplay(json);
+  if (fromLog && opt('--out', '')) writeFileSync(opt('--out', ''), json + '\n');
 } catch (err) {
   console.error(`replay: cannot read ${file}: ${err instanceof Error ? err.message : String(err)}`);
   process.exit(2);

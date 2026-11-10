@@ -190,6 +190,7 @@ export const ru: Dictionary = {
   'settings.copyLog': 'КОПИРОВАТЬ ЖУРНАЛ',
   'settings.clearLog': 'ОЧИСТИТЬ ЖУРНАЛ',
   'settings.logCopied': 'Журнал диагностики скопирован',
+  'settings.logCopiedTrimmed': 'Журнал скопирован; старые записи матчей не поместились',
   'settings.logCopyFailed': 'Не удалось скопировать журнал',
   'settings.logCleared': 'Журнал диагностики очищен',
 

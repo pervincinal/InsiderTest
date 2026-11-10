@@ -144,7 +144,7 @@ describe('on: one row per booked result', () => {
     const rows = diagRows();
     expect(rows).toHaveLength(1);
     const r = rows[0]!;
-    expect(Object.keys(r).sort()).toEqual([...DIAG_COLUMNS].sort());
+    expect(Object.keys(r).sort()).toEqual([...DIAG_COLUMNS, 'replay'].sort()); // DIAG-2: + the match's replay record
     expect(r).toMatchObject({ v: 1, build: appVersion(), lvl: 5, mode: 'campaign', attempt: 1, outcome: 'won', first: true, continued: false, boosters: 1, textScale: 1.25 });
     expect(r.timeMs).toBe(play.elapsedMs());
     expect(r.timeMs).toBeGreaterThan(0);

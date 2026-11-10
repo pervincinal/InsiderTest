@@ -9,6 +9,9 @@ import { shotPath } from './tools/shots';
  * Off by default: a win writes nothing. Switched on from the About card, the reference player's win of
  * level 1 books one `level_end` row; COPY LOG puts the hints line, the column line and that row on the
  * clipboard; CLEAR LOG empties the log. Nothing is requested from the network (no telemetry, ever).
+ * DIAG-2 (2026-11-10): the row of a played result carries the match's replay record and COPY LOG appends
+ * it as a `#replay <row> <json>` line; a level 15 loss copied from the About card re-runs to its recorded
+ * hash through the debug `verifyReplay`, and the eager chunk does not hold the replay module.
  */
 
 // src/render/titleLayout.ts — TITLE.settings
@@ -134,7 +137,8 @@ test.describe('AUD-B6 diagnostics log', () => {
     const text = await page.evaluate(() => navigator.clipboard.readText());
     expect(text).toBe(await diagText(page));
     const lines = text.split('\n');
-    expect(lines).toHaveLength(3);
+    expect(lines).toHaveLength(4); // DIAG-2: + the win's `#replay 1 {…}` line
+    expect(lines[3]).toMatch(/^#replay 1 \{"v":1,"levelId":1,/);
     expect(lines[0]).toMatch(/\| build \S.* \| ua .+ \| viewport \d+x\d+ \| dpr [\d.]+ \| text 100% \| lang en \| events 1$/);
     expect(lines[1]).toBe(COLUMNS);
     const cells = lines[2]!.split(',');
@@ -148,6 +152,50 @@ test.describe('AUD-B6 diagnostics log', () => {
     await expect.poll(() => diagAbout(page).then((a) => a?.rows)).toBe(0);
 
     expect(requests, 'no request leaves the device').toEqual([]);
+    expect(errors).toEqual([]);
+  });
+
+  test('DIAG-2: a level 15 loss books its replay record; the copied log parses and its last record verifies', async ({ page, context }) => {
+    const errors = await boot(page);
+    let about = await openSettings(page);
+    await scrollTo(page, about.toggle);
+    await tapRect(page, about.toggle);
+    await expect.poll(() => diagAbout(page).then((a) => a?.on)).toBe(true);
+
+    await page.evaluate(async () => {
+      await window.__towerclash.loadLevel(15, 1);
+      window.__towerclash.setSpeed(20);
+      window.__towerclash.economy.autoLose();
+    });
+    await expect.poll(() => screen(page), { timeout: 90_000, intervals: [250] }).toBe('result');
+    await expect.poll(() => diagRows(page).then((r) => r.length)).toBe(1);
+    expect((await diagRows(page))[0]).toMatchObject({ lvl: 15, outcome: 'lost' });
+    expect(await page.evaluate((k) => localStorage.getItem(k)!, SAVE_KEY), 'the record is never inside the save').not.toContain('"commands"');
+
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    about = await openSettings(page);
+    await scrollTo(page, about.copy!);
+    await tapRect(page, about.copy!);
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toMatch(/^# Tower Clash diagnostics v1/);
+    const text = await page.evaluate(() => navigator.clipboard.readText());
+    expect(text.length).toBeLessThanOrEqual(100 * 1024);
+    const lines = text.split('\n');
+    expect(lines[2]).toMatch(/^1,[^,]+,[^,]+,15,campaign,1,lost,/);
+    const last = lines.filter((l) => l.startsWith('#replay ')).at(-1)!;
+    expect(last, 'the loss carries its record').toMatch(/^#replay 1 \{/);
+    const json = last.replace(/^#replay \d+ /, '');
+    const rec = JSON.parse(json) as { levelId: number; outcome: { result: string; hash: string }; commands: unknown[] };
+    expect(rec.levelId).toBe(15);
+    expect(rec.outcome.result).toBe('lost');
+    expect(json.length).toBeLessThanOrEqual(32 * 1024);
+    const v = await page.evaluate((j) => (window as unknown as { __towerclash: { verifyReplay(json: string): Promise<Record<string, unknown>> } }).__towerclash.verifyReplay(j), json);
+    expect(v).toMatchObject({ matches: true, rulesMatch: true, outcome: 'lost', expected: rec.outcome.hash, hash: rec.outcome.hash });
+    console.log(`DIAG-2 e2e: level 15 loss record ${json.length} B, ${rec.commands.length} commands, log text ${text.length} B`);
+
+    // the replay module stays out of the eager entry chunk (its parse error text is unique to it)
+    const entry = await page.evaluate(() => (document.querySelector('script[type="module"][src]') as HTMLScriptElement).src);
+    const body = await page.evaluate((u) => fetch(u).then((r) => r.text()), entry);
+    expect(body).not.toContain('replay: not an object');
     expect(errors).toEqual([]);
   });
 });

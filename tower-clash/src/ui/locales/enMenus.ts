@@ -126,6 +126,7 @@ export const enMenus = {
   'settings.copyLog': 'COPY LOG',
   'settings.clearLog': 'CLEAR LOG',
   'settings.logCopied': 'Diagnostics log copied',
+  'settings.logCopiedTrimmed': 'Log copied; older match records left out (too big)',
   'settings.logCopyFailed': 'Could not copy the log',
   'settings.logCleared': 'Diagnostics log cleared',
 

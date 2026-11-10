@@ -190,6 +190,7 @@ export const az: Dictionary = {
   'settings.copyLog': 'JURNALI KOPYALA',
   'settings.clearLog': 'JURNALI TƏMİZLƏ',
   'settings.logCopied': 'Diaqnostika jurnalı kopyalandı',
+  'settings.logCopiedTrimmed': 'Jurnal kopyalandı; köhnə matç qeydləri sığmadı',
   'settings.logCopyFailed': 'Jurnal kopyalanmadı',
   'settings.logCleared': 'Diaqnostika jurnalı təmizləndi',
 
