@@ -1003,8 +1003,9 @@ export function drawGame(ctx: CanvasRenderingContext2D, state: GameState, view: 
   ctx.clip();
   ctx.save();
   if (shake.dx || shake.dy) ctx.translate(shake.dx, shake.dy);
-  // a shaking frame re-blits the ground here so the whole world moves together (the layer stays put)
-  if (!layers || shake.dx || shake.dy) drawTerrain(ctx, view, pal, spec, cam);
+  // a shaking frame re-blits the ground here so the whole world moves together (the layer stays put; PERF-13:
+  // as the layer's own pixels moved by the shake's whole device px, terrain.ts `copyLayer`)
+  if (!layers || shake.dx || shake.dy) drawTerrain(ctx, view, pal, spec, cam, layers?.ground.canvas);
 
   // ART-21 (camera.ts): everything is drawn in the logical frame at projected map points — first what
   // lies on the ground, then what stands on it (upright, depth-scaled)

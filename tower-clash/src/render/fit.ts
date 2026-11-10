@@ -79,6 +79,29 @@ export function groundRect(f: Fit, view: Pick<View, 'scale' | 'offsetX' | 'offse
 /** The fitted ground image (one level at a time): the flat map's ground (terrain.ts `render`) for `groundRect` only, at the zoomed resolution — about the screen's pixel count, not the whole map × z². */
 let ground: { key: string; canvas: HTMLCanvasElement } | null = null;
 
+/**
+ * PERF-13 (terrain.ts `drawTerrain`, flat or fitted; here to keep it out of the eager chunk): the ground image's box (x, y, w, h: logical, at rest) filled from `layer`, a canvas of the view's
+ * size holding that image at rest (layers.ts), moved by the current transform's offset from rest (a
+ * shaking frame's; draw.ts snaps the shake to whole device px): the box rounded to device px and copied
+ * 1 : 1 — the pixels re-drawing the image there gives, but a copy instead of a filtered 1.7 Mpx resample
+ * (≈ 1.8 ms a frame on the level-50 perf sample, DPR 2.75). Only the box's edge pixels (under the HUD
+ * bands on a phone) can differ, by their anti-aliasing.
+ */
+export function copyLayer(ctx: CanvasRenderingContext2D, view: View, layer: HTMLCanvasElement, x: number, y: number, w: number, h: number): void {
+  const { e, f } = ctx.getTransform();
+  const s = view.dpr * view.scale;
+  const ox = view.dpr * view.offsetX;
+  const oy = view.dpr * view.offsetY;
+  const x0 = Math.round(ox + s * x);
+  const y0 = Math.round(oy + s * y);
+  const cw = Math.round(ox + s * (x + w)) - x0;
+  const ch = Math.round(oy + s * (y + h)) - y0;
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.drawImage(layer, x0, y0, cw, ch, x0 + Math.round(e - ox), y0 + Math.round(f - oy), cw, ch);
+  ctx.restore();
+}
+
 /** The flat map seen through fit `f` (k 1 like the flat map; not `flat`, which means the identity). */
 export function fitCamera(f: Fit): Camera {
   const { z, tx, ty } = f;
@@ -86,8 +109,9 @@ export function fitCamera(f: Fit): Camera {
     z,
     tx,
     ty,
-    ground(ctx, view, pal, spec) {
+    ground(ctx, view, pal, spec, layer) {
       const r = groundRect(f, view);
+      if (layer) return copyLayer(ctx, view, layer, tx + z * r.x, ty + z * r.y, z * r.w, z * r.h); // PERF-13: a shaking play frame
       const s = view.dpr * view.scale * z;
       const pxW = Math.max(1, Math.ceil(r.w * s));
       const pxH = Math.max(1, Math.ceil(r.h * s));

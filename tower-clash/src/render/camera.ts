@@ -159,8 +159,11 @@ export interface Fit {
 
 /** A fit camera's `fit` (fit.ts): the zoom and offset, the ground it paints and the transform for the flat map's overlay (terrain.ts). */
 export interface CameraFit extends Fit {
-  /** Paint the ground: the part of the map the screen shows, cached at the zoomed resolution. Logical frame. */
-  ground(ctx: CanvasRenderingContext2D, view: View, pal: Palette, spec: TerrainSpec): void;
+  /**
+   * Paint the ground: the part of the map the screen shows, cached at the zoomed resolution. Logical frame.
+   * `layer` (PERF-13): a canvas of the view's size holding exactly that ground at rest — a shaking frame copies it.
+   */
+  ground(ctx: CanvasRenderingContext2D, view: View, pal: Palette, spec: TerrainSpec, layer?: HTMLCanvasElement): void;
   /** Apply the fit to `ctx` (map px → logical px). */
   on(ctx: CanvasRenderingContext2D): void;
 }
@@ -172,6 +175,8 @@ const FIT_CHUNK = 'fit';
 let fitFor: ((c: FitContent) => (a?: HudAnchors) => Camera | null) | null = null;
 let fitCam: ((a?: HudAnchors) => Camera | null) | null = null;
 let fitBand: (() => HudAnchors) | undefined;
+/** PERF-13: fit.ts `copyLayer` once the chunk is in — a shaking frame's flat ground (terrain.ts `drawTerrain`). */
+export let copyGround: typeof import('./fit').copyLayer | undefined;
 
 /**
  * The level the play camera frames (its towers and mines), or null: the whole map (`?fit=0`: fit.ts
@@ -211,6 +216,7 @@ export function loadFit(): Promise<void> {
   fitPromise ??= loadChunk(FIT_CHUNK, () => import('./fit'))
     .then((m) => {
       fitFor = m.fitFor;
+      copyGround = m.copyLayer;
     })
     .catch((err: unknown) => {
       fitPromise = null;

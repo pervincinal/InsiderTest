@@ -553,6 +553,15 @@ export function musterGrowth(state: MarksState, link: Link, body: Rect, cam: Cam
 }
 
 /**
+ * PERF-13: the rect holding every pixel of a muster at gate (x, y), depth scale `s` (the ring, the soldier's
+ * head, a tank's hull, the reduced-motion dot): ±17·s across, 35·s above, 8·s below, + 4 px for strokes and
+ * anti-aliasing (tests/render/muster.test.ts measures the drawing against it).
+ */
+export function musterBox(x: number, y: number, s: number): Rect {
+  return { x: x - 17 * s - 4, y: y - 35 * s - 4, w: 34 * s + 8, h: 43 * s + 8 };
+}
+
+/**
  * AUD-F5b (GDD §2.3 "AUD-F5 2026-10-31"): the first soldier of a new stream leaves one interval after the
  * tap (1 000 ms at L1) — the sim is not changed; instead, from the frame a link has come through its first
  * tick, a soldier forms at the source's gate (the plinth rim toward the target, where the stream leaves
@@ -561,10 +570,10 @@ export function musterGrowth(state: MarksState, link: Link, body: Rect, cam: Cam
  * follow it — 2 fills and an ink outline. It stands at full size from the first emission until that soldier
  * can be seen (`musterGrowth`; so the hand-over has no empty frame), then is gone for good. Reduced motion: a static
  * MUSTER_DOT_ALPHA dot (owner lit, ink edge) for the same span. One per link; 0 particles; no sound
- * (the `linked` pulse stays). Clipped clear of the badges.
+ * (the `linked` pulse stays). Clipped clear of the badges (PERF-13: of those reaching it, `musterBox`).
  */
 export function drawMusters(host: BurstHost, ctx: CanvasRenderingContext2D, pal: Palette, state: MarksState, layout: MarksLayout, cam: Camera): void {
-  let clipped = false;
+  let saved = false;
   for (const link of state.links) {
     const from = state.towers[link.from];
     const to = state.towers[link.to];
@@ -578,62 +587,77 @@ export function drawMusters(host: BurstHost, ctx: CanvasRenderingContext2D, pal:
     const half = body.w / 2;
     const k = musterGrowth(state, link, body, cam);
     if (k === null) continue;
-    if (!clipped) {
-      clipped = true;
+    if (!saved) {
+      saved = true;
       ctx.save();
-      ctx.beginPath();
-      ctx.rect(-1e4, -1e4, 2e4, 2e4);
-      for (const { rect: r } of layout.badges.values()) pillPath(ctx, r, 3);
-      ctx.clip('evenodd');
       ctx.lineCap = 'round';
     }
     const r = rimScale(dx, dy, half);
     const x = p.x + dx * r;
     const y = p.y + 2 * WORLD_ZOOM.tower * p.s + dy * r;
-    const tones = pal.ownerTones[link.owner];
-    if (host.reducedMotion) {
-      ctx.globalAlpha = MUSTER_DOT_ALPHA;
-      ctx.beginPath();
-      ctx.arc(x, y - 6 * p.s, 6 * p.s, 0, Math.PI * 2);
-      ctx.fillStyle = tones.lit;
-      ctx.fill();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = pal.ink;
-      ctx.stroke();
-      continue;
+    // PERF-13: clipped clear of the badge pills that reach this muster's box (none: no clip) — the pixels of one
+    // canvas-wide clip round every pill, without a full-canvas clip mask on every frame a stream starts
+    const m = musterBox(x, y, p.s);
+    let cut = false;
+    for (const { rect: b } of layout.badges.values()) {
+      if (b.x - 3 >= m.x + m.w || m.x >= b.x + b.w + 3 || b.y - 3 >= m.y + m.h || m.y >= b.y + b.h + 3) continue;
+      if (!cut) {
+        cut = true;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(m.x, m.y, m.w, m.h);
+      }
+      pillPath(ctx, b, 3);
     }
-    // the ring on the ground: a faint paper track, the owner's lit arc closing clockwise from the top
-    const rx = 13 * p.s;
-    ctx.globalAlpha = 0.85;
-    ctx.lineWidth = 3 * p.s;
+    if (cut) ctx.clip('evenodd');
+    drawMuster(ctx, pal, host.reducedMotion, link.owner, from, x, y, dx, p.s, k);
+    if (cut) ctx.restore();
+  }
+  if (saved) ctx.restore();
+}
+
+/** One muster (`drawMusters`) at gate (x, y), the lane leaving along screen x-direction `dx`, depth scale `ps`, growth `k`. */
+function drawMuster(ctx: CanvasRenderingContext2D, pal: Palette, reduced: boolean, owner: Link['owner'], from: Tower, x: number, y: number, dx: number, ps: number, k: number): void {
+  const tones = pal.ownerTones[owner];
+  if (reduced) {
+    ctx.globalAlpha = MUSTER_DOT_ALPHA;
     ctx.beginPath();
-    ctx.ellipse(x, y, rx, rx * PLINTH_RY, 0, 0, Math.PI * 2);
-    ctx.strokeStyle = pal.paper;
-    ctx.stroke();
-    if (k > 0) {
-      ctx.beginPath();
-      ctx.ellipse(x, y, rx, rx * PLINTH_RY, 0, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k);
-      ctx.strokeStyle = tones.shade;
-      ctx.stroke();
-    }
-    if (k <= 0) continue;
-    // the forming soldier (sprites.ts proportions at the units' draw scale): body + head, or hull + turret
-    ctx.globalAlpha = k;
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = pal.ink;
-    const tank = from.kind === 'tankFactory' && from.units >= C.TANK_WEIGHT;
-    const s = (tank ? TANK_RADIUS * TANK_DRAW_SCALE : SOLDIER_DRAW_SCALE) * p.s * k;
-    if (tank) roundRect(ctx, { x: x - s, y: y - 0.85 * s, w: 2 * s, h: 1.25 * s }, 3 * k);
-    else roundRect(ctx, { x: x - 3.6 * s, y: y - 12 * s, w: 7.2 * s, h: 11 * s }, 3.6 * s);
-    ctx.fillStyle = tones.mid;
-    ctx.fill();
-    ctx.stroke();
-    ctx.beginPath();
-    if (tank) ctx.arc(x, y - 0.45 * s, 0.5 * s, 0, Math.PI * 2);
-    else ctx.arc(x + dx * 1.2 * s, y - 15.4 * s, 4.2 * s, 0, Math.PI * 2);
+    ctx.arc(x, y - 6 * ps, 6 * ps, 0, Math.PI * 2);
     ctx.fillStyle = tones.lit;
     ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = pal.ink;
     ctx.stroke();
+    return;
   }
-  if (clipped) ctx.restore();
+  // the ring on the ground: a faint paper track, the owner's lit arc closing clockwise from the top
+  const rx = 13 * ps;
+  ctx.globalAlpha = 0.85;
+  ctx.lineWidth = 3 * ps;
+  ctx.beginPath();
+  ctx.ellipse(x, y, rx, rx * PLINTH_RY, 0, 0, Math.PI * 2);
+  ctx.strokeStyle = pal.paper;
+  ctx.stroke();
+  if (k <= 0) return;
+  ctx.beginPath();
+  ctx.ellipse(x, y, rx, rx * PLINTH_RY, 0, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k);
+  ctx.strokeStyle = tones.shade;
+  ctx.stroke();
+  // the forming soldier (sprites.ts proportions at the units' draw scale): body + head, or hull + turret
+  ctx.globalAlpha = k;
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = pal.ink;
+  const tank = from.kind === 'tankFactory' && from.units >= C.TANK_WEIGHT;
+  const s = (tank ? TANK_RADIUS * TANK_DRAW_SCALE : SOLDIER_DRAW_SCALE) * ps * k;
+  if (tank) roundRect(ctx, { x: x - s, y: y - 0.85 * s, w: 2 * s, h: 1.25 * s }, 3 * k);
+  else roundRect(ctx, { x: x - 3.6 * s, y: y - 12 * s, w: 7.2 * s, h: 11 * s }, 3.6 * s);
+  ctx.fillStyle = tones.mid;
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  if (tank) ctx.arc(x, y - 0.45 * s, 0.5 * s, 0, Math.PI * 2);
+  else ctx.arc(x + dx * 1.2 * s, y - 15.4 * s, 4.2 * s, 0, Math.PI * 2);
+  ctx.fillStyle = tones.lit;
+  ctx.fill();
+  ctx.stroke();
 }

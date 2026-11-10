@@ -6,7 +6,7 @@ import { TONE_PALETTES } from '../../src/render/teamTones';
 import { badgeSize } from '../../src/render/sprites';
 import { setTextScale, worldScale } from '../../src/render/widgets';
 import type { Rect } from '../../src/render/widgets';
-import { EMBLEM, drawOwnerEmblem, drawOwnerEmblems, emblemBox, emblemTones, lumContrast, ownerEmblem } from '../../src/render/ownerEmblem';
+import { EMBLEM, drawOwnerEmblem, drawOwnerEmblems, emblemBand, emblemBox, emblemTones, lumContrast, ownerEmblem } from '../../src/render/ownerEmblem';
 
 /*
  * AUD-U17 (docs/reviews/2026-10-29-audit-ux.md): ownership survives grayscale. Every badge carries an owner
@@ -151,10 +151,101 @@ describe('AUD-U17 owner emblems', () => {
       ['c', { rect: { ...r, x: r.x + 400 }, bs: 1, side: 'above' }],
     ]) as never;
     const frame = recorder();
-    drawOwnerEmblems({ badgeHit: () => 0 }, frame.ctx, pal, { towers }, { badges, chips: [{ rect: { x: 0, y: 0, w: 40, h: 20 } }] as never }, 0);
+    // a chip on badge c's top rim: c's emblem is clipped clear of it (PERF-13: the far chip clips nothing)
+    const chips = [{ rect: { x: 0, y: 0, w: 40, h: 20 } }, { rect: { x: r.x + 400 + r.w / 2 + 4, y: r.y - 12, w: 40, h: 20 } }];
+    drawOwnerEmblems({ badgeHit: () => 0 }, frame.ctx, pal, { towers }, { badges, chips } as never, 0);
     expect(frame.log.fills).toHaveLength(2); // the star and the three-pip row; neutral none
     expect(frame.log.arc).toBe(3);
     expect(frame.log.clips).toBe(1);
     expect(frame.log.saves).toBe(frame.log.restores);
+  });
+});
+
+/*
+ * PERF-13: the emblems used to be drawn inside one even-odd clip of the whole canvas minus every chip, built on
+ * every frame with a chip on screen (≈ 0.8 ms a frame on the level-50 perf sample at DPR 2.75). Now an emblem
+ * no chip reaches is drawn unclipped, and one a chip reaches inside an even-odd clip of `emblemBand` (its pill's
+ * top-rim band) minus the chips that reach that band: inside the band it is the same clip region, and the band
+ * holds every pixel of the emblem — so the pixels are those of the canvas-wide clip.
+ */
+describe('PERF-13 emblem clip', () => {
+  /** Records each clip's rects (the path since the last beginPath) and how many emblems were drawn under it. */
+  function clipRecorder() {
+    const clips: { rects: number[][]; rule: unknown }[] = [];
+    let path: number[][] = [];
+    const store: Record<string, unknown> = { globalAlpha: 1 };
+    const ctx = new Proxy({} as CanvasRenderingContext2D, {
+      get(_t, key: string) {
+        if (key === 'beginPath') return () => void (path = []);
+        if (key === 'rect') return (...a: number[]) => void path.push(a);
+        if (key === 'clip') return (rule: unknown) => void clips.push({ rects: path, rule });
+        if (key in store) return store[key];
+        return () => undefined;
+      },
+      set(_t, key: string, v) {
+        store[key] = v;
+        return true;
+      },
+    });
+    return { ctx, clips };
+  }
+  const inside = (a: Rect, b: Rect): boolean => a.x >= b.x && a.y >= b.y && a.x + a.w <= b.x + b.w && a.y + a.h <= b.y + b.h;
+  const grow = (r: Rect, d: number): Rect => ({ x: r.x - d, y: r.y - d, w: r.w + 2 * d, h: r.h + 2 * d });
+
+  it('the band holds every emblem with 2 px to spare: every owner, pill text, badge scale and text size', () => {
+    try {
+      for (const scale of [1, 1.25, 1.5]) {
+        setTextScale(scale);
+        for (const text of ['0', '7', '42', '199']) {
+          for (const s of [0.6, 0.8, 1, 1.15, 1.6, 2]) {
+            const { r } = pill(text, s);
+            for (const owner of OWNERS) {
+              const box = emblemBox(r, owner);
+              if (box) expect(inside(grow(box, 2), emblemBand(r)), `${owner} "${text}" × ${s} at text ${scale}`).toBe(true);
+            }
+          }
+        }
+      }
+    } finally {
+      setTextScale(1);
+    }
+  });
+
+  it('no chip near any emblem: no clip at all (the old pass built one canvas-wide clip whenever a chip was on screen)', () => {
+    const { r } = pill('12');
+    const towers = { a: { owner: 'player' }, b: { owner: 'enemy1' } } as never;
+    const badges = new Map([
+      ['a', { rect: r, bs: 1, side: 'above' }],
+      ['b', { rect: { ...r, y: r.y + 300 }, bs: 1, side: 'above' }],
+    ]) as never;
+    // a chip just clear of a's band (1 px cut + the band's own 2 px), and one beside b's pill well below its rim
+    const band = emblemBand(r);
+    const chips = [{ rect: { x: band.x + band.w + 1.01, y: r.y, w: 60, h: 30 } }, { rect: { x: r.x + r.w + 12, y: r.y + 300 + r.h * 0.6, w: 60, h: 30 } }];
+    const { ctx, clips } = clipRecorder();
+    drawOwnerEmblems({ badgeHit: () => 0 }, ctx, DEFAULT_PALETTE, { towers }, { badges, chips } as never, 0);
+    expect(clips).toHaveLength(0);
+  });
+
+  it('a chip reaching an emblem clips only that emblem, by its band minus the chips that reach it (even-odd)', () => {
+    const { r } = pill('12');
+    const towers = { a: { owner: 'player' }, b: { owner: 'enemy2' }, n: { owner: 'neutral' } } as never;
+    const rb = { ...r, x: r.x + 220 };
+    const rn = { ...r, x: r.x - 220 };
+    const badges = new Map([
+      ['a', { rect: r, bs: 1, side: 'above' }],
+      ['b', { rect: rb, bs: 1, side: 'above' }],
+      ['n', { rect: rn, bs: 1, side: 'above' }],
+    ]) as never;
+    const onB = { x: rb.x + rb.w / 2 - 10, y: rb.y - 20, w: 40, h: 22 };
+    const onN = { x: rn.x + rn.w / 2 - 10, y: rn.y - 20, w: 40, h: 22 }; // a neutral badge has no emblem: nothing to clip
+    const { ctx, clips } = clipRecorder();
+    drawOwnerEmblems({ badgeHit: (id) => (id === 'b' ? 3 : 0) }, ctx, DEFAULT_PALETTE, { towers }, { badges, chips: [{ rect: onB }, { rect: onN }] } as never, 0);
+    expect(clips).toHaveLength(1);
+    const band = emblemBand({ ...rb, x: rb.x + 3 }); // follows the under-fire jolt like the emblem
+    expect(clips[0]!.rule).toBe('evenodd');
+    expect(clips[0]!.rects).toEqual([
+      [band.x, band.y, band.w, band.h],
+      [onB.x - 1, onB.y - 1, onB.w + 2, onB.h + 2], // the same 1 px cut round the chip as before
+    ]);
   });
 });

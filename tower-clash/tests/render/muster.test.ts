@@ -6,11 +6,13 @@ import { step } from '../../src/sim/step';
 import { C } from '../../src/sim/constants';
 import type { GameState, TowerDef } from '../../src/sim/types';
 import { DEFAULT_PALETTE } from '../../src/render/palette';
+import type { Camera } from '../../src/render/camera';
 import { FLAT } from '../../src/render/camera';
+import { fitCamera } from '../../src/render/fit';
 import { ParticleSystem, loadEconomyBursts } from '../../src/render/particles';
 import type { MarksLayout } from '../../src/render/particles';
 import { towerBodyRect } from '../../src/render/worldChips';
-import { MUSTER_DOT_ALPHA } from '../../src/render/particlesEconomy';
+import { MUSTER_DOT_ALPHA, musterBox } from '../../src/render/particlesEconomy';
 
 // AUD-U17's owner emblems ride the same marks pass (src/render/ownerEmblem.ts, tests/render/ownerEmblem.test.ts);
 // this file pins the other marks' draw calls, so the emblems are left out here
@@ -301,5 +303,125 @@ describe('muster (reduced motion)', () => {
     }
     expect(n).toBeGreaterThan(19); // through the emission at 1 000 ms and the walk out from behind the roof
     expect(fx.count).toBe(0);
+  });
+});
+
+/*
+ * PERF-13: the musters used to be drawn inside one even-odd clip of the whole canvas minus every badge pill,
+ * built on every frame a stream was forming (≈ 0.8 ms a frame on the level-50 perf sample at DPR 2.75). Now
+ * each muster is clipped only by the pills that reach its `musterBox`, inside that box (none: no clip) — the
+ * same pixels, as long as the box holds every pixel the muster draws, which these pin.
+ */
+describe('PERF-13 muster clip', () => {
+  beforeAll(async () => {
+    await loadEconomyBursts();
+  });
+
+  /** The bounds of everything drawn (paths, grown by half the line width when stroked) and the gate (the ring's / dot's centre). */
+  function extents(calls: Call[], lineWidths: number[]): { box: { x0: number; y0: number; x1: number; y1: number } | null } {
+    let box: { x0: number; y0: number; x1: number; y1: number } | null = null;
+    let path: [number, number, number, number][] = [];
+    const add = (x0: number, y0: number, x1: number, y1: number): void => void path.push([x0, y0, x1, y1]);
+    let w = 0;
+    for (const c of calls) {
+      const a = c.args as number[];
+      if (c.fn === 'beginPath') path = [];
+      else if (c.fn === 'moveTo' || c.fn === 'lineTo') add(a[0]!, a[1]!, a[0]!, a[1]!);
+      else if (c.fn === 'quadraticCurveTo') add(Math.min(a[0]!, a[2]!), Math.min(a[1]!, a[3]!), Math.max(a[0]!, a[2]!), Math.max(a[1]!, a[3]!));
+      else if (c.fn === 'arc') add(a[0]! - a[2]!, a[1]! - a[2]!, a[0]! + a[2]!, a[1]! + a[2]!);
+      else if (c.fn === 'ellipse') add(a[0]! - a[2]!, a[1]! - a[3]!, a[0]! + a[2]!, a[1]! + a[3]!);
+      else if (c.fn === 'fill' || c.fn === 'stroke') {
+        const g = c.fn === 'stroke' ? (lineWidths[w++] ?? 0) / 2 : 0;
+        for (const [x0, y0, x1, y1] of path) {
+          box = box ? { x0: Math.min(box.x0, x0 - g), y0: Math.min(box.y0, y0 - g), x1: Math.max(box.x1, x1 + g), y1: Math.max(box.y1, y1 + g) } : { x0: x0 - g, y0: y0 - g, x1: x1 + g, y1: y1 + g };
+        }
+      }
+    }
+    return { box };
+  }
+
+  /** A recording context that also logs the line width of every stroke. */
+  function strokeCtx(): { ctx: CanvasRenderingContext2D; calls: Call[]; widths: number[] } {
+    const { ctx: inner, calls } = recCtx();
+    const widths: number[] = [];
+    const ctx = new Proxy(inner, {
+      get(t, key) {
+        if (key === 'stroke') return () => void (widths.push(Reflect.get(t, 'lineWidth') as number), calls.push({ fn: 'stroke', args: [], stroke: null, fill: null, alpha: 1 }));
+        return Reflect.get(t, key);
+      },
+      set(t, key, v) {
+        return Reflect.set(t, key, v);
+      },
+    });
+    return { ctx, calls, widths };
+  }
+
+  it('musterBox holds every pixel a muster draws (+1 px anti-aliasing): soldier, tank, reduced-motion dot, flat and at depth 1.35', () => {
+    const z = 1.35;
+    const cams: [string, Camera][] = [
+      ['flat', FLAT],
+      ['fit 1.35', fitCamera({ z, tx: (720 - 720 * z) / 2, ty: -200 })],
+    ];
+    let checked = 0;
+    for (const [name, cam] of cams) {
+      for (const [kind, reduced, p] of [
+        ['soldier', false, {}],
+        ['tank', false, { kind: 'tankFactory', units: 10 }],
+        ['dot', true, {}],
+      ] as const) {
+        const state = board(p as Partial<TowerDef>);
+        const fx = new ParticleSystem(reduced);
+        link(state);
+        const s = cam.proj(360, 1000).s;
+        for (let i = 0; i < 40; i++) {
+          ticks(state, 1);
+          const bodies = new Map(Object.values(state.towers).map((t) => [t.id, towerBodyRect(t.kind, t.level, cam.proj(t.x, t.y))]));
+          const { ctx, calls, widths } = strokeCtx();
+          fx.drawMarks(ctx, P, state, { badges: new Map(), chips: [], bodies }, 1000, cam);
+          if (!calls.length) break;
+          const ring = calls.find((c) => c.fn === 'ellipse' || c.fn === 'arc')!;
+          const gate = { x: ring.args[0] as number, y: (ring.args[1] as number) + (ring.fn === 'arc' ? 6 * s : 0) };
+          const m = musterBox(gate.x, gate.y, s);
+          const { box } = extents(calls, widths);
+          expect(box, `${name} ${kind}`).not.toBeNull();
+          expect(box!.x0 - 1, `${name} ${kind} left`).toBeGreaterThanOrEqual(m.x);
+          expect(box!.y0 - 1, `${name} ${kind} top`).toBeGreaterThanOrEqual(m.y);
+          expect(box!.x1 + 1, `${name} ${kind} right`).toBeLessThanOrEqual(m.x + m.w);
+          expect(box!.y1 + 1, `${name} ${kind} bottom`).toBeLessThanOrEqual(m.y + m.h);
+          checked++;
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(40);
+  });
+
+  it('no badge reaches the muster: no clip; a badge over it: one even-odd clip of the muster box minus that pill', () => {
+    const state = board();
+    const fx = new ParticleSystem(false);
+    link(state);
+    ticks(state, 4);
+    const bodies = layoutOf(state).bodies;
+    const m = musterBox(GATE.x, GATE.y, 1);
+    const far = { x: 40, y: 200, w: 60, h: 36 };
+    const near = { x: GATE.x - 30, y: m.y - 30, w: 60, h: 36 }; // its pill (3 px out) reaches the box's top edge
+    const run = (rects: { x: number; y: number; w: number; h: number }[]): Call[] => {
+      const { ctx, calls } = recCtx();
+      fx.drawMarks(ctx, P, state, { badges: new Map(rects.map((rect, i) => [`b${i}`, { rect, bs: 1, side: 'above' }])) as never, chips: [], bodies }, 1000, FLAT);
+      return calls;
+    };
+    const free = run([far]);
+    expect(tracks(free)).toHaveLength(1);
+    expect(free.filter((c) => c.fn === 'clip')).toHaveLength(0);
+    const cut = run([far, near]);
+    const clips = cut.filter((c) => c.fn === 'clip');
+    expect(clips).toHaveLength(1);
+    expect(clips[0]!.args).toEqual(['evenodd']);
+    const i = cut.indexOf(clips[0]!);
+    const begin = cut.slice(0, i).map((c) => c.fn).lastIndexOf('beginPath');
+    const path = cut.slice(begin + 1, i);
+    expect(path[0]).toMatchObject({ fn: 'rect', args: [m.x, m.y, m.w, m.h] });
+    expect(path.filter((c) => c.fn === 'arcTo')).toHaveLength(4); // the one pill that reaches it, not the far one
+    expect(path.find((c) => c.fn === 'moveTo')!.args).toEqual([near.x - 3 + (near.h + 6) / 2, near.y - 3]);
+    expect(cut.filter((c) => c.fn === 'save').length).toBe(cut.filter((c) => c.fn === 'restore').length);
   });
 });

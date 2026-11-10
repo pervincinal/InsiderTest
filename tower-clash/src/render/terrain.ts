@@ -4,7 +4,7 @@ import type { Biome, GroundLight, Palette, TerrainTheme, Tones } from './palette
 import { BIOME_LIGHT, shade, themeFor, themedBiome, withAlpha } from './palette';
 import type { View } from './view';
 import type { Camera } from './camera';
-import { FLAT, depth, jacY, projY } from './camera';
+import { FLAT, copyGround, depth, jacY, projY } from './camera';
 
 /*
  * Ground layer (ART_DIRECTION §3 "island"), rendered once per (level, palette, canvas resolution)
@@ -982,10 +982,12 @@ export function getTerrain(view: View, pal: Palette, spec: TerrainSpec, cam: Cam
 
 /**
  * Blit the cached ground onto the logical map (call with the logical transform active, not the ground
- * frame: a tilted camera is baked into the image).
+ * frame: a tilted camera is baked into the image). `layer` (PERF-13, a shaking play frame): the ground
+ * layer, holding this ground at rest — copied over instead once the fit chunk is in (fit.ts `copyLayer`).
  */
-export function drawTerrain(ctx: CanvasRenderingContext2D, view: View, pal: Palette, spec: TerrainSpec, cam: Camera = FLAT): void {
-  if (cam.fit) cam.fit.ground(ctx, view, pal, spec); // AUD-U21: the zoomed part of the map the screen shows (fit.ts)
+export function drawTerrain(ctx: CanvasRenderingContext2D, view: View, pal: Palette, spec: TerrainSpec, cam: Camera = FLAT, layer?: HTMLCanvasElement): void {
+  if (cam.fit) cam.fit.ground(ctx, view, pal, spec, layer); // AUD-U21: the zoomed part of the map the screen shows (fit.ts)
+  else if (layer && copyGround) copyGround(ctx, view, layer, 0, 0, C.MAP_W, C.MAP_H);
   else ctx.drawImage(getTerrain(view, pal, spec, cam), 0, 0, C.MAP_W, C.MAP_H);
 }
 

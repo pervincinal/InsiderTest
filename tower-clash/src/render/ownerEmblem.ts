@@ -99,21 +99,39 @@ export function drawOwnerEmblem(ctx: CanvasRenderingContext2D, pal: Palette, own
 }
 
 /**
+ * PERF-13: a band round the pill `r`'s top rim that holds either emblem with its edge and anti-aliasing
+ * (≥ 2 px clear of `emblemBox`: the pill's width, 8 / 36 of its height above and below the rim + 2 px).
+ */
+export function emblemBand(r: Rect): Rect {
+  const k = r.h / EMBLEM.basePx;
+  return { x: r.x - 2, y: r.y - 8 * k - 2, w: r.w + 4, h: 16 * k + 4 };
+}
+
+/**
  * Every tower's emblem on its placed badge (`layout.badges`, following the under-fire jolt like the
- * booster tint), clipped clear of the chips so a chip stacked over a badge keeps its edge.
+ * booster tint), clipped clear of the chips so a chip stacked over a badge keeps its edge. PERF-13: only
+ * an emblem a chip reaches is clipped — by the band `emblemBand` keeps it in, minus the chips' 1 px cuts
+ * that reach it (even-odd): the pixels of one canvas-wide clip, without building a full-canvas clip mask
+ * every frame (≈ 0.8 ms a frame on level 50).
  */
 export function drawOwnerEmblems(host: Pick<BurstHost, 'badgeHit'>, ctx: CanvasRenderingContext2D, pal: Palette, state: Pick<MarksState, 'towers'>, layout: Pick<MarksLayout, 'badges' | 'chips'>, nowMs: number): void {
   ctx.save();
-  if (layout.chips.length) {
-    ctx.beginPath();
-    ctx.rect(-1e4, -1e4, 2e4, 2e4);
-    for (const { rect: c } of layout.chips) ctx.rect(c.x - 1, c.y - 1, c.w + 2, c.h + 2);
-    ctx.clip('evenodd');
-  }
   for (const id in state.towers) {
     const t = state.towers[id]!;
     const b = layout.badges.get(id);
-    if (b) drawOwnerEmblem(ctx, pal, t.owner, { ...b.rect, x: b.rect.x + host.badgeHit(id, nowMs) });
+    if (!b || t.owner === 'neutral') continue;
+    const r = { ...b.rect, x: b.rect.x + host.badgeHit(id, nowMs) };
+    const e = emblemBand(r);
+    const cuts = layout.chips.filter(({ rect: c }) => c.x - 1 < e.x + e.w && e.x < c.x + c.w + 1 && c.y - 1 < e.y + e.h && e.y < c.y + c.h + 1);
+    if (cuts.length) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(e.x, e.y, e.w, e.h);
+      for (const { rect: c } of cuts) ctx.rect(c.x - 1, c.y - 1, c.w + 2, c.h + 2);
+      ctx.clip('evenodd');
+    }
+    drawOwnerEmblem(ctx, pal, t.owner, r);
+    if (cuts.length) ctx.restore();
   }
   ctx.restore();
 }
