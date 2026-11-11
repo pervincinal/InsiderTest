@@ -18,7 +18,7 @@
  * says when older ones were left out). tests/ui/diagnosticsReplay.test.ts.
  */
 import type { Replay, ReplayEntry } from '../sim/replay';
-import { replayOf, serializeReplay } from '../sim/replay';
+import { challengeDescriptor, replayOf, serializeReplay } from '../sim/replay';
 import type { GameState, LevelDef } from '../sim/types';
 import type { SaveData, SaveStorage } from './save';
 import { saveStorage } from './save';
@@ -251,6 +251,9 @@ export interface DiagMatch {
   readonly state?: GameState;
   readonly replayLog?: readonly ReplayEntry[];
   readonly hasContinued?: boolean;
+  /** SIM-R2: the Daily / Weekly the match is (`PlayScreen.challenge` / `.weekly`), for the record's descriptor. */
+  readonly challenge?: { dayKey: string; twist: { id: string } } | null;
+  readonly weekly?: { weekKey: string; twist: { id: string } } | null;
 }
 
 /**
@@ -259,7 +262,7 @@ export interface DiagMatch {
  */
 export function diagReplayOf(play: DiagMatch, max = DIAG_REPLAY_MAX): DiagReplay | undefined {
   if (!play.level || !play.state || !play.replayLog) return undefined;
-  const replay = replayOf(play.level, play.state, play.replayLog, play.hasContinued === true);
+  const replay = replayOf(play.level, play.state, play.replayLog, play.hasContinued === true, challengeDescriptor(play.challenge, play.weekly));
   const bytes = serializeReplay(replay).length;
   return bytes <= max ? replay : { dropped: 'size', bytes };
 }

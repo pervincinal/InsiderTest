@@ -1,11 +1,12 @@
 import type { Command, GameState, Owner, Tower } from './sim/types';
 import { C } from './sim/constants';
 import { hasOverdrive, linksFrom, streamIntervalMs } from './sim/step';
-import { parseReplay, replayOf, serializeReplay, verifyReplay } from './sim/replay';
+import { challengeDescriptor, parseReplay, replayOf, serializeReplay, verifyReplay } from './sim/replay';
+import { levelForReplay } from './daily/replayLevel';
 import { aiModule } from './ui/ai';
 import type { TowerClashApp, TowerClashDebug } from './main';
 import type { PlayScreen } from './ui/play';
-import { LEVEL_META, levelIndex, loadLevel } from './levels/index';
+import { LEVEL_META, levelIndex } from './levels/index';
 import { fromHudSpace, hudAnchors, toClient } from './render/view';
 import type { SaveStorage } from './ui/save';
 import { isLevelUnlocked, isSaveFailing, isSaveReadOnly, saveLoadIssue, setSaveStorageForTests } from './ui/save';
@@ -79,7 +80,9 @@ export interface QaDebugExtras {
   /**
    * SIM-R1: re-run a replay record (the JSON of `getReplay()`, or a committed fixture) on this engine and
    * compare it with its recorded outcome — `verifyReplay` of `src/sim/replay.ts` minus the state. The
-   * level chunk is loaded if needed. Rejects on a malformed record or an unknown level.
+   * level chunk is loaded if needed. Rejects on a malformed record or an unknown level. SIM-R2: a Daily /
+   * Weekly record (`challenge: { kind, key, twist }`) is rebuilt from its key through the generator
+   * (src/daily/replayLevel.ts) and rejected when its level, seed, twist or modifiers disagree with the record.
    */
   verifyReplay(json: string): Promise<{ hash: string; expected?: string; matches: boolean; rulesMatch: boolean; outcome: string; timeMs: number; reason?: string }>;
 }
@@ -133,11 +136,12 @@ function withPlay(app: TowerClashApp, fn: (play: PlayScreen) => void): boolean {
 export function installDebug(app: TowerClashApp): TowerClashDebug & QaDebugExtras {
   const extras: QaDebugExtras = {
     getFocus: () => app.lazy?.focusState(app) ?? null,
-    getReplay: () => (app.play ? serializeReplay(replayOf(app.play.level, app.play.state, app.play.replayLog, app.play.hasContinued)) : null),
+    // SIM-R2: a Daily / Weekly match carries its descriptor (kind, day / week key, twist id)
+    getReplay: () => (app.play ? serializeReplay(replayOf(app.play.level, app.play.state, app.play.replayLog, app.play.hasContinued, challengeDescriptor(app.play.challenge, app.play.weekly))) : null),
     verifyReplay: async (json) => {
       const replay = parseReplay(json);
-      const level = await loadLevel(replay.levelId);
-      if (!level) throw new Error(`verifyReplay: unknown level ${replay.levelId}`);
+      // SIM-R2: a challenge record is rebuilt from its key and checked against the record (rejects on a mismatch)
+      const level = await levelForReplay(replay);
       const { hash, expected, matches, rulesMatch, outcome, timeMs, reason } = verifyReplay(level, replay);
       const out: Awaited<ReturnType<QaDebugExtras['verifyReplay']>> = { hash, matches, rulesMatch, outcome, timeMs };
       if (expected !== undefined) out.expected = expected;

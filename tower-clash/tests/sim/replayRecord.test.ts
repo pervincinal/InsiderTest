@@ -6,6 +6,7 @@ import { SNAPSHOT_VERSION } from '../../src/sim/snapshot';
 import { createState } from '../../src/sim/create';
 import {
   REPLAY_VERSION,
+  challengeDescriptor,
   finishReplay,
   fnv1a,
   hashState,
@@ -266,5 +267,78 @@ describe('replay record v1: format', () => {
     expect(bytes).toBeGreaterThan(500);
     expect(bytes).toBeLessThan(32_768);
     expect(bytes / Math.max(1, replay.commands.length)).toBeLessThan(120); // ≈ 70–90 B per entry
+  });
+});
+
+/*
+ * SIM-R2 (2026-11-11): the optional `challenge` descriptor — `{ kind: 'daily' | 'weekly', key, twist }`, the
+ * generator's inputs — rides in the v1 record. The sim only carries it (src/daily/replayLevel.ts rebuilds and
+ * checks it, tests/daily/replayLevel.test.ts); here: it round-trips, old records without it still parse, a
+ * campaign record is byte-for-byte what SIM-R1 wrote, and `runReplay` / `verifyReplay` do not read it.
+ */
+describe('replay record v1: SIM-R2 challenge descriptor', () => {
+  const level = makeLevel();
+  const log: ReplayEntry[] = [{ t: 0, c: { type: 'link', owner: 'player', from: 'p', to: 'e' } }];
+
+  it('challengeDescriptor maps the play screen’s daily / weekly objects to { kind, key, twist }, campaign to undefined', () => {
+    const daily = { dayKey: '2026-11-11', twist: { id: 'plain' } };
+    const weekly = { weekKey: '2026-11-09', twist: { id: 'lean' } };
+    expect(challengeDescriptor(daily, null)).toEqual({ kind: 'daily', key: '2026-11-11', twist: 'plain' });
+    expect(challengeDescriptor(null, weekly)).toEqual({ kind: 'weekly', key: '2026-11-09', twist: 'lean' });
+    expect(challengeDescriptor(daily, weekly)).toEqual({ kind: 'daily', key: '2026-11-11', twist: 'plain' }); // the play screen never has both; the daily wins
+    expect(challengeDescriptor(null, null)).toBeUndefined();
+    expect(challengeDescriptor()).toBeUndefined();
+  });
+
+  it('replayOf carries the descriptor (a copy) and it round-trips through JSON; the version stays 1', () => {
+    const state = runReplay(level, { ...newReplay(level, createState(level, 7)), commands: log }, { maxMs: 2000 });
+    const desc = { kind: 'daily' as const, key: '2026-11-11', twist: 'fastFeet' };
+    const replay = replayOf(level, state, log, false, desc);
+    expect(replay.v).toBe(1);
+    expect(replay.challenge).toEqual(desc);
+    expect(replay.challenge).not.toBe(desc);
+    const json = serializeReplay(replay);
+    expect(json).toContain('"challenge":{"kind":"daily","key":"2026-11-11","twist":"fastFeet"}');
+    const parsed = parseReplay(json);
+    expect(parsed.challenge).toEqual(desc);
+    expect(parsed).toEqual(replay);
+    expect(verifyReplay(level, parsed).matches).toBe(true);
+    // the weekly kind too
+    expect(parseReplay(serializeReplay(replayOf(level, state, log, true, { kind: 'weekly', key: '2026-11-09', twist: 'lean' }))).challenge).toEqual({ kind: 'weekly', key: '2026-11-09', twist: 'lean' });
+  });
+
+  it('a campaign record is unchanged: no `challenge` key at all, byte-identical to the SIM-R1 shape', () => {
+    const state = runReplay(level, { ...newReplay(level, createState(level, 7)), commands: log }, { maxMs: 2000 });
+    const replay = replayOf(level, state, log);
+    expect('challenge' in replay).toBe(false);
+    expect(Object.keys(replay)).toEqual(['v', 'levelId', 'seed', 'modifiers', 'rules', 'commands', 'outcome']);
+    expect(serializeReplay(replay)).toBe(serializeReplay(replayOf(level, state, log, false, undefined)));
+    expect(parseReplay(serializeReplay(replay)).challenge).toBeUndefined();
+    // the committed SIM-R1 fixture (no descriptor) still parses and verifies
+    expect(parseReplay(FIXTURE).challenge).toBeUndefined();
+  });
+
+  it('parseReplay accepts a record without the field (old v1), rejects a malformed descriptor', () => {
+    const state = createState(level, 1);
+    const ok = serializeReplay(finishReplay(newReplay(level, state), state));
+    expect(ok).not.toContain('challenge');
+    expect(() => parseReplay(ok)).not.toThrow();
+    const withField = (c: string): string => ok.replace('"commands":[]', `"commands":[],"challenge":${c}`);
+    expect(() => parseReplay(withField('{"kind":"daily","key":"2026-11-11","twist":"plain"}'))).not.toThrow();
+    expect(() => parseReplay(withField('{"kind":"monthly","key":"2026-11-11","twist":"plain"}'))).toThrow(/challenge malformed/);
+    expect(() => parseReplay(withField('{"kind":"daily","twist":"plain"}'))).toThrow(/challenge malformed/);
+    expect(() => parseReplay(withField('{"kind":"daily","key":"2026-11-11"}'))).toThrow(/challenge malformed/);
+    expect(() => parseReplay(withField('{"kind":"daily","key":20261111,"twist":"plain"}'))).toThrow(/challenge malformed/);
+    expect(() => parseReplay(withField('"daily"'))).toThrow(/challenge malformed/);
+    expect(() => parseReplay(withField('null'))).toThrow(/challenge malformed/);
+  });
+
+  it('the sim does not read the descriptor: the same commands re-run to the same hash with or without it, or with a wrong one', () => {
+    const state = runReplay(level, { ...newReplay(level, createState(level, 3)), commands: log }, { maxMs: 3000 });
+    const plain = replayOf(level, state, log);
+    const tagged = replayOf(level, state, log, false, { kind: 'weekly', key: 'not-even-a-key', twist: 'x' });
+    expect(tagged.outcome).toEqual(plain.outcome);
+    expect(hashState(runReplay(level, tagged))).toBe(plain.outcome!.hash);
+    expect(verifyReplay(level, tagged).matches).toBe(true); // the descriptor check is src/daily/replayLevel.ts's job
   });
 });

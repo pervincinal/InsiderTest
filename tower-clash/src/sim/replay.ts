@@ -22,9 +22,32 @@ import { SNAPSHOT_VERSION } from './snapshot';
  * the record self-contained: it verifies against any build with the same rules (`rules`), the AI
  * can be re-tuned freely, and a 60 s match costs ≈ 10–20 kB of JSON (see tests/sim/replayRecord.test.ts).
  * The `a` flag is informational: `runReplay` applies every entry alike, in record order.
+ *
+ * SIM-R2 (2026-11-11): a Daily / Weekly Challenge match (GDD §7 / §8) plays a shipped level with the
+ * challenge's fixed seed and its twist's modifiers — all of which the record already holds — but a
+ * record of one said nothing about *which* challenge it was, so a verifier could re-run it and still not
+ * tell that it was that day's match. The optional `challenge` descriptor carries the generator's inputs
+ * (`kind`, the day / week `key`, the twist id); `src/daily/replayLevel.ts` rebuilds the challenge from
+ * the key, checks the record's level / seed / modifiers against it and hands the verifier the level.
+ * The version stays 1: the field is optional, a v1 record without it is a campaign match and parses as
+ * before; a record with it is accepted by every SIM-R1 reader, which ignores the field. The sim never
+ * imports `src/daily`: the descriptor is data, the rebuild lives outside the sim.
  */
 
 export const REPLAY_VERSION = 1;
+
+/**
+ * SIM-R2: the Daily / Weekly Challenge a record was played as — exactly the generator's inputs
+ * (`challengeFor(key)` / `weeklyFor(key)` in src/daily/challenge.ts) plus the twist id for reading;
+ * the level id, seed and modifiers the generator derives are the record's own fields.
+ */
+export interface ReplayChallenge {
+  kind: 'daily' | 'weekly';
+  /** The UTC day key (`YYYY-MM-DD`) of a daily, the Monday key of a weekly. */
+  key: string;
+  /** The twist's id (`Twist['id']`, e.g. `fastFeet`); informational — the modifiers are in the record. */
+  twist: string;
+}
 
 /** One applied command: `t` = `state.time` before the tick it was applied to; `a` = produced by a bot (AI hook). */
 export interface ReplayEntry {
@@ -57,6 +80,8 @@ export interface Replay {
    * not the reinforcements, so it is kept for reading but does not verify (v1 limitation).
    */
   continued?: true;
+  /** SIM-R2: the Daily / Weekly Challenge this match was (absent: a campaign match). */
+  challenge?: ReplayChallenge;
 }
 
 /** FNV-1a 32-bit of a string, as 8 lower-case hex digits. Pure and cheap; collision-safe enough for a verify. */
@@ -105,12 +130,27 @@ export function recordInto(replay: Replay, state: GameState, cmd: Command, ai = 
   return entry;
 }
 
-/** Build a record from a log kept elsewhere (the play screen's, `ui/play.ts`) and close it on `state`. */
-export function replayOf(level: LevelDef, state: GameState, commands: readonly ReplayEntry[], continued = false): Replay {
+/**
+ * Build a record from a log kept elsewhere (the play screen's, `ui/play.ts`) and close it on `state`.
+ * `challenge` (SIM-R2): the Daily / Weekly descriptor of the match, `challengeDescriptor(play.challenge, play.weekly)`.
+ */
+export function replayOf(level: LevelDef, state: GameState, commands: readonly ReplayEntry[], continued = false, challenge?: ReplayChallenge): Replay {
   const replay = newReplay(level, state);
   replay.commands = commands.map((e) => ({ ...e }));
   if (continued) replay.continued = true;
+  if (challenge) replay.challenge = { kind: challenge.kind, key: challenge.key, twist: challenge.twist };
   return finishReplay(replay, state);
+}
+
+/**
+ * SIM-R2: the record's `challenge` descriptor from the play screen's challenge objects (`PlayScreen.challenge`,
+ * a `DailyChallenge`, or `PlayScreen.weekly`, a `WeeklyChallenge` — typed structurally: the sim does not
+ * import src/daily). Undefined for a campaign match. Yesterday's map (DAILY-6) is the daily of its own key.
+ */
+export function challengeDescriptor(daily?: { dayKey: string; twist: { id: string } } | null, weekly?: { weekKey: string; twist: { id: string } } | null): ReplayChallenge | undefined {
+  if (daily) return { kind: 'daily', key: daily.dayKey, twist: daily.twist.id };
+  if (weekly) return { kind: 'weekly', key: weekly.weekKey, twist: weekly.twist.id };
+  return undefined;
 }
 
 /** Close the record on `state`: outcome, time and hash. Returns the same record. */
@@ -143,6 +183,11 @@ export function parseReplay(json: string): Replay {
   if (raw.outcome !== undefined) {
     const o = raw.outcome;
     if (!isRecord(o) || typeof o.result !== 'string' || typeof o.timeMs !== 'number' || typeof o.hash !== 'string') throw new Error('replay: outcome malformed');
+  }
+  if (raw.challenge !== undefined) {
+    // SIM-R2: optional; a v1 record without it is a campaign match
+    const c = raw.challenge;
+    if (!isRecord(c) || (c.kind !== 'daily' && c.kind !== 'weekly') || typeof c.key !== 'string' || typeof c.twist !== 'string') throw new Error('replay: challenge malformed');
   }
   return raw as unknown as Replay;
 }

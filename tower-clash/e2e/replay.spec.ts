@@ -35,8 +35,17 @@ type Win = Window & {
     autoplay(): boolean;
     getReplay(): string | null;
     verifyReplay(json: string): Promise<Verify>;
+    setDayKey(key: string | null): void;
+    daily: {
+      get(dayKey?: string): { challenge: { dayKey: string; levelId: number; seed: number; twist: { id: string } } };
+      start(dayKey?: string): Promise<boolean>;
+    };
   };
 };
+/** SIM-R2: the committed daily fixture's day (level 37 "Tank Country", plain; `scripts/replay.ts --record-daily 2026-11-11`). */
+const DAILY_KEY = '2026-11-11';
+const DAILY_FIXTURE = readFileSync(new URL(`../tests/fixtures/replay-daily-${DAILY_KEY}.json`, import.meta.url), 'utf8');
+type ChallengeRecord = typeof FIXTURE_RECORD & { modifiers: Record<string, number>; challenge?: { kind: string; key: string; twist: string } };
 
 const screen = (page: Page) => page.evaluate(() => (window as unknown as Win).__towerclash.getScreen());
 const verify = (page: Page, json: string) => page.evaluate((j) => (window as unknown as Win).__towerclash.verifyReplay(j), json);
@@ -96,6 +105,57 @@ test.describe('replay record v1 (SIM-R1)', () => {
     const v = await verify(page, json!);
     expect(v.matches, `${v.reason ?? ''} ${v.hash} vs ${v.expected}`).toBe(true);
     expect(v.timeMs).toBe(record.outcome.timeMs);
+    expect(errors).toEqual([]);
+  });
+});
+
+/*
+ * SIM-R2 (2026-11-11): a Daily Challenge match carries `challenge: { kind: 'daily', key, twist }`; `verifyReplay`
+ * rebuilds the day's challenge from the key (src/daily/replayLevel.ts) and verifies the record on it; the
+ * node-recorded daily fixture re-runs in the browser; a tampered descriptor is rejected.
+ */
+test.describe('replay record: daily challenge (SIM-R2)', () => {
+  test(`the daily of ${DAILY_KEY} started through the debug surface (autoplay ×10) is captured with its descriptor and verifies`, async ({ page }) => {
+    const errors = await boot(page);
+    const info = await page.evaluate((key) => {
+      const d = (window as unknown as Win).__towerclash;
+      d.setDayKey(key);
+      const got = JSON.parse(JSON.stringify(d.daily.get())) as ReturnType<Win['__towerclash']['daily']['get']>;
+      void d.daily.start();
+      d.setSpeed(10);
+      d.autoplay();
+      return got;
+    }, DAILY_KEY);
+    expect(info.challenge.dayKey).toBe(DAILY_KEY);
+    expect(info.challenge.levelId).toBe(37);
+    await expect.poll(() => screen(page), { timeout: 75_000, intervals: [250] }).toBe('result');
+    const json = await page.evaluate(() => (window as unknown as Win).__towerclash.getReplay());
+    expect(json).not.toBeNull();
+    const record = JSON.parse(json!) as ChallengeRecord;
+    expect(record.v).toBe(1);
+    expect(record.challenge).toEqual({ kind: 'daily', key: DAILY_KEY, twist: info.challenge.twist.id });
+    expect(record.levelId).toBe(info.challenge.levelId);
+    expect(record.seed).toBe(info.challenge.seed);
+    expect(record.outcome.result).toBe('won');
+    const v = await verify(page, json!);
+    expect(v.matches, `${v.reason ?? ''} ${v.hash} vs ${v.expected}`).toBe(true);
+    expect(v.timeMs).toBe(record.outcome.timeMs);
+
+    // a tampered descriptor (another day) is refused before any re-run
+    const tampered = JSON.parse(json!) as ChallengeRecord;
+    tampered.challenge!.key = '2026-11-12';
+    await expect(verify(page, JSON.stringify(tampered))).rejects.toThrow(/does not match the record/);
+    expect(errors).toEqual([]);
+  });
+
+  test(`the node-recorded daily fixture (${DAILY_KEY}) re-runs in the browser to the recorded hash`, async ({ page }) => {
+    const errors = await boot(page);
+    const fixture = JSON.parse(DAILY_FIXTURE) as ChallengeRecord;
+    expect(fixture.challenge).toEqual({ kind: 'daily', key: DAILY_KEY, twist: 'plain' });
+    const v = await verify(page, DAILY_FIXTURE);
+    expect(v.rulesMatch, 'the build under test plays the rules the fixture was recorded with (re-record it after a constants change)').toBe(true);
+    expect(v.hash, `browser hash ${v.hash} vs node hash ${fixture.outcome.hash} (${v.reason ?? 'ok'})`).toBe(fixture.outcome.hash);
+    expect(v.matches).toBe(true);
     expect(errors).toEqual([]);
   });
 });

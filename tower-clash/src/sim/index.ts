@@ -47,10 +47,11 @@ export {
   newReplay,
   recordInto,
   replayOf,
+  challengeDescriptor,
   finishReplay,
   serializeReplay,
   parseReplay,
   runReplay,
   verifyReplay,
 } from './replay';
-export type { Replay, ReplayEntry, ReplayOutcome, RunReplayOptions, VerifyResult } from './replay';
+export type { Replay, ReplayChallenge, ReplayEntry, ReplayOutcome, RunReplayOptions, VerifyResult } from './replay';

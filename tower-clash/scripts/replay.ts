@@ -15,6 +15,13 @@
  * `npx tsx scripts/replay.ts --from-log <log.txt> [--row N] [--out file.json]` (DIAG-2, frontend; argument
  * parsing only) — the file is a tester's pasted Diagnostics COPY LOG text: take its last `#replay <row> <json>`
  * line (or row N's), write it with `--out`, and verify it as above.
+ *
+ * SIM-R2: a Daily / Weekly record (`challenge: { kind, key, twist }`) is rebuilt through the generator
+ * (src/daily/replayLevel.ts `levelForReplay`: `challengeFor(key)` / `weeklyFor(key)` must agree with the record's
+ * level, seed, twist and modifiers, else exit 2 with the mismatch) and verified like any record.
+ * `--record-daily <YYYY-MM-DD>` / `--record-weekly <Monday key>` [--out f.json] record the reference player on that
+ * challenge headlessly, descriptor included; the committed fixture tests/fixtures/replay-daily-2026-11-11.json is
+ * `--record-daily 2026-11-11` (level 37, plain) — re-record it when a sim rule changes.
  */
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -22,12 +29,14 @@ import type { LevelDef } from '../src/sim/types';
 import { parseReplay, rulesId, serializeReplay, verifyReplay } from '../src/sim/replay';
 import type { Replay } from '../src/sim/replay';
 import { referencePlayerCommands } from '../src/ai/index';
-import { recordHeadless } from './lib/recordReplay';
+import { levelForReplay, rebuildChallenge } from '../src/daily/replayLevel';
+import { recordChallengeHeadless, recordHeadless } from './lib/recordReplay';
 
 const DIR = join(import.meta.dirname, '..', 'src', 'levels');
 
 const args = process.argv.slice(2);
-const file = args.find((a, i) => !a.startsWith('--') && args[i - 1] !== '--row' && args[i - 1] !== '--out' && args[i - 1] !== '--max-ms');
+const VALUED = ['--row', '--out', '--max-ms', '--record-daily', '--record-weekly'];
+const file = args.find((a, i) => !a.startsWith('--') && !VALUED.includes(args[i - 1] ?? ''));
 const opt = (name: string, def: string): string => {
   const i = args.indexOf(name);
   return i >= 0 && args[i + 1] !== undefined ? args[i + 1]! : def;
@@ -74,8 +83,36 @@ if (recordAt >= 0) {
   process.exit(0);
 }
 
+// SIM-R2: record the reference player on a Daily / Weekly Challenge, descriptor included
+const recordChallengeAt = args.findIndex((a) => a === '--record-daily' || a === '--record-weekly');
+if (recordChallengeAt >= 0) {
+  const kind = args[recordChallengeAt] === '--record-daily' ? 'daily' : 'weekly';
+  const key = args[recordChallengeAt + 1] ?? '';
+  let built;
+  try {
+    built = rebuildChallenge({ kind, key, twist: '' });
+  } catch (err) {
+    console.error(`replay: ${err instanceof Error ? err.message : String(err)}`);
+    console.error('usage: npx tsx scripts/replay.ts --record-daily <YYYY-MM-DD> | --record-weekly <Monday YYYY-MM-DD> [--out file.json] [--max-ms N]');
+    process.exit(2);
+  }
+  const level = loadLevelSync(built.levelId)!;
+  const { replay } = recordChallengeHeadless(level, built, referencePlayerCommands, maxMs);
+  const json = serializeReplay(replay);
+  const out = opt('--out', '');
+  if (out) {
+    writeFileSync(out, json + '\n');
+    console.log(
+      `replay: ${kind} ${key} = level ${level.id} "${level.name}" seed ${built.seed} twist ${built.twist.id}: ${replay.commands.length} command(s), ${replay.outcome!.result} at ${(replay.outcome!.timeMs / 1000).toFixed(2)} s, hash ${replay.outcome!.hash}, ${json.length} B → ${out}`,
+    );
+  } else {
+    console.log(json);
+  }
+  process.exit(0);
+}
+
 if (!file) {
-  console.error('usage: npx tsx scripts/replay.ts <file.json> [--max-ms N] | --from-log <log.txt> [--row N] [--out file.json] | --record <level> <seed> [--out file.json]');
+  console.error('usage: npx tsx scripts/replay.ts <file.json> [--max-ms N] | --from-log <log.txt> [--row N] [--out file.json] | --record <level> <seed> [--out file.json] | --record-daily <day> | --record-weekly <Monday> [--out file.json]');
   process.exit(2);
 }
 
@@ -89,14 +126,18 @@ try {
   console.error(`replay: cannot read ${file}: ${err instanceof Error ? err.message : String(err)}`);
   process.exit(2);
 }
-const level = loadLevelSync(replay.levelId);
-if (!level) {
-  console.error(`replay: level ${replay.levelId} is not a shipped level`);
+// SIM-R2: a challenge record is rebuilt through the generator and checked against the record first
+let level: LevelDef;
+try {
+  level = await levelForReplay(replay, loadLevelSync);
+} catch (err) {
+  console.error(err instanceof Error ? err.message : String(err));
   process.exit(2);
 }
 
 const ai = replay.commands.filter((e) => e.a === 1).length;
 console.log(`replay: level ${level.id} "${level.name}"  seed ${replay.seed}  rules ${replay.rules}${replay.rules === rulesId() ? '' : ` (this build: ${rulesId()})`}`);
+if (replay.challenge) console.log(`replay: ${replay.challenge.kind} challenge ${replay.challenge.key}, twist ${replay.challenge.twist} — rebuilt from the key: level, seed, twist and modifiers agree`);
 console.log(`replay: ${replay.commands.length} command(s) — ${replay.commands.length - ai} player, ${ai} AI${replay.ai ? `; level ai ${JSON.stringify(replay.ai)}` : ''}${replay.continued ? '; CONTINUED (not verifiable)' : ''}`);
 console.log(
   `replay: modifiers production ×${replay.modifiers.productionMul} capacity ×${replay.modifiers.capacityMul} garrison +${replay.modifiers.startGarrisonBonus} speed ×${replay.modifiers.unitSpeedMul}`,
