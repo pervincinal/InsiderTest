@@ -19,7 +19,7 @@ The Azerbaijani part comes first, the English part follows. The capture table (�
 1. **Build 27 və ya daha böyük olmalıdır** (TestFlight-da tətbiqin adının altındakı rəqəm). Build 26-da dərs kartı açıq olanda da saat işləyir, ona görə vaxtları botla müqayisə etmək olmur. Build 26-dırsa dayan və çata `build 26 — sınaq gözləyir` yaz.
 2. Bu sınağı **İRƏLİLƏYİŞİ SIFIRLA-dan (TF-28) əvvəl** et, çünki sıfırlama səviyyələri yenidən bağlayır.
 3. Təyyarə rejimi açıq olsun (reklam və bildiriş gəlmir), Aşağı enerji rejimi isə söndürülsün.
-4. **Ayarlar → Haqqında → Diaqnostika**: yandır. Hər səviyyənin vaxtı telefonda dəqiq yazılır. Bu ehtiyat nüsxədir, heç yerə göndərilmir.
+4. **Addım 0, birinci səviyyədən əvvəl: Ayarlar → Haqqında → Diaqnostika**: yandır və bütün sınaq boyu **yanıq saxla**. Hər səviyyənin vaxtı, ulduzu, cəhd sayı və hər matçın təkrar qeydi telefonda yazılır. Özü heç yerə getmir: sonda mətni sən göndərirsən (§6).
 5. Xəritəni aç və **açıq olan ən böyük səviyyənin nömrəsini** yaz (məs. `açıq: 34`).
 6. İstənilən səviyyəni aç, **II**-yə toxun: FASİLƏ kartında **SÜRƏT ×1** yazılmalıdır. ×2 yazılıbsa, bir dəfə toxun. Sürət saatı dəyişmir, amma sənin reaksiya vaxtını dəyişir, ona görə bütün sınaq ×1 sürətlə oynanır.
 7. Qaydalar:
@@ -91,7 +91,7 @@ Sınaq: build 27 · açıq: 50 · başlama 20:10 · bitiş 20:52
 Suallar: 1) … 2) … 3) …
 ```
 
-Mesajın altına: **Ayarlar → Haqqında → JURNALI KOPYALA** mətnini yapışdır, sonra nəticə kartlarının skrinşotlarını və 17, 33, 49-un üç ekran yazısını əlavə et.
+Sınaqdan sonra: **Ayarlar → Haqqında → JURNALI KOPYALA** et və **bütün mətni** doldurulmuş cədvəllə birlikdə **fayl və ya e-poçt** kimi göndər (çata yapışdırma: mətn 20–100 kB ola bilər). Mətndə CSV sətirləri və `#replay N {…}` sətirləri var (ən yeni 5 matç). Komanda matçı bu mətndən yenidən oynadır. Jurnal həm də hər səviyyənin **ulduzunu (`stars`), vaxtını (`timeMs`), cəhd sayını (`attempt`)**, nəticəni (`outcome`) və ilk keçidi (`first`) saxlayır: bununla əllə yazdığın cədvəlin həmin sütunları yoxlanılır. Sonra nəticə kartlarının skrinşotlarını və 17, 33, 49-un üç ekran yazısını əlavə et.
 
 ### 7. Komanda bununla nə edəcək (qısa)
 
@@ -167,7 +167,7 @@ Session header (fill once): tester · fresh / stakeholder · build · highest op
 1. **Build 27 or later** (the number under the app name in TestFlight). On build 26 the clock runs while the lesson card is up, so its times cannot be compared with the bot's. If the build is 26, stop and send `build 26 — playtest waits`.
 2. Run this **before RESET PROGRESS (TF-28)**, because the reset locks the levels again.
 3. Turn airplane mode on (no ads, no notifications) and Low Power Mode off.
-4. **Settings → About → Diagnostics**: turn it on. It records each level's exact time on the phone. This is a backup and is never sent anywhere.
+4. **Step 0, before the first level: Settings → About → Diagnostics**: turn it on and **leave it on** for the whole session. The phone records each level's time, stars, attempt count and every match's replay record. Nothing is sent by itself: you send the text at the end (§6).
 5. Open the map and write down the **highest open level**.
 6. Open any level and tap **II**. The PAUSED card must read **SPEED ×1**; if it reads ×2, tap it once. Speed does not change the clock, but it does change how fast you have to react. The whole session is played at ×1.
 7. Rules:
@@ -211,7 +211,7 @@ The order is 3, 5, 9, 13, 16, **17**, 23, 27, 32, **33**, 38, 41, 45, **49**, 50
 
 ### 6. Report (one message)
 
-Use the same format as the AZ example in §6. Under it, paste the text from **Settings → About → COPY LOG**, then attach the result-card screenshots and the three recordings (17, 33, 49).
+Use the same format as the AZ example in §6. After the session, tap **Settings → About → COPY LOG** and send the **whole text** with the filled sheet as a **file or e-mail** (do not paste it into a chat: it can be 20–100 kB). It holds CSV rows plus `#replay N {…}` lines (newest 5 matches, each ≤ 32 kB; text up to 100 kB), from which the team re-plays a match headlessly. The log also carries each level's **stars (`stars`), time (`timeMs`), attempt count (`attempt`)**, outcome (`outcome`) and first clear (`first`), which cross-checks those columns of your hand-written table. Then attach the result-card screenshots and the three recordings (17, 33, 49).
 
 ---
 
@@ -292,6 +292,8 @@ At N = 1, H2 failing is a hypothesis: the flag stays off and AUD-A3 stays P2. It
 3. **Run the rules.** `cd tower-clash && npm run playtest:decide -- <sheet.csv> [--date <play date>]` (`scripts/playtestDecide.ts`, QA-36) prints markdown for the playtest review: the C.1 table (zone, proposed `star3`, band moves), H3, C.2's human half, C.3 per tester, C.4, the C.5 side outputs and a JSON block for `reclock.ts`'s `HUMAN` pin table. Each line is tagged `DECISION` (N ≥ 3) or `PROVISIONAL`. The JSON is a proposal: a row becomes a pin by hand, after the sign-off. Without the helper, apply §C by hand: take each row's bot median and clocks from §B.1 / §B.2, compute r, and read the zone tables.
    - **AZ.** CSV-də hər cəhd bir sətirdir, sütunlar yuxarıdakı 1-ci addımdakı kimidir. `bot` sütunu məcburidir: bu, §B.1-dəki "Bot" rəqəmidir (saniyə), hər səviyyənin ən azı bir sətrində olmalıdır. Saatlar (`star3` / `star2`) `src/levels/*.json`-dan oxunur. Hazır fayl `--levels <json>` ilə verilə bilər (`{ id: { s3, s2, bot } }`, saniyə). Qrup dəyişikliyi nümunədə olmayan səviyyələrin bot medianını tələb edəndə skript onu istinad oyunçusu ilə özü ölçür (K = 20). Səhv CSV sətir nömrəsi ilə rədd edilir (çıxış kodu 1).
    - **EN.** The CSV is one row per try with the step 1 columns. `bot` is required: §B.1's "Bot" (seconds), on at least one row of each level. The clocks (`star3` / `star2`) are read from `src/levels/*.json`, or from a pre-computed `--levels <json>` (`{ id: { s3, s2, bot } }`, seconds). When a band move needs the bot median of an unsampled level, the script measures it with the reference player (K = 20). A malformed CSV is rejected with its line number (exit 1).
+3a. **Verify each interesting match.** `cd tower-clash && npx tsx scripts/replay.ts --from-log <log.txt> [--row N]` must print MATCH. A mismatch means the build differs from the record's rules id: compare the build numbers first (the `build` column of the log row against the tested build).
+   - **AZ.** Maraqlı hər matç üçün yuxarıdakı əmri işlət: MATCH çıxmalıdır. Uyğunsuzluq qeydin qayda identifikatorundan fərqli build deməkdir: əvvəlcə build nömrələrini müqayisə et.
 4. **Code the recordings** (17 / 33 / 49: who attacked first, when a king's colour vanished on 33 / 49) by someone who did not author those levels, at 2× speed, into the `log` column, then re-run step 3.
 5. **Act on each `DECISION` line.**
    - **B4.** The Level Designer writes the new `star3` values into the level JSON. Before that, `scripts/reclock.ts` needs a human-clock pin table beside `KEEP` (gameplay / level-designer change in `scripts/`), or the next `reclock.ts --write` puts the bot clocks back. Then run `npx tsx scripts/reclock.ts --seeds 20` as a dry run (only the boundary step may move), `npm run levels:manifest`, `npm run check`, `npm run playtest -- --seeds 20` and the weekly gate (`--weekly <Monday> --weeks 26 --seeds 5`). Docs: GDD §3 star-clock bullet and items 8 / 10 (the meaning of 3★); How to Play and store text if zone S makes 3★ "beat the bot"; `TESTFLIGHT_TEST_PLAN.md` §0 item 10's clock list (Publisher); `RELEASE_NOTES.md`; ECONOMY's 3★-gated rows (Monetization).

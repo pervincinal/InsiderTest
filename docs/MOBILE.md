@@ -251,6 +251,12 @@ A check of the native lane against the Day 47–51 changes (Vibration / Screen s
 | Keyboard focus ring: drawn only after a key press, hidden on any pointer press — nothing changes for touch | pass |
 | Capacitor config, `android/`, `ios/`, plugin versions: unchanged since build 26 | pass |
 
+**DIAG-2 on the native build (2026-11-11, MM-17): pass, nothing to fix.** The Diagnostics log's replay record (Settings → About → Diagnostics → COPY LOG adds a `#replay N {…}` line per match) is a shipping feature and survives `build:native`; only the debug `getReplay()` / `verifyReplay()` hooks are stripped. Checked twice on a scratch `build:native`: first on `97dca58`, then again on `97dca58` plus the gameplay engineer's finished SIM-R2 working tree (challenge descriptors, uncommitted at the time). The numbers below are from the second build; the first one gave the same results.
+- the lazy `diagnostics-*.js` chunk (5 172 B; 4 959 B before SIM-R2) holds the `#replay ${row} ${JSON}` writer, the record builder and the rules id (`${SNAPSHOT_VERSION}:${fnv1a(constants)}`). There is no `debug-*.js` and no `__towerclash` in any shipped file: pass.
+- played in headless Chromium as an Android WebView (Pixel 7, `; wv)` user agent, touch) with no debug surface at all (`window.__towerclash` undefined). Diagnostics was switched on with a tap on the Settings switch, level 13 was started from the level map and left idle at ×2 (pause card → speed), it lost at 91.05 s game time, then Settings → COPY LOG. The copied text (3 554 B) has a `#replay 1 {…}` line: level 13, rules `3:79e900d4`, 35 commands (all AI: the player sent nothing), outcome `lost` at 91 050 ms, 3 106 B. No console error: pass.
+- that log was verified off the device with `npx tsx scripts/replay.ts --from-log <log.txt>`, which printed `replay: re-run lost at 91.05 s, hash cd44a399` / `replay: MATCH` (exit 0): pass. The first build also matched (84.35 s, hash `02aa9eab`).
+- size of the web assets `cap sync` copies: **1 319 375 B (116 files)**, +3 434 B over Day 52's 1 315 941 B (the DIAG-2 replay record in the diagnostics chunk; 1 319 162 B before SIM-R2).
+
 Nothing has to be fixed before build 27. One thing to know: the haptic limiter (one impact per 150 ms) takes the first request, so a light capture tick in the 150 ms before an airstrike's impact swallows the medium one (rare; not a blocker).
 
 **What remains for the Producer to request build 27** (MM-15 first: the Apple Program License Agreement must be accepted, or the run fails the same way as build 26):

@@ -1,6 +1,6 @@
 {
   "board": {
-    "title": "Lövhə · 10 noyabr, gün 53",
+    "title": "Lövhə · 11 noyabr, gün 54",
     "stats": [
       {
         "b": "build 27",
@@ -11,19 +11,19 @@
         "s": "səviyyə bot ilə keçir"
       },
       {
-        "b": "2605",
-        "s": "unit test, e2e 192 + 4 + 4 + WebKit + soak"
+        "b": "2618",
+        "s": "unit test, e2e 194 + 4 + 4 + WebKit + soak"
       },
       {
         "b": "80,8 kB",
-        "s": "ilk yükləmə (büdcə 82); 50-ci səviyyə kadr norması ×0,94"
+        "s": "ilk yükləmə (büdcə 82); native paket 1,32 MB"
       },
       {
-        "b": "28 gün",
+        "b": "29 gün",
         "s": "rəyin gözlənilir"
       }
     ],
-    "footer": "Mənbə: <code>.claude/agents/*.md</code> rol faylları, <code>docs/BACKLOG.md</code> və son hesabatlar (gün 51–53). Statuslar 10 noyabr vəziyyətidir."
+    "footer": "Mənbə: <code>.claude/agents/*.md</code> rol faylları, <code>docs/BACKLOG.md</code> və son hesabatlar (gün 52–54). Statuslar 11 noyabr vəziyyətidir."
   },
   "team": [
     {
@@ -42,19 +42,19 @@
         "build nömrəsi, commit və push"
       ],
       "recent": [
+        "Gün 54: dörd agent — çağırış matçlarının qeydi, native-də replay yolu MATCH, build 27 qeydləri gün 51–53, vərəqdə Diaqnostika addımı",
         "Gün 53: üç agent — 50-ci səviyyə kadr yükü ×0,94, jurnalda matç qeydi, PLAN.md yeniləndi; audit P0 1/2 düzəlişi",
-        "Gün 52: dörd agent — replay qeydi v1, 1.1 dizayn qeydi, native xətt yoxlaması, 377 e2e yürüşü 0 flaky",
-        "Gün 51: sakit gün — dörd agent; paket −1,1 kB, səs qarışığı ölçüldü, lint e2e-ni örtür"
+        "Gün 52: dörd agent — replay qeydi v1, 1.1 dizayn qeydi, native xətt yoxlaması, 377 e2e yürüşü 0 flaky"
       ],
-      "status": "Bu gün işlədi · sabah gün 54 (sakit rejim)"
+      "status": "Bu gün işlədi · sabah gün 55 (sakit rejim)"
     },
     {
       "id": "game-designer",
       "name": "Oyun dizayneri",
       "role": "Qaydalar və balans",
       "color": "#7c5cbf",
-      "tag": "gözləyir",
-      "cls": "wait",
+      "tag": "işlədi",
+      "cls": "",
       "does": "GDD-ni (qaydalar sənədi), balans sabitlərini və səviyyə zolaqlarını yazır. Hər dərs kartını \"karta hərfi əməl edən\" simulyasiya oyunçusu ilə yoxlayır və keçməyənləri yenidən yazmaq üçün level dizaynerinə dəqiq mətn verir.",
       "owns": [
         "docs/GDD.md",
@@ -62,38 +62,38 @@
         "GD-x baxışları"
       ],
       "recent": [
+        "Gün 54: playtest vərəqi — Diaqnostika addım 0, jurnal fayl ilə, §D 3a yoxlama",
         "Gün 52: 1.1 icebox qeydi — təkrar baxış (≈ 31 s) və bir telefonda 2 oyunçu (≈ 57 s), əvvəl replay",
-        "Gün 50: kamera tavanı — 72 görüntü, 1,35 qalır (toxunma dairəsi 77–92 px, 1,78-də ada dənizi itirir)",
-        "Gün 48: insan playtest vərəqi — 15 səviyyə, bot saatları ilə cədvəl, mexaniki qaydalar (3★, 2★ döşəməsi, zolaq 5–6, A3 açarı); yalnız build 27+"
+        "Gün 50: kamera tavanı — 72 görüntü, 1,35 qalır (toxunma dairəsi 77–92 px, 1,78-də ada dənizi itirir)"
       ],
-      "status": "Gözləyir · B4 / B5 playtest-dən sonra"
+      "status": "Bu gün işlədi (sonnet) · B4 / B5 playtest-dən sonra"
     },
     {
       "id": "gameplay-engineer",
       "name": "Gameplay mühəndisi",
       "role": "Simulyasiya",
       "color": "#2f9e5c",
-      "tag": "gözləyir",
-      "cls": "wait",
+      "tag": "işlədi",
+      "cls": "",
       "does": "Oyunun deterministik qaydalarını yazır: qüllələr, axınlar, tutma, yüksəlmə, minalar, toplar. Hər qayda rəqəmlə test olunur; simulyasiyada DOM, saat və təsadüf yoxdur, ona görə eyni toxum həmişə eyni oyunu verir.",
       "owns": [
         "tower-clash/src/sim/",
         "tests/sim/"
       ],
       "recent": [
+        "Gün 54: gündəlik / həftəlik qeyd çağırış açarını daşıyır, yoxlayıcı onu yenidən qurur və uyğunsuzluğu rədd edir (−5 B)",
         "Gün 52: deterministik replay qeydi v1 — seriallaşdır / oynat / yoxla, AI əmrləri saxlanılır, node fikstürü Chromium-da eyni hash (+60 B)",
-        "Gün 44: həftəlik çağırış permutasiyası",
-        "Gün 43: ilk əsgər qaydası sınandı, geri alındı"
+        "Gün 44: həftəlik çağırış permutasiyası"
       ],
-      "status": "Gözləyir · sim dəyişmir"
+      "status": "Bu gün işlədi (fable) · sim dəyişmir"
     },
     {
       "id": "frontend-engineer",
       "name": "Frontend mühəndisi",
       "role": "Ekranlar və toxunuş",
       "color": "#e0702e",
-      "tag": "işlədi",
-      "cls": "",
+      "tag": "gözləyir",
+      "cls": "wait",
       "does": "Oyunçunun gördüyü və toxunduğu hər şey: canvas çəkimi, HUD, menyular, nişanlar, toxunuş jestləri, save/yükləmə, PWA. Hər dəyişiklik 360×640 və 430×932 ekranlarda kadrlarla və qoruyucu testlərlə yoxlanır.",
       "owns": [
         "src/render/",
@@ -106,7 +106,7 @@
         "Gün 51: ilk yükləmə 81,7 → 80,6 kB — gec ekranların köməkçiləri öz parçalarına; davranış dəyişməyib",
         "Gün 50: buster düyməsində pop + parıltı, rəngli aktiv vəziyyət; məğlubiyyət pərdəsi fasilədən sonra; menyu keçidi 120 ms; nəticə kartı fasilədə isinir (giriş kadrı 23,8 → 10,7 ms)"
       ],
-      "status": "Bu gün işlədi · 1.1-R replay UI 1.0-dan sonra"
+      "status": "Gözləyir · 1.1-R replay UI 1.0-dan sonra"
     },
     {
       "id": "ai-engineer",
@@ -172,8 +172,8 @@
       "name": "Tech artist",
       "role": "Görünüş və səs",
       "color": "#d4536b",
-      "tag": "işlədi",
-      "cls": "",
+      "tag": "gözləyir",
+      "cls": "wait",
       "does": "Vizual üslubu (palitra, qalaların və əsgərlərin çəkimi, zərrəciklər, ekran effektləri) və WebAudio ilə sintez olunan səsləri yaradır. Rəng-korluğu palitrası və \"az hərəkət\" rejimi onun qoruyucularındandır.",
       "owns": [
         "src/render/ effektlər, palitra",
@@ -185,15 +185,15 @@
         "Gün 51: ən pis səs yığını −6,3 dBFS (limiter 0 dB), sub-bass və stinq səviyyələri endirildi, 24 səslik tavan, bas variasiyası",
         "Gün 50: Hava zərbəsi effekt zənciri + airstrike səsi (eager −49 B); qələbə / məğlubiyyət stinq-i +0 ms; musiqi gərginlik qatı; send tembr növbəsi"
       ],
-      "status": "Bu gün işlədi · dinamikdə dinləmə TF planında"
+      "status": "Gözləyir · dinamikdə dinləmə TF planında"
     },
     {
       "id": "mobile-engineer",
       "name": "Mobil mühəndis",
       "role": "iOS və Android",
       "color": "#4a6fa5",
-      "tag": "gözləyir",
-      "cls": "wait",
+      "tag": "işlədi",
+      "cls": "",
       "does": "Capacitor qabığını, Android / iOS layihələrini, CI build-lərini (APK, imzalı iOS arxivi, TestFlight yükləməsi) və cihaz test planını saxlayır. Açarlar və parollar heç vaxt çatda olmur — onları yalnız sən GitHub-a qoyursan.",
       "owns": [
         "capacitor.config.ts",
@@ -203,11 +203,11 @@
         "docs/MOBILE.md"
       ],
       "recent": [
+        "Gün 54: native build-də Diaqnostika → JURNALI KOPYALA → #replay → MATCH; paket 1 319 375 B",
         "Gün 52: native xətt yoxlandı — map / debug yoxdur, haptik qapılar, 1,32 MB; sorğu addımları MOBILE.md §4.2",
-        "Gün 46: mağaza build-i source map-sız və debug səthsiz — 3,9 → 1,3 MB (`build:native`, CI artefaktı)",
-        "Gün 43: iOS simulator açılış addımı"
+        "Gün 46: mağaza build-i source map-sız və debug səthsiz — 3,9 → 1,3 MB (`build:native`, CI artefaktı)"
       ],
-      "status": "Gözləyir · build 27 müqavilədən sonra"
+      "status": "Bu gün işlədi · build 27 müqavilədən sonra"
     },
     {
       "id": "publisher",
@@ -223,9 +223,9 @@
         "fastlane/"
       ],
       "recent": [
+        "Gün 54: build 27 qeydlərinə gün 51–53, TestFlight bənd 13 (10)",
         "Gün 53: PLAN.md real vəziyyətə — mərhələlər 1.0 / 1.0.1 / 1.1, risklər; P0 1/2 düzəlişi",
-        "Gün 51: build 27 qeydlərinə gün 50, TestFlight bənd 13 (9) dinləmə yoxlaması",
-        "Gün 50: build 27 qeydlərinə gün 48–49, TestFlight bənd 13 (8)"
+        "Gün 51: build 27 qeydlərinə gün 50, TestFlight bənd 13 (9) dinləmə yoxlaması"
       ],
       "status": "Bu gün işlədi (sonnet) · build 27 materialı hazırdır"
     },
@@ -264,8 +264,8 @@
       ],
       "recent": [
         "Apple PLA müqaviləsi — qəbul edilməyincə heç bir build yüklənmir; sonra build 27 (4 addım)",
-        "Build 27 gələndə: Diaqnostikanı aç, 20 dəqiqəlik alt-plan + TF-13 / TF-30 / TF-31, playtest vərəqi (~40 dəq), dinamikdə dinləmə; jurnalı fayl / e-poçtla göndər",
-        "Yeni defaultlar: jurnalda son 5 matçın qeydi; perf bazası dəyişmir"
+        "Build 27 gələndə: Ayarlar → Haqqında → Diaqnostika açıq; 20 dəqiqəlik alt-plan + playtest vərəqi (~40 dəq); jurnalı fayl / e-poçtla göndər — kampaniya və gündəlik matçların qeydi içindədir",
+        "Yeni default: çağırış qeydi açardan yenidən qurulur, uyğunsuzluq rədd edilir"
       ],
       "status": "Səndə: Apple müqaviləsi + cihaz yoxlaması (P0) + playtest vərəqi"
     }
@@ -307,39 +307,48 @@
       ]
     },
     {
-      "title": "Gün 53 — bağlandı (10 noyabr)",
+      "title": "Gün 54 — bağlandı (11 noyabr)",
       "items": [
         {
-          "id": "PERF-13",
+          "id": "SIM-R2",
           "p": "p2",
           "own": [
-            "tech-artist"
+            "gameplay-engineer"
           ],
           "day": "bağlı",
-          "t": "50-ci səviyyə kadr norması 1,212 → 1,020, piksel dəyişmədən."
+          "t": "Gündəlik / həftəlik replay qeydi yoxlanılır (çağırış açarı)."
         },
         {
-          "id": "DIAG-2",
+          "id": "MM-17",
           "p": "p2",
           "own": [
-            "frontend-engineer"
+            "mobile-engineer"
           ],
           "day": "bağlı",
-          "t": "Diaqnostika jurnalı matçın replay qeydini daşıyır."
+          "t": "Native build-də diaqnostika → replay yolu MATCH."
         },
         {
-          "id": "DOC-7",
+          "id": "PUB-42",
           "p": "p3",
           "own": [
             "publisher"
           ],
           "day": "bağlı",
-          "t": "PLAN.md real vəziyyətə; P0 1/2 düzəlişi."
+          "t": "Build 27 qeydləri gün 51–53."
+        },
+        {
+          "id": "GD-15",
+          "p": "p3",
+          "own": [
+            "game-designer"
+          ],
+          "day": "bağlı",
+          "t": "Vərəqdə Diaqnostika addımı və jurnal göndərmə."
         }
       ]
     },
     {
-      "title": "Gün 54",
+      "title": "Gün 55",
       "items": [
         {
           "id": "Build 27",
@@ -358,8 +367,8 @@
             "producer",
             "qa-engineer"
           ],
-          "day": "gün 54",
-          "t": "CI izləmə, QA-35 tələsi, eager ehtiyatı 1,2 kB."
+          "day": "gün 55",
+          "t": "CI izləmə, QA-35 tələsi; 1.1-R kodu 1.0-dan sonra."
         }
       ]
     },
