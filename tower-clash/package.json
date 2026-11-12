@@ -21,6 +21,7 @@
     "version:check": "node scripts/syncVersion.mjs --check",
     "playtest": "tsx scripts/playtest.ts",
     "playtest:decide": "tsx scripts/playtestDecide.ts",
+    "playtest:log": "tsx scripts/playtestLog.ts",
     "perf:baseline": "node scripts/perfBaseline.mjs",
     "check": "npm run typecheck && npm run lint && npm run test && npm run levels:check",
     "e2e": "npm run build && playwright test --project=chromium",
