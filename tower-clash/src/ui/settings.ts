@@ -278,7 +278,7 @@ export class SettingsScreen implements Screen {
       this.toast.show(t('settings.copyUnavailable'), 'error', this.nowMs);
       return;
     }
-    const share = diagShare(diagRows(), currentHints(this.app.save, currentLanguage())); // DIAG-2: ≤ 100 kB, newest replays first
+    const share = diagShare(diagRows(), currentHints(this.app.save, currentLanguage())); // DIAG-2 / QA-39-2: ≤ 400 kB, newest replays first
     clip.writeText(share.text).then(
       () => this.toast.show(t(share.omitted > 0 ? 'settings.logCopiedTrimmed' : 'settings.logCopied'), 'ok', this.nowMs),
       () => this.toast.show(t('settings.logCopyFailed'), 'error', this.nowMs),

@@ -39,8 +39,8 @@ import { makeLevel } from '../helpers';
 
 /*
  * DIAG-2 (2026-11-10): the diagnostics row of a played result carries the match's SIM-R1 replay record
- * (src/ui/diagnostics.ts `diagReplayOf`), bounded (≤ 32 kB per record, else a size marker; the newest 5
- * rows keep theirs); COPY LOG appends `#replay <row> <json>` lines, newest first, within 100 kB; off, nothing
+ * (src/ui/diagnostics.ts `diagReplayOf`), bounded (≤ 32 kB per record, else a size marker; the newest 20
+ * rows keep theirs, QA-39-2); COPY LOG appends `#replay <row> <json>` lines, newest first, within 400 kB; off, nothing
  * is built. The record stays outside the save, and src/sim/replay.ts stays out of the eager chunk.
  */
 
@@ -184,12 +184,37 @@ describe('the row carries the replay record', () => {
   it(`last-${DIAG_REPLAY_KEEP} rule: older rows drop the field, every row stays`, () => {
     save.settings.diagnostics = true;
     const rep = fatReplay(makeLevel({ id: 5 }), 3);
-    for (let i = 0; i < 8; i++) recordDiag(save, ev({ replay: rep }));
+    expect(DIAG_REPLAY_KEEP).toBe(20); // QA-39-2: a 15-level session (+ retries) keeps every match's record
+    const n = DIAG_REPLAY_KEEP + 3;
+    for (let i = 0; i < n; i++) recordDiag(save, ev({ replay: rep }));
     recordDiag(save, ev({ outcome: 'skip' })); // a skip carries none and does not push one out
     const rows = diagRows();
-    expect(rows).toHaveLength(9);
-    expect(rows.map((r) => 'replay' in r)).toEqual([false, false, false, true, true, true, true, true, false]);
-    expect(rows.map((r) => r.attempt)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 8]);
+    expect(rows).toHaveLength(n + 1);
+    expect(rows.map((r) => 'replay' in r)).toEqual([false, false, false, ...Array<boolean>(DIAG_REPLAY_KEEP).fill(true), false]);
+    expect(rows.map((r) => r.attempt)).toEqual([...Array.from({ length: n }, (_, i) => i + 1), n]);
+  });
+
+  it('QA-39-2: 20 records near the 32 kB cap fit the store (≈ 640 kB); a store that refuses them drops the oldest first, the rows stay', () => {
+    save.settings.diagnostics = true;
+    const big = fatReplay(makeLevel({ id: 5 }), 390); // ≈ 31.6 kB, under DIAG_REPLAY_MAX
+    const json = JSON.stringify(big).length;
+    expect(json).toBeGreaterThan(31_000);
+    expect(json).toBeLessThanOrEqual(DIAG_REPLAY_MAX);
+    for (let i = 0; i < 25; i++) recordDiag(save, ev({ replay: big }));
+    const stored = store.data.get(DIAG_KEY)!.length;
+    expect(stored).toBeGreaterThan(20 * 31_000);
+    expect(stored).toBeLessThan(20 * DIAG_REPLAY_MAX + 25 * 400); // the worst case: 20 records + the rows
+    expect(diagRows().filter((r) => r.replay).length).toBe(20);
+    // a nearly full origin: room for ≈ 6 records — the newest ones stay, the rows all stay
+    store = memory(6.5 * json);
+    setSaveStorageForTests(store);
+    for (let i = 0; i < 10; i++) recordDiag(save, ev({ replay: big }));
+    const rows = diagRows();
+    expect(rows).toHaveLength(10);
+    const kept = rows.map((r) => 'replay' in r);
+    expect(kept.filter(Boolean).length).toBe(6);
+    expect(kept.slice(-6).every(Boolean)).toBe(true); // newest first
+    expect(store.data.get(DIAG_KEY)!.length).toBeLessThanOrEqual(6.5 * json);
   });
 
   it('a stored field that is not a record is dropped on read; storage refusing the records keeps the rows', () => {
@@ -229,12 +254,16 @@ describe('COPY LOG with replays', () => {
     const json = JSON.stringify(rep).length;
     expect(json).toBeGreaterThan(28_000);
     expect(json).toBeLessThanOrEqual(DIAG_REPLAY_MAX);
-    // 400 rows (the log's cap) + 5 records ≈ 190 kB untrimmed
-    const rows = Array.from({ length: 400 }, (_, i) => row({ attempt: i + 1, build: '1.0.0 (build 999)', textScale: 1.25, ...(i >= 395 ? { replay: rep } : {}) }));
+    expect(DIAG_SHARE_MAX).toBe(400 * 1024); // QA-39-2
+    // 400 rows (the log's cap) + 20 records ≈ 640 kB untrimmed
+    const rows = Array.from({ length: 400 }, (_, i) => row({ attempt: i + 1, build: '1.0.0 (build 999)', textScale: 1.25, speed: 2, ...(i >= 380 ? { replay: rep } : {}) }));
     const s = diagShare(rows, hints);
     expect(s.text.length).toBeLessThanOrEqual(DIAG_SHARE_MAX);
-    expect(s.replays).toBeGreaterThanOrEqual(1);
-    expect(s.replays + s.omitted).toBe(5);
+    expect(s.replays).toBeGreaterThanOrEqual(12); // (400 kB − the 400 CSV rows) / ≈ 30 kB
+    expect(s.replays + s.omitted).toBe(20);
+    // a 15-level session (≈ 20 rows, 20 records at ≈ 10 kB, the dry run's size) fits whole
+    const session = Array.from({ length: 20 }, (_, i) => row({ attempt: i + 1, replay: fatReplay(makeLevel({ id: 5 }), 120) }));
+    expect(diagShare(session, hints)).toMatchObject({ replays: 20, omitted: 0 });
     expect(s.text.split('\n').at(-1)).toBe(`# replays omitted ${s.omitted} (size)`);
     const kept = parseDiagReplays(s.text).map((r) => r.row);
     expect(kept).toEqual(Array.from({ length: s.replays }, (_, i) => 401 - s.replays + i)); // the newest, in row order
@@ -258,13 +287,14 @@ describe('COPY LOG with replays', () => {
     expect(parseDiagReplays((writeText.mock.calls[0] as unknown as [string])[0])).toHaveLength(1);
     expect(screen.toast.opts(0)?.text).toBe(en['settings.logCopied']);
     const big = fatReplay(makeLevel({ id: 5 }), 370);
-    for (let i = 0; i < 5; i++) recordDiag(save, ev({ replay: big }));
+    for (let i = 0; i < 20; i++) recordDiag(save, ev({ replay: big })); // ≈ 600 kB of records
     screen = new SettingsScreen(fakeApp(save), () => {});
     tap(screen, screen.diagInfo.copy!);
     await flush();
     const text = (writeText.mock.calls[1] as unknown as [string])[0];
     expect(text.length).toBeLessThanOrEqual(DIAG_SHARE_MAX);
-    expect(parseDiagReplays(text).at(-1)!.row).toBe(6);
+    expect(text.length).toBeGreaterThan(300 * 1024);
+    expect(parseDiagReplays(text).at(-1)!.row).toBe(21);
     expect(screen.toast.opts(0)?.text).toBe(en['settings.logCopiedTrimmed']);
   });
 

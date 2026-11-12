@@ -31,6 +31,11 @@ export class GameLoop {
   state: GameState | null = null;
   paused = false;
   speed = 1;
+  /**
+   * QA-39-1: the highest `speed` ticks ran at in this loop's life (one PlayScreen = one match; the Diagnostics
+   * row's `speed`); undefined until the first tick. `declare`: no initialiser in the eager chunk.
+   */
+  declare speedMax: number | undefined;
   private acc = 0;
   private pending: Command[] = [];
 
@@ -69,6 +74,7 @@ export class GameLoop {
     this.acc += Math.max(0, Math.min(realDtMs, 250)) * this.speed;
     let ticks = Math.floor(this.acc / C.TICK_MS);
     if (ticks <= 0) return 0;
+    if (!(this.speedMax! >= this.speed)) this.speedMax = this.speed; // also when undefined
     if (ticks > MAX_TICKS_PER_FRAME) {
       ticks = MAX_TICKS_PER_FRAME;
       this.acc = ticks * C.TICK_MS; // drop the backlog instead of spiralling

@@ -16,6 +16,12 @@
  * it (older rows lose the field, the row stays). COPY LOG appends one `#replay <row> <json>` line per
  * kept record, newest first while the text stays ≤ `DIAG_SHARE_MAX` (`diagShare`; the settings toast
  * says when older ones were left out). tests/ui/diagnosticsReplay.test.ts.
+ * QA-39-2 (2026-11-12): kept records 5 → 20 (`DIAG_REPLAY_KEEP`; worst case 20 × 32 kB = 640 kB under
+ * `DIAG_KEY`, the save key untouched) and the COPY LOG cap 100 → 400 kB (`DIAG_SHARE_MAX`), so a 15-level
+ * playtest session keeps every match's record. A refused write drops the oldest records one by one.
+ * QA-39-1 (2026-11-12): the `speed` column — the highest game speed the match's ticks ran at
+ * (`GameLoop.speedMax`: 1, 2 from the pause card, 20 from the debug `setSpeed`); empty on a skip and in
+ * logs from before the column (`parseDiagText` maps by the text's own column line).
  */
 import type { Replay, ReplayEntry } from '../sim/replay';
 import { challengeDescriptor, replayOf, serializeReplay } from '../sim/replay';
@@ -32,9 +38,9 @@ export const DIAG_CAP = 400;
 /** DIAG-2: a serialized replay record longer than this (chars = bytes: the JSON is ASCII) is not kept. */
 export const DIAG_REPLAY_MAX = 32 * 1024;
 /** DIAG-2: rows that keep their `replay` field, newest first; older rows drop it. */
-export const DIAG_REPLAY_KEEP = 5;
+export const DIAG_REPLAY_KEEP = 20;
 /** DIAG-2: COPY LOG's text stays at or under this many chars; the oldest replay lines go first. */
-export const DIAG_SHARE_MAX = 100 * 1024;
+export const DIAG_SHARE_MAX = 400 * 1024;
 
 /** DIAG-2: the row's replay record, or why it was not kept. */
 export type DiagReplay = Replay | { dropped: 'size'; bytes: number };
@@ -70,6 +76,11 @@ export interface DiagRow {
   boosters: number;
   /** `settings.textScale` (1, 1.25, 1.5). */
   textScale: number;
+  /**
+   * QA-39-1: the highest loop speed the match's ticks ran at (`GameLoop.speedMax`: 1, 2 = the pause
+   * card's ×2, any debug speed as is). Absent on a skip and on rows written before the column.
+   */
+  speed?: number;
   /** DIAG-2: the match's replay record (a played result only, not a skip; newest `DIAG_REPLAY_KEEP` rows). */
   replay?: DiagReplay;
 }
@@ -82,7 +93,9 @@ interface DiagStore {
 }
 
 /** CSV column order (COPY LOG's second line). */
-export const DIAG_COLUMNS = ['v', 't', 'build', 'lvl', 'mode', 'attempt', 'outcome', 'timeMs', 'stars', 'first', 'continued', 'boosters', 'textScale'] as const;
+export const DIAG_COLUMNS = ['v', 't', 'build', 'lvl', 'mode', 'attempt', 'outcome', 'timeMs', 'stars', 'first', 'continued', 'boosters', 'textScale', 'speed'] as const;
+/** The column line before QA-39-1 added `speed` (old COPY LOG texts; `parseDiagText` reads both). */
+export const DIAG_COLUMNS_V1_0 = DIAG_COLUMNS.slice(0, -1);
 
 const MODES: readonly string[] = ['campaign', 'daily', 'weekly'];
 const OUTCOMES: readonly string[] = ['won', 'lost', 'retreat', 'skip'];
@@ -105,7 +118,8 @@ function isRow(r: unknown): r is DiagRow {
     typeof r.first === 'boolean' &&
     typeof r.continued === 'boolean' &&
     nonNegInt(r.boosters) &&
-    typeof r.textScale === 'number'
+    typeof r.textScale === 'number' &&
+    (r.speed === undefined || (typeof r.speed === 'number' && r.speed > 0))
   );
 }
 
@@ -197,6 +211,8 @@ export interface DiagEvent {
   boosters: number;
   /** DIAG-2: the match's replay record (absent: a skip, or a caller without a match). */
   replay?: DiagReplay;
+  /** QA-39-1: the match's highest game speed (absent: a skip). */
+  speed?: number;
 }
 
 /** `2026-11-01T10:23Z`: the wall clock to the minute (no seconds). */
@@ -231,14 +247,19 @@ export function recordDiag(save: SaveData, ev: DiagEvent, nowMs = Date.now(), bu
     boosters: ev.boosters,
     textScale: save.settings.textScale ?? 1,
   };
+  if (ev.speed !== undefined && ev.speed > 0) row.speed = ev.speed;
   if (ev.replay) row.replay = ev.replay;
   d.rows.push(row);
   if (d.rows.length > DIAG_CAP) d.rows.splice(0, d.rows.length - DIAG_CAP);
   trimReplays(d.rows);
-  // DIAG-2: storage refused the log with its records (quota) — keep the rows without them
-  if (!writeStore(store, d) && d.rows.some((r) => r.replay)) {
-    for (const r of d.rows) delete r.replay;
-    writeStore(store, d);
+  // DIAG-2 / QA-39-2: storage refused the log with its records (quota) — drop the oldest record until it fits
+  // (the rows themselves always stay)
+  if (!writeStore(store, d)) {
+    for (const r of d.rows) {
+      if (r.replay === undefined) continue;
+      delete r.replay;
+      if (writeStore(store, d)) break;
+    }
   }
   return row;
 }
@@ -251,6 +272,8 @@ export interface DiagMatch {
   readonly state?: GameState;
   readonly replayLog?: readonly ReplayEntry[];
   readonly hasContinued?: boolean;
+  /** QA-39-1: the play screen's loop (`PlayScreen.loop`), for the row's `speed`. */
+  readonly loop?: { readonly speedMax?: number; readonly speed: number };
   /** SIM-R2: the Daily / Weekly the match is (`PlayScreen.challenge` / `.weekly`), for the record's descriptor. */
   readonly challenge?: { dayKey: string; twist: { id: string } } | null;
   readonly weekly?: { weekKey: string; twist: { id: string } } | null;
@@ -262,7 +285,9 @@ export interface DiagMatch {
  */
 export function diagReplayOf(play: DiagMatch, max = DIAG_REPLAY_MAX): DiagReplay | undefined {
   if (!play.level || !play.state || !play.replayLog) return undefined;
-  const replay = replayOf(play.level, play.state, play.replayLog, play.hasContinued === true, challengeDescriptor(play.challenge, play.weekly));
+  // SIM-R3: a rewinding continue is the log's `r` entry; a reinforcements restart is a fresh match (its bonus
+  // garrison is in the modifiers) and verifies as a plain one, so the record is never flagged `continued`
+  const replay = replayOf(play.level, play.state, play.replayLog, false, challengeDescriptor(play.challenge, play.weekly));
   const bytes = serializeReplay(replay).length;
   return bytes <= max ? replay : { dropped: 'size', bytes };
 }
@@ -290,6 +315,8 @@ export function logLevelEnd(save: SaveData, info: ResultInfo, play: DiagMatch, n
       first,
       continued: info.continued,
       boosters: play.boosters,
+      // QA-39-1: the highest speed the ticks ran at (a match that never ticked: the current one)
+      speed: play.loop ? (play.loop.speedMax ?? play.loop.speed) : undefined,
       replay: diagReplayOf(play),
     },
     nowMs,
@@ -352,7 +379,7 @@ const REPLAY_LINE = /^#replay (\d+) (\{.*\})$/;
 export function diagShare(rows: readonly DiagRow[], h: DiagHints, max = DIAG_SHARE_MAX): DiagShare {
   const head = `# Tower Clash diagnostics v1 | build ${oneLine(h.build)} | ua ${oneLine(h.ua)} | viewport ${h.viewport} | dpr ${h.dpr} | text ${Math.round(h.textScale * 100)}% | lang ${h.language} | events ${rows.length}`;
   const lines = [head, DIAG_COLUMNS.join(',')];
-  for (const r of rows) lines.push(DIAG_COLUMNS.map((c) => csvField(r[c])).join(','));
+  for (const r of rows) lines.push(DIAG_COLUMNS.map((c) => csvField(r[c] ?? '')).join(','));
   const omitNote = 40; // room for the "# replays omitted n (size)" line
   let size = lines.join('\n').length;
   const picked: string[] = [];
@@ -415,14 +442,26 @@ function csvSplit(line: string): string[] {
   return out;
 }
 
-/** COPY LOG text back to rows (tests, and whoever reads a tester's paste); lines that are not rows are skipped. */
+/**
+ * COPY LOG text back to rows (tests, and whoever reads a tester's paste); lines that are not rows are skipped.
+ * Fields are read by the text's own column line (QA-39-1: an older text without `speed` reads it as absent).
+ */
 export function parseDiagText(text: string): DiagRow[] {
   const rows: DiagRow[] = [];
+  let cols: readonly string[] = DIAG_COLUMNS;
   for (const line of text.split(/\r?\n/)) {
-    if (line === '' || line.startsWith('#') || line === DIAG_COLUMNS.join(',')) continue;
+    if (line === '' || line.startsWith('#')) continue;
     const f = csvSplit(line);
-    if (f.length !== DIAG_COLUMNS.length) continue;
-    const get = (c: (typeof DIAG_COLUMNS)[number]): string => f[DIAG_COLUMNS.indexOf(c)]!;
+    if (f[0] === 'v') {
+      cols = f; // a column line: this build's or an older one
+      continue;
+    }
+    if (f.length !== cols.length) continue;
+    const get = (c: (typeof DIAG_COLUMNS)[number]): string => {
+      const i = cols.indexOf(c);
+      return i < 0 ? '' : f[i]!;
+    };
+    const speed = get('speed');
     const row = {
       v: Number(get('v')),
       t: get('t'),
@@ -437,6 +476,7 @@ export function parseDiagText(text: string): DiagRow[] {
       continued: get('continued') === '1',
       boosters: Number(get('boosters')),
       textScale: Number(get('textScale')),
+      ...(speed === '' ? {} : { speed: Number(speed) }),
     };
     if (isRow(row)) rows.push(row);
   }

@@ -137,7 +137,7 @@ export function installDebug(app: TowerClashApp): TowerClashDebug & QaDebugExtra
   const extras: QaDebugExtras = {
     getFocus: () => app.lazy?.focusState(app) ?? null,
     // SIM-R2: a Daily / Weekly match carries its descriptor (kind, day / week key, twist id)
-    getReplay: () => (app.play ? serializeReplay(replayOf(app.play.level, app.play.state, app.play.replayLog, app.play.hasContinued, challengeDescriptor(app.play.challenge, app.play.weekly))) : null),
+    getReplay: () => (app.play ? serializeReplay(replayOf(app.play.level, app.play.state, app.play.replayLog, false, challengeDescriptor(app.play.challenge, app.play.weekly))) : null),
     verifyReplay: async (json) => {
       const replay = parseReplay(json);
       // SIM-R2: a challenge record is rebuilt from its key and checked against the record (rejects on a mismatch)

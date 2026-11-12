@@ -18,7 +18,7 @@ import '../registerResult'; // PERF-11: the lazy result chunk is in (the play sc
 import { PlayScreen } from '../../src/ui/play';
 import { SettingsScreen } from '../../src/ui/settings';
 import type { DiagEvent, DiagRow } from '../../src/ui/diagnostics';
-import { DIAG_CAP, DIAG_COLUMNS, DIAG_KEY, clearDiag, diagRows, diagText, isoMinute, logLevelEnd, parseDiagText, recordDiag, resetDiag } from '../../src/ui/diagnostics';
+import { DIAG_CAP, DIAG_COLUMNS, DIAG_COLUMNS_V1_0, DIAG_KEY, clearDiag, diagRows, diagText, isoMinute, logLevelEnd, parseDiagText, recordDiag, resetDiag } from '../../src/ui/diagnostics';
 import { en } from '../../src/ui/locales/en';
 import { az } from '../../src/ui/locales/az';
 import { ru } from '../../src/ui/locales/ru';
@@ -338,16 +338,86 @@ describe('COPY LOG text', () => {
   const row = (over: Partial<DiagRow> = {}): DiagRow => ({ v: 1, t: '2026-11-01T10:23Z', build: '1.0.0 (build 27)', lvl: 1, mode: 'campaign', attempt: 1, outcome: 'won', timeMs: 41_250, stars: 3, first: true, continued: false, boosters: 0, textScale: 1, ...over });
 
   it('one hints line, the column line, one CSV row per event; round-trips (quoted fields too)', () => {
-    const rows = [row(), row({ lvl: 12, mode: 'daily', attempt: 4, outcome: 'retreat', stars: 0, first: false, continued: true, boosters: 2, textScale: 1.25 }), row({ build: 'odd, "build"', outcome: 'skip', timeMs: 0 })];
+    const rows = [row({ speed: 1 }), row({ lvl: 12, mode: 'daily', attempt: 4, outcome: 'retreat', stars: 0, first: false, continued: true, boosters: 2, textScale: 1.25, speed: 2 }), row({ build: 'odd, "build"', outcome: 'skip', timeMs: 0 })];
     const text = diagText(rows, hints);
     const lines = text.split('\n');
     expect(lines).toHaveLength(2 + rows.length);
     expect(lines[0]).toBe('# Tower Clash diagnostics v1 | build 1.0.0 (build 27) | ua Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) X | viewport 393x852 | dpr 3 | text 150% | lang az | events 3');
-    expect(lines[1]).toBe('v,t,build,lvl,mode,attempt,outcome,timeMs,stars,first,continued,boosters,textScale');
-    expect(lines[2]).toBe('1,2026-11-01T10:23Z,1.0.0 (build 27),1,campaign,1,won,41250,3,1,0,0,1');
-    expect(lines[4]).toBe('1,2026-11-01T10:23Z,"odd, ""build""",1,campaign,1,skip,0,3,1,0,0,1');
+    expect(lines[1]).toBe('v,t,build,lvl,mode,attempt,outcome,timeMs,stars,first,continued,boosters,textScale,speed');
+    expect(lines[2]).toBe('1,2026-11-01T10:23Z,1.0.0 (build 27),1,campaign,1,won,41250,3,1,0,0,1,1');
+    expect(lines[3]).toBe('1,2026-11-01T10:23Z,1.0.0 (build 27),12,daily,4,retreat,41250,0,0,1,2,1.25,2');
+    expect(lines[4]).toBe('1,2026-11-01T10:23Z,"odd, ""build""",1,campaign,1,skip,0,3,1,0,0,1,'); // a skip: no speed
     expect(parseDiagText(text)).toEqual(rows);
     expect(parseDiagText(diagText([], hints))).toEqual([]);
+  });
+
+  it('QA-39-1: a log from before the speed column still parses (rows without speed); a mixed paste follows each column line', () => {
+    expect(DIAG_COLUMNS_V1_0).toEqual(DIAG_COLUMNS.filter((c) => c !== 'speed'));
+    const old = ['# Tower Clash diagnostics v1 | build 1.0.0 (build 26)', DIAG_COLUMNS_V1_0.join(','), '1,2026-11-01T10:23Z,1.0.0 (build 26),3,campaign,1,won,41250,3,1,0,0,1'].join('\n');
+    const r = row({ build: '1.0.0 (build 26)', lvl: 3 });
+    expect(parseDiagText(old)).toEqual([r]);
+    expect('speed' in parseDiagText(old)[0]!).toBe(false);
+    const fresh = diagText([row({ speed: 20 })], hints);
+    expect(parseDiagText(`${old}\n${fresh}`)).toEqual([r, row({ speed: 20 })]);
+    // a 13-field row under the 14-column line is a cut line: skipped
+    expect(parseDiagText(`${DIAG_COLUMNS.join(',')}\n1,2026-11-01T10:23Z,b,3,campaign,1,won,41250,3,1,0,0,1`)).toEqual([]);
+  });
+});
+
+describe("QA-39-1: the speed column is the match's highest game speed", () => {
+  beforeEach(() => {
+    save.settings.diagnostics = true;
+  });
+
+  /** Win level 5 after one 50 ms frame at each of `speeds` in turn (the pause card's toggle / the debug setSpeed). */
+  async function winAt(speeds: number[]): Promise<PlayScreen> {
+    const shell = fakeApp(save);
+    const play = new PlayScreen(shell.app, makeLevel({ id: 5 }), 1, 1);
+    shell.app.go(play);
+    play.startMatch();
+    let now = 100;
+    for (const sp of speeds) {
+      play.setSpeed(sp);
+      play.update(50, (now += 50));
+    }
+    for (const tw of Object.values(play.state.towers)) tw.owner = 'player';
+    play.state.units = [];
+    play.state.links = [];
+    play.update(50, (now += 50));
+    expect(play.over).toBe(true);
+    await flush();
+    return play;
+  }
+
+  it('×1 all match: 1; ×2 then back to ×1 mid-match: 2 (the max, not the speed at the result)', async () => {
+    await winAt([1, 1]);
+    const p = await winAt([1, 2, 1]);
+    expect(p.loop.speed).toBe(1);
+    expect(diagRows().map((r) => r.speed)).toEqual([1, 2]);
+  });
+
+  it('the debug setSpeed(20) shows up as 20; a speed set while no tick ran does not count', async () => {
+    await winAt([20, 1]);
+    expect(diagRows().at(-1)!.speed).toBe(20);
+    // the app's persisted ×2 at the start, switched to ×1 before the first tick: a ×1 match
+    const shell = fakeApp(save);
+    const play = new PlayScreen(shell.app, makeLevel({ id: 5 }), 1, 2);
+    expect(play.loop.speedMax).toBeUndefined();
+    play.setSpeed(1);
+    play.startMatch();
+    play.update(50, 100);
+    expect(play.loop.speedMax).toBe(1);
+  });
+
+  it('a skip row has no speed (empty in the CSV); a stored row with a bad speed is dropped on read', () => {
+    recordDiag(save, ev({ outcome: 'skip', stars: 1 }));
+    expect('speed' in diagRows()[0]!).toBe(false);
+    recordDiag(save, ev({ speed: 2 }));
+    expect(diagRows()[1]!.speed).toBe(2);
+    const raw = JSON.parse(store.data.get(DIAG_KEY)!) as { rows: Record<string, unknown>[] };
+    raw.rows[1]!.speed = 'fast';
+    store.data.set(DIAG_KEY, JSON.stringify(raw));
+    expect(diagRows()).toHaveLength(1);
   });
 });
 
