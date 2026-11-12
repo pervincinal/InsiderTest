@@ -213,7 +213,9 @@ test.describe('replay record: continued match (SIM-R3)', () => {
     expect(entry.t).toBe(lost.timeMs);
     expect(entry.c).toBeUndefined();
     expect(lost.timeMs - entry.r!.toMs).toBeGreaterThanOrEqual(CONTINUE_REWIND_MS);
-    expect(lost.timeMs - entry.r!.toMs).toBeLessThan(CONTINUE_REWIND_MS + 1000); // the newest snapshot at least 20 s old (1 s ring interval)
+    // the newest snapshot at least 20 s old: the 1 s ring records once per frame, and a frame may batch up to
+    // MAX_TICKS_PER_FRAME ticks (500 ms of sim) on a slow CI runner, so snapshots can sit up to 1.5 s apart
+    expect(lost.timeMs - entry.r!.toMs).toBeLessThan(CONTINUE_REWIND_MS + 2000);
     expect(entry.r!.toMs).toBeLessThanOrEqual(mid.clock.timeMs);
     expect(entry.r).toEqual({ toMs: entry.r!.toMs, freezeMs: 5000, infantry: 15 }); // C.CONTINUE_FREEZE_MS / C.CONTINUE_INFANTRY
     expect(midRecord.continued).toBeUndefined();
