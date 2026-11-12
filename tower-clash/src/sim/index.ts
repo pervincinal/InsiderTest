@@ -41,6 +41,7 @@ export { getOutcome } from './outcome';
 export { SnapshotRing, applyContinue, cloneState, deepCopy, SNAPSHOT_VERSION } from './snapshot';
 export {
   REPLAY_VERSION,
+  REPLAY_MAX_CONTINUES,
   fnv1a,
   rulesId,
   hashState,
@@ -51,7 +52,8 @@ export {
   finishReplay,
   serializeReplay,
   parseReplay,
+  liveTimeline,
   runReplay,
   verifyReplay,
 } from './replay';
-export type { Replay, ReplayChallenge, ReplayEntry, ReplayOutcome, RunReplayOptions, VerifyResult } from './replay';
+export type { Replay, ReplayChallenge, ReplayCommandEntry, ReplayContinue, ReplayContinueEntry, ReplayEntry, ReplayOutcome, RunReplayOptions, VerifyResult } from './replay';

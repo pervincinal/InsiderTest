@@ -2,14 +2,19 @@ import { describe, expect, it } from 'vitest';
 import { loadLevel } from '../../src/levels/index';
 import { makeLevel } from '../helpers';
 import { C } from '../../src/sim/constants';
-import { SNAPSHOT_VERSION } from '../../src/sim/snapshot';
+import { SNAPSHOT_VERSION, applyContinue, cloneState } from '../../src/sim/snapshot';
 import { createState } from '../../src/sim/create';
+import { applyCommand } from '../../src/sim/commands';
+import { step } from '../../src/sim/step';
+import { getOutcome } from '../../src/sim/outcome';
 import {
+  REPLAY_MAX_CONTINUES,
   REPLAY_VERSION,
   challengeDescriptor,
   finishReplay,
   fnv1a,
   hashState,
+  liveTimeline,
   newReplay,
   parseReplay,
   recordInto,
@@ -19,9 +24,11 @@ import {
   serializeReplay,
   verifyReplay,
 } from '../../src/sim/replay';
-import type { Replay, ReplayEntry } from '../../src/sim/replay';
-import type { Command } from '../../src/sim/types';
-import { referencePlayerCommands } from '../../src/ai/index';
+import type { Replay, ReplayContinue, ReplayEntry } from '../../src/sim/replay';
+import type { Command, GameState, LevelDef, Owner } from '../../src/sim/types';
+import type { Rng } from '../../src/sim/rng';
+import type { PlayerBot } from '../../src/ai/headless';
+import { isAiTick, referencePlayerCommands, rngsFor, runAiTick } from '../../src/ai/index';
 import { recordHeadless } from '../../scripts/lib/recordReplay';
 import { readFileSync } from 'node:fs';
 
@@ -79,13 +86,13 @@ describe('replay record v1: record → JSON → re-run', () => {
       last = e.t;
     }
     expect(replay.commands[0]!.t).toBe(0); // the bots act on tick 0
-    expect(replay.commands[0]!.c.owner).toBe('player'); // the player's commands land first on a tick (like a tap)
+    expect(replay.commands[0]!.c!.owner).toBe('player'); // the player's commands land first on a tick (like a tap)
   });
 
   it('the `a` flag is informational: a record with the flags stripped re-runs to the same hash', async () => {
     const level = (await loadLevel(15))!;
     const { replay } = recordHeadless(level, 2, referencePlayerCommands);
-    const stripped: Replay = { ...replay, commands: replay.commands.map(({ t, c }) => ({ t, c })) };
+    const stripped: Replay = { ...replay, commands: replay.commands.map(({ t, c }) => ({ t, c: c! })) };
     expect(verifyReplay(level, stripped).matches).toBe(true);
   });
 });
@@ -97,7 +104,7 @@ describe('replay record v1: mismatches', () => {
     const json = serializeReplay(replay);
     const mutated = parseReplay(json);
     // the player's first link: swap the target for another lane-connected tower of the same source
-    const first = mutated.commands.find((e) => e.c.type === 'link' && e.c.owner === 'player')!;
+    const first = mutated.commands.find((e) => e.c?.type === 'link' && e.c.owner === 'player')!;
     const link = first.c as Extract<Command, { type: 'link' }>;
     const state = createState(level, replay.seed);
     const other = Object.values(state.roads).find((r) => (r.a === link.from || r.b === link.from) && r.a !== link.to && r.b !== link.to)!;
@@ -340,5 +347,184 @@ describe('replay record v1: SIM-R2 challenge descriptor', () => {
     expect(tagged.outcome).toEqual(plain.outcome);
     expect(hashState(runReplay(level, tagged))).toBe(plain.outcome!.hash);
     expect(verifyReplay(level, tagged).matches).toBe(true); // the descriptor check is src/daily/replayLevel.ts's job
+  });
+});
+
+/*
+ * SIM-R3 (2026-11-12): a Continue rewind is a replay-level entry `{ t: <defeat time>, r: { toMs, freezeMs, infantry } }`
+ * (never a sim Command). `runReplay` reduces the record to its live timeline — the rewind drops the abandoned
+ * future (`t >= toMs`) and stands at `toMs` as the grant (`applyContinue`) — and plays it in one pass; a record
+ * with the entry verifies (`reason` is not 'continued'), the pre-SIM-R3 flag without entries still is.
+ */
+describe('replay record v1: SIM-R3 continue entries', () => {
+  const grant = (toMs: number): ReplayContinue => ({ toMs, freezeMs: C.CONTINUE_FREEZE_MS, infantry: C.CONTINUE_INFANTRY });
+  const link = (t: number, from = 'p', to = 'e', owner: Owner = 'player'): ReplayEntry => ({ t, c: { type: 'link', owner, from, to } });
+
+  /**
+   * The headless loop of `recordHeadless` with the play screen's Continue simulated (tests/ui/continue.test.ts
+   * is the live one): a snapshot of the state and the AI rng streams after every `C.SNAPSHOT_INTERVAL_MS` tick
+   * like the ring; at each scheduled `at` (reached once, in order) the state of `at - back` is restored, the
+   * reinforcements granted, the entry logged after the abandoned future's commands and the granted state
+   * re-snapshotted at its time (`PlayScreen.resumeFromSnapshot`). The sim never sees the rewind.
+   */
+  function recordWithContinues(level: LevelDef, seed: number, player: PlayerBot, continues: { at: number; back: number }[], maxMs = 180_000): { replay: Replay; state: GameState } {
+    let state = createState(level, seed);
+    const replay = newReplay(level, state);
+    const rngs = rngsFor(seed, level.enemies);
+    type Snap = { state: GameState; player: number; enemies: Map<Owner, number> };
+    const snaps = new Map<number, Snap>();
+    const snapshot = (): Snap => ({ state: cloneState(state), player: rngs.player.state, enemies: new Map([...rngs.enemies].map(([o, r]: [Owner, Rng]) => [o, r.state])) });
+    const queue = [...continues];
+    snaps.set(0, snapshot());
+    while (getOutcome(state) === 'playing' && state.time < maxMs) {
+      if (queue[0] && queue[0].at === state.time) {
+        const { at, back } = queue.shift()!;
+        const snap = snaps.get(at - back);
+        if (!snap) throw new Error(`no snapshot at ${at - back}`);
+        state = cloneState(snap.state);
+        rngs.player.state = snap.player;
+        for (const [o, r] of rngs.enemies) r.state = snap.enemies.get(o)!;
+        expect(applyContinue(state)).toBe(state);
+        replay.commands.push({ t: at, r: grant(state.time) });
+        snaps.set(state.time, snapshot()); // the ring records the granted state at its time
+      }
+      if (isAiTick(state)) {
+        for (const cmd of [...(player ? player(state, rngs.player) : []), ...runAiTick(state, rngs.enemies, undefined, level.ai)]) {
+          recordInto(replay, state, cmd, true);
+          applyCommand(state, cmd);
+        }
+      }
+      step(state, C.TICK_MS);
+      if (state.time % C.SNAPSHOT_INTERVAL_MS === 0) snaps.set(state.time, snapshot());
+    }
+    return { replay: finishReplay(replay, state), state };
+  }
+
+  it('liveTimeline: a rewind drops the abandoned future (t ≥ toMs) and stands at toMs as the grant; an earlier grant at exactly toMs stays', () => {
+    const g1 = grant(1000);
+    const log: ReplayEntry[] = [link(0), link(500), link(1000), link(1500), { t: 2000, r: g1 }];
+    expect(liveTimeline(log)).toEqual([link(0), link(500), { t: 1000, r: g1 }]);
+    // the continued match plays on: commands at 1000 and 1500 on the new timeline
+    const log2: ReplayEntry[] = [...log, link(1000, 'q'), link(1500, 'q')];
+    expect(liveTimeline(log2)).toEqual([link(0), link(500), { t: 1000, r: g1 }, link(1000, 'q'), link(1500, 'q')]);
+    // a second rewind to the same tick: the ring re-snapshotted the granted state, so grant 1 stays and grant 2 follows it
+    const g2 = grant(1000);
+    expect(liveTimeline([...log2, { t: 3000, r: g2 }])).toEqual([link(0), link(500), { t: 1000, r: g1 }, { t: 1000, r: g2 }]);
+    // a second rewind further back drops grant 1 too
+    const g3 = grant(500);
+    expect(liveTimeline([...log2, { t: 3000, r: g3 }])).toEqual([link(0), { t: 500, r: g3 }]);
+    // no continue: the record is its own timeline
+    expect(liveTimeline([link(0), link(500)])).toEqual([link(0), link(500)]);
+    expect(liveTimeline([])).toEqual([]);
+  });
+
+  it('an entry round-trips through replayOf and JSON, and a log that carries its rewind is never flagged `continued`', () => {
+    const level = makeLevel();
+    const state = createState(level, 9);
+    const log: ReplayEntry[] = [link(0), { t: 3000, r: grant(1000) }, link(1000, 'q')];
+    const final = runReplay(level, { ...newReplay(level, state), commands: log }, { maxMs: 5000 });
+    const replay = replayOf(level, final, log, true);
+    expect(replay.commands).toEqual(log);
+    expect(replay.commands[1]!.r).not.toBe(log[1]!.r); // a copy
+    expect(replay.continued).toBeUndefined(); // the rewind is in the record: `hasContinued` adds nothing
+    expect(replayOf(level, final, [link(0)], true).continued).toBe(true); // a flag without the entry stays (a reinforcements restart passes it)
+    const json = serializeReplay(replay);
+    expect(json).toContain(`{"t":3000,"r":{"toMs":1000,"freezeMs":${C.CONTINUE_FREEZE_MS},"infantry":${C.CONTINUE_INFANTRY}}}`);
+    const parsed = parseReplay(json);
+    expect(parsed).toEqual(replay);
+    expect(parsed.v).toBe(1);
+    const v = verifyReplay(level, parsed);
+    expect(v.matches).toBe(true);
+    expect(v.reason).toBeUndefined();
+    // the grant is in the re-run: the free Freeze from toMs and the infantry on the strongest tower
+    const at = runReplay(level, { ...parsed, outcome: undefined }, { maxMs: 1000 }); // open: `maxMs` sets the end
+    expect(at.time).toBe(1000);
+    expect(at.boosters).toEqual([{ type: 'freeze', owner: 'player', untilMs: 1000 + C.CONTINUE_FREEZE_MS }]);
+    const plain = runReplay(level, { ...newReplay(level, state), commands: [link(0)] }, { maxMs: 1000 });
+    const strongest = Object.values(plain.towers).filter((t) => t.owner === 'player').reduce((a, b) => (b.units > a.units ? b : a));
+    expect(at.towers[strongest.id]!.units).toBe(Math.min(C.CAPACITY[strongest.level]!, strongest.units + C.CONTINUE_INFANTRY));
+  });
+
+  it('a headless record with a simulated continue (level 15, seed 1: 30 s → 10 s) re-runs to the live loop’s hash; without the entry it does not', async () => {
+    const level = (await loadLevel(15))!;
+    const { replay, state } = recordWithContinues(level, 1, referencePlayerCommands, [{ at: 30_000, back: 20_000 }]);
+    expect(replay.outcome!.result).toBe('won');
+    const entries = replay.commands.filter((e) => e.r);
+    expect(entries).toEqual([{ t: 30_000, r: grant(10_000) }]);
+    const abandoned = replay.commands.slice(0, replay.commands.indexOf(entries[0]!)).filter((e) => e.t >= 10_000);
+    expect(abandoned.length).toBeGreaterThan(5); // the abandoned future is in the record, before the entry
+    expect(replay.commands.slice(replay.commands.indexOf(entries[0]!) + 1).every((e) => e.t >= 10_000)).toBe(true);
+    expect(replay.continued).toBeUndefined();
+    const json = serializeReplay(replay);
+    const parsed = parseReplay(json);
+    expect(parsed).toEqual(replay);
+    const rerun = runReplay(level, parsed);
+    expect(rerun.time).toBe(state.time);
+    expect(hashState(rerun)).toBe(replay.outcome!.hash);
+    expect(JSON.stringify(rerun)).toBe(JSON.stringify(state));
+    const v = verifyReplay(level, parsed);
+    expect(v.matches).toBe(true);
+    expect(v.reason).toBeUndefined();
+    expect(v.rulesMatch).toBe(true);
+    // the rule: dropping the entry leaves the abandoned future in play — a different match
+    const without: Replay = { ...replay, commands: replay.commands.filter((e) => !e.r) };
+    const w = verifyReplay(level, without);
+    expect(w.matches).toBe(false);
+    expect(['hash', 'time', 'outcome']).toContain(w.reason);
+    // and the freeze is where the loop put it: active from 10 s for CONTINUE_FREEZE_MS, gone at 15 s
+    const at = runReplay(level, { ...parsed, outcome: undefined }, { maxMs: 10_050 });
+    expect(at.boosters.filter((b) => b.type === 'freeze' && b.owner === 'player').map((b) => b.untilMs)).toEqual([10_000 + C.CONTINUE_FREEZE_MS]);
+  });
+
+  it('two continues (the algorithm is general; the game and the parser allow one): both rewinds re-run to the live hash', async () => {
+    const level = (await loadLevel(50))!; // the longest reference match (≈ 70 s): both rewinds happen
+    const { replay, state } = recordWithContinues(level, 1, referencePlayerCommands, [
+      { at: 30_000, back: 20_000 },
+      { at: 40_000, back: 20_000 }, // to 20 s: after grant 1 (10 s), which stays in the live timeline
+    ]);
+    expect(state.time).toBeGreaterThan(40_000);
+    expect(replay.commands.filter((e) => e.r)).toEqual([
+      { t: 30_000, r: grant(10_000) },
+      { t: 40_000, r: grant(20_000) },
+    ]);
+    const live = liveTimeline(replay.commands);
+    expect(live.filter((e) => e.r).map((e) => e.t)).toEqual([10_000, 20_000]);
+    expect(live.every((e, i) => i === 0 || e.t >= live[i - 1]!.t)).toBe(true);
+    const rerun = runReplay(level, replay);
+    expect(rerun.time).toBe(state.time);
+    expect(JSON.stringify(rerun)).toBe(JSON.stringify(state));
+    expect(verifyReplay(level, replay).matches).toBe(true);
+    expect(() => parseReplay(serializeReplay(replay))).toThrow(new RegExp(`2 continues \\(max ${REPLAY_MAX_CONTINUES}\\)`));
+    expect(REPLAY_MAX_CONTINUES).toBe(1); // one Continue per attempt (PlayScreen.hasContinued)
+  });
+
+  it('parseReplay: a continue entry placed before its toMs, a malformed grant, or one over the cap is rejected', () => {
+    const level = makeLevel();
+    const ok = serializeReplay(finishReplay(newReplay(level, createState(level, 1)), createState(level, 1)));
+    const withEntries = (entries: string): string => ok.replace('"commands":[]', `"commands":[${entries}]`);
+    const g = `"freezeMs":${C.CONTINUE_FREEZE_MS},"infantry":${C.CONTINUE_INFANTRY}`;
+    expect(() => parseReplay(withEntries(`{"t":3000,"r":{"toMs":1000,${g}}}`))).not.toThrow();
+    expect(() => parseReplay(withEntries(`{"t":1000,"r":{"toMs":1000,${g}}}`))).not.toThrow(); // a rewind to the defeat tick itself is in range
+    expect(() => parseReplay(withEntries(`{"t":500,"r":{"toMs":1000,${g}}}`))).toThrow(/continue 0 malformed/); // before its toMs
+    expect(() => parseReplay(withEntries(`{"t":3000,"r":{"toMs":-50,${g}}}`))).toThrow(/continue 0 malformed/);
+    expect(() => parseReplay(withEntries(`{"t":3000,"r":{"toMs":1000,"freezeMs":${C.CONTINUE_FREEZE_MS}}}`))).toThrow(/continue 0 malformed/);
+    expect(() => parseReplay(withEntries(`{"t":3000,"r":{"toMs":"1000",${g}}}`))).toThrow(/continue 0 malformed/);
+    expect(() => parseReplay(withEntries(`{"t":3000,"r":1000}`))).toThrow(/continue 0 malformed/);
+    expect(() => parseReplay(withEntries(`{"t":3000,"r":{"toMs":1000,${g}},"c":{"type":"link"}}`))).toThrow(/continue 0 malformed/); // not both
+    expect(() => parseReplay(withEntries(`{"t":0,"c":{"type":"link","owner":"player","from":"p","to":"e"}},{"t":3000,"r":{"toMs":1000,${g}}},{"t":6000,"r":{"toMs":2000,${g}}}`))).toThrow(/2 continues \(max 1\)/);
+    expect(() => parseReplay(withEntries(`{"t":0,"c":{"type":"link","owner":"player","from":"p","to":"e"}},{"t":3000,"r":{"toMs":1000,${g}}}`))).not.toThrow();
+  });
+
+  it('verifyReplay: the pre-SIM-R3 flag without entries still reads `continued`; a flagged record with its entries is honoured as flagged', () => {
+    const level = makeLevel();
+    const state = createState(level, 5);
+    const log: ReplayEntry[] = [link(0), { t: 2000, r: grant(1000) }];
+    const final = runReplay(level, { ...newReplay(level, state), commands: log }, { maxMs: 3000 });
+    const replay = replayOf(level, final, log, true);
+    expect(replay.continued).toBeUndefined();
+    expect(verifyReplay(level, replay).reason).toBeUndefined();
+    const old: Replay = { ...replay, commands: [link(0)], continued: true };
+    expect(verifyReplay(level, old).reason).toBe('continued');
+    expect(verifyReplay(level, { ...replay, continued: true }).reason).toBe('continued'); // the record's own claim
   });
 });

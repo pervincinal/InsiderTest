@@ -111,7 +111,7 @@ describe('GameLoop onCommand hook', () => {
     expect(loop.state!.links).toEqual([]);
     expect(log.length).toBe(1);
     const check = createState(level, 1);
-    applyCommand(check, log[0]!.c);
+    applyCommand(check, log[0]!.c!);
     expect(check.links).toEqual([]);
     expect(verifyReplay(level, replayOf(level, loop.state!, log)).matches).toBe(true);
   });
@@ -133,8 +133,8 @@ describe('PlayScreen replayLog', () => {
     expect(play.loop.finished).toBe(true);
     expect(play.replayLog.length).toBeGreaterThan(5);
     expect(play.replayLog.every((e) => e.a === 1)).toBe(true); // every command came from the AI hook (enemies + the autoplay bot)
-    expect(play.replayLog.some((e) => e.c.owner === 'player')).toBe(true);
-    expect(play.replayLog.some((e) => e.c.owner === 'enemy1')).toBe(true);
+    expect(play.replayLog.some((e) => e.c?.owner === 'player')).toBe(true);
+    expect(play.replayLog.some((e) => e.c?.owner === 'enemy1')).toBe(true);
 
     const json = serializeReplay(replayOf(play.level, play.state, play.replayLog, play.hasContinued));
     const replay = parseReplay(json);

@@ -36,6 +36,13 @@ type Win = Window & {
     getReplay(): string | null;
     verifyReplay(json: string): Promise<Verify>;
     setDayKey(key: string | null): void;
+    getResult(): { outcome: string } | null;
+    economy: {
+      setAdsAvailable(on: boolean): void;
+      autoLose(): boolean;
+      resultAction(action: 'continueAd'): boolean;
+      getClock(): { timeMs: number; elapsedMs: number; continued: boolean } | null;
+    };
     daily: {
       get(dayKey?: string): { challenge: { dayKey: string; levelId: number; seed: number; twist: { id: string } } };
       start(dayKey?: string): Promise<boolean>;
@@ -156,6 +163,86 @@ test.describe('replay record: daily challenge (SIM-R2)', () => {
     expect(v.rulesMatch, 'the build under test plays the rules the fixture was recorded with (re-record it after a constants change)').toBe(true);
     expect(v.hash, `browser hash ${v.hash} vs node hash ${fixture.outcome.hash} (${v.reason ?? 'ok'})`).toBe(fixture.outcome.hash);
     expect(v.matches).toBe(true);
+    expect(errors).toEqual([]);
+  });
+});
+
+/*
+ * SIM-R3 (2026-11-12): a match that used Continue (the rewarded-ad rewind ≈ 20 s back with a free Freeze + infantry,
+ * economy.spec's "defeat → CONTINUE" flow is the model) records the rewind as `{ t, r: { toMs, freezeMs, infantry } }`
+ * and verifies — `continued` is no longer set, `reason` is never 'continued'. Level 15 seed 1 with the lose bot
+ * falls at ≈ 34 s of sim (past the 22 s a full rewind needs).
+ */
+test.describe('replay record: continued match (SIM-R3)', () => {
+  type ContinueRecord = Omit<typeof FIXTURE_RECORD, 'commands'> & { continued?: true; commands: { t: number; c?: unknown; r?: { toMs: number; freezeMs: number; infantry: number } }[] };
+  const CONTINUE_REWIND_MS = 20_000; // src/sim/constants.ts CONTINUE_REWIND_MS
+  const getReplay = (page: Page) => page.evaluate(() => (window as unknown as Win).__towerclash.getReplay());
+  const clock = (page: Page) => page.evaluate(() => (window as unknown as Win).__towerclash.economy.getClock()!);
+
+  test('level 15 (seed 1) lost by the lose bot, continued through the rewarded ad: the record carries the rewind entry and verifies, before and after the match ends', async ({ page }) => {
+    const errors = await boot(page);
+    await page.evaluate(() => {
+      const d = (window as unknown as Win).__towerclash;
+      d.economy.setAdsAvailable(true);
+      void d.loadLevel(15, 1);
+      d.setSpeed(20);
+      d.economy.autoLose();
+    });
+    await expect.poll(() => screen(page), { timeout: 60_000, intervals: [250] }).toBe('result');
+    expect((await page.evaluate(() => (window as unknown as Win).__towerclash.getResult()))?.outcome).toBe('lost');
+    const lost = await clock(page);
+    expect(lost.continued).toBe(false);
+    expect(lost.timeMs).toBeGreaterThanOrEqual(CONTINUE_REWIND_MS + 2000);
+    const lostJson = (await getReplay(page))!;
+    const lostRecord = JSON.parse(lostJson) as ContinueRecord;
+    expect(lostRecord.commands.some((e) => e.r)).toBe(false);
+    expect(lostRecord.outcome.result).toBe('lost');
+
+    // CONTINUE (rewarded video): back on the play screen ≈ 20 s earlier, with the entry logged
+    await page.evaluate(() => (window as unknown as Win).__towerclash.economy.resultAction('continueAd'));
+    await expect.poll(() => screen(page), { timeout: 15_000 }).toBe('play');
+    const mid = await page.evaluate(() => {
+      const d = (window as unknown as Win).__towerclash;
+      return { json: d.getReplay()!, clock: d.economy.getClock()! };
+    });
+    expect(mid.clock.continued).toBe(true);
+    const midRecord = JSON.parse(mid.json) as ContinueRecord;
+    const entries = midRecord.commands.filter((e) => e.r);
+    expect(entries).toHaveLength(1);
+    const entry = entries[0]!;
+    expect(entry.t).toBe(lost.timeMs);
+    expect(entry.c).toBeUndefined();
+    expect(lost.timeMs - entry.r!.toMs).toBeGreaterThanOrEqual(CONTINUE_REWIND_MS);
+    expect(lost.timeMs - entry.r!.toMs).toBeLessThan(CONTINUE_REWIND_MS + 1000); // the newest snapshot at least 20 s old (1 s ring interval)
+    expect(entry.r!.toMs).toBeLessThanOrEqual(mid.clock.timeMs);
+    expect(entry.r).toEqual({ toMs: entry.r!.toMs, freezeMs: 5000, infantry: 15 }); // C.CONTINUE_FREEZE_MS / C.CONTINUE_INFANTRY
+    expect(midRecord.continued).toBeUndefined();
+    expect(midRecord.commands.slice(midRecord.commands.indexOf(entry) + 1).every((e) => e.t >= entry.r!.toMs)).toBe(true);
+    // the record closed on the running, rewound match verifies: the re-run lands on the restored + granted state
+    const vm = await verify(page, mid.json);
+    expect(vm.matches, `${vm.reason ?? ''} ${vm.hash} vs ${vm.expected}`).toBe(true);
+    expect(vm.reason).toBeUndefined();
+    expect(vm.timeMs).toBe(midRecord.outcome.timeMs);
+
+    // the continued attempt plays to its end (the lose bot is still on: a second defeat, or a win under rules v2)
+    await expect.poll(() => screen(page), { timeout: 60_000, intervals: [250] }).toBe('result');
+    const json = (await getReplay(page))!;
+    const record = JSON.parse(json) as ContinueRecord;
+    expect(record.levelId).toBe(15);
+    expect(record.seed).toBe(1);
+    expect(record.rules).toBe(FIXTURE_RECORD.rules);
+    expect(record.continued).toBeUndefined();
+    expect(record.commands.filter((e) => e.r)).toEqual([entry]);
+    expect(['won', 'lost']).toContain(record.outcome.result);
+    expect(record.outcome.timeMs).toBeGreaterThan(entry.r!.toMs);
+    const v = await verify(page, json);
+    expect(v.matches, `${v.reason ?? ''} ${v.hash} vs ${v.expected}`).toBe(true);
+    expect(v.reason).toBeUndefined();
+    expect(v.outcome).toBe(record.outcome.result);
+    expect(v.timeMs).toBe(record.outcome.timeMs);
+    // the rule: the same record without the entry is the pre-SIM-R3 one and does not verify
+    const without = { ...record, commands: record.commands.filter((e) => !e.r) };
+    expect((await verify(page, JSON.stringify(without))).matches).toBe(false);
     expect(errors).toEqual([]);
   });
 });

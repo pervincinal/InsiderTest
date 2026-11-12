@@ -194,8 +194,9 @@ export class PlayScreen implements Screen {
   /**
    * SIM-R1 replay record of this match: every command the loop applied, in order, with its tick time
    * (`sim/replay.ts` `ReplayEntry`; `a: 1` = produced by the AI hook — enemies, autoplay, the lose bot).
-   * A plain push per command; the debug surface (`getReplay`) serializes it on demand. After a Continue
-   * rewind the log keeps the abandoned future (v1: a continued record does not verify, `hasContinued`).
+   * A plain push per command; the debug surface (`getReplay`) serializes it on demand. SIM-R3: a Continue
+   * rewind is logged as its own entry (`{ t: <defeat time>, r: { toMs, freezeMs, infantry } }`,
+   * `resumeFromSnapshot`) after the abandoned future's commands; `runReplay` replays it (the record verifies).
    */
   readonly replayLog: ReplayEntry[] = [];
   /** Debug-only command sources (src/debug.ts): the reference player (autoplay) and "auto lose"; null when off. */
@@ -432,6 +433,7 @@ export class PlayScreen implements Screen {
     if (!snap) return false;
     const restored = applyContinue(snap.state);
     if (!restored) return false;
+    this.replayLog.push({ t: this.state.time, r: { toMs: restored.time, freezeMs: C.CONTINUE_FREEZE_MS, infantry: C.CONTINUE_INFANTRY } }); // SIM-R3
     this.rewoundMs += this.state.time - restored.time;
     this.playerRng.state = snap.rng.player;
     for (const [owner, rng] of this.enemyRngs) {
