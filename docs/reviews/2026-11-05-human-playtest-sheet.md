@@ -19,7 +19,7 @@ The Azerbaijani part comes first, the English part follows. The capture table (�
 1. **Build 27 və ya daha böyük olmalıdır** (TestFlight-da tətbiqin adının altındakı rəqəm). Build 26-da dərs kartı açıq olanda da saat işləyir, ona görə vaxtları botla müqayisə etmək olmur. Build 26-dırsa dayan və çata `build 26 — sınaq gözləyir` yaz.
 2. Bu sınağı **İRƏLİLƏYİŞİ SIFIRLA-dan (TF-28) əvvəl** et, çünki sıfırlama səviyyələri yenidən bağlayır.
 3. Təyyarə rejimi açıq olsun (reklam və bildiriş gəlmir), Aşağı enerji rejimi isə söndürülsün.
-4. **Addım 0, birinci səviyyədən əvvəl: Ayarlar → Haqqında → Diaqnostika**: yandır və bütün sınaq boyu **yanıq saxla**. Hər səviyyənin vaxtı, ulduzu, cəhd sayı, oyun sürəti (×1 / ×2) və ən yeni 20 matçın təkrar qeydi telefonda yazılır (15 səviyyə və təkrarlar buna sığır). Özü heç yerə getmir: sonda mətni sən göndərirsən (§6).
+4. **Addım 0, birinci səviyyədən əvvəl: Ayarlar → Haqqında → Diaqnostika**: yandır və bütün sınaq boyu **yanıq saxla**. Hər səviyyənin vaxtı, ulduzu, cəhd sayı, oyun sürəti (×1 / ×2) və ən yeni 20 matçın təkrar qeydi telefonda yazılır (15 səviyyə və təkrarlar buna sığır). Özü heç yerə getmir: sonda mətni sən göndərirsən (§6). Diaqnostika kartında artıq hadisələr (sətir sayı) görünürsə, əvvəlcə **JURNALI TƏMİZLƏ**-yə toxun: sınaq 1-ci cəhddən başlasın və içində köhnə sətir olmasın.
 5. Xəritəni aç və **açıq olan ən böyük səviyyənin nömrəsini** yaz (məs. `açıq: 34`).
 6. İstənilən səviyyəni aç, **II**-yə toxun: FASİLƏ kartında **SÜRƏT ×1** yazılmalıdır. ×2 yazılıbsa, bir dəfə toxun. Sürət saatı dəyişmir, amma sənin reaksiya vaxtını dəyişir, ona görə bütün sınaq ×1 sürətlə oynanır.
 7. Qaydalar:
@@ -28,7 +28,7 @@ The Azerbaijani part comes first, the English part follows. The capture table (�
    - **SƏVİYYƏNİ KEÇ-ə toxunma**;
    - hər səviyyəyə **ən çox 3 cəhd** et: ilk qələbədən sonra növbəti səviyyəyə keç.
 8. **Ekran yazısı mikrofonla**: İdarəetmə mərkəzində dairəli nöqtəni basıb saxla, sonra **Mikrofon: açıq**. Bunu yalnız **17, 33 və 49**-da yaz və oynayarkən fikrini səsli de. Yazıda yalnız ekran olur, üz görünmür. Təhlildən sonra silinir.
-9. Qeydlər (Notes) tətbiqini aç və başlama saatını yaz.
+9. Qeydlər (Notes) tətbiqini aç və başlama saatını **həm yerli, həm UTC** yaz (Bakı = UTC+4, yəni telefon saatı − 4 saat; məs. `20:10 (UTC 16:10)`). Prodüser `--since` süzgəcinə UTC vaxtı dəyişmədən verir.
 
 ### 2. Vaxtı haradan oxumaq (alət lazım deyil)
 
@@ -167,7 +167,7 @@ Session header (fill once): tester · fresh / stakeholder · build · highest op
 1. **Build 27 or later** (the number under the app name in TestFlight). On build 26 the clock runs while the lesson card is up, so its times cannot be compared with the bot's. If the build is 26, stop and send `build 26 — playtest waits`.
 2. Run this **before RESET PROGRESS (TF-28)**, because the reset locks the levels again.
 3. Turn airplane mode on (no ads, no notifications) and Low Power Mode off.
-4. **Step 0, before the first level: Settings → About → Diagnostics**: turn it on and **leave it on** for the whole session. The phone records each level's time, stars, attempt count, game speed (×1 / ×2) and the replay record of the newest 20 matches (the 15 levels and their retries fit). Nothing is sent by itself: you send the text at the end (§6).
+4. **Step 0, before the first level: Settings → About → Diagnostics**: turn it on and **leave it on** for the whole session. The phone records each level's time, stars, attempt count, game speed (×1 / ×2) and the replay record of the newest 20 matches (the 15 levels and their retries fit). Nothing is sent by itself: you send the text at the end (§6). If the Diagnostics card already shows events (a row count), tap **CLEAR LOG** first, so the session starts at attempt 1 with no older rows.
 5. Open the map and write down the **highest open level**.
 6. Open any level and tap **II**. The PAUSED card must read **SPEED ×1**; if it reads ×2, tap it once. Speed does not change the clock, but it does change how fast you have to react. The whole session is played at ×1.
 7. Rules:
@@ -176,7 +176,7 @@ Session header (fill once): tester · fresh / stakeholder · build · highest op
    - **no SKIP LEVEL**;
    - **at most 3 tries** per level, and go to the next level after the first win.
 8. **Screen recording with the microphone on**: in Control Centre, long-press the record button, then **Microphone: on**. Record only **17, 33 and 49**, and think aloud while you play. The recording shows the screen only, never your face, and it is deleted after analysis.
-9. Open Notes and write the start time.
+9. Open Notes and write the start time **in local time and in UTC** (Baku = UTC+4, i.e. phone clock − 4 h; e.g. `20:10 (UTC 16:10)`). The Producer gives the UTC time to the `--since` filter unchanged.
 
 ### 2. Where the time is (no tools needed)
 
@@ -289,8 +289,8 @@ At N = 1, H2 failing is a hypothesis: the flag stays off and AUD-A3 stays P2. It
    
    When the Diagnostics log is pasted, take `timeMs`, `boosters` and `continued` from its CSV rows (`lvl`, `attempt`, `outcome`) instead of the card. Step 2a writes those rows of the CSV for you.
 2. **Check the build against today's numbers.** Run `git diff --stat e2b6044 <build commit> -- tower-clash/src/levels tower-clash/src/ai tower-clash/src/sim`. If anything moved, re-run both `npm run playtest -- --seeds 20` and `npm run playtest -- --naive --seeds 20 --tie both` on the build's tree and put the new reference medians into the CSV's `bot` column.
-2a. **Turn the log into the CSV.** `cd tower-clash && npm run playtest:log -- <log.txt> --tester <name> --out <play date>-playtest.csv --verify` (`scripts/playtestLog.ts`, QA-39). It writes one row per try, with `bot` measured on this tree (reference player, seeds 1–20), and verifies every `#replay` line (step 3a). Daily and weekly rows are left out. Fill `named`, `log`, `iv` and `note` by hand from the chat lines, then run step 3 on the file.
-   - **AZ.** Jurnalı CSV-yə çevir: `cd tower-clash && npm run playtest:log -- <log.txt> --tester <ad> --out <sınaq tarixi>-playtest.csv --verify`. Hər cəhd bir sətirdir, `bot` bu ağacda ölçülür, hər `#replay` sətri yoxlanılır. `named`, `log`, `iv` və `note` sütunlarını əllə doldur, sonra 3-cü addımı işlət.
+2a. **Turn the log into the CSV.** `cd tower-clash && npm run playtest:log -- <log.txt> --tester <name> --out <play date>-playtest.csv --verify` (`scripts/playtestLog.ts`, QA-39). It writes one row per try, with `bot` measured on this tree (reference player, seeds 1–20), and verifies every `#replay` line (step 3a). Daily and weekly rows are left out. Fill `named`, `log`, `iv` and `note` by hand from the chat lines, then run step 3 on the file. `--since YYYY-MM-DDTHH:MMZ` (optional, drops older rows) takes **UTC**, the log's `t`: use the UTC start time from §A step 9 unchanged.
+   - **AZ.** Jurnalı CSV-yə çevir: `cd tower-clash && npm run playtest:log -- <log.txt> --tester <ad> --out <sınaq tarixi>-playtest.csv --verify`. Hər cəhd bir sətirdir, `bot` bu ağacda ölçülür, hər `#replay` sətri yoxlanılır. `named`, `log`, `iv` və `note` sütunlarını əllə doldur, sonra 3-cü addımı işlət. `--since YYYY-MM-DDTHH:MMZ` (könüllü, köhnə sətirləri atır) **UTC** qəbul edir, jurnalın `t` sütunu kimi: §A 9-cu addımdakı UTC başlama vaxtını dəyişmədən ver.
 3. **Run the rules.** `cd tower-clash && npm run -s playtest:decide -- <sheet.csv> [--date <play date>]` (`scripts/playtestDecide.ts`, QA-36; `-s` keeps npm's banner out of the pasted markdown) prints markdown for the playtest review: the C.1 table (zone, proposed `star3`, band moves), H3, C.2's human half, C.3 per tester, C.4, the C.5 side outputs and a JSON block for `reclock.ts`'s `HUMAN` pin table. Each line is tagged `DECISION` (N ≥ 3) or `PROVISIONAL`. The JSON is a proposal: a row becomes a pin by hand, after the sign-off. Without the helper, apply §C by hand: take each row's bot median and clocks from §B.1 / §B.2, compute r, and read the zone tables.
    - **AZ.** CSV-də hər cəhd bir sətirdir, sütunlar yuxarıdakı 1-ci addımdakı kimidir. `bot` sütunu məcburidir: bu, §B.1-dəki "Bot" rəqəmidir (saniyə), hər səviyyənin ən azı bir sətrində olmalıdır. Saatlar (`star3` / `star2`) `src/levels/*.json`-dan oxunur. Hazır fayl `--levels <json>` ilə verilə bilər (`{ id: { s3, s2, bot } }`, saniyə). Qrup dəyişikliyi nümunədə olmayan səviyyələrin bot medianını tələb edəndə skript onu istinad oyunçusu ilə özü ölçür (K = 20). Səhv CSV sətir nömrəsi ilə rədd edilir (çıxış kodu 1).
    - **EN.** The CSV is one row per try with the step 1 columns. `bot` is required: §B.1's "Bot" (seconds), on at least one row of each level. The clocks (`star3` / `star2`) are read from `src/levels/*.json`, or from a pre-computed `--levels <json>` (`{ id: { s3, s2, bot } }`, seconds). When a band move needs the bot median of an unsampled level, the script measures it with the reference player (K = 20). A malformed CSV is rejected with its line number (exit 1).
