@@ -81,7 +81,7 @@
  * preinstalled headless shell under /opt/pw-browsers (never run `playwright install` here);
  * in other environments the default Playwright browser is used.
  */
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
@@ -101,7 +101,19 @@ const STORE = outArg ? resolve(outArg) : join(ROOT, 'store');
  * cannot rewrite it mid-run, BUG-15). Resolved (and checked) only when a preview server is needed.
  */
 const DIST_ARG = argValue('dist');
-const HEADLESS_SHELL = '/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell';
+/** The sandbox's Chromium headless shell, whatever build /opt/pw-browsers holds (same rule as scripts/lib/sandboxBrowser.ts); '' elsewhere. */
+function sandboxHeadlessShell(root = '/opt/pw-browsers') {
+  if (!existsSync(root)) return '';
+  const dirs = readdirSync(root).filter((d) => d.startsWith('chromium_headless_shell-')).sort().reverse();
+  for (const d of dirs) {
+    for (const rel of ['chrome-headless-shell-linux64/chrome-headless-shell', 'chrome-linux/headless_shell']) {
+      const bin = `${root}/${d}/${rel}`;
+      if (existsSync(bin)) return bin;
+    }
+  }
+  return '';
+}
+const HEADLESS_SHELL = sandboxHeadlessShell();
 const MAX_BYTES = 600 * 1024;
 
 /* ---------- CLI ---------- */

@@ -32,9 +32,10 @@ import { build } from 'esbuild';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { constants, crc32, deflateSync, inflateSync } from 'node:zlib';
+import { sandboxHeadlessShell } from './lib/sandboxBrowser';
 
 const ROOT = resolve(import.meta.dirname, '..');
-const SANDBOX_CHROMIUM = '/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell';
+const SANDBOX_CHROMIUM = sandboxHeadlessShell(); // '' outside the sandbox → Playwright's own browser
 /** Fake origin the page is served from (fonts load from it; localStorage etc. work, unlike about:blank). */
 const ORIGIN = 'http://tower-clash.icons';
 /** The native shells' launch colour (capacitor.config.ts `backgroundColor`). */

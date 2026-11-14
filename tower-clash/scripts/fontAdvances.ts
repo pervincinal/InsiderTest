@@ -19,9 +19,10 @@ import { az } from '../src/ui/locales/az';
 import { ru } from '../src/ui/locales/ru';
 import { tr } from '../src/ui/locales/tr';
 import { FONT, FONT_RU } from '../src/render/widgets';
+import { sandboxHeadlessShell } from './lib/sandboxBrowser';
 
 const ROOT = resolve(import.meta.dirname, '..');
-const SANDBOX_CHROMIUM = '/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell';
+const SANDBOX_CHROMIUM = sandboxHeadlessShell(); // '' outside the sandbox → Playwright's own browser
 const OUT = resolve(ROOT, 'tests/render/fontAdvances.ts');
 
 /** Keys whose texts the fit tests lay out. */
