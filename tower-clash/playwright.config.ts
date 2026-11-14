@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,12 +8,27 @@ import { DEFAULT_PW_OUTPUT } from './e2e/tools/shots';
 import { IPHONE_UA } from './e2e/tools/webkit';
 
 /**
- * Locally the sandbox ships Chromium 1194 under /opt/pw-browsers while @playwright/test 1.47.2
- * expects build 1134, so we point straight at the binary. In CI the path does not exist and
- * `npx playwright install --with-deps chromium` provides the matching browser instead.
+ * Locally the sandbox ships one Chromium headless shell under /opt/pw-browsers (build 1194 until
+ * 2026-11-13, 1243 since — the container image moves) while @playwright/test 1.47.2 expects build 1134,
+ * so we find whatever build is there and point straight at its binary (the layout changed too:
+ * `chrome-linux/headless_shell` up to 1194, `chrome-headless-shell-linux64/chrome-headless-shell` from 1243).
+ * In CI the directory does not exist and `npx playwright install --with-deps chromium` provides the
+ * matching browser instead.
  */
-const LOCAL_HEADLESS_SHELL = '/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell';
-const launchOptions = existsSync(LOCAL_HEADLESS_SHELL) ? { executablePath: LOCAL_HEADLESS_SHELL } : {};
+function localHeadlessShell(): string | undefined {
+  const root = '/opt/pw-browsers';
+  if (!existsSync(root)) return undefined;
+  const dirs = readdirSync(root).filter((d) => d.startsWith('chromium_headless_shell-')).sort();
+  for (const d of dirs.reverse()) {
+    for (const rel of ['chrome-headless-shell-linux64/chrome-headless-shell', 'chrome-linux/headless_shell']) {
+      const bin = `${root}/${d}/${rel}`;
+      if (existsSync(bin)) return bin;
+    }
+  }
+  return undefined;
+}
+const LOCAL_HEADLESS_SHELL = localHeadlessShell();
+const launchOptions = LOCAL_HEADLESS_SHELL ? { executablePath: LOCAL_HEADLESS_SHELL } : {};
 
 /**
  * Android WebView user agent: the stock Pixel 7 Chrome UA with the `; wv` marker Android adds
