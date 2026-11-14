@@ -12,7 +12,7 @@
       },
       {
         "b": "2654",
-        "s": "unit test, e2e 196 (1 lokal flake, QA-41) + 4 + 4 + WebKit + soak"
+        "s": "unit test, e2e 196 + 4 + 4 + WebKit + soak"
       },
       {
         "b": "80,8 kB",
@@ -161,11 +161,11 @@
         "Bugs bölməsi"
       ],
       "recent": [
-        "Gün 57: QA-40 flake taraması — 152 qaçış, 0 qırmızı; SIM-R3 geri sarma maks 21 050 ms, tavan 21 400 → həddə 600 ms ehtiyat.",
+        "Gün 57: QA-41 — lokal tutorial e2e flake kökündən həll (dərs addımı əmrdə, sim növbəti tick-də; oxunuş poll oldu), 20/20; QA-40 flake taraması 152 qaçış, 0 qırmızı.",
         "Gün 55: playtest günü boru xətti uçdan-uca — 5/5 MATCH, playtest:log skripti, 4 boşluq (2-si bağlandı)",
         "Gün 52: CI-şəkilli süpürgə — 377 yürüş, 0 qırmızı, 0 flaky; QA-35 təkrarlanmadı; perf bazası dəyişmədi"
       ],
-      "status": "Bu gün işlədi"
+      "status": "Bu gün işlədi (fable + opus)"
     },
     {
       "id": "tech-artist",
@@ -353,6 +353,15 @@
           ],
           "day": "bağlı",
           "t": "Konteyner brauzeri 1194 → 1243: konfiq və 3 skript özü tapır."
+        },
+        {
+          "id": "QA-41",
+          "p": "p2",
+          "own": [
+            "qa-engineer"
+          ],
+          "day": "bağlı",
+          "t": "Lokal e2e flake (tutorial testi) kökündən həll, poll."
         }
       ]
     },
