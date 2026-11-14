@@ -15,6 +15,8 @@ import { shotPath } from './tools/shots';
  * QA-39-1 / QA-39-2 (2026-11-12): the row's last column `speed` is the match's highest game speed (the
  * debug ×10 / ×20 show as 10 / 20); 20 rows keep a record (≈ 640 kB in the log's key) and COPY LOG
  * writes up to 400 kB to the clipboard; a nearly full origin keeps the rows and drops the oldest records.
+ * QA-39-4 (2026-11-14): the new last column `had` (on every row) — the level 1 win after a first win with the log
+ * off had a clear before (1, `first` 0); the level 15 loss on a never-cleared level did not (0).
  */
 
 // src/render/titleLayout.ts — TITLE.settings
@@ -22,7 +24,7 @@ const TITLE_SETTINGS = { x: 180, y: 776, w: 172, h: 64 };
 const SAVE_KEY = 'towerclash.save.v3';
 const DIAG_KEY = 'towerclash.diag.v1';
 // src/ui/diagnostics.ts — DIAG_COLUMNS
-const COLUMNS = 'v,t,build,lvl,mode,attempt,outcome,timeMs,stars,first,continued,boosters,textScale,speed';
+const COLUMNS = 'v,t,build,lvl,mode,attempt,outcome,timeMs,stars,first,continued,boosters,textScale,speed,had';
 
 interface DiagAbout {
   toggle: Rect;
@@ -32,7 +34,7 @@ interface DiagAbout {
   on: boolean;
 }
 interface DiagDebug {
-  rows(): { lvl: number; outcome: string; attempt: number; first: boolean; stars: number; timeMs: number; mode: string; speed?: number; replay?: unknown }[];
+  rows(): { lvl: number; outcome: string; attempt: number; first: boolean; stars: number; timeMs: number; mode: string; speed?: number; had?: boolean; replay?: unknown }[];
   text(): string;
   clear(): void;
   about(): DiagAbout | null;
@@ -122,7 +124,7 @@ test.describe('AUD-B6 diagnostics log', () => {
     await winLevelOne(page);
     const rows = await diagRows(page);
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ lvl: 1, mode: 'campaign', outcome: 'won', attempt: 1, first: false });
+    expect(rows[0]).toMatchObject({ lvl: 1, mode: 'campaign', outcome: 'won', attempt: 1, first: false, had: true }); // QA-39-4: won before with the log off
     expect(rows[0]!.stars).toBeGreaterThanOrEqual(1);
     expect(rows[0]!.timeMs).toBeGreaterThan(0);
     const saved = await page.evaluate((k) => localStorage.getItem(k)!, SAVE_KEY);
@@ -146,8 +148,8 @@ test.describe('AUD-B6 diagnostics log', () => {
     expect(lines[1]).toBe(COLUMNS);
     const cells = lines[2]!.split(',');
     const at = (c: string) => cells[COLUMNS.split(',').indexOf(c)];
-    expect([at('v'), at('lvl'), at('mode'), at('outcome'), at('attempt'), at('speed')]).toEqual(['1', '1', 'campaign', 'won', '1', '10']); // QA-39-1: the debug ×10
-    expect(cells).toHaveLength(14);
+    expect([at('v'), at('lvl'), at('mode'), at('outcome'), at('attempt'), at('speed'), at('first'), at('had')]).toEqual(['1', '1', 'campaign', 'won', '1', '10', '0', '1']); // QA-39-1: the debug ×10
+    expect(cells).toHaveLength(15);
     expect(at('t')).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\dZ$/);
 
     // CLEAR LOG → 0 rows (the count on the card follows)
@@ -173,7 +175,7 @@ test.describe('AUD-B6 diagnostics log', () => {
     });
     await expect.poll(() => screen(page), { timeout: 90_000, intervals: [250] }).toBe('result');
     await expect.poll(() => diagRows(page).then((r) => r.length)).toBe(1);
-    expect((await diagRows(page))[0]).toMatchObject({ lvl: 15, outcome: 'lost', speed: 20 }); // QA-39-1: the dry run's ×20 shows
+    expect((await diagRows(page))[0]).toMatchObject({ lvl: 15, outcome: 'lost', speed: 20, first: false, had: false }); // QA-39-1: the dry run's ×20 shows; QA-39-4: never cleared
     expect(await page.evaluate((k) => localStorage.getItem(k)!, SAVE_KEY), 'the record is never inside the save').not.toContain('"commands"');
 
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
@@ -184,7 +186,7 @@ test.describe('AUD-B6 diagnostics log', () => {
     const text = await page.evaluate(() => navigator.clipboard.readText());
     expect(text.length).toBeLessThanOrEqual(400 * 1024);
     const lines = text.split('\n');
-    expect(lines[2]).toMatch(/^1,[^,]+,[^,]+,15,campaign,1,lost,.*,20$/);
+    expect(lines[2]).toMatch(/^1,[^,]+,[^,]+,15,campaign,1,lost,.*,20,0$/); // … speed 20, had 0
     const last = lines.filter((l) => l.startsWith('#replay ')).at(-1)!;
     expect(last, 'the loss carries its record').toMatch(/^#replay 1 \{/);
     const json = last.replace(/^#replay \d+ /, '');

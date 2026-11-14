@@ -11,8 +11,11 @@
  *   (decide uses `time_ms`); `stars` = `stars`; `boosters` = `boosters`; `help` = `continued`.
  * - A row with `continued` = 1 is the result after that try's REINFORCEMENTS: it replaces the try's earlier row of
  *   the same log attempt (`help` 1, boosters the larger of the two) instead of becoming a new attempt.
- * - `first_ever` per level: 1 when a win of the level has `first` = 1 (the level had no star before), 0 when it was
- *   won only with `first` = 0, empty when it was never won (a loss row's `first` is always 0: unknown).
+ * - `first_ever` per level (QA-39-4): from the log's `had` (the level had a clear before that attempt, on every row)
+ *   of the level's first row in the sheet (its attempt 1): `had` 0 → 1, `had` 1 → 0 — also for a level never won.
+ *   Fallback for a log from before the column (build 27 without `had`, or before `speed`): 1 when a win of the level
+ *   has `first` = 1 (no star before), 0 when it was won only with `first` = 0, empty with a warning when it was
+ *   never won (a loss row's `first` is always 0: unknown).
  * - `speed` (QA-39-1) from the log's `speed` (the match's highest game speed): 1 → 1; anything else (the pause
  *   card's ×2, a debug ×20, a slowed ×0.5) → 2, i.e. "not ×1" (decide only knows 1 / 2), with a warning for a
  *   value other than 1 / 2; a continued result keeps the larger of its try's two. Empty with a warning in a log
@@ -22,7 +25,7 @@
  * Excluded with a note: daily / weekly rows (the sheet's sample is campaign only), `skip` rows (SKIP LEVEL is
  * against §A rule 7; the try stays as its lost row), rows before `since`.
  */
-import { DIAG_COLUMNS, DIAG_COLUMNS_V1_0 } from '../../src/ui/diagnostics';
+import { DIAG_COLUMNS, DIAG_COLUMNS_V1_0, DIAG_COLUMNS_V1_1 } from '../../src/ui/diagnostics';
 import { REQUIRED_COLUMNS, SheetError, parseSheet } from './playtestDecideRule';
 
 /** §A step 1: times from builds below this are not comparable with the bot's (the lesson card ran the clock). */
@@ -51,6 +54,8 @@ export interface LogRow {
   textScale: number;
   /** QA-39-1: the match's highest game speed; null on a skip row and in a log from before the column. */
   speed: number | null;
+  /** QA-39-4: the level / day / week had a clear before this attempt; null in a log from before the column. */
+  had: boolean | null;
   /** 1-based line in the log text. */
   line: number;
   /** 1-based CSV row number (the `N` of `#replay N`). */
@@ -92,8 +97,8 @@ const int = (s: string): number => (/^\d+$/.test(s) ? Number(s) : NaN);
 export function parseLog(text: string, isLevel: (id: number) => boolean = (id) => id >= 1 && id <= 50): ParsedLog {
   const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/);
   const header = DIAG_COLUMNS.join(',');
-  /** QA-39-1: a log from before the `speed` column is read too (its rows have no speed). */
-  const oldHeader = DIAG_COLUMNS_V1_0.join(',');
+  /** QA-39-1 / QA-39-4: logs from before the `speed` / `had` columns are read too (their rows have none). */
+  const headers = new Map<string, readonly string[]>([DIAG_COLUMNS, DIAG_COLUMNS_V1_1, DIAG_COLUMNS_V1_0].map((h) => [h.join(','), h]));
   let cols: readonly string[] = DIAG_COLUMNS;
   let seenHeader = false;
   const rows: LogRow[] = [];
@@ -107,8 +112,9 @@ export function parseLog(text: string, isLevel: (id: number) => boolean = (id) =
       if (m && !m[2]!.includes('"dropped"')) replayRows.push(Number(m[1]));
       return;
     }
-    if (l === header || l === oldHeader) {
-      cols = l === header ? DIAG_COLUMNS : DIAG_COLUMNS_V1_0; // also two logs pasted into one file
+    const h = headers.get(l);
+    if (h) {
+      cols = h; // also two logs pasted into one file
       seenHeader = true;
       return;
     }
@@ -143,11 +149,14 @@ export function parseLog(text: string, isLevel: (id: number) => boolean = (id) =
     const sp = c('speed');
     const speed = sp === '' ? null : Number(sp);
     if (speed !== null && !(speed > 0)) bad('speed', 'must be a number > 0 (the game speed)');
+    const hd = c('had');
+    if (hd !== '' && hd !== '0' && hd !== '1') bad('had', 'must be 0 or 1');
     const outcome = c('outcome') as LogOutcome;
     if (outcome === 'won' && stars < 1) bad('stars', 'must be 1–3 on a win');
     rows.push({
       t: c('t'), build: c('build'), lvl, mode: c('mode') as LogMode, attempt, outcome, timeMs, stars,
-      first: c('first') === '1', continued: c('continued') === '1', boosters, textScale, speed, line: n, row: rows.length + 1,
+      first: c('first') === '1', continued: c('continued') === '1', boosters, textScale, speed,
+      had: hd === '' ? null : hd === '1', line: n, row: rows.length + 1,
     });
   });
   if (!seenHeader) throw new LogError('no Diagnostics column line: is this a COPY LOG text?');
@@ -219,6 +228,8 @@ export function convertLog(log: ParsedLog, o: ConvertOptions): Converted {
   const next = new Map<number, number>();
   /** level → its last emitted row and that row's log attempt (for a continued result). */
   const last = new Map<number, { row: SheetRow; logAttempt: number }>();
+  /** QA-39-4: level → `had` of its first row in the sheet (null: a log row from before the column). */
+  const hadFirst = new Map<number, boolean | null>();
   for (const r of log.rows) {
     if (o.since !== undefined && r.t < o.since) { excluded.push(`line ${r.line}: ${r.t} is before --since ${o.since}`); continue; }
     if (r.mode !== 'campaign') { excluded.push(`line ${r.line}: ${r.mode} challenge on level ${r.lvl} (the sheet's sample is campaign only)`); continue; }
@@ -233,6 +244,7 @@ export function convertLog(log: ParsedLog, o: ConvertOptions): Converted {
     }
     const attempt = (next.get(r.lvl) ?? 0) + 1;
     next.set(r.lvl, attempt);
+    if (attempt === 1) hadFirst.set(r.lvl, r.had);
     if (attempt === 1 && r.attempt > 1) warnings.push(`line ${r.line}: level ${r.lvl}'s first try in this log is the log's attempt ${r.attempt} (tried before with Diagnostics on: use --since, or CLEAR LOG before the session)`);
     const row: SheetRow = {
       tester, level: r.lvl, bot: '', attempt, result: RESULT[r.outcome], timeMs: r.timeMs, stars: r.stars,
@@ -242,15 +254,18 @@ export function convertLog(log: ParsedLog, o: ConvertOptions): Converted {
     last.set(r.lvl, { row, logAttempt: r.attempt });
   }
   if (out.length === 0) throw new LogError(`no campaign rows to convert (${excluded.length} excluded)`);
-  // first_ever per level from its wins' `first`
+  // first_ever per level: QA-39-4 from its first row's `had`; a log without the column: from its wins' `first`
   const firstOf = new Map<number, '' | '0' | '1'>();
   for (const r of log.rows) {
     if (r.mode !== 'campaign' || r.outcome !== 'won' || (o.since !== undefined && r.t < o.since)) continue;
     firstOf.set(r.lvl, r.first || firstOf.get(r.lvl) === '1' ? '1' : '0');
   }
-  for (const row of out) row.firstEver = firstOf.get(row.level) ?? '';
+  for (const row of out) {
+    const had = hadFirst.get(row.level);
+    row.firstEver = had === true ? '0' : had === false ? '1' : (firstOf.get(row.level) ?? '');
+  }
   const unknownFirst = [...new Set(out.filter((r) => r.firstEver === '').map((r) => r.level))];
-  if (unknownFirst.length) warnings.push(`first_ever left empty on level(s) ${unknownFirst.join(', ')}: never won in the log, so "before" is unknown — fill it from the tester's line`);
+  if (unknownFirst.length) warnings.push(`first_ever left empty on level(s) ${unknownFirst.join(', ')}: never won in a log without the had column (a build before QA-39-4), so "before" is unknown — fill it from the tester's line`);
   for (const b of builds) {
     const n = buildNumber(b);
     if (n === undefined || n < MIN_BUILD) warnings.push(`build "${b}" is below build ${MIN_BUILD}: §A step 1 says its times are not comparable with the bot's`);

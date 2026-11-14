@@ -22,6 +22,11 @@
  * QA-39-1 (2026-11-12): the `speed` column — the highest game speed the match's ticks ran at
  * (`GameLoop.speedMax`: 1, 2 from the pause card, 20 from the debug `setSpeed`); empty on a skip and in
  * logs from before the column (`parseDiagText` maps by the text's own column line).
+ * QA-39-4 (2026-11-14): the `had` column, on every row (won / lost / retreat / skip) — 1 when the level already had
+ * a clear before this attempt (campaign: the save held ≥ 1★ for it before the result was booked; a daily / weekly:
+ * that day's / week's challenge was already won before this attempt), else 0. Read from the state before the result
+ * (`ResultInfo.first` is taken before `recordResult`; a challenge's `firstWin` / `best` from before its record), so a
+ * win never reads its own new star. Empty in logs from before the column (`DIAG_COLUMNS_V1_1` / `_V1_0`).
  */
 import type { Replay, ReplayEntry } from '../sim/replay';
 import { challengeDescriptor, replayOf, serializeReplay } from '../sim/replay';
@@ -81,6 +86,11 @@ export interface DiagRow {
    * card's ×2, any debug speed as is). Absent on a skip and on rows written before the column.
    */
   speed?: number;
+  /**
+   * QA-39-4: the level already had a clear before this attempt (campaign: ≥ 1★ in the save before the result; a
+   * challenge: its day / week already won before it). On every row; absent only on rows written before the column.
+   */
+  had?: boolean;
   /** DIAG-2: the match's replay record (a played result only, not a skip; newest `DIAG_REPLAY_KEEP` rows). */
   replay?: DiagReplay;
 }
@@ -93,9 +103,11 @@ interface DiagStore {
 }
 
 /** CSV column order (COPY LOG's second line). */
-export const DIAG_COLUMNS = ['v', 't', 'build', 'lvl', 'mode', 'attempt', 'outcome', 'timeMs', 'stars', 'first', 'continued', 'boosters', 'textScale', 'speed'] as const;
-/** The column line before QA-39-1 added `speed` (old COPY LOG texts; `parseDiagText` reads both). */
-export const DIAG_COLUMNS_V1_0 = DIAG_COLUMNS.slice(0, -1);
+export const DIAG_COLUMNS = ['v', 't', 'build', 'lvl', 'mode', 'attempt', 'outcome', 'timeMs', 'stars', 'first', 'continued', 'boosters', 'textScale', 'speed', 'had'] as const;
+/** The column line before QA-39-4 added `had` (build 27's COPY LOG texts; `parseDiagText` reads every line). */
+export const DIAG_COLUMNS_V1_1 = DIAG_COLUMNS.slice(0, -1);
+/** The column line before QA-39-1 added `speed` (old COPY LOG texts). */
+export const DIAG_COLUMNS_V1_0 = DIAG_COLUMNS.slice(0, -2);
 
 const MODES: readonly string[] = ['campaign', 'daily', 'weekly'];
 const OUTCOMES: readonly string[] = ['won', 'lost', 'retreat', 'skip'];
@@ -119,7 +131,8 @@ function isRow(r: unknown): r is DiagRow {
     typeof r.continued === 'boolean' &&
     nonNegInt(r.boosters) &&
     typeof r.textScale === 'number' &&
-    (r.speed === undefined || (typeof r.speed === 'number' && r.speed > 0))
+    (r.speed === undefined || (typeof r.speed === 'number' && r.speed > 0)) &&
+    (r.had === undefined || typeof r.had === 'boolean')
   );
 }
 
@@ -213,6 +226,8 @@ export interface DiagEvent {
   replay?: DiagReplay;
   /** QA-39-1: the match's highest game speed (absent: a skip). */
   speed?: number;
+  /** QA-39-4: the level / day / week already had a clear before this attempt (absent: unknown, no `had` field). */
+  had?: boolean;
 }
 
 /** `2026-11-01T10:23Z`: the wall clock to the minute (no seconds). */
@@ -248,6 +263,7 @@ export function recordDiag(save: SaveData, ev: DiagEvent, nowMs = Date.now(), bu
     textScale: save.settings.textScale ?? 1,
   };
   if (ev.speed !== undefined && ev.speed > 0) row.speed = ev.speed;
+  if (ev.had !== undefined) row.had = ev.had;
   if (ev.replay) row.replay = ev.replay;
   d.rows.push(row);
   if (d.rows.length > DIAG_CAP) d.rows.splice(0, d.rows.length - DIAG_CAP);
@@ -303,6 +319,11 @@ export function logLevelEnd(save: SaveData, info: ResultInfo, play: DiagMatch, n
   const mode: DiagMode = info.challenge ? 'daily' : info.weekly ? 'weekly' : 'campaign';
   const key = info.challenge ? `d:${info.challenge.dayKey}` : info.weekly ? `w:${info.weekly.weekKey}` : String(info.level.id);
   const first = won && (info.daily ? info.daily.firstWin : info.weeklyOutcome ? info.weeklyOutcome.firstWin : info.first === true);
+  // QA-39-4: a clear before this attempt, from the state before the result was booked — a challenge win: not its
+  // first of the day / week; a challenge loss: the day / week already has a best (a loss writes none); campaign:
+  // `info.first` (no star before `recordResult`, set on every campaign result; absent: unknown → no `had`)
+  const chal = info.daily ?? info.weeklyOutcome;
+  const had = chal ? (won ? !chal.firstWin : chal.best !== null && chal.best !== undefined) : info.first === undefined ? undefined : !info.first;
   return recordDiag(
     save,
     {
@@ -313,6 +334,7 @@ export function logLevelEnd(save: SaveData, info: ResultInfo, play: DiagMatch, n
       timeMs: play.match.timeMs,
       stars: won ? info.earnings.stars : 0,
       first,
+      had,
       continued: info.continued,
       boosters: play.boosters,
       // QA-39-1: the highest speed the ticks ran at (a match that never ticked: the current one)
@@ -323,9 +345,12 @@ export function logLevelEnd(save: SaveData, info: ResultInfo, play: DiagMatch, n
   );
 }
 
-/** The level skip bought on a defeat's result (src/ui/result.ts): 1★, booked to the try it ends. */
+/**
+ * The level skip bought on a defeat's result (src/ui/result.ts): 1★, booked to the try it ends. `first` = the level
+ * had no star before the skip (QA-39-4: `had` is its negation — the caller reads the star before `buyLevelSkip`).
+ */
 export function logSkip(save: SaveData, info: ResultInfo, stars: number, first: boolean, nowMs = Date.now()): DiagRow | null {
-  return recordDiag(save, { lvl: info.level.id, mode: 'campaign', key: String(info.level.id), outcome: 'skip', timeMs: 0, stars, first, continued: info.continued, boosters: 0 }, nowMs);
+  return recordDiag(save, { lvl: info.level.id, mode: 'campaign', key: String(info.level.id), outcome: 'skip', timeMs: 0, stars, first, had: !first, continued: info.continued, boosters: 0 }, nowMs);
 }
 
 /* ---------- COPY LOG text ---------- */
@@ -444,7 +469,8 @@ function csvSplit(line: string): string[] {
 
 /**
  * COPY LOG text back to rows (tests, and whoever reads a tester's paste); lines that are not rows are skipped.
- * Fields are read by the text's own column line (QA-39-1: an older text without `speed` reads it as absent).
+ * Fields are read by the text's own column line (QA-39-1 / QA-39-4: an older text without `speed` / `had` reads it
+ * as absent).
  */
 export function parseDiagText(text: string): DiagRow[] {
   const rows: DiagRow[] = [];
@@ -462,6 +488,7 @@ export function parseDiagText(text: string): DiagRow[] {
       return i < 0 ? '' : f[i]!;
     };
     const speed = get('speed');
+    const had = get('had');
     const row = {
       v: Number(get('v')),
       t: get('t'),
@@ -477,6 +504,7 @@ export function parseDiagText(text: string): DiagRow[] {
       boosters: Number(get('boosters')),
       textScale: Number(get('textScale')),
       ...(speed === '' ? {} : { speed: Number(speed) }),
+      ...(had === '' ? {} : { had: had === '1' ? true : had === '0' ? false : had }),
     };
     if (isRow(row)) rows.push(row);
   }

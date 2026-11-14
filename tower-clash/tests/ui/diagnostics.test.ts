@@ -18,11 +18,13 @@ import '../registerResult'; // PERF-11: the lazy result chunk is in (the play sc
 import { PlayScreen } from '../../src/ui/play';
 import { SettingsScreen } from '../../src/ui/settings';
 import type { DiagEvent, DiagRow } from '../../src/ui/diagnostics';
-import { DIAG_CAP, DIAG_COLUMNS, DIAG_COLUMNS_V1_0, DIAG_KEY, clearDiag, diagRows, diagText, isoMinute, logLevelEnd, parseDiagText, recordDiag, resetDiag } from '../../src/ui/diagnostics';
+import { DIAG_CAP, DIAG_COLUMNS, DIAG_COLUMNS_V1_0, DIAG_COLUMNS_V1_1, DIAG_KEY, clearDiag, diagRows, diagText, isoMinute, logLevelEnd, parseDiagText, recordDiag, resetDiag } from '../../src/ui/diagnostics';
 import { en } from '../../src/ui/locales/en';
 import { az } from '../../src/ui/locales/az';
 import { ru } from '../../src/ui/locales/ru';
 import { tr } from '../../src/ui/locales/tr';
+import { recordChallengeResult } from '../../src/ui/daily';
+import { recordWeeklyResult } from '../../src/ui/weekly';
 import { makeLevel } from '../helpers';
 
 /*
@@ -145,7 +147,7 @@ describe('on: one row per booked result', () => {
     expect(rows).toHaveLength(1);
     const r = rows[0]!;
     expect(Object.keys(r).sort()).toEqual([...DIAG_COLUMNS, 'replay'].sort()); // DIAG-2: + the match's replay record
-    expect(r).toMatchObject({ v: 1, build: appVersion(), lvl: 5, mode: 'campaign', attempt: 1, outcome: 'won', first: true, continued: false, boosters: 1, textScale: 1.25 });
+    expect(r).toMatchObject({ v: 1, build: appVersion(), lvl: 5, mode: 'campaign', attempt: 1, outcome: 'won', first: true, had: false, continued: false, boosters: 1, textScale: 1.25 });
     expect(r.timeMs).toBe(play.elapsedMs());
     expect(r.timeMs).toBeGreaterThan(0);
     expect(r.stars).toBe(save.stars['5']);
@@ -154,7 +156,25 @@ describe('on: one row per booked result', () => {
     expect([isoMinute(before), isoMinute(Date.now())]).toContain(r.t);
     // the second win of the level is attempt 2 and no first clear
     await playTo(save, 5, 'won');
-    expect(diagRows()[1]).toMatchObject({ lvl: 5, attempt: 2, outcome: 'won', first: false, boosters: 0 });
+    expect(diagRows()[1]).toMatchObject({ lvl: 5, attempt: 2, outcome: 'won', first: false, had: true, boosters: 0 });
+  });
+
+  it('QA-39-4: `had` on every campaign row, from the save before the result (a win never reads its own new star)', async () => {
+    await playTo(save, 5, 'lost'); // never cleared
+    await playTo(save, 5, 'retreat');
+    await playTo(save, 5, 'won'); // the first clear: had 0, first 1
+    await playTo(save, 5, 'lost'); // now it has a star
+    await playTo(save, 5, 'retreat');
+    await playTo(save, 5, 'won');
+    expect(diagRows().map((r) => [r.outcome, r.had, r.first])).toEqual([
+      ['lost', false, false],
+      ['retreat', false, false],
+      ['won', false, true],
+      ['lost', true, false],
+      ['retreat', true, false],
+      ['won', true, false],
+    ]);
+    expect(save.stars['5']).toBeGreaterThanOrEqual(1);
   });
 
   it('a loss: no stars, no first clear', async () => {
@@ -179,6 +199,8 @@ describe('on: one row per booked result', () => {
     const rows = diagRows();
     expect(rows.map((r) => r.outcome)).toEqual(['lost', 'skip']);
     expect(rows[1]).toMatchObject({ lvl: 5, mode: 'campaign', attempt: 1, outcome: 'skip', timeMs: 0, stars: CRYSTAL_SERVICES.levelSkip.starsGranted, first: true });
+    // QA-39-4: neither the loss nor the skip had a clear before (the skip's own 1★ is not "before")
+    expect(rows.map((r) => r.had)).toEqual([false, false]);
   });
 
   it('attempt counts per level; a result after a continue belongs to its try', async () => {
@@ -209,6 +231,56 @@ describe('on: one row per booked result', () => {
     expect(logLevelEnd(save, weekly, play)).toMatchObject({ mode: 'weekly', lvl: 7, attempt: 1, first: false });
     expect(logLevelEnd(save, practice, play), "yesterday's map books nothing").toBeNull();
     expect(diagRows()).toHaveLength(3);
+  });
+
+  it('QA-39-4: daily / weekly `had` = the day / week was already won before this attempt (a win: not its first; a loss: a best exists)', () => {
+    const won = { level: makeLevel({ id: 7 }), ui: { outcome: 'won' }, earnings: { stars: 2 }, continued: false } as unknown as ResultInfo;
+    const lost = { ...won, ui: { outcome: 'lost' } } as unknown as ResultInfo;
+    const retreat = { ...lost, retreated: true } as unknown as ResultInfo;
+    const best = { stars: 2, timeMs: 41_000 };
+    const play = { match: { timeMs: 41_000 }, boosters: 0 };
+    const day = { challenge: { dayKey: '2026-11-01', levelId: 7 } };
+    const week = { weekly: { weekKey: '2026-10-26', levelId: 7 } };
+    const cases: [ResultInfo, string, boolean, boolean][] = [
+      [{ ...lost, ...day, daily: { won: false, firstWin: false, best: null } } as unknown as ResultInfo, 'lost', false, false],
+      [{ ...retreat, ...day, daily: { won: false, firstWin: false, best: null } } as unknown as ResultInfo, 'retreat', false, false],
+      [{ ...won, ...day, daily: { won: true, firstWin: true, best } } as unknown as ResultInfo, 'won', false, true], // its own best is new
+      [{ ...lost, ...day, daily: { won: false, firstWin: false, best } } as unknown as ResultInfo, 'lost', true, false],
+      [{ ...won, ...day, daily: { won: true, firstWin: false, best } } as unknown as ResultInfo, 'won', true, false],
+      [{ ...lost, ...week, weeklyOutcome: { won: false, firstWin: false, best: null } } as unknown as ResultInfo, 'lost', false, false],
+      [{ ...won, ...week, weeklyOutcome: { won: true, firstWin: true, best: { ...best, target: false } } } as unknown as ResultInfo, 'won', false, true],
+      [{ ...retreat, ...week, weeklyOutcome: { won: false, firstWin: false, best: { ...best, target: false } } } as unknown as ResultInfo, 'retreat', true, false],
+      [{ ...won, ...week, weeklyOutcome: { won: true, firstWin: false, best: { ...best, target: true } } } as unknown as ResultInfo, 'won', true, false],
+    ];
+    for (const [info, outcome, had, first] of cases) expect(logLevelEnd(save, info, play), `${outcome} ${had}`).toMatchObject({ outcome, had, first });
+    expect(diagRows().map((r) => r.mode)).toEqual(['daily', 'daily', 'daily', 'daily', 'daily', 'weekly', 'weekly', 'weekly', 'weekly']);
+  });
+
+  it('QA-39-4: through the real records (`recordChallengeResult` / `recordWeeklyResult` run first, as in play.ts) — a loss and the first win of the day / week had 0, every try after it 1', () => {
+    const level = makeLevel({ id: 7 });
+    const play = { match: { timeMs: 30_000 }, boosters: 0 };
+    const base = { level, earnings: { stars: 0 }, continued: false };
+    const day = { dayKey: '2026-11-01', levelId: 7 } as unknown as Parameters<typeof recordChallengeResult>[1];
+    const week = { weekKey: '2026-10-26', levelId: 7, targetMs: 20_000 } as unknown as Parameters<typeof recordWeeklyResult>[1];
+    for (const outcome of ['lost', 'won', 'lost', 'won'] as const) {
+      const daily = recordChallengeResult(save, day, level, outcome, 30_000);
+      logLevelEnd(save, { ...base, ui: { outcome }, challenge: day, daily } as unknown as ResultInfo, play);
+      const weeklyOutcome = recordWeeklyResult(save, week, level, outcome, 30_000);
+      logLevelEnd(save, { ...base, ui: { outcome }, weekly: week, weeklyOutcome } as unknown as ResultInfo, play);
+    }
+    const rows = diagRows();
+    expect(rows.filter((r) => r.mode === 'daily').map((r) => [r.outcome, r.had, r.first])).toEqual([
+      ['lost', false, false],
+      ['won', false, true],
+      ['lost', true, false],
+      ['won', true, false],
+    ]);
+    expect(rows.filter((r) => r.mode === 'weekly').map((r) => [r.outcome, r.had, r.first])).toEqual([
+      ['lost', false, false],
+      ['won', false, true],
+      ['lost', true, false],
+      ['won', true, false],
+    ]);
   });
 });
 
@@ -338,29 +410,52 @@ describe('COPY LOG text', () => {
   const row = (over: Partial<DiagRow> = {}): DiagRow => ({ v: 1, t: '2026-11-01T10:23Z', build: '1.0.0 (build 27)', lvl: 1, mode: 'campaign', attempt: 1, outcome: 'won', timeMs: 41_250, stars: 3, first: true, continued: false, boosters: 0, textScale: 1, ...over });
 
   it('one hints line, the column line, one CSV row per event; round-trips (quoted fields too)', () => {
-    const rows = [row({ speed: 1 }), row({ lvl: 12, mode: 'daily', attempt: 4, outcome: 'retreat', stars: 0, first: false, continued: true, boosters: 2, textScale: 1.25, speed: 2 }), row({ build: 'odd, "build"', outcome: 'skip', timeMs: 0 })];
+    const rows = [row({ speed: 1, had: false }), row({ lvl: 12, mode: 'daily', attempt: 4, outcome: 'retreat', stars: 0, first: false, continued: true, boosters: 2, textScale: 1.25, speed: 2, had: true }), row({ build: 'odd, "build"', outcome: 'skip', timeMs: 0, had: false })];
     const text = diagText(rows, hints);
     const lines = text.split('\n');
     expect(lines).toHaveLength(2 + rows.length);
     expect(lines[0]).toBe('# Tower Clash diagnostics v1 | build 1.0.0 (build 27) | ua Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) X | viewport 393x852 | dpr 3 | text 150% | lang az | events 3');
-    expect(lines[1]).toBe('v,t,build,lvl,mode,attempt,outcome,timeMs,stars,first,continued,boosters,textScale,speed');
-    expect(lines[2]).toBe('1,2026-11-01T10:23Z,1.0.0 (build 27),1,campaign,1,won,41250,3,1,0,0,1,1');
-    expect(lines[3]).toBe('1,2026-11-01T10:23Z,1.0.0 (build 27),12,daily,4,retreat,41250,0,0,1,2,1.25,2');
-    expect(lines[4]).toBe('1,2026-11-01T10:23Z,"odd, ""build""",1,campaign,1,skip,0,3,1,0,0,1,'); // a skip: no speed
+    expect(lines[1]).toBe('v,t,build,lvl,mode,attempt,outcome,timeMs,stars,first,continued,boosters,textScale,speed,had');
+    expect(lines[2]).toBe('1,2026-11-01T10:23Z,1.0.0 (build 27),1,campaign,1,won,41250,3,1,0,0,1,1,0');
+    expect(lines[3]).toBe('1,2026-11-01T10:23Z,1.0.0 (build 27),12,daily,4,retreat,41250,0,0,1,2,1.25,2,1');
+    expect(lines[4]).toBe('1,2026-11-01T10:23Z,"odd, ""build""",1,campaign,1,skip,0,3,1,0,0,1,,0'); // a skip: no speed, `had` all the same
     expect(parseDiagText(text)).toEqual(rows);
     expect(parseDiagText(diagText([], hints))).toEqual([]);
   });
 
   it('QA-39-1: a log from before the speed column still parses (rows without speed); a mixed paste follows each column line', () => {
-    expect(DIAG_COLUMNS_V1_0).toEqual(DIAG_COLUMNS.filter((c) => c !== 'speed'));
+    expect(DIAG_COLUMNS_V1_0).toEqual(DIAG_COLUMNS.filter((c) => c !== 'speed' && c !== 'had'));
     const old = ['# Tower Clash diagnostics v1 | build 1.0.0 (build 26)', DIAG_COLUMNS_V1_0.join(','), '1,2026-11-01T10:23Z,1.0.0 (build 26),3,campaign,1,won,41250,3,1,0,0,1'].join('\n');
     const r = row({ build: '1.0.0 (build 26)', lvl: 3 });
     expect(parseDiagText(old)).toEqual([r]);
     expect('speed' in parseDiagText(old)[0]!).toBe(false);
-    const fresh = diagText([row({ speed: 20 })], hints);
-    expect(parseDiagText(`${old}\n${fresh}`)).toEqual([r, row({ speed: 20 })]);
-    // a 13-field row under the 14-column line is a cut line: skipped
+    const fresh = diagText([row({ speed: 20, had: true })], hints);
+    expect(parseDiagText(`${old}\n${fresh}`)).toEqual([r, row({ speed: 20, had: true })]);
+    // a 13-field row under the 15-column line is a cut line: skipped
     expect(parseDiagText(`${DIAG_COLUMNS.join(',')}\n1,2026-11-01T10:23Z,b,3,campaign,1,won,41250,3,1,0,0,1`)).toEqual([]);
+  });
+
+  it('QA-39-4: `had` is the last column; a 14-column text (build 27, before `had`) and a 13-column one parse with `had` absent', () => {
+    expect(DIAG_COLUMNS).toHaveLength(15);
+    expect(DIAG_COLUMNS.at(-1)).toBe('had');
+    expect(DIAG_COLUMNS_V1_1).toEqual(DIAG_COLUMNS.filter((c) => c !== 'had'));
+    expect(DIAG_COLUMNS_V1_1.join(',')).toBe('v,t,build,lvl,mode,attempt,outcome,timeMs,stars,first,continued,boosters,textScale,speed');
+    const v11 = ['# Tower Clash diagnostics v1 | build 1.0.0 (build 27)', DIAG_COLUMNS_V1_1.join(','), '1,2026-11-01T10:23Z,1.0.0 (build 27),3,campaign,1,lost,41250,0,0,0,0,1,2'].join('\n');
+    const v10 = ['# Tower Clash diagnostics v1 | build 1.0.0 (build 26)', DIAG_COLUMNS_V1_0.join(','), '1,2026-11-01T10:23Z,1.0.0 (build 26),3,campaign,1,won,41250,3,1,0,0,1'].join('\n');
+    const a = row({ lvl: 3, outcome: 'lost', stars: 0, first: false, speed: 2 });
+    const b = row({ build: '1.0.0 (build 26)', lvl: 3 });
+    expect(parseDiagText(v11)).toEqual([a]);
+    expect(parseDiagText(v10)).toEqual([b]);
+    for (const p of [...parseDiagText(v11), ...parseDiagText(v10)]) expect('had' in p).toBe(false);
+    // a paste of all three: each part by its own column line
+    const now = diagText([row({ lvl: 4, outcome: 'lost', stars: 0, first: false, speed: 1, had: false })], hints);
+    expect(parseDiagText(`${v10}\n${v11}\n${now}`).map((x) => [x.lvl, x.had])).toEqual([
+      [3, undefined],
+      [3, undefined],
+      [4, false],
+    ]);
+    // a `had` that is not 0 / 1 drops the row
+    expect(parseDiagText(now.replace(/,0$/, ',2'))).toEqual([]);
   });
 });
 
@@ -407,6 +502,16 @@ describe("QA-39-1: the speed column is the match's highest game speed", () => {
     play.startMatch();
     play.update(50, 100);
     expect(play.loop.speedMax).toBe(1);
+  });
+
+  it('QA-39-4: a stored row with a bad `had` is dropped on read; a row without one (before the column) stays', () => {
+    recordDiag(save, ev({ had: true }));
+    recordDiag(save, ev());
+    expect(diagRows().map((r) => r.had)).toEqual([true, undefined]);
+    const raw = JSON.parse(store.data.get(DIAG_KEY)!) as { rows: Record<string, unknown>[] };
+    raw.rows[0]!.had = 1;
+    store.data.set(DIAG_KEY, JSON.stringify(raw));
+    expect(diagRows()).toHaveLength(1);
   });
 
   it('a skip row has no speed (empty in the CSV); a stored row with a bad speed is dropped on read', () => {

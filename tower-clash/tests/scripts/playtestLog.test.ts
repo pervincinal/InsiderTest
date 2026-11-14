@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import type { DiagRow } from '../../src/ui/diagnostics';
-import { DIAG_COLUMNS, DIAG_COLUMNS_V1_0, diagShare } from '../../src/ui/diagnostics';
+import { DIAG_COLUMNS, DIAG_COLUMNS_V1_0, DIAG_COLUMNS_V1_1, diagShare } from '../../src/ui/diagnostics';
 import type { LevelDef } from '../../src/sim/types';
 import { serializeReplay } from '../../src/sim/replay';
 import { referencePlayerCommands } from '../../src/ai/referencePlayer';
@@ -79,6 +79,53 @@ describe('playtestLog: COPY LOG → decide sheet', () => {
     expect(lossOnly.warnings.join('\n')).toContain('first_ever left empty on level(s) 32');
   });
 
+  it('QA-39-4: first_ever from the level\'s first row\'s `had` (also a level never won); no "left empty" warning', () => {
+    const k = convertLog(parseLog(logText([
+      lost(32, 1, 80_000, { had: false }), // never cleared, never won in the log: first_ever 1
+      lost(32, 2, 81_000, { had: false }),
+      lost(5, 1, 40_000, { had: true }), // cleared before the session, lost only: 0
+      won(23, 1, 30_000, 2, true, { had: false }), // a first clear on try 1: 1
+      lost(23, 2, 70_000, { had: true }), // later rows' had 1 does not change the level's value
+      won(3, 1, 24_450, 3, false, { had: true }), // had stars: 0
+      row({ lvl: 26, attempt: 1, outcome: 'won', timeMs: 26_800, stars: 2, first: true, mode: 'daily', had: false }), // excluded
+    ])), { tester: 'S', botMs });
+    expect(k.rows.map((r) => [r.level, r.attempt, r.firstEver])).toEqual([[32, 1, '1'], [32, 2, '1'], [5, 1, '0'], [23, 1, '1'], [23, 2, '1'], [3, 1, '0']]);
+    expect(k.warnings.join('\n')).not.toContain('first_ever left empty');
+    expect(parseSheet(k.csv).rows.map((r) => r.level)).toEqual([32, 32, 5, 23, 23, 3]);
+    // the first row is the sheet's attempt 1: --since drops an older row, the renumbered first row's had decides
+    const since = convertLog(parseLog(logText([
+      lost(5, 3, 40_000, { t: '2026-11-01T09:00Z', had: false }),
+      won(5, 4, 50_000, 1, true, { had: false }),
+      lost(5, 5, 45_000, { had: true }),
+    ])), { tester: 'S', botMs, since: '2026-11-12T00:00Z' });
+    expect(since.rows.map((r) => [r.attempt, r.firstEver])).toEqual([[1, '1'], [2, '1']]);
+    // a skip is excluded, so it is never the first row; a continued result keeps its try (the try's first row)
+    const cont = convertLog(parseLog(logText([lost(5, 1, 40_000, { had: false }), won(5, 1, 61_000, 1, true, { continued: true, had: false })])), { tester: 'S', botMs });
+    expect(cont.rows.map((r) => [r.attempt, r.result, r.firstEver])).toEqual([[1, 'W', '1']]);
+    expect(parseLog(logText([lost(5, 1, 40_000, { had: true })])).rows[0]!.had).toBe(true);
+    expect(() => parseLog(logText([lost(5, 1, 40_000, { had: true })]).replace(/,1$/m, ',x'))).toThrow(/^line 3: had "x" must be 0 or 1$/);
+  });
+
+  it('QA-39-4: a log from before `had` (14 columns, build 27; or 13 before speed) keeps the wins-only rule and its warning', () => {
+    for (const cols of [DIAG_COLUMNS_V1_1, DIAG_COLUMNS_V1_0]) {
+      const text = logText([won(3, 1, 24_450, 3, false, { speed: 1 }), lost(32, 1, 80_000, { speed: 1 }), lost(23, 1, 64_450, { speed: 1 }), won(23, 2, 52_950, 2, true, { speed: 1 })]).split('\n');
+      text[1] = cols.join(',');
+      for (let i = 2; i < text.length; i++) text[i] = text[i]!.split(',').slice(0, cols.length).join(',');
+      const p = parseLog(text.join('\n'));
+      expect(p.rows.every((r) => r.had === null)).toBe(true);
+      const o = convertLog(p, { tester: 'S', botMs });
+      expect(o.rows.map((r) => [r.level, r.firstEver])).toEqual([[3, '0'], [32, ''], [23, '1'], [23, '1']]);
+      expect(o.warnings.join('\n')).toContain('first_ever left empty on level(s) 32');
+    }
+    // a paste of an old log then a new one: each level by its own first row (null had → the fallback)
+    const old = logText([lost(32, 1, 80_000)]).split('\n');
+    old[1] = DIAG_COLUMNS_V1_1.join(',');
+    old[2] = old[2]!.replace(/,$/, '');
+    const mixed = convertLog(parseLog(`${old.join('\n')}\n${logText([lost(5, 1, 40_000, { had: false })])}`), { tester: 'S', botMs });
+    expect(mixed.rows.map((r) => [r.level, r.firstEver])).toEqual([[32, ''], [5, '1']]);
+    expect(mixed.warnings.join('\n')).toContain('first_ever left empty on level(s) 32:');
+  });
+
   it('free-text columns and speed stay empty; the bot median is printed to 0.1 s like §B.1', () => {
     const p = parseSheet(c.csv);
     expect(p.rows.every((r) => r.named === undefined && r.log === undefined && !r.iv && r.note === '')).toBe(true);
@@ -106,7 +153,7 @@ describe('playtestLog: COPY LOG → decide sheet', () => {
     // a log from a build before the column: its own column line, rows without speed → empty, with a warning
     const old = logText([won(3, 1, 24_450, 3, false)]).split('\n');
     old[1] = DIAG_COLUMNS_V1_0.join(',');
-    old[2] = old[2]!.replace(/,$/, '');
+    old[2] = old[2]!.replace(/,,$/, ''); // no speed, no had
     const o = convertLog(parseLog(old.join('\n')), { tester: 'S', botMs });
     expect(o.rows[0]!.speed).toBeNull();
     expect(o.csv.split('\n')[1]).toBe('S,3,27.8,1,W,00:24.450,3,0,,0,0,,,,,24450');
@@ -151,7 +198,7 @@ describe('playtestLog: COPY LOG → decide sheet', () => {
   it('malformed input is rejected with its line number', () => {
     const text = logText(SESSION).split('\n');
     const at = (i: number, line: string): string => [...text.slice(0, i), line, ...text.slice(i + 1)].join('\n');
-    expect(() => parseLog(at(4, '1,2026-11-12T16:10Z,1.0.0 (build 27),23,campaign,1,lost'))).toThrow(new LogError('line 5: 7 field(s), the column line has 14 (a line cut by the paste?)'));
+    expect(() => parseLog(at(4, '1,2026-11-12T16:10Z,1.0.0 (build 27),23,campaign,1,lost'))).toThrow(new LogError('line 5: 7 field(s), the column line has 15 (a line cut by the paste?)'));
     expect(() => parseLog(at(4, text[4]!.replace(',lost,', ',defeat,')))).toThrow(/^line 5: outcome "defeat" must be won \/ lost \/ retreat \/ skip$/);
     expect(() => parseLog(at(2, text[2]!.replace(',3,campaign,', ',51,campaign,')))).toThrow(/^line 3: lvl "51" is not a level id$/);
     expect(() => parseLog(at(2, text[2]!.replace(',won,24450,3,', ',won,24450,0,')))).toThrow(/^line 3: stars "0" must be 1–3 on a win$/);
