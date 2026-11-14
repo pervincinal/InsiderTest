@@ -277,7 +277,11 @@ test.describe('tutorial levels 1–4 (LV-5 / checklist R1, GD-5a/b)', () => {
     await tap(page, towerAt(2, 'side'));
     await tap(page, towerAt(2, 'foe'));
     await expect.poll(() => hint(page), { message: 'side → foe completes step 2; the stop step shows' }).toBe(T['tutorial.stopStream']);
-    expect(await playerLinks(page)).toEqual([
+    // ok: QA-41 — the step completes when the link command is *issued* (play.ts `onCommand` → `tutorial.onCommand`
+    // runs in the pointerup handler, before `loop.enqueue`); the sim applies it at its next tick, ≤ 50 ms at ×1
+    // (3–43 ms after the pointerup measured on the 1243 headless shell, whose `touchscreen.tap` resolves ~1 ms after
+    // it). A one-shot read here landed in that gap and saw `[home → side]`; a link that never forms still fails.
+    await expect.poll(() => playerLinks(page), { message: 'the sim applied side → foe at its next tick' }).toEqual([
       { from: 'home', to: 'side' },
       { from: 'side', to: 'foe' },
     ]);
