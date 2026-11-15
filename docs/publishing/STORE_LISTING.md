@@ -41,7 +41,7 @@ Paste-ready Play Console order (PUB-21, 2026-10-11): `PLAY_CONSOLE_SHEET.md` —
 | Category | — | Games › Strategy | Oyunlar › Strategiya |
 | Tags | — | Strategy, Casual, Single player, Offline, Stylised | — |
 | Contact e-mail | — | `yusifli.pervin@gmail.com` | — |
-| Privacy policy URL | — | `https://pervincinal.github.io/InsiderTest/privacy.html` (policy v2.2 with the ads/purchases section and the optional on-device Diagnostics section; the page is `tower-clash/public/privacy.html`, published by the Pages job — not live yet: GitHub Pages was never enabled, BUG-26, checklist W3) | — |
+| Privacy policy URL | — | `https://pervincinal.github.io/InsiderTest/privacy.html` (policy v2.2 with the ads/purchases section and the optional on-device Diagnostics section; the page is `tower-clash/public/privacy.html`, published by the Pages job — live since 2026-10-11, BUG-26 fixed, checklist W3) | — |
 | Website (optional) | — | `https://pervincinal.github.io/InsiderTest/` — support page `https://pervincinal.github.io/InsiderTest/support.html` | — |
 | Store labels (automatic) | — | **Contains ads** (from the Ads declaration) · **In-app purchases** (from the product list) — Google adds both badges; nothing to type | — |
 
@@ -204,8 +204,8 @@ HONEST BY DESIGN
 | Primary category | — | Games | — |
 | Subcategories | — | Strategy, Casual | — |
 | Support URL | — | `https://pervincinal.github.io/InsiderTest/support.html` (`tower-clash/public/support.html`: contact, restore purchases, delete data; the `[developer e-mail]` placeholder must be filled before submission) | — |
-| Marketing URL | — | `https://pervincinal.github.io/InsiderTest/` (not live yet — GitHub Pages was never enabled, BUG-26; `LAUNCH_CHECKLIST.md` §0b step 0) | — |
-| Privacy policy URL | — | `https://pervincinal.github.io/InsiderTest/privacy.html` (policy v2.2, `tower-clash/public/privacy.html`; not live yet, BUG-26 — the `[developer e-mail]` placeholder on the page must be replaced before review, G18 / T3) | — |
+| Marketing URL | — | `https://pervincinal.github.io/InsiderTest/` (live since 2026-10-11 — BUG-26 fixed; `LAUNCH_CHECKLIST.md` §0b step 0) | — |
+| Privacy policy URL | — | `https://pervincinal.github.io/InsiderTest/privacy.html` (policy v2.2, `tower-clash/public/privacy.html`; live since 2026-10-11, BUG-26 fixed — the page carries the contact line, G18 / T3) | — |
 | Copyright | — | `© 2026 [developer name]` (stakeholder fills the name) | — |
 | In-App Purchases (automatic) | — | App Store shows an "In-App Purchases" line with the products from §6.1 once they are attached to the version; nothing to type in the description. **1.0.0 default: no products attached (variant B)** | — |
 

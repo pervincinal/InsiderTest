@@ -36,7 +36,7 @@ Ads in both variants: the review build must carry the real AdMob iOS ids (`ADMOB
 | Content Rights (Məzmun hüquqları) → "Does your app contain, show, or access third-party content?" | **No** — "This app does not contain, show, or access third-party content" | all art, sounds and text are the team's own |
 | Age Rating (Yaş reytinqi) → Edit | answers in §5 | expected result **9+** |
 | License Agreement (Lisenziya müqaviləsi) | Apple's Standard EULA (default) | do not upload a custom one |
-| Privacy Policy URL (Məxfilik siyasəti URL) — under "Privacy Policy" for English (U.S.) | `https://pervincinal.github.io/InsiderTest/privacy.html` | **not live yet** — GitHub Pages was never enabled (BUG-26, corrected 2026-10-09; `LAUNCH_CHECKLIST.md` §0b step 0); open it once in Safari when it is, before saving (the `[developer e-mail]` placeholder on that page must be replaced first — checklist G18 / T3) |
+| Privacy Policy URL (Məxfilik siyasəti URL) — under "Privacy Policy" for English (U.S.) | `https://pervincinal.github.io/InsiderTest/privacy.html` | **live since 2026-10-11** (BUG-26 fixed; the page carries the contact line, checklist G18 / T3; `LAUNCH_CHECKLIST.md` §0b step 0); open it once in Safari before saving |
 | User Privacy Choices URL (Məxfilik seçimləri URL) | leave empty | — |
 | Localizable Information — Name / Subtitle / Privacy Policy URL for other languages | none | English (U.S.) only in 1.0.0 |
 
@@ -129,8 +129,8 @@ App Previews (videos): none. "Use the same screenshots for all sizes" is not nee
 | Description (Təsvir) | 4000 | **Variant B (default):** the block in §6.3 below | 3855 |
 | ″ | 4000 | Variant A: `STORE_LISTING.md` §1.1 verbatim | 3976 |
 | Keywords (Açar sözlər) | 100 | `war,strategy,rts,capture,castle,army,offline,casual,defense,attack,soldiers,siege,kingdom,battle` — commas, no spaces; 2026-10-09: `tower`, `tap`, `conquer` dropped because the accepted name "Tower Clash: Tap & Conquer" already indexes them, replaced by `siege`, `kingdom`, `battle` | 96 |
-| Support URL (Dəstək URL) | — | `https://pervincinal.github.io/InsiderTest/support.html` | not live yet (BUG-26 — `LAUNCH_CHECKLIST.md` §0b step 0); the `[developer e-mail]` on the page must be replaced before submission (G18 / T3, §0b step 9) |
-| Marketing URL (Marketinq URL) | — | `https://pervincinal.github.io/InsiderTest/` | optional; not live yet (BUG-26) |
+| Support URL (Dəstək URL) | — | `https://pervincinal.github.io/InsiderTest/support.html` | live since 2026-10-11 (BUG-26 fixed — `LAUNCH_CHECKLIST.md` §0b step 0); the page carries the contact line (G18 / T3, §0b step 9) |
+| Marketing URL (Marketinq URL) | — | `https://pervincinal.github.io/InsiderTest/` | optional; live since 2026-10-11 (BUG-26 fixed) |
 | Version (Versiya) | — | `1.0.0` | must equal `MARKETING_VERSION` of the uploaded build (it does: 1.0.0 / build 7) |
 | Copyright (Müəllif hüququ) | — | `© 2026 [developer name]` — **stakeholder fills** the name (the person or company that owns the app; the same name as the developer account) | 23 with the placeholder |
 | Routing App Coverage File | — | none | — |
