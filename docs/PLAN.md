@@ -51,7 +51,7 @@ With "Next" nearly empty, the team moved to content that the reference bot can v
 ## Risks & mitigations
 - **Apple PLA agreement delay (MM-15)** → build 27 cannot be cut or reach TestFlight until the Account Holder accepts; the code side is verified and the request is 4 steps, so it ships the day the agreement clears.
 - **No human data yet** → no device pass and no human playtest has ever been recorded (AUD-Q1 / A2); star clocks, AI engagement and bands 5–6 are decided only by the sheet's mechanical rules, and at N = 1 only as proposals.
-- **Eager budget headroom 1.3 kB** (80.7 of 82 kB) → new work goes into lazy chunks; the budget is raised only by argued exception.
+- **Eager budget headroom 1.2 kB** (80.8 of 82 kB) → new work goes into lazy chunks; the budget is raised only by argued exception.
 - **QA-35 rare CI hang** → about 1 red test per 100 under load; a rerun clears it, notes in BACKLOG "Bugs"; the replay record (SIM-R1) can catch a stack.
 - **Balance drift** → reference-player bot must clear every level; results logged per day. Since 09-18 CI also runs the daily (30 days × 3 seeds) and twist (5 × 32 × 5) gates.
 - **Scope creep** → backlog is the only source of work; new ideas go to "Icebox".
