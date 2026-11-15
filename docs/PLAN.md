@@ -4,7 +4,7 @@ Owner: the autonomous team (see `docs/TEAM.md`). The human stakeholder reads `re
 
 ## Milestones
 
-| # | Milestone | Target | Definition of done | Status (2026-11-10, day 53) |
+| # | Milestone | Target | Definition of done | Status (2026-11-15, day 58) |
 |---|---|---|---|---|
 | M0 | Foundations | Day 1 (2026-09-13) | Project scaffolded, deterministic sim with generation/send/capture/upgrade, canvas renderer, 5 levels, unit tests green, playable in browser | **Done** 2026-09-13 |
 | M1 | Vertical slice | Day 5 | Enemy AI with 3 personalities, fortress + artillery, win/lose/stars, level select + save, 15 levels, Playwright smoke test, CI workflow | **Done** 2026-09-13 (day 1) |
@@ -16,18 +16,21 @@ Owner: the autonomous team (see `docs/TEAM.md`). The human stakeholder reads `re
 | M-onboarding | Lesson-card cycle (added 2026-10-17 after TestFlight builds 14–16: the cards must say the move that wins) | Day 32 → 40 | Every level's lesson card reviewed by the game designer (GDD §3.9–§3.17) and, where its literal reading does not win, rewritten in EN / AZ / RU / TR and verified with the literal card follower (`--follow`, rule (a)); every card ≤ 3 lines at 20 px | **Done** 2026-10-28 (day 40): 50 cards reviewed, 41 rewritten (levels 2–50), each verified 20 seeds × both tie orders; 23 and 32 stay over their 2★ clocks as learning levels; the star-2 floor is a post-launch decision on telemetry (GDD proposal, GD-12) |
 | 1.0 | 1.0 release (builds 25 → 27) | open, gated | Build 27 cut and on TestFlight; the stakeholder's device pass and the human playtest recorded | **Build 27 waits on the Apple PLA agreement (MM-15)**, then the stakeholder's device pass + human playtest (AUD-Q1 / A2, `docs/reviews/2026-11-05-human-playtest-sheet.md`). Code side ready: native lane checked 2026-11-09, request steps in `docs/MOBILE.md` §4.2; release text in `docs/publishing/RELEASE_NOTES.md` (build 27 block, days 42–50). Build 8 is in App Review, build 25 on TestFlight (source: BACKLOG MM-15, AUD-Q1; reports/2026-11-09.md) |
 | 1.0.1 | Playtest-gated decisions | after the playtest | Each decision taken by the sheet's mechanical rules, not by taste | Star clocks B4 / B5 (rules in the sheet §C.1 / §C.2, `npm run playtest:decide`); AI engagement per level (LV-13 per-level switch, memo `docs/reviews/2026-11-05-ai-engagement.md` §6); bands 5–6 only on the memo §4.3 signal (sheet §C.3). Rules run at N ≥ 3 testers; at N = 1 they only "propose" and nothing changes in JSON without the stakeholder's sign-off (sheet §C.0) |
-| 1.1 | Replay playback, then local 2-player | after 1.0 ships | Order R then P; nothing starts before 1.0 ships | Replay playback ≈ 31 h, then local 2-player ≈ 57 h (source: `docs/reviews/2026-11-09-icebox-1.1.md`; BACKLOG "1.1 candidates"). The replay record (SIM-R1) is already in the tree, eager +60 B |
+| 1.1 | Replay playback, then local 2-player | after 1.0 ships | Order R then P; nothing starts before 1.0 ships | Replay playback ≈ 31 h, then local 2-player ≈ 57 h (source: `docs/reviews/2026-11-09-icebox-1.1.md`; BACKLOG "1.1 candidates"). The replay record v1 (SIM-R1…R3: campaign, daily / weekly, continued matches) is already in the tree |
 
 Version: 1.0.0 — build 8 (2026-10-09, real AdMob ids) submitted to App Review on 2026-10-11; builds 9 (2026-10-11: swipe-to-cut, iPhone drag, full screen, new icon) and 10 (2026-10-12) are TestFlight hotfix builds of the same 1.0.0 after the stakeholder's first device session, and the review build is swapped to the newest verified one; 1.0.1 with in-app purchases takes the next free build number when it is cut; the v1.0.0 section of `docs/publishing/RELEASE_NOTES.md` is the release text, `POST_LAUNCH.md` §6 the 1.0.1 / 1.1 roadmap. **Update 2026-11-10:** build 8 is still the one in App Review; build 25 (2026-10-29) is the newest on TestFlight; build 26 was requested 2026-10-30 but Apple blocks signing until the PLA agreement is accepted (MM-15), so the next upload will be **build 27** (release notes block covers days 42 evening to 50) via the four steps in docs/MOBILE.md §4.2.
 
-## State on 2026-11-10
+## State on 2026-11-15
 
-- **Content and gates:** 50 levels, reference bot 50/50; 2 584 unit tests; e2e 191 + WebView 4 + PWA 4, plus WebKit and soak jobs; CI run 124 on `510d530` was 9 jobs green on the first try (source: reports/2026-11-09.md).
-- **Size:** eager bundle 80.7 kB of the 82 kB budget gzip; native package 1.32 MB (source: reports/2026-11-09.md; docs/MOBILE.md §4.2).
-- **Audit 2026-10-29** (2 P0, 29 P1, 44 P2, 21 P3; source: docs/reviews/2026-10-29-audit-summary.md): P0 AUD-B1 closed, AUD-Q1 / A2 open (the stakeholder's pass); P1 28 of 29 closed, the open one is B4 / A13 + B5 (playtest-gated); P2 / P3 closed except the playtest-gated ones (AUD-A12, the AI-engagement changes A3–A6 / A9) (source: BACKLOG "Audit 2026-10-29").
-- **Feel pass:** 11/14 BREATHING, up from 8/14; FEEL-1 9/9 closed (source: BACKLOG "Feel pass 2026-11-06").
-- **Blocked on the stakeholder:** MM-15 (accept the Apple Program License Agreement, then build 27 is requested in 4 steps, docs/MOBILE.md §4.2) and AUD-Q1 / A2 (device pass + human playtest on build 27).
-- **One open bug:** QA-35 — a rare e2e / renderer hang under CI load (about 1 red test per 100; not reproduced in 40 + 15 seeds, no device impact seen) (source: BACKLOG "Bugs"; reports/2026-11-09.md).
+- **Build 27:** code-complete, not cut; it waits on the stakeholder accepting Apple's PLA agreement (MM-15), then the four steps in docs/MOBILE.md §4.2. Build 8 is in App Review, build 25 on TestFlight (source: BACKLOG MM-15; reports/2026-11-14.md).
+- **Remaining P0:** the device pass + human playtest (AUD-Q1 / A2, the stakeholder) on build 27. Audit P1 28 of 29 (the open one is B4 / A13 + B5, playtest-gated); P2 / P3 closed except the playtest-gated ones (source: BACKLOG "Audit 2026-10-29").
+- **Feel pass:** 13/14 ALIVE (FEEL-2 re-score on 2026-11-12, up from 11/14); FEEL-2-1…3 are P3, after 1.0 (source: docs/reviews/2026-11-12-feel-pass-2.md).
+- **Replay record v1 complete** (SIM-R1…R3): campaign, daily / weekly (challenge descriptor) and continued (Continue) matches verify in node, Chromium, WebKit and the native build (source: BACKLOG Days 52, 54, 55).
+- **Playtest-day pipeline** dry-run end to end: Diagnostics log with 15 columns (incl. `speed` and `had`), 20 replays / 400 kB kept, then `npm run playtest:log`, then `npm run playtest:decide` (source: BACKLOG QA-39, QA-39-1…4, DIAG-2).
+- **Flakes:** QA-38 + QA-40 sweeps 377 + 152 runs, 0 red; QA-41 (local tutorial e2e) fixed; QA-35 (rare CI hang under load, about 1 red per 100) not reproduced since (source: BACKLOG "Bugs"; reports/2026-11-14.md).
+- **Numbers:** 50 levels, reference bot 50/50; 2 654 unit tests; e2e 196 + WebView 4 + PWA 4, plus WebKit and soak jobs; eager bundle 80.8 of the 82 kB budget gzip; CI run 131 green, 9 jobs (source: reports/2026-11-14.md).
+- **Environment:** the sandbox browser moved to build 1243 (ENV-1); a container restart cost Day 56, and its uncommitted work was redone on Day 57 and is now committed item by item.
+- **1.1 candidates** (replay playback, then local 2-player) start the day 1.0 ships (source: docs/reviews/2026-11-09-icebox-1.1.md).
 
 ## Daily cadence (fully autonomous)
 
