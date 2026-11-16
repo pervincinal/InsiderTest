@@ -11,6 +11,8 @@ import {
   bandStar3,
   decide,
   humanTable,
+  invalidTries,
+  isValid,
   nextStar3,
   parseSheet,
   renderMarkdown,
@@ -222,6 +224,63 @@ describe('playtestDecide: tester count tags DECISION at N ≥ 3', () => {
       win('S', 17, 40, 4, '00:50', 1),
     ), spec);
     expect(d.levels[0]!.hMs).toBe(50_000);
+  });
+});
+
+/*
+ * QA-42-2 (2026-11-16): C.0 dropped ×2 / booster / REINFORCEMENTS wins from H without naming them, so the pasted review
+ * never showed which tries were left out. The markdown now lists them under the C.1 table, every failing reason in the
+ * order ×1, boosters, REINFORCEMENTS; losses are not listed.
+ */
+describe('playtestDecide: the "Not valid (C.0)" list (QA-42-2)', () => {
+  const spec = { 17: { s3: 25, s2: 90, bot: 40 }, 23: { s3: 30, s2: 90, bot: 40 } };
+  const csv = sheet(
+    loss('S', 17, 40, 1),
+    win('S', 17, 40, 2, '00:28.4', 3, '0,2,0,0,,,,'), // ×2
+    win('S', 17, 40, 3, '00:30', 3, '0,1,1,0,,,,'), // a booster
+    win('S', 17, 40, 4, '00:44', 2), // valid
+    win('S', 23, 40, 2, '00:31.05', 3, '0,2,2,1,,,,'), // ×2 + 2 boosters + REINFORCEMENTS
+    win('S', 23, 40, 1, '01:05', 1, '0,1,0,1,,,,'), // REINFORCEMENTS (listed by attempt, not by line)
+    win('S', 23, 40, 3, '00:50', 2), // valid
+  );
+  const LIST = [
+    '17 #2 W 00:28.400 — not ×1',
+    '17 #3 W 00:30.000 — boosters 1',
+    '23 #1 W 01:05.000 — REINFORCEMENTS',
+    '23 #2 W 00:31.050 — not ×1, boosters 2, REINFORCEMENTS',
+  ];
+
+  it('one line per dropped win, every reason in order, by level then attempt; the loss is absent', () => {
+    const list = invalidTries(parseSheet(csv).rows);
+    expect(list.map((x) => x.text)).toEqual(LIST);
+    expect(list.map((x) => x.reasons)).toEqual([['not ×1'], ['boosters 1'], ['REINFORCEMENTS'], ['not ×1', 'boosters 2', 'REINFORCEMENTS']]);
+    expect(list.every((x) => x.attempt.result === 'W' && !isValid(x.attempt))).toBe(true);
+    expect(list.some((x) => x.attempt.attempt === 1 && x.attempt.level === 17)).toBe(false); // the loss
+  });
+
+  it('the markdown prints it right under the C.1 table; H is the valid wins only, same as without the list', () => {
+    const d = run(csv, spec);
+    expect(d.invalid.map((x) => x.text)).toEqual(LIST);
+    expect(d.levels.map((l) => [l.id, l.hMs])).toEqual([[17, 44_000], [23, 50_000]]);
+    const onlyValid = run(sheet(loss('S', 17, 40, 1), win('S', 17, 40, 4, '00:44', 2), win('S', 23, 40, 3, '00:50', 2)), spec);
+    expect(d.levels.map((l) => [l.hMs, l.r, l.zone, l.star3])).toEqual(onlyValid.levels.map((l) => [l.hMs, l.r, l.zone, l.star3]));
+    const md = renderMarkdown(d, { sheetName: 's', clocksFrom: 't', source: 's' });
+    const lines = md.split('\n');
+    const at = lines.indexOf('Not valid (C.0):');
+    expect(lines[at - 2]).toMatch(/^\| 23 \| 3 \|/); // the last C.1 row, then a blank line
+    expect(lines.slice(at + 1, at + 6)).toEqual([...LIST.map((x) => `- ${x}`), '']);
+    expect(md).not.toContain('Not valid (C.0): none');
+  });
+
+  it('"none" when every win is valid (losses do not count)', () => {
+    const d = run(sheet(loss('S', 17, 40, 1), win('S', 17, 40, 2, '00:44', 2)), spec);
+    expect(d.invalid).toEqual([]);
+    expect(renderMarkdown(d, { sheetName: 's', clocksFrom: 't', source: 's' })).toContain('\nNot valid (C.0): none\n');
+  });
+
+  it('with several testers each line names the tester (attempt numbers are per tester)', () => {
+    const list = invalidTries(parseSheet(sheet(win('S', 17, 40, 1, '00:30', 3, '0,2,0,0,,,,'), win('F1', 17, 40, 1, '00:31', 3, '0,1,1,0,,,,'))).rows);
+    expect(list.map((x) => x.text)).toEqual(['17 #1 W 00:30.000 — not ×1 (tester S)', '17 #1 W 00:31.000 — boosters 1 (tester F1)']);
   });
 });
 

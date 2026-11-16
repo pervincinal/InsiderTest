@@ -7,6 +7,7 @@
  *   attempt number), whatever its validity. **B** = the bot median (reference player, K = 20; the CSV `bot` column).
  *   Rows are tagged `DECISION` at N ≥ 3 testers, else `PROVISIONAL` (proposed; nothing moves without the
  *   stakeholder's sign-off on the row). "≥ 2 of 3 testers" reads as max(2, ⌈2N / 3⌉); "≥ 2 testers" stays 2.
+ *   The wins C.0 drops are named under the C.1 table ("Not valid (C.0)", `invalidTries`; QA-42-2).
  * - C.1 (AUD-B4 / A13): r = H / B; zone F when r < 0.85 → min(S3, round5(1.1 × H)); M when 0.85 ≤ r ≤ 1.10 → S3;
  *   S when r > 1.10 → max(S3, round5(B)); then new `star3` < S2 (else S2 − 5 s); levels 1 and 33 never move
  *   (`reclock.ts` KEEP). Band move: ≥ 2 non-pinned sampled levels of a band in the same zone F or S move every
@@ -251,6 +252,43 @@ export const median = (xs: readonly number[]): number => {
 export const bandOf = (id: number): number => BANDS.findIndex(([a, b]) => id >= a && id <= b);
 export const isPinned = (id: number): boolean => PINNED[id] !== undefined;
 export const isValid = (a: Attempt): boolean => a.result === 'W' && a.speed === 1 && a.boosters === 0 && !a.help;
+
+/** A won try C.0 drops from H, with every failing reason in the order ×1, boosters, REINFORCEMENTS (QA-42-2). */
+export interface InvalidTry {
+  attempt: Attempt;
+  /** `not ×1`, `boosters <n>`, `REINFORCEMENTS`, in that order. */
+  reasons: string[];
+  /** `17 #2 W 00:28.400 — not ×1` (` (tester <name>)` appended when the sheet has more than one tester). */
+  text: string;
+}
+
+/** `mm:ss.fff` of a time in ms. */
+export const clockText = (ms: number): string => {
+  const r = Math.round(ms);
+  const mm = Math.floor(r / 60_000);
+  const ss = Math.floor((r % 60_000) / 1000);
+  return `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}.${String(r % 1000).padStart(3, '0')}`;
+};
+
+/**
+ * The "Not valid (C.0)" list: every win `isValid` rejects, by level, then tester (sheet order), then attempt. Losses
+ * and retreats are not listed (they are not wins, not invalid ones). Pure; H does not read it.
+ */
+export function invalidTries(rows: readonly Attempt[]): InvalidTry[] {
+  const testers = [...new Set(rows.map((r) => r.tester))];
+  const many = testers.length > 1;
+  return rows
+    .filter((a) => a.result === 'W' && !isValid(a))
+    .sort((a, b) => a.level - b.level || testers.indexOf(a.tester) - testers.indexOf(b.tester) || a.attempt - b.attempt)
+    .map((a) => {
+      const reasons: string[] = [];
+      if (a.speed !== 1) reasons.push('not ×1');
+      if (a.boosters > 0) reasons.push(`boosters ${a.boosters}`);
+      if (a.help) reasons.push('REINFORCEMENTS');
+      const text = `${a.level} #${a.attempt} W ${clockText(a.timeMs!)} — ${reasons.join(', ')}${many ? ` (tester ${a.tester})` : ''}`;
+      return { attempt: a, reasons, text };
+    });
+}
 /** "≥ 2 of 3 testers" for N testers. */
 export const twoThirds = (n: number): number => Math.max(2, Math.ceil((2 * n) / 3));
 export const tagFor = (n: number): Tag => (n >= DECISION_MIN_TESTERS ? 'DECISION' : 'PROVISIONAL');
@@ -323,6 +361,8 @@ export interface Decision {
   need: number;
   rows: number;
   levels: LevelRow[];
+  /** C.0's dropped wins (`invalidTries`), listed under the C.1 table. */
+  invalid: InvalidTry[];
   bandMoves: BandMove[];
   h3: { threeStar: number; validFirstWins: number; holds: boolean };
   b5: {
@@ -452,7 +492,7 @@ export function decide({ sheet, clockOf, botOf }: DecideInput): Decision {
     : verdict === 'RE-OPEN' ? '(a) C.3 re-opens bands 5–6' : h2Fails >= need ? `(b) H2 fails for ${h2Fails} of ${n}` : `neither (a) nor (b) (H2 fails for ${h2Fails} of ${n}, need ${need})`;
 
   return {
-    testers, n, tag, need, rows: rows.length, levels, bandMoves, h3,
+    testers, n, tag, need, rows: rows.length, levels, invalid: invalidTries(rows), bandMoves, h3,
     b5: { perTester, refuters, refuted: decisive && refuters >= 2, share: { twoStar: floored2, firstWins: floored.length, triggerFires: floored.length > 0 && floored2 / floored.length < GD12_TRIGGER_SHARE } },
     past16: { twoStar: past2, firstWins: past.length, rungCandidate: past.length > 0 && past2 / past.length >= RUNG_CANDIDATE_SHARE },
     c3: { perTester: c3, reopen, h1Refuted, verdict, lever32: c3.filter((x) => x.lever32).length, lever41: c3.filter((x) => x.lever41).length },
@@ -494,6 +534,8 @@ export function renderMarkdown(d: Decision, opts: { sheetName: string; clocksFro
     L.push(`| ${l.id} | ${l.band + 1} | ${s(l.clock.star3)} / ${s(l.clock.star2)} | ${s(l.botMs)} | ${l.hMs === undefined ? '—' : s(l.hMs)} | ${l.r === undefined ? '—' : l.r.toFixed(2)} | ${l.zone ?? '—'} | ${next} | ${d.tag} |`);
   }
   L.push('');
+  if (d.invalid.length === 0) L.push('Not valid (C.0): none', '');
+  else L.push('Not valid (C.0):', ...d.invalid.map((x) => `- ${x.text}`), '');
   if (d.bandMoves.length === 0) L.push('Band moves: none (no band has ≥ 2 non-pinned sampled levels in the same zone F or S).');
   for (const m of d.bandMoves) {
     const [a, b] = BANDS[m.band]!;

@@ -3,7 +3,8 @@
  * (`npm run playtest:decide -- <sheet.csv>`) — the mechanical §C of
  * docs/reviews/2026-11-05-human-playtest-sheet.md on a filled human playtest sheet (QA-36; ported from the Game
  * Designer's scratch `decide.mjs`). Prints markdown to paste into the playtest review: the C.1 `star3` table
- * (zones F / M / S at r = H / B < 0.85 / ≤ 1.10 / > 1.10, round5, the `star2` guard, pins 1 / 33, band moves), H3,
+ * (zones F / M / S at r = H / B < 0.85 / ≤ 1.10 / > 1.10, round5, the `star2` guard, pins 1 / 33, band moves) with the
+ * "Not valid (C.0)" list under it (each win left out of H: `17 #2 W 00:28.400 — not ×1`, QA-42-2), H3,
  * C.2's human half of the 2★ floor, C.3 per tester, C.4, the C.5 side outputs, and a JSON block for
  * `scripts/reclock.ts`'s human-clock pin table (`HUMAN` in `scripts/lib/reclockPins.ts`: id → { star3?, star2?,
  * source: 'sheet YYYY-MM-DD', note }, ms; only `star3` is proposed — the B5 `star2` floor is `reclock.ts --gd12`'s,
