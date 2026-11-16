@@ -188,6 +188,118 @@ describe('playtestDecide: band move and pins', () => {
   });
 });
 
+/*
+ * QA-42-3 (ruled 2026-11-16, sheet §C.1 "Sampled, no valid win"): a level with CSV rows but no H used to count as
+ * unsampled, so a band move re-clocked it (QA-42: level 45, lost twice, 40 → 50 s). It is now held (`L` no win, `X`
+ * no valid win): clocks stay, no HUMAN entry, no part in a band's ≥ 2 or median r; never-won / help-only testers go to
+ * the difficulty list.
+ */
+const QA42_CSV = `tester,level,bot,attempt,result,time,stars,first_ever,speed,boosters,help,named,log,iv,note,time_ms
+dryrun,3,27.8,1,W,00:24.450,3,1,1,0,0,,,,,24450
+dryrun,5,37.4,1,W,00:31.750,2,1,1,0,0,,,,,31750
+dryrun,9,30.7,1,W,00:31.250,2,1,1,0,0,,,,,31250
+dryrun,13,47.3,1,W,00:45.050,2,1,1,0,0,,,,,45050
+dryrun,16,30.5,1,W,00:34.650,2,1,1,0,0,,,,,34650
+dryrun,17,28.4,1,W,00:28.400,2,1,1,0,0,red,red,,,28400
+dryrun,23,37.0,1,L,01:04.450,0,1,1,0,0,,,,,64450
+dryrun,23,37.0,2,W,00:44.300,2,1,1,0,0,,,,,44300
+dryrun,27,50.0,1,W,00:42.000,2,0,1,0,0,,,,,42000
+dryrun,32,48.2,1,W,00:54.650,2,1,1,0,0,,,,,54650
+dryrun,33,38.5,1,W,00:39.800,2,1,1,0,0,green,yellow,,,39800
+dryrun,38,32.6,1,W,00:32.500,2,1,1,0,0,,,,,32500
+dryrun,41,72.9,1,W,01:21.700,2,1,1,0,0,,,,,81700
+dryrun,45,48.2,1,L,00:39.250,0,1,1,0,0,,,,,39250
+dryrun,45,48.2,2,L,00:50.800,0,1,1,0,0,,,,never won (autoLose x2),50800
+dryrun,49,33.1,1,W,00:40.100,2,1,1,0,0,yellow,yellow,,,40100
+dryrun,50,49.6,1,W,01:28.600,2,1,1,0,0,,,0,,88600
+dryrun,17,28.4,2,W,00:28.400,2,1,2,0,0,,,,speed retry at x2 (pause card),28400
+`;
+
+describe('playtestDecide: sampled, no valid win is held (QA-42-3)', () => {
+  const retreat = (t: string, level: number, bot: number, attempt: number): string => `${t},${level},${bot},${attempt},R,,0,0,1,0,0,,,,`;
+  // band 9–16 (bot 40 s, S3 30, S2 80); 9 and 10 in F (r 0.5, 0.7) move the band unless held
+  const band2 = Object.fromEntries([9, 10, 11, 12, 13, 14, 15, 16].map((id) => [id, { s3: 30, s2: 80, bot: 40 }]));
+  const fast = [win('A', 9, 40, 1, '00:20', 3), win('A', 10, 40, 1, '00:28', 3)];
+  const md = (d: Decision): string => renderMarkdown(d, { sheetName: 's', clocksFrom: 't', source: 'sheet 2026-11-16' });
+
+  it('the QA-42 CSV: 45 (lost twice) is held as L, on the difficulty list, not in HUMAN; 42–44 / 46–48 still move', () => {
+    const spec = { ...EXAMPLE_LEVELS, 5: { s3: 30, s2: 110, bot: 37.4 }, 9: { s3: 25, s2: 60, bot: 30.7 }, 13: { s3: 35, s2: 80, bot: 47.3 }, 16: { s3: 20, s2: 75, bot: 30.5 }, 27: { s3: 40, s2: 80, bot: 50 } };
+    const d = run(QA42_CSV, spec);
+    const l45 = d.levels.find((l) => l.id === 45)!;
+    expect([l45.held, l45.tries, l45.star3]).toEqual(['L', { W: 0, L: 2, R: 0 }, 40_000]);
+    const m = d.bandMoves.find((x) => x.band === 5)!;
+    expect([m.zone, m.sampled, m.rBand.toFixed(2), m.held]).toEqual(['S', [41, 49, 50], '1.21', [45]]);
+    expect(m.moves.map((x) => [x.id, x.from / 1000, x.to / 1000])).toEqual([[42, 60, 65], [43, 30, 35], [44, 25, 30], [46, 45, 55], [47, 40, 45], [48, 45, 55]]);
+    expect(d.difficulty).toEqual([{ id: 45, tester: 'dryrun', tries: 2, lost: 2, retreated: 0, helpOnly: false }]);
+    const out = md(d);
+    expect(out).toContain('Band 41–50: 3 sampled levels in zone S (41, 49, 50; median r 1.21) → unsampled: 42 60 → 65, 43 30 → 35, 44 25 → 30, 46 45 → 55, 47 40 → 45, 48 45 → 55 · held (sampled, no valid win): 45 · PROVISIONAL');
+    expect(out).not.toContain('45 40 → 50');
+    expect(out).toContain('| 45 | 6 | 40 / 95 | 48.2 | — | — | L | = (sampled, no valid win: L, 2 tries — 2 L, 0 R) | PROVISIONAL |');
+    expect(out).toContain('\nDifficulty list (C.1 sampled-lost → Level Designer finding; clocks stay): 45 dryrun 2 tries (2 L, 0 R), not won · PROVISIONAL\n');
+    const json = JSON.parse(/```json\n([\s\S]*?)\n```/.exec(out)![1]!) as Record<string, unknown>;
+    expect(Object.keys(json)).not.toContain('45');
+    expect(Object.keys(json)).toEqual(expect.arrayContaining(['42', '43', '44', '46', '47', '48']));
+  });
+
+  it('an R-only level is L, exactly like an L-only one', () => {
+    const r = run(sheet(...fast, retreat('A', 11, 40, 1), retreat('A', 11, 40, 2)), band2);
+    const l = run(sheet(...fast, loss('A', 11, 40, 1), loss('A', 11, 40, 2)), band2);
+    for (const d of [r, l]) {
+      expect(d.levels.find((x) => x.id === 11)!.held).toBe('L');
+      expect(d.bandMoves[0]!.held).toEqual([11]);
+      expect(d.bandMoves[0]!.moves.map((x) => x.id)).toEqual([12, 13, 14, 15, 16]);
+      expect(star3Of(d)[11]).toBe(30);
+    }
+    expect(r.levels.find((x) => x.id === 11)!.tries).toEqual({ W: 0, L: 0, R: 2 });
+    expect(r.difficulty).toEqual([{ id: 11, tester: 'A', tries: 2, lost: 0, retreated: 2, helpOnly: false }]);
+    expect(l.difficulty).toEqual([{ id: 11, tester: 'A', tries: 2, lost: 2, retreated: 0, helpOnly: false }]);
+    expect(md(r)).toContain('= (sampled, no valid win: L, 2 tries — 0 L, 2 R)');
+  });
+
+  it('a ×2-only win is X, held, and not on the difficulty list', () => {
+    const d = run(sheet(...fast, win('A', 11, 40, 1, '00:15', 3, '0,2,0,0,,,,')), band2);
+    expect(d.levels.find((x) => x.id === 11)!.held).toBe('X');
+    expect(d.bandMoves[0]!.held).toEqual([11]);
+    expect(Object.keys(humanTable(d, 's'))).not.toContain('11');
+    expect(d.difficulty).toEqual([]);
+    const out = md(d);
+    expect(out).toContain('| 11 | 2 | 30 / 80 | 40 | — | — | X | = (sampled, no valid win: X, 1 try — not ×1) | PROVISIONAL |');
+    expect(out).toContain('\nDifficulty list: none.\n');
+  });
+
+  it('a booster-only win is X, held, and on the difficulty list with helpOnly', () => {
+    const d = run(sheet(...fast, loss('A', 11, 40, 1), win('A', 11, 40, 2, '00:15', 3, '0,1,1,0,,,,'), win('A', 11, 40, 3, '00:18', 3, '0,1,0,1,,,,')), band2);
+    expect(d.levels.find((x) => x.id === 11)!.held).toBe('X');
+    expect(d.bandMoves[0]!.held).toEqual([11]);
+    expect(d.difficulty).toEqual([{ id: 11, tester: 'A', tries: 3, lost: 1, retreated: 0, helpOnly: true }]);
+    const out = md(d);
+    expect(out).toContain('= (sampled, no valid win: X, 3 tries — boosters 1, REINFORCEMENTS)');
+    expect(out).toContain('11 A 3 tries (1 L, 0 R), won only with boosters / REINFORCEMENTS · PROVISIONAL');
+  });
+
+  it('a loss, then a valid win, is zoned from the win, not held and not listed; at N ≥ 2 a non-winner is "k of N not won"', () => {
+    const d = run(sheet(...fast, loss('A', 11, 40, 1), win('A', 11, 40, 2, '00:24', 3)), band2);
+    const l11 = d.levels.find((x) => x.id === 11)!;
+    expect([l11.held, l11.hMs, l11.zone]).toEqual([undefined, 24_000, 'F']);
+    expect(d.bandMoves[0]!.sampled).toEqual([9, 10, 11]);
+    expect(d.bandMoves[0]!.held).toEqual([]);
+    expect(d.difficulty).toEqual([]);
+    expect(md(d)).not.toContain('held (sampled');
+    const two = run(sheet(...fast, win('A', 11, 40, 1, '00:24', 3), loss('B', 11, 40, 1)), band2);
+    expect(two.levels.find((x) => x.id === 11)!.zone).toBe('F');
+    expect(two.difficulty).toEqual([{ id: 11, tester: 'B', tries: 1, lost: 1, retreated: 0, helpOnly: false }]);
+    expect(md(two)).toContain('11 B 1 try (1 L, 0 R), not won (1 of 2 not won) · PROVISIONAL');
+  });
+
+  it('a band whose second zone-S level is L has no band move', () => {
+    const d = run(sheet(win('A', 9, 40, 1, '01:00', 1), loss('A', 10, 40, 1)), band2);
+    expect(d.levels.find((x) => x.id === 10)!.held).toBe('L');
+    expect(d.bandMoves).toEqual([]);
+    expect(star3Of(d)).toEqual({ 9: 40, 10: 30 });
+    expect(Object.keys(humanTable(d, 's'))).toEqual(['9']);
+  });
+});
+
 describe('playtestDecide: tester count tags DECISION at N ≥ 3', () => {
   const spec = Object.fromEntries([17, 23, 32, 38, 49].map((id) => [id, { s3: 25, s2: 90, bot: 40 }]));
   /** First try won at 2★ on all five floored sample levels. */

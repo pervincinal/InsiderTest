@@ -8,6 +8,10 @@
  *   Rows are tagged `DECISION` at N ≥ 3 testers, else `PROVISIONAL` (proposed; nothing moves without the
  *   stakeholder's sign-off on the row). "≥ 2 of 3 testers" reads as max(2, ⌈2N / 3⌉); "≥ 2 testers" stays 2.
  *   The wins C.0 drops are named under the C.1 table ("Not valid (C.0)", `invalidTries`; QA-42-2).
+ * - C.1 sampled, no valid win (QA-42-3): a level with any CSV row is sampled; without an H it is held (`L` no win,
+ *   `X` no valid win): clocks stay, never band-moved, not counted in a band's ≥ 2 or its median r, no HUMAN entry.
+ *   The difficulty list (Level Designer finding) = each tester who never won a level or won it only with boosters /
+ *   REINFORCEMENTS.
  * - C.1 (AUD-B4 / A13): r = H / B; zone F when r < 0.85 → min(S3, round5(1.1 × H)); M when 0.85 ≤ r ≤ 1.10 → S3;
  *   S when r > 1.10 → max(S3, round5(B)); then new `star3` < S2 (else S2 − 5 s); levels 1 and 33 never move
  *   (`reclock.ts` KEEP). Band move: ≥ 2 non-pinned sampled levels of a band in the same zone F or S move every
@@ -331,6 +335,13 @@ export interface LevelRow {
   pinned: boolean;
   /** Attempts to first clear per tester (undefined = no win). */
   firstClear: Record<string, number | undefined>;
+  /**
+   * Sampled, no valid win (QA-42-3): `L` = no W row at all (every try L or R), `X` = W rows but none `isValid`;
+   * undefined when zoned. A held level keeps its clocks and is never band-moved.
+   */
+  held: 'L' | 'X' | undefined;
+  /** Every row of the level, all testers. */
+  tries: { W: number; L: number; R: number };
 }
 
 export interface BandMove {
@@ -339,6 +350,20 @@ export interface BandMove {
   sampled: number[];
   rBand: number;
   moves: { id: number; from: number; to: number; botMs: number }[];
+  /** The band's sampled, non-pinned, unzoned levels (QA-42-3: held, not moved), ascending. */
+  held: number[];
+}
+
+/** C.1 difficulty list (QA-42-3): a tester who never won a level, or won it only with boosters / REINFORCEMENTS. */
+export interface DifficultyEntry {
+  id: number;
+  tester: string;
+  /** The tester's rows of the level. */
+  tries: number;
+  lost: number;
+  retreated: number;
+  /** Won, but every win used boosters or REINFORCEMENTS (false = never won). */
+  helpOnly: boolean;
 }
 
 export interface TesterC3 {
@@ -364,6 +389,8 @@ export interface Decision {
   /** C.0's dropped wins (`invalidTries`), listed under the C.1 table. */
   invalid: InvalidTry[];
   bandMoves: BandMove[];
+  /** Level Designer findings, by level then tester (sheet order); clocks stay. */
+  difficulty: DifficultyEntry[];
   h3: { threeStar: number; validFirstWins: number; holds: boolean };
   b5: {
     perTester: { tester: string; firstTry2: number[]; played: number[]; refutes: boolean }[];
@@ -419,8 +446,13 @@ export function decide({ sheet, clockOf, botOf }: DecideInput): Decision {
     const star3 = zone && hMs !== undefined ? nextStar3(id, zone, clock, hMs, botMs) : clock.star3;
     const firstClear: Record<string, number | undefined> = {};
     for (const t of testers) firstClear[t] = clearAt(t, id);
-    return { id, band: bandOf(id), clock, botMs, bests, hMs, r, zone, star3, pinned: isPinned(id), firstClear };
+    const all = rows.filter((x) => x.level === id);
+    const tries = { W: 0, L: 0, R: 0 };
+    for (const x of all) tries[x.result]++;
+    const held = zone !== undefined ? undefined : tries.W === 0 ? 'L' : 'X';
+    return { id, band: bandOf(id), clock, botMs, bests, hMs, r, zone, star3, pinned: isPinned(id), firstClear, held, tries };
   });
+  const sampled = new Map(levels.map((l) => [l.id, l]));
 
   const zoned = new Map(levels.filter((l) => l.zone).map((l) => [l.id, l]));
   const bandMoves: BandMove[] = [];
@@ -432,8 +464,13 @@ export function decide({ sheet, clockOf, botOf }: DecideInput): Decision {
       const rBand = median(hit.map((l) => l.r!));
       const [a, c] = BANDS[b]!;
       const moves: BandMove['moves'] = [];
+      const held: number[] = [];
       for (let id = a; id <= c; id++) {
-        if (isPinned(id) || zoned.has(id)) continue;
+        if (isPinned(id)) continue;
+        if (sampled.has(id)) {
+          if (!zoned.has(id)) held.push(id);
+          continue;
+        }
         const clock = clockOf(id);
         if (!clock) throw new SheetError(`band ${a}–${c} moves: level ${id} has no clocks`);
         const bot = clock.botMs ?? sheet.botMs.get(id) ?? botOf?.(id);
@@ -441,7 +478,24 @@ export function decide({ sheet, clockOf, botOf }: DecideInput): Decision {
         const to = bandStar3(z, clock, rBand, bot);
         if (to !== clock.star3) moves.push({ id, from: clock.star3, to, botMs: bot });
       }
-      bandMoves.push({ band: b, zone: z, sampled: hit.map((l) => l.id), rBand, moves });
+      bandMoves.push({ band: b, zone: z, sampled: hit.map((l) => l.id), rBand, moves, held });
+    }
+  }
+
+  // C.1 difficulty list (QA-42-3): never won, or won only with boosters / REINFORCEMENTS
+  const difficulty: DifficultyEntry[] = [];
+  for (const l of levels) {
+    for (const t of testers) {
+      const mine = of(t, l.id);
+      if (!mine.length) continue;
+      const wins = mine.filter((x) => x.result === 'W');
+      const neverWon = l.firstClear[t] === Infinity;
+      const helpOnly = wins.length > 0 && wins.every((x) => x.boosters > 0 || x.help);
+      if (!neverWon && !helpOnly) continue;
+      difficulty.push({
+        id: l.id, tester: t, tries: mine.length,
+        lost: mine.filter((x) => x.result === 'L').length, retreated: mine.filter((x) => x.result === 'R').length, helpOnly,
+      });
     }
   }
 
@@ -492,7 +546,7 @@ export function decide({ sheet, clockOf, botOf }: DecideInput): Decision {
     : verdict === 'RE-OPEN' ? '(a) C.3 re-opens bands 5–6' : h2Fails >= need ? `(b) H2 fails for ${h2Fails} of ${n}` : `neither (a) nor (b) (H2 fails for ${h2Fails} of ${n}, need ${need})`;
 
   return {
-    testers, n, tag, need, rows: rows.length, levels, invalid: invalidTries(rows), bandMoves, h3,
+    testers, n, tag, need, rows: rows.length, levels, invalid: invalidTries(rows), bandMoves, difficulty, h3,
     b5: { perTester, refuters, refuted: decisive && refuters >= 2, share: { twoStar: floored2, firstWins: floored.length, triggerFires: floored.length > 0 && floored2 / floored.length < GD12_TRIGGER_SHARE } },
     past16: { twoStar: past2, firstWins: past.length, rungCandidate: past.length > 0 && past2 / past.length >= RUNG_CANDIDATE_SHARE },
     c3: { perTester: c3, reopen, h1Refuted, verdict, lever32: c3.filter((x) => x.lever32).length, lever41: c3.filter((x) => x.lever41).length },
@@ -503,6 +557,25 @@ export function decide({ sheet, clockOf, botOf }: DecideInput): Decision {
 const s = (ms: number): string => `${+(ms / 1000).toFixed(1)}`;
 const pct = (a: number, b: number): string => (b ? `${Math.round((100 * a) / b)} %` : '—');
 const yn = (b: boolean | undefined): string => (b === undefined ? 'n/a' : b ? 'yes' : 'no');
+
+const triesWord = (n: number): string => `${n} ${n === 1 ? 'try' : 'tries'}`;
+
+/** The New `star3` cell's reason for a held level: `L, 2 tries — 2 L, 0 R` / `X, 1 try — not ×1` (C.0 reason words). */
+function heldText(d: Decision, l: LevelRow): string {
+  const n = l.tries.W + l.tries.L + l.tries.R;
+  if (l.held === 'L') return `L, ${triesWord(n)} — ${l.tries.L} L, ${l.tries.R} R`;
+  const reasons: string[] = [];
+  for (const x of d.invalid) if (x.attempt.level === l.id) for (const r of x.reasons) if (!reasons.includes(r)) reasons.push(r);
+  return `X, ${triesWord(n)} — ${reasons.join(', ')}`;
+}
+
+/** `45 stakeholder 2 tries (2 L, 0 R), not won` (+ ` (k of N not won)` at N ≥ 2). */
+function difficultyText(d: Decision, x: DifficultyEntry): string {
+  const what = x.helpOnly ? 'won only with boosters / REINFORCEMENTS' : 'not won';
+  const l = d.levels.find((v) => v.id === x.id)!;
+  const k = d.testers.filter((t) => l.firstClear[t] === Infinity).length;
+  return `${x.id} ${x.tester} ${triesWord(x.tries)} (${x.lost} L, ${x.retreated} R), ${what}${d.n >= 2 ? ` (${k} of ${d.n} not won)` : ''}`;
+}
 
 /** `HUMAN` entries (`scripts/lib/reclockPins.ts`) for every `star3` the rules move (sampled and band moves); `source` = `sheet YYYY-MM-DD`. */
 export function humanTable(d: Decision, source: string): Record<string, HumanPin> {
@@ -530,8 +603,8 @@ export function renderMarkdown(d: Decision, opts: { sheetName: string; clocksFro
   L.push('### C.1 AUD-B4 / A13: `star3`', '');
   L.push('| Lvl | Band | 3★ / 2★ | Bot | H (best valid, median) | r = H / B | Zone | New `star3` | Tag |', '|---|---|---|---|---|---|---|---|---|');
   for (const l of d.levels) {
-    const next = l.zone === undefined ? 'no valid win' : l.pinned ? `= (pinned: ${PINNED[l.id]})` : l.star3 === l.clock.star3 ? '=' : `${s(l.clock.star3)} → **${s(l.star3)}**`;
-    L.push(`| ${l.id} | ${l.band + 1} | ${s(l.clock.star3)} / ${s(l.clock.star2)} | ${s(l.botMs)} | ${l.hMs === undefined ? '—' : s(l.hMs)} | ${l.r === undefined ? '—' : l.r.toFixed(2)} | ${l.zone ?? '—'} | ${next} | ${d.tag} |`);
+    const next = l.held ? `= (sampled, no valid win: ${heldText(d, l)})` : l.pinned ? `= (pinned: ${PINNED[l.id]})` : l.star3 === l.clock.star3 ? '=' : `${s(l.clock.star3)} → **${s(l.star3)}**`;
+    L.push(`| ${l.id} | ${l.band + 1} | ${s(l.clock.star3)} / ${s(l.clock.star2)} | ${s(l.botMs)} | ${l.hMs === undefined ? '—' : s(l.hMs)} | ${l.r === undefined ? '—' : l.r.toFixed(2)} | ${l.zone ?? l.held ?? '—'} | ${next} | ${d.tag} |`);
   }
   L.push('');
   if (d.invalid.length === 0) L.push('Not valid (C.0): none', '');
@@ -539,8 +612,9 @@ export function renderMarkdown(d: Decision, opts: { sheetName: string; clocksFro
   if (d.bandMoves.length === 0) L.push('Band moves: none (no band has ≥ 2 non-pinned sampled levels in the same zone F or S).');
   for (const m of d.bandMoves) {
     const [a, b] = BANDS[m.band]!;
-    L.push(`Band ${a}–${b}: ${m.sampled.length} sampled levels in zone ${m.zone} (${m.sampled.join(', ')}; median r ${m.rBand.toFixed(2)}) → unsampled: ${m.moves.map((x) => `${x.id} ${s(x.from)} → ${s(x.to)}`).join(', ') || 'no change'} · ${d.tag}`);
+    L.push(`Band ${a}–${b}: ${m.sampled.length} sampled levels in zone ${m.zone} (${m.sampled.join(', ')}; median r ${m.rBand.toFixed(2)}) → unsampled: ${m.moves.map((x) => `${x.id} ${s(x.from)} → ${s(x.to)}`).join(', ') || 'no change'}${m.held.length ? ` · held (sampled, no valid win): ${m.held.join(', ')}` : ''} · ${d.tag}`);
   }
+  L.push(d.difficulty.length === 0 ? 'Difficulty list: none.' : `Difficulty list (C.1 sampled-lost → Level Designer finding; clocks stay): ${d.difficulty.map((x) => difficultyText(d, x)).join('; ')} · ${d.tag}`);
   L.push(`H3: 3★ on ${d.h3.threeStar} / ${d.h3.validFirstWins} valid first wins (${pct(d.h3.threeStar, d.h3.validFirstWins)}) → ${d.h3.holds ? 'holds (≤ 10 %): no new 3★-gated reward' : 'does not hold (> 10 %)'}.`);
   L.push('Then: the boundary step runs as usual in `reclock.ts` (not computed here).', '');
 
