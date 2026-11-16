@@ -1,6 +1,6 @@
 {
   "board": {
-    "title": "Lövhə · 15 noyabr, gün 58",
+    "title": "Lövhə · 16 noyabr, gün 59",
     "stats": [
       {
         "b": "build 27",
@@ -11,7 +11,7 @@
         "s": "səviyyə bot ilə keçir"
       },
       {
-        "b": "2654",
+        "b": "2665",
         "s": "unit test, e2e 196 + 4 + 4 + WebKit + soak"
       },
       {
@@ -19,11 +19,11 @@
         "s": "ilk yükləmə (büdcə 82); hiss balı 13/14"
       },
       {
-        "b": "33 gün",
+        "b": "34 gün",
         "s": "rəyin gözlənilir"
       }
     ],
-    "footer": "Mənbə: <code>.claude/agents/*.md</code> rol faylları, <code>docs/BACKLOG.md</code> və son hesabatlar (gün 56–58). Statuslar 15 noyabr vəziyyətidir."
+    "footer": "Mənbə: <code>.claude/agents/*.md</code> rol faylları, <code>docs/BACKLOG.md</code> və son hesabatlar (gün 57–59). Statuslar 16 noyabr vəziyyətidir."
   },
   "team": [
     {
@@ -42,11 +42,11 @@
         "build nömrəsi, commit və push"
       ],
       "recent": [
+        "Gün 59: QA-42-1…3 eyni gün bağlandı (frontend, QA, dizayner); 2654 → 2665 test; zəncir yaşıl; artefakt v76.",
         "Gün 58: sakit gün — native yoxlama, playtest boru xətti 2-ci məşq, buraxılış siyahısı və PLAN bugünkü vəziyyətdə; zəncir yaşıl; kod dəyişməyib.",
-        "Gün 57: konteyner yenidən başladı — mühit sıfırdan, itən 3 iş təkrar; brauzer 1194 → 1243 düzəlişi; CI run 129 9/9 yaşıl; artefakt v75; Gün 56 + 57 hesabatları.",
-        "Gün 56: yarımçıq — sprint ortasında konteyner yenidən başladı; QA-39-3 commit olunmuşdu, 3 agentin işi itdi."
+        "Gün 57: konteyner yenidən başladı — mühit sıfırdan, itən 3 iş təkrar; brauzer 1194 → 1243 düzəlişi; CI run 129 9/9 yaşıl; artefakt v75; Gün 56 + 57 hesabatları."
       ],
-      "status": "Bu gün işlədi · sabah gün 59 (QA-42-1…3)"
+      "status": "Bu gün işlədi · sabah gün 60 (sakit rejim)"
     },
     {
       "id": "game-designer",
@@ -54,7 +54,7 @@
       "role": "Qaydalar və balans",
       "color": "#7c5cbf",
       "tag": "gözləyir",
-      "cls": "wait",
+      "cls": "",
       "does": "GDD-ni (qaydalar sənədi), balans sabitlərini və səviyyə zolaqlarını yazır. Hər dərs kartını \"karta hərfi əməl edən\" simulyasiya oyunçusu ilə yoxlayır və keçməyənləri yenidən yazmaq üçün level dizaynerinə dəqiq mətn verir.",
       "owns": [
         "docs/GDD.md",
@@ -62,11 +62,11 @@
         "GD-x baxışları"
       ],
       "recent": [
+        "Gün 59: QA-42-3 qaydası — oynanıb qazanılmayan səviyyə saxlanılır (L / X), band nümunəsinə girmir, çətinlik siyahısına düşür; vərəq §C.1 EN + AZ.",
         "Gün 56: QA-39-3 — vərəqdə JURNALI TƏMİZLƏ əvvəl, başlama vaxtı UTC ilə, --since UTC (AZ + EN).",
-        "Gün 54: playtest vərəqi — Diaqnostika addım 0, jurnal fayl ilə, §D 3a yoxlama",
-        "Gün 52: 1.1 icebox qeydi — təkrar baxış (≈ 31 s) və bir telefonda 2 oyunçu (≈ 57 s), əvvəl replay"
+        "Gün 54: playtest vərəqi — Diaqnostika addım 0, jurnal fayl ilə, §D 3a yoxlama"
       ],
-      "status": "Gözləyir · sabah QA-42-1 / QA-42-3"
+      "status": "Bu gün işlədi"
     },
     {
       "id": "gameplay-engineer",
@@ -93,7 +93,7 @@
       "role": "Ekranlar və toxunuş",
       "color": "#e0702e",
       "tag": "gözləyir",
-      "cls": "wait",
+      "cls": "",
       "does": "Oyunçunun gördüyü və toxunduğu hər şey: canvas çəkimi, HUD, menyular, nişanlar, toxunuş jestləri, save/yükləmə, PWA. Hər dəyişiklik 360×640 və 430×932 ekranlarda kadrlarla və qoruyucu testlərlə yoxlanır.",
       "owns": [
         "src/render/",
@@ -102,11 +102,11 @@
         "src/main.ts"
       ],
       "recent": [
+        "Gün 59: QA-42-1 — JURNALI TƏMİZLƏ cəhd sayğaclarını da sıfırlayır; e2e addımı yoxlayır; eager dəyişməyib.",
         "Gün 57: jurnalda 15-ci sütun `had` (hər sətirdə \"əvvəldən keçilmişdi\"); playtest:log first_ever ondan; 2647 → 2654 test; +67 B lazy.",
-        "Gün 55: jurnalda oyun sürəti sütunu; saxlanılan qeyd 5 → 20, kopyalama həddi 400 kB (+24 B)",
-        "Gün 53: diaqnostika jurnalı matçın replay qeydini daşıyır (≤ 32 kB, son 5); --from-log yoxlayıcı"
+        "Gün 55: jurnalda oyun sürəti sütunu; saxlanılan qeyd 5 → 20, kopyalama həddi 400 kB (+24 B)"
       ],
-      "status": "Gözləyir · sabah QA-42-1 / QA-42-3"
+      "status": "Bu gün işlədi"
     },
     {
       "id": "ai-engineer",
@@ -161,9 +161,9 @@
         "Bugs bölməsi"
       ],
       "recent": [
+        "Gün 59: QA-42-2 \"Not valid (C.0)\" siyahısı + QA-42-3 qaydası skriptdə (saxlanılan səviyyə, çətinlik siyahısı); 10 yeni test, 2665.",
         "Gün 58: QA-42 — playtest günü boru xətti 2-ci quru məşq: 20 sətir, 20/20 MATCH, decide çıxış 0; 3 P3 tapıntı (QA-42-1…3) sabaha.",
-        "Gün 57: QA-41 — lokal tutorial e2e flake kökündən həll (dərs addımı əmrdə, sim növbəti tick-də; oxunuş poll oldu), 20/20; QA-40 flake taraması 152 qaçış, 0 qırmızı.",
-        "Gün 55: playtest günü boru xətti uçdan-uca — 5/5 MATCH, playtest:log skripti, 4 boşluq (2-si bağlandı)"
+        "Gün 57: QA-41 — lokal tutorial e2e flake kökündən həll (dərs addımı əmrdə, sim növbəti tick-də; oxunuş poll oldu), 20/20; QA-40 flake taraması 152 qaçış, 0 qırmızı."
       ],
       "status": "Bu gün işlədi"
     },
@@ -193,7 +193,7 @@
       "role": "iOS və Android",
       "color": "#4a6fa5",
       "tag": "gözləyir",
-      "cls": "",
+      "cls": "wait",
       "does": "Capacitor qabığını, Android / iOS layihələrini, CI build-lərini (APK, imzalı iOS arxivi, TestFlight yükləməsi) və cihaz test planını saxlayır. Açarlar və parollar heç vaxt çatda olmur — onları yalnız sən GitHub-a qoyursan.",
       "owns": [
         "capacitor.config.ts",
@@ -207,7 +207,7 @@
         "Gün 54: native build-də Diaqnostika → JURNALI KOPYALA → #replay → MATCH; paket 1 319 375 B",
         "Gün 52: native xətt yoxlandı — map / debug yoxdur, haptik qapılar, 1,32 MB; sorğu addımları MOBILE.md §4.2"
       ],
-      "status": "Bu gün işlədi · build 27 müqavilədən sonra"
+      "status": "Gözləyir · build 27 müqavilədən sonra"
     },
     {
       "id": "publisher",
@@ -215,7 +215,7 @@
       "role": "Mağaza və buraxılış",
       "color": "#6b8e23",
       "tag": "gözləyir",
-      "cls": "",
+      "cls": "wait",
       "does": "App Store və Google Play mətnlərini (4 dildə), kadrları, məxfilik siyasətini, buraxılış qeydlərini, TestFlight test planını və buraxılış siyahısını yazır. Hər iddianı kodla yoxlayır; səndən heç nə istəmir, lazım olanı siyahıya status ilə yazır.",
       "owns": [
         "docs/publishing/",
@@ -227,7 +227,7 @@
         "Gün 57: build 27 qeydlərinə Gün 54–55 (EN + AZ); DIAG-2 rəqəmləri 20 matç / 400 kB; jurnal ölçüsü 20–400 kB.",
         "Gün 54: build 27 qeydlərinə gün 51–53, TestFlight bənd 13 (10)"
       ],
-      "status": "Bu gün işlədi (sonnet)"
+      "status": "Gözləyir · sakit rejim"
     },
     {
       "id": "monetization-designer",
@@ -263,9 +263,9 @@
         "qərarlar (defaultlar hesabatda)"
       ],
       "recent": [
+        "Səndə: MM-15 (Apple PLA müqaviləsi → build 27 sorğusu) və AUD-Q1 / A2 (build 27 ilə cihaz yoxlaması + playtest vərəqi); vərəqin qərar qaydaları tam (C.0 siyahı, saxlanılan səviyyə).",
         "Səndə: MM-15 (Apple PLA müqaviləsi → build 27 sorğusu) və AUD-Q1 / A2 (build 27 ilə cihaz yoxlaması + playtest vərəqi); buraxılış siyahısında hər gözləyən maddə adınla yazılıb (§8).",
-        "Səndə: MM-15 (Apple PLA müqaviləsi → build 27 sorğusu) və AUD-Q1 / A2 (build 27 ilə cihaz yoxlaması + playtest vərəqi, Diaqnostika açıq, jurnalı fayl / e-poçtla göndər).",
-        "Vərəq yeniləndi: əvvəlcə JURNALI TƏMİZLƏ, başlama vaxtını UTC ilə də yaz."
+        "Səndə: MM-15 (Apple PLA müqaviləsi → build 27 sorğusu) və AUD-Q1 / A2 (build 27 ilə cihaz yoxlaması + playtest vərəqi, Diaqnostika açıq, jurnalı fayl / e-poçtla göndər)."
       ],
       "status": "Səndə: Apple müqaviləsi + cihaz yoxlaması (P0) + playtest vərəqi"
     }
@@ -307,48 +307,7 @@
       ]
     },
     {
-      "title": "Gün 58 — bağlandı (15 noyabr)",
-      "items": [
-        {
-          "id": "MM-18",
-          "p": "p2",
-          "own": [
-            "mobile-engineer"
-          ],
-          "day": "bağlı",
-          "t": "Native build-də jurnal / replay yoxlaması: 3/3 MATCH."
-        },
-        {
-          "id": "QA-42",
-          "p": "p2",
-          "own": [
-            "qa-engineer"
-          ],
-          "day": "bağlı",
-          "t": "Playtest boru xətti 2-ci məşq: 20/20 MATCH, decide 0."
-        },
-        {
-          "id": "PUB-44",
-          "p": "p3",
-          "own": [
-            "publisher"
-          ],
-          "day": "bağlı",
-          "t": "Buraxılış siyahısı 15 noyabr vəziyyətində."
-        },
-        {
-          "id": "DOC-8",
-          "p": "p3",
-          "own": [
-            "producer"
-          ],
-          "day": "bağlı",
-          "t": "PLAN.md vəziyyət 2026-11-15."
-        }
-      ]
-    },
-    {
-      "title": "Gün 59",
+      "title": "Gün 59 — bağlandı (16 noyabr)",
       "items": [
         {
           "id": "QA-42-1",
@@ -356,8 +315,8 @@
           "own": [
             "frontend-engineer"
           ],
-          "day": "gün 59",
-          "t": "JURNALI TƏMİZLƏ cəhd sayğacını da sıfırlasın."
+          "day": "bağlı",
+          "t": "JURNALI TƏMİZLƏ cəhd sayğaclarını da sıfırlayır."
         },
         {
           "id": "QA-42-2",
@@ -365,17 +324,32 @@
           "own": [
             "qa-engineer"
           ],
-          "day": "gün 59",
-          "t": "decide etibarsız cəhdləri (×2, buster, DAVAM ET) siyahıda göstərsin."
+          "day": "bağlı",
+          "t": "decide etibarsız cəhdləri sadalayır (Not valid C.0)."
         },
         {
           "id": "QA-42-3",
           "p": "p3",
           "own": [
-            "game-designer"
+            "game-designer",
+            "qa-engineer"
           ],
-          "day": "gün 59",
-          "t": "Oynanıb qazanılmayan səviyyə band qaydasında."
+          "day": "bağlı",
+          "t": "Oynanıb qazanılmayan səviyyə saxlanılır; çətinlik siyahısı; skriptdə."
+        }
+      ]
+    },
+    {
+      "title": "Gün 60",
+      "items": [
+        {
+          "id": "CI",
+          "p": "p3",
+          "own": [
+            "producer"
+          ],
+          "day": "gün 60",
+          "t": "Sakit rejim: CI izləmə; açıq kod işi yoxdur — MM-15 və playtest gözlənilir."
         },
         {
           "id": "FEEL-2-1…3",
