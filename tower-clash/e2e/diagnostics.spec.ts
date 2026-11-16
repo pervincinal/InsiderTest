@@ -8,7 +8,7 @@ import { shotPath } from './tools/shots';
  * AUD-B6: the opt-in on-device diagnostics log (src/ui/diagnostics.ts, Settings → About → Diagnostics).
  * Off by default: a win writes nothing. Switched on from the About card, the reference player's win of
  * level 1 books one `level_end` row; COPY LOG puts the hints line, the column line and that row on the
- * clipboard; CLEAR LOG empties the log. Nothing is requested from the network (no telemetry, ever).
+ * clipboard; CLEAR LOG empties the log and (QA-42-1) its attempt counters, so the next level 1 win is attempt 1. Nothing is requested from the network (no telemetry, ever).
  * DIAG-2 (2026-11-10): the row of a played result carries the match's replay record and COPY LOG appends
  * it as a `#replay <row> <json>` line; a level 15 loss copied from the About card re-runs to its recorded
  * hash through the debug `verifyReplay`, and the eager chunk does not hold the replay module.
@@ -99,7 +99,7 @@ async function scrollTo(page: Page, r: Rect): Promise<void> {
 }
 
 test.describe('AUD-B6 diagnostics log', () => {
-  test('off by default; on, a level 1 win books one row; COPY LOG copies it as CSV; CLEAR LOG empties it', async ({ page, context }) => {
+  test('off by default; on, a level 1 win books one row; COPY LOG copies it as CSV; CLEAR LOG empties it and its counters', async ({ page, context }) => {
     const errors = await boot(page);
     const requests: string[] = [];
     page.on('request', (r) => {
@@ -152,10 +152,16 @@ test.describe('AUD-B6 diagnostics log', () => {
     expect(cells).toHaveLength(15);
     expect(at('t')).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\dZ$/);
 
-    // CLEAR LOG → 0 rows (the count on the card follows)
+    // CLEAR LOG → 0 rows (the count on the card follows) and (QA-42-1) no attempt counters
     await tapRect(page, about.clear!);
     await expect.poll(() => diagRows(page).then((r) => r.length)).toBe(0);
     await expect.poll(() => diagAbout(page).then((a) => a?.rows)).toBe(0);
+    expect(await page.evaluate((k) => JSON.parse(localStorage.getItem(k)!), DIAG_KEY)).toEqual({ v: 1, n: {}, rows: [] });
+
+    // QA-42-1: level 1 played after the clear is attempt 1 again (was 2: the counter outlived the rows)
+    await winLevelOne(page);
+    await expect.poll(() => diagRows(page).then((r) => r.length)).toBe(1);
+    expect((await diagRows(page))[0]).toMatchObject({ lvl: 1, outcome: 'won', attempt: 1 });
 
     expect(requests, 'no request leaves the device').toEqual([]);
     expect(errors).toEqual([]);

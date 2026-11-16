@@ -285,7 +285,7 @@ export class SettingsScreen implements Screen {
     );
   }
 
-  /** AUD-B6 CLEAR LOG: no rows (the attempt counters stay); the actions hide while the switch is off. */
+  /** AUD-B6 CLEAR LOG: no rows and (QA-42-1) no attempt counters; the actions hide while the switch is off. */
   clearDiagLog(): void {
     clearDiag();
     this.diagRowCount = 0;

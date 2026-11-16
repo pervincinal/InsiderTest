@@ -31,7 +31,7 @@ import { makeLevel } from '../helpers';
  * AUD-B6: the opt-in on-device diagnostics log (src/ui/diagnostics.ts). Off by default and then it
  * writes nothing; on, every booked result (win / loss / retreat, and a bought skip) appends one
  * `level_end` row under `towerclash.diag.v1` — never inside the save — capped at the newest 400;
- * CLEAR LOG empties it, RESET PROGRESS wipes it with its attempt counters; COPY LOG's text round-trips.
+ * CLEAR LOG and RESET PROGRESS both wipe it with its attempt counters (QA-42-1); COPY LOG's text round-trips.
  */
 
 const memory = (): SaveStorage & { data: Map<string, string> } => {
@@ -299,12 +299,28 @@ describe('the ring, CLEAR and reset', () => {
     expect(rows[DIAG_CAP - 1]!.attempt).toBe(DIAG_CAP + 5); // the counter is not the ring
   });
 
-  it('CLEAR LOG: no rows; the next try of a level keeps its number', () => {
+  it('CLEAR LOG: no rows and no attempt counters; the next try of a level is attempt 1 again (QA-42-1)', () => {
     recordDiag(save, ev());
-    recordDiag(save, ev());
+    recordDiag(save, ev({ lvl: 3, key: '3' }));
+    expect(recordDiag(save, ev())!.attempt).toBe(2);
     clearDiag();
     expect(diagRows()).toEqual([]);
-    expect(recordDiag(save, ev())!.attempt).toBe(3);
+    expect(JSON.parse(store.data.get(DIAG_KEY)!)).toEqual({ v: 1, n: {}, rows: [] });
+    expect(recordDiag(save, ev({ lvl: 3, key: '3' }))!.attempt).toBe(1);
+    expect(recordDiag(save, ev())!.attempt).toBe(1);
+    expect(JSON.parse(store.data.get(DIAG_KEY)!).n).toEqual({ 1: 1, 3: 1 });
+    // a continue / skip right after the clear books to attempt 1 (never 0)
+    clearDiag();
+    expect(recordDiag(save, ev({ outcome: 'skip' }))!.attempt).toBe(1);
+  });
+
+  it('CLEAR LOG on a log that only holds counters empties them; on nothing stored, writes nothing', () => {
+    store.data.set(DIAG_KEY, JSON.stringify({ v: 1, n: { 1: 4 }, rows: [] }));
+    clearDiag();
+    expect(JSON.parse(store.data.get(DIAG_KEY)!)).toEqual({ v: 1, n: {}, rows: [] });
+    store.data.delete(DIAG_KEY);
+    clearDiag();
+    expect(store.data.has(DIAG_KEY)).toBe(false);
   });
 
   it('RESET PROGRESS on the settings screen wipes the log and its counters (TF-28); the switch stays', () => {

@@ -3,7 +3,8 @@
  * ever: a ring of the newest `DIAG_CAP` `level_end` rows kept on the device under its own
  * localStorage key (`DIAG_KEY`, never inside the save and mirrored nowhere), which the tester copies
  * out by hand (COPY LOG: one `#` hints line, the CSV column line, one CSV row per event) and empties
- * with CLEAR LOG; RESET PROGRESS wipes it with its attempt counters.
+ * with CLEAR LOG (QA-42-1, 2026-11-16: with its attempt counters, so a session after it starts at attempt 1);
+ * RESET PROGRESS wipes it with its attempt counters too.
  *
  * A row is written when the result is booked (src/ui/play.ts `present`, through the result chunk
  * that re-exports `logLevelEnd`; the level skip from src/ui/result.ts) and only while
@@ -66,7 +67,7 @@ export interface DiagRow {
   /**
    * The nth finished try of this level (a challenge: of this day / week) since diagnostics went on in
    * this save. A result after a continue, and a skip, belong to the try they follow (not counted again).
-   * The counters survive CLEAR LOG; RESET PROGRESS restarts them.
+   * CLEAR LOG and RESET PROGRESS restart the counters (QA-42-1: the first try after a CLEAR LOG is attempt 1).
    */
   attempt: number;
   outcome: DiagOutcome;
@@ -194,12 +195,14 @@ export function diagCount(): number {
   return diagRows().length;
 }
 
-/** CLEAR LOG: no rows; the attempt counters stay (the next try of a level keeps its number). */
+/**
+ * CLEAR LOG: no rows and (QA-42-1, 2026-11-16) no attempt counters — the next try of every level, day and week is
+ * attempt 1 again, as the playtest sheet's §A step 4 promises. Nothing stored: nothing written.
+ */
 export function clearDiag(): void {
   const store = saveStorage();
-  const d = readStore(store);
-  if (d.rows.length === 0 && store?.getItem(DIAG_KEY) === null) return;
-  writeStore(store, { v: 1, n: d.n, rows: [] });
+  if (store?.getItem(DIAG_KEY) === null) return;
+  writeStore(store, emptyStore());
 }
 
 /** RESET PROGRESS (TF-28): the log and its counters are gone with the progress. */
