@@ -273,6 +273,19 @@ Nothing has to be fixed before build 27. One thing to know: the haptic limiter (
 3. In `tower-clash/release/ios-release.request` set `note=build 27 (1.0.0): …` and change `requested=` to the current UTC time (e.g. `requested=2026-11-09T12:00:00Z`).
 4. Commit the three changes together and push to `claude/tower-war-game-plan-weqwpb`; the push starts `tower-clash-ios-release.yml`.
 
+**MM-19 dry run (2026-11-17): steps 1–3 run on a scratch copy of `358bac2`, no surprises.** The real tree was not touched.
+- `version:check` gives exit 0 on HEAD (26). After step 1 alone it gives **exit 1** ("`android/app/build.gradle` is out of date (expected 1.0.0 / 27)", same for `project.pbxproj`), so a commit that skips `version:sync` fails in the workflow's "Native version numbers match package.json" step before anything is built. After `version:sync` it gives exit 0.
+- The whole request is **4 files and 6 lines**, nothing else:
+  - `tower-clash/package.json`: `"buildNumber": 26` → `27`;
+  - `tower-clash/android/app/build.gradle`: `versionCode 26` → `27`;
+  - `tower-clash/ios/App/App.xcodeproj/project.pbxproj`: `CURRENT_PROJECT_VERSION = 26;` → `27;`, twice (Debug and Release);
+  - `tower-clash/release/ios-release.request`: the `note=` and `requested=` lines.
+  
+  `versionName` / `MARKETING_VERSION` stay `1.0.0`, `package-lock.json` does not change, and there is no `cap sync` output to commit.
+- The workflow reads the file the way step 3 assumes. The trigger is `push` → `branches: claude/tower-war-game-plan-weqwpb` + `paths: tower-clash/release/ios-release.request`. Then `node scripts/releaseRequest.mjs ios-release release/ios-release.request --env` exports only `LANE` (`note` goes to the log only; `requested` must be a valid UTC timestamp, but it is not compared with anything, it only makes the diff). The build number is not read from the request: the workflow reads it from `package.json` `config.buildNumber`. The scratch request passed the parser (`LANE=testflight`). The PLA has no check of its own: if the agreement is still pending, the archive step fails with exit 65 and shows Xcode's "No profiles" lines as annotations, as build 26 did.
+- `build:native` on the bumped copy: `buildNative: OK`, and the entry chunk carries `"1.0.0 (build 27)"` (Settings → About).
+- **One-command option:** the dry run's result is a patch, `git apply` checked clean against `358bac2` (`git apply --check` exit 0). On the day, from the repo root: `git apply build27.diff`, then set `requested=` to the current time, then `cd tower-clash && npm run version:check` (must say "already at 1.0.0 (27)" twice). Running steps 1–3 by hand is just as quick and is the safer default: the patch stops applying if any of the four files changes before then (it then fails loudly, it never half-applies), and its `requested=` is the dry run's time.
+
 ## 5. What a real store release needs
 
 The game has no accounts and sends no saves anywhere. Since the monetization work (§8) the native apps **do** talk to the network: RevenueCat (purchase receipts), Google AdMob (ads, advertising id) and the stores' billing systems. The privacy policy, the Play "Data safety" form and the App Store "App Privacy" answers must say so (§8.6). The following are mandatory.
