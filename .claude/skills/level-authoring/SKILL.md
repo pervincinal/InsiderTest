@@ -63,3 +63,53 @@ table's `@608` column) — so a shipped lesson must fit 3 lines at 20 px, with r
 2b. Clocks: `npx tsx scripts/reclock.ts --seeds 20 [--only a-b] --write` derives `star3`/`star2` from the reference player (GDD §3 formula + max-upgrade boundary step; levels 1 and 33 are pinned and only reported), then `npm run levels:manifest`. `star2` is floored at the slower of the naive line's two tie orders (`asc`, `tie desc`) rounded up to 5 s — 1–16 always, past 16 on daily-pool levels whose two medians differ by > 5 s (AUD-B10); the rule is defined at K = 20, so `--write` only at `--seeds 20` (a lower K warns the floors are provisional). A floor that would raise today's `star2` with an `asc` / `desc` 2★ gap under 8 of 20 is listed (`floor would be N — not applied`) and the clock held. Read the dry run before `--write`: it may list `CHANGED` rows that are reference-player drift, not a decision. Run it after any bot change too.
 2c. First-time line: `npm run playtest -- --naive --seeds 5` (and `--react 8000`) — levels 1–8 ≥ 4/5 at 4 s and ≥ 3/5 at 8 s, 9–16 ≥ 3/5; before laying out any level with a rusher, apply GDD §3 "Authoring for the first-time line (rules v3)" (the rusher horizon `30 × (0.5 + 0.5 a)` s, fall time `1 + d/120 + N`, tower-in-the-way, home pocket, the contested-first-tap parity trap).
 3. Each level's `lesson` must be new or a harder variant of a previous lesson.
+
+## Difficulty-list finding (after the human playtest)
+LV-12 (2026-11-18). Sheet `docs/reviews/2026-11-05-human-playtest-sheet.md` §C.1 "Sampled, no valid win" (QA-42-3,
+ruled 2026-11-16): a level a tester played but never validly won is **held** (clocks stay) and comes to you. Start the
+day the sheet comes back.
+
+**Input.** The decide markdown's `Difficulty list (C.1 sampled-lost → Level Designer finding; clocks stay):` line, one
+entry per tester and level — `<level> <tester> <tries> (<L>, <R>), not won` or `… won only with boosters /
+REINFORCEMENTS`, ` (k of N not won)` appended at N ≥ 2 testers — and the level's C.1 row: `L` (only L / R tries; a
+retreat is a loss) or `X` (won, no win valid under C.0; listed only when every win used help, a ×2-only `X` is no
+signal). Read it against §B.2's naive-line columns for the level.
+
+**Triage, in order.**
+1. *Must it stay?* `docs/reviews/2026-10-29-audit-summary.md` "What must not be fixed": the lesson card's winning first
+   move (literal-follower proof, `--follow`), the `star2` floor at the first-time median on 1–16, no level needs an
+   upgrade, free retries; and 23 / 32 are GD-2 learning levels (GDD §3 item 9, own lever order). A fix may break none.
+2. *Is the naive line already short?* `npm run playtest -- --naive --level <id> --seeds 20 --tie both` (4 s; add
+   `--gate <id>-<id>` on 1–16 only, the gate refuses past 16 — read the wins column there; `--react 8000` for slower
+   hands). Under 20/20 in either tie order: a known gap, the finding is a level item. 20/20 both: the replay decides.
+3. *What did the tester do?* Their COPY LOG `#replay <row> {…}` line → `npx tsx scripts/replay.ts --from-log <log.txt>
+   --row N --out <file.json>`, watched in the browser. **Wrong first move** (a tower the card does not name, the
+   contested-first-tap parity trap): a card / readability finding, not layout. **Stalemate** (alive at 180 s, then a
+   retreat): no lane reaches the enemy home fast enough or it out-grows the player — check lanes and growth.
+   **Lost a tower early** (before the naive line's first enemy ribbon lands): fall time `1 + d/120 + N` too short —
+   GDD §3 "Authoring for the first-time line" (rusher horizon, home pocket, tower-in-the-way).
+
+**Responses, in order of preference.**
+- **(a) Nothing.** One tester, naive 20/20 from both first taps, a designed difficulty step (band entry, new
+  vocabulary). Write the finding with its evidence; post-launch GD-12 attempts-to-first-clear or item 9's completion
+  drop (> 15 % against its neighbours) reopens it.
+- **(b) Tower-only re-lay, as LV-1.0.1a / AUD-Q13** (13 `outpost` 3 → 6 u; 32 `factory` 10 → 14 u, `red` / `green`
+  14 → 12 u): tower units / level / position only; owners, cards (`lesson*`), `star3` / `star2` unchanged; on 23 / 32
+  item 9's lever (a 3–4 u pocket neutral reachable only from home, never an L2 start). Gates: naive `--seeds 20 --tie
+  both` 20/20 in both orders where it applies (else ≥ before and ≥ the band's share); reference player unchanged
+  (`npm run playtest -- --seeds 20`, 20/20, median ± 5 %; idle still loses or stalls); `npm run levels:check`; every
+  twist `npm run playtest -- --twist <plain|lean|fastFeet|thinWalls|reinforced> --seeds 50 --pool <id>-<id>` 50/50;
+  `npm run playtest -- --tier-gate --seeds 5` 0 failed; `npx tsx scripts/reclock.ts --seeds 20 --only <id>-<id>`
+  dry run with no `CHANGED` row and `tests/scripts/reclock.test.ts` green; then the full `npm run playtest`. Every
+  other level's rows byte-identical.
+- **(c) Card or clock change.** Only with the Game Designer, after launch, on GD-12 / item 9 data — never before the
+  stakeholder's playtest decisions (AUD-B4 / B5).
+
+**Never.** No clock loosened because of a loss (QA-42-3: a looser `star3` helps only a player who already wins; who
+never won never saw 1★, so the clock was not in the way). No enemy AI change for one level (`LevelDef.ai` exists, no
+shipped level sets it by design; `tests/ai/levelAi.test.ts`). No level inserted, reordered or skipped.
+
+**Output.** `docs/reviews/<YYYY-MM-DD>-difficulty-<id>.md`: the input line verbatim; triage 1–3 with commands and rows
+quoted (naive `asc` / `desc` w/20 + median, reference, idle, the replay row and second of the decisive event); the
+response and why the earlier ones do not fit; the gates for (b). Backlog, one line per level:
+`- [x] LV-DIFF-<id> (<date>, level-designer; sheet <date>: <tester> <tries> (<L>, <R>)) <name> — done <date>: <(a) nothing | (b) <tower> <u> → <u> u | (c) to game-designer>; naive asc/desc <w>/20 → <w>/20, reference <s> → <s> s, clocks unchanged; docs/reviews/<date>-difficulty-<id>.md.`
