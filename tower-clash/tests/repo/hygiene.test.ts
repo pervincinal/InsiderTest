@@ -1131,9 +1131,13 @@ describe('native store build: no source maps, no debug surface (AUD-Q17, AUD-Q18
       ...readdirSync(E2E, { recursive: true })
         .map(String)
         .filter((f) => /\.(?:ts|mjs)$/.test(f))
+        // QA-44 (2026-11-18): the QA-35 hang hunt rig reads the scratch dist's hidden maps on purpose, to name the
+        // paused frame; it is a manual tool, never imported by a spec or run by the config, and nothing ships from it.
+        .filter((f) => f !== 'tools/hunt.mjs')
         .map((f): [string, string] => [`e2e/${f}`, readFileSync(path.join(E2E, f), 'utf8')]),
     ];
     for (const [name, text] of files) expect(text, name).not.toMatch(/\.(?:js|css)\.map\b|['"`]\.map['"`]|\*\.map\b|\\\.map\b|sourceMappingURL/);
+    expect(readdirSync(path.join(E2E, 'tools'))).toContain('hunt.mjs'); // the exception names a real file
   });
 });
 
