@@ -12,9 +12,11 @@
  *
  * Get a record from the browser with `window.__towerclash.getReplay()` (debug surface; a JSON string).
  *
- * `npx tsx scripts/replay.ts --from-log <log.txt> [--row N] [--out file.json]` (DIAG-2, frontend; argument
+ * `npx tsx scripts/replay.ts --from-log <log.txt> [--text T] [--row N] [--out file.json]` (DIAG-2, frontend; argument
  * parsing only) — the file is a tester's pasted Diagnostics COPY LOG text: take its last `#replay <row> <json>`
- * line (or row N's), write it with `--out`, and verify it as above.
+ * line (or row N's), write it with `--out`, and verify it as above. REV-2: a file with several COPY LOG texts pasted
+ * one after another restarts the row numbers in each, so it needs `--text T` (the T-th column line starts text T;
+ * 1-based) — without it the command exits 2 naming the count (`scripts/lib/playtestLog.ts` `pickReplay`).
  *
  * SIM-R2: a Daily / Weekly record (`challenge: { kind, key, twist }`) is rebuilt through the generator
  * (src/daily/replayLevel.ts `levelForReplay`: `challengeFor(key)` / `weeklyFor(key)` must agree with the record's
@@ -31,11 +33,12 @@ import type { Replay } from '../src/sim/replay';
 import { referencePlayerCommands } from '../src/ai/index';
 import { levelForReplay, rebuildChallenge } from '../src/daily/replayLevel';
 import { recordChallengeHeadless, recordHeadless } from './lib/recordReplay';
+import { pickReplay } from './lib/playtestLog';
 
 const DIR = join(import.meta.dirname, '..', 'src', 'levels');
 
 const args = process.argv.slice(2);
-const VALUED = ['--row', '--out', '--max-ms', '--record-daily', '--record-weekly'];
+const VALUED = ['--row', '--text', '--out', '--max-ms', '--record-daily', '--record-weekly'];
 const file = args.find((a, i) => !a.startsWith('--') && !VALUED.includes(args[i - 1] ?? ''));
 const opt = (name: string, def: string): string => {
   const i = args.indexOf(name);
@@ -45,13 +48,16 @@ const maxMs = Number(opt('--max-ms', '180000'));
 const recordAt = args.indexOf('--record');
 const fromLog = args.includes('--from-log');
 
-/** DIAG-2: the record JSON of a COPY LOG text — the last `#replay <row> {…}` line, or row `--row N`'s. */
-function replayFromLog(text: string, row: string): string {
-  const lines = text.split(/\r?\n/).filter((l) => /^#replay \d+ \{/.test(l) && (row === '' || l.startsWith(`#replay ${row} `)));
-  if (lines.length === 0) throw new Error(`no #replay line${row ? ` for row ${row}` : ''} in the log`);
-  const json = lines.at(-1)!.replace(/^#replay \d+ /, '');
-  if (json.includes('"dropped"')) throw new Error(`the record was not kept (${json})`);
-  return json;
+/** DIAG-2 / REV-2: the record JSON of a COPY LOG text — text `--text T`'s row `--row N` (each optional). */
+function replayFromLog(text: string, textNo: string, row: string): string {
+  const num = (name: string, v: string): number | undefined => {
+    if (v === '') return undefined;
+    if (!/^\d+$/.test(v)) throw new Error(`${name} must be a positive integer, got ${v}`);
+    return Number(v);
+  };
+  const t = num('--text', textNo);
+  const r = num('--row', row);
+  return pickReplay(text, { ...(t !== undefined ? { text: t } : {}), ...(r !== undefined ? { row: r } : {}) });
 }
 
 /** The shipped level with `id` (the JSON files of src/levels, like scripts/reclock.ts reads them). */
@@ -112,14 +118,14 @@ if (recordChallengeAt >= 0) {
 }
 
 if (!file) {
-  console.error('usage: npx tsx scripts/replay.ts <file.json> [--max-ms N] | --from-log <log.txt> [--row N] [--out file.json] | --record <level> <seed> [--out file.json] | --record-daily <day> | --record-weekly <Monday> [--out file.json]');
+  console.error('usage: npx tsx scripts/replay.ts <file.json> [--max-ms N] | --from-log <log.txt> [--text T] [--row N] [--out file.json] | --record <level> <seed> [--out file.json] | --record-daily <day> | --record-weekly <Monday> [--out file.json]');
   process.exit(2);
 }
 
 let replay: Replay;
 try {
   const text = readFileSync(file, 'utf8');
-  const json = fromLog ? replayFromLog(text, opt('--row', '')) : text;
+  const json = fromLog ? replayFromLog(text, opt('--text', ''), opt('--row', '')) : text;
   replay = parseReplay(json);
   if (fromLog && opt('--out', '')) writeFileSync(opt('--out', ''), json + '\n');
 } catch (err) {

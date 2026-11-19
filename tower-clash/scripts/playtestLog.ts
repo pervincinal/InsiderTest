@@ -1,6 +1,6 @@
 /**
  * `npx tsx scripts/playtestLog.ts <log.txt> --tester <name> [--out sheet.csv] [--levels <json>] [--seeds K]
- * [--since YYYY-MM-DDTHH:MMZ] [--verify]` (`npm run playtest:log -- …`, QA-39) — the human playtest sheet's §D step
+ * [--since YYYY-MM-DDTHH:MMZ] [--verify [--verify-timeout <s>]]` (`npm run playtest:log -- …`, QA-39) — the human playtest sheet's §D step
  * 2a: turn a tester's Diagnostics COPY LOG text into the CSV `npm run playtest:decide` reads (one row per try).
  * Mapping and exclusions: `scripts/lib/playtestLog.ts`. The free-text columns (`named`, `log`, `iv`, `note`) stay
  * empty for the Producer; `speed` comes from the log's `speed` column (QA-39-1; empty for a log from an older build,
@@ -12,25 +12,28 @@
  * changes. `--levels <json>` (decide's `{ "<id>": { s3, s2, bot } }` file) takes `bot` from that file instead;
  * hand decide the same file then.
  *
- * `--verify` also runs `scripts/replay.ts --from-log <log> --row N` for every `#replay` line and fails when one
- * does not print MATCH (§D 3a).
+ * `--verify` also runs `scripts/replay.ts --from-log <log> --text T --row N` for every `#replay` line and fails when
+ * one does not print MATCH (§D 3a). REV-2: a file with several pasted COPY LOG texts restarts the row numbers in
+ * each text, so a record is addressed as (text T, row N) — each one is re-run exactly once and the output names
+ * `text T row N`. Each re-run is killed (SIGKILL) after `--verify-timeout` seconds (default 120) and reported as
+ * TIMEOUT, which fails the run like a mismatch.
  *
  * Exit codes: 0 written; 1 the log was rejected (the message names the line), a level has no bot median, or a
- * `--verify` replay did not match; 2 usage.
+ * `--verify` replay did not match or timed out; 2 usage.
  */
-import { spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { LevelDef } from '../src/sim/types';
 import { referencePlayerCommands } from '../src/ai/referencePlayer';
 import { runHeadless } from '../src/ai/headless';
 import { SheetError, median, parseLevelsFile } from './lib/playtestDecideRule';
-import { LogError, convertLog, parseLog } from './lib/playtestLog';
+import type { ParsedLog } from './lib/playtestLog';
+import { LogError, VERIFY_TIMEOUT_S, convertLog, parseLog, spawnVerify, verifyReplays } from './lib/playtestLog';
 import { DIAG_REPLAY_KEEP } from '../src/ui/diagnostics';
 
 const ROOT = join(import.meta.dirname, '..');
 const DIR = join(ROOT, 'src', 'levels');
-const USAGE = 'usage: npx tsx scripts/playtestLog.ts <log.txt> --tester <name> [--out sheet.csv] [--levels <json>] [--seeds K] [--since YYYY-MM-DDTHH:MMZ] [--verify]';
+const USAGE = 'usage: npx tsx scripts/playtestLog.ts <log.txt> --tester <name> [--out sheet.csv] [--levels <json>] [--seeds K] [--since YYYY-MM-DDTHH:MMZ] [--verify [--verify-timeout <s>]]';
 
 function usage(msg: string): never {
   console.error(`playtestLog: ${msg}\n${USAGE}`);
@@ -46,7 +49,7 @@ if (args.includes('--help') || args.includes('-h')) {
   console.log(USAGE);
   process.exit(0);
 }
-const VALUED = new Set(['--tester', '--out', '--levels', '--seeds', '--since']);
+const VALUED = new Set(['--tester', '--out', '--levels', '--seeds', '--since', '--verify-timeout']);
 const FLAGS = new Set(['--verify']);
 const positional: string[] = [];
 const values: Record<string, string> = {};
@@ -68,6 +71,9 @@ const seeds = Number(values['--seeds'] ?? '20');
 if (!Number.isInteger(seeds) || seeds < 1) usage(`--seeds must be a positive integer, got ${values['--seeds']}`);
 const since = values['--since'];
 if (since !== undefined && !/^\d{4}-\d\d-\d\dT\d\d:\d\dZ$/.test(since)) usage(`--since must be YYYY-MM-DDTHH:MMZ (the log's t), got ${since}`);
+const verifyTimeoutS = Number(values['--verify-timeout'] ?? String(VERIFY_TIMEOUT_S));
+if (!(verifyTimeoutS > 0) || !Number.isFinite(verifyTimeoutS)) usage(`--verify-timeout must be a number of seconds > 0, got ${values['--verify-timeout']}`);
+if (values['--verify-timeout'] !== undefined && !flags.has('--verify')) usage('--verify-timeout needs --verify');
 const logPath = positional[0]!;
 
 const read = (path: string, what: string): string => {
@@ -110,13 +116,10 @@ const botMs = (id: number): number | undefined => {
 
 let text: string;
 let converted: ReturnType<typeof convertLog>;
-let replayRows: number[];
-let logRows = 0;
+let log: ParsedLog;
 try {
   text = read(logPath, 'log');
-  const log = parseLog(text, (id) => (fromFile ? fromFile.has(id) : levelDefs.has(id)));
-  replayRows = log.replayRows;
-  logRows = log.rows.length;
+  log = parseLog(text, (id) => (fromFile ? fromFile.has(id) : levelDefs.has(id)));
   converted = convertLog(log, { tester: values['--tester'], botMs, ...(since !== undefined ? { since } : {}) });
 } catch (e) {
   if (e instanceof LogError) fail(`${logPath}: ${e.message}`);
@@ -139,16 +142,15 @@ for (const w of warnings) console.error(`playtestLog: WARNING ${w}`);
 console.error('playtestLog: fill named / log (17, 33, 49), iv (50) and note by hand from the chat lines and recordings');
 
 if (flags.has('--verify')) {
-  let bad = 0;
-  if (replayRows.length === 0) console.error('playtestLog: --verify: the log has no #replay line');
-  for (const n of replayRows) {
-    const r = spawnSync(process.execPath, [join(ROOT, 'node_modules', 'tsx', 'dist', 'cli.mjs'), join(ROOT, 'scripts', 'replay.ts'), '--from-log', logPath, '--row', String(n)], { cwd: ROOT, encoding: 'utf8' });
-    const ok = r.status === 0 && /^replay: MATCH/m.test(r.stdout);
-    const head = /^replay: level .*$/m.exec(r.stdout)?.[0] ?? r.stderr.trim().split('\n').at(-1) ?? '';
-    console.error(`playtestLog: --verify row ${n}: ${ok ? 'MATCH' : `NOT MATCHED (exit ${r.status})`} — ${head.replace(/^replay: /, '')}`);
-    if (!ok) bad++;
-  }
-  const unverified = logRows - replayRows.length;
-  console.error(`playtestLog: --verify: ${replayRows.length - bad}/${replayRows.length} MATCH; ${unverified} log row(s) carry no record (only the newest ${DIAG_REPLAY_KEEP} do)`);
-  if (bad) process.exit(1);
+  if (log.replays.length === 0) console.error('playtestLog: --verify: the log has no #replay line');
+  const tsx = join(ROOT, 'node_modules', 'tsx', 'dist', 'cli.mjs');
+  const replayTs = join(ROOT, 'scripts', 'replay.ts');
+  const v = verifyReplays(
+    log,
+    (r) => spawnVerify(process.execPath, [tsx, replayTs, '--from-log', logPath, '--text', String(r.text), '--row', String(r.row)], ROOT, verifyTimeoutS * 1000),
+    { timeoutS: verifyTimeoutS, keep: DIAG_REPLAY_KEEP },
+  );
+  for (const l of v.lines) console.error(`playtestLog: --verify ${l}`);
+  console.error(`playtestLog: --verify: ${v.summary}`);
+  if (!v.ok) process.exit(1);
 }

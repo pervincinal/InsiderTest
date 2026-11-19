@@ -25,6 +25,7 @@
  * Excluded with a note: daily / weekly rows (the sheet's sample is campaign only), `skip` rows (SKIP LEVEL is
  * against §A rule 7; the try stays as its lost row), rows before `since`.
  */
+import { spawnSync } from 'node:child_process';
 import { DIAG_COLUMNS, DIAG_COLUMNS_V1_0, DIAG_COLUMNS_V1_1 } from '../../src/ui/diagnostics';
 import { REQUIRED_COLUMNS, SheetError, parseSheet } from './playtestDecideRule';
 
@@ -58,14 +59,80 @@ export interface LogRow {
   had: boolean | null;
   /** 1-based line in the log text. */
   line: number;
-  /** 1-based CSV row number (the `N` of `#replay N`). */
+  /** REV-2: 1-based number of the pasted COPY LOG text this row is in (the T-th column line starts text T). */
+  text: number;
+  /** 1-based CSV row number within its text (the `N` of that text's `#replay N`; restarts in each pasted text). */
   row: number;
+}
+
+/** REV-2: one `#replay N {…}` line, addressed by its pasted text and row (N restarts at 1 in each text). */
+export interface LogReplay {
+  text: number;
+  row: number;
+  /** 1-based line in the log file. */
+  line: number;
+  /** The record JSON (or the `{"dropped":…}` size marker). */
+  json: string;
+  /** The size marker: the game did not keep the record. */
+  dropped: boolean;
 }
 
 export interface ParsedLog {
   rows: LogRow[];
-  /** Row numbers that carry a `#replay` line (a size marker excluded). */
+  /** Row numbers that carry a `#replay` line (a size marker excluded); see `replays` for the text of each. */
   replayRows: number[];
+  /** REV-2: the `#replay` lines that carry a record (size markers excluded), in file order. */
+  replays: LogReplay[];
+  /** REV-2: how many COPY LOG texts were pasted into the file (column lines). */
+  texts: number;
+}
+
+/** QA-39-1 / QA-39-4: every column line the game has written (logs from before `speed` / `had` are read too). */
+const HEADERS = new Map<string, readonly string[]>([DIAG_COLUMNS, DIAG_COLUMNS_V1_1, DIAG_COLUMNS_V1_0].map((h) => [h.join(','), h]));
+const REPLAY_LINE = /^#replay (\d+) (\{.*)$/;
+/** The first line of every COPY LOG text (src/ui/diagnostics.ts `diagShare`). */
+const HINT_START = '# Tower Clash diagnostics v1';
+/**
+ * REV-2: COPY LOG's text ends without a line break, so two texts pasted back to back glue the second's hint line
+ * onto the first's last line (a `#replay` record or a CSV row) — say so, naming the line, instead of a JSON error.
+ */
+function gluedError(l: string, n: number): LogError | undefined {
+  return l.indexOf(HINT_START) > 0 ? new LogError(`line ${n}: two COPY LOG texts pasted without a line break between them (the next text's "${HINT_START}" line starts mid-line) — put a line break before it`) : undefined;
+}
+
+/**
+ * REV-2: the `#replay` lines of a log file, each with its pasted text (a `#replay` line before any column line
+ * counts as text 1) — the one rule `parseLog` and `scripts/replay.ts --from-log` share.
+ */
+export function logReplays(text: string): { texts: number; replays: LogReplay[] } {
+  let texts = 0;
+  const replays: LogReplay[] = [];
+  text.replace(/^\uFEFF/, '').split(/\r?\n/).forEach((raw, i) => {
+    const l = raw.trim();
+    if (HEADERS.has(l)) texts++;
+    const m = REPLAY_LINE.exec(l);
+    if (m) replays.push({ text: Math.max(1, texts), row: Number(m[1]), line: i + 1, json: m[2]!, dropped: m[2]!.includes('"dropped"') });
+  });
+  return { texts, replays };
+}
+
+/**
+ * REV-2: the record JSON `scripts/replay.ts --from-log` verifies — text `text`'s row `row` (each optional: the
+ * last match in file order). A file with several pasted texts needs `text` (row numbers restart in each text, so
+ * "the last `#replay N`" would silently pick the wrong tester session). Throws `LogError`.
+ */
+export function pickReplay(log: string, o: { text?: number; row?: number } = {}): string {
+  const { texts, replays } = logReplays(log);
+  if (o.text !== undefined && (o.text < 1 || o.text > Math.max(1, texts))) throw new LogError(`--text ${o.text}: the log holds ${texts} pasted text(s)`);
+  if (o.text === undefined && texts > 1) throw new LogError(`the log holds ${texts} pasted COPY LOG texts and #replay numbers restart in each: pass --text 1..${texts}`);
+  const hit = replays.filter((r) => (o.text === undefined || r.text === o.text) && (o.row === undefined || r.row === o.row));
+  const where = `${o.text !== undefined && texts > 1 ? ` in text ${o.text}` : ''}`;
+  if (hit.length === 0) throw new LogError(`no #replay line${o.row !== undefined ? ` for row ${o.row}` : ''}${where} in the log`);
+  const r = hit.at(-1)!;
+  const glued = gluedError(r.json, r.line);
+  if (glued) throw glued;
+  if (r.dropped) throw new LogError(`the record was not kept (${r.json})`);
+  return r.json;
 }
 
 const MODES: readonly string[] = ['campaign', 'daily', 'weekly'];
@@ -98,24 +165,26 @@ export function parseLog(text: string, isLevel: (id: number) => boolean = (id) =
   const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/);
   const header = DIAG_COLUMNS.join(',');
   /** QA-39-1 / QA-39-4: logs from before the `speed` / `had` columns are read too (their rows have none). */
-  const headers = new Map<string, readonly string[]>([DIAG_COLUMNS, DIAG_COLUMNS_V1_1, DIAG_COLUMNS_V1_0].map((h) => [h.join(','), h]));
+  const headers = HEADERS;
   let cols: readonly string[] = DIAG_COLUMNS;
   let seenHeader = false;
   const rows: LogRow[] = [];
-  const replayRows: number[] = [];
+  /** REV-2: the pasted text being read (the T-th column line starts text T) and its row count. */
+  let textNo = 0;
+  let textRows = 0;
   lines.forEach((raw, i) => {
     const n = i + 1;
     const l = raw.trim();
     if (l === '') return;
-    if (l.startsWith('#')) {
-      const m = /^#replay (\d+) (\{.*)$/.exec(l);
-      if (m && !m[2]!.includes('"dropped"')) replayRows.push(Number(m[1]));
-      return;
-    }
+    const glued = gluedError(l, n);
+    if (glued) throw glued;
+    if (l.startsWith('#')) return; // hints, size notes; #replay lines: logReplays below
     const h = headers.get(l);
     if (h) {
-      cols = h; // also two logs pasted into one file
+      cols = h; // also two logs pasted into one file: each column line starts a text, its rows count from 1
       seenHeader = true;
+      textNo++;
+      textRows = 0;
       return;
     }
     if (!seenHeader) throw new LogError(`line ${n}: expected the Diagnostics column line "${header}" (is this a COPY LOG text?), got "${l.slice(0, 60)}"`);
@@ -153,15 +222,21 @@ export function parseLog(text: string, isLevel: (id: number) => boolean = (id) =
     if (hd !== '' && hd !== '0' && hd !== '1') bad('had', 'must be 0 or 1');
     const outcome = c('outcome') as LogOutcome;
     if (outcome === 'won' && stars < 1) bad('stars', 'must be 1–3 on a win');
+    // REV-2 (c): the mirror rule, so the error names the log line (not the converted CSV's). A skip row keeps the
+    // star the skip bought (src/ui/diagnostics.ts logSkip: the level's stars after buyLevelSkip, ≥ 1), so not it.
+    if ((outcome === 'lost' || outcome === 'retreat') && stars !== 0) bad('stars', 'must be 0 on a loss / retreat');
+    textRows++;
     rows.push({
       t: c('t'), build: c('build'), lvl, mode: c('mode') as LogMode, attempt, outcome, timeMs, stars,
       first: c('first') === '1', continued: c('continued') === '1', boosters, textScale, speed,
-      had: hd === '' ? null : hd === '1', line: n, row: rows.length + 1,
+      had: hd === '' ? null : hd === '1', line: n, text: textNo, row: textRows,
     });
   });
   if (!seenHeader) throw new LogError('no Diagnostics column line: is this a COPY LOG text?');
   if (rows.length === 0) throw new LogError('the log has no rows (was Diagnostics on during the session?)');
-  return { rows, replayRows };
+  const { replays: all } = logReplays(text);
+  const replays = all.filter((r) => !r.dropped);
+  return { rows, replayRows: replays.map((r) => r.row), replays, texts: textNo };
 }
 
 /** The `(build N)` number of a log `build` string (`1.0.0 (build 26)`), or undefined. */
@@ -301,4 +376,67 @@ export function convertLog(log: ParsedLog, o: ConvertOptions): Converted {
     throw e;
   }
   return { csv, rows: out, excluded, warnings };
+}
+
+/* ---------- REV-2: --verify, one record per (text, row), each re-run under a time limit ---------- */
+
+/** `--verify`'s default limit per record (a level is at most a few minutes of sim; the re-run takes seconds). */
+export const VERIFY_TIMEOUT_S = 120;
+
+/** One record's re-run, as `--verify` reads it. */
+export interface VerifyRun {
+  status: number | null;
+  stdout: string;
+  stderr: string;
+  /** Killed at the time limit (SIGKILL: a stalled sim does not get to ignore it). */
+  timedOut: boolean;
+}
+
+/** Run `cmd args` like `spawnSync`, killed with SIGKILL after `timeoutMs`. */
+export function spawnVerify(cmd: string, args: readonly string[], cwd: string, timeoutMs: number): VerifyRun {
+  const r = spawnSync(cmd, args, { cwd, encoding: 'utf8', timeout: timeoutMs, killSignal: 'SIGKILL' });
+  const code = (r.error as NodeJS.ErrnoException | undefined)?.code;
+  return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '', timedOut: code === 'ETIMEDOUT' };
+}
+
+export interface VerifySummary {
+  /** One line per record (`text T row N: MATCH — …`; `row N` alone when the file holds one text). */
+  lines: string[];
+  match: number;
+  notMatched: number;
+  timedOut: number;
+  /** The closing line (counts, unverified rows). */
+  summary: string;
+  ok: boolean;
+}
+
+/**
+ * Re-run every record of `log` exactly once, addressed as (text, row) — `run` is `scripts/replay.ts --from-log
+ * <log> --text T --row N` in the CLI, a stub in the tests. A record killed at the limit is TIMEOUT, not MATCH.
+ */
+export function verifyReplays(log: ParsedLog, run: (r: LogReplay) => VerifyRun, o: { timeoutS: number; keep: number }): VerifySummary {
+  const lines: string[] = [];
+  let match = 0;
+  let notMatched = 0;
+  let timedOut = 0;
+  for (const rep of log.replays) {
+    const r = run(rep);
+    const label = log.texts > 1 ? `text ${rep.text} row ${rep.row}` : `row ${rep.row}`;
+    const head = (/^replay: level .*$/m.exec(r.stdout)?.[0] ?? r.stderr.trim().split('\n').at(-1) ?? '').replace(/^replay: /, '');
+    if (r.timedOut) {
+      timedOut++;
+      lines.push(`${label}: TIMEOUT (killed after ${o.timeoutS} s; log line ${rep.line})${head ? ` — ${head}` : ''}`);
+    } else if (r.status === 0 && /^replay: MATCH/m.test(r.stdout)) {
+      match++;
+      lines.push(`${label}: MATCH — ${head}`);
+    } else {
+      notMatched++;
+      lines.push(`${label}: NOT MATCHED (exit ${r.status}) — ${head}`);
+    }
+  }
+  const k = log.replays.length;
+  const fails = [notMatched ? `${notMatched} NOT MATCHED` : '', timedOut ? `${timedOut} TIMEOUT (limit ${o.timeoutS} s per record)` : ''].filter(Boolean);
+  const texts = log.texts > 1 ? ` across ${log.texts} pasted texts` : '';
+  const summary = `${match}/${k} MATCH${fails.length ? `, ${fails.join(', ')}` : ''}${texts}; ${log.rows.length - k} log row(s) carry no record (only the newest ${o.keep} per text do)`;
+  return { lines, match, notMatched, timedOut, summary, ok: notMatched === 0 && timedOut === 0 };
 }

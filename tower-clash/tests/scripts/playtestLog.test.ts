@@ -7,11 +7,14 @@ import { afterAll, describe, expect, it } from 'vitest';
 import type { DiagRow } from '../../src/ui/diagnostics';
 import { DIAG_COLUMNS, DIAG_COLUMNS_V1_0, DIAG_COLUMNS_V1_1, diagShare } from '../../src/ui/diagnostics';
 import type { LevelDef } from '../../src/sim/types';
-import { serializeReplay } from '../../src/sim/replay';
+import { parseReplay, serializeReplay } from '../../src/sim/replay';
 import { referencePlayerCommands } from '../../src/ai/referencePlayer';
 import { recordHeadless } from '../../scripts/lib/recordReplay';
 import { REQUIRED_COLUMNS, decide, parseSheet } from '../../scripts/lib/playtestDecideRule';
-import { LogError, MIN_BUILD, SHEET_COLUMNS, buildNumber, convertLog, formatClock, parseLog } from '../../scripts/lib/playtestLog';
+import type { VerifyRun } from '../../scripts/lib/playtestLog';
+import {
+  LogError, MIN_BUILD, SHEET_COLUMNS, buildNumber, convertLog, formatClock, logReplays, parseLog, pickReplay, spawnVerify, verifyReplays,
+} from '../../scripts/lib/playtestLog';
 
 /*
  * QA-39 (2026-11-12): the playtest-day dry run found that §D asked the Producer to retype the Diagnostics log into
@@ -202,6 +205,12 @@ describe('playtestLog: COPY LOG → decide sheet', () => {
     expect(() => parseLog(at(4, text[4]!.replace(',lost,', ',defeat,')))).toThrow(/^line 5: outcome "defeat" must be won \/ lost \/ retreat \/ skip$/);
     expect(() => parseLog(at(2, text[2]!.replace(',3,campaign,', ',51,campaign,')))).toThrow(/^line 3: lvl "51" is not a level id$/);
     expect(() => parseLog(at(2, text[2]!.replace(',won,24450,3,', ',won,24450,0,')))).toThrow(/^line 3: stars "0" must be 1–3 on a win$/);
+    // REV-2 (c): the mirror rule names the log line (it used to surface as "internal: the converted sheet does not
+    // parse (line K …)" with the CSV's line number)
+    expect(() => parseLog(at(3, text[3]!.replace(',lost,64450,0,', ',lost,64450,2,')))).toThrow(new LogError('line 4: stars "2" must be 0 on a loss / retreat'));
+    expect(() => parseLog(at(3, text[3]!.replace(',lost,64450,0,', ',retreat,64450,1,')))).toThrow(new LogError('line 4: stars "1" must be 0 on a loss / retreat'));
+    // a skip row keeps the star the skip bought (src/ui/diagnostics.ts logSkip) and stays valid
+    expect(parseLog(at(3, text[3]!.replace(',lost,64450,0,', ',skip,0,1,'))).rows[1]).toMatchObject({ outcome: 'skip', stars: 1, line: 4 });
     expect(() => parseLog('tester,level,bot\nS,3,27.8\n')).toThrow(/^line 1: expected the Diagnostics column line/);
     expect(() => parseLog(`${text[0]}\n${text[1]}\n`)).toThrow(/no rows/);
     expect(() => convertLog(parseLog(logText([won(9, 1, 30_000, 2)])), { tester: 'S', botMs })).toThrow(/level 9: no bot median/);
@@ -213,6 +222,73 @@ describe('playtestLog: COPY LOG → decide sheet', () => {
     const rows = [won(3, 1, 24_450, 3, false, { replay: { dropped: 'size', bytes: 40_000 } }), won(17, 1, 28_400, 2)];
     const text = `${logText(rows)}\n#replay 2 {"v":1}`;
     expect(parseLog(text).replayRows).toEqual([2]);
+  });
+
+  it('REV-2: two pasted COPY LOG texts — rows and #replay lines numbered per text, a record addressed as (text, row)', () => {
+    const a = parseReplay(readFileSync(join(ROOT, 'tests/fixtures/replay-l15-s1.json'), 'utf8'));
+    const d = parseReplay(readFileSync(join(ROOT, 'tests/fixtures/replay-daily-2026-11-11.json'), 'utf8'));
+    const t1 = logText([lost(3, 1, 30_000), won(3, 2, 24_450, 3), won(15, 1, a.outcome!.timeMs, 2, true, { replay: a })]);
+    const t2 = logText([lost(17, 1, 40_000), won(17, 2, 28_400, 2), row({ lvl: 37, attempt: 1, outcome: 'won', timeMs: d.outcome!.timeMs, stars: 2, mode: 'daily', replay: d })]);
+    const two = `${t1}\n${t2}`;
+    const log = parseLog(two);
+    expect(log.texts).toBe(2);
+    expect(log.rows.map((r) => [r.text, r.row, r.line])).toEqual([[1, 1, 3], [1, 2, 4], [1, 3, 5], [2, 1, 9], [2, 2, 10], [2, 3, 11]]);
+    expect(log.replays.map((r) => [r.text, r.row, r.line])).toEqual([[1, 3, 6], [2, 3, 12]]);
+    expect(log.replayRows).toEqual([3, 3]);
+    expect(logReplays(two).texts).toBe(2);
+    // both `#replay 3` lines resolve to their own record (the old "last line wins" gave the daily one twice)
+    expect(parseReplay(pickReplay(two, { text: 1, row: 3 })).levelId).toBe(15);
+    expect(parseReplay(pickReplay(two, { text: 2, row: 3 })).challenge?.key).toBe('2026-11-11');
+    expect(() => pickReplay(two, { row: 3 })).toThrow(new LogError('the log holds 2 pasted COPY LOG texts and #replay numbers restart in each: pass --text 1..2'));
+    expect(() => pickReplay(two, { text: 3, row: 3 })).toThrow(/--text 3: the log holds 2 pasted text/);
+    expect(() => pickReplay(two, { text: 1, row: 1 })).toThrow(/no #replay line for row 1 in text 1/);
+    // a single text: --row alone (and nothing at all = the newest record) as before
+    expect(parseReplay(pickReplay(t1, { row: 3 })).levelId).toBe(15);
+    expect(parseReplay(pickReplay(t1)).levelId).toBe(15);
+    expect(parseReplay(pickReplay(t1, { text: 1 })).levelId).toBe(15);
+    // COPY LOG ends without a line break: two texts pasted back to back glue the second's hint line onto the
+    // first's last #replay line — a named error (it was "Unexpected non-whitespace character after JSON")
+    const glued = `${t1}${t2}`;
+    const gluedMsg = 'line 6: two COPY LOG texts pasted without a line break between them (the next text\'s "# Tower Clash diagnostics v1" line starts mid-line) — put a line break before it';
+    expect(() => parseLog(glued)).toThrow(new LogError(gluedMsg));
+    expect(() => pickReplay(glued, { text: 1, row: 3 })).toThrow(new LogError(gluedMsg));
+    const noReplay = logText([won(3, 2, 24_450, 3)]);
+    expect(() => parseLog(`${noReplay}${t2}`)).toThrow(/^line 3: two COPY LOG texts pasted without a line break/);
+  });
+
+  it('REV-2: --verify re-runs each record once as (text, row); a re-run killed at the limit is TIMEOUT, not MATCH', () => {
+    const rep = (lvl: number): DiagRow => won(lvl, 1, 20_000, 2, true, { replay: parseReplay(readFileSync(join(ROOT, 'tests/fixtures/replay-l15-s1.json'), 'utf8')) });
+    const two = parseLog(`${logText([rep(3), rep(17)])}\n${logText([rep(23), rep(32)])}`);
+    const seen: string[] = [];
+    const run = (r: { text: number; row: number }): VerifyRun => {
+      seen.push(`${r.text}.${r.row}`);
+      if (r.text === 2 && r.row === 1) return { status: null, stdout: '', stderr: '', timedOut: true };
+      if (r.text === 2 && r.row === 2) return { status: 1, stdout: 'replay: level 32 "x"\nreplay: MISMATCH — hash\n', stderr: '', timedOut: false };
+      return { status: 0, stdout: `replay: level ${r.text === 1 && r.row === 1 ? 3 : 17} "x"\nreplay: MATCH\n`, stderr: '', timedOut: false };
+    };
+    const v = verifyReplays(two, run, { timeoutS: 120, keep: 20 });
+    expect(seen).toEqual(['1.1', '1.2', '2.1', '2.2']);
+    expect(v.lines).toEqual([
+      'text 1 row 1: MATCH — level 3 "x"',
+      'text 1 row 2: MATCH — level 17 "x"',
+      'text 2 row 1: TIMEOUT (killed after 120 s; log line 11)',
+      'text 2 row 2: NOT MATCHED (exit 1) — level 32 "x"',
+    ]);
+    expect(v).toMatchObject({ match: 2, notMatched: 1, timedOut: 1, ok: false });
+    expect(v.summary).toBe('2/4 MATCH, 1 NOT MATCHED, 1 TIMEOUT (limit 120 s per record) across 2 pasted texts; 0 log row(s) carry no record (only the newest 20 per text do)');
+    const one = verifyReplays(parseLog(logText([rep(3)])), () => ({ status: 0, stdout: 'replay: level 3 "x"\nreplay: MATCH\n', stderr: '', timedOut: false }), { timeoutS: 120, keep: 20 });
+    expect(one.lines).toEqual(['row 1: MATCH — level 3 "x"']);
+    expect(one).toMatchObject({ ok: true, summary: '1/1 MATCH; 0 log row(s) carry no record (only the newest 20 per text do)' });
+  });
+
+  it('REV-2: spawnVerify kills a command that never ends (SIGKILL at the limit) and says so', () => {
+    const t0 = Date.now();
+    const r = spawnVerify(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000)'], ROOT, 300);
+    expect(r.timedOut).toBe(true);
+    expect(r.status).toBeNull();
+    expect(Date.now() - t0).toBeLessThan(10_000);
+    const ok = spawnVerify(process.execPath, ['-e', 'console.log("replay: MATCH")'], ROOT, 10_000);
+    expect(ok).toMatchObject({ status: 0, stdout: 'replay: MATCH\n', timedOut: false });
   });
 
   it('the parser reads the game\'s own column line (src/ui/diagnostics.ts DIAG_COLUMNS) and helpers', () => {
@@ -270,6 +346,50 @@ describe('playtestLog CLI', () => {
     expect(bad.status).toBe(1);
     expect(bad.stderr).toContain('--verify row 1: NOT MATCHED (exit 1)');
   }, 30_000);
+
+  it('REV-2: --verify on two pasted texts with the same #replay 3 verifies both records once (fixtures; one tampered)', () => {
+    const fx = (f: string): string => readFileSync(join(ROOT, 'tests/fixtures', f), 'utf8').trim();
+    const a = parseReplay(fx('replay-l15-s1.json'));
+    const d = parseReplay(fx('replay-daily-2026-11-11.json'));
+    const t1 = logText([lost(3, 1, 30_000), won(3, 2, 24_450, 3), won(15, 1, a.outcome!.timeMs, 2, true, { replay: a })]);
+    const t2 = logText([lost(17, 1, 40_000), won(17, 2, 28_400, 2), row({ lvl: 37, attempt: 1, outcome: 'won', timeMs: d.outcome!.timeMs, stars: 2, mode: 'daily', replay: d })]);
+    const lv = file('levels-rev2.json', JSON.stringify({ 3: { s3: 25, s2: 60, bot: 27.8 }, 15: { s3: 30, s2: 60, bot: 30 }, 17: { s3: 25, s2: 50, bot: 28.4 }, 37: { s3: 30, s2: 60, bot: 30 } }));
+    const good = cli(file('two.txt', `${t1}\n${t2}\n`), '--tester', 'S', '--levels', lv, '--verify');
+    expect(good.status, good.stderr).toBe(0);
+    expect(good.stderr).toMatch(/--verify text 1 row 3: MATCH — level 15 /);
+    expect(good.stderr).toMatch(/--verify text 2 row 3: MATCH — level 37 /);
+    expect(good.stderr).toContain('--verify: 2/2 MATCH across 2 pasted texts; 4 log row(s) carry no record');
+    // the first text's record tampered: the old "last #replay 3 wins" re-ran the daily twice and said 2/2 MATCH
+    const tampered = t1.replace(`"hash":"${a.outcome!.hash}"`, '"hash":"00000000"');
+    expect(tampered).not.toBe(t1);
+    const bad = cli(file('two-bad.txt', `${tampered}\n${t2}\n`), '--tester', 'S', '--levels', lv, '--verify');
+    expect(bad.status).toBe(1);
+    expect(bad.stderr).toMatch(/--verify text 1 row 3: NOT MATCHED \(exit 1\) — level 15 /);
+    expect(bad.stderr).toMatch(/--verify text 2 row 3: MATCH — level 37 /);
+    expect(bad.stderr).toContain('--verify: 1/2 MATCH, 1 NOT MATCHED across 2 pasted texts');
+    // scripts/replay.ts --from-log: --text picks the text; without it a multi-text file is refused (exit 2)
+    const rp = (...x: string[]) => spawnSync(process.execPath, [tsx, 'scripts/replay.ts', ...x], { cwd: ROOT, encoding: 'utf8' });
+    const two = join(dir, 'two.txt');
+    expect(rp('--from-log', two, '--text', '2', '--row', '3').stdout).toMatch(/replay: daily challenge 2026-11-11[\s\S]*replay: MATCH/);
+    const refused = rp('--from-log', two, '--row', '3');
+    expect(refused.status).toBe(2);
+    expect(refused.stderr).toContain('the log holds 2 pasted COPY LOG texts and #replay numbers restart in each: pass --text 1..2');
+    const single = rp('--from-log', file('one-text.txt', t1), '--row', '3');
+    expect(single.status, single.stderr).toBe(0);
+    expect(single.stdout).toMatch(/replay: level 15 [\s\S]*replay: MATCH/);
+  }, 60_000);
+
+  it('REV-2: --verify-timeout kills a re-run that outlives it: TIMEOUT, counted, exit 1', () => {
+    const a = parseReplay(readFileSync(join(ROOT, 'tests/fixtures/replay-l15-s1.json'), 'utf8'));
+    const lv = file('levels-15.json', JSON.stringify({ 15: { s3: 30, s2: 60, bot: 30 } }));
+    // 1 ms: tsx alone takes far longer to start, so the kill is certain, and no sim runs for minutes
+    const r = cli(file('slow.txt', logText([won(15, 1, a.outcome!.timeMs, 2, true, { replay: a })])), '--tester', 'S', '--levels', lv, '--verify', '--verify-timeout', '0.001');
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('--verify row 1: TIMEOUT (killed after 0.001 s; log line 4)');
+    expect(r.stderr).toContain('--verify: 0/1 MATCH, 1 TIMEOUT (limit 0.001 s per record); 0 log row(s) carry no record');
+    expect(cli(join(dir, 'slow.txt'), '--tester', 'S', '--levels', lv, '--verify', '--verify-timeout', '0').status).toBe(2);
+    expect(cli(join(dir, 'slow.txt'), '--tester', 'S', '--levels', lv, '--verify-timeout', '5').stderr).toContain('--verify-timeout needs --verify');
+  });
 
   it('a malformed log exits 1 naming the line; a bad command line exits 2', () => {
     const text = logText(SESSION).replace(',campaign,1,won,24450,', ',campaign,x,won,24450,');
