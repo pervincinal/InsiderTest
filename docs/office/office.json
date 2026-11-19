@@ -1,6 +1,6 @@
 {
   "board": {
-    "title": "Lövhə · 18 noyabr, gün 61",
+    "title": "Lövhə · 19 noyabr, gün 62",
     "stats": [
       {
         "b": "build 27",
@@ -11,7 +11,7 @@
         "s": "səviyyə bot ilə keçir"
       },
       {
-        "b": "2672",
+        "b": "2689",
         "s": "unit test, e2e 196 + 4 + 4 + WebKit + soak"
       },
       {
@@ -19,11 +19,11 @@
         "s": "ilk yükləmə (büdcə 82); hiss balı 13/14"
       },
       {
-        "b": "36 gün",
+        "b": "37 gün",
         "s": "rəyin gözlənilir"
       }
     ],
-    "footer": "Mənbə: <code>.claude/agents/*.md</code> rol faylları, <code>docs/BACKLOG.md</code> və son hesabatlar (gün 59–61). Statuslar 18 noyabr vəziyyətidir."
+    "footer": "Mənbə: <code>.claude/agents/*.md</code> rol faylları, <code>docs/BACKLOG.md</code> və son hesabatlar (gün 60–62). Statuslar 19 noyabr vəziyyətidir."
   },
   "team": [
     {
@@ -42,11 +42,11 @@
         "build nömrəsi, commit və push"
       ],
       "recent": [
+        "Gün 62: kod baxışı (5 tapıntı, 3 eyni gün düzəldildi: replay yoxlanması, jurnal yoxlaması, JURNALI TƏMİZLƏ), TestFlight mətni, TEAM.md; artefakt v77.",
         "Gün 61: QA-35 ovu yeni brauzerdə (240 toxum + 546 qaçış, 0 ilişmə → QA-35 bağlandı), LV-12 çətinlik proseduru, PERF-14 baza dəyişməz; kod dəyişməyib.",
-        "Gün 60: build 27 sorğusunun məşqi (4 fayl / 6 sətir), prodüser alətləri repo-da (zəncir + artefakt sinxron), 2672 test; kod dəyişməyib.",
-        "Gün 59: QA-42-1…3 eyni gün bağlandı (frontend, QA, dizayner); 2654 → 2665 test; zəncir yaşıl; artefakt v76."
+        "Gün 60: build 27 sorğusunun məşqi (4 fayl / 6 sətir), prodüser alətləri repo-da (zəncir + artefakt sinxron), 2672 test; kod dəyişməyib."
       ],
-      "status": "Bu gün işlədi · sabah gün 62 (sakit rejim)"
+      "status": "Bu gün işlədi · sabah gün 63 (sakit rejim)"
     },
     {
       "id": "game-designer",
@@ -74,18 +74,18 @@
       "role": "Simulyasiya",
       "color": "#2f9e5c",
       "tag": "gözləyir",
-      "cls": "wait",
+      "cls": "",
       "does": "Oyunun deterministik qaydalarını yazır: qüllələr, axınlar, tutma, yüksəlmə, minalar, toplar. Hər qayda rəqəmlə test olunur; simulyasiyada DOM, saat və təsadüf yoxdur, ona görə eyni toxum həmişə eyni oyunu verir.",
       "owns": [
         "tower-clash/src/sim/",
         "tests/sim/"
       ],
       "recent": [
+        "Gün 62: REV-1 — replay qeydində vaxtlar sonlu / ≥ 0, nəticədən sonrakı əmr rədd, maxMs büdcəsi bitmiş qeyddə də; v1 dəyişməz, +6 test.",
         "Gün 55: DAVAM ET (geri sarma) qeyd səviyyəsində yazılır, canlı zaman xətti bir keçiddə yoxlanılır (+29 B)",
-        "Gün 54: gündəlik / həftəlik qeyd çağırış açarını daşıyır, yoxlayıcı onu yenidən qurur və uyğunsuzluğu rədd edir (−5 B)",
-        "Gün 52: deterministik replay qeydi v1 — seriallaşdır / oynat / yoxla, AI əmrləri saxlanılır, node fikstürü Chromium-da eyni hash (+60 B)"
+        "Gün 54: gündəlik / həftəlik qeyd çağırış açarını daşıyır, yoxlayıcı onu yenidən qurur və uyğunsuzluğu rədd edir (−5 B)"
       ],
-      "status": "Gözləyir (fable) · sakit rejim"
+      "status": "Bu gün işlədi (fable)"
     },
     {
       "id": "frontend-engineer",
@@ -93,7 +93,7 @@
       "role": "Ekranlar və toxunuş",
       "color": "#e0702e",
       "tag": "gözləyir",
-      "cls": "wait",
+      "cls": "",
       "does": "Oyunçunun gördüyü və toxunduğu hər şey: canvas çəkimi, HUD, menyular, nişanlar, toxunuş jestləri, save/yükləmə, PWA. Hər dəyişiklik 360×640 və 430×932 ekranlarda kadrlarla və qoruyucu testlərlə yoxlanır.",
       "owns": [
         "src/render/",
@@ -102,11 +102,11 @@
         "src/main.ts"
       ],
       "recent": [
+        "Gün 62: REV-3 — JURNALI TƏMİZLƏ yaddaş dolu olanda yalan \"təmizləndi\" demir; yeni xəta bildirişi 4 dildə; 29 → 33 test.",
         "Gün 59: QA-42-1 — JURNALI TƏMİZLƏ cəhd sayğaclarını da sıfırlayır; e2e addımı yoxlayır; eager dəyişməyib.",
-        "Gün 57: jurnalda 15-ci sütun `had` (hər sətirdə \"əvvəldən keçilmişdi\"); playtest:log first_ever ondan; 2647 → 2654 test; +67 B lazy.",
-        "Gün 55: jurnalda oyun sürəti sütunu; saxlanılan qeyd 5 → 20, kopyalama həddi 400 kB (+24 B)"
+        "Gün 57: jurnalda 15-ci sütun `had` (hər sətirdə \"əvvəldən keçilmişdi\"); playtest:log first_ever ondan; 2647 → 2654 test; +67 B lazy."
       ],
-      "status": "Gözləyir · sakit rejim"
+      "status": "Bu gün işlədi"
     },
     {
       "id": "ai-engineer",
@@ -133,7 +133,7 @@
       "role": "50 səviyyə",
       "color": "#b8860b",
       "tag": "gözləyir",
-      "cls": "",
+      "cls": "wait",
       "does": "Səviyyə fayllarını (qalalar, yollar, divarlar, minalar, saatlar) və dərs kartlarını dörd dildə yazır. Hər kart ≤ 3 sətir sığmalı və hərfi əməl edən oyunçu ilə qazanmalıdır; hər dəyişiklik playtest qapılarından keçir.",
       "owns": [
         "tower-clash/src/levels/*.json",
@@ -144,7 +144,7 @@
         "Gün 48: 13-də guns 60 px şərqə + east2 8 u — boş oyunçu 20/20 uduzur (87 s), saatlar və qapılar dəyişmədi; 23 qəbul",
         "Gün 47: Q13 K = 20 ilə ölçüldü, 13 / 32 / 41 rıçaqları, 41 2★ 140 → 120 s; 5 kart düşməni işarə ilə adlandırır"
       ],
-      "status": "Bu gün işlədi"
+      "status": "Gözləyir · sakit rejim"
     },
     {
       "id": "qa-engineer",
@@ -161,11 +161,11 @@
         "Bugs bölməsi"
       ],
       "recent": [
+        "Gün 62: REV-2 — playtest:log --verify: hər qeyd (mətn, sətir) ilə bir dəfə, 120 s TIMEOUT, məğlubiyyətdə ulduz rədd; 18 → 23 test.",
         "Gün 61: QA-44 — QA-35 render ilişməsi ovu 1243-də: 240 toxum + 546 CI-şəkilli qaçış, 0 ilişmə; QA-35 bağlandı, tələ qalır, ov aləti repo-da.",
-        "Gün 60: QA-43 — brauzer tapıcısı üçün 7 unit test (iki qovluq düzümü, ən yeni build, boş qovluq, yox olan kök).",
-        "Gün 59: QA-42-2 \"Not valid (C.0)\" siyahısı + QA-42-3 qaydası skriptdə (saxlanılan səviyyə, çətinlik siyahısı); 10 yeni test, 2665."
+        "Gün 60: QA-43 — brauzer tapıcısı üçün 7 unit test (iki qovluq düzümü, ən yeni build, boş qovluq, yox olan kök)."
       ],
-      "status": "Bu gün işlədi (fable)"
+      "status": "Bu gün işlədi"
     },
     {
       "id": "tech-artist",
@@ -173,7 +173,7 @@
       "role": "Görünüş və səs",
       "color": "#d4536b",
       "tag": "gözləyir",
-      "cls": "",
+      "cls": "wait",
       "does": "Vizual üslubu (palitra, qalaların və əsgərlərin çəkimi, zərrəciklər, ekran effektləri) və WebAudio ilə sintez olunan səsləri yaradır. Rəng-korluğu palitrası və \"az hərəkət\" rejimi onun qoruyucularındandır.",
       "owns": [
         "src/render/ effektlər, palitra",
@@ -185,7 +185,7 @@
         "Gün 55: hiss 11/14 → 13/14 (ALIVE); doqquz düzəliş kadr-kadr təsdiqləndi; 3 yeni P3 1.0-dan sonra",
         "Gün 53: 50-ci səviyyə — silkələnən kadrda ada 1 : 1 kopyalanır, işarə klipləri öz qutusunda: norma 1,212 → 1,020 (piksel dəyişmədən)"
       ],
-      "status": "Bu gün işlədi"
+      "status": "Gözləyir · sakit rejim"
     },
     {
       "id": "mobile-engineer",
@@ -215,7 +215,7 @@
       "role": "Mağaza və buraxılış",
       "color": "#6b8e23",
       "tag": "gözləyir",
-      "cls": "wait",
+      "cls": "",
       "does": "App Store və Google Play mətnlərini (4 dildə), kadrları, məxfilik siyasətini, buraxılış qeydlərini, TestFlight test planını və buraxılış siyahısını yazır. Hər iddianı kodla yoxlayır; səndən heç nə istəmir, lazım olanı siyahıya status ilə yazır.",
       "owns": [
         "docs/publishing/",
@@ -223,11 +223,11 @@
         "fastlane/"
       ],
       "recent": [
+        "Gün 62: PUB-45 — TestFlight \"Nəyi test etməli\" build 27 (EN 1 111 / AZ 1 122), Beta təsviri build 27-yə.",
         "Gün 58: PUB-44 — buraxılış siyahısı §3/§4/§5/§8 15 noyabr vəziyyətində; Pages \"canlı deyil\" qeydləri hər yerdə düzəldildi; TestFlight planı build 27-yə.",
-        "Gün 57: build 27 qeydlərinə Gün 54–55 (EN + AZ); DIAG-2 rəqəmləri 20 matç / 400 kB; jurnal ölçüsü 20–400 kB.",
-        "Gün 54: build 27 qeydlərinə gün 51–53, TestFlight bənd 13 (10)"
+        "Gün 57: build 27 qeydlərinə Gün 54–55 (EN + AZ); DIAG-2 rəqəmləri 20 matç / 400 kB; jurnal ölçüsü 20–400 kB."
       ],
-      "status": "Gözləyir · sakit rejim"
+      "status": "Bu gün işlədi (sonnet)"
     },
     {
       "id": "monetization-designer",
@@ -307,39 +307,41 @@
       ]
     },
     {
-      "title": "Gün 61 — bağlandı (18 noyabr)",
+      "title": "Gün 62 — bağlandı (19 noyabr)",
       "items": [
         {
-          "id": "QA-44",
+          "id": "REV-1…3",
           "p": "p2",
           "own": [
-            "qa-engineer"
+            "gameplay-engineer",
+            "qa-engineer",
+            "frontend-engineer"
           ],
           "day": "bağlı",
-          "t": "QA-35 ovu 1243-də: 0 ilişmə → bağlandı, tələ qalır."
+          "t": "Kod baxışının 3 tapıntısı: replay yoxlanması, jurnal yoxlaması, JURNALI TƏMİZLƏ."
         },
         {
-          "id": "LV-12",
+          "id": "PUB-45",
           "p": "p3",
           "own": [
-            "level-designer"
+            "publisher"
           ],
           "day": "bağlı",
-          "t": "Çətinlik siyahısı proseduru (playtest-dən sonra)."
+          "t": "TestFlight \"Nəyi test etməli\" build 27 (EN + AZ)."
         },
         {
-          "id": "PERF-14",
+          "id": "DOC-9",
           "p": "p3",
           "own": [
-            "tech-artist"
+            "producer"
           ],
           "day": "bağlı",
-          "t": "Perf bazası 1243-də dəyişməz (×0,99–1,07)."
+          "t": "TEAM.md rollar + iş qaydaları."
         }
       ]
     },
     {
-      "title": "Gün 62",
+      "title": "Gün 63",
       "items": [
         {
           "id": "CI",
@@ -347,7 +349,7 @@
           "own": [
             "producer"
           ],
-          "day": "gün 62",
+          "day": "gün 63",
           "t": "Sakit rejim: CI izləmə; açıq kod işi yoxdur — MM-15 və playtest gözlənilir."
         },
         {
