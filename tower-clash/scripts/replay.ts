@@ -2,7 +2,9 @@
  * `npx tsx scripts/replay.ts <file.json> [--max-ms N]` — verify a replay record v1 (SIM-R1, `src/sim/replay.ts`;
  * GDD §5 "Replay record v1"). Prints the level, seed, rules id, command count (player / AI), re-runs the match
  * headlessly from the record alone (no AI involved: every command is in the file), prints the outcome, the time,
- * the final-state hash and whether it matches the recorded one. Exit 1 on a mismatch (or a continued / open
+ * the final-state hash and whether it matches the recorded one. A closed record re-runs to its recorded
+ * `outcome.timeMs`; `--max-ms N` caps it only when given (an open record, without an outcome, runs to N, default
+ * 180000 ms — also the recording budget of `--record*`). Exit 1 on a mismatch (or a continued / open
  * record, which cannot be verified), 2 on a bad file or an unknown level.
  *
  * `npx tsx scripts/replay.ts --record <level> <seed> [--out file.json] [--max-ms N]` — record the reference player
@@ -151,7 +153,9 @@ console.log(
 if (replay.outcome) console.log(`replay: recorded ${replay.outcome.result} at ${(replay.outcome.timeMs / 1000).toFixed(2)} s, hash ${replay.outcome.hash}`);
 else console.log(`replay: open record (no outcome) — re-running to ${maxMs / 1000} s`);
 
-const v = verifyReplay(level, replay, { maxMs });
+// REV-1 follow-up: runReplay caps a closed record at `maxMs`, so the 180 s default would cut a genuine longer record
+// (a Continue rewind) — a closed record runs to its own outcome.timeMs unless --max-ms was given on the command line
+const v = verifyReplay(level, replay, replay.outcome && !args.includes('--max-ms') ? {} : { maxMs });
 console.log(`replay: re-run ${v.outcome} at ${(v.timeMs / 1000).toFixed(2)} s, hash ${v.hash}`);
 if (v.matches) {
   console.log(`replay: MATCH${v.rulesMatch ? '' : ' (rules id differs from this build — same result nonetheless)'}`);

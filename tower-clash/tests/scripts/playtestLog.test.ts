@@ -391,6 +391,26 @@ describe('playtestLog CLI', () => {
     expect(cli(join(dir, 'slow.txt'), '--tester', 'S', '--levels', lv, '--verify-timeout', '5').stderr).toContain('--verify-timeout needs --verify');
   });
 
+  it('REV-1 follow-up: scripts/replay.ts runs a closed record to its own outcome.timeMs (no 180 s default cap); --max-ms given still caps', () => {
+    // the l15 fixture wins at 43.8 s, so with its commands both versions stop there: drop them (nobody moves, the
+    // match never ends) and claim 200 s — the old default `maxMs` 180000 stopped the re-run at 180.00 s
+    const r = JSON.parse(readFileSync(join(ROOT, 'tests/fixtures/replay-l15-s1.json'), 'utf8')) as { commands: unknown[]; outcome: { timeMs: number } };
+    r.commands = [];
+    r.outcome.timeMs = 200_000;
+    const long = file('long-200s.json', JSON.stringify(r));
+    const rp = (...x: string[]) => spawnSync(process.execPath, [tsx, 'scripts/replay.ts', ...x], { cwd: ROOT, encoding: 'utf8' });
+    const free = rp(long);
+    expect(free.status).toBe(1); // a mismatch, but not the budget's
+    expect(free.stdout).toContain('replay: re-run playing at 200.00 s');
+    expect(free.stdout).toContain('replay: MISMATCH — outcome playing, recorded won');
+    expect(free.stdout).not.toContain('180.00 s');
+    expect(free.stdout).not.toContain('ended at 180000 ms');
+    const capped = rp(long, '--max-ms', '2000');
+    expect(capped.status).toBe(1);
+    expect(capped.stdout).toContain('replay: re-run playing at 2.00 s');
+    expect(capped.stdout).toContain('replay: MISMATCH — ended at 2000 ms, recorded 200000 ms');
+  }, 30_000);
+
   it('a malformed log exits 1 naming the line; a bad command line exits 2', () => {
     const text = logText(SESSION).replace(',campaign,1,won,24450,', ',campaign,x,won,24450,');
     const r = cli(file('bad.txt', text), '--tester', 'S', '--levels', levels);
