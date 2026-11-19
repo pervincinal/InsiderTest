@@ -193,6 +193,7 @@ export const ru: Dictionary = {
   'settings.logCopiedTrimmed': 'Журнал скопирован; старые записи матчей не поместились',
   'settings.logCopyFailed': 'Не удалось скопировать журнал',
   'settings.logCleared': 'Журнал диагностики очищен',
+  'settings.logClearFailed': 'Не удалось очистить журнал — проверьте хранилище',
 
   'achievements.title': 'ДОСТИЖЕНИЯ',
   'achievements.summary': 'Открыто {unlocked} из {total}  ·  {crystals|получен|получено|получено} {crystals} {crystals|кристалл|кристалла|кристаллов}',

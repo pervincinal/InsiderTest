@@ -129,6 +129,7 @@ export const enMenus = {
   'settings.logCopiedTrimmed': 'Log copied; older match records left out (too big)',
   'settings.logCopyFailed': 'Could not copy the log',
   'settings.logCleared': 'Diagnostics log cleared',
+  'settings.logClearFailed': 'Log could not be cleared — check storage',
 
   'achievements.title': 'ACHIEVEMENTS',
   'achievements.summary': '{unlocked} of {total} unlocked  ·  {crystals} {crystals|crystal|crystals} earned',

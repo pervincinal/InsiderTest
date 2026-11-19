@@ -197,12 +197,19 @@ export function diagCount(): number {
 
 /**
  * CLEAR LOG: no rows and (QA-42-1, 2026-11-16) no attempt counters — the next try of every level, day and week is
- * attempt 1 again, as the playtest sheet's §A step 4 promises. Nothing stored: nothing written.
+ * attempt 1 again, as the playtest sheet's §A step 4 promises. Nothing stored: nothing written (true).
+ * REV-3 (2026-11-19): false when storage refused the write (quota, read-only / private mode) — the rows and
+ * counters are still there and the caller must not say "cleared".
  */
-export function clearDiag(): void {
+export function clearDiag(): boolean {
   const store = saveStorage();
-  if (store?.getItem(DIAG_KEY) === null) return;
-  writeStore(store, emptyStore());
+  if (!store) return true; // no storage: no log was ever kept
+  try {
+    if (store.getItem(DIAG_KEY) === null) return true;
+  } catch {
+    return false; // unreadable: we cannot tell, and cannot have cleared it
+  }
+  return writeStore(store, emptyStore());
 }
 
 /** RESET PROGRESS (TF-28): the log and its counters are gone with the progress. */

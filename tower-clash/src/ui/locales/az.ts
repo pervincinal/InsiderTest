@@ -193,6 +193,7 @@ export const az: Dictionary = {
   'settings.logCopiedTrimmed': 'Jurnal kopyalandı; köhnə matç qeydləri sığmadı',
   'settings.logCopyFailed': 'Jurnal kopyalanmadı',
   'settings.logCleared': 'Diaqnostika jurnalı təmizləndi',
+  'settings.logClearFailed': 'Jurnal təmizlənmədi — yaddaşı yoxla',
 
   'achievements.title': 'NAİLİYYƏTLƏR',
   'achievements.summary': '{unlocked}/{total} açılıb  ·  {crystals} kristal qazanılıb',

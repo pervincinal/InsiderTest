@@ -323,6 +323,39 @@ describe('the ring, CLEAR and reset', () => {
     expect(store.data.has(DIAG_KEY)).toBe(false);
   });
 
+  it('REV-3: CLEAR LOG returns true when it emptied the log, and true with nothing stored (nothing written)', () => {
+    recordDiag(save, ev());
+    expect(clearDiag()).toBe(true);
+    expect(JSON.parse(store.data.get(DIAG_KEY)!)).toEqual({ v: 1, n: {}, rows: [] });
+    store.data.delete(DIAG_KEY);
+    const setItem = vi.spyOn(store, 'setItem');
+    expect(clearDiag()).toBe(true);
+    expect(setItem).not.toHaveBeenCalled();
+    expect(store.data.has(DIAG_KEY)).toBe(false);
+  });
+
+  it('REV-3: a refused write (quota / read-only) returns false and leaves the rows and attempt counters as they were', () => {
+    recordDiag(save, ev());
+    recordDiag(save, ev());
+    recordDiag(save, ev({ lvl: 3, key: '3' }));
+    const before = store.data.get(DIAG_KEY)!;
+    store.setItem = () => {
+      throw new DOMException('quota', 'QuotaExceededError');
+    };
+    expect(clearDiag()).toBe(false);
+    expect(store.data.get(DIAG_KEY)).toBe(before);
+    expect(diagRows()).toHaveLength(3);
+    expect(JSON.parse(store.data.get(DIAG_KEY)!).n).toEqual({ 1: 2, 3: 1 });
+  });
+
+  it('REV-3: an unreadable store (getItem throws) is not "cleared" — false, and nothing thrown', () => {
+    store.getItem = () => {
+      throw new Error('SecurityError');
+    };
+    expect(() => clearDiag()).not.toThrow();
+    expect(clearDiag()).toBe(false);
+  });
+
   it('RESET PROGRESS on the settings screen wipes the log and its counters (TF-28); the switch stays', () => {
     recordDiag(save, ev());
     const screen = new SettingsScreen(fakeApp(save).app, () => {});
@@ -391,6 +424,23 @@ describe('the settings screen (About card)', () => {
     tap(screen, screen.diagInfo.clear!);
     expect(diagRows()).toEqual([]);
     expect(screen.diagInfo.rows).toBe(0);
+    expect(screen.toast.opts(0)).toMatchObject({ text: en['settings.logCleared'], kind: 'ok' });
+  });
+
+  it('REV-3: CLEAR LOG on storage that refuses the write keeps the real row count and toasts the failure, not "cleared"', () => {
+    save.settings.diagnostics = true;
+    recordDiag(save, ev());
+    recordDiag(save, ev({ lvl: 3, key: '3' }));
+    const screen = new SettingsScreen(fakeApp(save).app, () => {});
+    expect(screen.diagInfo.rows).toBe(2);
+    store.setItem = () => {
+      throw new DOMException('quota', 'QuotaExceededError');
+    };
+    tap(screen, screen.diagInfo.clear!);
+    expect(diagRows()).toHaveLength(2);
+    expect(screen.diagInfo.rows).toBe(2);
+    expect(screen.diagInfo.clear).not.toBeNull();
+    expect(screen.toast.opts(0)).toMatchObject({ text: en['settings.logClearFailed'], kind: 'error' });
   });
 
   it('the block sits under the About rows with tap areas clear of COPY / PRIVACY OPTIONS above (88 layout px = 44 pt at 360 wide)', () => {
@@ -415,7 +465,7 @@ describe('the settings screen (About card)', () => {
   });
 
   it('strings in four languages', () => {
-    const keys = ['settings.diagnostics', 'settings.diagnosticsSub', 'settings.diagCount', 'settings.copyLog', 'settings.clearLog', 'settings.logCopied', 'settings.logCopyFailed', 'settings.logCleared'] as const;
+    const keys = ['settings.diagnostics', 'settings.diagnosticsSub', 'settings.diagCount', 'settings.copyLog', 'settings.clearLog', 'settings.logCopied', 'settings.logCopyFailed', 'settings.logCleared', 'settings.logClearFailed'] as const;
     expect(en['settings.diagnosticsSub']).toBe('Kept on this phone, never sent');
     for (const dict of [en, az, ru, tr] as Record<string, string>[]) for (const k of keys) expect(dict[k], k).toBeTruthy();
   });

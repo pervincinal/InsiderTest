@@ -285,12 +285,16 @@ export class SettingsScreen implements Screen {
     );
   }
 
-  /** AUD-B6 CLEAR LOG: no rows and (QA-42-1) no attempt counters; the actions hide while the switch is off. */
+  /**
+   * AUD-B6 CLEAR LOG: no rows and (QA-42-1) no attempt counters; the actions hide while the switch is off.
+   * REV-3: the count is re-read from storage, and a refused write says so instead of "cleared".
+   */
   clearDiagLog(): void {
-    clearDiag();
-    this.diagRowCount = 0;
+    const ok = clearDiag();
+    this.diagRowCount = diagCount();
     this.relayout();
-    this.toast.show(t('settings.logCleared'), 'ok', this.nowMs);
+    if (ok) this.toast.show(t('settings.logCleared'), 'ok', this.nowMs);
+    else this.toast.show(t('settings.logClearFailed'), 'error', this.nowMs);
   }
 
   /** Open the ads SDK's privacy options form (UMP); no-op when the provider has none. */

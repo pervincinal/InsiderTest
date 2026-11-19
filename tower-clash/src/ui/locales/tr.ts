@@ -193,6 +193,7 @@ export const tr: Dictionary = {
   'settings.logCopiedTrimmed': 'Günlük kopyalandı; eski maç kayıtları sığmadı',
   'settings.logCopyFailed': 'Günlük kopyalanamadı',
   'settings.logCleared': 'Tanılama günlüğü temizlendi',
+  'settings.logClearFailed': 'Günlük temizlenemedi — depolamayı kontrol et',
 
   'achievements.title': 'BAŞARIMLAR',
   'achievements.summary': '{unlocked}/{total} açıldı  ·  {crystals} kristal kazanıldı',
