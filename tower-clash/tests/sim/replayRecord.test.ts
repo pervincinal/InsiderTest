@@ -500,7 +500,8 @@ describe('replay record v1: SIM-R3 continue entries', () => {
 
   it('parseReplay: a continue entry placed before its toMs, a malformed grant, or one over the cap is rejected', () => {
     const level = makeLevel();
-    const ok = serializeReplay(finishReplay(newReplay(level, createState(level, 1)), createState(level, 1)));
+    // REV-1: the record ends at 10 s so the entries below (≤ 6 s) are not refused as standing after the outcome
+    const ok = serializeReplay(finishReplay(newReplay(level, createState(level, 1)), createState(level, 1))).replace('"timeMs":0', '"timeMs":10000');
     const withEntries = (entries: string): string => ok.replace('"commands":[]', `"commands":[${entries}]`);
     const g = `"freezeMs":${C.CONTINUE_FREEZE_MS},"infantry":${C.CONTINUE_INFANTRY}`;
     expect(() => parseReplay(withEntries(`{"t":3000,"r":{"toMs":1000,${g}}}`))).not.toThrow();
@@ -526,5 +527,144 @@ describe('replay record v1: SIM-R3 continue entries', () => {
     const old: Replay = { ...replay, commands: [link(0)], continued: true };
     expect(verifyReplay(level, old).reason).toBe('continued');
     expect(verifyReplay(level, { ...replay, continued: true }).reason).toBe('continued'); // the record's own claim
+  });
+});
+
+/*
+ * REV-1 (2026-11-19, code review): every time in a record is a finite, non-negative number, and no live entry
+ * stands after the recorded end — `parseReplay` refuses `1e999` (Infinity after JSON.parse), negative times and a
+ * command past `outcome.timeMs` with the named errors; `runReplay` caps a closed record at `maxMs` when one is
+ * given, so a bogus but finite `outcome.timeMs` on a stalemating level ends at the budget with `reason: 'time'`
+ * instead of spinning (scripts/playtestLog.ts --verify spawns scripts/replay.ts per `#replay` line).
+ */
+describe('replay record v1: REV-1 malformed times and the maxMs cap', () => {
+  const grant = (toMs: number): ReplayContinue => ({ toMs, freezeMs: C.CONTINUE_FREEZE_MS, infantry: C.CONTINUE_INFANTRY });
+  const link = (t: number, from = 'p', to = 'e', owner: Owner = 'player'): ReplayEntry => ({ t, c: { type: 'link', owner, from, to } });
+  const G = `"freezeMs":${C.CONTINUE_FREEZE_MS},"infantry":${C.CONTINUE_INFANTRY}`;
+  const LINK = '"c":{"type":"link","owner":"player","from":"p","to":"e"}';
+  /** A closed record of the test level with `commands: []` and `outcome.timeMs` 1000, as JSON, with the given entries / outcome time. */
+  function closed(entries: string, timeMs: number | string = 1000): string {
+    const level = makeLevel();
+    const state = createState(level, 1);
+    const json = serializeReplay(finishReplay(newReplay(level, state), state));
+    expect(json).toContain('"timeMs":0');
+    return json.replace('"commands":[]', `"commands":[${entries}]`).replace('"timeMs":0', `"timeMs":${timeMs}`);
+  }
+
+  it('parseReplay: a command entry’s t must be a finite number ≥ 0 (1e999 → Infinity, negatives, strings, null, missing are `command i malformed`)', () => {
+    expect(() => parseReplay(closed(`{"t":0,${LINK}}`))).not.toThrow();
+    expect(() => parseReplay(closed(`{"t":1000,${LINK}}`))).not.toThrow(); // at the end itself: the re-run applies it before stopping
+    expect(() => parseReplay(closed(`{"t":1e999,${LINK}}`))).toThrow(/^replay: command 0 malformed$/); // JSON.parse('1e999') === Infinity
+    expect(() => parseReplay(closed(`{"t":-1e999,${LINK}}`))).toThrow(/^replay: command 0 malformed$/);
+    expect(() => parseReplay(closed(`{"t":-50,${LINK}}`))).toThrow(/^replay: command 0 malformed$/);
+    expect(() => parseReplay(closed(`{"t":"50",${LINK}}`))).toThrow(/^replay: command 0 malformed$/);
+    expect(() => parseReplay(closed(`{"t":null,${LINK}}`))).toThrow(/^replay: command 0 malformed$/);
+    expect(() => parseReplay(closed(`{${LINK}}`))).toThrow(/^replay: command 0 malformed$/);
+    expect(() => parseReplay(closed(`{"t":0,${LINK}},{"t":1e999,${LINK}}`))).toThrow(/^replay: command 1 malformed$/); // the index is the entry's
+    // NaN cannot arrive through JSON at all: JSON.parse refuses the token before the record is looked at
+    expect(() => parseReplay(closed(`{"t":NaN,${LINK}}`))).toThrow(SyntaxError);
+    // a continue entry's own t obeys the same rule (its toMs was already finite and ≥ 0, SIM-R3)
+    expect(() => parseReplay(closed(`{"t":1e999,"r":{"toMs":500,${G}}}`))).toThrow(/^replay: command 0 malformed$/);
+    expect(() => parseReplay(closed(`{"t":-1,"r":{"toMs":0,${G}}}`))).toThrow(/^replay: command 0 malformed$/);
+    expect(() => parseReplay(closed(`{"t":800,"r":{"toMs":500,${G}}}`))).not.toThrow();
+  });
+
+  it('parseReplay: outcome.timeMs must be a finite number ≥ 0 (`outcome malformed`)', () => {
+    expect(() => parseReplay(closed('', 0))).not.toThrow();
+    expect(() => parseReplay(closed('', 43800))).not.toThrow();
+    expect(() => parseReplay(closed('', '1e999'))).toThrow(/^replay: outcome malformed$/);
+    expect(() => parseReplay(closed('', '-1e999'))).toThrow(/^replay: outcome malformed$/);
+    expect(() => parseReplay(closed('', -50))).toThrow(/^replay: outcome malformed$/);
+    expect(() => parseReplay(closed('', '"1000"'))).toThrow(/^replay: outcome malformed$/);
+    expect(() => parseReplay(closed('', 'null'))).toThrow(/^replay: outcome malformed$/);
+    expect(() => parseReplay(closed('', 'NaN'))).toThrow(SyntaxError);
+    // the other outcome fields are as before
+    expect(() => parseReplay(closed('').replace('"result":"playing"', '"result":1'))).toThrow(/^replay: outcome malformed$/);
+    expect(() => parseReplay(closed('').replace(/"hash":"[0-9a-f]{8}"/, '"hash":1'))).toThrow(/^replay: outcome malformed$/);
+    // an open record has no end to check against: any finite t parses
+    expect(() => parseReplay(closed(`{"t":999999,${LINK}}`).replace(/,"outcome":\{[^}]*\}/, ''))).not.toThrow();
+  });
+
+  it('parseReplay: a live entry after outcome.timeMs is a parse error (`command i after the outcome`), the abandoned future of a Continue is not', () => {
+    // no continue: the record is its own timeline
+    expect(() => parseReplay(closed(`{"t":0,${LINK}},{"t":1050,${LINK}}`))).toThrow(/^replay: command 1 after the outcome \(1050 > 1000 ms\)$/);
+    expect(() => parseReplay(closed(`{"t":1000,${LINK}}`, 999))).toThrow(/^replay: command 0 after the outcome \(1000 > 999 ms\)$/);
+    // a continue taken at 6000 that rewound to 500: the entries at 3000 and 5000 were abandoned (not live) and may stand past the end
+    const abandoned = `{"t":0,${LINK}},{"t":3000,${LINK}},{"t":5000,${LINK}},{"t":6000,"r":{"toMs":500,${G}}},{"t":700,${LINK}}`;
+    expect(() => parseReplay(closed(abandoned, 1000))).not.toThrow();
+    expect(liveTimeline(parseReplay(closed(abandoned, 1000)).commands)).toEqual([link(0), { t: 500, r: grant(500) }, link(700)]);
+    // a live command after the rewind past the end: refused with its index in the record (raw index 5)
+    expect(() => parseReplay(closed(`${abandoned},{"t":1200,${LINK}}`, 1000))).toThrow(/^replay: command 5 after the outcome \(1200 > 1000 ms\)$/);
+    // the grant itself is live at toMs: a rewind to a time after the end is refused as the continue entry (index 1)
+    expect(() => parseReplay(closed(`{"t":0,${LINK}},{"t":6000,"r":{"toMs":2000,${G}}}`, 1000))).toThrow(/^replay: command 1 after the outcome \(2000 > 1000 ms\)$/);
+    // the parser never re-runs anything: a record of 10 000 entries after the end is refused at once
+    const many = Array.from({ length: 10_000 }, (_, i) => `{"t":${1050 + i * 50},${LINK}}`).join(',');
+    expect(() => parseReplay(closed(many))).toThrow(/^replay: command 0 after the outcome/);
+  });
+
+  it('runReplay / verifyReplay: a closed record with a huge outcome.timeMs ends at maxMs with reason `time` instead of spinning', () => {
+    const level = makeLevel(); // one lane, two towers: a 10 vs 10 start with no commands never ends on its own
+    const state = createState(level, 2);
+    const open = newReplay(level, state);
+    recordInto(open, state, { type: 'link', owner: 'player', from: 'p', to: 'e' });
+    const base = finishReplay({ ...open, commands: [...open.commands] }, runReplay(level, open, { maxMs: 1000 }));
+    expect(base.outcome!.result).toBe('playing');
+    expect(verifyReplay(level, base).matches).toBe(true);
+    // the same record claiming an end a billion seconds away: finite, so it parses...
+    const bogus = parseReplay(serializeReplay(base).replace('"timeMs":1000', '"timeMs":1000000000000'));
+    expect(bogus.outcome!.timeMs).toBe(1e12);
+    // ...and the re-run stops at the budget
+    const t0 = performance.now();
+    const v = verifyReplay(level, bogus, { maxMs: 2000 });
+    expect(performance.now() - t0).toBeLessThan(5000);
+    expect(v.timeMs).toBe(2000);
+    expect(v.matches).toBe(false);
+    expect(v.reason).toBe('time');
+    expect(v.expected).toBe(base.outcome!.hash);
+    expect(runReplay(level, bogus, { maxMs: 2000 }).time).toBe(2000);
+    expect(runReplay(level, bogus, { maxMs: 50 }).time).toBe(50);
+    // a budget past the recorded end changes nothing: the re-run still stops at outcome.timeMs and matches
+    const capped = verifyReplay(level, base, { maxMs: 180_000 });
+    expect(capped.timeMs).toBe(1000);
+    expect(capped.matches).toBe(true);
+    // a budget short of a genuine record's end cuts it and says so (scripts/replay.ts passes --max-ms, default 180 s)
+    const short = verifyReplay(level, base, { maxMs: 500 });
+    expect(short.timeMs).toBe(500);
+    expect(short.reason).toBe('time');
+    // without a budget, a closed record runs to its recorded end as before
+    expect(runReplay(level, base).time).toBe(1000);
+  });
+
+  it('verifyReplay: a record claiming a result the sim has not reached at its outcome.timeMs reads `outcome`, not a spin', () => {
+    const level = makeLevel();
+    const state = createState(level, 2);
+    const replay = finishReplay(newReplay(level, state), runReplay(level, newReplay(level, state), { maxMs: 1000 }));
+    expect(replay.outcome!.result).toBe('playing');
+    const won = parseReplay(serializeReplay(replay).replace('"result":"playing"', '"result":"won"'));
+    const v = verifyReplay(level, won);
+    expect(v.timeMs).toBe(1000);
+    expect(v.outcome).toBe('playing');
+    expect(v.matches).toBe(false);
+    expect(v.reason).toBe('outcome');
+    // and the claimed result with the wrong hash is `hash` only once time and outcome agree
+    const badHash = parseReplay(serializeReplay(replay).replace(/"hash":"[0-9a-f]{8}"/, '"hash":"00000000"'));
+    expect(verifyReplay(level, badHash).reason).toBe('hash');
+  });
+
+  it('both committed fixtures still parse (every live t ≤ outcome.timeMs) and verify MATCH on their shipped levels', async () => {
+    for (const name of ['replay-l15-s1.json', 'replay-daily-2026-11-11.json']) {
+      const json = readFileSync(new URL(`../fixtures/${name}`, import.meta.url), 'utf8');
+      const replay = parseReplay(json);
+      expect(replay.v).toBe(REPLAY_VERSION);
+      expect(serializeReplay(replay)).toBe(json.trim()); // the parse is byte-neutral: nothing is rewritten
+      const end = replay.outcome!.timeMs;
+      expect(Number.isFinite(end) && end > 0).toBe(true);
+      expect(replay.commands.every((e) => Number.isFinite(e.t) && e.t >= 0 && e.t <= end)).toBe(true);
+      const level = (await loadLevel(replay.levelId))!;
+      const v = verifyReplay(level, replay, { maxMs: 180_000 }); // the script's default budget does not cut a 44–50 s record
+      expect(v.matches, `${name}: ${v.reason ?? ''} ${v.hash} vs ${v.expected}`).toBe(true);
+      expect(v.timeMs).toBe(end);
+      expect(verifyReplay(level, replay).matches).toBe(true);
+    }
   });
 });

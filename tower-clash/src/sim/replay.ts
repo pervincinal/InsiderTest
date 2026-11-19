@@ -50,6 +50,14 @@ import { SNAPSHOT_VERSION, applyContinue } from './snapshot';
  * per attempt, `PlayScreen.hasContinued`); `parseReplay` refuses a record over it. The version stays 1:
  * the entry is optional, a record without one is as before; `verifyReplay` returns `continued` only for
  * the pre-SIM-R3 records that carry the flag without the entry (their rewind is not in the record).
+ *
+ * REV-1 (2026-11-19): every time in a record is a finite, non-negative number — `parseReplay` refuses `1e999`
+ * (Infinity after JSON.parse), a negative `t` / `outcome.timeMs`, and an entry of the live timeline after the
+ * recorded end (`t > outcome.timeMs`: the re-run stops at the end, so no loop could have applied it — a malformed
+ * record, not a mismatch; the abandoned future of a Continue may lie past the end, it is not live). `runReplay`
+ * caps a closed record's re-run at `maxMs` too when the caller gives one, so a finite but bogus `outcome.timeMs`
+ * on a level the sim never closes by itself (a stalemate) ends at the budget with `reason: 'time'` instead of
+ * spinning. Valid records are untouched: same bytes, same hashes, version 1.
  */
 
 export const REPLAY_VERSION = 1;
@@ -221,7 +229,11 @@ function isNum(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v);
 }
 
-/** Parse a serialized record; throws on a wrong version or a malformed shape (fields are checked, commands' bodies are the sim's to validate). */
+/**
+ * Parse a serialized record; throws on a wrong version or a malformed shape (fields are checked, commands' bodies
+ * are the sim's to validate). Times (`t`, `r.toMs`, `outcome.timeMs`) must be finite and ≥ 0; with an outcome,
+ * no entry of the live timeline may stand after `outcome.timeMs` (REV-1).
+ */
 export function parseReplay(json: string): Replay {
   const raw: unknown = JSON.parse(json);
   if (!isRecord(raw)) throw new Error('replay: not an object');
@@ -233,7 +245,7 @@ export function parseReplay(json: string): Replay {
   if (!Array.isArray(raw.commands)) throw new Error('replay: commands must be an array');
   let continues = 0;
   raw.commands.forEach((e: unknown, i) => {
-    if (!isRecord(e) || typeof e.t !== 'number') throw new Error(`replay: command ${i} malformed`);
+    if (!isRecord(e) || !isNum(e.t) || e.t < 0) throw new Error(`replay: command ${i} malformed`);
     if (e.r !== undefined) {
       // SIM-R3: a continue entry — the rewind target precedes (or is) the defeat it was taken on
       const r = e.r;
@@ -243,7 +255,17 @@ export function parseReplay(json: string): Replay {
   });
   if (raw.outcome !== undefined) {
     const o = raw.outcome;
-    if (!isRecord(o) || typeof o.result !== 'string' || typeof o.timeMs !== 'number' || typeof o.hash !== 'string') throw new Error('replay: outcome malformed');
+    if (!isRecord(o) || typeof o.result !== 'string' || !isNum(o.timeMs) || o.timeMs < 0 || typeof o.hash !== 'string') throw new Error('replay: outcome malformed');
+    // REV-1: an entry the re-run would reach after the end can never apply (`runReplay` stops at `timeMs`), so the
+    // record contradicts itself — refused here like a continue before its `toMs`, not reported as a mismatch.
+    // Checked on the live timeline: the future a Continue abandoned may lie past the end and is not replayed.
+    const endMs = o.timeMs;
+    const entries = raw.commands as ReplayEntry[];
+    const late = liveTimeline(entries).find((e) => e.t > endMs);
+    if (late) {
+      const i = entries.findIndex((e) => e === late || (e.r !== undefined && e.r === late.r));
+      throw new Error(`replay: command ${i} after the outcome (${late.t} > ${endMs} ms)`);
+    }
   }
   if (raw.challenge !== undefined) {
     // SIM-R2: optional; a v1 record without it is a campaign match
@@ -254,7 +276,11 @@ export function parseReplay(json: string): Replay {
 }
 
 export interface RunReplayOptions {
-  /** Sim-time budget when the record has no outcome, ms (default 180 s like the headless runner). */
+  /**
+   * Sim-time budget, ms: the end of an open record (default 180 s like the headless runner); for a closed one,
+   * REV-1: a cap on its `outcome.timeMs` (the re-run then ends early and `verifyReplay` reads `'time'`).
+   * Absent on a closed record: the re-run goes to `outcome.timeMs`.
+   */
   maxMs?: number;
 }
 
@@ -283,13 +309,14 @@ export function liveTimeline(entries: readonly ReplayEntry[]): ReplayEntry[] {
  * the live timeline (`liveTimeline`: the record itself without continues) is applied right before the tick
  * at its `t` (in record order; an entry whose `t` already passed is applied at once; a continue entry is
  * its grant, `applyContinue`, on the state of `toMs`), and the sim steps until the recorded
- * `outcome.timeMs` (or the match ends, or `maxMs` when the record is open). Returns the final state —
+ * `outcome.timeMs` (or the match ends, or `maxMs` — the end of an open record, a cap on a closed one). Returns the final state —
  * compare it with `hashState` / `verifyReplay`. Cost: one pass over the record, continues or not.
  */
 export function runReplay(level: LevelDef, replay: Replay, options: RunReplayOptions = {}): GameState {
   if (level.id !== replay.levelId) throw new Error(`replay: level ${replay.levelId} recorded, level ${level.id} given`);
   const state = createState(level, replay.seed, replay.modifiers);
-  const endMs = replay.outcome?.timeMs ?? options.maxMs ?? 180_000;
+  const rec = replay.outcome;
+  const endMs = rec ? (options.maxMs === undefined ? rec.timeMs : Math.min(rec.timeMs, options.maxMs)) : (options.maxMs ?? 180_000);
   const live = liveTimeline(replay.commands);
   let i = 0;
   for (;;) {
