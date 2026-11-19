@@ -142,7 +142,8 @@ export function installDebug(app: TowerClashApp): TowerClashDebug & QaDebugExtra
       const replay = parseReplay(json);
       // SIM-R2: a challenge record is rebuilt from its key and checked against the record (rejects on a mismatch)
       const level = await levelForReplay(replay);
-      const { hash, expected, matches, rulesMatch, outcome, timeMs, reason } = verifyReplay(level, replay);
+      // REV-1: a 10-min sim budget (any real match incl. a Continue is shorter) — a huge finite timeMs reads 'time'
+      const { hash, expected, matches, rulesMatch, outcome, timeMs, reason } = verifyReplay(level, replay, { maxMs: 600_000 });
       const out: Awaited<ReturnType<QaDebugExtras['verifyReplay']>> = { hash, matches, rulesMatch, outcome, timeMs };
       if (expected !== undefined) out.expected = expected;
       if (reason !== undefined) out.reason = reason;
