@@ -4,9 +4,9 @@
  *
  * - Items: the screen's `focusRects()` (screen logical px, in reading order — rows top to bottom, each
  *   row left to right; a segmented control is one item per segment; a confirm card lists its safe
- *   answer first). The title and the pause card are listed here, from their eager layout tables, so
+ *   answer first). The title, the pause card and the stalemate card (REV-7) are listed here, from their eager layout tables, so
  *   the eager screens carry no focus code.
- * - Keys: Tab / Shift+Tab = next / previous (wrapping); ← / → the same; ↑ / ↓ = the nearest item in the
+ * - Keys (REV-5b: an auto-repeated Enter / Space is taken but taps nothing): Tab / Shift+Tab = next / previous (wrapping); ← / → the same; ↑ / ↓ = the nearest item in the
  *   row above / below (wrapping to the last / first item); Enter / Space = a tap at the item's centre
  *   (the screen's own `down` + `up`, the very path a finger takes); Escape stays the screen's back
  *   (`screen.key`). While the ring is hidden, Enter / Space / arrows keep their per-screen shortcuts
@@ -22,6 +22,7 @@ import { applyTransform } from '../render/view';
 import type { Rect } from '../render/widgets';
 import { roundRect } from '../render/widgets';
 import { PAUSE, TITLE } from '../render/layout';
+import { STALL } from '../render/hud';
 import { titleRectShift, titleShifts } from '../render/titleLayout';
 import type { PointerPoint } from '../input/pointer';
 import type { Screen } from './screens';
@@ -87,6 +88,8 @@ export function screenBand(s: Pick<Screen, 'fromLayout'>, top: number, bottom: n
 interface PlayLike {
   readonly loop: { readonly paused: boolean };
   readonly over: boolean;
+  /** REV-7: the "Nothing is changing" card is up (play.ts getter; it holds the sim over any pause). */
+  readonly stalemateCardUp?: boolean;
 }
 
 /** The focus items of `s` on `view`, in order. */
@@ -98,6 +101,8 @@ export function focusItems(s: Screen, view: View): readonly FocusItem[] {
   }
   if (s.name === 'play') {
     const p = s as unknown as PlayLike;
+    // REV-7: the stalemate card first (play.ts `down` / `up` test it before the pause card; identity coordinates, `stallButtonAt`)
+    if (p.stalemateCardUp && !p.over) return readingOrder([STALL.keep, STALL.restart, STALL.retreat]);
     // the pause card (identity coordinates; play.ts `cardButtonAt`)
     return p.loop.paused && !p.over ? readingOrder([PAUSE.resume, PAUSE.speed, PAUSE.sound, PAUSE.settings, PAUSE.retry, PAUSE.menu, PAUSE.howto]) : [];
   }
@@ -184,7 +189,8 @@ export function focusKey(host: FocusHost, e: KeyboardEvent): boolean {
   }
   if ((k === 'Enter' || k === ' ') && shown && index >= 0 && index < n) {
     e.preventDefault();
-    activate(s, items[index]!);
+    // REV-5b: a held key's auto-repeat is swallowed (it would re-tap RESUME / RETRY each repeat); a held arrow / Tab may walk the ring
+    if (!e.repeat) activate(s, items[index]!);
     return true;
   }
   return false;

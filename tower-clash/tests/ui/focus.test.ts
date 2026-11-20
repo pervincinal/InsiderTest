@@ -3,6 +3,7 @@ import type { View } from '../../src/render/view';
 import { getPalette } from '../../src/render/palette';
 import type { Rect } from '../../src/render/widgets';
 import { PAUSE, TITLE } from '../../src/render/layout';
+import { STALL } from '../../src/render/hud';
 import { SETTINGS } from '../../src/render/menuLayout';
 import { LANGUAGE_SEGMENTS, MOTION_SEGMENTS, SETTINGS_FEEL } from '../../src/render/menusSettings';
 import { createAdSession } from '../../src/economy/adsFlow';
@@ -47,7 +48,7 @@ function fakeApp(save: SaveData, log: string[] = []): App {
   };
 }
 
-const key = (k: string, shift = false): KeyboardEvent => ({ key: k, shiftKey: shift, ctrlKey: false, metaKey: false, altKey: false, preventDefault() {} }) as unknown as KeyboardEvent;
+const key = (k: string, shift = false, repeat = false): KeyboardEvent => ({ key: k, shiftKey: shift, repeat, ctrlKey: false, metaKey: false, altKey: false, preventDefault() {} }) as unknown as KeyboardEvent;
 const host = (current: Screen): FocusHost => ({ current, view: VIEW });
 const same = (a: Rect | null | undefined, b: Rect): boolean => !!a && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
 
@@ -110,6 +111,19 @@ describe('order', () => {
     (play as unknown as { loop: { paused: boolean } }).loop.paused = false;
     expect(focusItems(play, VIEW)).toEqual([]);
   });
+
+  it('REV-7: the stalemate card lists Keep playing, Restart, Retreat (reading order) over the pause card; without it the list is as before', () => {
+    const play = { name: 'play', draw() {}, loop: { paused: false }, over: false, stalemateCardUp: true } as unknown as Screen;
+    expect(focusItems(play, VIEW)).toEqual([STALL.keep, STALL.restart, STALL.retreat]);
+    (play as unknown as { loop: { paused: boolean } }).loop.paused = true;
+    expect(focusItems(play, VIEW)).toEqual([STALL.keep, STALL.restart, STALL.retreat]); // play.ts tests the card before the pause
+    (play as unknown as { stalemateCardUp: boolean }).stalemateCardUp = false;
+    expect(focusItems(play, VIEW)).toEqual([PAUSE.resume, PAUSE.speed, PAUSE.sound, PAUSE.settings, PAUSE.retry, PAUSE.menu, PAUSE.howto]);
+    (play as unknown as { loop: { paused: boolean } }).loop.paused = false;
+    expect(focusItems(play, VIEW)).toEqual([]);
+    const over = { name: 'play', draw() {}, loop: { paused: false }, over: true, stalemateCardUp: true } as unknown as Screen;
+    expect(focusItems(over, VIEW)).toEqual([]);
+  });
 });
 
 describe('wrap', () => {
@@ -156,6 +170,30 @@ describe('activate', () => {
     expect(focusKey(h, key('Enter'))).toBe(true);
     expect(focusKey(h, key(' '))).toBe(true);
     expect(s.taps).toEqual(['down 140,220', 'up 140,220', 'down 140,220', 'up 140,220']);
+  });
+
+  it('REV-5b: a held Enter / Space taps once — its auto-repeats are taken (no screen shortcut) but tap nothing', () => {
+    const s = recorder([{ x: 100, y: 200, w: 80, h: 40 }]);
+    const h = host(s);
+    focusKey(h, key('Tab'));
+    expect(focusKey(h, key('Enter'))).toBe(true);
+    for (let i = 0; i < 5; i++) expect(focusKey(h, key('Enter', false, true))).toBe(true);
+    expect(focusKey(h, key(' ', false, true))).toBe(true);
+    expect(s.taps).toEqual(['down 140,220', 'up 140,220']);
+    // a held arrow / Tab still walks the ring (normal list behaviour)
+    const two = recorder([
+      { x: 0, y: 0, w: 50, h: 50 },
+      { x: 100, y: 0, w: 50, h: 50 },
+    ]);
+    const h2 = host(two);
+    expect(focusState(h2).index).toBe(0); // keyboard mode carries over: the new screen opens on its first item
+    focusKey(h2, key('ArrowRight', false, true));
+    expect(focusState(h2).index).toBe(1);
+    focusKey(h2, key('Tab', false, true));
+    expect(focusState(h2).index).toBe(0);
+    // a hidden ring leaves even a repeat to the screen
+    hideFocus();
+    expect(focusKey(h2, key('Enter', false, true))).toBe(false);
   });
 
   it('settings: Tab to Music, Enter toggles it (the tap path: the row persists through the audio facade)', () => {
