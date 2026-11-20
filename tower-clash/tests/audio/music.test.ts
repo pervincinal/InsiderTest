@@ -5,7 +5,7 @@ import { Synth } from '../../src/audio/synth';
 import type { Mix } from '../../src/audio/mixer';
 import { dbToGain, BUS_DB, mixer } from '../../src/audio/mixer';
 import { busLevels, musicState } from '../../src/audio/inspect';
-import { BASS_LIFT, BPM, LOOKAHEAD_S, LOOP_STEPS, MusicLoop, PLAY_GAP_S, STEP_S, midiHz, notesAt, tensionAt } from '../../src/audio/music';
+import { BASS_LIFT, BPM, LOOKAHEAD_S, LOOP_STEPS, MusicLoop, PLAY_GAP_S, STEP_S, midiHz, notesAt, syncMusic, tensionAt } from '../../src/audio/music';
 import { audioSynth, initAudio, onSimFrame, playSfx, setAudioBackground, setMusicOn, setMuted, toggleMuted, unlockAudio } from '../../src/audio/index';
 import { defaultSave } from '../../src/ui/save';
 import type { FakeGain, FakeOscillator } from './fakeAudio';
@@ -232,6 +232,96 @@ describe('look-ahead scheduler (fake clock)', () => {
     vi.advanceTimersByTime(500);
     ctx.currentTime = 1.5;
     expect(ctx.oscillators.length).toBe(n);
+  });
+});
+
+/*
+ * REV-6: a stopped loop leaves the music bus entirely (the pad trim, the filters and inputs with the levels) once
+ * its fade has rung out, however often the Music toggle, the speaker (`syncMusic`) or a tab hide / show
+ * (`setAudioBackground`) cycle it; a `start` after a `stop` builds a fresh graph and plays.
+ */
+describe('REV-6: start / stop cycles release the graph', () => {
+  let ctx: FakeMixContext;
+  let synth: Synth;
+  let m: Mix;
+  beforeEach(() => {
+    vi.useFakeTimers();
+    ctx = new FakeMixContext();
+    synth = new Synth(() => ctx);
+    synth.unlock();
+    m = mixer(synth)!;
+  });
+  afterEach(() => {
+    syncMusic(synth, false);
+    vi.useRealTimers();
+  });
+
+  /** Nodes with an output into the music bus. */
+  const intoMusic = (): number => [...ctx.gains, ...ctx.filters].filter((n) => n.connections.includes(m.music)).length;
+  /** The loops' filters (5 per graph, only `build` makes them) still wired to anything, and those that still reach the bus. */
+  const wiredFilters = (): number => ctx.filters.filter((f) => f.connections.length > 0).length;
+  const reaching = (): number => {
+    const reach = (n: { connections: unknown[] }): boolean => n.connections.some((d) => d === m.music || reach(d as { connections: unknown[] }));
+    return ctx.filters.filter(reach).length;
+  };
+  /** Wake-ups every 25 ms of the context clock, the timers with it. */
+  const wait = (s: number): void => {
+    for (let i = 0; i < Math.round(s / 0.025); i++) {
+      ctx.currentTime += 0.025;
+      vi.advanceTimersByTime(25);
+    }
+  };
+
+  it('the facade path (syncMusic): the nodes on the music bus stay constant over 200 cycles, not +1 per cycle', () => {
+    const base = intoMusic();
+    syncMusic(synth, true);
+    const one = intoMusic();
+    expect(one - base).toBe(4); // the pad trim + the bass, pulse and tension levels
+    expect([wiredFilters(), reaching()]).toEqual([5, 5]);
+    const counts: number[][] = [];
+    for (let i = 1; i <= 200; i++) {
+      syncMusic(synth, false);
+      wait(1.05); // past the 1 s release
+      syncMusic(synth, true);
+      wait(0.1);
+      if (i % 50 === 0) counts.push([intoMusic(), wiredFilters(), reaching()]);
+    }
+    console.info(`REV-6 nodes into the music bus: before any loop ${base}, one loop ${one}, after 50/100/150/200 cycles ${counts.map((c) => c[0]).join('/')} (wired loop filters ${counts.map((c) => c[1]).join('/')})`);
+    expect(counts).toEqual([...Array(4)].map(() => [one, 5, 5]));
+    expect(musicState(synth).playing).toBe(true);
+  });
+
+  it('one MusicLoop stopped and started again (also inside the 1 s release): a fresh graph, constant on the bus, still audible', () => {
+    const base = intoMusic();
+    const loop = new MusicLoop(synth, m);
+    loop.start();
+    wait(2);
+    const one = intoMusic();
+    const counts: number[] = [];
+    for (let i = 1; i <= 50; i++) {
+      loop.stop();
+      wait(i % 2 ? 1.05 : 0.2); // every other start comes before the stopped graph's release timer
+      loop.start();
+      wait(0.2);
+      if (i % 10 === 0) counts.push(intoMusic());
+    }
+    wait(1.05); // the last early-restart's old graph is released too
+    console.info(`REV-6 one loop instance: before ${base}, started ${one}, after 10..50 cycles ${counts.join('/')}, settled ${intoMusic()}`);
+    expect(counts).toEqual(counts.map(() => 2 * (one - base) + base)); // bounded: the new graph + the one still ringing out
+    expect(intoMusic()).toBe(one);
+    expect(one - base).toBe(4);
+    // audible: the current graph is on the bus, pad and bass fade in to 1, and new notes play into its inputs
+    expect((loop.padTrim as FakeGain).connections).toEqual([m.music]);
+    expect(loop.levels.slice(1).every((g) => (g as FakeGain).connections[0] === m.music)).toBe(true);
+    for (const g of loop.levels.slice(0, 2)) expect((g.gain as FakeGain['gain']).events.at(-1)).toMatchObject({ kind: 'linear', value: 1 });
+    const n = ctx.oscillators.length;
+    wait(1);
+    const fresh = ctx.oscillators.slice(n);
+    expect(fresh.length).toBeGreaterThan(0);
+    expect(fresh.every((o) => loop.inputs.includes((o.connections[0] as FakeGain).connections[0] as FakeGain))).toBe(true);
+    loop.stop();
+    wait(1.05);
+    expect(intoMusic()).toBe(base);
   });
 });
 

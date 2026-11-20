@@ -123,6 +123,14 @@ export function intensityOf(state: Required<MatchView>, me: Owner = 'player'): n
 /** One smoothing step: `prev` moves toward `raw` by 1 − e^(−rate · dtS). */
 export const smoothIntensity = (prev: number, raw: number, dtS: number): number => prev + (raw - prev) * (1 - Math.exp(-TENSION.rate * dtS));
 
+/**
+ * REV-8: whether the sim clock moving from `fromMs` back to `toMs` is a Continue (the same match rewound by
+ * `C.CONTINUE_REWIND_MS`: the ring's newest snapshot at least that old, so up to one `C.SNAPSHOT_INTERVAL_MS` more,
+ * plus one AI tick of slack) rather than a new match: a retry or the next level starts again on AI tick 0.
+ */
+export const isContinueRewind = (fromMs: number, toMs: number): boolean =>
+  toMs < fromMs && toMs >= C.AI_TICK_MS && fromMs - toMs <= C.CONTINUE_REWIND_MS + C.SNAPSHOT_INTERVAL_MS + C.AI_TICK_MS;
+
 /** Hysteresis: on at ≥ TENSION.on, off below TENSION.off, else unchanged. */
 export const tensionGate = (on: boolean, x: number): boolean => (on ? x >= TENSION.off : x >= TENSION.on);
 
@@ -184,6 +192,9 @@ export class MusicLoop {
   tension = false;
   /** The AI tick (`time / AI_TICK_MS`) the intensity was last read on; −1: none this match. */
   private aiTick = -1;
+  /** REV-8: the sim time of the last play frame read and, held across a gap out of play, the intensity and gate then. */
+  private lastTime = -1;
+  private held: { time: number; intensity: number; hot: boolean } | null = null;
   /** The tension level's and the pad trim's last planned fades; the layer's hits stop once a fade-out ends. */
   private tFade: Fade = { start: -Infinity, from: 0, to: 0 };
   private padFade: Fade = { start: -Infinity, from: 1, to: 1 };
@@ -194,17 +205,29 @@ export class MusicLoop {
   readonly inputs: GainNodeLike[] = [];
   readonly levels: GainNodeLike[] = [];
   /** FEEL-1-4: the pad's trim (levels[0] → padTrim → music bus), PAD_UNDER_TENSION while the tension layer plays. */
-  readonly padTrim: GainNodeLike;
+  padTrim!: GainNodeLike;
+  /** REV-6: every node of the current graph (released by `stop`), and whether `stop` released it (`start` rebuilds). */
+  private nodes: { disconnect(): void }[] = [];
+  private released = false;
   private timer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     readonly synth: Synth,
     private readonly mix: Mix,
   ) {
-    const ctx = synth.graph()!.ctx;
+    this.build();
+  }
+
+  /** The layers' filters and levels and the pad trim, into the music bus (a fresh set: a stopped one is released). */
+  private build(): void {
+    const ctx = this.synth.graph()!.ctx;
+    const mix = this.mix;
+    this.inputs.length = 0;
+    this.levels.length = 0;
     this.padTrim = ctx.createGain();
     this.padTrim.gain.value = 1;
     this.padTrim.connect(mix.music);
+    this.nodes = [this.padTrim];
     const layer = (type: BiquadFilterType, hz: number, level?: GainNodeLike): void => {
       const f = ctx.createBiquadFilter();
       f.type = type;
@@ -216,18 +239,31 @@ export class MusicLoop {
         level.gain.value = 0;
         level.connect(this.levels.length ? mix.music : this.padTrim);
         this.levels.push(level);
+        this.nodes.push(level);
       }
       f.connect(level);
       this.inputs.push(input);
+      this.nodes.push(f, input);
     };
     LOWPASS_HZ.forEach((hz) => layer('lowpass', hz));
     // FEEL-1-4 tension: the kick (a low-pass well above it: a plain pass) and the hats share one level
     layer('lowpass', 4000);
     layer('highpass', HAT.hz, this.levels[3]);
+    // the new levels start silent: the layer flags and fades start from there too
+    this.pulse = false;
+    this.tension = false;
+    this.tFade = { start: -Infinity, from: 0, to: 0 };
+    this.padFade = { start: -Infinity, from: 1, to: 1 };
+    this.released = false;
   }
 
-  /** Begin at the next LEAD_S: pad and bass fade in; the timer wakes the scheduler every TICK_MS. */
+  /**
+   * Begin at the next LEAD_S: pad and bass fade in; the timer wakes the scheduler every TICK_MS. After a `stop`
+   * (REV-6) a fresh graph is built: the stopped one rings out under its fade and is released on its own timer.
+   */
   start(): void {
+    if (this.timer !== null) clearInterval(this.timer);
+    if (this.released) this.build();
     const now = this.synth.now();
     this.t0 = now + LEAD_S;
     this.step = 0;
@@ -280,24 +316,42 @@ export class MusicLoop {
 
   /**
    * FEEL-1-4: read the match once per AI tick and move the smoothed intensity and its gate. Out of play (no recent
-   * frame: the title, a menu, the result screen) everything resets to calm, so a new match starts from 0; a match
-   * whose clock went back (a retry, the next level) starts again from 0 too.
+   * frame: the title, a menu, the result screen) everything reads calm, so a new match starts from 0; a match whose
+   * clock went back to its start (a retry, the next level) or further than a Continue rewinds starts from 0 too.
+   * REV-8: a Continue (src/ui/play.ts `resumeFromSnapshot`: the same match, back by `isContinueRewind`) keeps the
+   * intensity and the gate it had at the last frame before the result screen, so the fight it rewinds into is
+   * as tense as the one it left; only the AI tick is re-anchored.
    */
   private sense(recent: boolean): void {
     const st = this.synth.sim;
     if (!recent || !st?.towers || !st.links || st.time === undefined) {
       if (!recent) {
+        if (this.lastTime >= 0) this.held = { time: this.lastTime, intensity: this.intensity, hot: this.hot };
         this.intensity = 0;
         this.hot = false;
         this.aiTick = -1;
+        this.lastTime = -1;
       }
       return;
     }
     const k = Math.floor(st.time / C.AI_TICK_MS);
     if (k === this.aiTick) return;
-    if (k < this.aiTick) this.intensity = 0;
+    // one AI tick of smoothing on a match's first read and on any backward step, else the ticks since the last read
     const dtS = ((this.aiTick < 0 || k < this.aiTick ? 1 : k - this.aiTick) * C.AI_TICK_MS) / 1000;
+    if (this.aiTick < 0 && this.held) {
+      // back in play after a gap: a Continue picks the held level up again, anything else starts calm (as reset)
+      if (isContinueRewind(this.held.time, st.time)) {
+        this.intensity = this.held.intensity;
+        this.hot = this.held.hot;
+      }
+      this.held = null;
+    } else if (k < this.aiTick && !isContinueRewind(this.lastTime, st.time)) {
+      // the clock went back while frames kept coming: the same rule, against the last frame read
+      this.intensity = 0;
+      this.hot = false;
+    }
     this.aiTick = k;
+    this.lastTime = st.time;
     this.intensity = smoothIntensity(this.intensity, intensityOf(st as Required<MatchView>), dtS);
     this.hot = tensionGate(this.hot, this.intensity);
   }
@@ -362,14 +416,21 @@ export class MusicLoop {
     o.stop(end);
   }
 
-  /** Stop scheduling and fade every layer out (what is already scheduled rings out under the fade). */
+  /**
+   * Stop scheduling and fade every layer out (what is already scheduled rings out under the fade); 1 s later the
+   * graph leaves the music bus (REV-6: nothing of a stopped loop stays attached, however often it is toggled).
+   */
   stop(): void {
     if (this.timer !== null) clearInterval(this.timer);
     this.timer = null;
     if (this.mix.loop === this) this.mix.loop = null;
     const now = this.synth.now();
     for (const g of this.levels) fade(g, now, 0, STOP_FADE_S);
-    setTimeout(() => this.levels.forEach((g) => g.disconnect()), 1000);
+    // REV-6: release the whole graph (the pad trim, the filters and inputs with the levels) once the fade has
+    // rung out; this graph's own list, so a `start` meanwhile (which builds a fresh one) is not cut
+    const nodes = this.nodes;
+    this.released = true;
+    setTimeout(() => nodes.forEach((n) => n.disconnect()), 1000);
   }
 }
 

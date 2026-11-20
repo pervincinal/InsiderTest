@@ -13,6 +13,7 @@ import {
   STEP_S,
   TENSION,
   intensityOf,
+  isContinueRewind,
   smoothIntensity,
   tensionAt,
   tensionGate,
@@ -242,6 +243,81 @@ describe('the layer on the music clock (fake context)', () => {
     expect(loop.intensity).toBeGreaterThan(0.8);
     run(3.025, 3.05, () => CALM(0)); // the retry's first frame
     expect(loop.intensity).toBeCloseTo(smoothIntensity(0, intensityOf(CALM(0)), C.AI_TICK_MS / 1000), 12);
+  });
+
+  /*
+   * REV-8: a Continue (src/ui/play.ts `resumeFromSnapshot`) rewinds the same match by C.CONTINUE_REWIND_MS (the
+   * ring's newest snapshot at least that old: up to one SNAPSHOT_INTERVAL_MS more) — the tension layer keeps its
+   * level; a retry / the next level (AI tick 0) or a longer jump still starts calm.
+   */
+  it('REV-8: a Continue rewind (≤ 20 s + a snapshot interval + an AI tick) is the same match; tick 0 or further back is a new one', () => {
+    expect(C.CONTINUE_REWIND_MS).toBe(20_000);
+    const max = C.CONTINUE_REWIND_MS + C.SNAPSHOT_INTERVAL_MS + C.AI_TICK_MS;
+    expect(isContinueRewind(60_000, 40_000)).toBe(true);
+    expect(isContinueRewind(60_000, 60_000 - max)).toBe(true);
+    expect(isContinueRewind(60_000, 60_000 - max - 50)).toBe(false);
+    expect(isContinueRewind(60_000, 0)).toBe(false); // the retry / next level
+    expect(isContinueRewind(15_000, 0)).toBe(false); // even when the lost match was shorter than the rewind
+    expect(isContinueRewind(15_000, C.AI_TICK_MS)).toBe(true); // the ring's oldest snapshot (a loss inside 20 s)
+    expect(isContinueRewind(60_000, 60_000)).toBe(false);
+    expect(isContinueRewind(40_000, 60_000)).toBe(false);
+  });
+
+  it('REV-8: hot → the clock jumps back 20 s while frames come → the next AI tick keeps hot and the intensity (no fade-out)', () => {
+    loop.start();
+    const sim = (now: number) => 40_000 + simAt(now); // a match 40 s in
+    run(0, 3, (now) => HOT(sim(now)));
+    expect(loop.hot).toBe(true);
+    expect(loop.tension).toBe(true);
+    const x = loop.intensity;
+    expect(x).toBeGreaterThan(0.8);
+    const fades = level().length;
+    run(3.025, 3.05, () => HOT(sim(3) - C.CONTINUE_REWIND_MS)); // the rewound state's first frame
+    expect(loop.hot).toBe(true);
+    expect(loop.intensity).toBeCloseTo(smoothIntensity(x, intensityOf(HOT(sim(3) - C.CONTINUE_REWIND_MS)), C.AI_TICK_MS / 1000), 12);
+    run(3.075, 5, (now) => HOT(sim(now) - C.CONTINUE_REWIND_MS));
+    expect(loop.tension).toBe(true);
+    expect(level()).toHaveLength(fades); // no ramp planned: the layer never left
+    // the time back to 0 (the retry): reset as before
+    run(5.025, 5.05, () => CALM(0));
+    expect(loop.intensity).toBeCloseTo(smoothIntensity(0, intensityOf(CALM(0)), C.AI_TICK_MS / 1000), 12);
+    expect(loop.hot).toBe(false);
+  });
+
+  it('REV-8: the real Continue — the loss beat, the result screen (no frames), the rewind — picks the held intensity up; a retry does not', () => {
+    loop.start();
+    const sim = (now: number) => 40_000 + simAt(now);
+    run(0, 3, (now) => HOT(sim(now)));
+    m.ended = true; // `lost`: frames with the clock frozen for the beat
+    const lossAt = sim(3);
+    run(3.025, 3.6, () => HOT(lossAt));
+    expect(loop.tension).toBe(false);
+    const held = loop.intensity;
+    run(3.625, 8); // the result screen: calm, as before
+    expect(loop.intensity).toBe(0);
+    expect(loop.hot).toBe(false);
+    const back = lossAt - C.CONTINUE_REWIND_MS - 600; // the newest snapshot at least 20 s old
+    run(8.025, 8.05, () => HOT(back)); // Reinforcements: the rewound state's first frame
+    expect(loop.hot).toBe(true);
+    expect(loop.intensity).toBeCloseTo(smoothIntensity(held, intensityOf(HOT(back)), C.AI_TICK_MS / 1000), 12);
+    run(8.075, 9, (now) => HOT(back + simAt(now - 8.05)));
+    expect(loop.tension).toBe(true); // back in on the first step the gate allows, not after a fresh 0 → 0.6 climb
+    // the same flow into a retry: the result screen, then the level from tick 0 → calm from 0
+    m.ended = true;
+    run(9.025, 9.6, () => HOT(back + 1_000));
+    run(9.625, 12);
+    run(12.025, 12.05, () => CALM(0));
+    expect(loop.intensity).toBeCloseTo(smoothIntensity(0, intensityOf(CALM(0)), C.AI_TICK_MS / 1000), 12);
+    expect(loop.hot).toBe(false);
+  });
+
+  it('REV-8: a jump back further than a Continue (a new match that did not start at 0) starts calm', () => {
+    loop.start();
+    run(0, 3, (now) => HOT(60_000 + simAt(now)));
+    expect(loop.hot).toBe(true);
+    run(3.025, 3.05, () => CALM(30_000));
+    expect(loop.intensity).toBeCloseTo(smoothIntensity(0, intensityOf(CALM(30_000)), C.AI_TICK_MS / 1000), 12);
+    expect(loop.hot).toBe(false);
   });
 
   it('loudness: the loop\'s summed peak with the tension layer on is not above today\'s (pulse on, no tension)', () => {
