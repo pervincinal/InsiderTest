@@ -255,8 +255,14 @@ export class PlayScreen implements Screen {
   private readonly ring = new SnapshotRing<Snapshot>();
   /** Sim ms discarded by continues: the star clock is `state.time + rewoundMs` (continuing never improves it). */
   private rewoundMs = 0;
-  /** A rewarded video for a free booster charge is in flight (sim paused meanwhile). */
+  /**
+   * REV-4: a rewarded video for a free booster charge is in flight — its own hold, like `held` /
+   * `stallUp`: no tick runs, no card is drawn (the ad covers the screen), all input is ignored.
+   * `loop.paused` is left alone so the pause card, its hit tests and its focus items stay off.
+   */
   private adPending = false;
+  /** REV-4: `pause()` came in during the ad (app sent to background): the pause card opens after it. */
+  private pauseAfterAd = false;
   /** AUD-B6: boosters this try paid for (charges or gold), for the diagnostics row. */
   boosters = 0;
   readonly toast = new Toast();
@@ -355,7 +361,7 @@ export class PlayScreen implements Screen {
   }
 
   tutorialStep(): TutorialStep | null {
-    if (!this.tutorial || this.loop.paused || this.over || this.stallUp || this.lessonCardAlpha(this.nowMs) > 0) return null;
+    if (!this.tutorial || this.loop.paused || this.adPending || this.over || this.stallUp || this.lessonCardAlpha(this.nowMs) > 0) return null;
     return this.tutorial.current(this.state);
   }
 
@@ -569,8 +575,8 @@ export class PlayScreen implements Screen {
     // a step on screen for TUTORIAL_STEP_TIMEOUT_MS without completion gives way (BUG-33: no overlay softlock)
     if (this.tutorialStep()) this.tutorial?.elapse(dtMs, this.state);
     this.applyStepSelection();
-    // AUD-B11: nothing ticks while the lesson card holds the match; AUD-B2: nor while the stalemate card is up
-    if (!this.held && !this.stallUp && !this.retreated && this.loop.advance(dtMs) > 0) {
+    // AUD-B11: nothing ticks while the lesson card holds the match; AUD-B2: nor while the stalemate card is up; REV-4: nor during an ad
+    if (!this.held && !this.stallUp && !this.adPending && !this.retreated && this.loop.advance(dtMs) > 0) {
       this.ring.record(this.snapshot()); // the ring clones at most once per interval
       if (this.stalemate.check(this.state)) {
         this.toast.show(t('hint.stalemate'), 'error', nowMs, 3200);
@@ -699,7 +705,7 @@ export class PlayScreen implements Screen {
       pressedTowerId: this.gestures.pressedTowerId,
       drag: this.gestures.drag ?? undefined,
       swipeTrail: this.gestures.trail,
-      paused: this.loop.paused,
+      paused: this.loop.paused && !this.adPending, // REV-4: never the pause card under an ad
       limitHint: this.gestures.limitHint ?? undefined,
       limitHintText: this.gestures.limitHintText || undefined,
       outcome,
@@ -843,12 +849,15 @@ export class PlayScreen implements Screen {
 
   /**
    * Layout point → screen logical point (Screen.fromLayout; the debug hooks `toClient` /
-   * `layoutToClient` use it): while the world takes input, a point of the map's band
-   * (HUD.mapTop..HUD.mapBottom) is a map point and goes through the camera (ART-21); the HUD
-   * bands, the pause card and anything else are drawn untilted and come back unchanged.
+   * `layoutToClient` use it): while the world takes input, a map point goes through the camera
+   * (ART-21); the HUD bands, the pause card and anything else are drawn untilted and come back
+   * unchanged. REV-9: "map point" is decided on the same anchored band as `toLayout` (`inWorld`,
+   * HUD.mapTop + a.top..HUD.mapBottom + a.bottom — on a tall phone the world reaches into the room the
+   * moved HUD bands left): the point lies in it, or its projection does (so every screen point of the
+   * band round-trips: `fromLayout(toLayout(p)) = p`).
    */
   fromLayout(x: number, y: number): { x: number; y: number } {
-    if (this.loop.paused || y < HUD.mapTop || y > HUD.mapBottom) return { x, y };
+    if (this.loop.paused || !this.inWorld({ id: 0, x, y, timeMs: 0 })) return { x, y };
     const p = proj(playCamera(), x, y);
     return { x: p.x, y: p.y };
   }
@@ -906,7 +915,7 @@ export class PlayScreen implements Screen {
    * booster with a rewarded video on offer starts the "free charge" flow instead (ECONOMY.md §5.2).
    */
   useBooster(kind: BoosterKind): boolean {
-    if (this.loop.paused || this.over || this.stallUp || this.bare) return false;
+    if (this.loop.paused || this.adPending || this.over || this.stallUp || this.bare) return false;
     if (this.weekly) {
       this.toast.show(t('weekly.noBoosters'), 'error', this.nowMs);
       return false;
@@ -931,15 +940,25 @@ export class PlayScreen implements Screen {
     return true;
   }
 
-  /** Rewarded video → +1 charge of `kind`. The sim pauses while the video plays. */
+  /**
+   * Rewarded video → +1 charge of `kind`. REV-4: the video is its own hold (`adPending`): the sim does
+   * not tick, nothing is drawn over the world and input is ignored; a `pause()` meanwhile opens the
+   * pause card once the video ends, otherwise the match simply goes on. Only from a running match.
+   */
   async freeCharge(kind: BoosterKind): Promise<boolean> {
-    if (this.adPending || this.over) return false;
+    if (this.adPending || this.over || this.loop.paused || this.stallUp) return false;
     this.adPending = true;
-    const wasPaused = this.loop.paused;
-    this.loop.paused = true;
+    this.pauseAfterAd = false;
+    this.press = null;
+    this.targeting = false;
+    this.pressedBooster = null;
+    this.gestures.cancel();
     const ok = await showRewarded(this.app.ads, this.app.save, 'rv_free_booster');
-    this.loop.paused = wasPaused;
     this.adPending = false;
+    if (this.pauseAfterAd) {
+      this.pauseAfterAd = false;
+      this.pause();
+    }
     if (ok) {
       this.app.save.charges[kind] += 1;
       writeSave(this.app.save);
@@ -1005,6 +1024,7 @@ export class PlayScreen implements Screen {
   }
 
   togglePause(): void {
+    if (this.adPending) return; // REV-4: Esc / P / the band's pause do nothing during an ad
     this.loop.paused = !this.loop.paused;
     this.targeting = false;
     this.pressedBooster = null;
@@ -1018,6 +1038,10 @@ export class PlayScreen implements Screen {
 
   /** Pause if the game is still running (app went to background). */
   pause(): void {
+    if (this.adPending) {
+      this.pauseAfterAd = !this.over; // REV-4: the pause card opens when the ad ends
+      return;
+    }
     if (this.loop.paused || this.over) return;
     this.togglePause();
   }
@@ -1032,6 +1056,7 @@ export class PlayScreen implements Screen {
 
   /** Platform back (main.ts `onBack`): swallowed during the result beat; on the stalemate card it is Keep playing (GDD §2.4); false when it did nothing here. */
   back(): boolean {
+    if (this.adPending) return true; // REV-4: swallowed (the ad provider owns the screen)
     if (this.pendingResult) {
       // AUD-F4: the result beat ignores input, back included — PERF-11: unless the result chunk failed (the result is booked)
       if (this.pendingResult.failures > 0) this.app.goLevels();
@@ -1044,7 +1069,7 @@ export class PlayScreen implements Screen {
 
   down(p: PointerPoint): void {
     this.press = null;
-    if (this.over) return; // AUD-F4: the result beat ignores input
+    if (this.over || this.adPending) return; // AUD-F4: the result beat ignores input; REV-4: so does an ad // AUD-F4: the result beat ignores input
     if (this.stallUp) {
       this.press = { kind: 'stall', button: this.stallButtonAt(p) };
       return;
@@ -1078,7 +1103,7 @@ export class PlayScreen implements Screen {
 
   move(p: PointerPoint): void {
     const press = this.press;
-    if (this.over) return;
+    if (this.over || this.adPending) return;
     // a card / HUD press that slides off its button no longer taps it (BUG-36, AUD-U7)
     if (press?.kind === 'card' && press.button && this.cardButtonAt(p) !== press.button) press.button = null;
     if (press?.kind === 'stall' && press.button && this.stallButtonAt(p) !== press.button) press.button = null;
@@ -1093,7 +1118,7 @@ export class PlayScreen implements Screen {
     this.pressedBooster = null;
     const press = this.press;
     this.press = null;
-    if (this.over) return;
+    if (this.over || this.adPending) return;
     if (this.stallUp) {
       // pressed and released on the same button (AUD-U7's rule); off the card both times = Keep playing
       const b = press?.kind === 'stall' ? press.button : null;
@@ -1133,7 +1158,7 @@ export class PlayScreen implements Screen {
     this.pressedBooster = null;
     const press = this.press;
     this.press = null;
-    if (this.loop.paused || this.stallUp || this.over || this.targeting || press?.kind !== 'world') {
+    if (this.loop.paused || this.adPending || this.stallUp || this.over || this.targeting || press?.kind !== 'world') {
       // BUG-37: only a press the gestures saw may finish a drag at `at`
       this.gestures.cancel();
       return;
@@ -1143,9 +1168,13 @@ export class PlayScreen implements Screen {
     if (this.gestures.limitHint && this.gestures.limitHint !== hintBefore) playSfx('refuse');
   }
 
-  /** AUD-U4: Esc opens / closes the pause card (never leaves); R opens it, R on the card restarts. */
+  /**
+   * AUD-U4: Esc opens / closes the pause card (never leaves); R opens it, R on the card restarts.
+   * REV-5: an auto-repeat of a held key is ignored (no pause flicker, no R-hold restart).
+   */
   key(e: KeyboardEvent): void {
-    if (this.over) return; // AUD-F4: the result beat ignores input
+    if (e.repeat) return;
+    if (this.over || this.adPending) return; // AUD-F4: the result beat ignores input; REV-4: so does an ad
     if (this.stallUp) {
       if (e.key === 'Escape') this.keepPlaying(); // GDD §2.4: Esc / back = Keep playing
       return;

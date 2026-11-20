@@ -186,8 +186,8 @@ function letterbox(shape: Shape, x: number, y: number): XY {
 
 /**
  * Where map point `p` is drawn and how big things are there, read from the running page after a
- * painted frame: client point, CSS px per logical px (`v`, the letterbox scale — a HUD-band point is
- * never projected) and the depth scale s (the client x-scale at that depth over v).
+ * painted frame: client point, CSS px per logical px (`v`, the letterbox scale — a point above the
+ * world band is never projected) and the depth scale s (the client x-scale at that depth over v).
  */
 async function drawnAt(page: Page, p: XY): Promise<{ c: XY; v: number; s: number }> {
   return page.evaluate(
@@ -195,7 +195,8 @@ async function drawnAt(page: Page, p: XY): Promise<{ c: XY; v: number; s: number
       new Promise<{ c: XY; v: number; s: number }>((resolve) =>
         requestAnimationFrame(() => {
           const tc = window.__towerclash;
-          const v = (tc.layoutToClient(100, 50).x - tc.layoutToClient(0, 50).x) / 100;
+          // y 0: above the world band on every phone (REV-9: on a tall one the band reaches y 50)
+          const v = (tc.layoutToClient(100, 0).x - tc.layoutToClient(0, 0).x) / 100;
           const s = (tc.toClient(x + 10, y).x - tc.toClient(x - 10, y).x) / 20 / v;
           resolve({ c: tc.toClient(x, y), v, s });
         }),
