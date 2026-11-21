@@ -26,6 +26,19 @@ describe('daily challenge picker (GDD §7)', () => {
 
   it('rejects malformed keys and hashes stably', () => {
     expect(() => challengeFor('2026/09/18')).toThrow();
+    // REV-18: a key is valid only when it round-trips (`dayKeyOfNumber(dayNumberOf(key)) === key`) — the shape alone let
+    // `2026-02-30` roll over to March 2 (the same level and twist under two keys, with a second seed)
+    for (const bad of ['2026-02-30', '2026-13-45', '9999-99-99', '2026-1-1', '2026-00-10', '2026-02-29', '0000-00-00', '2026-09-18T00:00:00Z', '']) {
+      expect(() => dayNumberOf(bad), bad).toThrow(/bad day key/);
+      expect(() => challengeFor(bad), bad).toThrow(/bad day key/);
+    }
+    for (const ok of ['2026-02-28', '2024-02-29', '2028-02-29', '0001-01-01', '0099-12-31', '9999-12-31']) {
+      expect(dayKeyOfNumber(dayNumberOf(ok)), ok).toBe(ok);
+      expect(challengeFor(ok).dayKey, ok).toBe(ok);
+    }
+    expect(dayNumberOf('2026-02-28')).toBe(58);
+    expect(dayNumberOf('2026-03-02')).toBe(60);
+    expect(dayNumberOf('0001-01-01')).toBe(-739_616); // a year < 100 is not read as 19xx (Date.parse, not Date.UTC)
     expect(hashDayKey('2026-09-18')).toBe(hashDayKey('2026-09-18'));
     expect(hashDayKey('2026-09-18')).not.toBe(hashDayKey('2026-09-19'));
   });

@@ -155,6 +155,89 @@ describe('a write that throws (quota)', () => {
     loadSaveFrom(storage);
     expect(isSaveFailing()).toBe(false);
   });
+
+  it('REV-11: a pending retry does not survive a load — the older JSON never lands over the new session, nor flags it', () => {
+    const a = loadSaveFrom(storage);
+    storage.refuse = 1;
+    a.gold = 123;
+    expect(writeSave(a)).toBe(false); // retry of A armed
+    const sets = storage.sets;
+    // the key now holds B (another device's restore, a test fixture …) and the session reloads it
+    storage.map.set(SAVE_KEY, JSON.stringify({ ...defaultSave(), gold: 555 }));
+    const b = loadSaveFrom(storage);
+    expect(b.gold).toBe(555);
+    storage.refuse = 1; // had the retry fired, it would have thrown and flipped `failing` right after a healthy load
+    vi.advanceTimersByTime(SAVE_RETRY_MS * 3);
+    expect(storage.sets).toBe(sets); // the retry never ran
+    expect(JSON.parse(storage.map.get(SAVE_KEY)!)).toMatchObject({ gold: 555 });
+    expect(isSaveFailing()).toBe(false);
+    expect(storage.refuse).toBe(1); // nothing consumed the refusal: no write happened
+  });
+
+  it('REV-12: a burst of refused writes faster than SAVE_RETRY_MS turns the notice on at the second refusal, not never', () => {
+    const save = loadSaveFrom(storage);
+    storage.refuse = 100;
+    save.gold = 1;
+    expect(writeSave(save)).toBe(false);
+    expect(isSaveFailing()).toBe(false); // one refusal: the retry is pending, as before
+    for (let i = 2; i <= 20; i++) {
+      vi.advanceTimersByTime(10); // the retry (100 ms) never gets to run: every write re-arms it
+      save.gold = i;
+      expect(writeSave(save)).toBe(false);
+      expect(isSaveFailing(), `after refused write ${i}`).toBe(true); // refused while a retry was pending = refused twice in a row
+    }
+    expect(storage.sets).toBe(20); // the 20 writes; no retry has fired yet
+    vi.advanceTimersByTime(SAVE_RETRY_MS);
+    expect(storage.sets).toBe(21); // the single retry, carrying the newest JSON only
+    expect(isSaveFailing()).toBe(true);
+    // a later write that lands clears it, as today
+    storage.refuse = 0;
+    save.gold = 99;
+    expect(writeSave(save)).toBe(true);
+    expect(isSaveFailing()).toBe(false);
+    expect(JSON.parse(storage.map.get(SAVE_KEY)!)).toMatchObject({ gold: 99 });
+    vi.advanceTimersByTime(SAVE_RETRY_MS * 2);
+    expect(storage.sets).toBe(22); // no stale retry
+  });
+
+  it('REV-12: a single refusal whose retry lands still never shows the notice (the two-in-a-row rule only)', () => {
+    const save = loadSaveFrom(storage);
+    for (let i = 0; i < 5; i++) {
+      storage.refuse = 1;
+      save.gold = i;
+      expect(writeSave(save)).toBe(false);
+      expect(isSaveFailing()).toBe(false);
+      vi.advanceTimersByTime(SAVE_RETRY_MS);
+      expect(isSaveFailing()).toBe(false);
+      expect(JSON.parse(storage.map.get(SAVE_KEY)!)).toMatchObject({ gold: i });
+    }
+  });
+});
+
+describe('REV-10: the native-mirror listeners', () => {
+  it('a throwing listener is ignored and the later listeners still receive every write', () => {
+    const save = loadSaveFrom(storage);
+    const seen: string[] = [];
+    let thrown = 0;
+    const offFirst = onSaveWritten(() => {
+      thrown += 1;
+      throw new Error('mirror down');
+    });
+    const offSecond = onSaveWritten((json) => seen.push(json));
+    try {
+      save.gold = 1;
+      expect(writeSave(save)).toBe(true);
+      save.gold = 2;
+      expect(recordWin(save, 2, 3, 10)).toBe(30);
+      expect(thrown).toBe(2);
+      expect(seen).toEqual([expect.stringContaining('"gold":1'), JSON.stringify(save)]);
+      expect(mirrored).toHaveLength(2); // the listener registered before the throwing one is unaffected too
+      expect(JSON.parse(storage.map.get(SAVE_KEY)!)).toMatchObject({ gold: 32, stars: { '1': 2, '2': 3 } });
+    } finally {
+      offFirst();
+      offSecond();
+    }
+  });
 });
 
 describe('a getter that throws at boot (storage disabled)', () => {

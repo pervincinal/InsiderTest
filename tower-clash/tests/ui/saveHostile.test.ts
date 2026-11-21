@@ -127,7 +127,7 @@ describe('normalizeSave under hostile input', () => {
   it('a hostile challenge block cannot break the streak arithmetic or the first-win payout', () => {
     setSaveStorageForTests(null);
     const s = normalizeSave({ challenge: { lastWinDay: '9999-99-99', streak: 1e300, milestones: [3, 7, 30, 1e300] } });
-    expect(s.challenge.lastWinDay).toBe('9999-99-99'); // matches the shape; the rules below must still be sane
+    expect(s.challenge.lastWinDay).toBeNull(); // REV-18: the shape matches but it is no calendar day — dropped; the rules below must still be sane
     expect(shownStreak(s, '2026-09-19')).toBe(0); // neither today nor yesterday → broken
     const level = { star3: 30_000, star2: 60_000 };
     const out = recordChallengeResult(s, { dayKey: '2026-09-19', levelId: 9, seed: 1, twist: TWISTS[0]! }, level, 'won', 10_000);
@@ -164,8 +164,39 @@ describe('normalizeSave under hostile input', () => {
     expect(loadSaveFrom(broken)).toEqual(defaultSave());
   });
 
-  it('challengeFor is total over well-formed keys the save could carry (no throw for any YYYY-MM-DD string)', () => {
-    for (const key of ['0000-00-00', '9999-99-99', '2026-02-30', '2026-13-01']) expect(() => challengeFor(key)).not.toThrow();
+  it('REV-18: the save keeps exactly the day keys challengeFor accepts — a key counts only when it round-trips as a calendar day', () => {
+    const dailyOf = (key: string) => normalizeSave({ challenge: { lastWinDay: key, best: { [key]: { stars: 1, timeMs: 1 } } } }).challenge;
+    // shape-valid but no calendar day: V8 rolls `2026-02-30` over to March 2 (two "same day" challenges), `9999-99-99` sorts last
+    for (const key of ['0000-00-00', '9999-99-99', '2026-02-30', '2026-13-45', '2026-13-01', '2026-02-29', '2026-1-1', '2026/02/28']) {
+      expect(() => challengeFor(key), key).toThrow(/bad day key/);
+      expect(dailyOf(key), key).toEqual({ lastWinDay: null, streak: 0, best: {}, milestones: [] });
+    }
+    for (const key of ['2026-02-28', '2024-02-29', '2028-02-29', '0001-01-01', '1970-01-01', '9999-12-31']) {
+      expect(() => challengeFor(key), key).not.toThrow();
+      expect(dailyOf(key), key).toEqual({ lastWinDay: key, streak: 0, best: { [key]: { stars: 1, timeMs: 1 } }, milestones: [] });
+    }
+    // `2026-02-30` is not March 2's challenge under another name
+    expect(challengeFor('2026-03-02').dayKey).toBe('2026-03-02');
+  });
+
+  it('REV-18: 30 hostile best keys sorting last cannot evict the real days', () => {
+    const best: Record<string, unknown> = {};
+    const real: string[] = [];
+    for (let d = 0; d < 10; d++) {
+      const key = addDays('2026-09-10', d);
+      real.push(key);
+      best[key] = { stars: 3, timeMs: 30_000 + d };
+    }
+    for (let i = 0; i < 30; i++) best[`9999-99-${String(i).padStart(2, '0')}`] = { stars: 3, timeMs: 1 }; // all > any real key as strings
+    best['2026-02-30'] = { stars: 3, timeMs: 1 };
+    best['2027-13-45'] = { stars: 3, timeMs: 1 };
+    const s = normalizeSave({ version: 3, challenge: { lastWinDay: '9999-99-00', streak: 10, best, milestones: [3, 7] } });
+    expect(Object.keys(s.challenge.best).sort()).toEqual(real);
+    expect(s.challenge.best['2026-09-19']).toEqual({ stars: 3, timeMs: 30_009 });
+    expect(s.challenge.lastWinDay).toBeNull();
+    expect(s.challenge.streak).toBe(10);
+    assertSaneNumbers(s);
+    expect(roundTrip(s)).toEqual(s);
   });
 });
 
@@ -191,10 +222,10 @@ describe('save.weekly normalisation (hostile input, interplay with the daily cha
     expect(() => weeklyFor('2026-02-30')).toThrow();
     const s = normalizeSave({ weekly: { lastWinWeek: '2026-02-30', streak: 2, best: { '2026-02-30': { stars: 3, timeMs: 1, target: true }, '2026-03-02': { stars: 1, timeMs: 2, target: true }, '2026-09-22': { stars: 3, timeMs: 1, target: true } } } });
     expect(s.weekly).toEqual({ lastWinWeek: null, streak: 2, best: { '2026-03-02': { stars: 1, timeMs: 2, target: true } } });
-    // the daily keeps shape-valid keys (its picker is total over them, see above): the two ledgers validate independently
-    const d = normalizeSave({ challenge: { lastWinDay: '2026-02-30', best: { '2026-02-30': { stars: 3, timeMs: 1 } } } });
-    expect(d.challenge.lastWinDay).toBe('2026-02-30');
-    expect(Object.keys(d.challenge.best)).toEqual(['2026-02-30']);
+    // REV-18: the daily drops a rolled-over key too (it is no calendar day); the two ledgers still validate independently
+    const d = normalizeSave({ challenge: { lastWinDay: '2026-02-30', best: { '2026-02-30': { stars: 3, timeMs: 1 }, '2026-03-02': { stars: 2, timeMs: 2 } } } });
+    expect(d.challenge.lastWinDay).toBeNull();
+    expect(Object.keys(d.challenge.best)).toEqual(['2026-03-02']);
     expect(d.weekly).toEqual(defaultSave().weekly);
   });
 

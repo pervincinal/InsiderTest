@@ -124,6 +124,35 @@ describe('save schema v3 (M3-3 + economy Phase A)', () => {
   });
 });
 
+describe('resetProgress and skins (REV-13)', () => {
+  it('every catalog pack skin survives a reset, every crystal-bought skin is wiped, the equipped slots follow', async () => {
+    const { resetProgress, setSaveStorageForTests } = await import('../../src/ui/save');
+    const { SKINS, isPackSkin } = await import('../../src/economy/catalog');
+    const pack = SKINS.filter((s) => s.source !== 'shop').map((s) => s.id);
+    const bought = SKINS.filter((s) => s.source === 'shop').map((s) => s.id);
+    expect(pack.length).toBeGreaterThanOrEqual(3);
+    expect(pack).toEqual(expect.arrayContaining(['roof_gold', 'helmet_royal', 'helmet_bronze'])); // the ids the old hardcoded list named
+    expect(pack.every(isPackSkin)).toBe(true);
+    expect(bought.some(isPackSkin)).toBe(false);
+    expect(isPackSkin('roof_nope')).toBe(false);
+    setSaveStorageForTests(null);
+    try {
+      const save = defaultSave();
+      save.gold = 500;
+      save.skins.owned = [...bought, ...pack, 'skin_unknown'];
+      save.skins.equipped = { roof: 'roof_gold', helmet: 'helmet_royal', theme: 'theme_dusk' };
+      save.purchases = ['tx-1', 'owned:premium_bundle', 'owned:starter_pack'];
+      resetProgress(save);
+      expect(save.skins.owned).toEqual(pack); // catalog order, nothing hardcoded, the unknown id gone with the crystal skins
+      expect(save.purchases).toEqual(['tx-1', 'owned:premium_bundle', 'owned:starter_pack']); // the purchase markers stay, so do their skins
+      expect(save.gold).toBe(0);
+      expect(save.skins.equipped).toEqual({ roof: null, helmet: null, theme: null }); // a reset unequips (the default look), as today
+    } finally {
+      setSaveStorageForTests(undefined);
+    }
+  });
+});
+
 describe('save.challenge (Daily Challenge, GDD §7)', () => {
   it('defaults to never played and is normalised like the other optional blocks', () => {
     expect(defaultSave().challenge).toEqual({ lastWinDay: null, streak: 0, best: {}, milestones: [] });

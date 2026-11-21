@@ -12,9 +12,10 @@
  * (`isSaveReadOnly`). Every write of the v3 key goes through `putSave`; `onSaveWritten` observes it.
  *
  * Failed writes (AUD-Q10, GDD §4 "Save" 2026-11-02): a `setItem` that throws (QuotaExceededError,
- * SecurityError, no storage) is retried once after `SAVE_RETRY_MS`; when that throws too the session
- * is `isSaveFailing()` — the title and the result screen show "Progress could not be saved" until a
- * later write lands — and the game plays on from memory. A getter that throws at boot (storage
+ * SecurityError, no storage) is retried once after `SAVE_RETRY_MS`; when that throws too — or when the
+ * next write is refused while the retry is still pending (REV-12) — the session is `isSaveFailing()`:
+ * the title and the result screen show "Progress could not be saved" until a later write lands, and
+ * the game plays on from memory. A load drops a pending retry (REV-11). A getter that throws at boot (storage
  * disabled) does not boot a writable default over a save that may exist: the session is read-only
  * *and* failing (`saveLoadIssue()` = `blocked`), nothing writes the key and nothing is mirrored.
  */
@@ -28,7 +29,7 @@ import { isLanguage } from './i18n';
 import type { ToneSet } from '../render/palette';
 import { isToneSet } from '../render/palette';
 import { LEVEL_META } from '../levels/index';
-import { LEARNING_LEVEL_IDS } from '../economy/catalog';
+import { LEARNING_LEVEL_IDS, isPackSkin } from '../economy/catalog';
 
 /** Reduced-motion preference: `auto` follows the OS (`prefers-reduced-motion`), `on`/`off` override it. */
 export type MotionPref = 'auto' | 'on' | 'off';
@@ -262,17 +263,22 @@ function intList(v: unknown): number[] {
   return Array.isArray(v) ? [...new Set(v.map(nonNegInt).filter((n): n is number => n !== null))] : [];
 }
 
-function dayString(v: unknown): string {
-  return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : '';
+/**
+ * A real UTC calendar day in canonical `YYYY-MM-DD` form, optionally on one weekday (`getUTCDay`). The
+ * shape alone lets `2026-02-30` / `2026-13-45` / `9999-99-99` through (REV-18): V8 rolls such a key over to
+ * another day (`dayNumberOf`, src/daily/challenge.ts, would hand out March 2's challenge twice) and a hostile
+ * `challenge.best` key sorting last would evict real days in `pruneChallengeBest` — so a key counts only
+ * when it reads back as itself, the same round trip `dayNumberOf` / `isMondayKey` apply.
+ */
+function dayString(v: unknown, weekday?: number): string {
+  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return '';
+  const d = new Date(`${v}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v && (weekday === undefined || d.getUTCDay() === weekday) ? v : '';
 }
 
 /** A well-formed day key that is a Monday (UTC) — the only keys `weekly` may carry. */
 function mondayString(v: unknown): string {
-  const day = dayString(v);
-  if (!day) return '';
-  const d = new Date(`${day}T00:00:00Z`);
-  // a real calendar date (V8 rolls `2026-02-30` over to Monday March 2) that is a Monday, as `isMondayKey`
-  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === day && d.getUTCDay() === 1 ? day : '';
+  return dayString(v, 1);
 }
 
 /** Well-formed `challenge.best` entries only (valid day key, stars 0..3, finite time), pruned to the newest keys. */
@@ -466,17 +472,25 @@ export function onSaveWritten(fn: (json: string) => void): () => void {
 function putSave(store: SaveStorage | null, data: unknown): boolean {
   if (readOnly) return false;
   const json = JSON.stringify(data);
-  try {
-    for (const fn of writeListeners) fn(json);
-  } catch {
-    /* a broken mirror must not stop the local write */
+  for (const fn of writeListeners) {
+    try {
+      fn(json);
+    } catch {
+      /* a broken mirror must not stop the next listener or the local write (REV-10) */
+    }
   }
   return setItem(store, json, true);
 }
 
-/** `store.setItem` under the retry rule above (`first`: this is the write itself, not its retry). */
+/**
+ * `store.setItem` under the retry rule above (`first`: this is the write itself, not its retry). REV-12: a
+ * write refused while the previous write's retry is still pending counts as that retry failing — two
+ * refusals in a row turn `failing` on at once, so a burst of refused writes faster than `SAVE_RETRY_MS`
+ * cannot keep re-arming a first attempt and hide the notice; the one retry still carries the newest JSON.
+ */
 function setItem(store: SaveStorage | null, json: string, first: boolean): boolean {
-  clearTimeout(retry);
+  const pending = retry !== undefined;
+  cancelRetry();
   try {
     store!.setItem(SAVE_KEY, json);
     failing = false;
@@ -484,9 +498,15 @@ function setItem(store: SaveStorage | null, json: string, first: boolean): boole
   } catch {
     /* no storage, private mode, quota */
     if (first) retry = setTimeout(() => setItem(store, json, false), 100); // SAVE_RETRY_MS
-    else failing = true;
+    if (!first || pending) failing = true;
     return false;
   }
+}
+
+/** Drop the pending retry (REV-11: a load swaps the session, so an older refused JSON must never land in the new one). */
+function cancelRetry(): void {
+  clearTimeout(retry);
+  retry = undefined;
 }
 
 /** Parsed v3 entry when it is an object we can read as a save, else null (unparseable, `null`, an array, a stray value). */
@@ -534,6 +554,7 @@ let activeStorage: SaveStorage | null | undefined;
 
 /** Test hook: route `writeSave` to a memory store (`null` = no persistence, `undefined` = localStorage). */
 export function setSaveStorageForTests(store: SaveStorage | null | undefined): void {
+  cancelRetry(); // a retry armed against the old store must not fire into the new one
   activeStorage = store;
 }
 
@@ -554,6 +575,7 @@ export function saveStorage(): SaveStorage | null {
  *   native copy either), and the "could not be saved" notice is up for the session.
  */
 export function loadSaveFrom(store: SaveStorage | null, nowMs = Date.now()): SaveData {
+  cancelRetry(); // REV-11: a refused write of the previous session must not land over (or flag) this one
   loadIssue = null;
   readOnly = holdingOriginal = failing = false;
   let v3: string | null;
@@ -622,14 +644,10 @@ export function resetProgress(data: SaveData): void {
   fresh.purchases = data.purchases;
   fresh.entitlements = data.entitlements;
   fresh.reviewAsked = data.reviewAsked; // "once per install", not once per progress
-  // pack-exclusive skins come from store purchases (not progress) and stay owned; crystal skins are wiped
-  fresh.skins.owned = data.skins.owned.filter(isExclusiveSkin);
+  // pack skins (catalog `source` starter / premium, REV-13) come from store purchases, not progress, and stay owned; crystal skins are wiped
+  fresh.skins.owned = data.skins.owned.filter(isPackSkin);
   Object.assign(data, fresh);
   writeSave(data);
-}
-
-function isExclusiveSkin(id: string): boolean {
-  return id === 'roof_gold' || id === 'helmet_royal' || id === 'helmet_bronze';
 }
 
 /** Spend gold on a booster. Returns false (and changes nothing) when unaffordable. */

@@ -233,6 +233,15 @@ export const SKINS = [
 ] as const satisfies readonly SkinDef[];
 
 /**
+ * A skin only a pack grants (`source` starter / premium — never sold for crystals, REV-13). Its
+ * ownership follows the store purchase, not progress, so `resetProgress` (src/ui/save.ts) keeps these
+ * and wipes the crystal-bought rest; a skin added here with a pack source is covered without a code change.
+ */
+export function isPackSkin(id: string): boolean {
+  return SKINS.some((s) => s.id === id && s.source !== 'shop');
+}
+
+/**
  * The levels GDD §3 records as *learning levels* ("first-time line" item 9, GD-2: 23 and 32; GD-4: 27) — the
  * naive line may lose them by design, so each carries its own level skip on top of its band's (ECONOMY.md §3.4,
  * AUD-B3). Change it only together with the GDD list; `skipSlotOf` in wallet.ts is the only reader.

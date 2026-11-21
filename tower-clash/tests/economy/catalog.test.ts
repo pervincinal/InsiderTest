@@ -16,6 +16,7 @@ import {
   SKINS,
   STORE_PRICE_POINTS_USD,
   UPGRADE_TRACK_COST_GOLD,
+  isPackSkin,
 } from '../../src/economy/catalog';
 import type { IapProductDef } from '../../src/economy/catalog';
 
@@ -185,6 +186,11 @@ describe('economy catalog (docs/ECONOMY.md)', () => {
       else expect(s.costCrystals).toBe(0);
     }
     expect(SKINS.filter((s) => s.source === 'premium').map((s) => s.id).sort()).toEqual(['helmet_royal', 'roof_gold']);
+    // REV-13: `isPackSkin` (what `resetProgress` keeps) is exactly the not-for-crystals set, derived from the catalog
+    expect(SKINS.filter((s) => isPackSkin(s.id)).map((s) => s.id).sort()).toEqual(SKINS.filter((s) => s.costCrystals === 0).map((s) => s.id).sort());
+    expect(SKINS.filter((s) => isPackSkin(s.id)).map((s) => s.id).sort()).toEqual(['helmet_bronze', 'helmet_royal', 'roof_gold']);
+    expect(isPackSkin('roof_slate')).toBe(false);
+    expect(isPackSkin('')).toBe(false);
     // every shop skin sits in the 80–200 crystal band of ECONOMY.md §3.3, including the M3-2 silhouettes
     for (const s of SKINS.filter((s) => s.source === 'shop')) {
       expect(s.costCrystals, s.id).toBeGreaterThanOrEqual(80);

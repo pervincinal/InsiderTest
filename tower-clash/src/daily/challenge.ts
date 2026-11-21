@@ -52,11 +52,17 @@ export function hashDayKey(dayKey: string): number {
 
 const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
 
-/** Day number of a key since 2026-01-01 UTC (negative before it). */
+/**
+ * Day number of a key since 2026-01-01 UTC (negative before it); throws on a malformed key. REV-18: the
+ * shape alone lets `2026-02-30` / `2026-13-45` / `9999-99-99` through and V8 rolls them over to another
+ * day (two "same day" challenges with different seeds), so a key is valid only when it round-trips —
+ * `dayKeyOfNumber(dayNumberOf(key)) === key` — the rule `isMondayKey` already applies. The save's
+ * sanitiser (src/ui/save.ts `dayString`) accepts exactly the keys this accepts.
+ */
 export function dayNumberOf(dayKey: string): number {
-  if (!DAY_KEY.test(dayKey)) throw new Error(`daily: bad day key ${dayKey}`);
-  const t = Date.UTC(Number(dayKey.slice(0, 4)), Number(dayKey.slice(5, 7)) - 1, Number(dayKey.slice(8, 10)));
-  return Math.round((t - Date.UTC(2026, 0, 1)) / 86_400_000);
+  const n = Math.round((Date.parse(`${dayKey}T00:00:00Z`) - Date.UTC(2026, 0, 1)) / 86_400_000);
+  if (!DAY_KEY.test(dayKey) || dayKeyOfNumber(n) !== dayKey) throw new Error(`daily: bad day key ${dayKey}`);
+  return n;
 }
 
 /** Deterministic Fisher–Yates over a copy of `items`, driven by a 32-bit hash (mulberry32 step). */
