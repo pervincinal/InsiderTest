@@ -297,14 +297,19 @@ export class ResultScreen implements Screen {
    * slot — one per band, plus one of its own on each learning level (`skipAvailable`).
    */
   private skipOffered(): boolean {
-    return !this.won && skipAvailable(this.app.save, this.info.level.id);
+    // REV-15: never on a daily / weekly match (its level is the campaign's; a skip would spend a campaign slot)
+    return !this.won && !this.fixed && skipAvailable(this.app.save, this.info.level.id);
+  }
+
+  /** A daily / weekly challenge result (fixed seed and twist): no continue, no level skip. */
+  private get fixed(): boolean {
+    return !!(this.info.challenge ?? this.info.weekly);
   }
 
   extras(): ResultExtras {
     const save = this.app.save;
     const e = this.info.earnings;
-    const fixed = !!(this.info.challenge ?? this.info.weekly);
-    const continueOffered = !this.won && !this.info.continued && !this.info.retreated && !fixed;
+    const continueOffered = !this.won && !this.info.continued && !this.info.retreated && !this.fixed;
     const d = this.info.daily;
     const w = this.info.weeklyOutcome;
     return {
@@ -317,7 +322,7 @@ export class ResultScreen implements Screen {
       doubled: this.doubled,
       continueCrystals: continueOffered ? CRYSTAL_SERVICES.continue.costCrystals : null,
       continueAd: continueOffered && canShowRewarded(this.app.ads, save, CONTINUE_AD.id),
-      skipCrystals: this.skipOffered() && !fixed ? CRYSTAL_SERVICES.levelSkip.costCrystals : null,
+      skipCrystals: this.skipOffered() ? CRYSTAL_SERVICES.levelSkip.costCrystals : null,
       pending: this.pending,
       tip: this.won ? null : levelLesson(this.info.level),
       howto: !this.won && this.defeatCount >= 2,
@@ -459,26 +464,49 @@ export class ResultScreen implements Screen {
     else if (hit === RESULT.continueAd || hit === RESULT.continueSolo) this.continueWithAd();
   }
 
+  /**
+   * REV-14: show a rewarded video for `placementId`; `grant` runs only on a reward. `pending` is reset on every
+   * outcome — a reward, no reward, a rejected promise, or a throw in `pre` / the synchronous call (each of the
+   * last three is treated as "no video": the toast, no grant) — so the screen never stays locked.
+   */
+  private rewarded(placementId: string, pre: () => boolean, grant: () => void): void {
+    if (this.pending) return;
+    let shown: Promise<boolean>;
+    try {
+      if (!pre()) return;
+      shown = showRewarded(this.app.ads, this.app.save, placementId);
+    } catch {
+      shown = Promise.resolve(false);
+    }
+    this.pending = true;
+    const settle = (ok: boolean): void => {
+      this.pending = false;
+      if (ok) grant();
+      else this.toast.show(t('result.noVideo'), 'error', this.nowMs);
+    };
+    void shown.then(settle, () => settle(false));
+  }
+
   /** Rewarded ×2 gold: pays the result's gold once more (ECONOMY.md §5.2). */
   doubleGold(): void {
-    const ex = this.extras();
-    if (ex.doubleGold === null || ex.doubled || this.pending) return;
-    this.pending = true;
-    void showRewarded(this.app.ads, this.app.save, DOUBLE_GOLD.id).then((ok) => {
-      this.pending = false;
-      if (!ok) {
-        this.toast.show(t('result.noVideo'), 'error', this.nowMs);
-        return;
-      }
-      const gained = ex.doubleGold ?? 0;
-      earnGold(this.app.save, gained);
-      this.doubled = true;
-      this.info.ui.coinsEarned += gained;
-      this.info.ui.coinsTotal = this.app.save.gold;
-      this.info.ui.particles?.coinBurst(360, RESULT.extra.y, 14, this.app.palette());
-      playSfx('reward');
-      this.toast.show(t('amount.gold', { n: gained }), 'ok', this.nowMs);
-    });
+    let gained = 0;
+    this.rewarded(
+      DOUBLE_GOLD.id,
+      () => {
+        const ex = this.extras();
+        gained = ex.doubleGold ?? 0;
+        return ex.doubleGold !== null && !ex.doubled;
+      },
+      () => {
+        earnGold(this.app.save, gained);
+        this.doubled = true;
+        this.info.ui.coinsEarned += gained;
+        this.info.ui.coinsTotal = this.app.save.gold;
+        this.info.ui.particles?.coinBurst(360, RESULT.extra.y, 14, this.app.palette());
+        playSfx('reward');
+        this.toast.show(t('amount.gold', { n: gained }), 'ok', this.nowMs);
+      },
+    );
   }
 
   /** Paid continue: rewind and resume; if the snapshot ring cannot serve one, restart with the bonus garrison. */
@@ -499,13 +527,7 @@ export class ResultScreen implements Screen {
 
   continueWithAd(): void {
     if (this.won || this.info.continued || this.info.retreated || this.pending) return;
-    if (!canShowRewarded(this.app.ads, this.app.save, CONTINUE_AD.id)) return;
-    this.pending = true;
-    void showRewarded(this.app.ads, this.app.save, CONTINUE_AD.id).then((ok) => {
-      this.pending = false;
-      if (ok) this.reinforce();
-      else this.toast.show(t('result.noVideo'), 'error', this.nowMs);
-    });
+    this.rewarded(CONTINUE_AD.id, () => canShowRewarded(this.app.ads, this.app.save, CONTINUE_AD.id), () => this.reinforce());
   }
 
   /** Level skip: 1★, next level unlocked, no gold, counts toward milestones; once per skip slot (`buyLevelSkip`). */
