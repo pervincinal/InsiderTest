@@ -19,7 +19,8 @@ export interface PointerHandlers {
   down?(p: PointerPoint): void;
   move?(p: PointerPoint): void;
   up?(p: PointerPoint): void;
-  cancel?(p: PointerPoint): void;
+  /** `p`: the pointer's last known position for a platform `pointercancel`; absent when the press was abandoned (REV-16): nothing may finish there. */
+  cancel?(p?: PointerPoint): void;
 }
 
 /**
@@ -39,9 +40,22 @@ export interface PointerHandlers {
  * `cancel` receives the pointer's LAST KNOWN position (from down / move), not the cancel event's
  * own coordinates: WebKit / Chromium report a `pointercancel` at 0,0 or at a stale spot, and the
  * play screen may finish a drag at the point the finger really was (`PlayGestures.cancel`).
+ *
+ * REV-17: only the primary mouse button starts a press (a right / middle press would run a full
+ * select / drag / swipe gesture behind the suppressed context menu); touch and pen are unaffected.
+ *
+ * REV-16: pointer capture is best-effort. When it fails, a mouse released outside the canvas delivers
+ * its `pointerup` elsewhere and the tracked pointer would never clear (every later press dropped). So,
+ * for a non-touch active pointer, a `lostpointercapture` on the canvas, a window `blur`, or a
+ * `pointerup` / `pointercancel` reaching `window` (bubbled from another element — the canvas's own
+ * `pointerup` clears the pointer first) abandons the press: the state is cleared and `cancel` is called
+ * with no point, so no command is issued. Touch keeps its exact behaviour (implicit capture delivers
+ * its `pointerup` / `pointercancel` to the canvas; a `pointercancel` may still finish a drag, BUG-33).
  */
 export function attachPointer(canvas: HTMLCanvasElement, view: View, handlers: PointerHandlers): () => void {
   let activeId: number | null = null;
+  /** `pointerType` of the active pointer: the REV-16 recoveries apply to mouse / pen only. */
+  let activeType = '';
   let last: PointerPoint | null = null;
   const point = (e: PointerEvent): PointerPoint => {
     const l = toLogical(view, e.clientX, e.clientY);
@@ -49,7 +63,9 @@ export function attachPointer(canvas: HTMLCanvasElement, view: View, handlers: P
   };
   const onDown = (e: PointerEvent): void => {
     if (activeId !== null) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return; // REV-17: primary button only
     activeId = e.pointerId;
+    activeType = e.pointerType ?? '';
     try {
       canvas.setPointerCapture(e.pointerId);
     } catch {
@@ -79,6 +95,21 @@ export function attachPointer(canvas: HTMLCanvasElement, view: View, handlers: P
     last = null;
     handlers.cancel?.(p);
   };
+  /** REV-16: drop the active non-touch pointer without a command (no point: nothing finishes). */
+  const abandon = (): void => {
+    if (activeId === null || activeType === 'touch') return;
+    activeId = null;
+    last = null;
+    handlers.cancel?.();
+  };
+  const onLost = (e: PointerEvent): void => {
+    if (e.pointerId === activeId) abandon();
+  };
+  const onWindowEnd = (e: PointerEvent): void => {
+    if (e.pointerId === activeId) abandon();
+  };
+  const onBlur = (): void => abandon();
+  const win = typeof window !== 'undefined' ? window : null;
   const onContext = (e: Event): void => e.preventDefault();
   const onTouch = (e: TouchEvent): void => {
     if (e.cancelable) e.preventDefault();
@@ -92,6 +123,10 @@ export function attachPointer(canvas: HTMLCanvasElement, view: View, handlers: P
   canvas.addEventListener('contextmenu', onContext);
   canvas.addEventListener('touchstart', onTouch, touchOpts);
   canvas.addEventListener('touchmove', onTouch, touchOpts);
+  canvas.addEventListener('lostpointercapture', onLost);
+  win?.addEventListener('pointerup', onWindowEnd);
+  win?.addEventListener('pointercancel', onWindowEnd);
+  win?.addEventListener('blur', onBlur);
   return () => {
     canvas.removeEventListener('pointerdown', onDown);
     canvas.removeEventListener('pointermove', onMove);
@@ -100,6 +135,10 @@ export function attachPointer(canvas: HTMLCanvasElement, view: View, handlers: P
     canvas.removeEventListener('contextmenu', onContext);
     canvas.removeEventListener('touchstart', onTouch, touchOpts);
     canvas.removeEventListener('touchmove', onTouch, touchOpts);
+    canvas.removeEventListener('lostpointercapture', onLost);
+    win?.removeEventListener('pointerup', onWindowEnd);
+    win?.removeEventListener('pointercancel', onWindowEnd);
+    win?.removeEventListener('blur', onBlur);
   };
 }
 

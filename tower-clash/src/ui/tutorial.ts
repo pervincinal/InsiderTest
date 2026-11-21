@@ -80,24 +80,39 @@ export class Tutorial {
   onCommand(cmd: Command, state: GameState): void {
     const step = this.current(state);
     if (step?.onCommand?.(cmd, state)) this.advance();
+    this.settle(state);
   }
 
   /** Call every frame with the current selection (also settles the state-driven `doneWhen` steps). */
   onSelect(selectedTowerId: string | null, state: GameState): void {
-    // `doneWhen` is checked on the raw step, before the `showWhen` gate (the two may exclude each other).
-    if (this.steps[this.index]?.doneWhen?.(state)) {
-      this.advance();
-      return;
-    }
+    if (this.settle(state)) return;
     const step = this.current(state);
-    if (step?.onSelect?.(selectedTowerId, state)) this.advance();
+    if (step?.onSelect?.(selectedTowerId, state)) {
+      this.advance();
+      this.settle(state);
+    }
+  }
+
+  /**
+   * Skip every step whose `doneWhen` already holds, in one call (REV-19): advancing one step per frame
+   * left an already-done intermediate step `current()` for a frame — drawn, and its `select` applied by
+   * the play screen. `doneWhen` is checked on the raw step, before the `showWhen` gate (the two may
+   * exclude each other). Bounded by the step count. True when it advanced.
+   */
+  private settle(state: GameState): boolean {
+    const start = this.index;
+    while (this.index < this.steps.length && this.steps[this.index]!.doneWhen?.(state)) this.advance();
+    return this.index !== start;
   }
 
   /** Real time passed with the game running: the current step times out after `TUTORIAL_STEP_TIMEOUT_MS` on screen. */
   elapse(dtMs: number, state: GameState): void {
     if (!this.current(state)) return;
     this.shownMs += Math.max(0, Math.min(MAX_FRAME_MS, dtMs));
-    if (this.shownMs >= TUTORIAL_STEP_TIMEOUT_MS) this.advance();
+    if (this.shownMs >= TUTORIAL_STEP_TIMEOUT_MS) {
+      this.advance();
+      this.settle(state);
+    }
   }
 
   private advance(): void {

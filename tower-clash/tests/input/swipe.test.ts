@@ -311,7 +311,7 @@ describe('attachPointer', () => {
     const handlers: PointerHandlers = {
       down: (p) => seen.push(`down ${p.x},${p.y}`),
       move: (p) => seen.push(`move ${p.x},${p.y}`),
-      cancel: (p) => seen.push(`cancel ${p.x},${p.y}`),
+      cancel: (p) => seen.push(p ? `cancel ${p.x},${p.y}` : 'cancel'),
     };
     attachPointer(canvas as unknown as HTMLCanvasElement, view(canvas), handlers);
     fire('pointerdown', { pointerId: 7, clientX: 10, clientY: 20 });

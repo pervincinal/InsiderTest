@@ -446,7 +446,9 @@ describe('level 3 tutorial (GD-5b: take both free neutrals; GD-7h: the west-firs
     capture(state, 'east');
     applyCommand(state, link('east', 'west'));
     tut.onSelect(null, state);
-    expect(tut.stepIndex, 'step 2 done by the stream into west').toBe(2);
+    // REV-19: steps 3–4 (stop home → west, which never ran; home → east, which runs) are done as well: skipped in the same call
+    expect(tut.stepIndex, 'step 2 done by the stream into west, steps 3–4 already done').toBe(4);
+    expect(tut.finished).toBe(true);
   });
 
   it('GD-7h: home → west does not complete step 1 — it hides while that stream runs, and the west capture hands over to step 2 on east', () => {
@@ -610,9 +612,7 @@ describe('level 4 tutorial (GD-5b: stop the stream so home fills to 25)', () => 
   it('stopToGrow also gives way when home levels up anyway or its stream ends on its own', () => {
     const a = atStop();
     a.state.towers['home']!.level = 2;
-    a.tut.onSelect(null, a.state);
-    expect(a.tut.finished).toBe(false);
-    a.tut.onSelect(null, a.state); // next frame: fillToUpgrade's doneWhen holds too
+    a.tut.onSelect(null, a.state); // REV-19: fillToUpgrade's doneWhen holds too — skipped in the same call, never shown
     expect(a.tut.finished).toBe(true);
 
     const b = atStop();
