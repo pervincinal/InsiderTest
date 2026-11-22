@@ -1,6 +1,6 @@
 {
   "board": {
-    "title": "Lövhə · 21 noyabr, gün 64",
+    "title": "Lövhə · 22 noyabr, gün 65",
     "stats": [
       {
         "b": "build 27",
@@ -11,19 +11,19 @@
         "s": "səviyyə bot ilə keçir"
       },
       {
-        "b": "2740",
+        "b": "2770",
         "s": "unit test, e2e 196 + 4 + 4 + WebKit + soak"
       },
       {
-        "b": "80,8 kB",
+        "b": "81,1 kB",
         "s": "ilk yükləmə (büdcə 82); hiss balı 13/14"
       },
       {
-        "b": "39 gün",
+        "b": "40 gün",
         "s": "rəyin gözlənilir"
       }
     ],
-    "footer": "Mənbə: <code>.claude/agents/*.md</code> rol faylları, <code>docs/BACKLOG.md</code> və son hesabatlar (gün 62–64). Statuslar 21 noyabr vəziyyətidir."
+    "footer": "Mənbə: <code>.claude/agents/*.md</code> rol faylları, <code>docs/BACKLOG.md</code> və son hesabatlar (gün 63–65). Statuslar 22 noyabr vəziyyətidir."
   },
   "team": [
     {
@@ -42,11 +42,11 @@
         "build nömrəsi, commit və push"
       ],
       "recent": [
+        "Gün 65: dördüncü kod baxışı — pul yolları (alış, pulqabı, reklam axını, RevenueCat, AdMob, yaddaş güzgüsü): 8 tapıntı (4 vacib) eyni gün düzəldildi; 2770 test; artefakt v80.",
         "Gün 64: üçüncü kod baxışı — 10 tapıntı (yaddaş 4, nəticə ekranı 2, toxunuş 2, dərs 1, gün açarları 1) eyni gün düzəldildi; 2740 test; artefakt v79.",
-        "Gün 63: ikinci kod baxışı — 6 tapıntı (2 vacib: reklam vaxtı pauza kartı, basılı saxlanan düymə) eyni gün düzəldildi; 60 günlük daily / 12 həftəlik weekly taraması; 2706 test; artefakt v78.",
-        "Gün 62: kod baxışı (5 tapıntı, 3 eyni gün düzəldildi: replay yoxlanması, jurnal yoxlaması, JURNALI TƏMİZLƏ), TestFlight mətni, TEAM.md; artefakt v77."
+        "Gün 63: ikinci kod baxışı — 6 tapıntı (2 vacib: reklam vaxtı pauza kartı, basılı saxlanan düymə) eyni gün düzəldildi; 60 günlük daily / 12 həftəlik weekly taraması; 2706 test; artefakt v78."
       ],
-      "status": "Bu gün işlədi · sabah gün 65 (sakit rejim)"
+      "status": "Bu gün işlədi · sabah gün 66 (sakit rejim)"
     },
     {
       "id": "game-designer",
@@ -102,11 +102,11 @@
         "src/main.ts"
       ],
       "recent": [
+        "Gün 65: REV-20/23/25/27 (fable) — kristal paketi bir ödənişə iki dəfə verilmir (əməliyyat id-si olmadan heç vaxt), gündəlik seriya saat keçidi günündə qırılmır, reklam soyuması video bitən vaxtdan sayılır, \"artıq çatdırılıb\" bildirişi 4 dildə; +15 test.",
         "Gün 64: REV-10…19 — yaddaş yazısı (dinləyicilər, təkrar, bildiriş, paket skinləri, gün açarları; fable), reklam rədd edilsə nəticə ekranı donmur, çağırışda keçid yox, mausla ilişib qalma yox, dərs addımı bir kadr yanıb-sönmür.",
-        "Gün 63: REV-4/5/7/9 — reklam öz saxlama vəziyyəti (kart yox, giriş yox), basılı düymə təkrar etmir, pat kartı klaviatura ilə, fromLayout bandı; +43 B eager.",
-        "Gün 62: REV-3 — JURNALI TƏMİZLƏ yaddaş dolu olanda yalan \"təmizləndi\" demir; yeni xəta bildirişi 4 dildə; 29 → 33 test."
+        "Gün 63: REV-4/5/7/9 — reklam öz saxlama vəziyyəti (kart yox, giriş yox), basılı düymə təkrar etmir, pat kartı klaviatura ilə, fromLayout bandı; +43 B eager."
       ],
-      "status": "Bu gün işlədi (fable + opus)"
+      "status": "Bu gün işlədi (fable)"
     },
     {
       "id": "ai-engineer",
@@ -193,7 +193,7 @@
       "role": "iOS və Android",
       "color": "#4a6fa5",
       "tag": "gözləyir",
-      "cls": "wait",
+      "cls": "",
       "does": "Capacitor qabığını, Android / iOS layihələrini, CI build-lərini (APK, imzalı iOS arxivi, TestFlight yükləməsi) və cihaz test planını saxlayır. Açarlar və parollar heç vaxt çatda olmur — onları yalnız sən GitHub-a qoyursan.",
       "owns": [
         "capacitor.config.ts",
@@ -203,11 +203,11 @@
         "docs/MOBILE.md"
       ],
       "recent": [
+        "Gün 65: REV-21/22/24/26 (fable) — AdMob hansı reklam vahidinin yükləndiyini izləyir (DAVAM ET öz vahidini göstərir), iki reklam üst-üstə açılmır, gözləyən ödəniş \"uğursuz\" deyil, yaddaş güzgüsünün uğursuz yazısı arxa planda təkrar göndərilir; +17 test; MM-21 qeydə alındı.",
         "Gün 60: MM-19 — build 27 sorğusunun quru məşqi kopiyada: version:check qapısı işləyir, workflow faylı gözlənildiyi kimi oxuyur, native build \"build 27\" göstərir; sürpriz yoxdur.",
-        "Gün 58: MM-18 — native build-də 15 sütunlu jurnal, 20 qeyd / 400 kB, kristal DAVAM ET qeydi: 3/3 MATCH; düzəliş lazım deyil; build 27 müqaviləni gözləyir.",
-        "Gün 54: native build-də Diaqnostika → JURNALI KOPYALA → #replay → MATCH; paket 1 319 375 B"
+        "Gün 58: MM-18 — native build-də 15 sütunlu jurnal, 20 qeyd / 400 kB, kristal DAVAM ET qeydi: 3/3 MATCH; düzəliş lazım deyil; build 27 müqaviləni gözləyir."
       ],
-      "status": "Gözləyir · build 27 müqavilədən sonra"
+      "status": "Bu gün işlədi (fable) · build 27 müqavilədən sonra"
     },
     {
       "id": "publisher",
@@ -263,9 +263,9 @@
         "qərarlar (defaultlar hesabatda)"
       ],
       "recent": [
+        "Səndə: MM-15 (Apple PLA müqaviləsi → build 27 sorğusu — 5 dəqiqəlik iş) və AUD-Q1 / A2 (build 27 ilə cihaz yoxlaması + playtest vərəqi). Build 27 dörd kod baxışından keçib.",
         "Səndə: MM-15 (Apple PLA müqaviləsi → build 27 sorğusu — artıq məşq edilib, 5 dəqiqəlik iş) və AUD-Q1 / A2 (build 27 ilə cihaz yoxlaması + playtest vərəqi).",
-        "Səndə: MM-15 (Apple PLA müqaviləsi → build 27 sorğusu) və AUD-Q1 / A2 (build 27 ilə cihaz yoxlaması + playtest vərəqi); vərəqin qərar qaydaları tam (C.0 siyahı, saxlanılan səviyyə).",
-        "Səndə: MM-15 (Apple PLA müqaviləsi → build 27 sorğusu) və AUD-Q1 / A2 (build 27 ilə cihaz yoxlaması + playtest vərəqi); buraxılış siyahısında hər gözləyən maddə adınla yazılıb (§8)."
+        "Səndə: MM-15 (Apple PLA müqaviləsi → build 27 sorğusu) və AUD-Q1 / A2 (build 27 ilə cihaz yoxlaması + playtest vərəqi); vərəqin qərar qaydaları tam (C.0 siyahı, saxlanılan səviyyə)."
       ],
       "status": "Səndə: Apple müqaviləsi + cihaz yoxlaması (P0) + playtest vərəqi"
     }
@@ -307,21 +307,22 @@
       ]
     },
     {
-      "title": "Gün 64 — bağlandı (21 noyabr)",
+      "title": "Gün 65 — bağlandı (22 noyabr)",
       "items": [
         {
-          "id": "REV-10…19",
+          "id": "REV-20…27",
           "p": "p2",
           "own": [
-            "frontend-engineer"
+            "frontend-engineer",
+            "mobile-engineer"
           ],
           "day": "bağlı",
-          "t": "Üçüncü kod baxışının 10 tapıntısı: yaddaş yazısı, nəticə ekranı, toxunuş, dərs, gün açarları."
+          "t": "Dördüncü kod baxışının 8 tapıntısı: alış dublikatı, gündəlik seriya (DST), reklam soyuması, AdMob vahidi, üst-üstə reklam, gözləyən ödəniş, yaddaş güzgüsü."
         }
       ]
     },
     {
-      "title": "Gün 65",
+      "title": "Gün 66",
       "items": [
         {
           "id": "CI",
@@ -329,8 +330,8 @@
           "own": [
             "producer"
           ],
-          "day": "gün 65",
-          "t": "Sakit rejim: CI izləmə; açıq kod işi yoxdur — MM-15 və playtest gözlənilir."
+          "day": "gün 66",
+          "t": "Sakit rejim: CI izləmə; dörd kod baxışı tamamlandı — MM-15 və playtest gözlənilir."
         },
         {
           "id": "FEEL-2-1…3",
@@ -459,6 +460,16 @@
           ],
           "day": "telefon gələndə",
           "t": "Android APK-nı real telefonda yoxlamaq (Play hesabı və Android telefon yoxdur)."
+        },
+        {
+          "id": "MM-21",
+          "p": "p3",
+          "own": [
+            "mobile-engineer",
+            "frontend-engineer"
+          ],
+          "day": "hesablar + cihaz",
+          "t": "Gözləyən (təxirə salınmış) ödəniş tamamlananda kristal paketinin sonradan verilməsi — RevenueCat əməliyyat tarixçəsi + dublikat qoruması; cihazda yoxlanmalı."
         }
       ]
     },
