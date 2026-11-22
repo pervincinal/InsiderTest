@@ -28,6 +28,8 @@ const RC_ERR = {
   PURCHASE_NOT_ALLOWED: '3',
   PRODUCT_NOT_AVAILABLE: '5',
   PRODUCT_ALREADY_PURCHASED: '6',
+  /** Deferred payment (Play: cash at a store / parental approval): the store completes it later. */
+  PAYMENT_PENDING: '20',
   CONFIGURATION: '23',
   UNSUPPORTED: '24',
 } as const;
@@ -96,6 +98,9 @@ export function mapRevenueCatError(err: unknown): PurchaseError | 'alreadyOwned'
   const code = e.code === undefined || e.code === null ? '' : String(e.code);
   if (e.userCancelled === true || code === RC_ERR.PURCHASE_CANCELLED) return 'cancelled';
   if (code === RC_ERR.PRODUCT_ALREADY_PURCHASED) return 'alreadyOwned';
+  // Not a failure: the order is accepted and the store finishes it out of band (REV-26). Nothing is
+  // granted now — the transaction only appears in `customerInfo.nonSubscriptionTransactions` later.
+  if (code === RC_ERR.PAYMENT_PENDING) return 'pending';
   if (
     code === RC_ERR.PRODUCT_NOT_AVAILABLE ||
     code === RC_ERR.PURCHASE_NOT_ALLOWED ||
@@ -184,7 +189,8 @@ export const revenueCatStore: StoreProvider = {
         // caller's idempotent grant makes this safe.
         return { ok: true, productId: id };
       }
-      if (mapped !== 'cancelled') warn(`purchase(${id})`, err);
+      if (mapped === 'pending') console.info(`[store/revenuecat] purchase(${id}) pending: the store completes it later`);
+      else if (mapped !== 'cancelled') warn(`purchase(${id})`, err);
       return { ok: false, productId: id, error: mapped };
     } finally {
       purchaseInFlight = false;

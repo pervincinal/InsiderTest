@@ -6,7 +6,12 @@
  *   init:  AdMob.initialize() -> UMP consent (requestConsentInfo / showConsentForm, EEA/UK only)
  *          -> preload one interstitial and one rewarded ad.
  *   show:  show the preloaded ad, wait for its Dismissed / FailedToShow event, preload the next.
+ *          `showing` is claimed before the first await, so a second show request while one is
+ *          loading or on screen is refused (`false` / `{ rewarded: false }`), never overlapped.
  *   reward: `{ rewarded: true }` only when `RewardAdPluginEvents.Rewarded` fired for this show.
+ *          Placements may map to their own rewarded unit (`rewardedByPlacement`, ECONOMY.md §5);
+ *          the unit shown is always the placement's: a load in flight for another unit is awaited
+ *          and then the requested unit is loaded (the SDK holds one rewarded ad at a time).
  *   privacy options: `privacyOptionsRequired()` mirrors UMP's `privacyOptionsRequirementStatus`;
  *          `showPrivacyOptions()` reopens the consent form (`showPrivacyOptionsForm`) and
  *          re-reads the consent state afterwards.
@@ -47,8 +52,13 @@ let showing = false;
 
 let interstitialReady = false;
 let interstitialLoading: Promise<boolean> | null = null;
+/** The rewarded ad unit the SDK currently holds loaded (the SDK keeps one rewarded ad at a time). */
 let rewardedReadyUnit: string | null = null;
 let rewardedLoading: Promise<boolean> | null = null;
+/** The unit `rewardedLoading` is loading — a request for another unit must not reuse that promise (REV-21). */
+let rewardedLoadingUnit: string | null = null;
+/** Bumped per `prepareRewardVideoAd` call: a load that finished after a newer one started must not claim `rewardedReadyUnit`. */
+let rewardedLoadSeq = 0;
 
 function warn(what: string, err: unknown): void {
   console.warn(`[ads/admob] ${what} failed:`, err);
@@ -135,15 +145,29 @@ function preloadInterstitial(): Promise<boolean> {
   return interstitialLoading;
 }
 
+/**
+ * Resolves true iff `unit` is the loaded rewarded ad (`rewardedReadyUnit === unit`). A load in
+ * flight for the same unit is shared; one for another unit (e.g. the default unit preloaded at
+ * init while the player taps Continue → `rv_continue` unit) is awaited first and then `unit` is
+ * loaded, so a show request can never present the other unit (REV-21).
+ */
 function preloadRewarded(unit: string): Promise<boolean> {
   if (!admob || !units || !canRequestAds) return Promise.resolve(false);
   if (rewardedReadyUnit === unit) return Promise.resolve(true);
-  if (rewardedLoading) return rewardedLoading;
+  if (rewardedLoading) {
+    if (rewardedLoadingUnit === unit) return rewardedLoading;
+    return rewardedLoading.then(() => preloadRewarded(unit));
+  }
   const mod = admob;
   const u = units;
+  const seq = ++rewardedLoadSeq;
+  rewardedLoadingUnit = unit;
   rewardedLoading = withTimeout(
     mod.AdMob.prepareRewardVideoAd({ adId: unit, isTesting: u.usesTestIds, npa: nonPersonalised, immersiveMode: true }).then(
       () => {
+        // A load that only finished after a newer one started (timeout, then another unit was
+        // requested) no longer describes what the SDK holds.
+        if (seq !== rewardedLoadSeq) return false;
         rewardedReadyUnit = unit;
         return true;
       },
@@ -156,6 +180,7 @@ function preloadRewarded(unit: string): Promise<boolean> {
     false,
   ).finally(() => {
     rewardedLoading = null;
+    rewardedLoadingUnit = null;
   });
   return rewardedLoading;
 }
@@ -247,75 +272,94 @@ export const adMobAds: AdsProvider = {
   async showInterstitial(): Promise<boolean> {
     if (!this.isAvailable() || !admob || showing) return false;
     const mod = admob;
-    if (!(await preloadInterstitial())) return false;
+    // Claimed before the first await (REV-24): a second show request that arrives while this one
+    // is still waiting for its ad to load is refused instead of overlapping it.
     showing = true;
-    const { InterstitialAdPluginEvents: Ev } = mod;
-    let shown = false;
-    let finish: () => void = () => undefined;
-    const done = new Promise<void>((resolve) => {
-      finish = resolve;
-    });
-    const handles: Array<Promise<ListenerHandle>> = [
-      mod.AdMob.addListener(Ev.Showed, () => {
-        shown = true;
-      }),
-      mod.AdMob.addListener(Ev.Dismissed, () => finish()),
-      mod.AdMob.addListener(Ev.FailedToShow, (err) => {
-        warn('interstitial show', err);
-        finish();
-      }),
-    ];
     try {
-      interstitialReady = false;
-      await mod.AdMob.showInterstitial();
-      await withTimeout(done, SHOW_TIMEOUT_MS, undefined);
-    } catch (err) {
-      warn('showInterstitial', err);
+      if (!(await preloadInterstitial())) return false;
+      return await presentInterstitial(mod);
     } finally {
-      await removeAll(handles);
       showing = false;
-      void preloadInterstitial();
     }
-    return shown;
   },
 
   async showRewarded(placementId: string): Promise<RewardedResult> {
     if (!this.isAvailable() || !admob || !units || showing) return { rewarded: false };
     const mod = admob;
-    const unit = units.rewardedByPlacement[placementId] ?? units.rewarded;
-    if (rewardedReadyUnit !== null && rewardedReadyUnit !== unit) rewardedReadyUnit = null;
-    if (!(await preloadRewarded(unit))) return { rewarded: false };
-    showing = true;
-    const { RewardAdPluginEvents: Ev } = mod;
-    let rewarded = false;
-    let finish: () => void = () => undefined;
-    const done = new Promise<void>((resolve) => {
-      finish = resolve;
-    });
-    const handles: Array<Promise<ListenerHandle>> = [
-      mod.AdMob.addListener(Ev.Rewarded, () => {
-        rewarded = true;
-      }),
-      mod.AdMob.addListener(Ev.Dismissed, () => finish()),
-      mod.AdMob.addListener(Ev.FailedToShow, (err) => {
-        warn(`rewarded show (${placementId})`, err);
-        finish();
-      }),
-    ];
+    const u = units;
+    const unit = u.rewardedByPlacement[placementId] ?? u.rewarded;
+    showing = true; // see showInterstitial
     try {
-      rewardedReadyUnit = null;
-      await mod.AdMob.showRewardVideoAd();
-      await withTimeout(done, SHOW_TIMEOUT_MS, undefined);
-    } catch (err) {
-      warn(`showRewardVideoAd(${placementId})`, err);
+      // `preloadRewarded` resolves true only once `unit` itself is the loaded ad (REV-21).
+      if (!(await preloadRewarded(unit)) || rewardedReadyUnit !== unit) return { rewarded: false };
+      return await presentRewarded(mod, placementId);
     } finally {
-      await removeAll(handles);
       showing = false;
-      void preloadRewarded(units.rewarded);
+      void preloadRewarded(u.rewarded);
     }
-    return { rewarded };
   },
 };
+
+/** Show the loaded interstitial and wait for Dismissed / FailedToShow. Caller holds `showing`. */
+async function presentInterstitial(mod: AdMobModule): Promise<boolean> {
+  const { InterstitialAdPluginEvents: Ev } = mod;
+  let shown = false;
+  let finish: () => void = () => undefined;
+  const done = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const handles: Array<Promise<ListenerHandle>> = [
+    mod.AdMob.addListener(Ev.Showed, () => {
+      shown = true;
+    }),
+    mod.AdMob.addListener(Ev.Dismissed, () => finish()),
+    mod.AdMob.addListener(Ev.FailedToShow, (err) => {
+      warn('interstitial show', err);
+      finish();
+    }),
+  ];
+  try {
+    interstitialReady = false;
+    await mod.AdMob.showInterstitial();
+    await withTimeout(done, SHOW_TIMEOUT_MS, undefined);
+  } catch (err) {
+    warn('showInterstitial', err);
+  } finally {
+    await removeAll(handles);
+    void preloadInterstitial();
+  }
+  return shown;
+}
+
+/** Show the loaded rewarded ad (`rewardedReadyUnit`) and wait for Dismissed / FailedToShow. Caller holds `showing`. */
+async function presentRewarded(mod: AdMobModule, placementId: string): Promise<RewardedResult> {
+  const { RewardAdPluginEvents: Ev } = mod;
+  let rewarded = false;
+  let finish: () => void = () => undefined;
+  const done = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const handles: Array<Promise<ListenerHandle>> = [
+    mod.AdMob.addListener(Ev.Rewarded, () => {
+      rewarded = true;
+    }),
+    mod.AdMob.addListener(Ev.Dismissed, () => finish()),
+    mod.AdMob.addListener(Ev.FailedToShow, (err) => {
+      warn(`rewarded show (${placementId})`, err);
+      finish();
+    }),
+  ];
+  try {
+    rewardedReadyUnit = null;
+    await mod.AdMob.showRewardVideoAd();
+    await withTimeout(done, SHOW_TIMEOUT_MS, undefined);
+  } catch (err) {
+    warn(`showRewardVideoAd(${placementId})`, err);
+  } finally {
+    await removeAll(handles);
+  }
+  return { rewarded };
+}
 
 /** Test hook. */
 export function resetAdMobForTests(): void {
@@ -330,4 +374,6 @@ export function resetAdMobForTests(): void {
   interstitialLoading = null;
   rewardedReadyUnit = null;
   rewardedLoading = null;
+  rewardedLoadingUnit = null;
+  rewardedLoadSeq = 0;
 }

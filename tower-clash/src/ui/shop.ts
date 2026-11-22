@@ -569,6 +569,7 @@ export class ShopScreen implements Screen {
     if (!res.ok) {
       if (res.error === 'unavailable') this.toast.show(t('shop.toast.storeUnavailableNow'), 'error', this.nowMs);
       else if (res.error === 'failed') this.toast.show(t('shop.toast.purchaseFailed'), 'error', this.nowMs);
+      else if (res.error === 'pending') this.toast.show(t('shop.toast.purchasePending'), 'ok', this.nowMs); // REV-26: deferred payment
       return false; // cancelled: nothing to say
     }
     const granted = tryGrantProduct(this.app.save, product.id, res.transactionId);

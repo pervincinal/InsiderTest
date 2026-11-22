@@ -173,6 +173,8 @@ describe('revenueCatStore without a configured key', () => {
     expect(mapRevenueCatError({ code: '5' })).toBe('unavailable');
     expect(mapRevenueCatError({ code: '23' })).toBe('unavailable');
     expect(mapRevenueCatError({ code: '6' })).toBe('alreadyOwned');
+    expect(mapRevenueCatError({ code: '20' })).toBe('pending'); // PAYMENT_PENDING_ERROR: deferred, not failed (REV-26)
+    expect(mapRevenueCatError({ code: 20 })).toBe('pending');
     expect(mapRevenueCatError({ code: '10' })).toBe('failed');
     expect(mapRevenueCatError(new Error('boom'))).toBe('failed');
     expect(mapRevenueCatError(undefined)).toBe('failed');

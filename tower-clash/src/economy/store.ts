@@ -42,7 +42,14 @@ export interface StoreProduct {
   currency: string;
 }
 
-export type PurchaseError = 'cancelled' | 'unavailable' | 'failed';
+/**
+ * `cancelled` — the player backed out (say nothing); `unavailable` — store not reachable /
+ * product unknown; `failed` — the store refused, nothing was charged; `pending` — the store
+ * accepted the order but the payment is deferred (Google Play "pending transactions": cash at a
+ * store, parental approval). Nothing is granted for `pending`; the store completes it out of band
+ * (RevenueCat `PAYMENT_PENDING_ERROR`).
+ */
+export type PurchaseError = 'cancelled' | 'unavailable' | 'failed' | 'pending';
 
 export interface PurchaseResult {
   /** True only when the store confirmed the purchase. Grant the goods iff this is true. */

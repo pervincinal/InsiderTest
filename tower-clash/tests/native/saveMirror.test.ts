@@ -315,6 +315,20 @@ describe('mirroring every write', () => {
     expect(prefs.sets()).toHaveLength(1);
   });
 
+  it('a set that failed just before backgrounding is resent by the background flush (REV-22)', async () => {
+    await bootSaveMirror(deps());
+    const save = loadSaveFrom(storage);
+    recordWin(save, 5, 3, 10);
+    prefs.failSetOnce = true; // transient bridge failure on the timed write
+    await vi.advanceTimersByTimeAsync(SAVE_MIRROR_DELAY_MS);
+    expect(prefs.sets()).toHaveLength(1);
+    expect(prefs.store.get(SAVE_KEY)).toBeUndefined();
+    hidden[0]!(); // the app goes to the background: last chance before a kill
+    await settle();
+    expect(prefs.sets()).toHaveLength(2);
+    expect(prefs.store.get(SAVE_KEY)).toBe(storage.getItem(SAVE_KEY));
+  });
+
   it('mirrors a write that localStorage refused (quota): the native copy is then the only one', async () => {
     await bootSaveMirror(deps());
     storage.refuse = true;
@@ -387,6 +401,59 @@ describe('createSaveMirror', () => {
     mirror.write('{"a":2}');
     await mirror.flush();
     expect(prefs.store.get(SAVE_KEY)).toBe('{"a":2}');
+  });
+
+  // REV-22: the value of a failed set must survive for the next flush alone (the backgrounding
+  // flush is the last chance before the app is killed), not only for a later write.
+  it('a value whose set failed is resent by the next flush() with no new write', async () => {
+    const mirror = createSaveMirror(prefs);
+    prefs.failSetOnce = true;
+    mirror.write('{"a":1}');
+    await mirror.flush();
+    expect(prefs.sets()).toEqual(['{"a":1}']);
+    expect(prefs.store.get(SAVE_KEY)).toBeUndefined();
+    await mirror.flush(); // e.g. the app goes to the background
+    expect(prefs.sets()).toEqual(['{"a":1}', '{"a":1}']);
+    expect(prefs.store.get(SAVE_KEY)).toBe('{"a":1}');
+    await mirror.flush(); // sent and unchanged: nothing more
+    expect(prefs.sets()).toHaveLength(2);
+  });
+
+  it('a newer write queued during the failure wins: the failed value is not resurrected', async () => {
+    const mirror = createSaveMirror(prefs);
+    let release!: () => void;
+    prefs.setGate = new Promise<void>((resolve) => (release = resolve));
+    prefs.failSetOnce = true;
+    mirror.write('{"a":1}');
+    const first = mirror.flush();
+    mirror.write('{"a":2}'); // queued (timer pending) while the failing call is in flight
+    release();
+    await first;
+    expect(prefs.sets()).toEqual(['{"a":1}']);
+    await mirror.flush();
+    expect(prefs.sets()).toEqual(['{"a":1}', '{"a":2}']);
+    expect(prefs.store.get(SAVE_KEY)).toBe('{"a":2}');
+    await mirror.flush();
+    await vi.advanceTimersByTimeAsync(SAVE_MIRROR_DELAY_MS * 4);
+    expect(prefs.sets()).toHaveLength(2); // {"a":1} never comes back
+  });
+
+  it('a newer value already chained behind the failed one is not overtaken by a retry of the old one', async () => {
+    const mirror = createSaveMirror(prefs);
+    let release!: () => void;
+    prefs.setGate = new Promise<void>((resolve) => (release = resolve));
+    prefs.failSetOnce = true;
+    mirror.write('{"a":1}');
+    const first = mirror.flush();
+    mirror.write('{"a":2}');
+    const second = mirror.flush(); // chained behind the (failing) first call
+    release();
+    await first;
+    await second;
+    expect(prefs.sets()).toEqual(['{"a":1}', '{"a":2}']);
+    expect(prefs.store.get(SAVE_KEY)).toBe('{"a":2}');
+    await mirror.flush();
+    expect(prefs.sets()).toHaveLength(2);
   });
 });
 

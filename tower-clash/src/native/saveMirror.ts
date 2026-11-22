@@ -87,8 +87,10 @@ const realTimers: Timers = {
 /**
  * The write side. The first `write` after a flush starts one timer (not reset by later writes, so
  * the delay is a ceiling); when it fires, only the newest JSON is sent. `Preferences.set` calls are
- * chained, so an older value can never land after a newer one; a failed call is logged and the
- * value is retried by the next write or flush.
+ * chained, so an older value can never land after a newer one; a failed call is logged and its
+ * value is queued again (unless a newer write is already waiting), so the next flush — e.g. the
+ * backgrounding one — or the next write resends it. No retry timer: a persistent plugin failure
+ * costs one call per flush, not a loop.
  */
 export function createSaveMirror(prefs: MirrorPrefs, delayMs = SAVE_MIRROR_DELAY_MS, timers: Timers = realTimers): SaveMirror {
   let latest: string | null = null;
@@ -108,8 +110,14 @@ export function createSaveMirror(prefs: MirrorPrefs, delayMs = SAVE_MIRROR_DELAY
       chain = chain
         .then(() => prefs.set({ key: SAVE_KEY, value }))
         .catch((err: unknown) => {
-          if (sent === value) sent = null;
           warn('Preferences.set', err);
+          // Nothing newer was handed to the plugin since (the chain is in order, so a newer `sent`
+          // means its call runs after this one): forget the failure and queue the value again —
+          // unless a newer write is already waiting, which supersedes it (REV-22).
+          if (sent === value) {
+            sent = null;
+            if (latest === null) latest = value;
+          }
         });
     }
     return chain;
