@@ -22,7 +22,7 @@ import type { PointerPoint } from '../input/pointer';
 import type { IapProductDef, SkinDef } from '../economy/catalog';
 import { getStore } from '../economy/store';
 import { spendCrystals } from '../economy/wallet';
-import { CONVERSION_PACKS, buyBoosterCrate, conversionGold, convertCrystals, goldTradeState, grantProduct, restorePurchases, tradeGold } from '../economy/purchases';
+import { CONVERSION_PACKS, buyBoosterCrate, conversionGold, convertCrystals, goldTradeState, restorePurchases, tradeGold, tryGrantProduct } from '../economy/purchases';
 import { CONVERSION, CRYSTAL_SERVICES, GOLD_TRADE } from '../economy/catalog';
 import { ownsProduct, spriteSkinId } from '../economy/entitlements';
 import { shopSkins, skinFamily, visibleProducts } from '../economy/shopListing';
@@ -571,9 +571,13 @@ export class ShopScreen implements Screen {
       else if (res.error === 'failed') this.toast.show(t('shop.toast.purchaseFailed'), 'error', this.nowMs);
       return false; // cancelled: nothing to say
     }
-    const granted = grantProduct(this.app.save, product.id, res.transactionId);
-    if (!granted) {
-      this.toast.show(t('shop.toast.alreadyOwned'), 'ok', this.nowMs);
+    const granted = tryGrantProduct(this.app.save, product.id, res.transactionId);
+    if (typeof granted === 'string') {
+      // owned: a non-consumable this save already has. duplicate / unverified (REV-20, REV-27): a
+      // crystal pack the store confirmed again (retry, or "already purchased" without an id) — it
+      // was delivered under its first transaction, so a neutral toast and no second grant.
+      if (granted === 'unknown') this.toast.show(t('shop.toast.purchaseFailed'), 'error', this.nowMs);
+      else this.toast.show(t(granted === 'owned' ? 'shop.toast.alreadyOwned' : 'shop.toast.alreadyDelivered'), 'ok', this.nowMs);
       return false;
     }
     this.burst(granted.crystals > 0 ? 'crystal' : 'gold', rect);

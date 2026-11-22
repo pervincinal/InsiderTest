@@ -116,28 +116,41 @@ function applyEntitlements(save: SaveData, product: IapProductDef): string[] {
 }
 
 /**
+ * Why `tryGrantProduct` added nothing: the product is not in the catalog (`unknown`), the
+ * non-consumable is already owned by this save (`owned`), the consumable's transaction was already
+ * delivered (`duplicate`), or a consumable came without a transaction id (`unverified`).
+ */
+export type GrantSkip = 'unknown' | 'owned' | 'duplicate' | 'unverified';
+
+/**
  * Apply a product's catalog grants exactly once. `transactionId` (from the store) is the dedupe
- * key; without one, consumables are granted unconditionally (the fake store always sends an id).
+ * key of a consumable: the first grant writes it into `save.purchases`, the same id again is a
+ * `duplicate`. A consumable WITHOUT an id is never granted (`unverified`, REV-20): RevenueCat
+ * answers "already purchased" (Play's ITEM_ALREADY_OWNED — an earlier crystal-pack transaction not
+ * yet consumed, e.g. after an offline sync) with `{ ok: true }` and no id, and that earlier
+ * transaction was already paid out under its own id. The fake store and the debug hook always
+ * send an id, so the dev path is unaffected.
  *
  * Non-consumables are granted once per save (ECON-12 (2), "grant once per purchase"): the first
  * grant writes `owned:<productId>` into `save.purchases`; from then on a purchase retry, a second
  * transaction or any number of `restore()`s add no currency again — they only re-ensure the
- * entitlement (skins, no-ads / premium / starter flags) in case the save lost it, and return null.
- * A restore on a fresh save (reinstall, second device: no marker yet) grants once, because the
- * player paid; `resetProgress` keeps `purchases`, so a reset never re-opens the grant.
- * Returns null when the product is unknown or was already granted.
+ * entitlement (skins, no-ads / premium / starter flags) in case the save lost it, and return
+ * `owned`. A restore on a fresh save (reinstall, second device: no marker yet) grants once, with
+ * or without an id, because the player paid; `resetProgress` keeps `purchases`, so a reset never
+ * re-opens the grant.
  */
-export function grantProduct(save: SaveData, productId: string, transactionId?: string): GrantResult | null {
+export function tryGrantProduct(save: SaveData, productId: string, transactionId?: string): GrantResult | GrantSkip {
   const product = productById(productId);
-  if (!product) return null;
+  if (!product) return 'unknown';
   const marker = product.kind === 'nonConsumable' ? `owned:${productId}` : null;
   if (marker && save.purchases.includes(marker)) {
     const flags = JSON.stringify(save.entitlements);
     const added = applyEntitlements(save, product);
     if (added.length > 0 || JSON.stringify(save.entitlements) !== flags) writeSave(save);
-    return null;
+    return 'owned';
   }
-  if (transactionId && save.purchases.includes(transactionId)) return null;
+  if (!marker && !transactionId) return 'unverified';
+  if (transactionId && save.purchases.includes(transactionId)) return 'duplicate';
   const g = product.grants;
   const result: GrantResult = {
     productId,
@@ -154,6 +167,12 @@ export function grantProduct(save: SaveData, productId: string, transactionId?: 
   if (marker) save.purchases.push(marker);
   writeSave(save);
   return result;
+}
+
+/** `tryGrantProduct` for callers that only need "granted or not": null for every skip. */
+export function grantProduct(save: SaveData, productId: string, transactionId?: string): GrantResult | null {
+  const r = tryGrantProduct(save, productId, transactionId);
+  return typeof r === 'string' ? null : r;
 }
 
 /**

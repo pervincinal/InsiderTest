@@ -25,7 +25,15 @@ export function dayKey(nowMs = Date.now()): string {
   return `${d.getFullYear()}-${mm}-${dd}`;
 }
 
-const DAY_MS = 86_400_000;
+/**
+ * The local calendar day before `key` (`YYYY-MM-DD`), by calendar arithmetic — not "24 h earlier"
+ * (REV-23): a spring-forward day is 23 h long, so from 00:00 to 01:00 on the day after it,
+ * `dayKey(nowMs - 86_400_000)` lands two days back and the streak would read as broken.
+ */
+export function yesterdayKey(key: string): string {
+  const [y, m, d] = key.split('-').map(Number) as [number, number, number];
+  return dayKey(new Date(y, m - 1, d - 1, 12).getTime()); // noon: no DST transition touches it
+}
 
 /* ---------- balances ---------- */
 
@@ -232,7 +240,7 @@ export interface DailyStatus {
 
 export function dailyStatus(save: SaveData, nowMs = Date.now()): DailyStatus {
   const today = dayKey(nowMs);
-  const yesterday = dayKey(nowMs - DAY_MS);
+  const yesterday = yesterdayKey(today);
   let day: number;
   let claimed = false;
   if (save.daily.lastClaimDay === today) {

@@ -98,9 +98,17 @@ export function canShowRewarded(session: AdSession, save: SaveData, placementId:
 /**
  * Show a rewarded video. Resolves true iff the network fired its reward event; on success the
  * daily counter, cooldown and "rewarded on this result" flag are updated and persisted.
+ *
+ * Clocks (REV-25): the gate (cap, cooldown) is checked at `nowMs`; the booking — day counter and
+ * cooldown start — uses the time the video FINISHED, re-sampled from `clock` after the ad, so a
+ * 30 s video does not start its cooldown 30 s in the past and one spanning midnight counts on the
+ * new day. Production callers pass nothing: `Date.now` is sampled before and after. Tests pass a
+ * fixed `nowMs` (booked as is) or a `clock` they advance inside the fake provider.
  */
-export async function showRewarded(session: AdSession, save: SaveData, placementId: string, nowMs = Date.now(), ads: AdsProvider = currentAds()): Promise<boolean> {
-  if (!canShowRewarded(session, save, placementId, nowMs, ads)) return false;
+export async function showRewarded(session: AdSession, save: SaveData, placementId: string, nowMs?: number, ads: AdsProvider = currentAds(), clock?: () => number): Promise<boolean> {
+  const sample: (() => number) | null = clock ?? (nowMs === undefined ? Date.now : null);
+  const startMs = nowMs ?? (sample ?? Date.now)();
+  if (!canShowRewarded(session, save, placementId, startMs, ads)) return false;
   let rewarded = false;
   try {
     rewarded = (await ads.showRewarded(placementId)).rewarded;
@@ -108,10 +116,11 @@ export async function showRewarded(session: AdSession, save: SaveData, placement
     rewarded = false;
   }
   if (!rewarded) return false;
-  rollDay(save, nowMs);
+  const doneMs = sample ? Math.max(startMs, sample()) : startMs;
+  rollDay(save, doneMs);
   save.adCounters.rewardedByPlacement[placementId] = (save.adCounters.rewardedByPlacement[placementId] ?? 0) + 1;
-  session.lastRewardedAtMs[placementId] = nowMs;
-  session.lastAdAtMs = nowMs;
+  session.lastRewardedAtMs[placementId] = doneMs;
+  session.lastAdAtMs = doneMs;
   session.winsAtLastAd = save.adCounters.levelsCompleted;
   session.rewardedOnResult = true;
   session.rewardedShown += 1;

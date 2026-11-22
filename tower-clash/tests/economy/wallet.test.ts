@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { SaveData } from '../../src/ui/save';
 import { SAVE_KEY, SAVE_KEY_V2, defaultSave, loadSaveFrom, resetProgress, setSaveStorageForTests } from '../../src/ui/save';
 import { claimDaily, dailyStatus, dayKey, earnCrystals, earnGold, payMilestones, recordResult, spendCrystals, spendGold } from '../../src/economy/wallet';
-import { CONVERSION_PACKS, buyBoosterCrate, conversionGold, convertCrystals, goldTradeState, grantProduct, restorePurchases, tradeGold, treeComplete } from '../../src/economy/purchases';
+import { CONVERSION_PACKS, buyBoosterCrate, conversionGold, convertCrystals, goldTradeState, grantProduct, restorePurchases, tradeGold, treeComplete, tryGrantProduct } from '../../src/economy/purchases';
 import { boosterDiscount, boosterPrice, equippedSkin, highestClearedLevel, interstitialsDisabled, ownsProduct, spriteSkinId } from '../../src/economy/entitlements';
 import { shopSkins, skinFamily, visibleProducts } from '../../src/economy/shopListing';
 import { HELMET_SKINS, ROOF_SKINS, THEME_IDS } from '../../src/render/sprites';
@@ -154,6 +154,32 @@ describe('grantProduct', () => {
     expect(grantProduct(save, 'crystals_100', 'tx-2')).not.toBeNull();
     expect(save.crystals).toBe(200);
     expect(save.purchases).toEqual(['tx-1', 'tx-2']);
+  });
+
+  it('REV-20: a consumable is granted once per transaction id, the same id again is a duplicate, and never without an id', () => {
+    const first = tryGrantProduct(save, 'crystals_100', 'tx-1');
+    expect(first).toMatchObject({ crystals: 100 });
+    expect(save.crystals).toBe(100);
+    expect(tryGrantProduct(save, 'crystals_100', 'tx-1')).toBe('duplicate');
+    expect(save.crystals).toBe(100);
+    // RevenueCat "already purchased" (Play ITEM_ALREADY_OWNED on an unconsumed pack): ok, no id
+    expect(tryGrantProduct(save, 'crystals_100')).toBe('unverified');
+    expect(tryGrantProduct(save, 'crystals_100', undefined)).toBe('unverified');
+    expect(save.crystals).toBe(100);
+    expect(save.purchases).toEqual(['tx-1']);
+    expect(grantProduct(save, 'crystals_100')).toBeNull();
+    expect(save.crystals).toBe(100);
+    expect(tryGrantProduct(save, 'nope', 'tx-x')).toBe('unknown');
+  });
+
+  it('REV-20: a non-consumable without an id (restore on a fresh save) is still granted once, then owned', () => {
+    const g = tryGrantProduct(save, 'remove_ads');
+    expect(g).toMatchObject({ noAds: true });
+    expect(save.entitlements.noAds).toBe(true);
+    expect(save.purchases).toEqual(['owned:remove_ads']);
+    expect(tryGrantProduct(save, 'remove_ads')).toBe('owned');
+    expect(tryGrantProduct(save, 'remove_ads', 'tx-r2')).toBe('owned');
+    expect(save.purchases).toEqual(['owned:remove_ads']);
   });
 
   it('non-consumables set entitlements, grant skins and are never granted twice', () => {
