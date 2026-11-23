@@ -361,6 +361,18 @@ function hazards(state: GameState, prev: Map<number, number>): void {
   if (dead.size) state.units = state.units.filter((u) => !dead.has(u.id));
 }
 
+/**
+ * Clashes (GDD §2.3): two units of different owners walking toward each other on one lane cross this
+ * tick when the forward one was behind the backward one before the move and is at or past it after it.
+ * The lighter dies and the heavier loses that weight (equal weights: both die).
+ *
+ * REV-28 (2026-11-23): a tick's crossings on a lane are resolved in the order the units actually meet —
+ * by the fraction of the tick at which the pair's gap closes at their combined speed (speeds are
+ * constant within a tick; friends never block each other, so a faster unit that overtook a friend meets
+ * the opponent first) — not in `state.units` order, which could skip a unit physically between two
+ * others. An exact tie (same position, same speed) goes to the lower unit id, the earlier spawn, which
+ * is the list order; the comparator is a total order, so the sort is deterministic on every engine.
+ */
 function clashes(state: GameState, prev: Map<number, number>): void {
   const byRoad = new Map<string, Unit[]>();
   for (const u of state.units) {
@@ -375,30 +387,35 @@ function clashes(state: GameState, prev: Map<number, number>): void {
     const forward = list.filter((u) => u.from === road.a);
     const backward = list.filter((u) => u.from !== road.a);
     if (!forward.length || !backward.length) continue;
+    const meetings: { f: Unit; b: Unit; at: number }[] = [];
     for (const f of forward) {
-      if (dead.has(f.id)) continue;
       const fPrev = prev.get(f.id) ?? f.progress;
       for (const b of backward) {
-        if (dead.has(b.id) || dead.has(f.id)) continue;
         if (b.owner === f.owner) continue;
         const bPrev = 1 - (prev.get(b.id) ?? b.progress);
         const bNow = 1 - b.progress;
         const crossed = fPrev < bPrev && f.progress >= bNow;
         if (!crossed) continue;
-        if (f.weight < b.weight) {
-          b.weight -= f.weight;
-          kill(state, f, 'clash');
-          dead.add(f.id);
-        } else if (f.weight > b.weight) {
-          f.weight -= b.weight;
-          kill(state, b, 'clash');
-          dead.add(b.id);
-        } else {
-          kill(state, f, 'clash');
-          kill(state, b, 'clash');
-          dead.add(f.id);
-          dead.add(b.id);
-        }
+        // Fraction of the tick at which the two meet; crossing guarantees the combined move > the gap > 0.
+        meetings.push({ f, b, at: (bPrev - fPrev) / (f.progress - fPrev + (bPrev - bNow)) });
+      }
+    }
+    if (meetings.length > 1) meetings.sort((p, q) => p.at - q.at || p.f.id - q.f.id || p.b.id - q.b.id);
+    for (const { f, b } of meetings) {
+      if (dead.has(f.id) || dead.has(b.id)) continue;
+      if (f.weight < b.weight) {
+        b.weight -= f.weight;
+        kill(state, f, 'clash');
+        dead.add(f.id);
+      } else if (f.weight > b.weight) {
+        f.weight -= b.weight;
+        kill(state, b, 'clash');
+        dead.add(b.id);
+      } else {
+        kill(state, f, 'clash');
+        kill(state, b, 'clash');
+        dead.add(f.id);
+        dead.add(b.id);
       }
     }
   }
