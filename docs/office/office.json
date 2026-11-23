@@ -11,7 +11,7 @@
         "s": "səviyyə bot ilə keçir"
       },
       {
-        "b": "2800+",
+        "b": "2793",
         "s": "unit test, e2e 196 + 4 + 6 + WebKit + soak"
       },
       {
@@ -325,6 +325,15 @@
     {
       "title": "Gün 67",
       "items": [
+        {
+          "id": "QA-46",
+          "p": "p2",
+          "own": [
+            "qa-engineer"
+          ],
+          "day": "gün 67",
+          "t": "CI-də üç gündə iki bir dəfəlik e2e dayanması (lokal keçir): növbəti halı diaqnoz edilə bilən edən uğursuzluq dökümü + CI-şəkilli təkrar; vaxt limitləri dəyişmir."
+        },
         {
           "id": "CI",
           "p": "p3",
