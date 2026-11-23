@@ -96,6 +96,17 @@ import { expectToast, recordToasts, toastMark, toastsSeen } from './helpers/toas
  * other pre-claim files (the ru dictionary chunk, the SFX recipes chunk) — and an offline Russian
  * relaunch loads it from Cache Storage: no network attempt for the file, the face is 'loaded',
  * digits render in Nunito, the strings are still Russian, and the console stays clean.
+ *
+ * REV-34 / REV-38 (2026-11-23, the Producer's boot-path review) add two more, each in its own context,
+ * on the worker's shell navigation (`networkFirstShell`), which these are the only tests of:
+ *  - REV-34: ./support.html and ./privacy.html ship in public/ inside the worker's scope. A visit to
+ *    them used to be stored under the shell's cache key, so the next offline launch opened the support
+ *    page as the app. Now only the scope root / index.html may overwrite the cached shell; the test
+ *    visits both pages (the worker fetches neither), reads the cached shell by key — still the game —
+ *    then launches offline: the game boots, and the support page itself is simply unreachable offline.
+ *  - REV-38: a reachable server answering 503 / 404 on the shell navigation (`context.route` on the
+ *    worker's fetch) is treated like a network failure: the cached shell is served, the game boots,
+ *    the error page is never cached, and the real shell is served again once the server is back.
  */
 
 test.use({ serviceWorkers: 'allow' });
@@ -713,6 +724,143 @@ test.describe('PWA offline (QA-8)', () => {
       expect(fontFailures).toEqual([]);
       expect(pageErrors).toEqual([]);
       expect(consoleErrors).toEqual([]);
+    });
+  });
+
+  /** The game's document on the preview server: the scope root or its index.html (what `networkFirstShell` handles). */
+  const isShellDocument = (url: URL) => url.pathname === '/' || url.pathname === '/index.html';
+  /** The cached shell's text, read by the fixed key the worker's offline fallback uses. */
+  const cachedShell = (page: Page) => page.evaluate(async (name) => (await (await caches.open(name)).match('./index.html'))?.text() ?? '', CACHE_NAME);
+  /**
+   * Two launches: the worker registers on the first and controls the page from the second's first
+   * request, so the idle preloads (level 1, lazy screens, debug surface, AI) all reach the runtime cache
+   * (QA-28; a first launch alone can miss one in flight at the claim, BUG-52). Returns the entry chunk path.
+   */
+  async function installAndWarm(page: Page): Promise<string> {
+    await navigate(page);
+    expect(await swReady(page, 20_000)).toBe(new URL('/', page.url()).href);
+    await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, { timeout: 20_000 });
+    const entry = (await shellModules(page)).find((p) => ENTRY_CHUNK.test(p)) ?? '';
+    expect(entry).toMatch(ENTRY_CHUNK);
+    await navigate(page);
+    expect(await controlled(page)).toBe(true);
+    await waitForWarm(page, CACHE_NAME);
+    expect(await cachedShell(page), 'the cached shell names the entry chunk').toContain(entry.slice(1));
+    return entry;
+  }
+
+  test('REV-34: a visit to ./support.html and ./privacy.html (in scope, not the game) leaves the cached shell alone — the next offline launch opens the game, not the support page', async ({ page, context }) => {
+    expect(process.env.PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS, 'worker network emulation flag (playwright.config.ts)').toBeTruthy();
+
+    const pageErrors: string[] = [];
+    page.on('pageerror', (err) => pageErrors.push(String(err)));
+    await page.addInitScript(([key, data]) => localStorage.setItem(key, JSON.stringify(data)), [SAVE_KEY, { version: 3 }] as const);
+    const isOtherPage = (path: string) => path === '/support.html' || path === '/privacy.html';
+
+    let entry = '';
+    await test.step('1. installed and warm', async () => {
+      entry = await installAndWarm(page);
+      expect(pageErrors).toEqual([]);
+    });
+
+    await test.step("2. the support page, then the privacy page it links to — both inside the worker's scope, neither stored as the shell", async () => {
+      const workerFetched: string[] = [];
+      const onRequest = (r: Request) => {
+        const path = new URL(r.url()).pathname;
+        if (r.serviceWorker() && isOtherPage(path)) workerFetched.push(path);
+      };
+      context.on('request', onRequest);
+      try {
+        await page.goto('/support.html', { waitUntil: 'load' });
+        await expect(page).toHaveTitle(/Support/);
+        expect(await controlled(page), 'the support page is inside the registration scope').toBe(true);
+        await page.locator('a[href="./privacy.html"]').first().click();
+        await expect(page).toHaveTitle(/Privacy/);
+        expect(await controlled(page), 'so is the privacy page').toBe(true);
+      } finally {
+        context.off('request', onRequest);
+      }
+      expect(workerFetched, 'the worker left both navigations to the browser (no respondWith, no fetch of its own)').toEqual([]);
+      const shell = await cachedShell(page);
+      expect(shell, 'the cached shell is still the game').toContain(entry.slice(1));
+      expect(shell).not.toMatch(/<title>Tower Clash — (?:Support|Privacy)/);
+      expect(pageErrors).toEqual([]);
+    });
+
+    await test.step('3. offline: the launch opens the game from the cached shell; the support page is not impersonated by it', async () => {
+      await goOffline(context);
+      const fromWorker: string[] = [];
+      const onResponse = (r: Response) => {
+        if (r.fromServiceWorker() && r.ok()) fromWorker.push(new URL(r.url()).pathname);
+      };
+      page.on('response', onResponse);
+      try {
+        await navigate(page);
+        expect(await onLine(page)).toBe(false);
+        expect(await controlled(page)).toBe(true);
+        expect(fromWorker).toContain('/');
+        expect(await page.title()).not.toMatch(/Support|Privacy/);
+        expect(await shellModules(page)).toEqual([entry]);
+        expect(pageErrors).toEqual([]);
+        // the pages that are not the game are not served from the cache either: offline they fail as plain network navigations
+        await expect(page.goto('/support.html', { waitUntil: 'commit' })).rejects.toThrow(/ERR_INTERNET_DISCONNECTED|ERR_FAILED/);
+        expect(fromWorker.filter(isOtherPage)).toEqual([]);
+      } finally {
+        page.off('response', onResponse);
+      }
+    });
+  });
+
+  test('REV-38: a reachable server answering 503 / 404 on the shell navigation — the cached game shell is served instead of the error page, which is never cached; the real shell returns with the server', async ({ page, context }) => {
+    expect(process.env.PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS, 'worker network emulation flag (playwright.config.ts)').toBeTruthy();
+
+    const pageErrors: string[] = [];
+    page.on('pageerror', (err) => pageErrors.push(String(err)));
+    await page.addInitScript(([key, data]) => localStorage.setItem(key, JSON.stringify(data)), [SAVE_KEY, { version: 3 }] as const);
+
+    let entry = '';
+    await test.step('1. installed and warm', async () => {
+      entry = await installAndWarm(page);
+      expect(pageErrors).toEqual([]);
+    });
+
+    for (const status of [503, 404]) {
+      await test.step(`2. the server answers ${status} on the shell: the game boots from the cached shell`, async () => {
+        const errorPage = `<!doctype html><html><head><title>${status}</title></head><body><h1>${status}</h1></body></html>`;
+        let errorsServed = 0;
+        await context.route(isShellDocument, (route) => {
+          errorsServed++;
+          return route.fulfill({ status, contentType: 'text/html', body: errorPage });
+        });
+        const fromWorker: string[] = [];
+        const onResponse = (r: Response) => {
+          if (r.fromServiceWorker() && r.ok()) fromWorker.push(new URL(r.url()).pathname);
+        };
+        page.on('response', onResponse);
+        try {
+          await navigate(page);
+          expect(errorsServed, 'the worker tried the network first').toBeGreaterThanOrEqual(1);
+          expect(await controlled(page)).toBe(true);
+          expect(fromWorker, 'the shell came from the worker, ok').toContain('/');
+          expect(await page.title()).not.toBe(String(status));
+          expect(await shellModules(page)).toEqual([entry]);
+          const shell = await cachedShell(page);
+          expect(shell, 'the cached shell is still the game').toContain(entry.slice(1));
+          expect(shell, 'the error page was not cached').not.toContain(`<title>${status}</title>`);
+          expect(pageErrors).toEqual([]);
+        } finally {
+          page.off('response', onResponse);
+          await context.unroute(isShellDocument);
+        }
+      });
+    }
+
+    await test.step('3. the server is back: the real shell is served (network-first) and the game boots', async () => {
+      await navigate(page);
+      expect(await controlled(page)).toBe(true);
+      expect(await shellModules(page)).toEqual([entry]);
+      expect(await cachedShell(page)).toContain(entry.slice(1));
+      expect(pageErrors).toEqual([]);
     });
   });
 });

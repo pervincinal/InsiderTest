@@ -92,4 +92,39 @@ describe('reloadOnce', () => {
     };
     expect(reloadOnce(broken)).toBe(false);
   });
+
+  /*
+   * REV-35: the default argument probes the real `sessionStorage`. Node has none (→ null → false); a
+   * browser with storage blocked throws SecurityError on the getter itself, which used to escape
+   * `reloadOnce` (and main.ts `chunkFailed`'s rejection handler: no load-failed toast, an unhandled
+   * rejection). `globalThis.sessionStorage` is defined per test and restored after.
+   */
+  describe('default storage (REV-35)', () => {
+    const define = (desc: PropertyDescriptor) => Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, ...desc });
+    afterEach(() => {
+      delete (globalThis as { sessionStorage?: unknown }).sessionStorage;
+    });
+
+    it('no sessionStorage at all (Node) → false, no throw', () => {
+      expect(typeof sessionStorage).toBe('undefined');
+      expect(reloadOnce()).toBe(false);
+    });
+
+    it('a working sessionStorage grants exactly one reload', () => {
+      define({ value: memory(), writable: true });
+      expect(reloadOnce()).toBe(true);
+      expect(reloadOnce()).toBe(false);
+    });
+
+    it('a blocked sessionStorage (the getter throws SecurityError, Chromium) → false, no throw', () => {
+      define({
+        get() {
+          throw new DOMException('Failed to read the sessionStorage property from Window: Access is denied for this document.', 'SecurityError');
+        },
+      });
+      expect(() => typeof sessionStorage, 'the probe itself throws without the guard').toThrow(DOMException);
+      expect(reloadOnce()).toBe(false);
+      expect(reloadOnce()).toBe(false);
+    });
+  });
 });

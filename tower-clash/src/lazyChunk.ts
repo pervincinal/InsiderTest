@@ -70,12 +70,28 @@ export function chunkRecoverable(key: string): boolean {
   return failures.get(key)?.url != null;
 }
 
+type ReloadStorage = Pick<Storage, 'getItem' | 'setItem'>;
+
+/**
+ * `sessionStorage`, or null when it is absent or blocked. REV-35: with storage blocked, Chromium throws
+ * SecurityError on the getter itself, so a bare `typeof sessionStorage` probe throws too — out of
+ * `reloadOnce`'s own try/catch and out of `chunkFailed`'s rejection handler, i.e. no toast and an
+ * unhandled rejection instead of "no storage → no reload". Same probe as src/ui/save.ts `storage()`.
+ */
+function sessionStorageOrNull(): ReloadStorage | null {
+  try {
+    return typeof sessionStorage === 'undefined' ? null : sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Last resort when a chunk keeps failing and the browser never named its URL: reload the page,
  * once per tab session (a sessionStorage flag stops any loop; no storage → no reload). Returns
- * false when the reload was already spent or storage is unavailable.
+ * false when the reload was already spent or storage is unavailable or blocked; never throws.
  */
-export function reloadOnce(storage: Pick<Storage, 'getItem' | 'setItem'> | null = typeof sessionStorage === 'undefined' ? null : sessionStorage): boolean {
+export function reloadOnce(storage: ReloadStorage | null = sessionStorageOrNull()): boolean {
   try {
     if (!storage || storage.getItem(RELOAD_FLAG)) return false;
     storage.setItem(RELOAD_FLAG, '1');

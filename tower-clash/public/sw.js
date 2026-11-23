@@ -15,8 +15,15 @@
  *   it; a Russian session caches it on its first request (src/swWarm.ts re-requests it once the
  *   worker claims the first launch, which loaded the face before the worker existed). Font files
  *   are never edited in place: new bytes ship under a new file name, like the hashed ./assets/*.
- * - Navigations go network-first with the cached shell as offline fallback, so a new deploy is
- *   picked up on the next launch while the game still opens with no connection.
+ * - The game's own navigation (the scope root or its index.html) goes network-first with the cached
+ *   shell as fallback, so a new deploy is picked up on the next launch while the game still opens
+ *   with no connection — also when the server is reachable but answers 4xx / 5xx (REV-38: a deploy in
+ *   progress or a Pages outage used to reach a fully cached player as an error page). A fresh shell
+ *   re-derives the entry chunk list above (a deploy that leaves sw.js byte-identical never
+ *   re-installs). Only that navigation may overwrite the cached './index.html' (REV-34: every
+ *   same-origin navigation did, so a visit to ./support.html — which links to ./privacy.html, both
+ *   shipped in public/ inside the scope — became the "shell" the next offline launch opened); the
+ *   other in-scope pages are left to the network and are not available offline.
  * Bump CACHE_VERSION when the shell files change shape; old caches are deleted on activate, after
  *   their ./assets/* entries (content-hashed, so still valid) and runtime fonts (see above) are
  *   carried into the new cache (BUG-19: without this an upgraded install kept only the shell and
@@ -67,19 +74,29 @@ function shellModuleUrls(html) {
   return urls;
 }
 
-/** Precache the entry chunk (and modulepreloads) named by the index.html just stored by PRECACHE. */
-async function precacheShellModules(cache) {
-  const shell = await cache.match('./index.html');
-  if (!shell) return;
-  const urls = shellModuleUrls(await shell.text());
-  if (urls.length > 0) await cache.addAll(urls);
+/**
+ * Precache the entry chunk (and modulepreloads) the shell `html` names, skipping what the cache already
+ * holds. Runs at install on the index.html just stored by PRECACHE, and again whenever a navigation
+ * stores a fresh shell (`storeShell`): a deploy that leaves sw.js byte-identical never re-installs, so
+ * that is the only moment the worker itself sees the new entry chunk's name (content-hashed, so a copy
+ * already present is always the right bytes).
+ */
+async function precacheShellModules(cache, html) {
+  const missing = [];
+  for (const url of shellModuleUrls(html)) if (!(await cache.match(url))) missing.push(url);
+  if (missing.length > 0) await cache.addAll(missing);
 }
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(CACHE_NAME)
-      .then((cache) => cache.addAll(PRECACHE).then(() => precacheShellModules(cache)))
+      .then((cache) =>
+        cache
+          .addAll(PRECACHE)
+          .then(() => cache.match('./index.html'))
+          .then((shell) => (shell ? shell.text().then((html) => precacheShellModules(cache, html)) : undefined)),
+      )
       .then(() => self.skipWaiting()),
   );
 });
@@ -154,17 +171,54 @@ async function cacheFirst(request) {
   return response;
 }
 
-async function networkFirstShell(request) {
-  const cache = await caches.open(CACHE_NAME);
+const SHELL_PATHS = [scopeUrl.pathname, new URL('./index.html', scopeUrl).pathname];
+
+/**
+ * The game's own document: the scope root or its index.html, query ignored (`./?source=pwa`). Not the
+ * other pages shipped in public/ inside the scope (./support.html, ./privacy.html) — REV-34: those must
+ * never be stored as the shell.
+ */
+function isShellNavigation(url) {
+  return SHELL_PATHS.includes(url.pathname);
+}
+
+/**
+ * Store a freshly fetched shell under the fixed key the offline fallback reads, then precache any entry
+ * chunk it names that the cache lacks. Never rejects: a chunk that 404s (deploy mid-flight) is simply
+ * fetched again on the page's first use, and the shell itself is kept — it is what the server serves.
+ */
+async function storeShell(cache, response) {
   try {
-    const response = await fetch(request);
-    if (response && response.ok) cache.put('./index.html', response.clone());
-    return response;
+    const html = await response.clone().text();
+    await cache.put('./index.html', response);
+    await precacheShellModules(cache, html);
   } catch {
-    const cached = (await cache.match('./index.html')) || (await cache.match('./'));
+    /* nothing cached this time; the next online launch tries again */
+  }
+}
+
+/**
+ * Network-first for the game's own navigation, the cached shell as the fallback. A reachable server
+ * answering 4xx / 5xx counts as a failure too (REV-38): the cached shell is served when there is one,
+ * else the error page, and a non-ok response is never stored. `status >= 400` rather than `!ok` so a
+ * redirect — navigation requests carry redirect: 'manual', so fetch() yields an `opaqueredirect` with
+ * status 0 — is still handed back for the browser to follow. The storing is `waitUntil`ed, so the
+ * page gets its response at once and the worker lives until the shell and its chunk are stored.
+ */
+async function networkFirstShell(event) {
+  const cache = await caches.open(CACHE_NAME);
+  const cachedShell = async () => (await cache.match('./index.html')) || (await cache.match('./'));
+  let response;
+  try {
+    response = await fetch(event.request);
+  } catch {
+    const cached = await cachedShell();
     if (cached) return cached;
     throw new Error('offline and no cached shell');
   }
+  if (response.status >= 400) return (await cachedShell()) || response;
+  if (response.ok) event.waitUntil(storeShell(cache, response.clone()));
+  return response;
 }
 
 self.addEventListener('fetch', (event) => {
@@ -173,7 +227,8 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (!isSameOrigin(url)) return;
   if (request.mode === 'navigate') {
-    event.respondWith(networkFirstShell(request));
+    // ./support.html, ./privacy.html and anything else in scope: plain network, never the shell (REV-34)
+    if (isShellNavigation(url)) event.respondWith(networkFirstShell(event));
     return;
   }
   if (isPrecached(url) || isRuntimeCached(url)) event.respondWith(cacheFirst(request));
