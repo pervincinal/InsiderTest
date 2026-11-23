@@ -24,6 +24,11 @@ import { STRIDE_SWING, badgeSize, badgeY, drawBadge, drawTowerShadow, drawTowerS
 import type { ParticleSystem } from './particles';
 import { hostileAttackers, prefersReducedMotion } from './particles';
 
+/** The badge's 'full' look: at the holding cap step.ts uses — the commander capacity track included (REV-29, AUD-B1). */
+export function isFull(t: Tower, state: Pick<GameState, 'modifiers'>): boolean {
+  return t.units >= capacityOf(t, state);
+}
+
 /** Everything the renderer needs beyond the sim state. Owned by the play screen; read-only here. */
 export interface PlayUi {
   level: LevelDef;
@@ -797,7 +802,7 @@ function drawWorld(ctx: CanvasRenderingContext2D, pal: Palette, state: GameState
     const n = fx?.shown(t, nowMs) ?? t.units; // FEEL-1-2: an airstrike's count-down (≤ 250 ms, lazy)
     const pop = badgePop(state, t.id, n, nowMs, motion);
     const by_ = fire.get(t.id) ? attackers.get(t.id) : undefined;
-    drawBadge(ctx, pal, b.rect.x + b.rect.w / 2, b.rect.y + b.rect.h / 2, String(n), t.units >= capacityOf(t), {
+    drawBadge(ctx, pal, b.rect.x + b.rect.w / 2, b.rect.y + b.rect.h / 2, String(n), isFull(t, state), {
       stroke: pal.ownerTones[t.owner].shade,
       scale: pop * b.bs,
       underFire: fire.get(t.id) ? (by_ ? pal.owners[by_] : pal.ink) : undefined,

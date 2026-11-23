@@ -31,7 +31,7 @@ import type { Language } from './ui/i18n';
 import { ENGLISH_MENUS_CHUNK, browserLanguages, detectLanguage, loadEnglishMenus, onLanguageChange, setLanguage, t } from './ui/i18n';
 import { drawSpinner } from './render/economyWidgets';
 import { initAudio, setAudioBackground, toggleMuted, unlockAudio } from './audio/index';
-import { initNative, startSaveMirror } from './native/index';
+import { initNative, isNative, startSaveMirror } from './native/index';
 import type { ShopTab } from './render/menuLayout';
 import type { AdSession } from './economy/adsFlow';
 import { createAdSession } from './economy/adsFlow';
@@ -263,7 +263,11 @@ class LoadingScreen implements Screen {
   readonly name = 'loading' as const;
   private shownAt = 0;
 
-  constructor(private readonly app: App) {}
+  /** `from`: the screen a failed download returns to — never a spinner (REV-36: a start superseding another start's spinner carries that start's `from`). */
+  constructor(
+    private readonly app: App,
+    readonly from: Screen,
+  ) {}
 
   draw(view: View, nowMs: number): void {
     if (!this.shownAt) this.shownAt = nowMs;
@@ -278,6 +282,11 @@ class LoadingScreen implements Screen {
     }
     endMapFrame(view);
   }
+}
+
+/** The screen a failed download returns to: under a spinner, the one that spinner would return to (REV-36). */
+function backOf(screen: Screen): Screen {
+  return screen instanceof LoadingScreen ? screen.from : screen;
 }
 
 /** Run `fn` when the browser is idle (after the first frame); falls back to a short timeout. */
@@ -425,6 +434,11 @@ export class TowerClashApp implements App {
     this.carriedToasts = handOverToasts([...this.carriedToasts, ...queued], this.current);
   }
 
+  /** REV-37: toasts of a screen that is no longer current (a late rewarded chest) — onto the current menu screen. */
+  carryToasts(queued: readonly QueuedToast[]): void {
+    this.handOverToasts(queued);
+  }
+
   goTitle(): void {
     this.play = null;
     this.go(new TitleScreen(this));
@@ -459,8 +473,8 @@ export class TowerClashApp implements App {
       this.go(make(this.lazy));
       return Promise.resolve();
     }
-    const from = this.current;
-    const loading = new LoadingScreen(this);
+    const from = backOf(this.current);
+    const loading = new LoadingScreen(this, from);
     this.go(loading);
     return this.loadLazy().then(
       (screens) => {
@@ -612,8 +626,8 @@ export class TowerClashApp implements App {
    * returns to the screen the player was on. Resolves true once the play screen is current.
    */
   startLevel(levelId: number, seed?: number, opts?: StartOptions): Promise<boolean> {
+    if (levelIndex(levelId) < 0) return Promise.resolve(false); // REV-36: before the bump, so an in-flight start is not superseded by nothing
     const seq = ++this.startSeq;
-    if (levelIndex(levelId) < 0) return Promise.resolve(false);
     const cosmetics = this.preloadCosmetics(); // kicked off before the level chunk
     const camera = preloadCamera();
     const tutorial = preloadTutorialSteps(levelId, this.save.stars[String(levelId)] ?? 0);
@@ -623,8 +637,8 @@ export class TowerClashApp implements App {
       this.enterLevel(cached, seed, opts);
       return Promise.resolve(true);
     }
-    const from = this.current;
-    const loading = new LoadingScreen(this);
+    const from = backOf(this.current);
+    const loading = new LoadingScreen(this, from);
     this.go(loading);
     const levelChunk = cached ? Promise.resolve(cached) : loadLevel(levelId);
     const start = Promise.all([
@@ -709,11 +723,6 @@ export class TowerClashApp implements App {
   }
 }
 
-/** True inside a Capacitor native shell (the global is injected by the native bridge). */
-function insideCapacitor(): boolean {
-  return Boolean((window as { Capacitor?: unknown }).Capacitor);
-}
-
 /**
  * Offline shell for the PWA build; native apps ship their own bundle and skip it. Registered after
  * the window's `load` — or at once when `load` has already fired: `boot` calls this after awaiting
@@ -721,7 +730,7 @@ function insideCapacitor(): boolean {
  * with no worker at all (found with FE-8, measured 2026-10-09: `load` at ~80 ms, never registered).
  */
 function registerServiceWorker(): void {
-  if (!('serviceWorker' in navigator) || insideCapacitor()) return;
+  if (!('serviceWorker' in navigator) || isNative()) return; // REV-39: a web @capacitor/core import defines the global too
   // FE-8: on the first claim, route the files loaded before it (dictionary, SFX, RU font) through the worker's cache
   navigator.serviceWorker.addEventListener('controllerchange', warmWorkerCache);
   const register = () => {

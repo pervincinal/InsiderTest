@@ -114,6 +114,10 @@ export interface App {
   setPerfOverlay?(on: boolean): void;
   /** The lazy screens chunk once it is in (src/ui/lazyScreens.ts; absent in test apps): AUD-Q11's idle title painter. */
   readonly lazy?: { paintTitle(view: View, pal: Palette, o: TitleOpts): void } | null;
+  /** The screen on show (main.ts; absent in test apps). */
+  readonly current?: Screen;
+  /** FE-9: line `queued` up on the current menu screen (kept while the spinner is up; dropped by a match) — main.ts; absent in test apps. */
+  carryToasts?(queued: readonly QueuedToast[]): void;
 }
 
 /** Test/dev override of what the native providers report for the settings About block. */
@@ -344,10 +348,28 @@ export class TitleScreen implements Screen {
    * its own toast right after the reward's (FE-9 — one combined toast filled all four lines in
    * Russian). Leaving the title before it shows hands it to the next menu screen (src/main.ts `go`).
    */
-  private toastClaim(text: string): void {
-    this.toast.show(text, 'ok', this.nowMs);
+  private toastClaim(text: string, nowMs = this.nowMs): void {
+    this.toast.show(text, 'ok', nowMs);
     const extra = achievementToastText(evaluateAchievements(this.app.save));
-    if (extra) this.toast.enqueue(extra, 'ok', this.nowMs, ACHIEVEMENT_TOAST_MS);
+    if (extra) this.toast.enqueue(extra, 'ok', nowMs, ACHIEVEMENT_TOAST_MS);
+  }
+
+  /**
+   * REV-37: the rewarded chest pays out seconds after the tap; the player may have pressed PLAY /
+   * SHOP meanwhile. The toasts then go to the screen that is current now (FE-9 carry, `App.carryToasts`),
+   * stamped with the clock of now — not this title's last frame.
+   */
+  private toastChest(text: string): void {
+    const now = performance.now();
+    const current = this.app.current;
+    if (!current || current === this || !this.app.carryToasts) {
+      this.toastClaim(text, now);
+      return;
+    }
+    const extra = achievementToastText(evaluateAchievements(this.app.save));
+    const queued: QueuedToast[] = [{ text, kind: 'ok', durationMs: 2400 }]; // Toast.show's default time
+    if (extra) queued.push({ text: extra, kind: 'ok', durationMs: ACHIEVEMENT_TOAST_MS });
+    this.app.carryToasts(queued);
   }
 
   /** Streak reward first; once claimed, the rewarded crystal chest (when a video is available). */
@@ -368,7 +390,7 @@ export class TitleScreen implements Screen {
         const amount = DAILY_CHEST_PLACEMENT.reward.kind === 'crystals' ? DAILY_CHEST_PLACEMENT.reward.amount : 0;
         earnCrystals(save, amount);
         playSfx('reward');
-        this.toastClaim(t('title.crystalChest', { n: amount }));
+        this.toastChest(t('title.crystalChest', { n: amount }));
       });
       return;
     }
