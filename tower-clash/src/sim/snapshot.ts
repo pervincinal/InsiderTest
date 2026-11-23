@@ -119,8 +119,8 @@ export class SnapshotRing<T extends { time: number } = GameState> {
 }
 
 export interface ContinueOptions {
-  freezeMs: number; // duration of the free freeze, from state.time
-  infantry: number; // reinforcements (weight) added to the player's strongest tower, capped at capacity
+  freezeMs: number; // duration of the free freeze, from state.time (≤ 0 or non-finite: no freeze)
+  infantry: number; // reinforcements (weight) added to the player's strongest tower, capped at capacity (≤ 0 or non-finite: none)
 }
 
 /** The player's highest-garrison tower (first in insertion order on ties), or undefined if the player owns none. */
@@ -147,9 +147,10 @@ export function applyContinue(
 ): GameState | null {
   const tower = strongestPlayerTower(state);
   if (!tower) return null;
-  const infantry = Math.max(0, Math.floor(opts.infantry));
+  // REV-32: a non-finite option grants nothing (`Math.floor(NaN)` would have made the garrison NaN).
+  const infantry = Number.isFinite(opts.infantry) ? Math.max(0, Math.floor(opts.infantry)) : 0;
   tower.units = Math.min(capacityOf(tower, state), tower.units + infantry);
-  if (opts.freezeMs > 0) {
+  if (Number.isFinite(opts.freezeMs) && opts.freezeMs > 0) {
     const booster: Booster = { type: 'freeze', owner: 'player', untilMs: state.time + opts.freezeMs };
     state.boosters.push(booster);
   }

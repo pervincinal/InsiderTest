@@ -248,6 +248,20 @@ describe('applyContinue', () => {
     expect(state.boosters).toEqual([]);
     expect(state.towers['q']!.units).toBe(12);
   });
+
+  it('REV-32: non-finite options grant nothing — NaN infantry adds no units, NaN freezeMs freezes nobody, the garrison stays a finite integer', () => {
+    const state = threeTowers();
+    expect(applyContinue(state, { freezeMs: Number.NaN, infantry: Number.NaN })).toBe(state);
+    expect(state.boosters).toEqual([]);
+    expect(state.towers['q']!.units).toBe(12);
+    expect(Number.isInteger(state.towers['q']!.units)).toBe(true);
+    applyContinue(state, { freezeMs: Number.POSITIVE_INFINITY, infantry: Number.POSITIVE_INFINITY });
+    expect(state.boosters).toEqual([]); // an endless freeze is refused too
+    expect(state.towers['q']!.units).toBe(12);
+    applyContinue(state, { freezeMs: 1000, infantry: 2.9 });
+    expect(state.boosters).toEqual([{ type: 'freeze', owner: 'player', untilMs: 1000 }]);
+    expect(state.towers['q']!.units).toBe(14); // floored
+  });
 });
 
 /* ---------- determinism ---------- */

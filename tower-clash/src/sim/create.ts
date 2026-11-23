@@ -41,7 +41,8 @@ function normaliseModifiers(m: Readonly<PlayerModifiers>): PlayerModifiers {
  * mines are copied into `state.mines` and referenced from the lanes they lie on.
  * `modifiers` are the player's permanent bonuses (Commander upgrades); they are copied into the
  * state so a replay reproduces the match, and every `player` tower starts with `startGarrisonBonus`
- * extra units (capped at its — already modified — capacity).
+ * extra units, capped at `capacityOf` (AUD-B1: the base ladder below the kind's top level, the player's
+ * modified capacity only at it).
  */
 export function createState(level: LevelDef, seed: number, modifiers: Readonly<PlayerModifiers> = DEFAULT_MODIFIERS): GameState {
   const mods = normaliseModifiers(modifiers);
@@ -53,10 +54,14 @@ export function createState(level: LevelDef, seed: number, modifiers: Readonly<P
 
   const towers: Record<string, Tower> = {};
   const list: Tower[] = [];
-  for (const def of level.towers) {
+  for (const [i, def] of level.towers.entries()) {
+    if (!def || typeof def !== 'object') fail(level, `tower #${i} is not an object`);
     if (typeof def.id !== 'string' || def.id.length === 0) fail(level, 'tower without id');
     if (def.id.includes('-')) fail(level, `tower id "${def.id}" must not contain "-"`);
-    if (towers[def.id]) fail(level, `duplicate tower id "${def.id}"`);
+    // `towers` is a plain object: `__proto__` cannot be stored as an own key (REV-30); every other
+    // prototype property name (`constructor`, `toString`, …) is a valid id once checked as an own key.
+    if (def.id === '__proto__') fail(level, `tower id "${def.id}" is reserved`);
+    if (Object.hasOwn(towers, def.id)) fail(level, `duplicate tower id "${def.id}"`);
     if (!isFiniteNumber(def.x) || !isFiniteNumber(def.y)) fail(level, `tower "${def.id}" has bad coordinates`);
     if (!OWNERS.has(def.owner)) fail(level, `tower "${def.id}" has bad owner "${String(def.owner)}"`);
     const kind = def.kind ?? 'barracks';
@@ -112,11 +117,12 @@ export function createState(level: LevelDef, seed: number, modifiers: Readonly<P
     mines.push({ x: def.x, y: def.y, charges: def.charges });
   });
 
-  for (const e of level.enemies) {
+  level.enemies.forEach((e, i) => {
+    if (!e || typeof e !== 'object') fail(level, `enemy #${i} is not an object`);
     if (e.owner !== 'enemy1' && e.owner !== 'enemy2' && e.owner !== 'enemy3') {
       fail(level, `bad enemy owner "${String(e.owner)}"`);
     }
-  }
+  });
 
   return {
     levelId: level.id,

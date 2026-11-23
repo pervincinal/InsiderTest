@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { makeLevel, wall } from '../helpers';
-import type { LevelDef } from '../../src/sim/types';
+import type { EnemyDef, LevelDef, TowerDef } from '../../src/sim/types';
 import { createState, roadIdFor } from '../../src/sim/create';
 import { C } from '../../src/sim/constants';
 
@@ -102,6 +102,38 @@ describe('createState', () => {
     expect(() => two({ id: 'q', x: 0.5, y: 0.5 })).toThrow(/overlap/);
     expect(() => two({ id: 'q', x: 1, y: 0 })).not.toThrow();
     expect(() => two({ id: 'a-b', x: 100, y: 0 })).toThrow(/must not contain/);
+  });
+
+  it('REV-30: tower ids that are Object.prototype property names are valid and only a real repeat is a duplicate', () => {
+    const state = createState(
+      makeLevel({
+        towers: [
+          { id: 'constructor', x: 0, y: 0, owner: 'player', units: 10 },
+          { id: 'toString', x: 300, y: 0, owner: 'enemy1', units: 10 },
+          { id: 'hasOwnProperty', x: 0, y: 300, owner: 'neutral', units: 5 },
+        ],
+      }),
+      1,
+    );
+    expect(Object.keys(state.towers)).toEqual(['constructor', 'toString', 'hasOwnProperty']);
+    expect(state.towers['constructor']).toMatchObject({ id: 'constructor', owner: 'player', units: 10 });
+    expect(Object.keys(state.roads).sort()).toEqual(['constructor-hasOwnProperty', 'constructor-toString', 'hasOwnProperty-toString']);
+    expect(() =>
+      createState(makeLevel({ towers: [{ id: 'constructor', x: 0, y: 0, owner: 'player' }, { id: 'constructor', x: 300, y: 0, owner: 'enemy1' }] }), 1),
+    ).toThrow(/duplicate tower id "constructor"/);
+    // the one name a plain-object record cannot hold as an own key is refused with its own message
+    expect(() => createState(makeLevel({ towers: [{ id: '__proto__', x: 0, y: 0, owner: 'player' }] }), 1)).toThrow(/Invalid level 999 \(test\): tower id "__proto__" is reserved/);
+  });
+
+  it('REV-31: a null / non-object tower or enemy entry fails with the "Invalid level" message, not a TypeError', () => {
+    expect(() => createState(makeLevel({ towers: [null as unknown as TowerDef] }), 1)).toThrow(/^Invalid level 999 \(test\): tower #0 is not an object$/);
+    expect(() => createState(makeLevel({ towers: [{ id: 'p', x: 0, y: 0, owner: 'player' }, 7 as unknown as TowerDef] }), 1)).toThrow(/Invalid level 999 \(test\): tower #1 is not an object/);
+    expect(() => createState(makeLevel({ enemies: [null as unknown as EnemyDef] }), 1)).toThrow(/^Invalid level 999 \(test\): enemy #0 is not an object$/);
+    expect(() =>
+      createState(makeLevel({ enemies: [{ owner: 'enemy1', personality: 'rusher', aggression: 0.5 }, 'enemy2' as unknown as EnemyDef] }), 1),
+    ).toThrow(/Invalid level 999 \(test\): enemy #1 is not an object/);
+    // and a plain bad owner still reads as before
+    expect(() => createState(makeLevel({ enemies: [{ owner: 'player' as 'enemy1', personality: 'rusher', aggression: 0.5 }] }), 1)).toThrow(/bad enemy owner "player"/);
   });
 
   it('throws on a fortress above level 2, a bad owner, bad units and bad coordinates', () => {
