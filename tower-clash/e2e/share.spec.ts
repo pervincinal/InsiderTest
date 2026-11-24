@@ -2,6 +2,7 @@ import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { tapRect } from './helpers/tap';
+import { expectScreen } from './helpers/screenPoll';
 import { shotPath } from './tools/shots';
 import { recordToasts, toastsSeen } from './helpers/toasts'; // BUG-25: page-side toast recorder
 
@@ -117,7 +118,7 @@ async function winLevel1(page: Page): Promise<void> {
     window.__towerclash.setSpeed(10);
     window.__towerclash.autoplay();
   });
-  await expect.poll(() => screen(page), { timeout: 75_000, intervals: [250] }).toBe('result');
+  await expectScreen(page, 'result', { timeout: 75_000, intervals: [250] });
   expect((await page.evaluate(() => window.__towerclash.getResult()))?.outcome).toBe('won');
   await page.waitForTimeout(900); // card slide-in
 }
@@ -181,7 +182,7 @@ test.describe('share card (SHARE-1)', () => {
       window.__towerclash.setSpeed(10);
       window.__towerclash.autoplay();
     });
-    await expect.poll(() => screen(page), { timeout: 75_000, intervals: [250] }).toBe('result');
+    await expectScreen(page, 'result', { timeout: 75_000, intervals: [250] });
     expect((await page.evaluate(() => window.__towerclash.getResult()))?.outcome).toBe('won');
     await page.waitForTimeout(900);
     await tapRect(page, RESULT_SHARE);

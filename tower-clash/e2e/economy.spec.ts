@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { settled, tapRect } from './helpers/tap';
+import { expectScreen } from './helpers/screenPoll';
 import { shotPath } from './tools/shots';
 
 /*
@@ -138,7 +139,7 @@ async function winLevelOne(page: Page): Promise<void> {
     window.__towerclash.setSpeed(10);
     window.__towerclash.autoplay();
   });
-  await expect.poll(() => screen(page), { timeout: 60_000, intervals: [250] }).toBe('result');
+  await expectScreen(page, 'result', { timeout: 60_000, intervals: [250] });
 }
 
 async function boot(page: Page, seeded: Record<string, unknown>): Promise<string[]> {
@@ -157,7 +158,7 @@ test.describe('economy', () => {
   test('commander upgrade bought in the shop changes state.modifiers of the next level', async ({ page }) => {
     const errors = await boot(page, { version: 3, gold: 100, crystals: 0, stars: { '1': 3 } });
     await page.evaluate(() => window.__towerclash.economy.openShop('upgrades'));
-    await expect.poll(() => screen(page)).toBe('shop');
+    await expectScreen(page, 'shop');
     await tapRect(page, shopRowRect(CAPACITY_ROW)); // Capacity tier 1
     await expect.poll(async () => (await save(page)).upgrades.capacity).toBe(1);
     expect((await save(page)).gold).toBe(100 - TIER1_COST);
@@ -169,7 +170,7 @@ test.describe('economy', () => {
     await page.waitForTimeout(150);
     expect((await save(page)).upgrades.production ?? 0).toBe(0);
     await page.evaluate(() => window.__towerclash.loadLevel(1, 1));
-    await expect.poll(() => screen(page)).toBe('play');
+    await expectScreen(page, 'play');
     const mods = await page.evaluate(() => window.__towerclash.getState()?.modifiers);
     expect(mods).toEqual({ productionMul: 1, capacityMul: 1 + CAPACITY_PER_TIER, startGarrisonBonus: 0, unitSpeedMul: 1 });
     expect(errors).toEqual([]);
@@ -181,18 +182,18 @@ test.describe('economy', () => {
     const errors = await boot(page, { version: 3, gold: 0, crystals: 0, stars });
     expect((await save(page)).achievements.unlocked).toEqual([]);
     await tapRect(page, TITLE_ACHIEVEMENTS);
-    await expect.poll(() => screen(page)).toBe('achievements');
+    await expectScreen(page, 'achievements');
     // ten 3★ levels were already in the save: entering the screen evaluates and pays the goal, once
     await expect.poll(async () => (await save(page)).achievements.unlocked).toEqual(['stars_10']);
     expect((await save(page)).crystals).toBe(STARS_10_CRYSTALS);
     await tapRect(page, ACHIEVEMENTS_BACK);
-    await expect.poll(() => screen(page)).toBe('title');
+    await expectScreen(page, 'title');
     await tapRect(page, TITLE_ACHIEVEMENTS);
-    await expect.poll(() => screen(page)).toBe('achievements');
+    await expectScreen(page, 'achievements');
     expect((await save(page)).crystals).toBe(STARS_10_CRYSTALS); // re-entering grants nothing
     await settled(page); // FEEL-1-6: keys during the title ↔ menu slide are not delivered
     await page.keyboard.press('Escape');
-    await expect.poll(() => screen(page)).toBe('title');
+    await expectScreen(page, 'title');
     // first win → First victory (+5); the same win again unlocks nothing new
     await winLevelOne(page);
     const first = await page.evaluate(() => window.__towerclash.getResult());
@@ -215,7 +216,7 @@ test.describe('economy', () => {
     const [small, mid] = CONVERSION.packs as [number, number, number];
     const errors = await boot(page, { version: 3, gold: 0, crystals: mid });
     await page.evaluate(() => window.__towerclash.economy.openShop('crystals'));
-    await expect.poll(() => screen(page)).toBe('shop');
+    await expectScreen(page, 'shop');
     // small pack, then CANCEL on the confirm card → balances untouched
     await tapSegment(page, CONVERT_SEG, CONVERSION.packs.length, 0);
     await tapRect(page, CONVERT_BUY);
@@ -242,7 +243,7 @@ test.describe('economy', () => {
   test('booster crate in the Bundles tab adds pre-paid charges for crystals, stacking, until unaffordable', async ({ page }) => {
     const errors = await boot(page, { version: 3, gold: 0, crystals: CRATE.cost * 2 + 10, charges: { overdrive: 1, freeze: 0, airstrike: 0 } });
     await page.evaluate(() => window.__towerclash.economy.openShop('bundles'));
-    await expect.poll(() => screen(page)).toBe('shop');
+    await expectScreen(page, 'shop');
     await tapRect(page, shopRowRect(0)); // the crate is the first row
     // AUD-U5: the confirm card first; CANCEL spends nothing, SPEND buys
     await tapRect(page, CONVERT_CONFIRM.no);
@@ -268,7 +269,7 @@ test.describe('economy', () => {
     const errors = await boot(page, { version: 3, gold: 0, crystals: 0 });
     // web providers: no support id, no privacy options
     await tapRect(page, TITLE_SETTINGS);
-    await expect.poll(() => screen(page)).toBe('settings');
+    await expectScreen(page, 'settings');
     await page.waitForTimeout(200); // the provider probe is async
     const web = await page.evaluate(() => window.__towerclash.economy.getAboutInfo());
     expect(web?.version).toMatch(/^\d+\.\d+\.\d+/);
@@ -276,12 +277,12 @@ test.describe('economy', () => {
     expect(web?.privacyOptions).toBe(false);
     await settled(page);
     await page.keyboard.press('Escape');
-    await expect.poll(() => screen(page)).toBe('title');
+    await expectScreen(page, 'title');
     // native-like providers: both rows appear; COPY puts the id on the clipboard
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     await page.evaluate(() => window.__towerclash.economy.setNativeInfo({ supportId: 'rc-test-1234', privacyOptionsRequired: true }));
     await tapRect(page, TITLE_SETTINGS);
-    await expect.poll(() => screen(page)).toBe('settings');
+    await expectScreen(page, 'settings');
     await expect.poll(() => page.evaluate(() => window.__towerclash.economy.getAboutInfo())).toEqual({ version: web!.version, supportId: 'rc-test-1234', privacyOptions: true });
     await scrollToFoot(page, ABOUT_PRIVACY);
     await tapRect(page, ABOUT_COPY);
@@ -295,7 +296,7 @@ test.describe('economy', () => {
   test('skins: buy a roof with crystals, it equips, tapping again unequips; pack skins are locked', async ({ page }) => {
     const errors = await boot(page, { version: 3, gold: 0, crystals: 100 });
     await page.evaluate(() => window.__towerclash.economy.openShop('skins'));
-    await expect.poll(() => screen(page)).toBe('shop');
+    await expectScreen(page, 'shop');
     await tapRect(page, shopSkinRect(SKIN_ROOFS_TOP, 0)); // Slate roof, 80 crystals
     await page.waitForTimeout(150);
     expect((await save(page)).crystals, 'AUD-U5: nothing spent before the confirm card').toBe(100);
@@ -341,7 +342,7 @@ test.describe('economy', () => {
     // the shop tab switch works by tap and the BACK button leaves
     await tapTab(page, 'crystals');
     await tapRect(page, SHOP.back);
-    await expect.poll(() => screen(page)).toBe('title');
+    await expectScreen(page, 'title');
     expect(errors).toEqual([]);
   });
 
@@ -385,7 +386,7 @@ test.describe('economy', () => {
         window.__towerclash.loadLevel(1, 1);
         window.__towerclash.autoplay();
       });
-      await expect.poll(() => screen(page)).toBe('play');
+      await expectScreen(page, 'play');
       await expect.poll(() => page.evaluate(() => window.__towerclash.getState()?.units.filter((u) => u.owner === 'player').length ?? 0), { timeout: 20_000 }).toBeGreaterThan(0);
       return page.evaluate(async () => {
         const w = window as unknown as HelmetRecWindow;
@@ -430,7 +431,7 @@ test.describe('economy', () => {
     expect(plain).not.toContain(CRUSADER_ENAMEL);
 
     await page.evaluate(() => window.__towerclash.economy.openShop('skins'));
-    await expect.poll(() => screen(page)).toBe('shop');
+    await expectScreen(page, 'shop');
     const scroll = await page.evaluate((y) => window.__towerclash.economy.shopScroll(y), HELMET_SCROLL);
     expect(scroll).toBe(HELMET_SCROLL);
     const crusader = await text('skin.helmet_crusader.short');
@@ -493,27 +494,27 @@ test.describe('economy', () => {
         window.__towerclash.setSpeed(10);
         window.__towerclash.autoplay();
       });
-      await expect.poll(() => screen(page), { timeout: 60_000, intervals: [250] }).toBe('result');
+      await expectScreen(page, 'result', { timeout: 60_000, intervals: [250] });
     };
     const stats = () => page.evaluate(() => window.__towerclash.economy.getAdStats());
     // 4th and 5th results: still inside the grace period → MENU leaves without an ad
     for (let i = 0; i < 2; i++) {
       await winLevel();
       await tapRect(page, RESULT.menu);
-      await expect.poll(() => screen(page)).toBe('levelSelect');
+      await expectScreen(page, 'levelSelect');
     }
     expect((await save(page)).adCounters.levelsCompleted).toBe(5);
     expect((await stats()).fakeInterstitials).toBe(0);
     // 6th result → interstitial on leaving the result screen (session counter counts it)
     await winLevel();
     await tapRect(page, RESULT.menu);
-    await expect.poll(() => screen(page)).toBe('levelSelect');
+    await expectScreen(page, 'levelSelect');
     await expect.poll(async () => (await stats()).fakeInterstitials).toBe(1);
     expect((await stats()).interstitialsShown).toBe(1);
     // 7th: not every result (every 3rd, plus the 120 s cooldown)
     await winLevel();
     await tapRect(page, RESULT.menu);
-    await expect.poll(() => screen(page)).toBe('levelSelect');
+    await expectScreen(page, 'levelSelect');
     expect((await stats()).fakeInterstitials).toBe(1);
     // remove-ads owner: never again
     await page.evaluate(() => window.__towerclash.economy.grant('remove_ads'));
@@ -521,7 +522,7 @@ test.describe('economy', () => {
     for (let i = 0; i < 3; i++) {
       await winLevel();
       await tapRect(page, RESULT.menu);
-      await expect.poll(() => screen(page)).toBe('levelSelect');
+      await expectScreen(page, 'levelSelect');
     }
     expect((await stats()).fakeInterstitials).toBe(1);
     expect(errors).toEqual([]);
@@ -599,7 +600,7 @@ test.describe('economy', () => {
     expect(lost.timeMs).toBeGreaterThanOrEqual(CONTINUE_REWIND_MS + 2000);
     await page.evaluate(() => window.__towerclash.setSpeed(1));
     await tapRect(page, RESULT.continueAd);
-    await expect.poll(() => screen(page)).toBe('play');
+    await expectScreen(page, 'play');
     const cont = await page.evaluate(() => {
       const s = window.__towerclash.getState()!;
       const clock = window.__towerclash.economy.getClock()!;
@@ -617,7 +618,7 @@ test.describe('economy', () => {
     // rules v2 the free Freeze can let the trickle capture the drained enemy towers, so the second
     // result may be a win; a second defeat must not offer CONTINUE again and keeps NEXT disabled.
     await page.evaluate(() => window.__towerclash.setSpeed(20));
-    await expect.poll(() => screen(page), { timeout: 60_000, intervals: [250] }).toBe('result');
+    await expectScreen(page, 'result', { timeout: 60_000, intervals: [250] });
     expect((await page.evaluate(() => window.__towerclash.economy.getClock()))?.continued).toBe(true);
     if ((await page.evaluate(() => window.__towerclash.getResult()))?.outcome === 'lost') {
       await tapRect(page, RESULT.continueAd); // lands on nothing
@@ -630,9 +631,9 @@ test.describe('economy', () => {
       // second consecutive defeat of the level: the tip's HOW TO PLAY link opens the card; CLOSE returns to this result
       expect((await page.evaluate(() => window.__towerclash.getResult()))?.howto).toBe(true);
       await tapRect(page, RESULT.howto);
-      await expect.poll(() => screen(page)).toBe('howto');
+      await expectScreen(page, 'howto');
       await tapRect(page, HOWTO_CLOSE);
-      await expect.poll(() => screen(page)).toBe('result');
+      await expectScreen(page, 'result');
       expect((await page.evaluate(() => window.__towerclash.getResult()))?.tip).toBe(lessonOf(REWIND_LEVEL));
     }
     expect((await save(page)).adCounters.rewardedByPlacement['rv_continue']).toBe(1);

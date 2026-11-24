@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { tapAt, tapHud, tapRect } from './helpers/tap';
+import { expectScreen } from './helpers/screenPoll';
 import { shotPath } from './tools/shots';
 
 /*
@@ -200,7 +201,7 @@ test.describe('Tower Clash smoke', () => {
     // (a4) economy: the wallet pills open the shop; a fake-store purchase of the 100-crystal pack
     //      lands in the save after the store resolves; RESTORE grants a store-reported non-consumable.
     await tapRect(page, TITLE_WALLET);
-    await expect.poll(() => screen(page)).toBe('shop');
+    await expectScreen(page, 'shop');
     await tapRect(page, SHOP_PACK_0);
     await expect.poll(async () => (await readSave(page))?.crystals, { timeout: 5000 }).toBe(100);
     await page.evaluate(() => window.__towerclash.economy.configureFakeStore({ owned: ['remove_ads'] }));
@@ -212,24 +213,24 @@ test.describe('Tower Clash smoke', () => {
     expect((await readSave(page))?.crystals).toBe(150);
     await shot(page, 'shop');
     await tapRect(page, SHOP_BACK);
-    await expect.poll(() => screen(page)).toBe('title');
+    await expectScreen(page, 'title');
 
     // (a3) settings: gear → settings screen, sound toggle persists, BACK returns to the title.
     await tapRect(page, TITLE_SETTINGS);
-    await expect.poll(() => screen(page)).toBe('settings');
+    await expectScreen(page, 'settings');
     await shot(page, 'settings');
     await tapRect(page, SETTINGS.sound);
     await expect.poll(async () => (await readSave(page))?.settings.sound).toBe(false);
     await tapRect(page, SETTINGS.sound);
     await expect.poll(async () => (await readSave(page))?.settings.sound).toBe(true);
     await tapRect(page, SETTINGS.back);
-    await expect.poll(() => screen(page)).toBe('title');
+    await expectScreen(page, 'title');
 
     // (b) PLAY → level select (winding path map): authored levels present, the map opens on the
     //     current level (level 1 on a fresh save → scroll 0), first three nodes reachable without
     //     scrolling, only level 1 unlocked and a tap on a locked node does nothing.
     await tapRect(page, TITLE_PLAY);
-    await expect.poll(() => screen(page)).toBe('levelSelect');
+    await expectScreen(page, 'levelSelect');
     expect(LEVEL_FILES.length).toBeGreaterThanOrEqual(5);
     expect(await page.evaluate(() => window.__towerclash.getLevelSelectScroll())).toBe(0);
     for (let i = 0; i < 3; i++) {
@@ -250,7 +251,7 @@ test.describe('Tower Clash smoke', () => {
     //     tutorial hint — until the first input on the map; a tap on open grass (no tower, below the
     //     card) starts the sim, and once the card has faded the tutorial hint shows on a fresh save.
     await tapRect(page, levelNodeRect(0));
-    await expect.poll(() => screen(page)).toBe('play');
+    await expectScreen(page, 'play');
     expect(await levelId(page)).toBe(1);
     await page.waitForTimeout(800);
     expect(await simTime(page), 'held by the lesson card').toBe(0);
@@ -373,7 +374,7 @@ test.describe('Tower Clash smoke', () => {
     test.info().annotations.push({ type: 'look3-play-links', description: bothStreams ? 'player + enemy streams on screen' : 'no player+enemy stream pair within 20 s' });
     await lookShot(page, 'look3-play-links');
     await page.evaluate(() => window.__towerclash.setSpeed(10));
-    await expect.poll(() => screen(page), { timeout: 60_000, intervals: [250] }).toBe('result');
+    await expectScreen(page, 'result', { timeout: 60_000, intervals: [250] });
     const finalState = await page.evaluate(() => window.__towerclash.getState());
     expect(finalState).not.toBeNull();
     const enemyOwned = Object.values(finalState!.towers).filter((t) => t.owner.startsWith('enemy'));
@@ -394,7 +395,7 @@ test.describe('Tower Clash smoke', () => {
     // (e) NEXT → level 2 starts playing at normal speed (it is unlocked by the level 1 star).
     await page.evaluate(() => window.__towerclash.setSpeed(1));
     await tapRect(page, RESULT.next);
-    await expect.poll(() => screen(page)).toBe('play');
+    await expectScreen(page, 'play');
     expect(await levelId(page)).toBe(2);
     await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: as a first input would
     await expect.poll(() => hint(page), { message: 'level 2 has its own tutorial on a fresh save' }).not.toBeNull();
@@ -406,7 +407,7 @@ test.describe('Tower Clash smoke', () => {
     await page.waitForTimeout(150);
     expect(await screen(page)).toBe('play');
     await tapRect(page, PAUSE.menu);
-    await expect.poll(() => screen(page)).toBe('levelSelect');
+    await expectScreen(page, 'levelSelect');
     expect(await unlocked(page, [1, 2, 3])).toEqual([true, true, false]);
     // the map opens on the current level (2); pin the scroll so the mirrored node rects apply
     await page.evaluate(() => window.__towerclash.setLevelSelectScroll(0));
@@ -415,7 +416,7 @@ test.describe('Tower Clash smoke', () => {
     await page.waitForTimeout(150);
     expect(await screen(page)).toBe('levelSelect');
     await tapRect(page, levelNodeRect(1));
-    await expect.poll(() => screen(page)).toBe('play');
+    await expectScreen(page, 'play');
     expect(await levelId(page)).toBe(2);
     await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card's hold ends
 
@@ -472,7 +473,7 @@ test.describe('Tower Clash smoke', () => {
     await page.goto('/');
     await page.waitForFunction(() => typeof window.__towerclash?.loadLevel === 'function');
     expect(await page.evaluate(() => window.__towerclash.loadLevel(5, 1))).toBe(true);
-    await expect.poll(() => screen(page)).toBe('play');
+    await expectScreen(page, 'play');
     expect(await levelId(page)).toBe(5);
     // the sim built no lane through the wall (§2.0b items 1–2) but one to the clear neighbour
     const lanes = await laneIds(page);
@@ -502,34 +503,34 @@ test.describe('Tower Clash smoke', () => {
 
     // settings row → card (title text, look shot) → CLOSE returns to settings; ESC closes too
     await tapRect(page, TITLE_SETTINGS);
-    await expect.poll(() => screen(page)).toBe('settings');
+    await expectScreen(page, 'settings');
     await tapRect(page, SETTINGS.howto);
-    await expect.poll(() => screen(page)).toBe('howto');
+    await expectScreen(page, 'howto');
     expect(await text(page, 'howto.title')).toBe('HOW TO PLAY');
     await page.waitForTimeout(250);
     await lookShot(page, 'look3-howto');
     await tapRect(page, HOWTO.close);
-    await expect.poll(() => screen(page)).toBe('settings');
+    await expectScreen(page, 'settings');
     await tapRect(page, SETTINGS.howto);
-    await expect.poll(() => screen(page)).toBe('howto');
+    await expectScreen(page, 'howto');
     await page.keyboard.press('Escape');
-    await expect.poll(() => screen(page)).toBe('settings');
+    await expectScreen(page, 'settings');
     await tapRect(page, SETTINGS.back);
-    await expect.poll(() => screen(page)).toBe('title');
+    await expectScreen(page, 'title');
 
     // pause menu → card → BACK returns to the paused game with the sim still frozen
     await page.evaluate(() => window.__towerclash.loadLevel(1, 1));
-    await expect.poll(() => screen(page)).toBe('play');
+    await expectScreen(page, 'play');
     await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11
     await page.waitForTimeout(100);
     await page.keyboard.press('p');
     await page.waitForTimeout(100);
     const pausedAt = await simTime(page);
     await tapRect(page, PAUSE.howto);
-    await expect.poll(() => screen(page)).toBe('howto');
+    await expectScreen(page, 'howto');
     expect(await text(page, 'howto.title')).toBe('HOW TO PLAY');
     await tapRect(page, HOWTO.back);
-    await expect.poll(() => screen(page)).toBe('play');
+    await expectScreen(page, 'play');
     await page.waitForTimeout(200);
     expect(await simTime(page)).toBe(pausedAt);
     await tapRect(page, PAUSE.resume);
@@ -549,7 +550,7 @@ test.describe('Tower Clash smoke', () => {
 
     // settings → pick Azərbaycanca
     await tapRect(page, TITLE_SETTINGS);
-    await expect.poll(() => screen(page)).toBe('settings');
+    await expectScreen(page, 'settings');
     await tapSegment(page, SETTINGS.language, LANGUAGE_ORDER.length, LANGUAGE_ORDER.indexOf('az'));
     await expect.poll(() => language(page)).toBe('az');
     await expect.poll(() => text(page, 'settings.title')).toBe('AYARLAR');
@@ -557,7 +558,7 @@ test.describe('Tower Clash smoke', () => {
     await page.waitForTimeout(200);
     await shot(page, 'settings-az');
     await tapRect(page, SETTINGS.back);
-    await expect.poll(() => screen(page)).toBe('title');
+    await expectScreen(page, 'title');
     // title chip + play label are Azerbaijani now
     expect(await text(page, 'title.play')).toBe('OYNA');
     expect(await page.evaluate(() => document.documentElement.lang)).toBe('az');
@@ -566,7 +567,7 @@ test.describe('Tower Clash smoke', () => {
 
     // tutorial hint of level 1 is translated
     await page.evaluate(() => window.__towerclash.loadLevel(1, 1));
-    await expect.poll(() => screen(page)).toBe('play');
+    await expectScreen(page, 'play');
     await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the bubble shows once the card is gone
     await expect.poll(() => hint(page)).toBe('Öz qüllənə toxun');
 

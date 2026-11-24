@@ -3,17 +3,19 @@ import { C } from './sim/constants';
 import { hasOverdrive, linksFrom, streamIntervalMs } from './sim/step';
 import { challengeDescriptor, parseReplay, replayOf, serializeReplay, verifyReplay } from './sim/replay';
 import { levelForReplay } from './daily/replayLevel';
-import { aiModule } from './ui/ai';
+import { AI_CHUNK, aiLoaded, aiModule } from './ui/ai';
 import type { TowerClashApp, TowerClashDebug } from './main';
 import type { PlayScreen } from './ui/play';
-import { LEVEL_META, levelIndex } from './levels/index';
+import { LEVEL_META, levelChunkKey, levelIndex } from './levels/index';
+import { chunkFailures } from './lazyChunk';
+import { RESULT_CHUNK, resultChunkLoaded } from './ui/resultChunk';
 import { fromHudSpace, hudAnchors, toClient } from './render/view';
 import type { SaveStorage } from './ui/save';
 import { isLevelUnlocked, isSaveFailing, isSaveReadOnly, saveLoadIssue, setSaveStorageForTests } from './ui/save';
 import { ResultScreen, lastShareRecord } from './ui/result';
 import { lastReviewResult } from './native/review';
 import type { TranslationKey } from './ui/i18n';
-import { currentLanguage, hasEnglish, loadEnglishMenus, t } from './ui/i18n';
+import { ENGLISH_MENUS_CHUNK, currentLanguage, hasEnglish, loadEnglishMenus, t } from './ui/i18n';
 import { loadTutorialSteps } from './ui/tutorialChunk';
 import { configureFakeStore } from './economy/providers/fakeStore';
 import { fakeAds, setFakeAds } from './economy/fakeAds';
@@ -85,6 +87,59 @@ export interface QaDebugExtras {
    * (src/daily/replayLevel.ts) and rejected when its level, seed, twist or modifiers disagree with the record.
    */
   verifyReplay(json: string): Promise<{ hash: string; expected?: string; matches: boolean; rulesMatch: boolean; outcome: string; timeMs: number; reason?: string }>;
+  /**
+   * QA-46: one read of everything a stalled `screen()` poll needs to tell sim-stalled from page-starved
+   * from chunk-failed from tap-lost (e2e/helpers/screenPoll.ts attaches it to the failure). Read-only,
+   * never throws, cheap enough to call twice a few hundred ms apart (`frame.lastFrameMs` / `match.timeMs`
+   * moving between the two reads = the rAF loop / the sim are alive).
+   */
+  stallDump(): StallDump;
+}
+
+/** QA-46: the one-shot state behind a `screen()` poll that never flipped (`QaDebugExtras.stallDump`). */
+export interface StallDump {
+  /** `performance.now()` of this read. */
+  nowMs: number;
+  screen: string;
+  /** FEEL-1-6: false while a title ↔ menu slide still holds input back. */
+  transitionDone: boolean;
+  /** The lazy menu screens chunk (+ English menus) is in — `go(levelSelect)` needs no spinner. */
+  lazyScreensIn: boolean;
+  /** `startLevel` in flight (its chunk downloading): the play screen is yet to come. */
+  pendingStart: boolean;
+  /** Consecutive failures per lazy chunk on this page (src/lazyChunk.ts); only levels with a failure are listed. */
+  chunkFailures: Record<string, number>;
+  chunksIn: { ai: boolean; result: boolean };
+  /** The spinner is current: the screen it would return to and how long it has been drawn (null before its first frame). */
+  loading: { from: string; shownForMs: number | null } | null;
+  /**
+   * The app's rAF loop: `performance.now()` of the last frame it ran (null before the first frame or right
+   * after the page was un-hidden, which resets it) and how long ago that was. A `sinceLastFrameMs` that keeps
+   * growing between two reads = the loop is dead or the tab is throttled; a few ms = alive.
+   */
+  frame: { lastFrameMs: number | null; sinceLastFrameMs: number | null };
+  page: { visibilityState: DocumentVisibilityState; hidden: boolean; hasFocus: boolean; onLine: boolean };
+  /** The current / last play screen's match, null when none was ever started on this page. */
+  match: {
+    /** The play screen is the current screen (false on the result screen, or while a spinner is up). */
+    current: boolean;
+    levelId: number;
+    tick: number;
+    timeMs: number;
+    elapsedMs: number;
+    speed: number;
+    paused: boolean;
+    /** AUD-B11: the lesson card still holds the sim (no first input / `startMatch` / bot yet). */
+    held: boolean;
+    stalemateCardUp: boolean;
+    over: boolean;
+    outcome: string;
+    /** AUD-F4 / PERF-11: the outcome is decided and the result screen is due after the beat (or waiting for its chunk). */
+    resultPending: boolean;
+  } | null;
+  /** The current screen's toast text, e.g. "Load failed" after a chunk failure (null when none). */
+  toast: string | null;
+  speed: number;
 }
 
 let groundBuilds = 0;
@@ -133,8 +188,65 @@ function withPlay(app: TowerClashApp, fn: (play: PlayScreen) => void): boolean {
   return true;
 }
 
+/**
+ * QA-46: the stall dump. Reads two fields main.ts / play.ts keep private (`TowerClashApp.lastFrame`,
+ * `LoadingScreen.shownAt`, `PlayScreen.pendingResult`) structurally — TypeScript's `private` is compile-time
+ * only and this surface is compiled out of the store builds (AUD-Q18), so no field is widened for it.
+ */
+function stallDump(app: TowerClashApp): StallDump {
+  const nowMs = performance.now();
+  const lastFrame = (app as unknown as { lastFrame?: number }).lastFrame ?? 0;
+  const cur = app.current;
+  const loading = cur.name === 'loading' ? (cur as unknown as { from?: { name: string }; shownAt?: number }) : null;
+  const failures: Record<string, number> = {
+    lazyScreens: chunkFailures('lazyScreens'), // main.ts LAZY_SCREENS_KEY
+    [ENGLISH_MENUS_CHUNK]: chunkFailures(ENGLISH_MENUS_CHUNK),
+    [AI_CHUNK]: chunkFailures(AI_CHUNK),
+    [RESULT_CHUNK]: chunkFailures(RESULT_CHUNK),
+    hudOverlays: chunkFailures('hudOverlays'), // render/hud.ts OVERLAY_CHUNK
+  };
+  for (const meta of LEVEL_META) {
+    const key = levelChunkKey(meta.id);
+    const n = chunkFailures(key);
+    if (n > 0) failures[key] = n;
+  }
+  const play = app.play;
+  const match: StallDump['match'] = play
+    ? {
+        current: cur === play,
+        levelId: play.state.levelId,
+        tick: Math.round(play.state.time / C.TICK_MS),
+        timeMs: play.state.time,
+        elapsedMs: play.elapsedMs(),
+        speed: play.loop.speed,
+        paused: play.loop.paused,
+        held: play.cardUp,
+        stalemateCardUp: play.stalemateCardUp,
+        over: play.over,
+        outcome: play.outcome(),
+        resultPending: (play as unknown as { pendingResult?: unknown }).pendingResult != null,
+      }
+    : null;
+  return {
+    nowMs,
+    screen: cur.name,
+    transitionDone: app.lazy?.slideDone() ?? true,
+    lazyScreensIn: app.lazy !== null,
+    pendingStart: app.pendingStart !== null,
+    chunkFailures: failures,
+    chunksIn: { ai: aiLoaded(), result: resultChunkLoaded() },
+    loading: loading ? { from: loading.from?.name ?? '?', shownForMs: loading.shownAt ? Math.round(nowMs - loading.shownAt) : null } : null,
+    frame: { lastFrameMs: lastFrame || null, sinceLastFrameMs: lastFrame ? Math.round(nowMs - lastFrame) : null },
+    page: { visibilityState: document.visibilityState, hidden: document.hidden, hasFocus: document.hasFocus(), onLine: navigator.onLine },
+    match,
+    toast: cur.toast?.opts(nowMs)?.text ?? null,
+    speed: app.speed,
+  };
+}
+
 export function installDebug(app: TowerClashApp): TowerClashDebug & QaDebugExtras {
   const extras: QaDebugExtras = {
+    stallDump: () => stallDump(app),
     getFocus: () => app.lazy?.focusState(app) ?? null,
     // SIM-R2: a Daily / Weekly match carries its descriptor (kind, day / week key, twist id)
     getReplay: () => (app.play ? serializeReplay(replayOf(app.play.level, app.play.state, app.play.replayLog, false, challengeDescriptor(app.play.challenge, app.play.weekly))) : null),
