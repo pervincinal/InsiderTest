@@ -30,7 +30,7 @@ import { UPGRADE_DEFS, upgradeTier } from './upgrades';
 import { UPGRADE_GLYPH, buyUpgrade, upgradeCost, upgradeEffectText } from './shopUpgrades';
 import type { SkinFamily } from './save';
 import { writeSave } from './save';
-import type { App, Screen } from './screens';
+import type { App, QueuedToast, Screen } from './screens';
 import type { FocusItem } from './focus';
 import { onScreen, readingOrder, screenBand, segmentRects } from './focus';
 import { Toast } from './screens';
@@ -69,6 +69,9 @@ interface Layout {
   hits: Hit[];
   contentHeight: number;
 }
+
+/** The header's controls (REV-42: a press is acted on only when it is released over the control it started on). */
+const SHOP_CHROME: readonly Rect[] = [SHOP.back, SHOP.wallet, SHOP.tabs];
 
 const BUNDLE_GLYPH: Record<string, ShopBundleCard['glyph']> = {
   starter_pack: 'chest',
@@ -171,10 +174,24 @@ export class ShopScreen implements Screen {
     void getStore().init();
     this.activeTab();
     this.relayout(); // FE-10: hit regions before the first painted frame
+    this.fetchPrices();
+  }
+
+  /**
+   * The store's localized price strings (ECONOMY.md §3). REV-40: the products are asked for only once
+   * `init()` has resolved (idempotent: the same init as above) — the native wrapper answers `[]` while
+   * RevenueCat is still loading, which left every pack on the USD fallback (`priceOf`) for the whole
+   * visit while BUY charged the store's real price. The fallback stays for the web / `?store=off`
+   * (empty answer). A shop left meanwhile (another screen is current) does not write into this dead instance.
+   */
+  private fetchPrices(): void {
     const ids = visibleProducts(this.app.save, this.app.ads.winsAtStart < 1).map((p) => p.id);
-    void getStore()
-      .getProducts(ids)
+    const store = getStore();
+    void store
+      .init()
+      .then(() => store.getProducts(ids))
       .then((list) => {
+        if (this.app.current && this.app.current !== this) return;
         for (const p of list) this.prices.set(p.id, p.priceString);
       })
       .catch(() => undefined);
@@ -184,15 +201,29 @@ export class ShopScreen implements Screen {
     return this.activeTab();
   }
 
-  /** Switch tabs; a hidden tab (store unavailable) is ignored. */
+  /** Switch tabs (a pick: remembered for this session, AUD-U25); a hidden tab (store unavailable) is ignored. */
   setTab(tab: ShopTab): void {
-    if (!this.tabs.includes(tab)) return;
-    this.tab = lastTab = tab;
+    if (this.showTab(tab)) lastTab = tab;
+  }
+
+  /**
+   * Show `tab` without touching the AUD-U25 memory (REV-44: the shop's own wallet pill is not a pick,
+   * like the title's and the map's). False when the tab is hidden (store unavailable).
+   */
+  private showTab(tab: ShopTab): boolean {
+    if (!this.tabs.includes(tab)) return false;
+    this.tab = tab;
     this.scroll = 0;
     this.fling.stop();
     this.pressed = null;
     this.confirmConvert = null;
     this.relayout(); // FE-10: a tap right after the switch hits the new tab's cards, painted or not
+    return true;
+  }
+
+  /** REV-44: the wallet pill opens CRYSTALS; when the store tabs are hidden it says why instead of doing nothing. */
+  private tapWallet(): void {
+    if (!this.showTab('crystals')) this.toast.show(t('shop.toast.storeUnavailablePlatform'), 'error', this.nowMs);
   }
 
   /** Conversion awaiting confirmation, if any (e2e). */
@@ -459,8 +490,14 @@ export class ShopScreen implements Screen {
     const l = this.toLayout(p.x, p.y);
     // AUD-U18: a press on the list while it glides stops it there and buys / equips nothing
     const caught = this.fling.press(p.y, p.timeMs);
-    if (this.on(SHOP.back, l)) this.pressed = SHOP.back;
+    const chrome = this.chromeAt(l);
+    if (chrome) this.pressed = chrome;
     else this.pressed = caught ? null : (this.contentHit(l)?.rect ?? null);
+  }
+
+  /** The header control (BACK, the wallet pill, the tab row) under layout point `l`, if any. */
+  private chromeAt(l: { x: number; y: number }): Rect | null {
+    return SHOP_CHROME.find((r) => this.on(r, l)) ?? null;
   }
 
   move(p: PointerPoint): void {
@@ -494,20 +531,20 @@ export class ShopScreen implements Screen {
       return;
     }
     const l = this.toLayout(p.x, p.y);
-    if (this.on(SHOP.back, l)) {
-      this.back();
-      return;
-    }
-    if (this.on(SHOP.wallet, l)) {
-      this.setTab('crystals');
-      return;
-    }
-    if (this.on(SHOP.tabs, l)) {
-      const tabs = this.tabs;
-      const tab = tabs[segmentAt(SHOP.tabs, tabs.length, l.x, SHOP.tabs.y + 1)];
-      if (tab && tab !== this.activeTab()) {
-        playSfx('button');
-        this.setTab(tab);
+    const chrome = this.chromeAt(l);
+    if (chrome || (hit && SHOP_CHROME.includes(hit))) {
+      // REV-42: a header press released over another control (down on BACK, slid onto the wallet) acts
+      // on neither, and one released on the list buys nothing — as settings.ts / achievements.ts
+      if (chrome !== hit) return;
+      if (chrome === SHOP.back) this.back();
+      else if (chrome === SHOP.wallet) this.tapWallet();
+      else {
+        const tabs = this.tabs;
+        const tab = tabs[segmentAt(SHOP.tabs, tabs.length, l.x, SHOP.tabs.y + 1)];
+        if (tab && tab !== this.activeTab()) {
+          playSfx('button');
+          this.setTab(tab);
+        }
       }
       return;
     }
@@ -554,6 +591,21 @@ export class ShopScreen implements Screen {
     else this.particles.crystalBurst(x, y, 12, this.app.palette());
   }
 
+  /**
+   * REV-41: the result of a purchase / restore, which settles seconds after the tap. BACK stays live
+   * while `pending` is set (a store sheet that never answers must not trap the player in the shop), so
+   * when another screen is current by then the toast goes there (FE-9 carry, `App.carryToasts`, the
+   * REV-37 pattern), stamped with the clock of now — not onto this abandoned shop.
+   */
+  private say(text: string, kind: QueuedToast['kind']): void {
+    const current = this.app.current;
+    if (!current || current === this || !this.app.carryToasts) {
+      this.toast.show(text, kind, this.nowMs);
+      return;
+    }
+    this.app.carryToasts([{ text, kind, durationMs: 2400 }]); // Toast.show's default time
+  }
+
   /** Store purchase: pressed → spinner → grant on ok; cancelled = nothing; failures toast. */
   async buy(product: IapProductDef, rect: Rect): Promise<boolean> {
     if (this.pending) return false;
@@ -567,9 +619,9 @@ export class ShopScreen implements Screen {
     const res = await store.purchase(product.id);
     this.pending = null;
     if (!res.ok) {
-      if (res.error === 'unavailable') this.toast.show(t('shop.toast.storeUnavailableNow'), 'error', this.nowMs);
-      else if (res.error === 'failed') this.toast.show(t('shop.toast.purchaseFailed'), 'error', this.nowMs);
-      else if (res.error === 'pending') this.toast.show(t('shop.toast.purchasePending'), 'ok', this.nowMs); // REV-26: deferred payment
+      if (res.error === 'unavailable') this.say(t('shop.toast.storeUnavailableNow'), 'error');
+      else if (res.error === 'failed') this.say(t('shop.toast.purchaseFailed'), 'error');
+      else if (res.error === 'pending') this.say(t('shop.toast.purchasePending'), 'ok'); // REV-26: deferred payment
       return false; // cancelled: nothing to say
     }
     const granted = tryGrantProduct(this.app.save, product.id, res.transactionId);
@@ -577,8 +629,8 @@ export class ShopScreen implements Screen {
       // owned: a non-consumable this save already has. duplicate / unverified (REV-20, REV-27): a
       // crystal pack the store confirmed again (retry, or "already purchased" without an id) — it
       // was delivered under its first transaction, so a neutral toast and no second grant.
-      if (granted === 'unknown') this.toast.show(t('shop.toast.purchaseFailed'), 'error', this.nowMs);
-      else this.toast.show(t(granted === 'owned' ? 'shop.toast.alreadyOwned' : 'shop.toast.alreadyDelivered'), 'ok', this.nowMs);
+      if (granted === 'unknown') this.say(t('shop.toast.purchaseFailed'), 'error');
+      else this.say(t(granted === 'owned' ? 'shop.toast.alreadyOwned' : 'shop.toast.alreadyDelivered'), 'ok');
       return false;
     }
     this.burst(granted.crystals > 0 ? 'crystal' : 'gold', rect);
@@ -589,7 +641,7 @@ export class ShopScreen implements Screen {
       granted.noAds ? t('shop.toast.adsRemoved') : '',
       granted.skins.length ? (granted.skins.length > 1 ? t('shop.toast.skins', { n: granted.skins.length }) : t('shop.toast.skin')) : '',
     ].filter(Boolean);
-    this.toast.show(`${product.title}: ${parts.join(' · ')}`, 'ok', this.nowMs);
+    this.say(`${product.title}: ${parts.join(' · ')}`, 'ok');
     return true;
   }
 
@@ -602,7 +654,7 @@ export class ShopScreen implements Screen {
     this.pending = 'restore';
     const granted = await restorePurchases(this.app.save);
     this.pending = null;
-    this.toast.show(granted.length ? t('shop.toast.restored', { list: granted.join(', ') }) : t('shop.toast.nothingToRestore'), 'ok', this.nowMs);
+    this.say(granted.length ? t('shop.toast.restored', { list: granted.join(', ') }) : t('shop.toast.nothingToRestore'), 'ok');
     return granted;
   }
 

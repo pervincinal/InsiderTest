@@ -345,6 +345,7 @@ export class LevelSelectScreen implements Screen {
   }
 
   up(p: PointerPoint): void {
+    const pressed = this.pressed;
     this.pressed = null;
     const wasDrag = this.dragging;
     this.held = false;
@@ -357,6 +358,9 @@ export class LevelSelectScreen implements Screen {
     // FE-11: the header block and the chip are hit-tested in layout space, each in its own band (they
     // move on a tall screen); the path's nodes with the plain logical point
     const hit = this.chromeAt(p);
+    // REV-42: a press released over another control (down on BACK, slid onto the wallet) acts on neither,
+    // and one that started on a header button starts no level on the path — as settings.ts / achievements.ts
+    if (hit !== pressed) return;
     const y = this.yesterday();
     if (hit === BACK) {
       this.app.goTitle();

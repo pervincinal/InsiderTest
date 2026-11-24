@@ -53,9 +53,23 @@ export function versionRowOf(about: SettingsAboutLayout): Rect {
   return { x: about.card.x, y: about.card.y, w: about.card.w, h: about.versionY + SETTINGS.aboutRowH / 2 - about.card.y };
 }
 
+/**
+ * REV-43: what a tappable rect of the screen does. A press is remembered by role, not by rect identity:
+ * `probeNative()` resolves asynchronously and `relayout()` replaces the About card's rects with new
+ * objects, so a press that straddles it would otherwise match nothing at `up()`.
+ */
+type HitKind = 'back' | 'music' | 'sound' | 'colorBlind' | 'motion' | 'howto' | 'language' | 'tones' | 'textSize' | 'haptics' | 'shake' | 'reset' | 'copy' | 'privacy' | 'diagToggle' | 'diagCopy' | 'diagClear' | 'version' | 'confirmYes' | 'confirmNo';
+
+interface SettingsHit {
+  kind: HitKind;
+  rect: Rect;
+}
+
 export class SettingsScreen implements Screen {
   readonly name = 'settings' as const;
   private pressed: Rect | null = null;
+  /** REV-43: the role of `pressed` (survives a relayout between down and up; `pressed` is re-pointed by `relayout()`). */
+  private pressedKind: HitKind | null = null;
   private confirming = false;
   private nowMs = 0;
   readonly toast = new Toast();
@@ -97,6 +111,7 @@ export class SettingsScreen implements Screen {
   private relayout(): void {
     this.about = withDiagnostics(settingsAboutLayout(this.supportId !== null, this.privacyRequired), this.diagnosticsOn || this.diagRowCount > 0);
     this.versionRect = versionRowOf(this.about);
+    if (this.pressedKind) this.pressed = this.rectOf(this.pressedKind); // the press look follows the rebuilt rect (REV-43)
   }
 
   /** AUD-B6: the Diagnostics block's rects (layout px; e2e), and the row count it shows. */
@@ -218,16 +233,40 @@ export class SettingsScreen implements Screen {
     });
   }
 
-  private rects(): Rect[] {
-    if (this.confirming) return [SETTINGS.confirm.yes, SETTINGS.confirm.no];
-    const list = [SETTINGS.back, SETTINGS.music, SETTINGS.sound, SETTINGS.colorBlind, SETTINGS.motion, SETTINGS.howto, SETTINGS.language, SETTINGS.tones, SETTINGS.textSize, SETTINGS_FEEL.haptics, SETTINGS_FEEL.shake, SETTINGS.reset];
-    if (this.about.copy) list.push(this.about.copy);
-    if (this.about.privacy) list.push(this.about.privacy);
-    list.push(this.about.diagToggle);
-    if (this.about.diagCopy) list.push(this.about.diagCopy);
-    if (this.about.diagClear) list.push(this.about.diagClear);
-    list.push(this.versionRect); // last: COPY's tap area reaches up into the row and wins there
+  /** The tappable rects as laid out right now, each with its role (REV-43), in hit-test order. */
+  private hits(): SettingsHit[] {
+    if (this.confirming) {
+      return [
+        { kind: 'confirmYes', rect: SETTINGS.confirm.yes },
+        { kind: 'confirmNo', rect: SETTINGS.confirm.no },
+      ];
+    }
+    const list: SettingsHit[] = [
+      { kind: 'back', rect: SETTINGS.back },
+      { kind: 'music', rect: SETTINGS.music },
+      { kind: 'sound', rect: SETTINGS.sound },
+      { kind: 'colorBlind', rect: SETTINGS.colorBlind },
+      { kind: 'motion', rect: SETTINGS.motion },
+      { kind: 'howto', rect: SETTINGS.howto },
+      { kind: 'language', rect: SETTINGS.language },
+      { kind: 'tones', rect: SETTINGS.tones },
+      { kind: 'textSize', rect: SETTINGS.textSize },
+      { kind: 'haptics', rect: SETTINGS_FEEL.haptics },
+      { kind: 'shake', rect: SETTINGS_FEEL.shake },
+      { kind: 'reset', rect: SETTINGS.reset },
+    ];
+    if (this.about.copy) list.push({ kind: 'copy', rect: this.about.copy });
+    if (this.about.privacy) list.push({ kind: 'privacy', rect: this.about.privacy });
+    list.push({ kind: 'diagToggle', rect: this.about.diagToggle });
+    if (this.about.diagCopy) list.push({ kind: 'diagCopy', rect: this.about.diagCopy });
+    if (this.about.diagClear) list.push({ kind: 'diagClear', rect: this.about.diagClear });
+    list.push({ kind: 'version', rect: this.versionRect }); // last: COPY's tap area reaches up into the row and wins there
     return list;
+  }
+
+  /** Where the control with role `kind` is laid out now; null when the card no longer shows it. */
+  private rectOf(kind: HitKind): Rect | null {
+    return this.hits().find((h) => h.kind === kind)?.rect ?? null;
   }
 
   /**
@@ -245,7 +284,9 @@ export class SettingsScreen implements Screen {
       [SETTINGS.tones, TONE_SEGMENTS.length],
       [SETTINGS.textSize, TEXT_SIZE_SEGMENTS.length],
     ];
-    const body = this.rects().filter((r) => r !== SETTINGS.back && r !== this.versionRect);
+    const body = this.hits()
+      .filter((h) => h.kind !== 'back' && h.kind !== 'version')
+      .map((h) => h.rect);
     const split = body.flatMap((r) => {
       const seg = segs.find(([s]) => s === r);
       return seg ? segmentRects(r, seg[1]) : [r];
@@ -333,7 +374,9 @@ export class SettingsScreen implements Screen {
     this.downY = p.y;
     this.scrollAtDown = this.scroll;
     const l = this.toLayout(p.x, p.y);
-    this.pressed = this.rects().find((r) => hitRect(this.app.view, r, l.x, l.y)) ?? null;
+    const hit = this.hits().find((h) => hitRect(this.app.view, h.rect, l.x, l.y)) ?? null;
+    this.pressed = hit?.rect ?? null;
+    this.pressedKind = hit?.kind ?? null;
   }
 
   move(p: PointerPoint): void {
@@ -347,7 +390,10 @@ export class SettingsScreen implements Screen {
       return;
     }
     const l = this.toLayout(p.x, p.y);
-    if (this.pressed && !hitRect(this.app.view, this.pressed, l.x, l.y)) this.pressed = null;
+    if (this.pressed && !hitRect(this.app.view, this.pressed, l.x, l.y)) {
+      this.pressed = null;
+      this.pressedKind = null;
+    }
   }
 
   wheel(dy: number): void {
@@ -355,18 +401,21 @@ export class SettingsScreen implements Screen {
   }
 
   up(pointer: PointerPoint): void {
-    const hit = this.pressed;
+    const kind = this.pressedKind;
     this.pressed = null;
+    this.pressedKind = null;
     const wasDrag = this.dragging;
     this.held = false;
     this.dragging = false;
-    if (wasDrag) return;
+    if (wasDrag || !kind) return;
     const p = { ...pointer, ...this.toLayout(pointer.x, pointer.y) };
+    // REV-43: the pressed role's rect as laid out now — `probeNative()` may have rebuilt the About card since down
+    const hit = this.rectOf(kind);
     if (!hit || !hitRect(this.app.view, hit, p.x, p.y)) return;
     p.y = hit.y + 1; // a segmented control picks by x: its tap area reaches above / below the drawn row (AUD-U1)
     const save = this.app.save;
     if (this.confirming) {
-      if (hit === SETTINGS.confirm.yes) {
+      if (kind === 'confirmYes') {
         resetProgress(save);
         resetDiag(); // AUD-B6 / TF-28: the diagnostics log and its attempt counters go with the progress
         this.diagRowCount = 0;
@@ -376,37 +425,37 @@ export class SettingsScreen implements Screen {
       playSfx('button');
       return;
     }
-    if (hit === SETTINGS.back) {
+    if (kind === 'back') {
       this.back();
       return;
     }
     // AUD-F6: Music and Effects persist through the audio facade (both flags; the click is on the UI bus, so Effects off is silent)
-    if (hit === SETTINGS.music) {
+    if (kind === 'music') {
       setMusicOn(!musicOn());
       playSfx('button');
       return;
     }
-    if (hit === SETTINGS.sound) {
+    if (kind === 'sound') {
       setMuted(effectsOn());
       playSfx('button');
       return;
     }
-    if (hit === SETTINGS.howto) {
+    if (kind === 'howto') {
       playSfx('button');
       this.app.openHowTo(this);
       return;
     }
-    if (hit === this.about.copy) {
+    if (kind === 'copy') {
       playSfx('button');
       this.copySupportId();
       return;
     }
-    if (hit === this.about.privacy) {
+    if (kind === 'privacy') {
       playSfx('button');
       this.openPrivacyOptions();
       return;
     }
-    if (hit === this.about.diagToggle) {
+    if (kind === 'diagToggle') {
       // AUD-B6: only `true` is stored (absent = off), as `perfOverlay`
       if (this.diagnosticsOn) delete save.settings.diagnostics;
       else save.settings.diagnostics = true;
@@ -415,34 +464,34 @@ export class SettingsScreen implements Screen {
       playSfx('button');
       return;
     }
-    if (hit === this.about.diagCopy) {
+    if (kind === 'diagCopy') {
       playSfx('button');
       this.copyDiagLog();
       return;
     }
-    if (hit === this.about.diagClear) {
+    if (kind === 'diagClear') {
       playSfx('button');
       this.clearDiagLog();
       return;
     }
-    if (hit === this.versionRect) {
+    if (kind === 'version') {
       this.versionTap();
       return;
     }
     playSfx('button');
-    if (hit === SETTINGS.colorBlind) {
+    if (kind === 'colorBlind') {
       save.settings.colorBlind = !save.settings.colorBlind;
-    } else if (hit === SETTINGS.motion) {
+    } else if (kind === 'motion') {
       const seg = MOTION_SEGMENTS[segmentAt(SETTINGS.motion, MOTION_SEGMENTS.length, p.x, p.y)];
       if (seg) {
         save.settings.reducedMotion = seg.value;
         applyMotionPref(seg.value);
       }
-    } else if (hit === SETTINGS.language) {
+    } else if (kind === 'language') {
       const seg = LANGUAGE_SEGMENTS[segmentAt(SETTINGS.language, LANGUAGE_SEGMENTS.length, p.x, p.y)];
       if (seg) this.app.setLanguage(seg.code); // persists through the app
       return;
-    } else if (hit === SETTINGS.tones) {
+    } else if (kind === 'tones') {
       // FE-14: persist the set; a non-classic one fetches its lazy chunk now (the shipped palette shows
       // until it lands, then the app's palette() answers the set and empties the sprite cache)
       const seg = TONE_SEGMENTS[segmentAt(SETTINGS.tones, TONE_SEGMENTS.length, p.x, p.y)];
@@ -450,26 +499,29 @@ export class SettingsScreen implements Screen {
         save.settings.tones = seg.value;
         if (seg.value !== 'classic') void loadToneSets().catch(() => undefined);
       }
-    } else if (hit === SETTINGS.textSize) {
+    } else if (kind === 'textSize') {
       // AUD-U2: 100 / 125 / 150 %, applied at once (every font goes through render/widgets.ts `font()`)
       const seg = TEXT_SIZE_SEGMENTS[segmentAt(SETTINGS.textSize, TEXT_SIZE_SEGMENTS.length, p.x, p.y)];
       if (seg) {
         save.settings.textScale = seg;
         setTextScale(seg);
       }
-    } else if (hit === SETTINGS_FEEL.haptics) {
+    } else if (kind === 'haptics') {
       save.settings.haptics = save.settings.haptics === false; // AUD-U20: the capture / hit haptics read it (play.ts, audio/recipes.ts)
-    } else if (hit === SETTINGS_FEEL.shake) {
+    } else if (kind === 'shake') {
       save.settings.shake = save.settings.shake === false; // AUD-F18: draw.ts drops the capture shake while it is false
-    } else if (hit === SETTINGS.reset) {
+    } else if (kind === 'reset') {
       this.confirming = true;
       return;
+    } else {
+      return; // REV-43: nothing changed (a confirm role outside the card): nothing to persist
     }
     writeSave(save);
   }
 
   cancel(): void {
     this.pressed = null;
+    this.pressedKind = null;
     this.held = false;
     this.dragging = false;
   }

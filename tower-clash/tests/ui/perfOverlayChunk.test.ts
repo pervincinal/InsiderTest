@@ -129,9 +129,12 @@ describe('the 5-tap switch and the setting (AUD-Q8)', () => {
       // at the 88-px tap area it still starts below RESET's
       expect(hitArea(row, 88).y).toBeGreaterThanOrEqual(reset.y + reset.h);
     }
-    // COPY's tap area reaches up into the row: the settings screen tests COPY first
+    // COPY's tap area reaches up into the row: the settings screen tests COPY first (REV-43: hits carry their role)
     const src = read(join(SRC, 'ui/settings.ts'));
-    expect(src.indexOf('list.push(this.versionRect)')).toBeGreaterThan(src.indexOf('if (this.about.copy) list.push(this.about.copy);'));
+    const version = src.indexOf("list.push({ kind: 'version', rect: this.versionRect })");
+    const copy = src.indexOf("if (this.about.copy) list.push({ kind: 'copy', rect: this.about.copy });");
+    expect(copy).toBeGreaterThan(-1);
+    expect(version).toBeGreaterThan(copy);
   });
 
   it('settings.perfOverlay: only true survives a load; absent = off', () => {
