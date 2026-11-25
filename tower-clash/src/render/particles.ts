@@ -27,6 +27,24 @@ export function prefersReducedMotion(): boolean {
   }
 }
 
+let osReduced = false;
+let osCheckedAt = -Infinity;
+/** REV-46: how often `motionAllowed` re-reads the OS media query (ms). */
+export const MOTION_POLL_MS = 500;
+/**
+ * Animations allowed: the settings override at once, else the OS media query re-read at most every
+ * MOTION_POLL_MS — one shared answer, so the world and the HUD / menus never disagree mid-session.
+ */
+export function motionAllowed(nowMs = typeof performance !== 'undefined' ? performance.now() : 0): boolean {
+  const o = reducedMotionOverride();
+  if (o !== null) return !o;
+  if (nowMs - osCheckedAt > MOTION_POLL_MS) {
+    osReduced = prefersReducedMotion();
+    osCheckedAt = nowMs;
+  }
+  return !osReduced;
+}
+
 /** Map point → where it is drawn and its depth scale (the play camera, ART-21 camera.ts `proj`). */
 export type ParticleProjection = (x: number, y: number) => { x: number; y: number; s: number };
 

@@ -25,13 +25,14 @@ import {
   font,
   formatTime,
   getTextScale,
+  onFontsLoaded,
   roundRect,
   textPx,
+  wrapLines,
   wrapText,
 } from './widgets';
 import type { PlayUi } from './draw';
-import { prefersReducedMotion } from './particles';
-import { reducedMotionOverride } from '../ui/motion';
+import { motionAllowed } from './particles';
 import type { BoosterKind, BoosterStatus } from '../ui/boosters';
 import { drawVideoGlyph } from './sprites';
 import type { Camera } from './camera';
@@ -55,13 +56,6 @@ import { ENGLISH_MENUS_CHUNK, currentLanguage, levelLesson, levelName, loadEngli
  * stay the layout positions; the play / result screens map taps through `toHudSpace`.
  */
 
-let reducedMotion: boolean | null = null;
-function motionAllowed(): boolean {
-  const override = reducedMotionOverride();
-  if (override !== null) return !override;
-  if (reducedMotion === null) reducedMotion = prefersReducedMotion();
-  return !reducedMotion;
-}
 
 /**
  * Extra HUD inputs that the play screen attaches to the frame's PlayUi (booster bar, airstrike
@@ -376,7 +370,7 @@ function drawTargeting(ctx: CanvasRenderingContext2D, state: GameState, ui: Play
   ctx.restore();
   // AUD-U2: 22 px, wrapped (never squeezed); the pill grows upwards from its foot at 1168
   const fit = fitTextLines(ctx, t('hud.airstrikeHint'), 22, 656, 3);
-  const w = Math.min(700, Math.max(...fit.lines.map((l) => ctx.measureText(l).width)) + 44);
+  const w = Math.min(700, Math.max(0, ...fit.lines.map((l) => ctx.measureText(l).width)) + 44);
   const h = fit.lines.length * fit.lineH + 16;
   const pill: Rect = { x: 360 - w / 2, y: 1168 - h + dy, w, h };
   drawPill(ctx, pill, color, shade(color, -0.35));
@@ -427,9 +421,11 @@ export function lessonCardLayout(ctx: CanvasRenderingContext2D, state: GameState
   for (const [p, wrapW, max] of steps) {
     px = p;
     ctx.font = exemptFont('lessonCard', px, '500');
-    lines = wrapText(ctx, lesson, wrapW, max);
-    if (!lines[lines.length - 1]?.endsWith('…')) break;
+    const fit = wrapLines(ctx, lesson, wrapW, max);
+    lines = fit.lines;
+    if (!fit.cut) break; // REV-52: a lesson that ends with "…" itself is no cut
   }
+  if (lines.length === 0) return null; // REV-45: a blank lesson has no card (levels:check also rejects one)
   const lineH = Math.round(px * k) + 6;
   const captionH = Math.round(textPx(22)) + 4;
   const h = lines.length * lineH + 18 + captionH;
@@ -457,7 +453,8 @@ export interface SelectHintBox {
   h: number;
 }
 
-const hintBoxes = new WeakMap<CanvasRenderingContext2D, { key: string; box: SelectHintBox }>();
+let hintBoxes = new WeakMap<CanvasRenderingContext2D, { key: string; box: SelectHintBox }>();
+onFontsLoaded(() => (hintBoxes = new WeakMap())); // REV-47: a hint measured in the fallback face is re-measured
 
 /**
  * AUD-U2 / U12: which half of the select hint ("start a stream · … to stop", one " · " in every
@@ -494,7 +491,7 @@ export function selectHintBox(ctx: CanvasRenderingContext2D, part: 0 | 1 = 0): S
   const maxText = SELECT_HINT.maxW - 2 * SELECT_HINT.padX;
   const lines = wrapText(ctx, text, maxText, 2);
   const lineH = Math.round(textPx(SELECT_HINT.px, SELECT_HINT.maxPx) * 1.18);
-  const w = Math.min(SELECT_HINT.maxW, Math.max(...lines.map((l) => ctx.measureText(l).width)) + 2 * SELECT_HINT.padX);
+  const w = Math.min(SELECT_HINT.maxW, Math.max(0, ...lines.map((l) => ctx.measureText(l).width)) + 2 * SELECT_HINT.padX);
   const box = { lines, lineH, w, h: lines.length * lineH + SELECT_HINT.padY };
   hintBoxes.set(ctx, { key, box });
   return box;
@@ -737,8 +734,9 @@ export function drawHud(ctx: CanvasRenderingContext2D, state: GameState, view: V
   // AUD-U9 (GDD §4): level 1 has no second stream to count, so no STREAMS pill; a first-time save's levels 1–4
   // no booster bar and no coin pill
   if (ui.level.id > 1) drawStreamsPill(ctx, ui, hud?.streams ?? 0);
+  // REV-50: over, the band is disabled with or without a wallet
+  if (over) ctx.globalAlpha = 0.45;
   if (over && hud?.wallet) {
-    ctx.globalAlpha = 0.45;
     drawWallet(ctx, pal, HUD.wallet, hud.wallet.gold, hud.wallet.crystals);
   } else if (!hud?.bare) {
     if (hud) drawBoosterBar(ctx, ui, hud, nowMs);

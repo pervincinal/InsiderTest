@@ -172,6 +172,8 @@ export interface FittedLines {
   px: number;
   drawnPx: number;
   lineH: number;
+  /** The last line was cut with "…" (REV-52: not inferred from the text, which may end with one). */
+  cut: boolean;
 }
 
 /**
@@ -184,9 +186,9 @@ export function fitTextLines(ctx: CanvasRenderingContext2D, text: string, px: nu
   const at = (p: number): FittedLines => {
     ctx.font = font(p, weight);
     const drawnPx = textPx(p);
-    return { lines: wrapText(ctx, text, maxWidth, maxLines), px: p, drawnPx, lineH: Math.round(drawnPx * lineGap) };
+    return { ...wrapLines(ctx, text, maxWidth, maxLines), px: p, drawnPx, lineH: Math.round(drawnPx * lineGap) };
   };
-  const fits = (f: FittedLines): boolean => !f.lines[f.lines.length - 1]?.endsWith('…') && f.lines.every((l) => ctx.measureText(l).width <= maxWidth);
+  const fits = (f: FittedLines): boolean => !f.cut && f.lines.every((l) => ctx.measureText(l).width <= maxWidth);
   let f = at(px);
   for (let p = px; !fits(f) && textPx(p) > MIN_TEXT_PX; ) {
     p = Math.max(MIN_TEXT_PX / textScale, p - 1 / textScale);
@@ -251,9 +253,10 @@ export function numeralRuns(text: string): NumeralRun[] {
 let runWidths = new WeakMap<CanvasRenderingContext2D, Map<string, number>>();
 const RUN_WIDTHS_MAX = 256;
 const fontSet = (globalThis as { document?: { fonts?: { addEventListener?: (type: string, fn: () => void) => void } } }).document?.fonts;
-fontSet?.addEventListener?.('loadingdone', () => {
-  runWidths = new WeakMap();
-});
+const fontSwaps = [(): void => void (runWidths = new WeakMap())];
+fontSet?.addEventListener?.('loadingdone', () => fontSwaps.forEach((f) => f()));
+/** REV-47: run `fn` whenever a web font finishes loading (drop a text-metrics memo with `runWidths`). */
+export const onFontsLoaded = (fn: () => void): void => void fontSwaps.push(fn);
 
 /** Width of `s` set in the CSS font `f`, memoised per canvas. Sets `ctx.font` (to `f`) only on a miss. */
 export function runWidth(ctx: CanvasRenderingContext2D, f: string, s: string): number {
@@ -471,24 +474,28 @@ export function withShadow(ctx: CanvasRenderingContext2D, paint: () => void, dy 
       [1.3, 0.22],
     ] as const) {
       ctx.save();
-      ctx.translate(dx * k, dy * k);
-      ctx.globalAlpha = base * alpha * share;
-      ctx.beginPath(); // never stroke a stale path when paint() only uses fillText
-      paint();
-      if (k === 1 && blur > 0) {
-        ctx.lineJoin = 'round';
-        ctx.lineCap = 'round';
-        ctx.lineWidth = blur * 0.8;
-        ctx.globalAlpha = base * alpha * 0.25;
-        ctx.stroke();
+      try {
+        ctx.translate(dx * k, dy * k);
+        ctx.globalAlpha = base * alpha * share;
+        ctx.beginPath(); // never stroke a stale path when paint() only uses fillText
+        paint();
+        if (k === 1 && blur > 0) {
+          ctx.lineJoin = 'round';
+          ctx.lineCap = 'round';
+          ctx.lineWidth = blur * 0.8;
+          ctx.globalAlpha = base * alpha * 0.25;
+          ctx.stroke();
+        }
+      } finally {
+        ctx.restore();
       }
-      ctx.restore();
     }
   } finally {
+    // REV-49: a throwing paint() still leaves the context as found (no shadow ink, no offset, save depth balanced)
     delete own.fillStyle;
     delete own.strokeStyle;
+    ctx.restore();
   }
-  ctx.restore();
   paint();
 }
 
@@ -765,6 +772,11 @@ export function drawStars(ctx: CanvasRenderingContext2D, pal: Palette, cx: numbe
 
 /** Greedy word wrap for the current ctx.font. */
 export function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, maxLines = 3): string[] {
+  return wrapLines(ctx, text, maxWidth, maxLines).lines;
+}
+
+/** `wrapText` that also says whether it cut the text (REV-52: a text that itself ends with "…" is not a cut). */
+export function wrapLines(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, maxLines = 3): { lines: string[]; cut: boolean } {
   const words = text.split(/\s+/).filter(Boolean);
   const lines: string[] = [];
   let line = '';
@@ -777,10 +789,10 @@ export function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: 
     }
   }
   if (line) lines.push(line);
-  if (lines.length <= maxLines) return lines;
+  if (lines.length <= maxLines) return { lines, cut: false };
   const kept = lines.slice(0, maxLines);
   kept[maxLines - 1] = `${kept[maxLines - 1]}…`;
-  return kept;
+  return { lines: kept, cut: true };
 }
 
 export function formatTime(ms: number): string {

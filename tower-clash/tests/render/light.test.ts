@@ -171,11 +171,12 @@ describe('ART-23 combat juice', () => {
   });
 
   it('a stream pulses once, STREAM_PULSE_MS from the first frame it is drawn; its glow is one faint wide stroke', () => {
-    const link = { owner: 'player', from: 'a', to: 'b' };
+    const link = { owner: 'player', from: 'a', to: 'b', createdMs: 700 };
     expect(linkPulse(link, 1000)).toBe(0);
     expect(linkPulse(link, 1000 + STREAM_PULSE_MS / 2)).toBeCloseTo(0.5, 5);
     expect(linkPulse(link, 1000 + STREAM_PULSE_MS)).toBe(1); // done: drawLinks draws no pulse at ≥ 1
-    expect(linkPulse({ ...link }, 5000)).toBe(0); // another link object starts its own
+    expect(linkPulse({ ...link }, 5000)).toBeGreaterThan(1); // REV-48: a clone (rewind) is the same stream
+    expect(linkPulse({ ...link, createdMs: 4000 }, 5000)).toBe(0); // another link starts its own
     expect(STREAM_PULSE_MS).toBeLessThanOrEqual(400);
     expect(LINK_GLOW_ALPHA).toBeLessThanOrEqual(0.25);
     expect(LINK_GLOW_PX).toBeGreaterThan(0);

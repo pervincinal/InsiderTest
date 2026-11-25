@@ -176,7 +176,7 @@ function drawResultCard(ctx: CanvasRenderingContext2D, state: GameState, ui: Pla
             : t('result.alreadyCleared', { n: ui.coinsTotal });
     // AUD-U2: one line fitted down to the 22 px floor, else two lines at the floor (never squeezed)
     const noteFit = fitTextLines(ctx, note, 22, card.w - 60, 1);
-    const noteLines = noteFit.lines[0]?.endsWith('…') ? fitTextLines(ctx, note, 22, card.w - 60, 2) : noteFit;
+    const noteLines = noteFit.cut ? fitTextLines(ctx, note, 22, card.w - 60, 2) : noteFit;
     const noteY = card.y + (noteLines.lines.length > 1 ? 420 : 416) - ((noteLines.lines.length - 1) * noteLines.lineH) / 2;
     noteLines.lines.forEach((l, i) => ctx.fillText(l, 360, noteY + i * noteLines.lineH));
   } else {

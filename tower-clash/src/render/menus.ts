@@ -15,8 +15,7 @@ import type { ToastOpts } from './economyWidgets';
 import { drawToast, drawWallet } from './economyWidgets';
 import { badgeY, drawBadge, drawCrystal, drawTowerShadow, drawTowerSprite, drawTreasureChest, drawUnitSprite, drawVideoGlyph } from './sprites';
 import { roadPoseAt } from './draw';
-import { prefersReducedMotion } from './particles';
-import { reducedMotionOverride } from '../ui/motion';
+import { motionAllowed } from './particles';
 import { t } from '../ui/i18n';
 
 /*
@@ -116,14 +115,8 @@ const DEMO_COLUMNS: { road: number; forward: boolean; owner: Owner; count: numbe
   { road: 2, forward: true, owner: 'enemy1', count: 6, phase: 0.2 },
 ];
 
-let reduced: boolean | null = null;
-/** Animations allowed (reduced-motion override, else the OS media query; cached). */
-export function motion(): boolean {
-  const override = reducedMotionOverride();
-  if (override !== null) return !override;
-  if (reduced === null) reduced = prefersReducedMotion();
-  return !reduced;
-}
+/** Animations allowed (reduced-motion override, else the OS media query; REV-46: the shared poller). */
+export const motion = (): boolean => motionAllowed();
 
 /** The demo battle's moving part (the tower shadows under it are static: `drawTitle`'s ground). */
 function drawDemoWorld(ctx: CanvasRenderingContext2D, pal: Palette, nowMs: number, scene: DemoScene): void {

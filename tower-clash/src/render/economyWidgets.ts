@@ -3,22 +3,13 @@ import { shade } from './palette';
 import type { NumeralWrap, Rect } from './widgets';
 import { drawNumeralLine, drawPill, drawStar, fitFontPx, font, getTextScale, textPx, wrapNumeralText } from './widgets';
 import { drawCrystal, drawGoldCoin } from './sprites';
-import { prefersReducedMotion } from './particles';
-import { reducedMotionOverride } from '../ui/motion';
+import { motionAllowed as motion } from './particles';
 
 /*
  * Economy widgets shared by the HUD (result card) and the menus (title, level map, shop): the
  * gold + crystal wallet pill, transient toasts and the purchase spinner. Kept out of menus.ts /
  * hud.ts so neither has to import the other.
  */
-
-let reduced: boolean | null = null;
-function motion(): boolean {
-  const override = reducedMotionOverride();
-  if (override !== null) return !override;
-  if (reduced === null) reduced = prefersReducedMotion();
-  return !reduced;
-}
 
 export interface WalletStyle {
   /** Prefix a star count (title footer). */

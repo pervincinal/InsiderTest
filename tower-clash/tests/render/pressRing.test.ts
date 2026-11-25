@@ -113,6 +113,25 @@ describe('AUD-F12: the pressed own tower shows its ring at half alpha', () => {
     ]);
   });
 
+  it('REV-51: no press looks nothing up — a tower whose id is "null" gets no phantom half ring', () => {
+    const state = createState(
+      makeLevel({
+        towers: [
+          { id: 'null', x: 200, y: 1000, owner: 'player', units: 10, level: 1 },
+          { id: 'undefined', x: 520, y: 1000, owner: 'player', units: 10, level: 1 },
+          { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 10, level: 1 },
+        ],
+      }),
+      1,
+    );
+    expect(goldRings(state, null, null)).toEqual([]);
+    const u = { ...ui(state, null, null), pressedTowerId: undefined };
+    const { ctx, calls } = recCtx();
+    drawGroundMarks(ctx, DEFAULT_PALETTE, state, u, 0, FLAT);
+    expect(calls.filter((c) => c.fn === 'stroke' && c.stroke === DEFAULT_PALETTE.gold)).toEqual([]);
+    expect(goldRings(state, null, 'null')).toEqual([{ x: 200, alpha: 0.5, r: 56 }]); // a real press on it still shows
+  });
+
   it('reduced motion draws the same press ring (a state, not motion)', () => {
     setReducedMotionOverride(true);
     vi.spyOn(performance, 'now').mockReturnValue(1e9); // past draw.ts's 500 ms reduced-motion recheck

@@ -22,7 +22,7 @@ import { FLAT, playCamera, proj, projAngle, projDir, standingAt } from './camera
 import type { TowerLook, TowerSkin } from './sprites';
 import { STRIDE_SWING, badgeSize, badgeY, drawBadge, drawTowerShadow, drawTowerSprite, drawUnitSprite, pushOffDistance, stridePhase, towerFootprintRadius } from './sprites';
 import type { ParticleSystem } from './particles';
-import { hostileAttackers, prefersReducedMotion } from './particles';
+import { hostileAttackers, motionAllowed } from './particles';
 
 /** The badge's 'full' look: at the holding cap step.ts uses — the commander capacity track included (REV-29, AUD-B1). */
 export function isFull(t: Tower, state: Pick<GameState, 'modifiers'>): boolean {
@@ -82,21 +82,12 @@ export interface LinkLike {
   from: string;
   to: string;
   roadId: string;
+  /** Sim time of the `link` command (the stream pulse's identity, REV-48). */
+  createdMs?: number;
 }
 
-type LinkedState = Pick<GameState, 'roads' | 'towers'> & { links?: readonly LinkLike[] };
+type LinkedState = Pick<GameState, 'roads' | 'towers'> & { links?: readonly LinkLike[]; time?: number };
 
-let reducedMotion = false;
-let reducedMotionCheckedAt = -1;
-/** Re-evaluated at most every 500 ms so a settings change applies without a reload. */
-function motionAllowed(): boolean {
-  const now = typeof performance !== 'undefined' ? performance.now() : 0;
-  if (now - reducedMotionCheckedAt > 500) {
-    reducedMotion = prefersReducedMotion();
-    reducedMotionCheckedAt = now;
-  }
-  return !reducedMotion;
-}
 
 /* ---------- lanes (rules v3: always a straight segment a → b) ---------- */
 
@@ -146,13 +137,22 @@ export const LINK_GLOW_PX = 16;
 export const LINK_GLOW_ALPHA = 0.2;
 /** ART-23 stream start: a paper pulse runs down a new ribbon once, this long (wall clock). */
 export const STREAM_PULSE_MS = 380;
-const linkSeen = new WeakMap<object, number>();
+/** REV-48: `from|to|createdMs` → [first frame drawn (wall clock), createdMs] — stable across a rewind's cloned links. */
+const linkSeen = new Map<string, [number, number]>();
+let linkClock = 0;
 
-/** 0..1 progress of a link's one-shot start pulse (from the first frame it is drawn), ≥ 1 once done. */
-export function linkPulse(link: object, nowMs: number): number {
-  let born = linkSeen.get(link);
-  if (born === undefined) linkSeen.set(link, (born = nowMs));
-  return (nowMs - born) / STREAM_PULSE_MS;
+/** 0..1 progress of a link's one-shot start pulse (from the first frame it is drawn, motion or not), ≥ 1 once done. */
+export function linkPulse(link: Pick<LinkLike, 'from' | 'to' | 'createdMs'>, nowMs: number): number {
+  const key = `${link.from}|${link.to}|${link.createdMs}`;
+  let seen = linkSeen.get(key);
+  if (!seen) linkSeen.set(key, (seen = [nowMs, link.createdMs ?? 0]));
+  return (nowMs - seen[0]) / STREAM_PULSE_MS;
+}
+
+/** Sim time went back (a rewind, a restart): forget the links created after it (they no longer exist). */
+export function linkClockAt(simMs: number): void {
+  if (simMs < linkClock) for (const [k, v] of linkSeen) if (v[1] > simMs) linkSeen.delete(k);
+  linkClock = simMs;
 }
 /** Chevron pitch along the ribbon and their speed toward the target (px / s). */
 const CHEVRON_PITCH = 26;
@@ -219,6 +219,7 @@ function linkRoad(state: LinkedState, link: LinkLike): Road | undefined {
  */
 export function drawLinks(ctx: CanvasRenderingContext2D, pal: Palette, state: LinkedState, nowMs: number, motion: boolean, cam: Camera = FLAT): void {
   const links = state.links ?? [];
+  linkClockAt(state.time ?? 0);
   if (links.length === 0) return;
   // which lanes carry traffic both ways, and which towers are streaming
   const dirs = new Map<string, number>();
@@ -288,8 +289,8 @@ export function drawLinks(ctx: CanvasRenderingContext2D, pal: Palette, state: Li
     ctx.stroke();
     ctx.setLineDash([]);
     // ART-23 stream start: one bright pulse runs from the source to the target (STREAM_PULSE_MS)
-    const k = motion ? linkPulse(l, nowMs) : 1;
-    if (k < 1) {
+    const k = linkPulse(l, nowMs); // REV-48: registered under reduced motion too, so turning motion on fires no stale pulse
+    if (motion && k < 1) {
       const head = s0 + (s1 - s0) * (1 - (1 - k) * (1 - k));
       traceRibbon(ctx, road, forward, Math.max(s0, head - 70), head, off, cam);
       ctx.globalAlpha = 0.95 * (1 - k * 0.5);
@@ -459,8 +460,8 @@ export function drawGroundMarks(ctx: CanvasRenderingContext2D, pal: Palette, sta
   if (dragSrc && dragSrc.id !== sel?.id) selectionRing(ctx, pal, cam, dragSrc.x, dragSrc.y, 56);
   // AUD-F12: a finger down on an own tower shows at once — the drag-source ring (r 56) at half alpha, which a
   // drag then draws in full (a state, so reduced motion too); on the selected tower it lies over the pulsing
-  // ring. No press: the id is null / undefined and no tower has that key (cheaper than a guard, PERF budget).
-  const prs = state.towers[ui.pressedTowerId as string];
+  // ring. REV-51: no press (null / undefined) looks nothing up (a tower id "null" is no phantom press).
+  const prs = ui.pressedTowerId ? state.towers[ui.pressedTowerId] : undefined;
   if (prs) {
     ctx.globalAlpha = 0.5;
     selectionRing(ctx, pal, cam, prs.x, prs.y, 56);
