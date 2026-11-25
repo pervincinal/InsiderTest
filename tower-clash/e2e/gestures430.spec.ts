@@ -5,6 +5,7 @@ import { Fingers } from './helpers/fingers';
 import type { XY } from './helpers/fingers';
 import { hudClientPoint } from './helpers/tap';
 import { expectToast, recordToasts } from './helpers/toasts';
+import { expectScreen } from './helpers/screenPoll';
 
 /*
  * QA-22: the gesture regression net for the real-device fixes, on the stakeholder's phone class —
@@ -175,13 +176,13 @@ async function boot(page: Page, save: Record<string, unknown> | null): Promise<s
   );
   await page.goto(`/?dprcap=${NATIVE_DPR_CAP}`);
   await page.waitForFunction(() => typeof window.__towerclash?.getDrag === 'function');
-  await expect.poll(() => screen(page)).toBe('title');
+  await expectScreen(page, 'title');
   return errors;
 }
 
 async function startLevel(page: Page, id: number): Promise<void> {
   expect(await page.evaluate(([lid, seed]) => window.__towerclash.loadLevel(lid, seed), [id, SEED] as const), `loadLevel(${id})`).toBe(true);
-  await expect.poll(() => screen(page)).toBe('play');
+  await expectScreen(page, 'play');
   await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
   expect(await page.evaluate(() => window.__towerclash.getState()?.levelId)).toBe(id);
   await expect.poll(() => simTime(page), { message: `level ${id} sim should tick` }).toBeGreaterThan(0);
@@ -535,7 +536,7 @@ test.describe('touch gestures on a 430×932 iPhone-class screen, DPR 3, safe ins
     }, { message: 'MENU pauses' }).toBe(0);
     expect(await screen(page)).toBe('play');
     await f.tap({ x: PAUSE_MENU.x + PAUSE_MENU.w / 2, y: PAUSE_MENU.y + PAUSE_MENU.h / 2 });
-    await expect.poll(() => screen(page), { message: 'pause card MENU → level map' }).toBe('levelSelect');
+    await expectScreen(page, 'levelSelect', { message: 'pause card MENU → level map' });
     expect(errors).toEqual([]);
   });
 
@@ -686,7 +687,7 @@ test.describe('touch gestures on a 430×932 iPhone-class screen, DPR 3, safe ins
     const f = new Fingers(page, await page.context().newCDPSession(page));
     await f.start({ x: TITLE_PLAY.x + TITLE_PLAY.w / 2, y: TITLE_PLAY.y + TITLE_PLAY.h / 2 });
     await f.end();
-    await expect.poll(() => screen(page)).toBe('levelSelect');
+    await expectScreen(page, 'levelSelect');
     await page.evaluate(() => window.__towerclash.setLevelSelectScroll(600));
     // a quick upward drag on the path: 4 frame-synced moves, 300 layout px. The page records the
     // scroll offset every frame and the lift's time (pointerup), so the glide is read off the page's own clock.

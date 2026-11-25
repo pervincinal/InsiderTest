@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { shotPath } from './tools/shots';
+import { expectScreen } from './helpers/screenPoll';
 
 /*
  * AUD-U27 (2026-11-05): desktop keyboard focus on the menus (src/ui/focus.ts). On a desktop browser
@@ -55,7 +56,7 @@ test('Tab from the title to Settings, Enter opens it, Tab + Enter toggles Music,
   await page.screenshot({ path: shotPath('keyboard-title-focus'), scale: 'css' });
 
   await page.keyboard.press('Enter');
-  await expect.poll(() => screen(page)).toBe('settings');
+  await expectScreen(page, 'settings');
   await settled(page);
   // keyboard mode carries over: the settings screen opens with the ring on BACK
   await expect.poll(async () => (await focus(page))?.rect).toEqual(SETTINGS_BACK);
@@ -69,7 +70,7 @@ test('Tab from the title to Settings, Enter opens it, Tab + Enter toggles Music,
   await page.screenshot({ path: shotPath('keyboard-settings-focus'), scale: 'css' });
 
   await page.keyboard.press('Escape');
-  await expect.poll(() => screen(page)).toBe('title');
+  await expectScreen(page, 'title');
   await settled(page);
   expect(await focus(page)).toMatchObject({ shown: true, index: 0 });
 
@@ -79,6 +80,6 @@ test('Tab from the title to Settings, Enter opens it, Tab + Enter toggles Music,
   expect(await screen(page)).toBe('title');
   // and with the ring hidden, Enter keeps the title's shortcut (PLAY → the level map)
   await page.keyboard.press('Enter');
-  await expect.poll(() => screen(page)).toBe('levelSelect');
+  await expectScreen(page, 'levelSelect');
   expect(pageErrors).toEqual([]);
 });

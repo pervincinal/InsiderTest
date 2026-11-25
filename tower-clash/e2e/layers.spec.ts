@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { expectScreen } from './helpers/screenPoll';
 
 /*
  * PERF-3 three stacked canvases (#ground / #game / #hud). What must hold on a real Chromium:
@@ -47,7 +48,6 @@ const stats = (page: Page, id: string) =>
     return { id: cid, w: c.width, h: c.height, cssW: c.style.width, cssH: c.style.height, opaque, nonBlack, sampled };
   }, id);
 
-const screen = (page: Page) => page.evaluate(() => window.__towerclash.getScreen());
 const simTime = (page: Page) => page.evaluate(() => window.__towerclash.getState()?.time ?? -1);
 const toClient = (page: Page, lx: number, ly: number) => page.evaluate(([x, y]) => window.__towerclash.toClient(x, y), [lx, ly] as const);
 /** Wait for two animation frames (one full draw after whatever the caller changed). */
@@ -64,7 +64,7 @@ async function boot(page: Page, seeded: Record<string, unknown> = { version: 3 }
   await page.addInitScript(([key, data]) => localStorage.setItem(key, JSON.stringify(data)), [SAVE_KEY, seeded] as const);
   await page.goto('/');
   await page.waitForFunction(() => typeof window.__towerclash?.loadLevel === 'function');
-  await expect.poll(() => screen(page)).toBe('title');
+  await expectScreen(page, 'title');
   return pageErrors;
 }
 
@@ -99,10 +99,10 @@ test.describe('PERF-3 canvas layers', () => {
     // a real touch on PLAY (Pixel 5 project: hasTouch) opens the level map
     const c = await toClient(page, TITLE_PLAY.x + TITLE_PLAY.w / 2, TITLE_PLAY.y + TITLE_PLAY.h / 2);
     await page.touchscreen.tap(c.x, c.y);
-    await expect.poll(() => screen(page)).toBe('levelSelect');
+    await expectScreen(page, 'levelSelect');
     await expectHudBlank(page, 'level map');
     expect(await page.evaluate(() => window.__towerclash.back())).toBe(true);
-    await expect.poll(() => screen(page)).toBe('title');
+    await expectScreen(page, 'title');
     expect(errors).toEqual([]);
   });
 
@@ -110,7 +110,7 @@ test.describe('PERF-3 canvas layers', () => {
     test.slow();
     const errors = await boot(page, NO_TUTORIAL);
     expect(await page.evaluate(() => window.__towerclash.loadLevel(1, 1))).toBe(true);
-    await expect.poll(() => screen(page)).toBe('play');
+    await expectScreen(page, 'play');
     await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
     await expect.poll(() => simTime(page)).toBeGreaterThan(400);
     await expectPlayLayersPainted(page, 'playing');
@@ -139,13 +139,13 @@ test.describe('PERF-3 canvas layers', () => {
       window.__towerclash.setSpeed(10);
       window.__towerclash.autoplay();
     });
-    await expect.poll(() => screen(page), { timeout: 75_000, intervals: [250] }).toBe('result');
+    await expectScreen(page, 'result', { timeout: 75_000, intervals: [250] });
     await expectHudBlank(page, 'result');
     expect(await page.evaluate(() => window.__towerclash.back())).toBe(true); // Escape → level map
-    await expect.poll(() => screen(page)).toBe('levelSelect');
+    await expectScreen(page, 'levelSelect');
     await expectHudBlank(page, 'level map after a result');
     expect(await page.evaluate(() => window.__towerclash.loadLevel(2, 1))).toBe(true);
-    await expect.poll(() => screen(page)).toBe('play');
+    await expectScreen(page, 'play');
     await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
     await expect.poll(() => simTime(page)).toBeGreaterThan(400);
     await expectPlayLayersPainted(page, 'level 2');
@@ -155,7 +155,7 @@ test.describe('PERF-3 canvas layers', () => {
   test('viewport change re-sizes all three canvases and repaints; a visibility change pauses and blanks the HUD layer', async ({ page }) => {
     const errors = await boot(page, NO_TUTORIAL);
     expect(await page.evaluate(() => window.__towerclash.loadLevel(1, 1))).toBe(true);
-    await expect.poll(() => screen(page)).toBe('play');
+    await expectScreen(page, 'play');
     await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
     await expect.poll(() => simTime(page)).toBeGreaterThan(400);
     const before = await stats(page, 'game');

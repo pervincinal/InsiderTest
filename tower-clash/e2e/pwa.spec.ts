@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test';
 import type { BrowserContext, Page, Request, Response } from '@playwright/test';
 import { tapRect } from './helpers/tap';
 import { expectToast, recordToasts, toastMark, toastsSeen } from './helpers/toasts';
+import { expectScreen } from './helpers/screenPoll';
 
 /*
  * QA-8: the PWA offline path — public/sw.js (precache of the app shell + cache-first runtime cache
@@ -141,7 +142,6 @@ const NUNITO_LATIN = '/fonts/nunito-latin.woff2';
 const DEPLOY_MARK = 'QA9';
 const isWorkerScript = (url: URL) => url.pathname === '/sw.js';
 
-const screen = (page: Page) => page.evaluate(() => window.__towerclash.getScreen());
 const simTime = (page: Page) => page.evaluate(() => window.__towerclash.getState()?.time ?? -1);
 const levelId = (page: Page) => page.evaluate(() => window.__towerclash.getState()?.levelId ?? -1);
 const text = (page: Page, key: string) => page.evaluate((k) => window.__towerclash.getText(k), key);
@@ -313,7 +313,7 @@ const nunitoFaces = (page: Page) =>
 async function navigate(page: Page): Promise<void> {
   await page.goto('/', { waitUntil: 'commit' });
   await page.waitForFunction(() => typeof window.__towerclash?.loadLevel === 'function', undefined, { timeout: 10_000 });
-  await expect.poll(() => screen(page)).toBe('title');
+  await expectScreen(page, 'title');
 }
 
 test.describe('PWA offline (QA-8)', () => {
@@ -398,7 +398,7 @@ test.describe('PWA offline (QA-8)', () => {
       expect(await onLine(page)).toBe(false);
       expect(await controlled(page)).toBe(true);
       expect(await page.evaluate(() => window.__towerclash.loadLevel(1, 1))).toBe(true);
-      await expect.poll(() => screen(page)).toBe('play');
+      await expectScreen(page, 'play');
       expect(await levelId(page)).toBe(1);
       await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
       await expect.poll(() => simTime(page)).toBeGreaterThan(200);
@@ -411,7 +411,7 @@ test.describe('PWA offline (QA-8)', () => {
       });
       await navigate(page);
       expect(await page.evaluate((id) => window.__towerclash.loadLevel(id, 1), COLD_LEVEL)).toBe(false);
-      await expect.poll(() => screen(page)).toBe('title');
+      await expectScreen(page, 'title');
       expect(await page.evaluate(() => window.__towerclash.getState())).toBeNull();
       await expectToast(page, await text(page, 'common.loadFailed'), { screen: 'title' });
       expect(failed.length, 'the worker tried the network for the cold chunk').toBeGreaterThanOrEqual(1);
@@ -425,7 +425,7 @@ test.describe('PWA offline (QA-8)', () => {
       const refetch = page.waitForResponse((r) => COLD_CHUNK.test(r.url()) && r.url().includes('?r='), { timeout: 15_000 });
       expect(await page.evaluate((id) => window.__towerclash.loadLevel(id, 1), COLD_LEVEL)).toBe(true);
       expect((await refetch).ok()).toBe(true);
-      await expect.poll(() => screen(page)).toBe('play');
+      await expectScreen(page, 'play');
       expect(await levelId(page)).toBe(COLD_LEVEL);
       await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
       await expect.poll(() => simTime(page)).toBeGreaterThan(0);
@@ -462,7 +462,7 @@ test.describe('PWA offline (QA-8)', () => {
         expect(await controlled(page)).toBe(true);
         const mark = await toastMark(page);
         await tapRect(page, TITLE_PLAY);
-        await expect.poll(() => screen(page), { message: 'PLAY opens the level map offline' }).toBe('levelSelect');
+        await expectScreen(page, 'levelSelect', { message: 'PLAY opens the level map offline' });
         expect(fromWorker, 'the page got the English menu strings from the worker').toEqual(expect.arrayContaining([expect.stringMatching(EN_MENUS_CHUNK)]));
         expect(fromWorker, 'and the lazy screens').toEqual(expect.arrayContaining([expect.stringMatching(MENU_CHUNK)]));
         expect(workerNetwork, 'the worker answered from Cache Storage, no network attempt').toEqual([]);
@@ -558,9 +558,9 @@ test.describe('PWA offline (QA-8)', () => {
       await expect.poll(() => paintedShare(page), { timeout: 15_000 }).toBeGreaterThan(0.9);
       // the carried-over runtime chunks: the debug surface installs (its chunk is a lazy import) and level 1 starts, all from the cache
       await page.waitForFunction(() => typeof window.__towerclash?.loadLevel === 'function', undefined, { timeout: 10_000 });
-      await expect.poll(() => screen(page)).toBe('title');
+      await expectScreen(page, 'title');
       expect(await page.evaluate(() => window.__towerclash.loadLevel(1, 1))).toBe(true);
-      await expect.poll(() => screen(page)).toBe('play');
+      await expectScreen(page, 'play');
       expect(await levelId(page)).toBe(1);
       await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
       await expect.poll(() => simTime(page)).toBeGreaterThan(200);
@@ -662,7 +662,7 @@ test.describe('PWA offline (QA-8)', () => {
       expect(requested).not.toContain(oldEntry);
       expect(assetRequests(requested).filter((p) => !p.endsWith(`${DEPLOY_MARK}.js`)), 'offline boot touched no old-hash chunk').toEqual([]);
       expect(await page.evaluate(() => window.__towerclash.loadLevel(1, 1))).toBe(true);
-      await expect.poll(() => screen(page)).toBe('play');
+      await expectScreen(page, 'play');
       expect(await levelId(page)).toBe(1);
       await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
       await expect.poll(() => simTime(page)).toBeGreaterThan(200);

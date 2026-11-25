@@ -5,6 +5,7 @@ import { clientPoint, tapRect } from './helpers/tap';
 import type { Rect } from './helpers/tap';
 import { recordToasts, toastsSeen } from './helpers/toasts';
 import { IPHONE_UA, WEBKIT_RUNS, WEBKIT_SKIP_REASON } from './tools/webkit';
+import { expectScreen } from './helpers/screenPoll';
 
 /*
  * AUD-Q5 (2026-10-31): the WebKit subset. The game ships first inside iOS WKWebView, and until this file
@@ -166,7 +167,7 @@ async function boot(page: Page, save: Record<string, unknown> | null = null): Pr
   await recordToasts(page);
   await page.goto('/');
   await page.waitForFunction(() => typeof window.__towerclash?.getScreen === 'function');
-  await expect.poll(() => screen(page)).toBe('title');
+  await expectScreen(page, 'title');
   return errors;
 }
 
@@ -177,7 +178,7 @@ async function winLevel1(page: Page): Promise<void> {
     window.__towerclash.setSpeed(10);
     window.__towerclash.autoplay();
   });
-  await expect.poll(() => screen(page), { timeout: 75_000, intervals: [250] }).toBe('result');
+  await expectScreen(page, 'result', { timeout: 75_000, intervals: [250] });
   expect((await page.evaluate(() => window.__towerclash.getResult()))?.outcome).toBe('won');
 }
 
@@ -310,13 +311,13 @@ test.describe('Tower Clash on WebKit, iPhone-class screen (AUD-Q5)', () => {
         message: 'WebKit must turn a touchscreen tap into pointerdown (pointerType touch)',
       })
       .toEqual(['down:touch']);
-    await expect.poll(() => screen(page), { message: 'PLAY must react to a touch tap' }).toBe('levelSelect');
+    await expectScreen(page, 'levelSelect', { message: 'PLAY must react to a touch tap' });
     expect(gameErrors(errors).page, 'no uncaught exception on the audio-unlocking first touch').toEqual([]);
 
     // (2) the level map opens on level 1 on a fresh save; touch the first node.
     expect(await page.evaluate(() => window.__towerclash.getLevelSelectScroll())).toBe(0);
     await touchRect(page, levelNodeRect(0));
-    await expect.poll(() => screen(page), { message: 'the level node must react to a touch tap' }).toBe('play');
+    await expectScreen(page, 'play', { message: 'the level node must react to a touch tap' });
     expect(await levelId(page)).toBe(1);
 
     // (3) AUD-B11: the lesson card holds the match — sim time 0, no tutorial bubble — until the first touch.
@@ -360,7 +361,7 @@ test.describe('Tower Clash on WebKit, iPhone-class screen (AUD-Q5)', () => {
     const errors = await boot(page);
     expect(await page.evaluate(() => window.__towerclash.startMatch()), 'no level up on the title').toBe(false);
     expect(await page.evaluate(() => window.__towerclash.loadLevel(1, 1))).toBe(true);
-    await expect.poll(() => screen(page)).toBe('play');
+    await expectScreen(page, 'play');
     await page.waitForTimeout(600);
     expect(await simTime(page), 'held: no tick before the first input').toBe(0);
     expect(await hint(page)).toBeNull();
@@ -397,7 +398,7 @@ test.describe('Tower Clash on WebKit, iPhone-class screen (AUD-Q5)', () => {
   test('Settings → Text size 150 % (AUD-U2): saved, the row redrawn bigger, kept across a reload; 100 % restores it', async ({ page }) => {
     const errors = await boot(page);
     await tapRect(page, TITLE_SETTINGS);
-    await expect.poll(() => screen(page)).toBe('settings');
+    await expectScreen(page, 'settings');
     const label: Rect = { x: SETTINGS.labelX, y: SETTINGS.textSize.y - 8, w: SETTINGS.textSize.x - SETTINGS.labelX - 8, h: SETTINGS.textSize.h + 16 };
     await page.waitForTimeout(300); // ok: let the screen's entry frame settle before the reference capture
     await captureRect(page, label, 'at100');
@@ -411,10 +412,10 @@ test.describe('Tower Clash on WebKit, iPhone-class screen (AUD-Q5)', () => {
 
     await page.reload();
     await page.waitForFunction(() => typeof window.__towerclash?.getScreen === 'function');
-    await expect.poll(() => screen(page)).toBe('title');
+    await expectScreen(page, 'title');
     expect((await savedSettings(page))?.textScale, 'kept across a reload').toBe(1.5);
     await tapRect(page, TITLE_SETTINGS);
-    await expect.poll(() => screen(page)).toBe('settings');
+    await expectScreen(page, 'settings');
     await tapRect(page, segment(SETTINGS.textSize, TEXT_SIZES.length, 0));
     await expect.poll(async () => (await savedSettings(page))?.textScale).toBe(1);
 

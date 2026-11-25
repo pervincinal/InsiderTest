@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import type { CDPSession, Page } from '@playwright/test';
 import { clientPoint } from './helpers/tap';
+import { expectScreen } from './helpers/screenPoll';
 
 /*
  * BUG-35 (TestFlight 1.0.0 (8), iPhone, level 2): "when I hold my own tower and drag, a line should
@@ -24,7 +25,6 @@ function towerAt(id: string): { x: number; y: number } {
   return { x: t.x, y: t.y };
 }
 
-const screen = (page: Page) => page.evaluate(() => window.__towerclash.getScreen());
 const simTime = (page: Page) => page.evaluate(() => window.__towerclash.getState()?.time ?? -1);
 const drag = (page: Page) => page.evaluate(() => window.__towerclash.getDrag());
 const playerLinks = (page: Page) =>
@@ -61,7 +61,7 @@ test.describe('drag rubber band (BUG-35)', () => {
     await page.goto('/');
     await page.waitForFunction(() => typeof window.__towerclash?.getDrag === 'function');
     expect(await page.evaluate((seed) => window.__towerclash.loadLevel(2, seed), SEED)).toBe(true);
-    await expect.poll(() => screen(page)).toBe('play');
+    await expectScreen(page, 'play');
     await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
     await expect.poll(() => simTime(page)).toBeGreaterThan(0);
 

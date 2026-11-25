@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { Fingers } from './helpers/fingers';
+import { expectScreen } from './helpers/screenPoll';
 
 /*
  * LV-5 / launch checklist R1: the first-play tutorial of levels 1–4 (src/ui/tutorial.ts, GD-5a/b)
@@ -181,7 +182,7 @@ async function waitForCapture(page: Page, id: string, speed: number, allowed: st
 /** Load a level with the fixed seed and wait until it is really running (sim time advancing). */
 async function startLevel(page: Page, id: number): Promise<void> {
   expect(await page.evaluate(([lid, seed]) => window.__towerclash.loadLevel(lid, seed), [id, SEED] as const), `loadLevel(${id})`).toBe(true);
-  await expect.poll(() => screen(page)).toBe('play');
+  await expectScreen(page, 'play');
   await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
   await page.waitForTimeout(300); // the card's 250 ms fade: the tutorial bubble shows once it is gone
   expect(await page.evaluate(() => window.__towerclash.getState()?.levelId)).toBe(id);
@@ -469,7 +470,7 @@ test.describe('tutorial levels 1–4 (LV-5 / checklist R1, GD-5a/b)', () => {
       window.__towerclash.setSpeed(10);
       window.__towerclash.autoplay();
     });
-    await expect.poll(() => screen(page), { timeout: 60_000, intervals: [250] }).toBe('result');
+    await expectScreen(page, 'result', { timeout: 60_000, intervals: [250] });
     expect((await page.evaluate(() => window.__towerclash.getResult()))?.outcome).toBe('won');
     expect(await stars(page, 1)).toBeGreaterThanOrEqual(1);
 

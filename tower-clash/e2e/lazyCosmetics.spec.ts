@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { tapRect } from './helpers/tap';
+import { expectScreen } from './helpers/screenPoll';
 
 /*
  * PERF-4 lazy cosmetics (QA 2026-09-21). With a lazy roof material (roof_pagoda → the skinShapes
@@ -39,17 +40,17 @@ test('lazy roof + theme + shape skin: 3 s of level 1 without errors, each cosmet
   await page.addInitScript(([key, data]) => localStorage.setItem(key, JSON.stringify(data)), [SAVE_KEY, seeded] as const);
   await page.goto('/');
   await page.waitForFunction(() => typeof window.__towerclash?.loadLevel === 'function');
-  await expect.poll(() => screen(page)).toBe('title');
+  await expectScreen(page, 'title');
   // the three equipped cosmetics survived normalisation (owned + equipped)
   expect((await page.evaluate(() => window.__towerclash.economy.getSave())).skins.equipped).toEqual(EQUIPPED);
 
   // first tap: PLAY on the title (pointer-down unlocks audio, the tap warms the SFX recipes chunk)
   await tapRect(page, TITLE_PLAY);
-  await expect.poll(() => screen(page)).toBe('levelSelect');
+  await expectScreen(page, 'levelSelect');
   await expect.poll(() => fetched.get('sfxRecipes')?.length ?? 0, { message: 'SFX recipes chunk warmed after the first tap' }).toBeGreaterThanOrEqual(1);
 
   expect(await page.evaluate(() => window.__towerclash.loadLevel(1, 1))).toBe(true);
-  await expect.poll(() => screen(page)).toBe('play');
+  await expectScreen(page, 'play');
   await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
   await expect.poll(() => simTime(page), { timeout: 20_000 }).toBeGreaterThanOrEqual(3_000);
   await expect.poll(() => fetched.get('skinShapes')?.length ?? 0, { message: 'roof material + silhouette skin chunk landed' }).toBe(1);

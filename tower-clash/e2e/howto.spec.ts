@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { tapRect } from './helpers/tap';
+import { expectScreen } from './helpers/screenPoll';
 
 /*
  * GD-5f: the "How to play" card carries six rules (`howto.2` gained the swipe sentence, `howto.6` is the
@@ -21,7 +22,6 @@ const SETTINGS_HOWTO = { x: 86, y: 552, w: 548, h: 64 }; // AUD-F6: under the ne
 const ROWS = 6;
 const MAX_LINES = 3;
 
-const screen = (page: Page) => page.evaluate(() => window.__towerclash.getScreen());
 
 async function openHowTo(page: Page, language: string): Promise<string[]> {
   const pageErrors: string[] = [];
@@ -31,9 +31,9 @@ async function openHowTo(page: Page, language: string): Promise<string[]> {
   await page.waitForFunction(() => typeof window.__towerclash?.getHowtoLines === 'function');
   await expect.poll(() => page.evaluate(() => window.__towerclash.getLanguage())).toBe(language);
   await tapRect(page, TITLE_SETTINGS);
-  await expect.poll(() => screen(page)).toBe('settings');
+  await expectScreen(page, 'settings');
   await tapRect(page, SETTINGS_HOWTO);
-  await expect.poll(() => screen(page)).toBe('howto');
+  await expectScreen(page, 'howto');
   // the dictionary and the faces are in before the measured frame
   await page.evaluate(() => document.fonts.ready.then(() => undefined));
   return pageErrors;

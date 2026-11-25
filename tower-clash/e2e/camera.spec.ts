@@ -6,6 +6,7 @@ import type { Page } from '@playwright/test';
 import { Fingers } from './helpers/fingers';
 import type { XY } from './helpers/fingers';
 import { clientPoint } from './helpers/tap';
+import { expectScreen } from './helpers/screenPoll';
 
 /*
  * QA-23: regression net for the ART-21 perspective play camera (build 13, docs/ART_DIRECTION.md §3
@@ -162,14 +163,14 @@ async function boot(page: Page, shape: Shape, extraQuery = ''): Promise<string[]
   const query = [shape.query, extraQuery].filter(Boolean).join('&');
   await page.goto(query ? `/?${query}` : '/');
   await page.waitForFunction(() => typeof window.__towerclash?.getDrag === 'function');
-  await expect.poll(() => screen(page)).toBe('title');
+  await expectScreen(page, 'title');
   expect(await page.evaluate(() => ({ w: innerWidth, h: innerHeight, dpr: devicePixelRatio }))).toEqual({ w: shape.viewport.width, h: shape.viewport.height, dpr: shape.dpr });
   return errors;
 }
 
 async function startLevel(page: Page, id: number, speed?: number): Promise<void> {
   expect(await page.evaluate(([lid, seed]) => window.__towerclash.loadLevel(lid, seed), [id, SEED] as const), `loadLevel(${id})`).toBe(true);
-  await expect.poll(() => screen(page)).toBe('play');
+  await expectScreen(page, 'play');
   await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
   expect(await page.evaluate(() => window.__towerclash.getState()?.levelId)).toBe(id);
   if (speed !== undefined) await page.evaluate((n) => window.__towerclash.setSpeed(n), speed);

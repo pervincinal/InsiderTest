@@ -3,6 +3,7 @@ import path from 'node:path';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { tapRect } from './helpers/tap';
+import { expectScreen } from './helpers/screenPoll';
 
 /*
  * QA-14 (L10N, 2026-10-06): the 1080 × 1350 share card (SHARE-1, GDD §7.3) in every UI language —
@@ -185,14 +186,13 @@ async function boot(page: Page, lang: Locale): Promise<string[]> {
   return errors;
 }
 
-const screen = (page: Page) => page.evaluate(() => window.__towerclash.getScreen());
 const text = (page: Page, key: string) => page.evaluate((k) => window.__towerclash.getText(k), key);
 function fill(template: string, params: Record<string, string | number>): string {
   return template.replace(/\{(\w+)\}/g, (m, k: string) => (params[k] === undefined ? m : String(params[k])));
 }
 
 async function toResult(page: Page, outcome: 'won' | 'lost'): Promise<void> {
-  await expect.poll(() => screen(page), { timeout: 50_000, intervals: [100] }).toBe('result');
+  await expectScreen(page, 'result', { timeout: 50_000, intervals: [100] });
   expect((await page.evaluate(() => window.__towerclash.getResult()))?.outcome).toBe(outcome);
   // no wait for the card's slide-up: ResultScreen hit-tests the static RESULT rects, not the animated card
 }

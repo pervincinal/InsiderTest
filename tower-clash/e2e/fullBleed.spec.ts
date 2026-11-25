@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { hudClientPoint, tapHud, tapRect } from './helpers/tap';
 import { shotPath } from './tools/shots';
+import { expectScreen } from './helpers/screenPoll';
 
 /*
  * BUG-34 (TestFlight 1.0.0 (8), iPhone 17 Pro Max, ~19.5:9): "the game does not fill the screen".
@@ -118,7 +119,7 @@ async function boot(page: Page, safe: { top: number; bottom: number }): Promise<
   );
   await page.goto('/');
   await page.waitForFunction(() => typeof window.__towerclash?.loadLevel === 'function');
-  await expect.poll(() => screen(page)).toBe('title');
+  await expectScreen(page, 'title');
   return errors;
 }
 
@@ -143,7 +144,7 @@ for (const phone of PHONES) {
     test('play: sea under the margins, HUD glass to the screen edges, pause / boosters / MENU tappable where they are drawn', async ({ page }) => {
       const errors = await boot(page, phone.safe);
       expect(await page.evaluate(() => window.__towerclash.loadLevel(4, 1))).toBe(true);
-      await expect.poll(() => screen(page)).toBe('play');
+      await expectScreen(page, 'play');
       await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
       const t0 = await simTime(page);
       await expect.poll(() => simTime(page)).toBeGreaterThan(t0);
@@ -191,7 +192,7 @@ for (const phone of PHONES) {
       expect(await simTime(page), 'MENU pauses the sim').toBe(held);
       expect(await screen(page)).toBe('play');
       await tapRect(page, PAUSE_MENU);
-      await expect.poll(() => screen(page)).toBe('levelSelect');
+      await expectScreen(page, 'levelSelect');
       const map = await corners(page, 'game');
       // the level map's header glass covers the top corners; the bottom ones are the sea or the map running on into the margin
       for (const px of Object.values(map)) expect(px[3]).toBe(255);
@@ -209,7 +210,7 @@ for (const phone of PHONES) {
 
       // shop: BACK on the top safe edge; the UPGRADES tab and Production's row where they are drawn
       await page.evaluate(() => window.__towerclash.economy.openShop('crystals'));
-      await expect.poll(() => screen(page)).toBe('shop');
+      await expectScreen(page, 'shop');
       const back = await layoutToClient(page, MENU_BACK.x, MENU_BACK.y);
       expect(back.y, 'BACK top edge = safe top + 20 layout px').toBeCloseTo(phone.safe.top + MENU_BACK.y * scale, 0);
       const tab = segment(SHOP_TABS, 4, 3);
@@ -221,11 +222,11 @@ for (const phone of PHONES) {
       expect((await save(page)).gold).toBe(0);
       await page.screenshot({ path: info.outputPath(`fe11-${phone.name}-shop.png`), scale: 'css' });
       await tapRect(page, MENU_BACK);
-      await expect.poll(() => screen(page)).toBe('title');
+      await expectScreen(page, 'title');
 
       // settings: the colour-blind row where it is drawn (the whole card follows the header up)
       await tapRect(page, TITLE_SETTINGS);
-      await expect.poll(() => screen(page)).toBe('settings');
+      await expectScreen(page, 'settings');
       const row = await layoutToClient(page, SETTINGS_COLOR_BLIND.x, SETTINGS_COLOR_BLIND.y);
       expect(row.y).toBeLessThan((await toClient(page, SETTINGS_COLOR_BLIND.x, SETTINGS_COLOR_BLIND.y)).y - 15);
       await tapRect(page, SETTINGS_COLOR_BLIND);
@@ -234,11 +235,11 @@ for (const phone of PHONES) {
       await expect.poll(async () => (await save(page)).settings.colorBlind).toBe(false);
       await page.screenshot({ path: info.outputPath(`fe11-${phone.name}-settings.png`), scale: 'css' });
       await tapRect(page, MENU_BACK);
-      await expect.poll(() => screen(page)).toBe('title');
+      await expectScreen(page, 'title');
 
       // level map: header + challenge card up, commander chip down to the bottom safe edge; WEEKLY tab and a node by tap
       await tapRect(page, TITLE_PLAY);
-      await expect.poll(() => screen(page)).toBe('levelSelect');
+      await expectScreen(page, 'levelSelect');
       const chip = await layoutToClient(page, LEVEL_MAP.commander.x, LEVEL_MAP.commander.y + LEVEL_MAP.commander.h);
       expect(chip.y, 'chip bottom edge = safe bottom − 20 layout px').toBeCloseTo(phone.viewport.height - phone.safe.bottom - 20 * scale, 0);
       await tapRect(page, LEVEL_MAP.tabWeekly);

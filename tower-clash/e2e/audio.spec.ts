@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { tapRect } from './helpers/tap';
+import { expectScreen } from './helpers/screenPoll';
 
 /*
  * AUD-F6 mixer + music on a real Chromium AudioContext, read through the debug surface
@@ -37,7 +38,6 @@ interface AudioDebug {
 
 const buses = (page: Page) => page.evaluate(() => (window.__towerclash as unknown as { audio: AudioDebug }).audio.getBuses());
 const music = (page: Page) => page.evaluate(() => (window.__towerclash as unknown as { audio: AudioDebug }).audio.getMusic());
-const screen = (page: Page) => page.evaluate(() => window.__towerclash.getScreen());
 const saved = (page: Page) =>
   page.evaluate((key) => (JSON.parse(localStorage.getItem(key) ?? '{}') as { settings?: { sound?: boolean; music?: boolean } }).settings ?? {}, SAVE_KEY);
 const near = (v: number | undefined, want: number) => v !== undefined && Math.abs(v - want) < 1e-3;
@@ -61,14 +61,14 @@ test.describe('AUD-F6 audio buses + music', () => {
     });
     await page.goto('/');
     await page.waitForFunction(() => typeof (window.__towerclash as unknown as { audio?: unknown } | undefined)?.audio === 'object');
-    await expect.poll(() => screen(page)).toBe('title');
+    await expectScreen(page, 'title');
     expect(await buses(page), 'no mixer before the first gesture').toBeNull();
     expect((await music(page)).playing).toBe(false);
     expect(chunks, 'the music chunk waits for the first gesture').not.toContain('music');
 
     // first gesture: the tap that opens Settings unlocks audio, builds the mixer and starts the loop
     await tapRect(page, TITLE_SETTINGS);
-    await expect.poll(() => screen(page)).toBe('settings');
+    await expectScreen(page, 'settings');
     await expect.poll(async () => (await music(page)).playing, { message: 'music starts on the first gesture' }).toBe(true);
     expect(chunks).toContain('music');
     expect(chunks.filter((c) => c === 'music')).toHaveLength(1);
@@ -113,7 +113,7 @@ test.describe('AUD-F6 audio buses + music', () => {
 
     // the title speaker silences both, then brings both back
     await tapRect(page, SETTINGS_BACK);
-    await expect.poll(() => screen(page)).toBe('title');
+    await expectScreen(page, 'title');
     await tapRect(page, TITLE_SOUND);
     await expect.poll(async () => (await buses(page))?.music).toBe(0);
     expect(await buses(page)).toMatchObject({ sfx: 0, ui: 0, master: 0.5 });
@@ -132,11 +132,11 @@ test.describe('AUD-F6 audio buses + music', () => {
     page.on('pageerror', (e) => errors.push(String(e)));
     await page.goto('/');
     await page.waitForFunction(() => typeof window.__towerclash?.loadLevel === 'function');
-    await expect.poll(() => screen(page)).toBe('title');
+    await expectScreen(page, 'title');
     await tapRect(page, TITLE_SETTINGS); // the first gesture: unlock + music
     await expect.poll(async () => (await music(page)).playing).toBe(true);
     await tapRect(page, SETTINGS_BACK);
-    await expect.poll(() => screen(page)).toBe('title');
+    await expectScreen(page, 'title');
     expect((await music(page)).tension).toBe(false);
     // level 15 seed 1 under the auto-lose bot (lost at ≈ 34 s of sim time): the home falls under every enemy stream
     await page.evaluate(() => {
@@ -144,7 +144,7 @@ test.describe('AUD-F6 audio buses + music', () => {
       window.__towerclash.setSpeed(3);
       window.__towerclash.economy.autoLose();
     });
-    await expect.poll(() => screen(page)).toBe('play');
+    await expectScreen(page, 'play');
     let peak = 0;
     await expect
       .poll(
@@ -158,7 +158,7 @@ test.describe('AUD-F6 audio buses + music', () => {
       .toBe(true);
     expect(peak).toBeGreaterThanOrEqual(0.6);
     // the outcome: the layer goes, and the result screen (no play frames) resets the intensity
-    await expect.poll(() => screen(page), { timeout: 45_000 }).toBe('result');
+    await expectScreen(page, 'result', { timeout: 45_000 });
     await expect.poll(async () => (await music(page)).tension).toBe(false);
     await expect.poll(async () => (await music(page)).intensity).toBe(0);
     expect(errors).toEqual([]);

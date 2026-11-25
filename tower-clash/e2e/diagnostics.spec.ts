@@ -3,6 +3,7 @@ import type { Page } from '@playwright/test';
 import type { Rect } from './helpers/tap';
 import { settled, tapRect } from './helpers/tap';
 import { shotPath } from './tools/shots';
+import { expectScreen } from './helpers/screenPoll';
 
 /*
  * AUD-B6: the opt-in on-device diagnostics log (src/ui/diagnostics.ts, Settings → About → Diagnostics).
@@ -43,7 +44,6 @@ type Win = Window & { __towerclash: { diag: DiagDebug } };
 const diagRows = (page: Page) => page.evaluate(() => (window as unknown as Win).__towerclash.diag.rows());
 const diagText = (page: Page) => page.evaluate(() => (window as unknown as Win).__towerclash.diag.text());
 const diagAbout = (page: Page) => page.evaluate(() => (window as unknown as Win).__towerclash.diag.about());
-const screen = (page: Page) => page.evaluate(() => window.__towerclash.getScreen());
 
 async function boot(page: Page): Promise<string[]> {
   const errors: string[] = [];
@@ -69,16 +69,16 @@ async function winLevelOne(page: Page): Promise<void> {
     window.__towerclash.setSpeed(10);
     window.__towerclash.autoplay();
   });
-  await expect.poll(() => screen(page), { timeout: 60_000, intervals: [250] }).toBe('result');
+  await expectScreen(page, 'result', { timeout: 60_000, intervals: [250] });
 }
 
 /** A fresh page load (the save stays: the seed runs once per session) → title → Settings. */
 async function openSettings(page: Page): Promise<DiagAbout> {
   await page.goto('/');
   await page.waitForFunction(() => typeof (window.__towerclash as unknown as { diag?: unknown } | undefined)?.diag === 'object');
-  await expect.poll(() => screen(page)).toBe('title');
+  await expectScreen(page, 'title');
   await tapRect(page, TITLE_SETTINGS);
-  await expect.poll(() => screen(page)).toBe('settings');
+  await expectScreen(page, 'settings');
   const about = await diagAbout(page);
   expect(about, 'the settings screen exposes its Diagnostics block').not.toBeNull();
   return about!;
@@ -179,7 +179,7 @@ test.describe('AUD-B6 diagnostics log', () => {
       window.__towerclash.setSpeed(20);
       window.__towerclash.economy.autoLose();
     });
-    await expect.poll(() => screen(page), { timeout: 90_000, intervals: [250] }).toBe('result');
+    await expectScreen(page, 'result', { timeout: 90_000, intervals: [250] });
     await expect.poll(() => diagRows(page).then((r) => r.length)).toBe(1);
     expect((await diagRows(page))[0]).toMatchObject({ lvl: 15, outcome: 'lost', speed: 20, first: false, had: false }); // QA-39-1: the dry run's ×20 shows; QA-39-4: never cleared
     expect(await page.evaluate((k) => localStorage.getItem(k)!, SAVE_KEY), 'the record is never inside the save').not.toContain('"commands"');

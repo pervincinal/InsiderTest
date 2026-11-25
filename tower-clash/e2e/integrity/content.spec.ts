@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { shotPath } from '../tools/shots';
+import { expectScreen } from '../helpers/screenPoll';
 
 /*
  * Content check: every authored level in src/levels/*.json must load in the real browser build
@@ -72,7 +73,7 @@ test.describe('Tower Clash content: every authored level loads', () => {
 
       const loaded = await page.evaluate((id) => window.__towerclash.loadLevel(id), level.id);
       expect(loaded, `loadLevel(${level.id}) must find the level in the built index`).toBe(true);
-      await expect.poll(() => screen(page)).toBe('play');
+      await expectScreen(page, 'play');
       await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
       expect(await levelId(page)).toBe(level.id);
 

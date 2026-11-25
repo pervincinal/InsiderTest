@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { shotPath } from './tools/shots';
+import { expectScreen } from './helpers/screenPoll';
 
 /*
  * Android WebView emulation (QA-1). Runs only in the `android-webview` Playwright project
@@ -109,14 +110,14 @@ async function boot(page: Page): Promise<Errors> {
   }, SAFE);
   await page.goto('/');
   await page.waitForFunction(() => typeof window.__towerclash?.getScreen === 'function');
-  await expect.poll(() => screen(page)).toBe('title');
+  await expectScreen(page, 'title');
   return errors;
 }
 
 /** Start level 1 on a fixed seed through the debug surface (no taps) and wait until the sim ticks. */
 async function startLevel1(page: Page): Promise<void> {
   expect(await page.evaluate(() => window.__towerclash.loadLevel(1, 1))).toBe(true);
-  await expect.poll(() => screen(page)).toBe('play');
+  await expectScreen(page, 'play');
   await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
   expect(await levelId(page)).toBe(1);
   const t0 = await simTime(page);
@@ -178,14 +179,14 @@ test.describe('Tower Clash in an Android WebView', () => {
     // (1) first touch of the session: PLAY. This is the gesture that creates/resumes the
     //     AudioContext (canvas pointerdown → unlockAudio); a WebView that refuses must not throw.
     await touchRect(page, TITLE_PLAY);
-    await expect.poll(() => screen(page), { message: 'PLAY must react to a touch tap' }).toBe('levelSelect');
+    await expectScreen(page, 'levelSelect', { message: 'PLAY must react to a touch tap' });
     expect(errors.page, 'no uncaught exception on the audio-unlocking first touch').toEqual([]);
     expect(errors.console, 'no console error on the audio-unlocking first touch').toEqual([]);
 
     // (2) level map opens on level 1 on a fresh save; touch the first node.
     expect(await page.evaluate(() => window.__towerclash.getLevelSelectScroll())).toBe(0);
     await touchRect(page, levelNodeRect(0));
-    await expect.poll(() => screen(page), { message: 'level node must react to a touch tap' }).toBe('play');
+    await expectScreen(page, 'play', { message: 'level node must react to a touch tap' });
     expect(await levelId(page)).toBe(1);
     // AUD-B11: the lesson card holds the match until the first touch on the map — no tick, no bubble yet
     const t0 = await simTime(page);
@@ -234,12 +235,12 @@ test.describe('Tower Clash in an Android WebView', () => {
 
     // 2nd press while paused: leave to the level map, play state dropped
     expect(await back(), 'back while paused must be handled').toBe(true);
-    await expect.poll(() => screen(page)).toBe('levelSelect');
+    await expectScreen(page, 'levelSelect');
     expect(await page.evaluate(() => window.__towerclash.getState())).toBeNull();
 
     // level map → title, title → unhandled (false lets the shell close the app)
     expect(await back()).toBe(true);
-    await expect.poll(() => screen(page)).toBe('title');
+    await expectScreen(page, 'title');
     expect(await back(), 'back on the title is unhandled so the OS may exit').toBe(false);
     expect(await screen(page)).toBe('title');
 

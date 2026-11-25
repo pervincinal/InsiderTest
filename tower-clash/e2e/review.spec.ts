@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { tapRect } from './helpers/tap';
+import { expectScreen } from './helpers/screenPoll';
 
 /*
  * QA-16 A: the rating prompt (MM-9, src/native/review.ts) on the web path. The result screen calls
@@ -79,7 +80,7 @@ async function threeStarRunToMap(page: Page, problems: string[], expected: 'unav
     [REVIEW_LEVEL, REVIEW_SEED] as const,
   );
   await expect.poll(() => page.evaluate(() => window.__towerclash.getState()?.levelId ?? null)).toBe(REVIEW_LEVEL);
-  await expect.poll(() => screen(page), { timeout: 30_000, intervals: [250] }).toBe('result');
+  await expectScreen(page, 'result', { timeout: 30_000, intervals: [250] });
   const result = await page.evaluate(() => window.__towerclash.getResult());
   // a normal campaign win: 3★, the first-clear gold, no practice / defeat-only fields
   expect(result).toMatchObject({ outcome: 'won', stars: 3, practice: false, tip: null, howto: false });
@@ -96,7 +97,7 @@ async function threeStarRunToMap(page: Page, problems: string[], expected: 'unav
   // the game goes on: MENU → level map, the next level is open
   await page.evaluate(() => window.__towerclash.setSpeed(1));
   await tapRect(page, RESULT_MENU);
-  await expect.poll(() => screen(page)).toBe('levelSelect');
+  await expectScreen(page, 'levelSelect');
   expect(await page.evaluate((id) => window.__towerclash.isLevelUnlocked(id), REVIEW_LEVEL + 1)).toBe(true);
   expect(await reviewAsked(page)).toEqual({ live: false, stored: false });
   expect(problems).toEqual([]);

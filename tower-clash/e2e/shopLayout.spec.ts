@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { expectScreen } from './helpers/screenPoll';
 
 /*
  * QA-16 B: shop layout at phone sizes after skin drop #2 (ART-11: 7 helmet cards → 3 rows with a
@@ -202,11 +203,10 @@ function contrast(a: readonly number[], b: readonly number[]): number {
 }
 
 const text = (page: Page, key: string) => page.evaluate((k) => window.__towerclash.getText(k), key);
-const screen = (page: Page) => page.evaluate(() => window.__towerclash.getScreen());
 
 async function openSkins(page: Page): Promise<void> {
   await page.evaluate(() => window.__towerclash.economy.openShop('skins'));
-  await expect.poll(() => screen(page)).toBe('shop');
+  await expectScreen(page, 'shop');
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   await page.waitForTimeout(200); // screen transition settled
 }

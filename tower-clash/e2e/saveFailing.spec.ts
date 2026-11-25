@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { shotPath } from './tools/shots';
+import { expectScreen } from './helpers/screenPoll';
 
 /*
  * AUD-Q10: failed save writes are not silent. `window.__towerclash.save.failWrites(n)` makes the next n
@@ -35,7 +36,7 @@ async function boot(page: Page): Promise<string[]> {
   page.on('pageerror', (err) => errors.push(String(err)));
   await page.goto('/');
   await page.waitForFunction(() => typeof window.__towerclash?.save?.failWrites === 'function');
-  await expect.poll(() => screen(page)).toBe('title');
+  await expectScreen(page, 'title');
   return errors;
 }
 
@@ -45,7 +46,7 @@ async function winLevelOne(page: Page): Promise<void> {
     window.__towerclash.setSpeed(10);
     window.__towerclash.autoplay();
   });
-  await expect.poll(() => screen(page), { timeout: 60_000, intervals: [250] }).toBe('result');
+  await expectScreen(page, 'result', { timeout: 60_000, intervals: [250] });
 }
 
 /** Back out of the result (→ level map) and the map (→ title). */
@@ -54,7 +55,7 @@ async function backToTitle(page: Page): Promise<void> {
     await page.evaluate(() => window.__towerclash.back());
     await expect.poll(() => screen(page)).not.toBe('result');
   }
-  await expect.poll(() => screen(page)).toBe('title');
+  await expectScreen(page, 'title');
 }
 
 test.describe('save writes that fail (AUD-Q10)', () => {
@@ -109,7 +110,7 @@ test.describe('save writes that fail (AUD-Q10)', () => {
     await expect.poll(() => status(page).then((s) => s.failing)).toBe(true);
     await page.reload();
     await page.waitForFunction(() => typeof window.__towerclash?.save?.failWrites === 'function');
-    await expect.poll(() => screen(page)).toBe('title');
+    await expectScreen(page, 'title');
     expect(await status(page)).toMatchObject({ failing: false, readOnly: false, issue: null, thrown: 0 });
     expect(await stored(page)).toMatchObject({ stars: {}, gold: 50 }); // the win never reached the disk
     expect(await page.evaluate(() => window.__towerclash.economy.getSave().stars['1'] ?? 0)).toBe(0);

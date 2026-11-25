@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { clientPoint, tapRect } from './helpers/tap';
+import { expectScreen } from './helpers/screenPoll';
 
 /*
  * FE-14 team colours as a player setting (2026-10-17). Settings → "Team colours" → Vivid: the title
@@ -24,7 +25,6 @@ const TONE_ORDER = ['classic', 'vivid', 'royal', 'pastel'] as const;
 const ROOF = { x: 132, y: 184 };
 const PLAYER_MID = { classic: '#2f6df6', vivid: '#0a50ff', royal: '#1e3aa8', pastel: '#4d82ff' } as const;
 
-const screen = (page: Page) => page.evaluate(() => window.__towerclash.getScreen());
 const savedTones = (page: Page) =>
   page.evaluate((key) => (JSON.parse(localStorage.getItem(key) ?? '{}') as { settings?: { tones?: string } }).settings?.tones ?? null, SAVE_KEY);
 
@@ -48,7 +48,7 @@ async function tapTone(page: Page, set: (typeof TONE_ORDER)[number]): Promise<vo
 async function boot(page: Page, path = '/'): Promise<void> {
   await page.goto(path);
   await page.waitForFunction(() => typeof window.__towerclash?.getTones === 'function');
-  await expect.poll(() => screen(page)).toBe('title');
+  await expectScreen(page, 'title');
 }
 
 test.describe('FE-14 team colours setting', () => {
@@ -66,21 +66,21 @@ test.describe('FE-14 team colours setting', () => {
 
     // settings → Vivid: saved at once, the chunk fetched on demand
     await tapRect(page, TITLE_SETTINGS);
-    await expect.poll(() => screen(page)).toBe('settings');
+    await expectScreen(page, 'settings');
     await tapTone(page, 'vivid');
     await expect.poll(() => savedTones(page)).toBe('vivid');
     await expect.poll(() => page.evaluate(() => window.__towerclash.getTones())).toMatchObject({ setting: 'vivid', active: 'vivid', loaded: true, player: PLAYER_MID.vivid });
     expect(chunks.length).toBe(1);
     await page.screenshot({ path: info.outputPath('fe14-settings-vivid.png'), scale: 'css' });
     await tapRect(page, SETTINGS_BACK);
-    await expect.poll(() => screen(page)).toBe('title');
+    await expectScreen(page, 'title');
     await expect.poll(() => pixel(page, ROOF)).toBe(PLAYER_MID.vivid);
     await page.screenshot({ path: info.outputPath('fe14-title-vivid.png'), scale: 'css' });
 
     // reload: the saved set is back (the shipped palette may show for the frames before the chunk lands)
     await page.reload();
     await page.waitForFunction(() => typeof window.__towerclash?.getTones === 'function');
-    await expect.poll(() => screen(page)).toBe('title');
+    await expectScreen(page, 'title');
     await expect.poll(() => pixel(page, ROOF)).toBe(PLAYER_MID.vivid);
     expect(await savedTones(page)).toBe('vivid');
 
@@ -96,11 +96,11 @@ test.describe('FE-14 team colours setting', () => {
     await boot(page);
     await expect.poll(() => pixel(page, ROOF)).toBe(PLAYER_MID.vivid);
     await tapRect(page, TITLE_SETTINGS);
-    await expect.poll(() => screen(page)).toBe('settings');
+    await expectScreen(page, 'settings');
     await tapTone(page, 'classic');
     await expect.poll(() => savedTones(page)).toBe('classic');
     await tapRect(page, SETTINGS_BACK);
-    await expect.poll(() => screen(page)).toBe('title');
+    await expectScreen(page, 'title');
     await expect.poll(() => pixel(page, ROOF)).toBe(PLAYER_MID.classic);
     expect(pageErrors).toEqual([]);
   });

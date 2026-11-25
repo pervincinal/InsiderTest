@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import type { CDPSession, Page } from '@playwright/test';
 import { clientPoint } from './helpers/tap';
+import { expectScreen } from './helpers/screenPoll';
 
 /*
  * BUG-33 (TestFlight 1.0.0 (8), iPhone, level 2 "Supply Line"): drag-to-attack and stopping a stream
@@ -121,7 +122,7 @@ test.describe('touch drag-to-link and swipe-to-cut (BUG-33)', () => {
     expect(stopStream).toBe('Swipe across the stream so your tower grows');
 
     expect(await page.evaluate((seed) => window.__towerclash.loadLevel(2, seed), SEED)).toBe(true);
-    await expect.poll(() => screen(page)).toBe('play');
+    await expectScreen(page, 'play');
     await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
     await expect.poll(() => simTime(page), { message: 'level 2 sim should tick' }).toBeGreaterThan(0);
     await expect.poll(() => hint(page), { message: 'fresh save: level 2 tutorial on' }).toBe(tapThenGrey);
@@ -191,7 +192,7 @@ test.describe('touch drag-to-link and swipe-to-cut (BUG-33)', () => {
     await page.goto('/');
     await page.waitForFunction(() => typeof window.__towerclash?.getTutorialHint === 'function');
     expect(await page.evaluate((seed) => window.__towerclash.loadLevel(2, seed), SEED)).toBe(true);
-    await expect.poll(() => screen(page)).toBe('play');
+    await expectScreen(page, 'play');
     await page.evaluate(() => window.__towerclash.startMatch());
     await expect.poll(() => simTime(page)).toBeGreaterThan(0);
 
@@ -223,7 +224,7 @@ test.describe('touch drag-to-link and swipe-to-cut (BUG-33)', () => {
     await page.goto('/');
     await page.waitForFunction(() => typeof window.__towerclash?.getTutorialHint === 'function');
     expect(await page.evaluate((seed) => window.__towerclash.loadLevel(2, seed), SEED)).toBe(true);
-    await expect.poll(() => screen(page)).toBe('play');
+    await expectScreen(page, 'play');
     await page.evaluate(() => window.__towerclash.startMatch());
     await expect.poll(() => simTime(page)).toBeGreaterThan(0);
 

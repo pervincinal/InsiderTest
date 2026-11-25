@@ -3,6 +3,7 @@ import type { Page } from '@playwright/test';
 import { tapRect } from './helpers/tap';
 import { recordToasts, toastsSeen } from './helpers/toasts';
 import { shotPath } from './tools/shots';
+import { expectScreen } from './helpers/screenPoll';
 
 /*
  * QA-13: the no-store shop — what App Review sees on build 8 (no IAP products configured), reached on
@@ -164,7 +165,7 @@ test.describe('shop without a store (QA-13, App Review build 8)', () => {
     const S = await strings(page);
     expect(S['shop.tab.skins']).toBe('SKINS'); // the seeded language is English
     await page.evaluate(() => window.__towerclash.economy.openShop('crystals')); // asked for Crystals …
-    await expect.poll(() => screen(page)).toBe('shop');
+    await expectScreen(page, 'shop');
     let texts = await drawnTexts(page);
     expect(tabLabels(texts)).toEqual([S['shop.tab.skins'], S['shop.tab.upgrades']]); // … exactly two tabs
     const all = () => texts.map((d) => d.t);
@@ -241,7 +242,7 @@ test.describe('shop without a store (QA-13, App Review build 8)', () => {
     await expect.poll(() => page.evaluate(() => window.__towerclash.storeAvailable)).toBe(true);
     const S = await strings(page);
     await page.evaluate(() => window.__towerclash.economy.openShop('crystals'));
-    await expect.poll(() => screen(page)).toBe('shop');
+    await expectScreen(page, 'shop');
     // fake-store prices arrive asynchronously; the catalog fallback is a "$x.xx" string as well
     await expect.poll(async () => (await drawnTexts(page)).filter((d) => PRICE_RE.test(d.t)).length).toBeGreaterThan(0);
     let texts = await drawnTexts(page);

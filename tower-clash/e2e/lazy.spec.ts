@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { tapRect } from './helpers/tap';
 import { expectToast, recordToasts } from './helpers/toasts';
+import { expectScreen } from './helpers/screenPoll';
 
 /*
  * Lazy chunks under a failing network (PERF-1 lazy screens, PERF-2 per-level JSON, M3-2 silhouette
@@ -70,7 +71,7 @@ async function boot(page: Page, seeded: Record<string, unknown> = { version: 3 }
       phase = `debug surface (${BOOT_SURFACE_TIMEOUT_MS} ms)`;
       await page.waitForFunction(() => typeof window.__towerclash?.loadLevel === 'function', undefined, { timeout: BOOT_SURFACE_TIMEOUT_MS });
       phase = 'title screen';
-      await expect.poll(() => screen(page)).toBe('title');
+      await expectScreen(page, 'title');
       return pageErrors;
     } catch (err) {
       failures.push(`attempt ${attempt} stalled in ${phase}: ${String(err).split('\n')[0]}`);
@@ -91,7 +92,7 @@ test.describe('lazy chunks under a failing network', () => {
     const errors = await boot(page);
     expect(await page.evaluate(() => window.__towerclash.loadLevel(3, 1))).toBe(false);
     expect(aborted.length).toBeGreaterThanOrEqual(1);
-    await expect.poll(() => screen(page)).toBe('title');
+    await expectScreen(page, 'title');
     expect(await page.evaluate(() => window.__towerclash.getState())).toBeNull();
     await expectToast(page, await text(page, 'common.loadFailed'), { screen: 'title' });
     // a second tap while still offline re-fetches under a fresh URL (module map) and fails again with the toast
@@ -99,13 +100,13 @@ test.describe('lazy chunks under a failing network', () => {
     expect(await page.evaluate(() => window.__towerclash.loadLevel(3, 1))).toBe(false);
     expect(aborted.length).toBeGreaterThan(before);
     expect(aborted[aborted.length - 1]).toMatch(/003-[^/?]*\.js\?r=\d+$/);
-    await expect.poll(() => screen(page)).toBe('title');
+    await expectScreen(page, 'title');
     // the same text while the first pill may still be up: the recorder cannot tell a re-show from the first one,
     // so this holds as much as the one-shot read it replaces did (the `?r=` re-fetch above is the real evidence)
     await expectToast(page, await text(page, 'common.loadFailed'), { screen: 'title' });
     // the rest of the game is untouched: another level still opens
     expect(await page.evaluate(() => window.__towerclash.loadLevel(1, 1))).toBe(true);
-    await expect.poll(() => screen(page)).toBe('play');
+    await expectScreen(page, 'play');
     await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
     await expect.poll(() => simTime(page)).toBeGreaterThan(200);
     expect(errors).toEqual([]);
@@ -115,7 +116,7 @@ test.describe('lazy chunks under a failing network', () => {
     const fetched = page.waitForResponse((r) => LEVEL3_CHUNK.test(r.url()) && r.url().includes('?r='));
     expect(await page.evaluate(() => window.__towerclash.loadLevel(3, 1))).toBe(true);
     expect((await fetched).ok()).toBe(true);
-    await expect.poll(() => screen(page)).toBe('play');
+    await expectScreen(page, 'play');
     expect(await page.evaluate(() => window.__towerclash.getState()?.levelId)).toBe(3);
     await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
     await expect.poll(() => simTime(page)).toBeGreaterThan(0);
@@ -131,7 +132,7 @@ test.describe('lazy chunks under a failing network', () => {
     const errors = await boot(page);
     await tapRect(page, TITLE_PLAY);
     // the spinner screen may show briefly; the navigation is abandoned and the title is current again
-    await expect.poll(() => screen(page), { timeout: 5_000 }).toBe('title');
+    await expectScreen(page, 'title', { timeout: 5_000 });
     await page.waitForTimeout(300);
     expect(await screen(page)).toBe('title');
     await expectToast(page, await text(page, 'common.loadFailed'), { screen: 'title' });
@@ -150,7 +151,7 @@ test.describe('lazy chunks under a failing network', () => {
 
     await page.unroute(MENU_CHUNK);
     await tapRect(page, TITLE_PLAY);
-    await expect.poll(() => screen(page), { timeout: 5_000 }).toBe('levelSelect');
+    await expectScreen(page, 'levelSelect', { timeout: 5_000 });
     expect(errors).toEqual([]);
   });
 
@@ -163,7 +164,7 @@ test.describe('lazy chunks under a failing network', () => {
     const errors = await boot(page);
     await tapRect(page, TITLE_PLAY);
     // the screens chunk itself may land; without their strings the map is not opened
-    await expect.poll(() => screen(page), { timeout: 5_000 }).toBe('title');
+    await expectScreen(page, 'title', { timeout: 5_000 });
     await page.waitForTimeout(300);
     expect(await screen(page)).toBe('title');
     await expectToast(page, await text(page, 'common.loadFailed'), { screen: 'title' });
@@ -175,7 +176,7 @@ test.describe('lazy chunks under a failing network', () => {
     const fetched = page.waitForResponse((r) => EN_MENUS_CHUNK.test(r.url()) && r.url().includes('?r='), { timeout: 15_000 });
     await tapRect(page, TITLE_PLAY);
     expect((await fetched).ok()).toBe(true);
-    await expect.poll(() => screen(page), { timeout: 5_000 }).toBe('levelSelect');
+    await expectScreen(page, 'levelSelect', { timeout: 5_000 });
     expect(await text(page, 'levels.title')).toBe('LEVELS');
     expect(errors).toEqual([]);
   });
@@ -188,7 +189,7 @@ test.describe('lazy chunks under a failing network', () => {
     });
     const errors = await boot(page, { version: 3, skins: { owned: ['tower_keep', 'unit_robots'], equipped: { roof: 'tower_keep', helmet: 'unit_robots', theme: null } } });
     expect(await page.evaluate(() => window.__towerclash.loadLevel(1, 1))).toBe(true);
-    await expect.poll(() => screen(page)).toBe('play');
+    await expectScreen(page, 'play');
     await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
     await expect.poll(() => simTime(page)).toBeGreaterThan(1000);
     expect(aborted.length, 'the play screen asked for the skin chunk').toBeGreaterThanOrEqual(1);
@@ -197,7 +198,7 @@ test.describe('lazy chunks under a failing network', () => {
       window.__towerclash.setSpeed(10);
       window.__towerclash.autoplay();
     });
-    await expect.poll(() => screen(page), { timeout: 75_000, intervals: [250] }).toBe('result');
+    await expectScreen(page, 'result', { timeout: 75_000, intervals: [250] });
     expect((await page.evaluate(() => window.__towerclash.getResult()))?.outcome).toBe('won');
     // draw-time retries are throttled (src/lazyChunk.ts RETRY_AFTER_MS): a match at ×10 asks a handful of times, not once per frame
     expect(aborted.length).toBeLessThan(30);
@@ -210,7 +211,7 @@ test.describe('lazy chunks under a failing network', () => {
     await page.unroute(SKIN_CHUNK);
     expect(await page.evaluate(() => window.__towerclash.loadLevel(2, 1))).toBe(true);
     expect((await fetched).ok()).toBe(true);
-    await expect.poll(() => screen(page)).toBe('play');
+    await expectScreen(page, 'play');
     expect(errors).toEqual([]);
   });
 
@@ -254,14 +255,14 @@ test.describe('lazy chunks under a failing network', () => {
     });
     const errors = await boot(page);
     expect(await page.evaluate(() => window.__towerclash.loadLevel(1, 1))).toBe(true);
-    await expect.poll(() => screen(page)).toBe('play');
+    await expectScreen(page, 'play');
     // the play screen warms the chunk right after its first frame (main.ts enterLevel → warmHudOverlays)
     await expect.poll(() => aborted.length, { timeout: 5_000 }).toBeGreaterThanOrEqual(1);
     await page.evaluate(() => {
       window.__towerclash.setSpeed(10);
       window.__towerclash.autoplay();
     });
-    await expect.poll(() => screen(page), { timeout: 75_000, intervals: [250] }).toBe('result');
+    await expectScreen(page, 'result', { timeout: 75_000, intervals: [250] });
     expect((await page.evaluate(() => window.__towerclash.getResult()))?.outcome).toBe('won');
     // the plain card is drawn frame after frame; draw-time retries are throttled (src/lazyChunk.ts RETRY_AFTER_MS),
     // so the result screen asks again once per back-off window — under a fresh URL (module map, BUG-8)
@@ -277,7 +278,7 @@ test.describe('lazy chunks under a failing network', () => {
     await page.waitForTimeout(200);
     expect(await screen(page)).toBe('result');
     await tapRect(page, RESULT_RETRY);
-    await expect.poll(() => screen(page), { timeout: 5_000 }).toBe('play');
+    await expectScreen(page, 'play', { timeout: 5_000 });
     expect(errors).toEqual([]);
   });
 
@@ -288,14 +289,14 @@ test.describe('lazy chunks under a failing network', () => {
     });
     const errors = await boot(page);
     expect(await page.evaluate(() => window.__towerclash.loadLevel(1, 1))).toBe(true);
-    await expect.poll(() => screen(page)).toBe('play');
+    await expectScreen(page, 'play');
     await expect.poll(() => fetched.length, { timeout: 5_000, message: 'overlay chunk warmed after the first play frame' }).toBe(1);
     const warmedAt = fetched[0]!.at;
     await page.evaluate(() => {
       window.__towerclash.setSpeed(10);
       window.__towerclash.autoplay();
     });
-    await expect.poll(() => screen(page), { timeout: 75_000, intervals: [250] }).toBe('result');
+    await expectScreen(page, 'result', { timeout: 75_000, intervals: [250] });
     const resultAt = Date.now();
     expect(fetched, 'exactly one fetch, no `?r=` re-fetch').toHaveLength(1);
     expect(fetched[0]!.url).not.toContain('?r=');
@@ -340,7 +341,7 @@ test.describe('lazy chunks under a failing network', () => {
     });
     const errors = await boot(page);
     expect(await page.evaluate(() => window.__towerclash.loadLevel(3, 1)), 'the level starts anyway (the tutorial is not load-bearing)').toBe(true);
-    await expect.poll(() => screen(page)).toBe('play');
+    await expectScreen(page, 'play');
     expect(aborted.length).toBeGreaterThanOrEqual(1);
     await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
     await expect.poll(() => simTime(page)).toBeGreaterThan(200);
@@ -411,7 +412,7 @@ for (const shape of [
       });
       const errors2 = await boot(page, { version: 3 }, 'tilt=0.72');
       expect(await page.evaluate(() => window.__towerclash.loadLevel(1, 1))).toBe(true);
-      await expect.poll(() => screen(page)).toBe('play');
+      await expectScreen(page, 'play');
       expect(flagged.length, '?tilt=0.72 fetches the perspective chunk').toBeGreaterThanOrEqual(1);
       await page.evaluate(() => window.__towerclash.startMatch());
       await expect.poll(() => simTime(page)).toBeGreaterThan(500);

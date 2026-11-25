@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { tapRect } from './helpers/tap';
 import { recordToasts, toastsSeen } from './helpers/toasts';
+import { expectScreen } from './helpers/screenPoll';
 
 /*
  * QA-15 — week-streak milestones in the real UI (WK-1, GDD §8.1 "Week-streak milestones", §8.4 item 6;
@@ -49,7 +50,6 @@ interface SaveShape {
   achievements: { unlocked: string[] };
 }
 
-const screen = (page: Page) => page.evaluate(() => window.__towerclash.getScreen());
 const save = (page: Page) => page.evaluate(() => JSON.parse(JSON.stringify(window.__towerclash.economy.getSave())) as SaveShape);
 const text = (page: Page, key: string, params?: Record<string, string | number>) => page.evaluate(([k, p]) => window.__towerclash.getText(k, p), [key, params] as const);
 const fill = (template: string, params: Record<string, string | number>) => template.replace(/\{(\w+)\}/g, (m, k: string) => (k in params ? String(params[k]) : m));
@@ -137,7 +137,7 @@ async function winRunning(page: Page): Promise<void> {
     window.__towerclash.autoplay();
     window.__towerclash.setSpeed(10);
   });
-  await expect.poll(() => screen(page), { timeout: 30_000, intervals: [100] }).toBe('result');
+  await expectScreen(page, 'result', { timeout: 30_000, intervals: [100] });
   expect((await page.evaluate(() => window.__towerclash.getResult()))?.outcome).toBe('won');
 }
 
@@ -168,13 +168,13 @@ test.describe('weekly week-streak milestones (QA-15, GDD §8.1)', () => {
   test('streak 3 → 4 through the card (AZ), first run: 15 milestone + 20 weekly_streak_4 = +35 crystals, the achievement takes the toast slot', async ({ page }) => {
     const errors = await boot(page, seededSave(3, 'az', []), 'az');
     await tapRect(page, TITLE_PLAY);
-    await expect.poll(() => screen(page)).toBe('levelSelect');
+    await expectScreen(page, 'levelSelect');
     await expectSeededStreak(page, 3);
     await tapRect(page, TAB_WEEKLY);
     await expect.poll(() => page.evaluate(() => window.__towerclash.weekly.tab())).toBe('weekly');
     await tapRect(page, LEVEL_MAP_DAILY);
     await page.evaluate(() => window.__towerclash.autoplay()); // queued onto the pending start
-    await expect.poll(() => screen(page)).toBe('play');
+    await expectScreen(page, 'play');
     await winRunning(page);
     const w = await readWin(page);
     const milestone = WEEKLY_STREAK_MILESTONES[4]!;

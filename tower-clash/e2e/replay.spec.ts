@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { expectScreen } from './helpers/screenPoll';
 
 /*
  * SIM-R1 replay record v1 (src/sim/replay.ts) through the debug surface, on Chromium (the `chromium` project;
@@ -54,7 +55,6 @@ const DAILY_KEY = '2026-11-11';
 const DAILY_FIXTURE = readFileSync(new URL(`../tests/fixtures/replay-daily-${DAILY_KEY}.json`, import.meta.url), 'utf8');
 type ChallengeRecord = typeof FIXTURE_RECORD & { modifiers: Record<string, number>; challenge?: { kind: string; key: string; twist: string } };
 
-const screen = (page: Page) => page.evaluate(() => (window as unknown as Win).__towerclash.getScreen());
 const verify = (page: Page, json: string) => page.evaluate((j) => (window as unknown as Win).__towerclash.verifyReplay(j), json);
 
 async function boot(page: Page): Promise<string[]> {
@@ -99,7 +99,7 @@ test.describe('replay record v1 (SIM-R1)', () => {
       d.setSpeed(10);
       d.autoplay();
     });
-    await expect.poll(() => screen(page), { timeout: 75_000, intervals: [250] }).toBe('result');
+    await expectScreen(page, 'result', { timeout: 75_000, intervals: [250] });
     const json = await page.evaluate(() => (window as unknown as Win).__towerclash.getReplay());
     expect(json).not.toBeNull();
     const record = JSON.parse(json!) as typeof FIXTURE_RECORD & { continued?: true };
@@ -135,7 +135,7 @@ test.describe('replay record: daily challenge (SIM-R2)', () => {
     }, DAILY_KEY);
     expect(info.challenge.dayKey).toBe(DAILY_KEY);
     expect(info.challenge.levelId).toBe(37);
-    await expect.poll(() => screen(page), { timeout: 75_000, intervals: [250] }).toBe('result');
+    await expectScreen(page, 'result', { timeout: 75_000, intervals: [250] });
     const json = await page.evaluate(() => (window as unknown as Win).__towerclash.getReplay());
     expect(json).not.toBeNull();
     const record = JSON.parse(json!) as ChallengeRecord;
@@ -188,7 +188,7 @@ test.describe('replay record: continued match (SIM-R3)', () => {
       d.setSpeed(20);
       d.economy.autoLose();
     });
-    await expect.poll(() => screen(page), { timeout: 60_000, intervals: [250] }).toBe('result');
+    await expectScreen(page, 'result', { timeout: 60_000, intervals: [250] });
     expect((await page.evaluate(() => (window as unknown as Win).__towerclash.getResult()))?.outcome).toBe('lost');
     const lost = await clock(page);
     expect(lost.continued).toBe(false);
@@ -200,7 +200,7 @@ test.describe('replay record: continued match (SIM-R3)', () => {
 
     // CONTINUE (rewarded video): back on the play screen ≈ 20 s earlier, with the entry logged
     await page.evaluate(() => (window as unknown as Win).__towerclash.economy.resultAction('continueAd'));
-    await expect.poll(() => screen(page), { timeout: 15_000 }).toBe('play');
+    await expectScreen(page, 'play', { timeout: 15_000 });
     const mid = await page.evaluate(() => {
       const d = (window as unknown as Win).__towerclash;
       return { json: d.getReplay()!, clock: d.economy.getClock()! };
@@ -227,7 +227,7 @@ test.describe('replay record: continued match (SIM-R3)', () => {
     expect(vm.timeMs).toBe(midRecord.outcome.timeMs);
 
     // the continued attempt plays to its end (the lose bot is still on: a second defeat, or a win under rules v2)
-    await expect.poll(() => screen(page), { timeout: 60_000, intervals: [250] }).toBe('result');
+    await expectScreen(page, 'result', { timeout: 60_000, intervals: [250] });
     const json = (await getReplay(page))!;
     const record = JSON.parse(json) as ContinueRecord;
     expect(record.levelId).toBe(15);

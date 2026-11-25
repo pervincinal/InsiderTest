@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import type { CDPSession, Page } from '@playwright/test';
+import { expectScreen } from './helpers/screenPoll';
 
 /*
  * AUD-Q12 (2026-11-02): memory over a long session. Nothing measured JS heap, DOM or canvas growth across
@@ -119,14 +120,13 @@ interface LevelRun {
 
 const mb = (bytes: number): string => (bytes / MB).toFixed(2);
 const canvasBytes = (c: CanvasInfo): number => c.width * c.height * 4;
-const screenOf = (page: Page): Promise<string> => page.evaluate(() => window.__towerclash.getScreen());
 
 async function boot(page: Page, query = ''): Promise<string[]> {
   const pageErrors: string[] = [];
   page.on('pageerror', (err) => pageErrors.push(String(err)));
   await page.goto(query ? `/?${query}` : '/');
   await page.waitForFunction(() => typeof window.__towerclash?.loadLevel === 'function');
-  await expect.poll(() => screenOf(page)).toBe('title');
+  await expectScreen(page, 'title');
   return pageErrors;
 }
 
@@ -203,9 +203,7 @@ test.describe('Tower Clash soak (AUD-Q12)', () => {
         `loadLevel(${id}) from the ${i === 0 ? 'title' : 'previous result screen'}`,
       ).toBe(true);
       expect(await page.evaluate(() => window.__towerclash.getState()?.levelId), `level ${id} is the one on screen`).toBe(id);
-      await expect
-        .poll(() => screenOf(page), { timeout: LEVEL_RESULT_TIMEOUT_MS, intervals: [250], message: `level ${id} reaches its result screen at x${SOAK_SPEED}` })
-        .toBe('result');
+      await expectScreen(page, 'result', { timeout: LEVEL_RESULT_TIMEOUT_MS, intervals: [250], message: `level ${id} reaches its result screen at x${SOAK_SPEED}` });
       const res = await page.evaluate(() => ({ outcome: window.__towerclash.getResult()?.outcome ?? 'none', simMs: window.__towerclash.getState()?.time ?? -1 }));
       runs.push({ id, outcome: res.outcome, simS: res.simMs / 1000, wallS: (Date.now() - started) / 1000 });
       expect(['won', 'lost'], `level ${id}: the result screen reports an outcome`).toContain(res.outcome);
