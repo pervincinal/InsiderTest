@@ -1,6 +1,6 @@
 {
   "board": {
-    "title": "Lövhə · 24 noyabr, gün 67",
+    "title": "Lövhə · 25 noyabr, gün 68",
     "stats": [
       {
         "b": "build 27",
@@ -11,7 +11,7 @@
         "s": "səviyyə bot ilə keçir"
       },
       {
-        "b": "2825",
+        "b": "2842",
         "s": "unit test, e2e 196 + 4 + 6 + WebKit + soak"
       },
       {
@@ -19,11 +19,11 @@
         "s": "ilk yükləmə (büdcə 82); hiss balı 13/14"
       },
       {
-        "b": "42 gün",
+        "b": "43 gün",
         "s": "rəyin gözlənilir"
       }
     ],
-    "footer": "Mənbə: <code>.claude/agents/*.md</code> rol faylları, <code>docs/BACKLOG.md</code> və son hesabatlar (gün 65–67). Statuslar 24 noyabr vəziyyətidir."
+    "footer": "Mənbə: <code>.claude/agents/*.md</code> rol faylları, <code>docs/BACKLOG.md</code> və son hesabatlar (gün 66–68). Statuslar 25 noyabr vəziyyətidir."
   },
   "team": [
     {
@@ -42,11 +42,11 @@
         "build nömrəsi, commit və push"
       ],
       "recent": [
+        "Gün 68: səkkizinci kod baxışı (render) — 8 tapıntı eyni gün bağlandı; build 27 mətnləri 6 günün düzəlişləri ilə yeniləndi; PLAN.md 25 noyabr vəziyyəti; artefakt v83.",
         "Gün 67: yeddinci kod baxışı (menyu ekranları) — 5 tapıntı eyni gün bağlandı; yeddi gündə yeddi baxış, build 27-nin hər modulu baxıldı (46 tapıntı, 45 düzəliş); artefakt v82.",
-        "Gün 66: beşinci (sim nüvəsi) və altıncı (yükləmə / yeniləmə yolu) kod baxışları — 12 tapıntı (2 vacib, 1 nəticəyə təsir edən sim qaydası) eyni gün bağlandı; artefakt v81.",
-        "Gün 65: dördüncü kod baxışı — pul yolları (alış, pulqabı, reklam axını, RevenueCat, AdMob, yaddaş güzgüsü): 8 tapıntı (4 vacib) eyni gün düzəldildi; 2770 test; artefakt v80."
+        "Gün 66: beşinci (sim nüvəsi) və altıncı (yükləmə / yeniləmə yolu) kod baxışları — 12 tapıntı (2 vacib, 1 nəticəyə təsir edən sim qaydası) eyni gün bağlandı; artefakt v81."
       ],
-      "status": "Bu gün işlədi · sabah gün 68 (sakit rejim)"
+      "status": "Bu gün işlədi · sabah gün 69 (sakit rejim)"
     },
     {
       "id": "game-designer",
@@ -102,11 +102,11 @@
         "src/main.ts"
       ],
       "recent": [
+        "Gün 68: REV-45…52 — boş dərs mətni kart çəkmir (nişan yerləşməsi pozulmur), azaldılmış hərəkət bütün ekranlarda eyni 500 ms-lik sorğu ilə, şrift gələndə ipucu eni yenilənir, hərəkət qayıdanda / geri sarmada axınlar hamısı birdən parlamır, 125-ə dolan qüllə; +16 test, eager +82 B.",
         "Gün 67: REV-40…44 (fable) — mağaza yerli qiymətləri mağaza hazır olandan sonra oxuyur (əvvəl erkən açılan mağaza USD ehtiyat qiymətini göstərirdi), mağazadan çıxandan sonra bitən alışın bildirişi cari ekrana, başlıq düymələri basılan yerdə buraxılanda işləyir, Parametrlər toxunuşu yenidən düzülüşdə itmir; +32 test.",
-        "Gün 66: REV-34/35/38 (fable) — servis işçisi dəstək / məxfilik səhifəsini oyun qabığı kimi keşləmir (oflayn açılış yenə oyundur), 5xx-də keşlənmiş qabıq; REV-29/36/37/39 — qüllə nişanı tutum trekinə baxır, ilişib qalan yükləmə spinneri yox, sandıq bildirişi cari ekrana; +15 test, +2 PWA e2e.",
-        "Gün 65: REV-20/23/25/27 (fable) — kristal paketi bir ödənişə iki dəfə verilmir (əməliyyat id-si olmadan heç vaxt), gündəlik seriya saat keçidi günündə qırılmır, reklam soyuması video bitən vaxtdan sayılır, \"artıq çatdırılıb\" bildirişi 4 dildə; +15 test."
+        "Gün 66: REV-34/35/38 (fable) — servis işçisi dəstək / məxfilik səhifəsini oyun qabığı kimi keşləmir (oflayn açılış yenə oyundur), 5xx-də keşlənmiş qabıq; REV-29/36/37/39 — qüllə nişanı tutum trekinə baxır, ilişib qalan yükləmə spinneri yox, sandıq bildirişi cari ekrana; +15 test, +2 PWA e2e."
       ],
-      "status": "Bu gün işlədi (fable)"
+      "status": "Bu gün işlədi"
     },
     {
       "id": "ai-engineer",
@@ -161,11 +161,11 @@
         "Bugs bölməsi"
       ],
       "recent": [
+        "Gün 68: QA-47 (sonnet) — qalan 127 ekran gözləməsi (26 spec) diaqnoz dökümlü köməkçiyə keçirildi; chromium 196 / PWA 6 / WebView 4 yaşıl; vaxt limitləri dəyişməyib.",
         "Gün 67: QA-46 (fable) — e2e ekran gözləməsi vaxt aşımında diaqnoz dökümü yazır (ekran, hissə yükləməsi, kadr, görünürlük, matç vəziyyəti + hökm); CI-şəkilli təkrar 100/100 + 114/114, dayanma təkrarlanmadı; vaxt limitləri dəyişməyib.",
-        "Gün 62: REV-2 — playtest:log --verify: hər qeyd (mətn, sətir) ilə bir dəfə, 120 s TIMEOUT, məğlubiyyətdə ulduz rədd; 18 → 23 test.",
-        "Gün 61: QA-44 — QA-35 render ilişməsi ovu 1243-də: 240 toxum + 546 CI-şəkilli qaçış, 0 ilişmə; QA-35 bağlandı, tələ qalır, ov aləti repo-da."
+        "Gün 62: REV-2 — playtest:log --verify: hər qeyd (mətn, sətir) ilə bir dəfə, 120 s TIMEOUT, məğlubiyyətdə ulduz rədd; 18 → 23 test."
       ],
-      "status": "Bu gün işlədi (fable)"
+      "status": "Bu gün işlədi (sonnet)"
     },
     {
       "id": "tech-artist",
@@ -215,7 +215,7 @@
       "role": "Mağaza və buraxılış",
       "color": "#6b8e23",
       "tag": "gözləyir",
-      "cls": "wait",
+      "cls": "",
       "does": "App Store və Google Play mətnlərini (4 dildə), kadrları, məxfilik siyasətini, buraxılış qeydlərini, TestFlight test planını və buraxılış siyahısını yazır. Hər iddianı kodla yoxlayır; səndən heç nə istəmir, lazım olanı siyahıya status ilə yazır.",
       "owns": [
         "docs/publishing/",
@@ -223,11 +223,11 @@
         "fastlane/"
       ],
       "recent": [
+        "Gün 68: PUB-46 (sonnet) — build 27 buraxılış qeydləri (EN + AZ) və TestFlight \"Nəyi test etməli\" mətni 62–67-ci günlərin 45 düzəlişi ilə yeniləndi (EN 1 442 / AZ 1 452 simvol); buraxılış siyahısının 8 sətri 25 noyabra tarixləndi.",
         "Gün 62: PUB-45 — TestFlight \"Nəyi test etməli\" build 27 (EN 1 111 / AZ 1 122), Beta təsviri build 27-yə.",
-        "Gün 58: PUB-44 — buraxılış siyahısı §3/§4/§5/§8 15 noyabr vəziyyətində; Pages \"canlı deyil\" qeydləri hər yerdə düzəldildi; TestFlight planı build 27-yə.",
-        "Gün 57: build 27 qeydlərinə Gün 54–55 (EN + AZ); DIAG-2 rəqəmləri 20 matç / 400 kB; jurnal ölçüsü 20–400 kB."
+        "Gün 58: PUB-44 — buraxılış siyahısı §3/§4/§5/§8 15 noyabr vəziyyətində; Pages \"canlı deyil\" qeydləri hər yerdə düzəldildi; TestFlight planı build 27-yə."
       ],
-      "status": "Gözləyir · sakit rejim"
+      "status": "Bu gün işlədi (sonnet)"
     },
     {
       "id": "monetization-designer",
@@ -263,9 +263,9 @@
         "qərarlar (defaultlar hesabatda)"
       ],
       "recent": [
+        "Səndə: MM-15 (Apple PLA müqaviləsi → build 27 sorğusu — 5 dəqiqəlik iş) və AUD-Q1 / A2 (build 27 ilə cihaz yoxlaması + playtest vərəqi). Build 27 səkkiz kod baxışından keçib, TestFlight mətni hazır.",
         "Səndə: MM-15 (Apple PLA müqaviləsi → build 27 sorğusu — 5 dəqiqəlik iş) və AUD-Q1 / A2 (build 27 ilə cihaz yoxlaması + playtest vərəqi). Build 27 yeddi kod baxışından keçib.",
-        "Səndə: MM-15 (Apple PLA müqaviləsi → build 27 sorğusu — 5 dəqiqəlik iş) və AUD-Q1 / A2 (build 27 ilə cihaz yoxlaması + playtest vərəqi). Build 27 altı kod baxışından keçib.",
-        "Səndə: MM-15 (Apple PLA müqaviləsi → build 27 sorğusu — 5 dəqiqəlik iş) və AUD-Q1 / A2 (build 27 ilə cihaz yoxlaması + playtest vərəqi). Build 27 dörd kod baxışından keçib."
+        "Səndə: MM-15 (Apple PLA müqaviləsi → build 27 sorğusu — 5 dəqiqəlik iş) və AUD-Q1 / A2 (build 27 ilə cihaz yoxlaması + playtest vərəqi). Build 27 altı kod baxışından keçib."
       ],
       "status": "Səndə: Apple müqaviləsi + cihaz yoxlaması (P0) + playtest vərəqi"
     }
@@ -307,30 +307,32 @@
       ]
     },
     {
-      "title": "Gün 67 — bağlandı (24 noyabr)",
+      "title": "Gün 68 — bağlandı (25 noyabr)",
       "items": [
         {
-          "id": "REV-40…44",
+          "id": "REV-45…52",
           "p": "p2",
           "own": [
             "frontend-engineer"
           ],
           "day": "bağlı",
-          "t": "Menyu baxışının 5 tapıntısı: mağaza qiymətləri, gecikmiş alış bildirişi, başlıq düymələri, Parametrlər toxunuşu, pulqabı düyməsi."
+          "t": "Render baxışının 8 tapıntısı: boş dərs kartı, azaldılmış hərəkət, şrift yeniləməsi, axın parıltısı, kölgə, bitmiş matç bandı, mətn kəsilməsi."
         },
         {
-          "id": "QA-46",
-          "p": "p2",
+          "id": "QA-47 · PUB-46 · DOC-10",
+          "p": "p3",
           "own": [
-            "qa-engineer"
+            "qa-engineer",
+            "publisher",
+            "producer"
           ],
           "day": "bağlı",
-          "t": "e2e dayanma dökümü + CI-şəkilli təkrar (dayanma təkrarlanmadı)."
+          "t": "Ekran gözləməsi köməkçisi hər yerdə; build 27 mətnləri; PLAN.md vəziyyəti."
         }
       ]
     },
     {
-      "title": "Gün 68",
+      "title": "Gün 69",
       "items": [
         {
           "id": "CI",
@@ -338,8 +340,8 @@
           "own": [
             "producer"
           ],
-          "day": "gün 68",
-          "t": "Sakit rejim: CI izləmə; kod baxışı dövrü tamamlandı (yeddi baxış) — MM-15 və playtest gözlənilir."
+          "day": "gün 69",
+          "t": "Sakit rejim: CI izləmə; səkkiz kod baxışı tamamlandı — MM-15 və playtest gözlənilir."
         },
         {
           "id": "FEEL-2-1…3",
