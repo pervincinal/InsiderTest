@@ -10,8 +10,8 @@
  */
 import type { GameState, Owner, SimEvent } from '../sim/types';
 import type { CaptureKind, HitState, SfxName, SfxOptions } from './sfx';
-import { ArrivalTracker, sendPitchHz, sfxForEvents } from './sfxRules';
-import { routeSfx, trackVoice, voiceRoom } from './mixer';
+import { ArrivalTracker, rateOk, sendPitchHz, sfxForEvents } from './sfxRules';
+import { isOutcome, routeSfx, trackVoice, voiceRoom } from './mixer';
 import { playSting } from './outcomeCues';
 
 /** AUD-F6: the event mapping, arrival detector and rate limits ride in this chunk (src/audio/sfx.ts loads it). */
@@ -31,8 +31,9 @@ export const HIT_GAP_MS = 170;
 /**
  * AUD-F1: being attacked. For every foe's landing on a tower `me` still owns after the tick, and every
  * capture that takes one of `me`'s towers (its last landing flipped it, so that landing no longer reads as
- * "on `me`"; AUD-F15: weight 0 — the capture's own `loss` thud is its sound, the haptic is medium), call `fire(weight)` — unless the same tower fired within HIT_TOWER_MS or any tower within
- * HIT_GAP_MS (wall clock `nowMs`; a refused hit is not recorded, so the next landing gets the slot).
+ * "on `me`"; AUD-F15: weight 0 — the capture's own `loss` thud is its sound, the haptic is medium), call `fire(weight)` — unless,
+ * for a landing, the same tower fired within HIT_TOWER_MS or any tower within HIT_GAP_MS (wall clock `nowMs`; a refused
+ * hit is not recorded, so the next landing gets the slot). A loss always fires (REV-53) and is recorded like a hit.
  */
 export function playHits(
   events: readonly SimEvent[],
@@ -53,7 +54,10 @@ export function playHits(
       id = ev.towerId;
       weight = 0;
     }
-    if (id === null || nowMs - st.last < HIT_GAP_MS || nowMs - (st.at.get(id) ?? -Infinity) < HIT_TOWER_MS) continue;
+    if (id === null) continue;
+    // REV-53: a loss bypasses both gaps — it is by construction preceded by foe landings on that very tower, so a
+    // knock < 250 ms earlier would otherwise swallow the AUD-F15 medium haptic it exists for; it still takes the slots
+    if (weight && (nowMs - st.last < HIT_GAP_MS || nowMs - (st.at.get(id) ?? -Infinity) < HIT_TOWER_MS)) continue;
     st.last = nowMs;
     st.at.set(id, nowMs);
     fire(weight);
@@ -121,7 +125,6 @@ export const DEATH_NOISES: readonly (readonly [BiquadFilterType, number, number]
   ['lowpass', 700, 0.14],
   ['bandpass', 1600, 0.17],
 ];
-/** AUD-F9: the fanfare over the three star pops — rising dyads of the C major triad (C5 E5, G5 C6, E6 G6). */
 /** FEEL-1-9: `send` alternates a triangle-led and a square-led blip (type, ms, gain)… */
 export const SEND_TIMBRES: readonly (readonly [OscillatorType, number, number])[] = [
   ['triangle', 60, 0.22],
@@ -152,6 +155,7 @@ function relinkGain(s: Synth, pair: string | undefined): number {
 export const SUB_GAIN = 0.18;
 /** FEEL-1-2: the airstrike's impact, after the whistle (render/combatFx.ts STRIKE_FALL_MS / 1000). */
 export const STRIKE_HIT_S = 0.15;
+/** AUD-F9: the fanfare over the three star pops — rising dyads of the C major triad (C5 E5, G5 C6, E6 G6). */
 export const STAR_CHORDS: readonly (readonly number[])[] = [
   [523.3, 659.3],
   [784, 1046.5],
@@ -178,7 +182,7 @@ export interface AudioHost {
  */
 export function onEvents(m: AudioHost, events: readonly SimEvent[], state: Pick<GameState, 'towers'>): void {
   (m.arrivals ??= new ArrivalTracker('player')).noteEvents(events);
-  for (const call of sfxForEvents(events, 'player', state.towers)) m.player.play(call.name, call.opts);
+  for (const call of sfxForEvents(events, 'player', state.towers)) m.player.play(call.name, call.opts); // REV-54: `towers` carries the send count
   playHits(events, 'player', state.towers, m.hits, performance.now(), (weight) => {
     if (weight) m.player.play('hit', { weight });
     if (m.save?.settings.haptics !== false) m.haptic(!weight);
@@ -190,9 +194,23 @@ export function onFrame(m: AudioHost, state: Pick<GameState, 'units'>): void {
   if ((m.arrivals ??= new ArrivalTracker('player')).tick(state) > 0) m.player.play('arrive');
 }
 
-/** Schedule the voices of `name` on `s` (the caller has checked the context, mute and rate limit). */
-export function playRecipe(s: Synth, name: SfxName, opts: SfxOptions): void {
-  if (!voiceRoom(s, name, opts)) return; // AUD-M1: the voice cap (src/audio/mixer.ts VOICE_CAP) skips the whole play
+/**
+ * `SfxPlayer.play`'s chunk half (the caller has checked the context and mute): the rate rule, the voice cap, the
+ * voices. REV-55: only a play that was scheduled takes its rate slot, and the result says whether it was.
+ */
+export function playLimited(s: Synth, last: Map<SfxName, number>, name: SfxName, opts: SfxOptions): boolean {
+  const now = s.now();
+  return rateOk(last, name, now, false) && playRecipe(s, name, opts) && rateOk(last, name, now);
+}
+
+/** Schedule the voices of `name` on `s` (the caller has checked the context, mute and rate limit); false: the voice cap skipped it. */
+export function playRecipe(s: Synth, name: SfxName, opts: SfxOptions): boolean {
+  if (!voiceRoom(s, name, opts)) {
+    // AUD-M1: the voice cap (src/audio/mixer.ts VOICE_CAP) skips the whole play — REV-55: but a capped outcome tick
+    // still ducks the music and ends its pulse / tension layers (`mix.ended`): the result sequence is state, not a voice
+    if (isOutcome(name, opts)) routeSfx(s, name, opts);
+    return false;
+  }
   s.route = routeSfx(s, name, opts); // AUD-F6: every voice below plays into the UI or SFX bus (src/audio/mixer.ts), ducking the music first when it should
   const i = nextPlay(s, name);
   const v = variation(name, i);
@@ -200,6 +218,7 @@ export function playRecipe(s: Synth, name: SfxName, opts: SfxOptions): void {
   gainK = Math.pow(10, v.db / 20);
   voices(s, name, opts, i);
   pitchK = gainK = 1;
+  return true;
 }
 
 /** The voices of the `i`-th play of `name`. */
@@ -359,18 +378,20 @@ function voices(s: Synth, name: SfxName, opts: SfxOptions, i: number): void {
 /**
  * AUD-F3 brass-ish note of `ms`: a sawtooth through a low-pass that opens 1.5 → 6 × the pitch over a
  * linear `riseMs` swell (the gain rises with it, not the 4 ms click of `blip`) and closes to 2 × on the
- * exponential release.
+ * exponential release. REV-57: applies the AUD-F7 factors like the other voices (its one user, `overdrive`, is
+ * UNVARIED, so they are 1 there: the cast sounds and peaks exactly as before).
  */
-function swell(s: Synth, freq: number, ms: number, riseMs: number, opts: BlipOptions = {}): void {
+function swell(s: Synth, hz: number, ms: number, riseMs: number, opts: BlipOptions = {}): void {
   const live = s.live();
   if (!live) return;
   const { ctx, master } = live;
+  const freq = hz * pitchK; // the filter tracks the detuned pitch
   const t0 = ctx.currentTime + (opts.delayS ?? 0);
   const tr = t0 + riseMs / 1000;
   const t1 = t0 + ms / 1000;
   const g = ctx.createGain();
   g.gain.setValueAtTime(FLOOR, t0);
-  g.gain.linearRampToValueAtTime(opts.gain ?? 0.2, tr);
+  g.gain.linearRampToValueAtTime((opts.gain ?? 0.2) * gainK, tr);
   g.gain.exponentialRampToValueAtTime(FLOOR, t1);
   g.connect(master);
   const filter = ctx.createBiquadFilter();

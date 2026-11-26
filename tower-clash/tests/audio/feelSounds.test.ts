@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { initAudio, loadSfxRecipes, playSfx, unlockAudio } from '../../src/audio/index';
+import { initAudio, loadSfxRecipes, onSimEvents, playSfx, unlockAudio } from '../../src/audio/index';
 import type { SfxOptions } from '../../src/audio/index';
 import { RELINK_DB, RELINK_S, SEND_TIMBRES, STRIKE_HIT_S, UNVARIED, variation } from '../../src/audio/recipes';
-import { RATE_LIMIT_S, sendPitchHz, sfxForEvents } from '../../src/audio/sfxRules';
+import { RATE_LIMIT_S, SEND_PITCH_CAP, sendPitchHz, sfxForEvents } from '../../src/audio/sfxRules';
+import { makeLevel } from '../helpers';
+import { createState } from '../../src/sim/create';
 import { busFor } from '../../src/audio/mixer';
 import { STRIKE_FALL_MS } from '../../src/render/combatFx';
 import { defaultSave } from '../../src/ui/save';
@@ -83,6 +85,24 @@ describe('send (FEEL-1-9)', () => {
   it('is played by the event mapping for the player’s own new streams, with the pair', () => {
     const ev = (owner: 'player' | 'enemy1'): SimEvent => ({ type: 'linked', owner, from: 'home', to: 'camp' });
     expect(sfxForEvents([ev('player'), ev('enemy1')], 'player')).toEqual([{ name: 'send', opts: { pair: 'home>camp' } }]);
+  });
+
+  it('REV-54: a new stream pitches with its source’s garrison — 20 units to the cap, 1 unit to 520 Hz', () => {
+    const state = createState(makeLevel(), 1); // towers p (player) and e (enemy1)
+    const link = (): SimEvent => ({ type: 'linked', owner: 'player', from: 'p', to: 'e' });
+    const pitchAt = (t: number, units: number): number => {
+      ctx.clear();
+      ctx.currentTime = t;
+      state.towers.p!.units = units;
+      onSimEvents([link()], state);
+      expect(ctx.oscillators).toHaveLength(1);
+      return ctx.oscillators[0]!.frequency.events[0]!.value;
+    };
+    expect(pitchAt(10, 20)).toBe(sendPitchHz(SEND_PITCH_CAP));
+    expect(sendPitchHz(SEND_PITCH_CAP)).toBeCloseTo(1040);
+    expect(pitchAt(11, 1)).toBeCloseTo(520);
+    expect(pitchAt(12, 35)).toBe(sendPitchHz(SEND_PITCH_CAP)); // past the cap: the cap
+    expect(sfxForEvents([link()], 'player', { p: { owner: 'player', units: 7 } })).toEqual([{ name: 'send', opts: { pair: 'p>e', count: 7 } }]);
   });
 
   it('alternates a triangle-led and a square-led blip and keeps the count pitch', () => {

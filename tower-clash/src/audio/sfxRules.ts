@@ -35,12 +35,16 @@ export function sendPitchHz(count: number): number {
   return SEND_BASE_HZ * Math.pow(2, (SEND_OCTAVE_SPAN * (n - 1)) / (SEND_PITCH_CAP - 1));
 }
 
-/** `SfxPlayer.play`: may `name` play at clock time `now` (seconds)? Records the play in `last` when it may. */
-export function rateOk(last: Map<SfxName, number>, name: SfxName, now: number): boolean {
+/**
+ * `SfxPlayer.play` (recipes.ts `playLimited`): may `name` play at clock time `now` (seconds)? Records the play in
+ * `last` when it may, unless `record` is false (REV-55: the check before the voice cap; the record after it).
+ */
+export function rateOk(last: Map<SfxName, number>, name: SfxName, now: number, record = true): boolean {
   const limit = RATE_LIMIT_S[name];
   if (limit === undefined) return true;
   const at = last.get(name);
   if (at !== undefined && now - at < limit - LIMIT_EPS_S) return false;
+  if (!record) return true;
   last.set(name, now);
   // AUD-F10: a tank landing counts as two `arrive` slots — the next arrival tap waits 2 × its limit
   // (so the soldier `onSimFrame` sees vanish in the same frame as the tank is not a second tap)
@@ -50,11 +54,14 @@ export function rateOk(last: Map<SfxName, number>, name: SfxName, now: number): 
 
 /* ---------- sim events → sounds (pure) ---------- */
 
-/** Map a batch of sim events to sound calls. `me` is the local player; `towers` resolves upgrade owners. */
+/**
+ * Map a batch of sim events to sound calls. `me` is the local player; `towers` (the state after the tick) resolves
+ * upgrade owners and, REV-54, a new stream's `send` count: the units its source holds (absent: 1, the base pitch).
+ */
 export function sfxForEvents(
   events: readonly SimEvent[],
   me: Owner = 'player',
-  towers: Readonly<Record<string, { owner: Owner }>> = {},
+  towers: Readonly<Record<string, { owner: Owner; units?: number }>> = {},
 ): SfxCall[] {
   const out: SfxCall[] = [];
   for (const ev of events) {
@@ -72,7 +79,8 @@ export function sfxForEvents(
         break;
       case 'linked':
         // one tick per stream `me` starts (manual or autoplay; was play.ts); FEEL-1-9: the pair softens a quick re-link
-        if (ev.owner === me) out.push({ name: 'send', opts: { pair: `${ev.from}>${ev.to}` } });
+        // REV-54: and its pitch rises with the source's garrison (it was always sendPitchHz(1): `linked` has no count)
+        if (ev.owner === me) out.push({ name: 'send', opts: { pair: `${ev.from}>${ev.to}`, count: towers[ev.from]?.units } });
         break;
       case 'landed':
         // AUD-F10: the player's own tank landing (reinforcing or attacking) is one heavy tap; a soldier's

@@ -4,7 +4,8 @@ import type { SfxName, SfxOptions } from '../../src/audio/index';
 import type { Mix } from '../../src/audio/mixer';
 import { VOICES, VOICE_CAP, duckFor } from '../../src/audio/mixer';
 import { ResultCuePlayer, resultCues } from '../../src/audio/resultCues';
-import { RATE_LIMIT_S } from '../../src/audio/sfxRules';
+import { RATE_LIMIT_S, rateOk } from '../../src/audio/sfxRules';
+import { playLimited } from '../../src/audio/recipes';
 import { busLevels } from '../../src/audio/inspect';
 import { rngsFor, runAiTick } from '../../src/ai/index';
 import { isAiTick } from '../../src/ai/common';
@@ -97,7 +98,9 @@ describe('AUD-M1 voice cap', () => {
     for (let i = 0; i < 8; i++) if (playSfx('upgrade')) played++;
     expect(live()).toBe(16);
     expect(m.capped).toBe(4);
-    expect(played).toBe(8); // the SfxPlayer accepted them (rate rules); the cap skipped 4 inside the chunk
+    // REV-55: the caller sees the cap — `play` is true only for a play that was scheduled (it was 8: the rate
+    // rules accepted all of them and the cap's skips inside the chunk were invisible)
+    expect(played).toBe(4);
     // the ducking sounds still fit (each checked at its VOICES entry, 3 for a capture or `won`): two own captures
     // and the outcome sting (2 voices each) → 22; a defeat chord (4) would make 26 → skipped; the stalemate hint (2) → 24
     expect(duckFor('capture', { capture: 'gain' })).not.toBeNull();
@@ -110,14 +113,36 @@ describe('AUD-M1 voice cap', () => {
     expect(m.capped).toBe(5);
     playSfx('stalemate'); // 2 (the UI bus counts too): exactly 24
     expect(live()).toBe(24);
-    expect(playSfx('send', { count: 1 })).toBe(true); // an ordinary tick at the full cap: skipped
+    // an ordinary tick at the full cap: skipped — REV-55: and `play` says so (this pinned `true`, a skipped play reported as played)
+    expect(playSfx('send', { count: 1 })).toBe(false);
     expect(live()).toBe(24);
     expect(m.peak).toBe(24);
+    // REV-55: the skipped tick took no rate slot (it used to: the next send inside 50 ms was refused as well)
+    const last = new Map<SfxName, number>();
+    expect(playLimited(audioSynth(), last, 'send', { count: 1 })).toBe(false);
+    expect(last.has('send')).toBe(false);
+    expect(rateOk(last, 'send', audioSynth().now(), false)).toBe(true);
     // once the upgrades rang out (≤ 300 ms) there is room again
     ctx.currentTime += 0.5;
     expect(live()).toBe(0);
     expect(playSfx('upgrade')).toBe(true);
     expect(live()).toBe(4);
+  });
+
+  it('REV-55: a capped outcome tick is reported (false) yet still ducks the music and ends its pulse / tension layers', async () => {
+    const m = await audio();
+    for (let i = 0; i < 4; i++) expect(playSfx('upgrade')).toBe(true); // 16: the ordinary limit
+    for (let i = 0; i < 2; i++) expect(playSfx('capture', { capture: 'gain' })).toBe(true); // 20
+    expect(playSfx('stalemate')).toBe(true); // 22: `won` (3) no longer fits in 24
+    const capped = m.capped;
+    const duck = m.plan;
+    expect(m.ended).toBe(false);
+    expect(playSfx('won')).toBe(false);
+    expect(m.capped).toBe(capped + 1);
+    expect(m.ended).toBe(true); // the result sequence's music state does not depend on the sting fitting
+    expect(m.plan).not.toBe(duck);
+    expect(m.plan!.until).toBeGreaterThan(audioSynth().now());
+    expect(playSfx('lost', { step: 0 })).toBe(false); // a capped card chord is just skipped
   });
 
   it('the rate rules alone bound the airstrike, the stings and the alternating send far under the cap', () => {

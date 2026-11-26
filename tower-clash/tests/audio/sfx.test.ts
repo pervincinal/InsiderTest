@@ -321,6 +321,27 @@ describe('arrivals', () => {
     onSimFrame(state);
     expect(ctx.voices().length).toBe(1);
   });
+
+  it('REV-56: Effects off and on mid-match plays no phantom arrival for the units that went while muted', () => {
+    unlockAudio();
+    const state = createState(makeLevel(), 1);
+    const unit = (id: number) => ({ id, owner: 'player' as const, kind: 'infantry' as const, weight: 1, roadId: 'e-p', from: 'p', to: 'e', progress: 0.5, speed: 100 });
+    state.units.push(unit(1), unit(2));
+    onSimFrame(state); // the tracker sees 1 and 2
+    setMuted(true);
+    state.units.length = 0; // they land (or die) while muted: the chunk does not run, the tracker is frozen
+    onSimFrame(state);
+    setMuted(false);
+    ctx.currentTime += 1; // past any rate limit
+    onSimFrame(state);
+    expect(ctx.voices()).toHaveLength(0);
+    // and it tracks again from there: a unit that appears and then lands taps once
+    state.units.push(unit(3));
+    onSimFrame(state);
+    state.units.length = 0;
+    onSimFrame(state);
+    expect(ctx.voices()).toHaveLength(1);
+  });
 });
 
 /*

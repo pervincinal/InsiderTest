@@ -74,6 +74,21 @@ describe('playHits (AUD-F1 limiter)', () => {
     expect(run(st, [land('b')], 170)).toHaveLength(1); // b was not marked at 100 ms
   });
 
+  it('REV-53: a lost tower always fires, inside both gaps, and takes the slots like a hit', () => {
+    const lose = (towerId: string): SimEvent => ({ type: 'capture', towerId, by: 'enemy1', from: 'player' });
+    const st = fresh();
+    // the review's scenario: landings on `a` at 0 / 150 (refused) / 300, a loss at 450 (< 250 ms after 300)
+    expect(run(st, [land('a')], 0)).toEqual([1]);
+    expect(run(st, [land('a')], 150)).toEqual([]);
+    expect(run(st, [land('a')], 300)).toEqual([1]);
+    expect(run(st, [lose('a')], 450)).toEqual([0]);
+    // inside the global gap of another tower's knock, too (and in the same batch as the landing that flipped it)
+    expect(run(st, [land('b'), lose('b')], 700)).toEqual([1, 0]);
+    // it is recorded: a landing elsewhere right after waits for the global gap
+    expect(run(st, [land('c')], 700 + HIT_GAP_MS - 1)).toEqual([]);
+    expect(run(st, [land('c')], 700 + HIT_GAP_MS)).toEqual([1]);
+  });
+
   it('a 3 s barrage on three towers (a landing on each every 10 ms) stays within both limits', () => {
     const st = fresh();
     const fires: { t: number; id: string }[] = [];
@@ -130,6 +145,21 @@ describe('onSimEvents → hit sound + haptic', () => {
     onSimEvents([land('p')], s);
     expect(ctx.voices()).toHaveLength(4);
     expect(haptics).toBe(2);
+  });
+
+  it('land(p) then capture of p 100 ms later still fires medium (REV-53, AUD-F15)', async () => {
+    ctx = new FakeAudioContext();
+    const taps: (boolean | undefined)[] = [];
+    const save = defaultSave();
+    save.settings.music = false;
+    initAudio(save, { factory: () => ctx, persist: () => undefined, haptic: (medium) => taps.push(medium) });
+    await loadSfxRecipes();
+    unlockAudio();
+    const s = state();
+    onSimEvents([land('p')], s);
+    now += 100;
+    onSimEvents([{ type: 'capture', towerId: 'p', by: 'enemy1', from: 'player' }], s);
+    expect(taps.map((m) => !!m)).toEqual([false, true]); // the light knock, then the medium loss
   });
 
   it('a tank knocks lower than a soldier', async () => {

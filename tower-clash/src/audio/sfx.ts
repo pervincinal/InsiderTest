@@ -117,18 +117,16 @@ export function sfxNow(): SfxChunk | null {
   return chunk;
 }
 
-/** Plays named sounds through a synth, applying per-sound rate limits (sfxRules.ts `rateOk`). */
+/** Plays named sounds through a synth, applying per-sound rate limits and the voice cap (recipes.ts `playLimited`). */
 export class SfxPlayer {
   private readonly last = new Map<SfxName, number>();
 
   constructor(private readonly synth: Synth) {}
 
-  /** Returns true when the sound was actually scheduled (false: muted, no context, the OS holds the context (AUD-Q19), recipes not loaded yet, rate-limited). */
+  /** Returns true when the sound was actually scheduled (false: muted, no context, the OS holds the context (AUD-Q19), recipes not loaded yet, rate-limited, voice-capped). */
   play(name: SfxName, opts: SfxOptions = {}): boolean {
     const v = this.synth.live(); // a context, Effects on
     const c = v && v.ctx.state !== 'interrupted' ? sfxNow() : null;
-    if (!c || !c.rateOk(this.last, name, this.synth.now())) return false;
-    c.playRecipe(this.synth, name, opts);
-    return true;
+    return !!c && c.playLimited(this.synth, this.last, name, opts);
   }
 }

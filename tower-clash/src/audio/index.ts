@@ -139,6 +139,9 @@ export function musicOn(): boolean {
 
 /** Effects off / on (persists `settings.sound`). */
 export function setMuted(muted: boolean): void {
+  // REV-56: the arrival tracker froze while muted (the chunk does not run then): forget it, or every own unit that
+  // vanished meanwhile would read as an arrival on the first frame back
+  if (!muted && mod.synth.muted) mod.arrivals?.reset();
   mod.synth.setMuted(muted);
   persistAudio();
 }
