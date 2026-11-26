@@ -249,9 +249,15 @@ export class ParticleSystem implements BurstHost {
   shakeDir: { x: number; y: number } | null = null;
   private lastMs = 0;
   private salt = 1;
-  private warmed = false;
+  /** REV-61: the last `state.time` `landings` saw (a smaller one = a Continue rewind). */
+  private simAt = 0;
 
-  constructor(readonly reducedMotion: boolean = prefersReducedMotion()) {}
+  /** `forced`: pin reduced motion (tests); else REV-59 it follows `motionAllowed` live (a Settings flip mid-match). */
+  constructor(private readonly forced?: boolean) {}
+
+  get reducedMotion(): boolean {
+    return this.forced ?? !motionAllowed();
+  }
 
   get count(): number {
     return this.ps.length;
@@ -398,6 +404,9 @@ export class ParticleSystem implements BurstHost {
    * ring at the base in the attacker's colour (`attackers` from `hostileAttackers`).
    */
   landings(state: GameState, attackers: ReadonlyMap<string, Owner>, pal: Palette, nowMs: number): void {
+    // REV-61: sim time went back (a Continue rewind): resync the deadlines without bursting
+    const back = state.time < this.simAt;
+    this.simAt = state.time;
     for (const id in state.towers) {
       const t = state.towers[id]!;
       const until = t.underFireUntilMs;
@@ -405,7 +414,7 @@ export class ParticleSystem implements BurstHost {
       if (f ? f.until === until : until === 0) continue;
       if (f) f.until = until;
       else this.fire.set(id, { until, hitAt: -Infinity, ringAt: -Infinity });
-      if (state.time >= until) continue; // expired / cleared by a capture: not a landing
+      if (back || state.time >= until) continue; // expired / cleared by a capture: not a landing
       const rec = this.fire.get(id)!;
       rec.hitAt = nowMs;
       this.hit(rec, t, attackers.get(id), pal, nowMs);
@@ -629,11 +638,9 @@ export class ParticleSystem implements BurstHost {
 
   /** Step by wall-clock time and paint. Expects the logical transform to be active. */
   draw(ctx: CanvasRenderingContext2D, nowMs: number, project?: ParticleProjection): void {
-    if (!this.warmed) {
-      // reduced motion too: the AUD-F2 mine marks are drawn through the chunk
-      this.warmed = true;
-      warmEconomyBursts();
-    }
+    // reduced motion too (the AUD-F2 mine marks are drawn through the chunk); REV-60: every frame until
+    // it is in, so a failed download is retried after its back-off (`chunkBackoff`), not never
+    warmEconomyBursts();
     const dt = this.lastMs ? Math.min(64, Math.max(0, nowMs - this.lastMs)) : 16;
     this.lastMs = nowMs;
     if (!this.ps.length) return;

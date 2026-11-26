@@ -493,16 +493,25 @@ const WALL_HALF = 0.6;
 
 /**
  * Per link (render-only, no sim field): the `emitAccMs` seen on the last frame, and the first soldier —
- * WAITING until the link's first emission (a drop of `emitAccMs` between two frames), then that unit's id
+ * WAITING until the link's first emission (a drop of `emitAccMs` between two frames, or a new unit of the stream), then that unit's id
  * until it has walked out past the plinth rim (the gate), then DONE: one muster per link, never again.
  */
 interface Muster {
   last: number;
   unit: number;
+  /** REV-62: the newest unit of this from → to pair when first seen (a leftover of an older stream); a newer one = the first emission. */
+  base: number;
 }
 const WAITING = -1;
 const DONE = -2;
 const musters = new WeakMap<Link, Muster>();
+
+/** The newest unit on the road from `link.from` to `link.to` (DONE: none). */
+function newestOf(state: MarksState, link: Link): number {
+  let id = DONE;
+  for (const u of state.units) if (u.from === link.from && u.to === link.to && u.id > id) id = u.id;
+  return id;
+}
 
 /** Distance from the tower's anchor to the plinth rim (ellipse rx `half`, ry 0.42 × `half`) along the screen direction (dx, dy). */
 function rimScale(dx: number, dy: number, half: number): number {
@@ -529,12 +538,13 @@ export function musterGrowth(state: MarksState, link: Link, body: Rect, cam: Cam
   if (!m) {
     // first seen; a frame long enough (×20 speed) may already have run past the first emission
     const mul = state.boosters.some((b) => b.type === 'overdrive' && b.owner === link.owner) ? C.OVERDRIVE_MUL : 1;
-    musters.set(link, (m = { last: (state.time - link.createdMs) * mul >= every ? Infinity : link.emitAccMs, unit: WAITING }));
+    musters.set(link, (m = { last: (state.time - link.createdMs) * mul >= every ? Infinity : link.emitAccMs, unit: WAITING, base: newestOf(state, link) }));
   }
-  if (m.unit === WAITING && link.emitAccMs < m.last) {
-    // the first emission: the newest unit of this stream is the one the muster hands over to
-    m.unit = DONE;
-    for (const u of state.units) if (u.from === link.from && u.to === link.to && u.id > m.unit) m.unit = u.id;
+  if (m.unit === WAITING) {
+    // the first emission — `emitAccMs` dropped, or (REV-62: a frame spanning a whole interval can end above the
+    // last value) a new unit of this stream is out: the newest one is the one the muster hands over to
+    const id = newestOf(state, link);
+    if (link.emitAccMs < m.last || id > m.base) m.unit = id;
   }
   m.last = link.emitAccMs;
   if (m.unit === WAITING) return Math.max(0, Math.min(1, link.emitAccMs / every));

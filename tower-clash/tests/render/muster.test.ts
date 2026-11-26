@@ -219,6 +219,25 @@ describe('muster (motion)', () => {
     expect(sweep(calls)).toBe(1);
   });
 
+  it('REV-62: a frame spanning the first emission whose emitAccMs ends above the last frame\'s still hands over (no second soldier forms)', () => {
+    const state = board();
+    const fx = new ParticleSystem(false);
+    link(state);
+    ticks(state, 1);
+    expect(sweep(frame(fx, state))).toBeCloseTo(50 / 1000, 9); // WAITING, emitAccMs 50
+    ticks(state, 21); // one long frame: 50 → 1 100 ms, the first soldier out, emitAccMs back at 100 (> 50: no drop)
+    expect(state.units).toHaveLength(1);
+    expect(state.links[0]!.emitAccMs).toBeGreaterThan(50);
+    expect(sweep(frame(fx, state))).toBe(1); // handed over to that soldier (hidden behind the tower), not growing again
+    while (tracks(frame(fx, state)).length) ticks(state, 1);
+    // gone for good: the second soldier (2 000 ms) does not bring it back
+    for (let i = 0; i < 60; i++) {
+      ticks(state, 1);
+      expect(frame(fx, state)).toHaveLength(0);
+    }
+    expect(state.units.length).toBeGreaterThan(1);
+  });
+
   it('a lane leaving in front of the tower hands over as soon as the soldier is painted after the tower', () => {
     const state = board({}, [{ id: 'd', x: 360, y: 1250, owner: 'neutral', units: 5, level: 1 }]);
     const fx = new ParticleSystem(false);

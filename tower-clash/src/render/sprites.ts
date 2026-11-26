@@ -1265,12 +1265,13 @@ export function drawBadge(ctx: CanvasRenderingContext2D, pal: Palette, x: number
   const flash = style.flash ?? 0;
   if (flash > 0) {
     // ART-23 capture: a bright halo flashes round the pill (paper-white by default), the numerals stay on top
-    ctx.globalAlpha = flash;
+    const a = ctx.globalAlpha; // REV-63: the caller's alpha (a fading badge), restored after the halo
+    ctx.globalAlpha = a * flash;
     ctx.strokeStyle = style.flashColor ?? '#ffffff';
     ctx.lineWidth = 3 + 5 * flash;
     roundRect(ctx, { x: r.x - 3, y: r.y - 3, w: w + 6, h: h + 6 }, h / 2 + 3);
     ctx.stroke();
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = a;
   }
   ctx.fillStyle = pal.ink;
   ctx.font = worldFont(px * s);
@@ -1790,7 +1791,6 @@ export function drawCrystal(ctx: CanvasRenderingContext2D, pal: Palette, x: numb
   ctx.fill();
 }
 
-/** Coin positions (in coin radii) and the coin radius (in `size`) for 1–5 coins. */
 /**
  * Wooden treasure chest with gold straps; `size` is its width. Open: the lid tips back and coins +
  * a crystal show over the rim (starter pack / reward). The anchor (x, y) is the chest centre.
