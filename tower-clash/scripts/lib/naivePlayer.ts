@@ -421,7 +421,7 @@ export function parseTieExempt(spec: string): number[] {
   if (parts.some((p) => !/^\d+$/.test(p)) || new Set(ids).size !== ids.length) throw new Error(`bad --tie-exempt ${spec} (unique level ids, e.g. 3)`);
   const unknown = ids.filter((id) => NAIVE_TIE_EXEMPT[id] === undefined);
   if (unknown.length) {
-    throw new Error(`--tie-exempt ${unknown.join(',')}: not in NAIVE_TIE_EXEMPT (scripts/lib/naivePlayer.ts: ${Object.keys(NAIVE_TIE_EXEMPT).join(', ')}) — add the level there with the item that cures it by tutorial`);
+    throw new Error(`--tie-exempt ${unknown.join(',')}: not in NAIVE_TIE_EXEMPT (scripts/lib/naivePlayer.ts: ${Object.keys(NAIVE_TIE_EXEMPT).join(', ') || 'none'}) — add the level there with the item that cures it by tutorial`);
   }
   return [...ids].sort((a, b) => a - b);
 }
@@ -429,6 +429,17 @@ export function parseTieExempt(spec: string): number[] {
 /** The naive gate's minimum win share for a level, or undefined past `NAIVE_GATE_LAST`. */
 export function naiveGateRate(levelId: number): number | undefined {
   return NAIVE_GATE_BANDS.find((b) => levelId >= b.from && levelId <= b.to)?.rate;
+}
+
+/**
+ * REV-70: the thresholds part of the `--naive --gate a-b` header, from `NAIVE_GATE_BANDS` clipped to the
+ * range: `>= 80%` for a range inside one band, else one `>= R% (lvl x-y)` per band, joined by ` / `
+ * (`1-16` → `>= 80% (lvl 1-8) / >= 60% (lvl 9-16)`, `5-12` → `>= 80% (lvl 5-8) / >= 60% (lvl 9-12)`).
+ */
+export function naiveGateBandsNote(range: NaiveGateRange): string {
+  const bands = NAIVE_GATE_BANDS.filter((b) => b.to >= range.from && b.from <= range.to).map((b) => ({ rate: b.rate, from: Math.max(b.from, range.from), to: Math.min(b.to, range.to) }));
+  const pct = (rate: number): string => `>= ${Math.round(rate * 100)}%`;
+  return bands.length === 1 ? pct(bands[0]!.rate) : bands.map((b) => `${pct(b.rate)} (lvl ${b.from}-${b.to})`).join(' / ');
 }
 
 /** Fewest wins out of `k` seeds that satisfy `rate` (4 of 5 at 0.8; 3 of 5 at 0.6; 8 of 10 at 0.8). */
@@ -468,7 +479,8 @@ export function parseNaiveGate(spec: string): NaiveGateRange {
 /**
  * Apply the naive gate to the rows of a `--naive` run: every level in `range` must be present and
  * win at least `naiveGateRate(id)` of its seeds. Returns one failure per level under its threshold;
- * a level of the range missing from `rows` is a failure too (0 wins of 0) so a partial run cannot pass.
+ * a level of the range missing from `rows` is a failure too (0 wins of 0) so a partial run cannot pass —
+ * as is a row of 0 seeds (REV-69: it used to pass at minWins 0).
  * Throws when a row's reaction is not the default: the thresholds are calibrated for `NAIVE_REACT_MS`.
  * GD-7f: `ties` names the tie orders the run gates (default `['asc']`, today's CI line; `--tie both` →
  * `['asc', 'desc']`): a level fails when **either** order's row is under its share or missing, one
@@ -500,7 +512,7 @@ export function naiveGate(
       if (tie === 'desc' && descExempt.includes(id)) continue;
       const row = byKey.get(`${id}:${tie}`);
       const k = row?.seeds.length ?? 0;
-      const minWins = row ? naiveGateMinWins(rate, k) : 1;
+      const minWins = k > 0 ? naiveGateMinWins(rate, k) : 1; // REV-69: a row of 0 seeds is not run, like a missing row
       const wins = row?.wins ?? 0;
       if (wins < minWins) failures.push({ levelId: id, name: row?.level.name ?? '(not run)', wins, k, minWins, rate, losers: row?.losers ?? [], ...(tie === 'desc' ? { tie } : {}) });
     }

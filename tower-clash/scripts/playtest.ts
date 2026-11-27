@@ -24,7 +24,7 @@
  * unmodified row, or the reference player loses a seed the unmodified run won (`tierGateFailures`).
  * One summary row per tier; exit 1 on any failure.
  * Daily mode (`--daily D`): the reference player on each day's Daily Challenge (`challengeFor`: level
- * 9–40, fixed seed, twist modifiers on the player side; no Commander upgrades) for D and the next N−1
+ * POOL_FROM–POOL_TO = 9–50, fixed seed, twist modifiers on the player side; no Commander upgrades) for D and the next N−1
  * days (`--days N`, default 1). `--seeds K` (default 1) measures each day over K seeds starting at the
  * fixed one (seed, seed+1, …). One row per day: level, twist, fixed-seed result, wins/K, median win
  * time, stars at the fixed seed. Gates: every day's fixed-seed run is won and wins/K ≥ 90 %.
@@ -33,8 +33,8 @@
  * (`weeklyFor`: level 33–POOL_TO, fixed seed, a non-plain twist, 3★ target = the level's `star3`) for
  * the Monday M and the next N−1 weeks (`--weeks N`, default 1), K seeds from the fixed one (`--seeds K`,
  * default 1). One row per week: level, twist, fixed-seed result, wins/K, median, best time vs the target
- * and which seed(s) reach it. Gates per week: fixed seed won, wins/K ≥ 90 %, and at least one of the K
- * seeds finishes ≤ targetMs (else "level/clock item" for the Level Designer). A non-Monday key is an error.
+ * and which seed(s) reach it. Gates per week: fixed seed won and wins/K ≥ WEEKLY_WIN_RATE (80 %); the 3★
+ * target (≤ targetMs) is reported, not gated (star3 sits at 0.9 × the bot's median by design). A non-Monday key is an error.
  * Twist mode (`--twist <id>`, GDD §7.5 item 3): the reference player on every pool level (`--pool a-b`,
  * default POOL_FROM–POOL_TO) with that twist's modifiers over seeds 1..K (`--seeds K`, default 5). One
  * row per level; gate per level: wins/K ≥ 80 % (4/5 at K = 5), every win under 180 s.
@@ -75,7 +75,7 @@ import { maxedModifiers } from '../src/economy/maxUpgrades';
 import { DAILY_WIN_RATE, TWIST_WIN_RATE, WEEKLY_WIN_RATE, dailyPlan, inPool, runDaily, runTwist, runWeekly, twistById, weeklyPlan } from './lib/daily';
 import type { DailyRow, PoolRange, TwistRow, WeeklyRow } from './lib/daily';
 import type { Twist } from '../src/daily/challenge';
-import { NAIVE_GATE_LAST, NAIVE_REACT_MS, NAIVE_TIE_EXEMPT, NAIVE_WIN_RATE, formatFollowSpec, makeNaivePlayer, naiveGate, naiveGateMinWins, naiveGateRate, ruleA, runNaive } from './lib/naivePlayer';
+import { NAIVE_GATE_LAST, NAIVE_REACT_MS, NAIVE_TIE_EXEMPT, NAIVE_WIN_RATE, formatFollowSpec, makeNaivePlayer, naiveGate, naiveGateBandsNote, naiveGateMinWins, naiveGateRate, ruleA, runNaive } from './lib/naivePlayer';
 import type { FollowSpec, NaiveGateRange, NaiveRow, NaiveTie } from './lib/naivePlayer';
 import { parseArgs, tiesOf } from './lib/playtestArgs';
 import type { TieMode, Upgrades } from './lib/playtestArgs';
@@ -397,14 +397,14 @@ async function runDailyMode(from: string, days: number, k: number, twist: boolea
 
 /**
  * Weekly mode (GDD §8): the reference player on each week's challenge (level 33+, fixed seed, non-plain
- * twist, no upgrades) over K seeds from the fixed one. Gate per week: fixed seed won, wins/K >= 90 %
- * and at least one seed within the 3★ target (`weekly.targetMs` = the level's `star3`).
+ * twist, no upgrades) over K seeds from the fixed one. Gate per week: fixed seed won and wins/K >=
+ * `WEEKLY_WIN_RATE` (80 %); the 3★ target (`weekly.targetMs` = the level's `star3`) is reported, not gated.
  */
 async function runWeeklyMode(from: string, weeks: number, k: number, twist: boolean): Promise<number> {
   const plan = weeklyPlan(from, weeks);
   const header = `${pad('week', 10)} ${pad('lvl', 4)} ${pad('name', 20)} ${pad('twist', 10)} ${pad('fixed seed', 24)} ${pad('wins', 6)} ${pad('median', 8)} ${pad('best / target', 16)} ${pad('3* by', 12)} ${pad('gate', 6)} losing seeds`;
   console.log(
-    `playtest weekly  ${from} +${weeks - 1} week(s)  seeds=K=${k} (fixed, fixed+1, …)  twist=${twist ? 'on' : 'OFF (control)'}  upgrades=none  max=${fmtTime(MAX_MS)}  gate: fixed seed won, wins/K >= ${Math.round(WEEKLY_WIN_RATE * 100)}%, >= 1 seed <= 3* target`,
+    `playtest weekly  ${from} +${weeks - 1} week(s)  seeds=K=${k} (fixed, fixed+1, …)  twist=${twist ? 'on' : 'OFF (control)'}  upgrades=none  max=${fmtTime(MAX_MS)}  gate: fixed seed won, wins/K >= ${Math.round(WEEKLY_WIN_RATE * 100)}% (3* target reported, not gated)`,
   );
   console.log(header);
   console.log('-'.repeat(header.length));
@@ -557,8 +557,7 @@ async function runNaiveMode(
   const tieLabel = (t: NaiveTie | undefined): string => (t === 'desc' ? ' tie desc' : '');
   const header = `${pad('lvl', 4)} ${pad('name', 20)} ${pad('wins', 6)} ${pad('3*/2*/1*/0*', 12)} ${pad('median', 8)} ${pad('worst', 8)} ${pad('star2', 8)} ${pad('holds', 6)} ${pad('star2?', 7)} ${pad('gate', 6)} losing seeds`;
   const gateNote = gate
-    ? `gate lvl ${gate.from}-${gate.to}: wins/K >= ${Math.round(naiveGateRate(gate.from)! * 100)}%` +
-      (naiveGateRate(gate.to) !== naiveGateRate(gate.from) ? ` (lvl 1-8) / >= ${Math.round(naiveGateRate(gate.to)! * 100)}% (lvl 9-${NAIVE_GATE_LAST})` : '')
+    ? `gate lvl ${gate.from}-${gate.to}: wins/K ${naiveGateBandsNote(gate)}` // REV-70: the band labels follow the range
     : 'no gate';
   const line = follow ? `card follower [${formatFollowSpec(follow)}]` : 'naive';
   const tieNote = tie === 'asc' ? '' : `  tie=${tie} (desc = the larger id on an exact target tie${tie === 'both' ? '; extra rows labelled "tie desc"' : ''})`;

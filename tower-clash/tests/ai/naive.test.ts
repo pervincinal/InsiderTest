@@ -11,6 +11,7 @@ import {
   isReactionTick,
   makeNaivePlayer,
   naiveGate,
+  naiveGateBandsNote,
   naiveGateMinWins,
   naiveGateRate,
   naiveTarget,
@@ -170,6 +171,24 @@ describe('naive human line (QA-3)', () => {
     it('a level of the range that was not run fails (0 of 0): a partial run cannot pass the gate', () => {
       const failures = naiveGate([row(1, 5), row(2, 5)], { from: 1, to: 3 });
       expect(failures).toEqual([{ levelId: 3, name: '(not run)', wins: 0, k: 0, minWins: 1, rate: 0.8, losers: [] }]);
+    });
+
+    // REV-69 (REV-0k, 2026-11-27): a row with `seeds: []` passed at minWins 0 while a missing row failed
+    it('a row of 0 seeds fails like a missing row (minWins 1), in both tie orders', () => {
+      expect(naiveGate([row(1, 5), row(2, 0, 0)], { from: 1, to: 2 })).toEqual([{ levelId: 2, name: 'L2', wins: 0, k: 0, minWins: 1, rate: 0.8, losers: [] }]);
+      expect(naiveGate([row(9, 0, 0)], { from: 9, to: 9 })).toEqual([{ levelId: 9, name: 'L9', wins: 0, k: 0, minWins: 1, rate: 0.6, losers: [] }]);
+      const desc = { ...row(4, 0, 0), tie: 'desc' as const };
+      expect(naiveGate([row(4, 5), desc], { from: 4, to: 4 }, ['asc', 'desc'])).toEqual([{ levelId: 4, name: 'L4', wins: 0, k: 0, minWins: 1, rate: 0.8, losers: [], tie: 'desc' }]);
+    });
+
+    // REV-70: the `--naive --gate a-b` header's band labels come from NAIVE_GATE_BANDS clipped to a-b
+    it('naiveGateBandsNote labels the bands of the range (1-16 text unchanged)', () => {
+      expect(naiveGateBandsNote({ from: 1, to: 16 })).toBe('>= 80% (lvl 1-8) / >= 60% (lvl 9-16)');
+      expect(naiveGateBandsNote({ from: 5, to: 12 })).toBe('>= 80% (lvl 5-8) / >= 60% (lvl 9-12)');
+      expect(naiveGateBandsNote({ from: 8, to: 9 })).toBe('>= 80% (lvl 8-8) / >= 60% (lvl 9-9)');
+      expect(naiveGateBandsNote({ from: 1, to: 5 })).toBe('>= 80%');
+      expect(naiveGateBandsNote({ from: 9, to: 16 })).toBe('>= 60%');
+      expect(naiveGateBandsNote({ from: 12, to: 12 })).toBe('>= 60%');
     });
 
     it('rejects rows from another reaction delay and ranges outside 1–16', () => {

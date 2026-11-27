@@ -99,4 +99,14 @@ describe('scripts/checkBundle.mjs — forbidden native plugins (QA-16)', () => {
     expect(r.status).toBe(2);
     expect(r.stderr).toMatch(/dist\/index\.html does not exist/);
   });
+
+  // REV-73 (REV-0k, 2026-11-27): a trailing `--dist` resolved to '<cwd>/undefined' and reported a missing dist/ there
+  it('--dist without a directory → exit 2 naming the flag (last argument or before another flag)', () => {
+    for (const argv of [['--no-build', '--dist'], ['--dist', '--no-build']]) {
+      const r = spawnSync(process.execPath, [SCRIPT, ...argv], { encoding: 'utf8', timeout: 20_000 });
+      expect(r.status, r.stderr).toBe(2);
+      expect(r.stderr).toContain('checkBundle: --dist needs a directory');
+      expect(r.stderr).not.toContain('undefined');
+    }
+  });
 });

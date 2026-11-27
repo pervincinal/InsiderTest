@@ -94,9 +94,11 @@ describe('playtest flags: --upgrades on --naive, --tier-gate, --jobs (AUD-B1, AU
     expect(() => parseArgs(['--upgrades', 'capacity:6'])).toThrow(/bad --upgrades capacity:6: capacity has tiers 1-5/);
   });
 
-  it('--naive takes --upgrades (with --gate, --tie, --follow); the challenge and twist modes refuse it', () => {
+  it('--naive takes --upgrades (with --tie, --follow; not --gate, REV-67); the challenge and twist modes refuse it', () => {
     expect(parseArgs(['--naive', '--upgrades', 'max'])).toMatchObject({ naive: true, upgrades: 'max' });
-    expect(parseArgs(['--naive', '--seeds', '5', '--gate', '1-16', '--tie', 'both', '--upgrades', 'capacity:1'])).toMatchObject({ upgrades: 'capacity:1', tie: 'both' });
+    expect(parseArgs(['--naive', '--seeds', '5', '--tie', 'both', '--upgrades', 'capacity:1'])).toMatchObject({ upgrades: 'capacity:1', tie: 'both' });
+    // REV-67: the gate shares are the unmodified player's — a gated run with upgrades is refused (it used to report a pass CI would not)
+    expect(() => parseArgs(['--naive', '--seeds', '5', '--gate', '1-16', '--tie', 'both', '--upgrades', 'capacity:1'])).toThrow(/--gate is defined for the unmodified player; drop --upgrades capacity:1/);
     expect(parseArgs(['--naive', '--level', '10', '--follow', 'prio=fort', '--upgrades', 'garrison:2']).upgrades).toBe('garrison:2');
     expect(() => parseArgs(['--daily', '2026-10-30', '--upgrades', 'max'])).toThrow(/--upgrades does not apply to --daily/);
     expect(() => parseArgs(['--daily', '2026-10-30', '--naive', '--upgrades', 'capacity:1'])).toThrow(/--upgrades does not apply to --daily/);

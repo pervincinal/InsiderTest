@@ -157,6 +157,10 @@ describe('--tie-exempt on the command line (QA-30, since AUD-B9: empty registry)
     // every well-formed id is refused now, level 3 (GD-7h, dropped by AUD-B9) first of all
     for (let id = 1; id <= 16; id++) expect(() => parseTieExempt(String(id)), `id ${id}`).toThrow(new RegExp(`--tie-exempt ${id}: not in NAIVE_TIE_EXEMPT`));
     expect(() => parseTieExempt('3,5')).toThrow(/--tie-exempt 3,5: not in NAIVE_TIE_EXEMPT/);
+    // REV-72: the empty registry reads "none", not a dangling colon
+    expect(Object.keys(NAIVE_TIE_EXEMPT)).toEqual([]);
+    expect(() => parseTieExempt('3')).toThrow('(scripts/lib/naivePlayer.ts: none) — add the level there');
+    expect(() => parseTieExempt('3')).not.toThrow(/naivePlayer\.ts: \)/);
     // on the command line too, in both flag forms, even with --gate … --tie both
     expect(() => parseArgs(['--naive', '--gate', '1-16', '--tie', 'both', '--tie-exempt', '3'])).toThrow(/--tie-exempt 3: not in NAIVE_TIE_EXEMPT/);
     expect(() => parseArgs(['--naive', '--gate=1-16', '--tie=both', '--tie-exempt=3'])).toThrow(/--tie-exempt 3: not in NAIVE_TIE_EXEMPT/);

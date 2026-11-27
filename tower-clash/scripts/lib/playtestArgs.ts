@@ -22,6 +22,9 @@
  * run without Commander upgrades by definition and refuse anything but `none`.
  * AUD-B1: `--tier-gate [--seeds K] [--jobs N]` (campaign, default K = 5) is the "no single tier hurts"
  * gate; `--jobs N` (only with it; default: the host's parallelism) sets its worker threads. It takes no other flag.
+ * REV-0k (2026-11-27): an unknown argument or a value flag without its value throws (REV-68); `--seed` only
+ * with the single-seed campaign run, `--days` / `--weeks` / `--no-twist` only with their mode (REV-74);
+ * `--gate` refuses `--upgrades` (REV-67) and narrows to `N-N` under `--level N` (REV-66).
  */
 import { C } from '../../src/sim/index';
 import { TWISTS, isMondayKey } from '../../src/daily/challenge';
@@ -83,6 +86,14 @@ export interface Args {
   jobs?: number;
 }
 
+/** REV-68: every flag that takes a value (`--x v` or `--x=v`); anything not here or in `SWITCH_FLAGS` is an error. */
+export const VALUE_FLAGS = Object.freeze([
+  '--level', '--seed', '--seeds', '--upgrades', '--daily', '--days', '--weekly', '--weeks', '--twist', '--pool',
+  '--react', '--gate', '--follow', '--prefer', '--hold', '--tie', '--tie-exempt', '--jobs',
+] as const);
+/** REV-68: the flags without a value. */
+export const SWITCH_FLAGS = Object.freeze(['--naive', '--no-twist', '--tier-gate'] as const);
+
 export function parseArgs(argv: readonly string[]): Args {
   let level: number | undefined;
   let seed = DEFAULT_SEED;
@@ -105,48 +116,54 @@ export function parseArgs(argv: readonly string[]): Args {
   let tieExemptSpec: string | undefined;
   let tierGate = false;
   let jobs: number | undefined;
+  // REV-68 / REV-74: which flags were given at all (a flag that changes nothing in the chosen mode is refused, not ignored)
+  const given = new Set<string>();
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
-    const next = argv[i + 1];
-    if (arg === '--level' && next !== undefined) level = Number(next);
-    else if (arg.startsWith('--level=')) level = Number(arg.slice('--level='.length));
-    else if (arg === '--seeds' && next !== undefined) seeds = Number(next);
-    else if (arg.startsWith('--seeds=')) seeds = Number(arg.slice('--seeds='.length));
-    else if (arg === '--seed' && next !== undefined) seed = Number(next);
-    else if (arg.startsWith('--seed=')) seed = Number(arg.slice('--seed='.length));
-    else if (arg === '--upgrades' && next !== undefined) upgrades = next;
-    else if (arg.startsWith('--upgrades=')) upgrades = arg.slice('--upgrades='.length);
-    else if (arg === '--daily' && next !== undefined) daily = next;
-    else if (arg.startsWith('--daily=')) daily = arg.slice('--daily='.length);
-    else if (arg === '--days' && next !== undefined) days = Number(next);
-    else if (arg.startsWith('--days=')) days = Number(arg.slice('--days='.length));
-    else if (arg === '--no-twist') twist = false;
-    else if (arg === '--twist' && next !== undefined) twistId = next;
-    else if (arg.startsWith('--twist=')) twistId = arg.slice('--twist='.length);
-    else if (arg === '--pool' && next !== undefined) poolSpec = next;
-    else if (arg.startsWith('--pool=')) poolSpec = arg.slice('--pool='.length);
-    else if (arg === '--weekly' && next !== undefined) weekly = next;
-    else if (arg.startsWith('--weekly=')) weekly = arg.slice('--weekly='.length);
-    else if (arg === '--weeks' && next !== undefined) weeks = Number(next);
-    else if (arg.startsWith('--weeks=')) weeks = Number(arg.slice('--weeks='.length));
-    else if (arg === '--naive') naive = true;
-    else if (arg === '--react' && next !== undefined) reactMs = Number(next);
-    else if (arg.startsWith('--react=')) reactMs = Number(arg.slice('--react='.length));
-    else if (arg === '--gate' && next !== undefined) gateSpec = next;
-    else if (arg.startsWith('--gate=')) gateSpec = arg.slice('--gate='.length);
-    else if (arg === '--follow' && next !== undefined) followSpec = next;
-    else if (arg.startsWith('--follow=')) followSpec = arg.slice('--follow='.length);
-    else if (arg === '--prefer' && next !== undefined) prefer = next;
-    else if (arg.startsWith('--prefer=')) prefer = arg.slice('--prefer='.length);
-    else if (arg === '--hold' && next !== undefined) holdIds = next;
-    else if (arg.startsWith('--hold=')) holdIds = arg.slice('--hold='.length);
-    else if (arg === '--tie' && next !== undefined) tieSpec = next;
-    else if (arg.startsWith('--tie=')) tieSpec = arg.slice('--tie='.length);
-    else if (arg === '--tie-exempt' && next !== undefined) tieExemptSpec = next;
-    else if (arg.startsWith('--tie-exempt=')) tieExemptSpec = arg.slice('--tie-exempt='.length);
-    else if (arg === '--tier-gate') tierGate = true;
-    else if (arg === '--jobs' && next !== undefined) jobs = Number(next);
-    else if (arg.startsWith('--jobs=')) jobs = Number(arg.slice('--jobs='.length));
+    const eq = arg.indexOf('=');
+    const name = arg.startsWith('--') && eq > 0 ? arg.slice(0, eq) : arg;
+    // REV-68: a misspelt flag (`--tiergate`) or a stray word used to run the default campaign and exit 0
+    if (!(VALUE_FLAGS as readonly string[]).includes(name) && !(SWITCH_FLAGS as readonly string[]).includes(name)) {
+      throw new Error(`unknown argument ${arg} (flags: ${[...VALUE_FLAGS, ...SWITCH_FLAGS].join(' ')})`);
+    }
+    if ((SWITCH_FLAGS as readonly string[]).includes(name)) {
+      if (name !== arg) throw new Error(`${name} takes no value (got ${arg})`);
+      given.add(name);
+      if (name === '--no-twist') twist = false;
+      else if (name === '--naive') naive = true;
+      else tierGate = true; // --tier-gate
+      continue;
+    }
+    let value: string;
+    if (name !== arg) value = arg.slice(eq + 1);
+    else {
+      const next = argv[i + 1];
+      // REV-68: a value flag as the last argument (or followed by another flag) used to be dropped silently
+      if (next === undefined || next.startsWith('--')) throw new Error(`missing value for ${name}`);
+      value = next;
+      i++;
+    }
+    given.add(name);
+    switch (name) {
+      case '--level': level = Number(value); break;
+      case '--seeds': seeds = Number(value); break;
+      case '--seed': seed = Number(value); break;
+      case '--upgrades': upgrades = value; break;
+      case '--daily': daily = value; break;
+      case '--days': days = Number(value); break;
+      case '--twist': twistId = value; break;
+      case '--pool': poolSpec = value; break;
+      case '--weekly': weekly = value; break;
+      case '--weeks': weeks = Number(value); break;
+      case '--react': reactMs = Number(value); break;
+      case '--gate': gateSpec = value; break;
+      case '--follow': followSpec = value; break;
+      case '--prefer': prefer = value; break;
+      case '--hold': holdIds = value; break;
+      case '--tie': tieSpec = value; break;
+      case '--tie-exempt': tieExemptSpec = value; break;
+      default: jobs = Number(value); // --jobs
+    }
   }
   if (level !== undefined && !Number.isInteger(level)) throw new Error(`bad --level ${String(level)}`);
   if (!Number.isInteger(seed)) throw new Error(`bad --seed ${String(seed)}`);
@@ -175,23 +192,35 @@ export function parseArgs(argv: readonly string[]): Args {
       ...modes,
       level !== undefined ? '--level' : undefined,
       upgrades !== 'none' ? '--upgrades' : undefined,
-      seed !== DEFAULT_SEED ? '--seed' : undefined,
+      given.has('--seed') ? '--seed' : undefined,
     ].filter((m) => m !== undefined);
     if (other.length) throw new Error(`--tier-gate takes only --seeds K and --jobs N (it runs every tier of every track on levels 1-16); drop ${other.join(', ')}`);
   }
   if (jobs !== undefined && (!Number.isInteger(jobs) || jobs < 1)) throw new Error(`bad --jobs ${String(jobs)}`);
   if (jobs !== undefined && !tierGate) throw new Error('--jobs only applies to --tier-gate');
+  // REV-74 (the AUD-B17 rule): `--seed S` is read by the single-seed campaign run only; every other run takes its seeds elsewhere
+  if (given.has('--seed')) {
+    const seedless = seeds !== undefined ? '--seeds K (seeds 1..K)' : naive ? '--naive (seeds 1..K)' : modes[0] !== undefined ? `${modes[0]} (${modes[0] === '--twist' ? 'seeds 1..K' : 'K seeds from the fixed one'})` : undefined;
+    if (seedless) throw new Error(`--seed only applies to the single-seed campaign run; ${seedless} does not read it — drop --seed`);
+  }
+  if (given.has('--days') && daily === undefined) throw new Error('--days only applies to --daily');
+  if (given.has('--weeks') && weekly === undefined) throw new Error('--weeks only applies to --weekly');
+  if (!twist && daily === undefined && weekly === undefined) throw new Error('--no-twist only applies to --daily / --weekly (the control run without the twist)');
   const challengeNaive = naive && (daily !== undefined || weekly !== undefined);
   if (challengeNaive && level !== undefined) throw new Error(`--level does not apply to --naive with ${daily !== undefined ? '--daily' : '--weekly'} (the challenge picks the level)`);
   const pool = poolSpec === undefined ? DEFAULT_POOL : parsePool(poolSpec);
   if (poolSpec !== undefined && !twistDef) throw new Error('--pool only applies to --twist');
   if (!Number.isInteger(reactMs) || reactMs < C.TICK_MS || reactMs % C.TICK_MS !== 0) throw new Error(`bad --react ${String(reactMs)} (ms, a positive multiple of ${C.TICK_MS})`);
   if (reactMs !== NAIVE_REACT_MS && !naive) throw new Error('--react only applies to --naive');
-  const gate = gateSpec === undefined ? undefined : parseNaiveGate(gateSpec);
-  if (gate && !naive) throw new Error('--gate only applies to --naive');
-  if (gate && challengeNaive) throw new Error(`--gate only applies to the campaign naive run, not to --naive with ${daily !== undefined ? '--daily' : '--weekly'} (informational, no gate)`);
-  if (gate && reactMs !== NAIVE_REACT_MS) throw new Error(`--gate is defined at the default reaction (${NAIVE_REACT_MS} ms); drop --react`);
-  if (gate && level !== undefined && (level < gate.from || level > gate.to)) throw new Error(`--level ${level} is outside --gate ${gate.from}-${gate.to}`);
+  const gateRange = gateSpec === undefined ? undefined : parseNaiveGate(gateSpec);
+  if (gateRange && !naive) throw new Error('--gate only applies to --naive');
+  if (gateRange && challengeNaive) throw new Error(`--gate only applies to the campaign naive run, not to --naive with ${daily !== undefined ? '--daily' : '--weekly'} (informational, no gate)`);
+  if (gateRange && reactMs !== NAIVE_REACT_MS) throw new Error(`--gate is defined at the default reaction (${NAIVE_REACT_MS} ms); drop --react`);
+  // REV-67: the gate shares are the unmodified player's, like the reaction — a Commander-upgraded run must not report a pass CI would not
+  if (gateRange && upgrades !== 'none') throw new Error(`--gate is defined for the unmodified player; drop --upgrades ${upgrades} (the per-tier check is --tier-gate)`);
+  if (gateRange && level !== undefined && (level < gateRange.from || level > gateRange.to)) throw new Error(`--level ${level} is outside --gate ${gateRange.from}-${gateRange.to}`);
+  // REV-66: `--level N` runs one level, so the gate is that level's — the rest of a-b would count as "(not run)" failures
+  const gate = gateRange && level !== undefined ? { from: level, to: level } : gateRange;
   // GD-6h: the card follower — `--follow` or its shorthands, the naive campaign run of one level, informational
   if (followSpec !== undefined && (prefer !== undefined || holdIds !== undefined)) throw new Error('--follow and --prefer / --hold are two spellings of one spec; use one');
   const shorthand = [prefer !== undefined ? `prio=${prefer}` : '', holdIds !== undefined ? `hold=${holdIds}` : ''].filter((p) => p !== '').join(';');

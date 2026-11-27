@@ -343,6 +343,15 @@ describe('validator rules', () => {
     expect(validateMines(walled)).toEqual(['mines[0] (360, 700) lies on no lane (within 30 px of none)']);
   });
 
+  // REV-65 (REV-0k, 2026-11-27): the lane hits indexed the isPoint-filtered list, so a malformed mine shifted the blame
+  it('blames the off-lane mine, not its neighbour, when an earlier mine is malformed', () => {
+    const mines = [{ x: Number.NaN, y: 700, charges: 5 }, { x: 360, y: 700, charges: 5 }, { x: 600, y: 900, charges: 5 }] as MineDef[];
+    expect(validateMines(triangle({ id: 20, mines }))).toEqual(['mines[0]: x/y must be finite numbers', 'mines[2] (600, 900) lies on no lane (within 30 px of none)']);
+    // order swapped: the on-lane mine last is still not blamed
+    const swapped = [mines[0]!, mines[2]!, mines[1]!];
+    expect(validateMines(triangle({ id: 20, mines: swapped }))).toEqual(['mines[0]: x/y must be finite numbers', 'mines[1] (600, 900) lies on no lane (within 30 px of none)']);
+  });
+
   it('applies band rules by level id', () => {
     expect(bandFor(0)).toBeUndefined();
     expect(bandFor(51)).toBeUndefined();

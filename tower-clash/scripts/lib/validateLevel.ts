@@ -516,13 +516,17 @@ export function validateMines(level: LevelDef): string[] {
       if (d < MINE_TOWER_CLEARANCE) errors.push(`${label} is ${d.toFixed(0)} px from tower ${t.id} (min ${MINE_TOWER_CLEARANCE})`);
     }
   }
+  // REV-65: `mineHitsOn` indexes the list it is given — map its indices back to `mines` (a malformed mine
+  // earlier in the array used to shift them, blaming the wrong mine for "lies on no lane")
+  const pointIdx = [...mines.keys()].filter((i) => isPoint(mines[i]));
+  const points = pointIdx.map((i) => mines[i]!);
   const hit = new Set<number>();
   for (let i = 0; i < towers.length; i++) {
     for (let j = i + 1; j < towers.length; j++) {
       const a = towers[i]!;
       const b = towers[j]!;
       if (!laneClear(towers, obstacles, a, b)) continue;
-      for (const h of mineHitsOn(mines.filter(isPoint), a, b)) hit.add(h.mine);
+      for (const h of mineHitsOn(points, a, b)) hit.add(pointIdx[h.mine]!);
     }
   }
   mines.forEach((m, i) => {

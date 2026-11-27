@@ -57,6 +57,11 @@ if (!Number.isInteger(budget) || budget <= 0) {
 }
 
 const distArg = args.indexOf('--dist');
+// REV-73: `--dist` as the last argument (or before another flag) used to resolve to '<cwd>/undefined'
+if (distArg >= 0 && (args[distArg + 1] === undefined || args[distArg + 1].startsWith('--'))) {
+  console.error('checkBundle: --dist needs a directory (e.g. --dist dist)');
+  process.exit(2);
+}
 const dist = distArg >= 0 ? resolve(process.cwd(), String(args[distArg + 1])) : resolve(root, 'dist');
 if (!noBuild) {
   console.log('checkBundle: building (npm run build)…');
