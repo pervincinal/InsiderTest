@@ -1022,6 +1022,31 @@ describe('PERF-11 lazy chunks: result screen and store boot', () => {
     expect(src('ui/shop.ts')).toMatch(/enter\(\): void \{[\s\S]{0,400}?void getStore\(\)\.init\(\);/);
   });
 
+  // PERF-16: the Daily / Weekly result rules and the worker cache warm-up left the entry chunk
+  it('PERF-16: ui/daily.ts, ui/weekly.ts and swWarm.ts are reached only through import(), each from one loader', () => {
+    for (const f of ['ui/daily.ts', 'ui/weekly.ts', 'ui/challengeRecord.ts', 'swWarm.ts']) expect(eager.has(path.join(SRC, f)), f).toBe(false);
+    expect(eager.has(path.join(SRC, 'ui/challengeChunk.ts'))).toBe(true);
+    const loadersOf = (re: RegExp) =>
+      readdirSync(SRC, { recursive: true })
+        .map(String)
+        .filter((f) => f.endsWith('.ts') && re.test(src(f)))
+        .map((f) => f.split(path.sep).join('/'));
+    expect(loadersOf(/\bimport\(\s*'\.\/challengeRecord'\s*\)/)).toEqual(['ui/challengeChunk.ts']);
+    expect(loadersOf(/\bimport\(\s*'\.\/swWarm'\s*\)/)).toEqual(['main.ts']);
+    // warmed at a challenge's start and by the title idle preload, like the result chunk
+    expect(src('ui/play.ts')).toMatch(/\n\s*warmResultChunk\(\);[^\n]*\n\s*if \(this\.challenge \|\| this\.weekly\) warmChallengeChunk\(\);/);
+    expect(src('main.ts')).toMatch(/whenIdle\(\(\) => \{[^}]*warmResultChunk\(\);[^\n]*\n\s*warmChallengeChunk\(\);/);
+  });
+
+  it('PERF-16: the controllerchange listener is still registered eagerly, before the worker is registered (it cannot claim earlier)', () => {
+    const main = src('main.ts');
+    const body = /\nfunction registerServiceWorker\(\): void \{\n([\s\S]*?)\n\}\n/.exec(main)?.[1] ?? '';
+    const listen = body.indexOf("navigator.serviceWorker.addEventListener('controllerchange', () => void swWarm().then((m) => m.warmWorkerCache()");
+    expect(listen).toBeGreaterThan(0);
+    expect(body.indexOf("navigator.serviceWorker.register('./sw.js')")).toBeGreaterThan(listen);
+    expect(body).toContain("const swWarm = () => loadChunk('swWarm', () => import('./swWarm'));");
+  });
+
   it('scripts/checkBundle.mjs keeps the 82 kB budget', () => {
     const script = readFileSync(new URL('../../scripts/checkBundle.mjs', import.meta.url), 'utf8');
     expect(script).toMatch(/\nconst DEFAULT_GZIP_BUDGET = 82 \* 1024;\n/);

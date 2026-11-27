@@ -44,8 +44,8 @@ import type { MatchSummary } from '../economy/achievements';
 import { L3_LEVEL, emptyMatch, evaluateAchievements } from '../economy/achievements';
 import { CRYSTAL_SERVICES } from '../economy/catalog';
 import type { DailyChallenge, WeeklyChallenge } from '../daily/challenge';
-import { practiceResult, recordChallengeResult, restartLevel } from './daily';
-import { recordWeeklyResult } from './weekly';
+import type { ChallengeChunk } from './challengeChunk';
+import { challengeChunk, challengeChunkFailures, loadChallengeChunk, warmChallengeChunk } from './challengeChunk';
 import { isMuted, onSimEvents, onSimFrame, playSfx, resetAudioLevel, toggleMuted } from '../audio/index';
 import { hapticCapture } from '../native/index';
 import { t } from './i18n';
@@ -249,6 +249,12 @@ export class PlayScreen implements Screen {
    * FEEL-1-8: `screen`, built half way through the beat (`ResultScreen.warm`), is the one shown.
    */
   private pendingResult: { info: ResultInfo; at: number; failures: number; screen?: ResultScreen | null } | null = null;
+  /**
+   * PERF-16: a Daily / Weekly outcome waiting for the challenge rules chunk (src/ui/challengeChunk.ts) before it
+   * is booked: `at` is the outcome's `nowMs` (the result beat counts from there, so a chunk that lands inside the
+   * beat changes nothing on screen), `failures` the chunk's failed downloads already toasted.
+   */
+  private pendingBook: { at: number; failures: number } | null = null;
   /** This attempt already used its "Reinforcements" continue (ECONOMY.md §3.5) — offered once per attempt. */
   private continued: boolean;
   /** State + rng snapshots of the last `C.SNAPSHOT_CAPACITY_MS` of sim time, one per `C.SNAPSHOT_INTERVAL_MS`. */
@@ -326,6 +332,7 @@ export class PlayScreen implements Screen {
     this.stalemate = new StalemateWatch(level.id !== 1); // the first tutorial level teaches one stream, no hint there
     this.stallWatch = new StalemateCardWatch(level.id >= STALEMATE_CARD_FROM_LEVEL);
     warmResultChunk(); // PERF-11: the result screen chunk (normally in already from the title's idle preload)
+    if (this.challenge || this.weekly) warmChallengeChunk(); // PERF-16: the challenge result rules (normally in with the level map)
     this.gestures = new PlayGestures({
       getState: () => (this.over ? null : this.loop.state),
       limitHintText: (n) => t('hint.linkLimit', { n }),
@@ -449,6 +456,7 @@ export class PlayScreen implements Screen {
     this.continued = true;
     this.finishedHandled = false;
     this.pendingResult = null;
+    this.pendingBook = null;
     this.stallUp = false;
     this.stallWatch.restart(restored.time); // GDD §2.4: a Continue restarts the stalemate window
     this.targeting = false;
@@ -591,6 +599,7 @@ export class PlayScreen implements Screen {
       warmHudOverlays(); // outcome decided: a last chance for the result card to land before its first frame
       this.finish();
     }
+    if (this.pendingBook) this.awaitChallengeChunk(this.pendingBook); // PERF-16: books (and starts presenting) once the chunk is in
     // AUD-F4: the result screen follows the outcome after the beat (PERF-11: once its chunk is in)
     const pending = this.pendingResult;
     if (pending && nowMs - pending.at >= RESULT_BEAT_MS) this.showResult(pending);
@@ -615,6 +624,22 @@ export class PlayScreen implements Screen {
     this.pendingResult = null;
     this.app.go(screen);
     return true;
+  }
+
+  /**
+   * PERF-16: the outcome of a challenge match waits for the challenge rules chunk. Once it is in, `finish`
+   * books and presents the result (the beat counted from the outcome); until then re-request it under the
+   * back-off and show the load-failed toast once per failed download. The world frame stays as the beat's.
+   */
+  private awaitChallengeChunk(book: { at: number; failures: number }): void {
+    if (challengeChunk()) {
+      this.finish();
+      return;
+    }
+    warmChallengeChunk();
+    const failures = challengeChunkFailures();
+    if (failures > book.failures) this.toast.show(t('common.loadFailed'), 'error', this.nowMs);
+    book.failures = failures;
   }
 
   /* ----- "Nothing is changing" card (AUD-B2 / A11, GDD §2.4) ----- */
@@ -696,7 +721,7 @@ export class PlayScreen implements Screen {
       clockMs: this.elapsedMs(),
       cardUp: this.held,
       cardFade: this.lessonCardAlpha(this.nowMs),
-      resultBeat: this.pendingResult !== null || undefined,
+      resultBeat: this.pendingResult !== null || this.pendingBook !== null || undefined,
       level: this.level,
       palette: this.app.palette(),
       alpha: this.loop.alpha,
@@ -726,38 +751,47 @@ export class PlayScreen implements Screen {
     this.match.outcome = outcome;
     this.match.levelId = this.level.id;
     this.match.timeMs = elapsed;
-    if (this.challenge && this.practice) {
+    // PERF-16: the challenge / weekly rules are a lazy chunk; not in yet → hold the beat and book once it lands
+    const rules = this.challenge || this.weekly ? challengeChunk() : null;
+    if ((this.challenge || this.weekly) && !rules) {
+      this.pendingBook ??= { at: this.nowMs, failures: 0 };
+      warmChallengeChunk();
+      return;
+    }
+    const bookedAt = this.pendingBook?.at;
+    this.pendingBook = null;
+    if (rules && this.challenge && this.practice) {
       // Yesterday's map (DAILY-6, ECONOMY.md §6.1): practice — no reward, streak, best, milestone or
       // achievement; nothing is written, so the save stays byte-identical.
-      const daily = practiceResult(this.challenge, this.level, outcome, elapsed);
+      const daily = rules.practiceResult(this.challenge, this.level, outcome, elapsed);
       this.earnings = { stars: daily.stars, gold: 0, crystals: 0, notes: [], replayCapped: false };
       const ui = this.buildUi();
       this.gestures.reset();
-      this.present({ state: this.state, level: this.level, ui, earnings: this.earnings, continued: this.continued, achievements: { unlocked: [], crystals: 0 }, challenge: this.challenge, daily });
+      this.present({ state: this.state, level: this.level, ui, earnings: this.earnings, continued: this.continued, achievements: { unlocked: [], crystals: 0 }, challenge: this.challenge, daily }, bookedAt);
       return;
     }
-    if (this.challenge) {
+    if (rules && this.challenge) {
       // Separate path (GDD §7): no level stars, first-clear gold or milestones — the daily reward is
       // paid once per day by `recordChallengeResult`. Achievements run without the match (ECONOMY.md
       // §6.3): only the save counters (`challenge_streak_7`, `challenge_wins_30`, …) can fire here, the
       // match facts (`first_win`, `flawless`, …) stay campaign-only; the grant rides on `achievements`,
       // not on `daily.crystals`.
-      const daily = recordChallengeResult(this.app.save, this.challenge, this.level, outcome, elapsed);
+      const daily = rules.recordChallengeResult(this.app.save, this.challenge, this.level, outcome, elapsed);
       const achievements = evaluateAchievements(this.app.save);
       this.earnings = { stars: daily.stars, gold: daily.gold, crystals: daily.crystals, notes: [], replayCapped: false };
       const ui = this.buildUi();
       this.gestures.reset();
-      this.present({ state: this.state, level: this.level, ui, earnings: this.earnings, continued: this.continued, achievements, challenge: this.challenge, daily });
+      this.present({ state: this.state, level: this.level, ui, earnings: this.earnings, continued: this.continued, achievements, challenge: this.challenge, daily }, bookedAt);
       return;
     }
-    if (this.weekly) {
+    if (rules && this.weekly) {
       // Same separate path for the weekly (GDD §8): gold once per week, crystals once at the 3★ target.
-      const weeklyOutcome = recordWeeklyResult(this.app.save, this.weekly, this.level, outcome, elapsed);
+      const weeklyOutcome = rules.recordWeeklyResult(this.app.save, this.weekly, this.level, outcome, elapsed);
       const achievements = evaluateAchievements(this.app.save); // save counters only (`weekly_streak_4`), no match
       this.earnings = { stars: weeklyOutcome.stars, gold: weeklyOutcome.gold, crystals: weeklyOutcome.crystals, notes: [], replayCapped: false };
       const ui = this.buildUi();
       this.gestures.reset();
-      this.present({ state: this.state, level: this.level, ui, earnings: this.earnings, continued: this.continued, achievements, weekly: this.weekly, weeklyOutcome });
+      this.present({ state: this.state, level: this.level, ui, earnings: this.earnings, continued: this.continued, achievements, weekly: this.weekly, weeklyOutcome }, bookedAt);
       return;
     }
     const first = !this.app.save.stars[this.level.id]; // AUD-B6: before recordResult books the stars
@@ -784,18 +818,28 @@ export class PlayScreen implements Screen {
    * save is already written); at once under reduced motion or after a Retreat (no capture to watch).
    * PERF-11: either way only once the result chunk is in (`showResult`).
    */
-  private present(info: ResultInfo): void {
+  private present(info: ResultInfo, outcomeAt = this.nowMs): void {
     // AUD-B6: the opt-in diagnostics row, booked with the result (src/ui/diagnostics.ts through the result chunk,
     // normally in by now). Off — the default — never touches the chunk loader (PERF-11's back-off stays as it was).
     if (this.app.save.settings.diagnostics) void loadResultChunk().then((m) => m.logLevelEnd(this.app.save, info, this), () => undefined);
     const now = this.retreated || prefersReducedMotion();
-    const pending = { info, at: now ? this.nowMs - RESULT_BEAT_MS : this.nowMs, failures: 0 };
+    const pending = { info, at: now ? this.nowMs - RESULT_BEAT_MS : outcomeAt, failures: 0 };
     if (!now || !this.showResult(pending)) this.pendingResult = pending;
   }
 
-  /** Restart this level; a challenge keeps its seed and twist. */
+  /**
+   * Restart this level; a challenge keeps its seed and twist (src/ui/daily.ts `restartLevel`, PERF-16: through the
+   * challenge chunk, normally in since the match start; a failed download says so and the pause menu stays).
+   */
   restart(): void {
-    restartLevel(this.app, this.level.id, this.challenge, this.weekly, this.practice);
+    if (!this.challenge && !this.weekly) {
+      void this.app.startLevel(this.level.id, undefined, undefined); // what `restartLevel` does for a campaign level
+      return;
+    }
+    const run = (m: ChallengeChunk): void => m.restartLevel(this.app, this.level.id, this.challenge, this.weekly, this.practice);
+    const rules = challengeChunk();
+    if (rules) run(rules);
+    else loadChallengeChunk().then(run, () => this.toast.show(t('common.loadFailed'), 'error', this.nowMs));
   }
 
   draw(view: View, nowMs: number): void {
@@ -1057,6 +1101,7 @@ export class PlayScreen implements Screen {
   /** Platform back (main.ts `onBack`): swallowed during the result beat; on the stalemate card it is Keep playing (GDD §2.4); false when it did nothing here. */
   back(): boolean {
     if (this.adPending) return true; // REV-4: swallowed (the ad provider owns the screen)
+    if (this.pendingBook) return true; // PERF-16: the outcome is not booked yet — leaving now would lose it
     if (this.pendingResult) {
       // AUD-F4: the result beat ignores input, back included — PERF-11: unless the result chunk failed (the result is booked)
       if (this.pendingResult.failures > 0) this.app.goLevels();

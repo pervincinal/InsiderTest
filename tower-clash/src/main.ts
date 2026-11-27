@@ -1,7 +1,6 @@
 import type { GameState, LevelDef } from './sim/types';
 import { LEVEL_META, getLoadedLevel, levelChunkKey, levelIndex, loadLevel } from './levels/index';
 import { chunkFailures, chunkRecoverable, loadChunk, reloadOnce } from './lazyChunk';
-import { warmWorkerCache } from './swWarm';
 import type { Palette } from './render/palette';
 import { settingsPalette } from './render/palette';
 import { setSpritePalette } from './render/spriteCache';
@@ -24,6 +23,7 @@ import { PlayScreen } from './ui/play';
 import { AI_CHUNK, aiLoaded, loadAi } from './ui/ai';
 import { preloadTutorialSteps } from './ui/tutorialChunk';
 import { warmResultChunk } from './ui/resultChunk';
+import { warmChallengeChunk } from './ui/challengeChunk';
 import { preloadCamera } from './render/camera';
 import { preloadTutorialBubble } from './render/tutorialDraw';
 import { applyMotionPref } from './ui/motion';
@@ -517,6 +517,7 @@ export class TowerClashApp implements App {
       this.preloadLevel(LEVEL_META[currentLevelIndex(this.save, LEVEL_META)]?.id);
       void loadAi().catch(() => undefined); // PERF-9: the enemy AI, so the first PLAY is instant
       warmResultChunk(); // PERF-11: the result screen, in (and in the worker's cache) before the first outcome
+      warmChallengeChunk(); // PERF-16: the Daily / Weekly result rules, likewise before the first challenge outcome
       void this.preloadCosmetics(); // equipped skins / theme, so the title and the first PLAY are already skinned
       void preloadCamera(); // PERF-9: the `?tilt=` perspective camera chunk, when one is asked for
     });
@@ -731,8 +732,14 @@ export class TowerClashApp implements App {
  */
 function registerServiceWorker(): void {
   if (!('serviceWorker' in navigator) || isNative()) return; // REV-39: a web @capacitor/core import defines the global too
-  // FE-8: on the first claim, route the files loaded before it (dictionary, SFX, RU font) through the worker's cache
-  navigator.serviceWorker.addEventListener('controllerchange', warmWorkerCache);
+  // FE-8: on the first claim, route the files loaded before it (dictionary, SFX, RU font) through the worker's cache.
+  // PERF-16: the listener stays registered here, before `register()` can let the worker claim; only the warming
+  // body (src/swWarm.ts) is a lazy chunk, fetched at idle while no worker controls the page (a claim is still to
+  // come) and in any case on the claim itself. warmWorkerCache reads Resource Timing (buffered), so the few ms
+  // the import takes lose nothing; a failed import only skips the warm-up, as a failed re-request did.
+  const swWarm = () => loadChunk('swWarm', () => import('./swWarm'));
+  navigator.serviceWorker.addEventListener('controllerchange', () => void swWarm().then((m) => m.warmWorkerCache(), () => undefined));
+  if (!navigator.serviceWorker.controller) whenIdle(() => void swWarm().catch(() => undefined));
   const register = () => {
     navigator.serviceWorker.register('./sw.js').catch(() => {
       /* e.g. insecure context or file:// — the game runs fine without it */

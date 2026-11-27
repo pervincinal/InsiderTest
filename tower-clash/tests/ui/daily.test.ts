@@ -8,6 +8,7 @@ import { defaultSave, setSaveStorageForTests } from '../../src/ui/save';
 import type { App, Screen, StartOptions } from '../../src/ui/screens';
 import { ResultScreen } from '../../src/ui/result';
 import '../registerResult'; // PERF-11: the lazy result chunk is in
+import '../registerChallenge'; // PERF-16: the lazy challenge rules chunk is in
 import { PlayScreen, RESULT_BEAT_MS } from '../../src/ui/play';
 import type { HudPlayUi } from '../../src/render/hud';
 import type { DailyChallenge } from '../../src/daily/challenge';

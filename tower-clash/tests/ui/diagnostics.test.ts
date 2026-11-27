@@ -15,6 +15,7 @@ import { appVersion } from '../../src/ui/screens';
 import type { ResultInfo } from '../../src/ui/result';
 import { ResultScreen } from '../../src/ui/result';
 import '../registerResult'; // PERF-11: the lazy result chunk is in (the play screen books the row through it)
+import '../registerChallenge'; // PERF-16: the lazy challenge rules chunk is in
 import { PlayScreen } from '../../src/ui/play';
 import { SettingsScreen } from '../../src/ui/settings';
 import type { DiagEvent, DiagRow } from '../../src/ui/diagnostics';
