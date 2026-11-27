@@ -1,6 +1,6 @@
 {
   "board": {
-    "title": "Lövhə · 26 noyabr, gün 69",
+    "title": "Lövhə · 27 noyabr, gün 70",
     "stats": [
       {
         "b": "build 27",
@@ -11,19 +11,19 @@
         "s": "səviyyə bot ilə keçir"
       },
       {
-        "b": "2853",
+        "b": "2872",
         "s": "unit test, e2e 196 + 4 + 6 + WebKit + soak"
       },
       {
-        "b": "81,6 kB",
-        "s": "ilk yükləmə (büdcə 82, boşluq 0,4 kB); hiss balı 13/14"
+        "b": "80,7 kB",
+        "s": "ilk yükləmə (büdcə 82, boşluq 1,3 kB); hiss balı 13/14"
       },
       {
-        "b": "44 gün",
+        "b": "45 gün",
         "s": "rəyin gözlənilir"
       }
     ],
-    "footer": "Mənbə: <code>.claude/agents/*.md</code> rol faylları, <code>docs/BACKLOG.md</code> və son hesabatlar (gün 67–69). Statuslar 26 noyabr vəziyyətidir."
+    "footer": "Mənbə: <code>.claude/agents/*.md</code> rol faylları, <code>docs/BACKLOG.md</code> və son hesabatlar (gün 68–70). Statuslar 27 noyabr vəziyyətidir."
   },
   "team": [
     {
@@ -42,11 +42,11 @@
         "build nömrəsi, commit və push"
       ],
       "recent": [
+        "Gün 70: ilk yükləmə paketi 0,9 kB yüngülləşdi (boşluq 0,4 → 1,3 kB); on birinci kod baxışı (playtest qapı alətləri) — 10 tapıntı eyni gün bağlandı, qapı nəticələri bayt-bayt eyni; artefakt v85.",
         "Gün 69: doqquzuncu (səs) və onuncu (hissəciklər) kod baxışları — 12 tapıntı eyni gün bağlandı; ilk yükləmə paketinin tərkibi ölçüldü (boşluq 0,4 kB), iki yüngülləşdirmə maddəsi qeydə alındı; artefakt v84.",
-        "Gün 68: səkkizinci kod baxışı (render) — 8 tapıntı eyni gün bağlandı; build 27 mətnləri 6 günün düzəlişləri ilə yeniləndi; PLAN.md 25 noyabr vəziyyəti; artefakt v83.",
-        "Gün 67: yeddinci kod baxışı (menyu ekranları) — 5 tapıntı eyni gün bağlandı; yeddi gündə yeddi baxış, build 27-nin hər modulu baxıldı (46 tapıntı, 45 düzəliş); artefakt v82."
+        "Gün 68: səkkizinci kod baxışı (render) — 8 tapıntı eyni gün bağlandı; build 27 mətnləri 6 günün düzəlişləri ilə yeniləndi; PLAN.md 25 noyabr vəziyyəti; artefakt v83."
       ],
-      "status": "Bu gün işlədi · sabah gün 70 (sakit rejim)"
+      "status": "Bu gün işlədi · sabah gün 71 (sakit rejim)"
     },
     {
       "id": "game-designer",
@@ -102,9 +102,9 @@
         "src/main.ts"
       ],
       "recent": [
+        "Gün 70: PERF-16 — gündəlik / həftəlik nəticə qeydiyyatı və servis işçisi isitməsi tənbəl hissəyə çıxdı (−897 B, 81,6 → 80,7 kB); çağırış nəticəsi hissə gələnə qədər vuruş kadrında gözləyir, iki dəfə yazılmır; +6 test; e2e 29 + 6 yaşıl.",
         "Gün 69: REV-59…64 — hissəcik qatı \"azaldılmış hərəkət\"i canlı oxuyur, iqtisadiyyat hissəsi yüklənməsə yenidən cəhd edilir, DAVAM ET-dən sonra bütün qüllələr birdən \"zərbə\" halqası göstərmir, toplanma animasiyası sürətli kadrda ötürülmür; +6 test, eager +31 B. PERF-15: ilk yükləmə paketinin tərkibi (sonnet).",
-        "Gün 68: REV-45…52 — boş dərs mətni kart çəkmir (nişan yerləşməsi pozulmur), azaldılmış hərəkət bütün ekranlarda eyni 500 ms-lik sorğu ilə, şrift gələndə ipucu eni yenilənir, hərəkət qayıdanda / geri sarmada axınlar hamısı birdən parlamır, 125-ə dolan qüllə; +16 test, eager +82 B.",
-        "Gün 67: REV-40…44 (fable) — mağaza yerli qiymətləri mağaza hazır olandan sonra oxuyur (əvvəl erkən açılan mağaza USD ehtiyat qiymətini göstərirdi), mağazadan çıxandan sonra bitən alışın bildirişi cari ekrana, başlıq düymələri basılan yerdə buraxılanda işləyir, Parametrlər toxunuşu yenidən düzülüşdə itmir; +32 test."
+        "Gün 68: REV-45…52 — boş dərs mətni kart çəkmir (nişan yerləşməsi pozulmur), azaldılmış hərəkət bütün ekranlarda eyni 500 ms-lik sorğu ilə, şrift gələndə ipucu eni yenilənir, hərəkət qayıdanda / geri sarmada axınlar hamısı birdən parlamır, 125-ə dolan qüllə; +16 test, eager +82 B."
       ],
       "status": "Bu gün işlədi"
     },
@@ -152,7 +152,7 @@
       "role": "Testlər və CI",
       "color": "#2a7f9e",
       "tag": "gözləyir",
-      "cls": "wait",
+      "cls": "",
       "does": "Unit testləri, Playwright e2e dəstini və CI-ı saxlayır; hər səhvi təkrar istehsal edib reqressiya testi yazır. Bir tapıntı test olmadan bağlanmır: kart sığması, nişan düzümü, kadr vaxtı, save sınağı — hamısı avtomatdır.",
       "owns": [
         "tower-clash/tests/",
@@ -161,11 +161,11 @@
         "Bugs bölməsi"
       ],
       "recent": [
+        "Gün 70: REV-65…74 — playtest arqument analizi səhv yazılmış bayraqda susmur (əvvəl default kampaniya işləyib 0 ilə çıxırdı), --gate + --upgrades rədd edilir, --level N qapını N-N-ə daraldır, boş toxum siyahısı qapını keçmir, mina xətası doğru minaya; +14 test; qapılar bayt-bayt eyni.",
         "Gün 68: QA-47 (sonnet) — qalan 127 ekran gözləməsi (26 spec) diaqnoz dökümlü köməkçiyə keçirildi; chromium 196 / PWA 6 / WebView 4 yaşıl; vaxt limitləri dəyişməyib.",
-        "Gün 67: QA-46 (fable) — e2e ekran gözləməsi vaxt aşımında diaqnoz dökümü yazır (ekran, hissə yükləməsi, kadr, görünürlük, matç vəziyyəti + hökm); CI-şəkilli təkrar 100/100 + 114/114, dayanma təkrarlanmadı; vaxt limitləri dəyişməyib.",
-        "Gün 62: REV-2 — playtest:log --verify: hər qeyd (mətn, sətir) ilə bir dəfə, 120 s TIMEOUT, məğlubiyyətdə ulduz rədd; 18 → 23 test."
+        "Gün 67: QA-46 (fable) — e2e ekran gözləməsi vaxt aşımında diaqnoz dökümü yazır (ekran, hissə yükləməsi, kadr, görünürlük, matç vəziyyəti + hökm); CI-şəkilli təkrar 100/100 + 114/114, dayanma təkrarlanmadı; vaxt limitləri dəyişməyib."
       ],
-      "status": "Gözləyir · sakit rejim"
+      "status": "Bu gün işlədi"
     },
     {
       "id": "tech-artist",
@@ -173,7 +173,7 @@
       "role": "Görünüş və səs",
       "color": "#d4536b",
       "tag": "gözləyir",
-      "cls": "",
+      "cls": "wait",
       "does": "Vizual üslubu (palitra, qalaların və əsgərlərin çəkimi, zərrəciklər, ekran effektləri) və WebAudio ilə sintez olunan səsləri yaradır. Rəng-korluğu palitrası və \"az hərəkət\" rejimi onun qoruyucularındandır.",
       "owns": [
         "src/render/ effektlər, palitra",
@@ -185,7 +185,7 @@
         "Gün 63: REV-6/8 — musiqi qrafı dayananda tam buraxılır (200 dövrdə 4 node, əvvəl +1/dövr), gərginlik qatı DAVAM ET-də sönmür.",
         "Gün 61: PERF-14 — performans bazası 1243-də yoxlanıldı: ×0,99 / ×1,07 / ×1,03, qapı 6/6, baza dəyişmir."
       ],
-      "status": "Bu gün işlədi"
+      "status": "Gözləyir · sakit rejim"
     },
     {
       "id": "mobile-engineer",
@@ -263,9 +263,9 @@
         "qərarlar (defaultlar hesabatda)"
       ],
       "recent": [
+        "Səndə: MM-15 (Apple PLA müqaviləsi → build 27 sorğusu — 5 dəqiqəlik iş) və AUD-Q1 / A2 (build 27 ilə cihaz yoxlaması + playtest vərəqi). Build 27 on bir kod baxışından keçib.",
         "Səndə: MM-15 (Apple PLA müqaviləsi → build 27 sorğusu — 5 dəqiqəlik iş) və AUD-Q1 / A2 (build 27 ilə cihaz yoxlaması + playtest vərəqi). Build 27 on kod baxışından keçib.",
-        "Səndə: MM-15 (Apple PLA müqaviləsi → build 27 sorğusu — 5 dəqiqəlik iş) və AUD-Q1 / A2 (build 27 ilə cihaz yoxlaması + playtest vərəqi). Build 27 səkkiz kod baxışından keçib, TestFlight mətni hazır.",
-        "Səndə: MM-15 (Apple PLA müqaviləsi → build 27 sorğusu — 5 dəqiqəlik iş) və AUD-Q1 / A2 (build 27 ilə cihaz yoxlaması + playtest vərəqi). Build 27 yeddi kod baxışından keçib."
+        "Səndə: MM-15 (Apple PLA müqaviləsi → build 27 sorğusu — 5 dəqiqəlik iş) və AUD-Q1 / A2 (build 27 ilə cihaz yoxlaması + playtest vərəqi). Build 27 səkkiz kod baxışından keçib, TestFlight mətni hazır."
       ],
       "status": "Səndə: Apple müqaviləsi + cihaz yoxlaması (P0) + playtest vərəqi"
     }
@@ -307,31 +307,30 @@
       ]
     },
     {
-      "title": "Gün 69 — bağlandı (26 noyabr)",
+      "title": "Gün 70 — bağlandı (27 noyabr)",
       "items": [
         {
-          "id": "REV-53…64",
-          "p": "p2",
-          "own": [
-            "tech-artist",
-            "frontend-engineer"
-          ],
-          "day": "bağlı",
-          "t": "Səs və hissəcik baxışlarının 12 tapıntısı: itirilən qüllə titrəyişi, axın səsinin tonu, səs tavanı, hərəkət parametri, iqtisadiyyat hissəsi, DAVAM ET halqaları, toplanma."
-        },
-        {
-          "id": "PERF-15",
+          "id": "PERF-16",
           "p": "p3",
           "own": [
             "frontend-engineer"
           ],
           "day": "bağlı",
-          "t": "İlk yükləmə paketinin tərkibi ölçüldü: 81,6 kB, boşluq 0,4 kB; altı yüngülləşdirmə namizədi."
+          "t": "İlk yükləmə −0,9 kB: gündəlik / həftəlik qeydiyyat və servis işçisi isitməsi tənbəl hissədə; görünən dəyişiklik yox."
+        },
+        {
+          "id": "REV-65…74",
+          "p": "p3",
+          "own": [
+            "qa-engineer"
+          ],
+          "day": "bağlı",
+          "t": "Playtest qapı alətlərinin 10 tapıntısı: arqument analizi, qapı + yüksəliş, boş toxum, mina xətası; qapı nəticələri eyni."
         }
       ]
     },
     {
-      "title": "Gün 70",
+      "title": "Gün 71",
       "items": [
         {
           "id": "CI",
@@ -339,17 +338,8 @@
           "own": [
             "producer"
           ],
-          "day": "gün 70",
-          "t": "Sakit rejim: CI izləmə; on kod baxışı tamamlandı — MM-15 və playtest gözlənilir."
-        },
-        {
-          "id": "PERF-16",
-          "p": "p3",
-          "own": [
-            "frontend-engineer"
-          ],
-          "day": "gün 70 (namizəd)",
-          "t": "≈ 1 kB ilk yükləmə boşluğu: gündəlik / həftəlik ekran kodu və servis işçisi isitməsi tənbəl yüklənsin; görünən dəyişiklik yox."
+          "day": "gün 71",
+          "t": "Sakit rejim: CI izləmə; on bir kod baxışı tamamlandı — MM-15 və playtest gözlənilir."
         },
         {
           "id": "FEEL-2-1…3",
