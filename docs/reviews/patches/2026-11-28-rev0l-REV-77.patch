@@ -1,0 +1,157 @@
+diff --git a/tower-clash/src/ai/common.ts b/tower-clash/src/ai/common.ts
+--- a/tower-clash/src/ai/common.ts
++++ b/tower-clash/src/ai/common.ts
+@@ -335,14 +335,20 @@
+   const mines = mineChargesOn(state, road);
+   // REV-81: no surplus on a mined lane — nothing reaches the mines, nothing lands.
+   if (mines > 0 && surplusW <= 0) return undefined;
+-  // Emit phase: an existing link has accumulated `emitAccMs` toward its next unit, a fresh one starts at 0.
+-  const interval = streamIntervalMs(from, state);
+-  const existing = state.links.find((l) => l.from === link.from && l.to === link.to && l.owner === link.owner);
+-  const phase = Math.max(0, interval - (existing?.emitAccMs ?? 0)) / (hasOverdrive(state, link.owner) ? C.OVERDRIVE_MUL : 1);
++  const phase = emitPhaseMs(state, link, from);
+   const startMs = phase + travelMsFor(state, road, link.owner, unitKindOf(from)) + (mines > 0 ? (mines / surplusW) * 1000 : 0);
+   return { link, startMs, rate, countRate: rate / w, firstWeight: (w * rate) / raw, hostile: link.owner !== to.owner, emitted: raw };
+ }
+ 
++/**
++ * ms until `link`'s next unit leaves its source `from`: an existing link has accumulated `emitAccMs`
++ * toward it, a fresh one starts at 0; overdrive fills the accumulator ×OVERDRIVE_MUL.
++ */
++export function emitPhaseMs(state: GameState, link: PlannedLink, from: Tower): number {
++  const existing = state.links.find((l) => l.from === link.from && l.to === link.to && l.owner === link.owner);
++  return Math.max(0, streamIntervalMs(from, state) - (existing?.emitAccMs ?? 0)) / (hasOverdrive(state, link.owner) ? C.OVERDRIVE_MUL : 1);
++}
++
+ /** ms until a walking unit lands. */
+ export function remainingMs(state: Pick<GameState, 'roads'>, u: Unit): number {
+   const road = state.roads[u.roadId];
+@@ -387,9 +393,24 @@
+       .filter((o) => o.roadId === roadId && o.to !== target.id)
+       .map((o) => ({ owner: o.owner, pos: 1 - o.progress, left: o.weight }))
+       .sort((a, b) => a.pos - b.pos);
++    // Streams the other way from the target (links on the map plus the planned ones, REV-77): their units
++    // leave one emit interval apart from the emit phase on, and each meets every inbound unit still on the
++    // lane when it leaves — consumed 1:1 in weight, nearest inbound unit first, like the walkers above. A
++    // stream whose first unit leaves after a walker lands, or whose source emits nothing (frozen, under one
++    // unit), sweeps that walker not at all.
++    const other = inbound[0]!.from;
++    const reverse: { owner: Owner; phase: number; interval: number; w: number; used: number }[] = [];
++    for (const l of all) {
++      if (l.from !== target.id || l.to !== other || reverse.some((r) => r.owner === l.owner)) continue;
++      const rf = state.towers[l.from];
++      const rate = rf ? emitRate(state, rf, l.owner) : 0;
++      if (!rf || rate <= 0) continue;
++      reverse.push({ owner: l.owner, phase: emitPhaseMs(state, l, rf), interval: 1000 / rate, w: unitWeightOf(rf), used: 0 });
++    }
++    /** Weight the stream has put on the lane by `t` (units that leave strictly before the walker lands). */
++    const emittedBy = (r: (typeof reverse)[number], t: number): number => (t > r.phase ? Math.ceil((t - r.phase) / r.interval - 1e-9) * r.w : 0);
+     for (const u of inbound) {
+-      const swept = all.some((l) => l.from === target.id && l.to === u.from && l.owner !== u.owner);
+-      if (swept) continue;
++      const t = remainingMs(state, u);
+       let weight = u.weight;
+       for (const o of opposing) {
+         if (weight <= 0) break;
+@@ -398,8 +419,17 @@
+         weight -= k;
+         o.left -= k;
+       }
++      for (const r of reverse) {
++        if (weight <= 0) break;
++        if (r.owner === u.owner) continue;
++        const avail = emittedBy(r, t) - r.used;
++        if (avail <= 0) continue;
++        const k = Math.min(weight, avail);
++        weight -= k;
++        r.used += k;
++      }
+       if (weight <= 0) continue;
+-      out.push({ t: remainingMs(state, u), weight, hostile: u.owner !== target.owner, owner: u.owner, id: u.id });
++      out.push({ t, weight, hostile: u.owner !== target.owner, owner: u.owner, id: u.id });
+     }
+   }
+   return out;
+diff --git a/tower-clash/tests/ai/rev77.test.ts b/tower-clash/tests/ai/rev77.test.ts
+new file mode 100644
+--- /dev/null
++++ b/tower-clash/tests/ai/rev77.test.ts
+@@ -0,0 +1,78 @@
++import { describe, expect, it } from 'vitest';
++import { makeLevel } from '../helpers';
++import { applyCommand, createState, step } from '../../src/sim/index';
++import type { GameState } from '../../src/sim/index';
++import { walkingLandings } from '../../src/ai/common';
++
++/*
++ * REV-77 (code review 2026-11-28, important): a stream the other way from the target (existing, planned or
++ * anticipated shield) dropped every inbound walker outright — even when its first unit leaves after the
++ * walker lands, or the source emits nothing (frozen, under one unit). Now the reverse stream's units are
++ * counted as they leave (first at the emit phase, then one per interval) and consumed 1:1 in weight by
++ * the inbound units they can still meet, nearest to the target first — a walker that lands before the
++ * first unit leaves is not touched.
++ */
++function run(state: GameState, ms: number): void {
++  for (let i = 0; i < ms / 50; i++) step(state);
++}
++
++/**
++ * p (L1, 1/s) streams at e for 5.5 s: five units on the 600 px lane (the first left at 0.95 s — the sim's
++ * one-tick-early emission), 0.45 / 1.45 / 2.45 / 3.45 / 4.45 s from landing.
++ */
++function column(): GameState {
++  const state = createState(makeLevel({ towers: [
++    { id: 'p', x: 360, y: 1000, owner: 'player', units: 10, level: 1 },
++    { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 30, level: 1 },
++  ] }), 1);
++  applyCommand(state, { type: 'link', owner: 'player', from: 'p', to: 'e' });
++  run(state, 5500);
++  expect(state.units).toHaveLength(5);
++  return state;
++}
++
++describe('REV-77: a stream back sweeps only the walkers its units can still meet', () => {
++  it('a fresh shield (first unit out at 1.0 s) spares the walker landing at 0.45 s and cancels the four behind it', () => {
++    const state = column();
++    const reverse = { owner: 'enemy1' as const, from: 'e', to: 'p' };
++    const landings = walkingLandings(state, state.towers['e']!, [...state.links, reverse]);
++    expect(landings).toHaveLength(1);
++    expect(landings[0]!.t).toBeCloseTo(450, 6);
++    expect(landings[0]!.weight).toBe(1);
++    // The sim agrees: the shield goes up now, p's stream ends; one unit lands, the other four clash.
++    applyCommand(state, { type: 'link', owner: 'enemy1', from: 'e', to: 'p' });
++    applyCommand(state, { type: 'unlink', owner: 'player', from: 'p', to: 'e' });
++    let landed = 0;
++    while (state.units.some((u) => u.owner === 'player') && state.time < 20_000) {
++      step(state);
++      for (const ev of state.events) if (ev.type === 'landed' && ev.towerId === 'e' && ev.hostile) landed++;
++    }
++    expect(landed).toBe(1);
++  });
++
++  it('a reverse source that emits nothing (garrison under one unit) sweeps nothing', () => {
++    const state = column();
++    const reverse = { owner: 'enemy1' as const, from: 'e', to: 'p' };
++    state.towers['e']!.units = 0.5; // the model is a pure function of the visible state (GDD §2.0b rule 6: no stream under one unit)
++    expect(walkingLandings(state, state.towers['e']!, [...state.links, reverse])).toHaveLength(5);
++    state.towers['e']!.units = 1;
++    expect(walkingLandings(state, state.towers['e']!, [...state.links, reverse])).toHaveLength(1);
++  });
++
++  it('a frozen reverse source sweeps nothing while the freeze lasts', () => {
++    const state = column();
++    applyCommand(state, { type: 'link', owner: 'enemy1', from: 'e', to: 'p' });
++    applyCommand(state, { type: 'booster', owner: 'player', booster: 'freeze' });
++    expect(walkingLandings(state, state.towers['e']!, state.links)).toHaveLength(5);
++  });
++
++  it('a stream back that has been running sweeps the whole column (its next unit leaves within the interval)', () => {
++    const state = column();
++    applyCommand(state, { type: 'link', owner: 'enemy1', from: 'e', to: 'p' });
++    run(state, 1000); // one unit out and walking; the next leaves in 1.0 s
++    const landings = walkingLandings(state, state.towers['e']!, state.links);
++    // p's column is now 0.0 (landing this tick) / 0.5 / 1.5 / 2.5 / 3.5 / 4.5 s out plus the unit emitted at 6.0 s;
++    // the walker already out and the stream's next units take one each; whatever lands within the phase lands.
++    for (const l of landings) expect(l.t).toBeLessThanOrEqual(1000);
++  });
++});

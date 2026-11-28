@@ -162,16 +162,17 @@ export function barredLanes(memory: EnemyMemory, state: GameState): Set<string> 
 }
 
 /**
- * After the tick: a link dropped at the limit stays barred until a landing on either end. A held link
- * ended for another reason (retreat, the upgrade break) is not barred — its timer simply starts over
- * if the standoff forms again.
+ * After the tick: a link the release rule dropped at the limit (`released`, recorded by `maintain`) stays
+ * barred until a landing on either end. A held link ended for another reason (retreat, the upgrade
+ * break) is not barred — its timer simply starts over if the standoff forms again (REV-80: before, any
+ * held link that ended with its timer at the limit was barred, whatever ended it).
  */
-export function commit(memory: EnemyMemory, state: GameState, ended: readonly Link[]): void {
+export function commit(memory: EnemyMemory, state: GameState, ended: readonly Link[], released: readonly Link[]): void {
   for (const link of ended) {
     const key = laneKey(link.from, link.to);
     const since = memory.holds.get(key);
     if (since === undefined) continue;
     memory.holds.delete(key);
-    if (state.time - since >= STANDOFF_RELEASE_MS) memory.released.add(key);
+    if (released.includes(link) && state.time - since >= STANDOFF_RELEASE_MS) memory.released.add(key);
   }
 }

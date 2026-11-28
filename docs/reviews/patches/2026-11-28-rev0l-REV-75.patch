@@ -1,0 +1,132 @@
+diff --git a/tower-clash/src/ai/common.ts b/tower-clash/src/ai/common.ts
+--- a/tower-clash/src/ai/common.ts
++++ b/tower-clash/src/ai/common.ts
+@@ -354,7 +354,20 @@
+  * stream running the other way (`all`: links plus planned ones) kills what is left — its next units meet
+  * every one of them before they land.
+  */
+-export function walkingLandings(state: GameState, target: Tower, all: readonly PlannedLink[]): { t: number; weight: number; hostile: boolean }[] {
++export interface WalkingLanding {
++  /** ms until it lands. */
++  t: number;
++  /** Weight that lands (after the lane's clashes ahead of it). */
++  weight: number;
++  /** True when the unit is hostile to the target's current owner. */
++  hostile: boolean;
++  /** The unit's owner (REV-75: read off the unit, never recovered from the landing time). */
++  owner: Owner;
++  /** The unit's id — spawn order, which is the order the sim lands equal-time units in. */
++  id: number;
++}
++
++export function walkingLandings(state: GameState, target: Tower, all: readonly PlannedLink[]): WalkingLanding[] {
+   const byLane = new Map<string, Unit[]>();
+   for (const u of state.units) {
+     if (u.to !== target.id) continue;
+@@ -362,7 +375,7 @@
+     if (list) list.push(u);
+     else byLane.set(u.roadId, [u]);
+   }
+-  const out: { t: number; weight: number; hostile: boolean }[] = [];
++  const out: WalkingLanding[] = [];
+   for (const [roadId, inbound] of byLane) {
+     inbound.sort((p, q) => q.progress - p.progress); // nearest to the target first
+     for (const u of inbound) {
+@@ -376,7 +389,7 @@
+       }
+       const weight = Math.max(0, u.weight - opposing);
+       if (weight <= 0) continue;
+-      out.push({ t: remainingMs(state, u), weight, hostile: u.owner !== target.owner });
++      out.push({ t: remainingMs(state, u), weight, hostile: u.owner !== target.owner, owner: u.owner, id: u.id });
+     }
+   }
+   return out;
+@@ -558,9 +571,10 @@
+     if (!f || f.rate <= 0 || f.countRate <= 0) continue;
+     streams.push({ owner: l.owner, next: f.startMs, gap: 1000 / f.countRate, weight: f.rate / f.countRate, order: order++ });
+   }
+-  const walking = walkingLandings(state, target, all)
+-    .map((w) => ({ owner: state.units.find((u) => u.to === target.id && remainingMs(state, u) === w.t)?.owner ?? target.owner, t: w.t, weight: w.weight }))
+-    .sort((p, q) => p.t - q.t);
++  // Each landing carries its unit's owner (REV-75); equal times land in unit (spawn) order, as the sim does.
++  const walking: Landing[] = walkingLandings(state, target, all)
++    .sort((p, q) => p.t - q.t || p.id - q.id)
++    .map((w) => ({ owner: w.owner, t: w.t, weight: w.weight }));
+   let wi = 0;
+   return () => {
+     let best: Stream | undefined;
+diff --git a/tower-clash/tests/ai/rev75.test.ts b/tower-clash/tests/ai/rev75.test.ts
+new file mode 100644
+--- /dev/null
++++ b/tower-clash/tests/ai/rev75.test.ts
+@@ -0,0 +1,70 @@
++import { describe, expect, it } from 'vitest';
++import { makeLevel } from '../helpers';
++import { applyCommand, createState, step } from '../../src/sim/index';
++import type { GameState } from '../../src/sim/index';
++import { contestOf, walkingLandings } from '../../src/ai/common';
++
++/*
++ * REV-75 (code review 2026-11-28, important): `landingReplay` recovered a walking landing's owner by searching
++ * `state.units` for a unit with an identical `remainingMs` — two columns of different owners that left on
++ * the same tick over equal lanes (a symmetric map, both bots linking on the same AI tick) tie exactly and
++ * were all credited to the first unit's owner, so `contestOf` named the wrong winner. `walkingLandings` now
++ * returns each landing's owner and unit id, and equal-time landings replay in unit (spawn) order — the
++ * order the sim lands them in.
++ */
++function run(state: GameState, ms: number): void {
++  for (let i = 0; i < ms / 50; i++) step(state);
++}
++
++/** Symmetric: p (player) and e (enemy1) each 300 px from the neutral n — equal lanes, equal L1 streams. */
++function symmetric(neutralUnits: number): GameState {
++  return createState(
++    makeLevel({
++      towers: [
++        { id: 'p', x: 360, y: 1000, owner: 'player', units: 10, level: 1 },
++        { id: 'n', x: 360, y: 700, owner: 'neutral', units: neutralUnits },
++        { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 10, level: 1 },
++      ],
++    }),
++    1,
++  );
++}
++
++describe('REV-75: walking landings carry their owner; exact ties replay in spawn order', () => {
++  it('two columns that left on the same tick over equal lanes are credited to their own owners', () => {
++    const state = symmetric(1);
++    applyCommand(state, { type: 'link', owner: 'player', from: 'p', to: 'n' });
++    applyCommand(state, { type: 'link', owner: 'enemy1', from: 'e', to: 'n' });
++    run(state, 1500); // first units left at 1.0 s on both lanes
++    expect(state.units.map((u) => u.owner)).toEqual(['player', 'enemy1']);
++    const landings = walkingLandings(state, state.towers['n']!, state.links);
++    expect(landings).toHaveLength(2);
++    expect(landings[0]!.t).toBe(landings[1]!.t); // the exact tie the review describes
++    expect(landings.map((l) => l.owner).sort()).toEqual(['enemy1', 'player']);
++    expect(landings.map((l) => l.id)).toEqual(state.units.map((u) => u.id));
++  });
++
++  it('contestOf names the owner whose unit lands second on the tied tick — as the sim resolves it', () => {
++    const state = symmetric(1);
++    applyCommand(state, { type: 'link', owner: 'player', from: 'p', to: 'n' });
++    applyCommand(state, { type: 'link', owner: 'enemy1', from: 'e', to: 'n' });
++    run(state, 1500);
++    const contest = contestOf(state, state.towers['n']!);
++    // The player's unit lands first (spawn order) and empties the garrison of 1; the enemy's flips it.
++    const owner = state.towers['n']!.owner;
++    while (state.towers['n']!.owner === owner && state.time < 10_000) step(state);
++    expect(state.towers['n']!.owner).toBe('enemy1');
++    expect(contest.winner).toBe('enemy1');
++    expect(Math.abs(contest.flipAtMs - (state.time - 1500))).toBeLessThanOrEqual(50);
++  });
++
++  it('the mirror: the enemy links first, the player second — the player flips it', () => {
++    const state = symmetric(1);
++    applyCommand(state, { type: 'link', owner: 'enemy1', from: 'e', to: 'n' });
++    applyCommand(state, { type: 'link', owner: 'player', from: 'p', to: 'n' });
++    run(state, 1500);
++    const contest = contestOf(state, state.towers['n']!);
++    while (state.towers['n']!.owner === 'neutral' && state.time < 10_000) step(state);
++    expect(state.towers['n']!.owner).toBe(contest.winner);
++  });
++});

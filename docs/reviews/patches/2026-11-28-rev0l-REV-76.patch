@@ -1,0 +1,100 @@
+diff --git a/tower-clash/src/ai/common.ts b/tower-clash/src/ai/common.ts
+--- a/tower-clash/src/ai/common.ts
++++ b/tower-clash/src/ai/common.ts
+@@ -380,16 +380,24 @@
+   const out: WalkingLanding[] = [];
+   for (const [roadId, inbound] of byLane) {
+     inbound.sort((p, q) => q.progress - p.progress); // nearest to the target first
++    // Walkers the other way on this lane, by position along the inbound direction, each with the weight it
++    // still has to spend (REV-76): the sim's clash is 1:1 in weight, so a walker is consumed by the inbound
++    // units it meets — the nearest to the target first — and a heavier unit walks on with the difference.
++    const opposing = state.units
++      .filter((o) => o.roadId === roadId && o.to !== target.id)
++      .map((o) => ({ owner: o.owner, pos: 1 - o.progress, left: o.weight }))
++      .sort((a, b) => a.pos - b.pos);
+     for (const u of inbound) {
+       const swept = all.some((l) => l.from === target.id && l.to === u.from && l.owner !== u.owner);
+       if (swept) continue;
+-      // Opposite walkers of another owner on the same lane that this unit still has to pass.
+-      let opposing = 0;
+-      for (const o of state.units) {
+-        if (o.roadId !== roadId || o.to !== u.from || o.owner === u.owner) continue;
+-        if (1 - o.progress > u.progress) opposing += o.weight; // still ahead of u
++      let weight = u.weight;
++      for (const o of opposing) {
++        if (weight <= 0) break;
++        if (o.left <= 0 || o.owner === u.owner || o.pos <= u.progress) continue; // spent, friendly, or already passed
++        const k = Math.min(weight, o.left);
++        weight -= k;
++        o.left -= k;
+       }
+-      const weight = Math.max(0, u.weight - opposing);
+       if (weight <= 0) continue;
+       out.push({ t: remainingMs(state, u), weight, hostile: u.owner !== target.owner, owner: u.owner, id: u.id });
+     }
+diff --git a/tower-clash/tests/ai/rev76.test.ts b/tower-clash/tests/ai/rev76.test.ts
+new file mode 100644
+--- /dev/null
++++ b/tower-clash/tests/ai/rev76.test.ts
+@@ -0,0 +1,61 @@
++import { describe, expect, it } from 'vitest';
++import { makeLevel } from '../helpers';
++import { applyCommand, createState, step } from '../../src/sim/index';
++import type { GameState } from '../../src/sim/index';
++import { walkingLandings } from '../../src/ai/common';
++
++/*
++ * REV-76 (code review 2026-11-28, important): `walkingLandings` cancelled every inbound unit against the full
++ * weight of all opposing walkers ahead of it, so one hostile unit on the lane erased a whole column from the
++ * threat model. Opposing walkers are now consumed 1:1 in weight, nearest inbound unit first — the sim's
++ * clash: one unit kills one unit (a heavier one walks on with the difference).
++ */
++function run(state: GameState, ms: number): void {
++  for (let i = 0; i < ms / 50; i++) step(state);
++}
++
++/** p streams at e for 3 s, e sends exactly one unit back, then both lanes go quiet. */
++function columnVsOneWalker(): GameState {
++  const state = createState(makeLevel({ towers: [
++    { id: 'p', x: 360, y: 1000, owner: 'player', units: 10, level: 1 },
++    { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 30, level: 1 },
++  ] }), 1);
++  applyCommand(state, { type: 'link', owner: 'player', from: 'p', to: 'e' });
++  run(state, 3000);
++  applyCommand(state, { type: 'link', owner: 'enemy1', from: 'e', to: 'p' });
++  while (!state.units.some((u) => u.owner === 'enemy1')) step(state);
++  applyCommand(state, { type: 'unlink', owner: 'enemy1', from: 'e', to: 'p' });
++  applyCommand(state, { type: 'unlink', owner: 'player', from: 'p', to: 'e' });
++  return state;
++}
++
++describe('REV-76: opposing walkers are consumed one for one, not charged against every inbound unit', () => {
++  it('one hostile walker takes exactly one unit off a column of three', () => {
++    const state = columnVsOneWalker();
++    const column = state.units.filter((u) => u.owner === 'player');
++    expect(column.length).toBe(3);
++    expect(state.units.filter((u) => u.owner === 'enemy1')).toHaveLength(1);
++    const landings = walkingLandings(state, state.towers['e']!, state.links);
++    expect(landings).toHaveLength(column.length - 1);
++    expect(landings.reduce((s, l) => s + l.weight, 0)).toBe(column.length - 1);
++    // The nearest unit meets the walker; the farther ones land in order.
++    expect(landings.map((l) => l.id)).toEqual(column.slice(1).map((u) => u.id));
++  });
++
++  it('matches the sim: two of the three land on e, one dies in the clash with the walker', () => {
++    const state = columnVsOneWalker();
++    const predicted = walkingLandings(state, state.towers['e']!, state.links).length;
++    let landed = 0;
++    let clashDeaths = 0;
++    while (state.units.length > 0 && state.time < 20_000) {
++      step(state);
++      for (const ev of state.events) {
++        if (ev.type === 'landed' && ev.towerId === 'e' && ev.hostile) landed++;
++        if (ev.type === 'unitDied' && ev.cause === 'clash') clashDeaths++;
++      }
++    }
++    expect(clashDeaths).toBe(2); // the walker and the one unit it met
++    expect(landed).toBe(2);
++    expect(predicted).toBe(landed);
++  });
++});

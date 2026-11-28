@@ -154,7 +154,7 @@ function run(state: GameState, enemy: EnemyDef, rng: Rng, cfg: PersonalityConfig
   });
   if (cfg.stacks) stack(ctx, { cap: cfg.cap, sources: cfg.sources, anticipate: cfg.anticipate });
   if (cfg.supplies) supply(ctx, hopsToOpponent(state, enemy.owner), cfg.cap);
-  commit(memory, state, ctx.ended);
+  commit(memory, state, ctx.ended, ctx.released);
   return ctx.cmds;
 }
 

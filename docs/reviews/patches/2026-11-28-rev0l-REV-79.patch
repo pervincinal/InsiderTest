@@ -1,0 +1,96 @@
+diff --git a/tower-clash/src/ai/common.ts b/tower-clash/src/ai/common.ts
+--- a/tower-clash/src/ai/common.ts
++++ b/tower-clash/src/ai/common.ts
+@@ -24,7 +24,6 @@
+   distPointSegment,
+   hasOverdrive,
+   isFrozen,
+-  isLinked,
+   linksFrom,
+   maxLevelOf,
+   maxLinksOf,
+@@ -439,7 +438,6 @@
+ }
+ 
+ export function siegeOf(state: GameState, target: Tower, options: SiegeOptions = {}): Siege {
+-  const planned = options.planned ?? [];
+   const all = allLinks(state, options);
+ 
+   const D = defenceMultiplier(target);
+@@ -461,7 +459,9 @@
+   events.sort((p, q) => p.t - q.t);
+ 
+   const gen = genPerSecond(target, state);
+-  const linked = isLinked(state, target.id) || planned.some((p) => p.from === target.id);
++  // Linked (so it grows nothing) by the model's own link set: the map's links minus `exclude`, plus
++  // `planned` — a "what if this link were gone" evaluation must see it unlinked (REV-79).
++  const linked = all.some((l) => l.from === target.id);
+   const capHp = capacityOf(target, state) * D + D;
+   let hp = target.units * D + D;
+   let minHp = hp;
+diff --git a/tower-clash/tests/ai/rev79.test.ts b/tower-clash/tests/ai/rev79.test.ts
+new file mode 100644
+--- /dev/null
++++ b/tower-clash/tests/ai/rev79.test.ts
+@@ -0,0 +1,61 @@
++import { describe, expect, it } from 'vitest';
++import { makeLevel } from '../helpers';
++import { C, applyCommand, createState, step } from '../../src/sim/index';
++import type { GameState } from '../../src/sim/index';
++import { siegeOf } from '../../src/ai/common';
++
++/*
++ * REV-79 (code review 2026-11-28, pre-existing): `siegeOf` read "is the target linked (so it grows nothing)"
++ * from `state.links` + `planned`, ignoring `options.exclude` — a "what if this link were gone" evaluation
++ * (`reclaimForAttack`, the upgrade break) still saw the target as linked and no regeneration, biasing the
++ * answer toward "falls". Now `linked` reads the same link set as the rest of the model (`allLinks`).
++ */
++function flipTime(state: GameState, towerId: string, maxMs = 120_000): number {
++  const owner = state.towers[towerId]!.owner;
++  while (state.time < maxMs) {
++    step(state);
++    if (state.towers[towerId]!.owner !== owner) return state.time;
++  }
++  return Infinity;
++}
++
++describe('REV-79: siegeOf honours `exclude` when it decides whether the target regenerates', () => {
++  const level = () =>
++    createState(
++      makeLevel({
++        towers: [
++          { id: 'p', x: 360, y: 1000, owner: 'player', units: 10, level: 1 },
++          { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 10, level: 1 },
++          { id: 'x', x: 660, y: 400, owner: 'neutral', units: 50 },
++        ],
++      }),
++      1,
++    );
++
++  it('an excluded outgoing link of the target no longer stops its regeneration', () => {
++    const state = level();
++    applyCommand(state, { type: 'link', owner: 'enemy1', from: 'e', to: 'x' });
++    const eToX = state.links[0]!;
++    const planned = [{ owner: 'player' as const, from: 'p', to: 'e' }];
++    const linked = siegeOf(state, state.towers['e']!, { planned }).fallsAtMs;
++    const unlinked = siegeOf(state, state.towers['e']!, { planned, exclude: [eToX] }).fallsAtMs;
++    expect(linked).toBe(16_000); // streams elsewhere: grows nothing, 11 hp at 1/s after the 6 s first landing
++    expect(unlinked).toBeGreaterThan(linked); // without that link it grows until the first landing
++    // The model with `exclude` predicts the sim without the link within one landing (the sim's one-tick-early
++    // arrival crosses a recruit, as in tests/ai/threatModel.test.ts); the linked read is 6 s out.
++    applyCommand(state, { type: 'unlink', owner: 'enemy1', from: 'e', to: 'x' });
++    applyCommand(state, { type: 'link', owner: 'player', from: 'p', to: 'e' });
++    const flipped = flipTime(state, 'e');
++    expect(Math.abs(flipped - unlinked)).toBeLessThanOrEqual(1000 + C.TICK_MS);
++    expect(flipped - linked).toBeGreaterThan(4000); // 20.95 s in the sim: five recruits before the one-tick-early first landing
++  });
++
++  it('a target whose only link is excluded reads exactly like an unlinked one', () => {
++    const state = level();
++    const fresh = siegeOf(state, state.towers['e']!, { planned: [{ owner: 'player', from: 'p', to: 'e' }] });
++    applyCommand(state, { type: 'link', owner: 'enemy1', from: 'e', to: 'x' });
++    const excluded = siegeOf(state, state.towers['e']!, { planned: [{ owner: 'player', from: 'p', to: 'e' }], exclude: [state.links[0]!] });
++    expect(excluded.fallsAtMs).toBe(fresh.fallsAtMs);
++    expect(excluded.minHp).toBe(fresh.minHp);
++  });
++});

@@ -45,20 +45,22 @@
 import type { Command, GameState, Link, Tower } from '../sim/index';
 import { Rng, capacityOf, isLinked, isUnderFire } from '../sim/index';
 import { atMaxLevel, contestHeld, contestOf, genPerSecond, hopsToOpponent, isCapped, isEnemyOwner, ownedTowers, siegeOf, underSiege, type Plan } from './common';
+import { COUNTER_PLAN_MS, HOPELESS_MS } from './personalities';
 import { isPassive, observePlayer, playerMemoryFor } from './playerMemory';
 import { activeLinks, attack, defend, isReinforcement, isShield, issueUnlink, maintain, newCtx, reclaimForAttack, stack, supply, type Ctx, type RuleTrace } from './tactics';
 
 export type { RuleTrace };
+/**
+ * Rule 1 (horizon for a counter-siege of an attacker's source) and rule 0 (an attack whose target no
+ * longer falls within this ends) share the enemies' values (`personalities.ts`; REV-82: one declaration).
+ */
+export { COUNTER_PLAN_MS, HOPELESS_MS };
 
 const OWNER = 'player' as const;
 /** Rule 2: a neutral must fall within this to be worth a stream. */
 export const CAPTURE_PLAN_MS = 30_000;
 /** Rule 3: an enemy tower must fall within this (with every link we can stack) to be attacked. */
 export const ATTACK_PLAN_MS = 45_000;
-/** Rule 1: horizon for a counter-siege of an attacker's source. */
-export const COUNTER_PLAN_MS = 30_000;
-/** Rule 0: an attack whose target no longer falls within this ends. */
-export const HOPELESS_MS = 60_000;
 /** Rule 2: the growing keep is kept out of captures only while we hold at least this many towers. */
 export const GROWER_MIN_TOWERS = 2;
 /**

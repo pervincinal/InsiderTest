@@ -1,0 +1,110 @@
+diff --git a/tower-clash/src/ai/tactics.ts b/tower-clash/src/ai/tactics.ts
+--- a/tower-clash/src/ai/tactics.ts
++++ b/tower-clash/src/ai/tactics.ts
+@@ -16,7 +16,7 @@
+  *              takeable target stays unlinked and grows.
+  */
+ import type { Command, GameState, Link, Owner, Tower } from '../sim/index';
+-import { capacityOf, isUnderFire, linksFrom, maxLinksOf } from '../sim/index';
++import { capacityOf, isFrozen, isUnderFire, linksFrom, maxLinksOf } from '../sim/index';
+ import {
+   allLinks,
+   atMaxLevel,
+@@ -202,6 +202,10 @@
+     }
+   }
+   const retreat = isUnderFire(state, tower) && tower.units < RETREAT_UNITS;
++  // Freeze pauses the streams (GDD §2.3): while the owner is frozen nothing of ours is emitted, so the
++  // landing / contest / retreat / hopeless judgements below would read every attack as "not landing" and
++  // end it. Keep the attacks and judge them again once the freeze lifts (REV-78).
++  const frozen = isFrozen(state, ctx.owner);
+   const releasedHere: Link[] = []; // holds the release rule stopped treating as shields this tick
+   for (const link of links) {
+     ctx.rule = 'maintain';
+@@ -212,6 +216,7 @@
+       if (retreat || !cfg.keepSupply(ctx, tower, target, link)) issueUnlink(ctx, link);
+       continue;
+     }
++    if (frozen) continue;
+     // Standoff release (GDD §2.5, AUD-A11): a shield whose lane has been silent for `STANDOFF_RELEASE_MS`
+     // (or was given up and is still barred) no longer counts as one — it ends under the rules below.
+     const released = isShield(ctx, link) && laneBarred(ctx, link.from, link.to);
+diff --git a/tower-clash/tests/ai/rev78.test.ts b/tower-clash/tests/ai/rev78.test.ts
+new file mode 100644
+--- /dev/null
++++ b/tower-clash/tests/ai/rev78.test.ts
+@@ -0,0 +1,74 @@
++import { describe, expect, it } from 'vitest';
++import { makeLevel } from '../helpers';
++import { C, applyCommand, createState, isFrozen, step } from '../../src/sim/index';
++import type { Command, GameState } from '../../src/sim/index';
++import { HOPELESS_MS, enemyCommands, rngsFor } from '../../src/ai/index';
++import { maintain, newCtx } from '../../src/ai/tactics';
++
++/*
++ * REV-78 (code review 2026-11-28, important): while its owner was frozen (the player's Freeze booster, or the
++ * 5 s Freeze every Continue grants) an enemy's `emitRate` was 0, so `laneFlow` was undefined and `maintain`
++ * ended every attack stream as "not landing" — a 5 s freeze cost the enemy its whole plan (6–8 s plus the
++ * re-plan). The GDD describes Freeze as "pauses the streams": `maintain` now keeps the streams of a frozen
++ * owner and skips their landing / hopeless judgements until the freeze lifts.
++ */
++const ENEMY = { owner: 'enemy1' as const, personality: 'rusher' as const, aggression: 1 };
++
++/** e (enemy1, L1) streams at p (player, L3 at 100): a hopeless attack (101 s > HOPELESS_MS) once MIN_ATTACK_MS has passed. */
++function attacking(ms: number): GameState {
++  const state = createState(
++    makeLevel({
++      enemies: [ENEMY],
++      towers: [
++        { id: 'p', x: 360, y: 1000, owner: 'player', units: 100, level: 3 },
++        { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 10, level: 1 },
++      ],
++    }),
++    1,
++  );
++  applyCommand(state, { type: 'link', owner: 'enemy1', from: 'e', to: 'p' });
++  for (let i = 0; i < ms / C.TICK_MS; i++) step(state);
++  return state;
++}
++
++function unlinks(cmds: readonly Command[]): Command[] {
++  return cmds.filter((c) => c.type === 'unlink');
++}
++
++describe('REV-78: maintain keeps a frozen owner’s streams (Freeze pauses them, it does not end them)', () => {
++  it('frozen at the hopeless check: the stream stays; unfrozen: it ends as hopeless (the rule is intact)', () => {
++    const frozen = attacking(4500);
++    applyCommand(frozen, { type: 'booster', owner: 'player', booster: 'freeze' });
++    for (let i = 0; i < 10; i++) step(frozen); // 5.0 s, an AI tick, inside the 5 s freeze
++    expect(isFrozen(frozen, 'enemy1')).toBe(true);
++    const ctx = newCtx(frozen, 'enemy1');
++    maintain(ctx, frozen.towers['e']!, { hopelessMs: HOPELESS_MS, keepSupply: () => true });
++    expect(ctx.cmds).toEqual([]);
++
++    const control = attacking(5000);
++    const c2 = newCtx(control, 'enemy1');
++    maintain(c2, control.towers['e']!, { hopelessMs: HOPELESS_MS, keepSupply: () => true });
++    expect(unlinks(c2.cmds)).toEqual([{ type: 'unlink', owner: 'enemy1', from: 'e', to: 'p' }]);
++  });
++
++  it('through a whole Freeze the rusher issues no unlink; the tick after it lifts, the judgement resumes', () => {
++    const state = attacking(2000);
++    applyCommand(state, { type: 'booster', owner: 'player', booster: 'freeze' });
++    const rng = rngsFor(1, state.enemies).enemies.get('enemy1')!;
++    const issued: { t: number; cmds: Command[] }[] = [];
++    while (state.time < 2000 + C.FREEZE_MS + 1000) {
++      if (state.time % C.AI_TICK_MS === 0) {
++        const cmds = enemyCommands(state, ENEMY, rng);
++        issued.push({ t: state.time, cmds });
++        for (const cmd of cmds) applyCommand(state, cmd);
++      }
++      step(state);
++    }
++    const during = issued.filter((e) => e.t < 2000 + C.FREEZE_MS);
++    const after = issued.filter((e) => e.t >= 2000 + C.FREEZE_MS);
++    expect(during.length).toBeGreaterThanOrEqual(10);
++    expect(during.flatMap((e) => unlinks(e.cmds))).toEqual([]);
++    // Lifted: the attack is judged again — hopeless (p at 100 behind a 1/s stream) and older than MIN_ATTACK_MS, so it ends.
++    expect(after.flatMap((e) => unlinks(e.cmds))).toEqual([{ type: 'unlink', owner: 'enemy1', from: 'e', to: 'p' }]);
++  });
++});

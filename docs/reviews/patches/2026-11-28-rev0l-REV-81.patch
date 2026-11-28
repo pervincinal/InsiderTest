@@ -1,0 +1,79 @@
+diff --git a/tower-clash/src/ai/common.ts b/tower-clash/src/ai/common.ts
+--- a/tower-clash/src/ai/common.ts
++++ b/tower-clash/src/ai/common.ts
+@@ -328,15 +328,18 @@
+   const w = unitWeightOf(from);
+   const raw = count * w;
+   // Clashes first: a hostile stream the other way cancels ours 1:1 in weight; only the surplus walks on,
+-  // and only the surplus is what the artillery covering the lane gets to shoot.
+-  const surplus = surplusWeight(state, link, all) / w;
++  // and only the surplus is what the artillery covering the lane gets to shoot — and what the mines eat.
++  const surplusW = surplusWeight(state, link, all);
++  const surplus = surplusW / w;
+   const rate = Math.max(0, surplus - artilleryLossOn(state, link, surplus, all)) * w;
+   const mines = mineChargesOn(state, road);
++  // REV-81: no surplus on a mined lane — nothing reaches the mines, nothing lands.
++  if (mines > 0 && surplusW <= 0) return undefined;
+   // Emit phase: an existing link has accumulated `emitAccMs` toward its next unit, a fresh one starts at 0.
+   const interval = streamIntervalMs(from, state);
+   const existing = state.links.find((l) => l.from === link.from && l.to === link.to && l.owner === link.owner);
+   const phase = Math.max(0, interval - (existing?.emitAccMs ?? 0)) / (hasOverdrive(state, link.owner) ? C.OVERDRIVE_MUL : 1);
+-  const startMs = phase + travelMsFor(state, road, link.owner, unitKindOf(from)) + (mines > 0 ? (mines / raw) * 1000 : 0);
++  const startMs = phase + travelMsFor(state, road, link.owner, unitKindOf(from)) + (mines > 0 ? (mines / surplusW) * 1000 : 0);
+   return { link, startMs, rate, countRate: rate / w, firstWeight: (w * rate) / raw, hostile: link.owner !== to.owner, emitted: raw };
+ }
+ 
+diff --git a/tower-clash/tests/ai/rev81.test.ts b/tower-clash/tests/ai/rev81.test.ts
+new file mode 100644
+--- /dev/null
++++ b/tower-clash/tests/ai/rev81.test.ts
+@@ -0,0 +1,49 @@
++import { describe, expect, it } from 'vitest';
++import { makeLevel } from '../helpers';
++import { applyCommand, createState } from '../../src/sim/index';
++import { laneFlow } from '../../src/ai/common';
++
++/*
++ * REV-81 (code review 2026-11-28, nit): `laneFlow` charged the lane's mines against the raw emitted weight,
++ * but a hostile stream the other way cancels part of ours first (1:1 in weight) and only the surplus walks
++ * on to the mines. The burn time now uses the surplus weight; a stream with no surplus on a mined lane
++ * lands nothing (undefined), as the sim shows (probe 2026-11-28: L1 vs L1 over a 4-charge mine — no landing
++ * in 60 s; L3 vs L1 mid-lane — sim 11.95 s, raw rule 7.5 s, surplus rule 9.5 s).
++ */
++describe('REV-81: the mine burn time counts the surplus after the lane clash, not the raw stream', () => {
++  const level = (pLevel: 1 | 2 | 3) =>
++    createState(
++      makeLevel({
++        towers: [
++          { id: 'p', x: 360, y: 1000, owner: 'player', units: 10, level: pLevel },
++          { id: 'e', x: 360, y: 400, owner: 'enemy1', units: 30, level: 1 },
++        ],
++        mines: [{ x: 370, y: 700, charges: 4 }],
++      }),
++      1,
++    );
++
++  it('L3 (2/s) against an L1 stream back (1/s): 4 charges burn at the 1/s surplus — 4 s, not 2 s', () => {
++    const state = level(3);
++    applyCommand(state, { type: 'link', owner: 'player', from: 'p', to: 'e' });
++    applyCommand(state, { type: 'link', owner: 'enemy1', from: 'e', to: 'p' });
++    const f = laneFlow(state, state.links[0]!, state.links)!;
++    expect(f.rate).toBe(1);
++    expect(f.startMs).toBe(500 + 5000 + 4000); // emit phase + travel + 4 charges at the 1/s surplus
++  });
++
++  it('equal streams: nothing walks past the clash, so nothing reaches the mines or the target', () => {
++    const state = level(1);
++    applyCommand(state, { type: 'link', owner: 'player', from: 'p', to: 'e' });
++    applyCommand(state, { type: 'link', owner: 'enemy1', from: 'e', to: 'p' });
++    expect(laneFlow(state, state.links[0]!, state.links)).toBeUndefined();
++  });
++
++  it('without a stream back the raw weight is the surplus: unchanged (L1 alone: 1 + 5 + 4 s)', () => {
++    const state = level(1);
++    applyCommand(state, { type: 'link', owner: 'player', from: 'p', to: 'e' });
++    const f = laneFlow(state, state.links[0]!, state.links)!;
++    expect(f.startMs).toBe(1000 + 5000 + 4000);
++    expect(f.rate).toBe(1);
++  });
++});

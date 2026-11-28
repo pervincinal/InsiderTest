@@ -70,6 +70,11 @@ export interface Ctx {
   planned: PlannedLink[];
   /** Links ended this tick. */
   ended: Link[];
+  /**
+   * The subset of `ended` the standoff release rule ended (`maintain`, GDD §2.5): the only links whose lane
+   * the enemy memory bars until a landing (REV-80 — a hold ended by the upgrade break or a retreat is not).
+   */
+  released: Link[];
   /** Towers that started a stream this tick (one new stream per tower per tick, readable ribbons). */
   used: Set<string>;
   /** Towers whose decisions are skipped this tick (aggression gate); they neither link nor unlink. */
@@ -84,7 +89,7 @@ export interface Ctx {
 }
 
 export function newCtx(state: GameState, owner: Owner, trace?: RuleTrace, barred: ReadonlySet<string> = new Set()): Ctx {
-  return { state, owner, cmds: [], planned: [], ended: [], used: new Set(), skipped: new Set(), barred, rule: '', trace };
+  return { state, owner, cmds: [], planned: [], ended: [], released: [], used: new Set(), skipped: new Set(), barred, rule: '', trace };
 }
 
 /** True when the owner may not link (or keep holding) `from → to` this tick (GDD §2.5 standoff release). */
@@ -197,6 +202,7 @@ export function maintain(ctx: Ctx, tower: Tower, cfg: MaintainConfig): void {
     }
   }
   const retreat = isUnderFire(state, tower) && tower.units < RETREAT_UNITS;
+  const releasedHere: Link[] = []; // holds the release rule stopped treating as shields this tick
   for (const link of links) {
     ctx.rule = 'maintain';
     const target = state.towers[link.to];
@@ -210,7 +216,10 @@ export function maintain(ctx: Ctx, tower: Tower, cfg: MaintainConfig): void {
     // (or was given up and is still barred) no longer counts as one — it ends under the rules below.
     const released = isShield(ctx, link) && laneBarred(ctx, link.from, link.to);
     const shield = !released && isShield(ctx, link);
-    if (released) ctx.rule = 'release';
+    if (released) {
+      ctx.rule = 'release';
+      releasedHere.push(link);
+    }
     const flow = laneFlow(state, link, [...state.links.filter((l) => !ctx.ended.includes(l)), ...ctx.planned]);
     const landing = flow !== undefined && landsEnough(flow);
     const falls = landing ? siege(ctx, target).fallsAtMs : Infinity;
@@ -235,6 +244,8 @@ export function maintain(ctx: Ctx, tower: Tower, cfg: MaintainConfig): void {
     }
     if (falls > cfg.hopelessMs && state.time - link.createdMs >= MIN_ATTACK_MS) issueUnlink(ctx, link);
   }
+  // A released hold that the rules above ended is what the enemy memory bars (REV-80).
+  for (const link of releasedHere) if (ctx.ended.includes(link)) ctx.released.push(link);
 }
 
 export interface DefendConfig {
