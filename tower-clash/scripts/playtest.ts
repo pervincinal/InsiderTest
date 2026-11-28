@@ -480,16 +480,16 @@ async function runWeeklyMode(from: string, weeks: number, k: number, twist: bool
  * level: wins/K >= TWIST_WIN_RATE (GDD §7.5 item 3: 4/5 at K = 5). `pool` is the id range swept
  * (`--pool a-b`, default the daily pool).
  */
-async function runTwistMode(twistId: Twist['id'], k: number, pool: Readonly<PoolRange>): Promise<number> {
+async function runTwistMode(twistId: Twist['id'], k: number, pool: Readonly<PoolRange>, oneLevel = false): Promise<number> {
   const twist = twistById(twistId)!;
   const levels = (await loadAllLevels()).filter((l) => inPool(l, pool));
   if (levels.length === 0) {
-    console.error(`No levels in --pool ${pool.from}-${pool.to}`);
+    console.error(oneLevel ? `No level ${pool.from} (--level)` : `No levels in --pool ${pool.from}-${pool.to}`);
     process.exit(1);
   }
   const header = `${pad('lvl', 4)} ${pad('name', 20)} ${pad('wins', 6)} ${pad('3*/2*/1*/0*', 12)} ${pad('median', 8)} ${pad('worst', 8)} ${pad('gate', 6)} losing seeds`;
   console.log(
-    `playtest twist=${twist.id} (${fmtModifiers(twist.modifiers)})  pool lvl ${pool.from}-${pool.to} (${levels.length} level(s): ${levels[0]?.id ?? '-'}-${levels[levels.length - 1]?.id ?? '-'})  seeds=1..${k}  upgrades=none  max=${fmtTime(MAX_MS)}  gate: wins/K >= ${Math.round(TWIST_WIN_RATE * 100)}%`,
+    `playtest twist=${twist.id} (${fmtModifiers(twist.modifiers)})  ${oneLevel ? `twist ${twist.id} lvl` : 'pool lvl'} ${pool.from}-${pool.to} (${levels.length} level(s): ${levels[0]?.id ?? '-'}-${levels[levels.length - 1]?.id ?? '-'})  seeds=1..${k}  upgrades=none  max=${fmtTime(MAX_MS)}  gate: wins/K >= ${Math.round(TWIST_WIN_RATE * 100)}%`,
   );
   console.log(header);
   console.log('-'.repeat(header.length));
@@ -793,7 +793,7 @@ async function main(): Promise<void> {
     return;
   }
   if (args.twistId !== undefined) {
-    const failed = await runTwistMode(args.twistId, args.seeds ?? 5, args.pool);
+    const failed = await runTwistMode(args.twistId, args.seeds ?? 5, args.pool, args.level !== undefined);
     if (failed > 0) process.exit(1);
     return;
   }

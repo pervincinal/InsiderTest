@@ -195,9 +195,32 @@ describe('playtest command line', () => {
         ['--upgrades', 'max', '--seeds', '20'],
         ['--level', '50', '--seed', '1'], // e2e/perf.spec.ts note
         ['--tier-gate', '--seeds', '5', '--jobs', '4'],
+        ['--level', '23', '--twist', 'lean', '--seeds', '100'], // QA-48: docs/BACKLOG.md LV-18
       ];
       for (const argv of real) expect(() => parseArgs(argv), argv.join(' ')).not.toThrow();
     });
+  });
+
+  describe('QA-48: --level under the challenge modes', () => {
+    it('--twist X --level N is the twist gate on level N alone (pool N-N), outside the default pool too', () => {
+      expect(parseArgs(['--level', '23', '--twist', 'lean', '--seeds', '100'])).toMatchObject({ level: 23, twistId: 'lean', pool: { from: 23, to: 23 } });
+      expect(parseArgs(['--twist=plain', '--level=5']).pool).toEqual({ from: 5, to: 5 });
+      expect(parseArgs(['--twist', 'lean']).pool).toEqual({ from: 9, to: 50 });
+    });
+    it('--level with --pool is refused (two spellings of one range)', () => {
+      expect(() => parseArgs(['--twist', 'lean', '--level', '23', '--pool', '20-30'])).toThrow(/--level and --pool/);
+    });
+    it('--daily / --weekly refuse --level (the day / week picks the level)', () => {
+      expect(() => parseArgs(['--daily', '2026-09-18', '--level', '23'])).toThrow(/--level does not apply to --daily \(the day picks the level\)/);
+      expect(() => parseArgs(['--weekly', '2026-09-21', '--level', '40', '--no-twist'])).toThrow(/--level does not apply to --weekly \(the week picks the level\)/);
+    });
+    it('the runner prints `twist lean lvl 23-23` and gates that level only', () => {
+      const tsx = fileURLToPath(new URL('../../node_modules/tsx/dist/cli.mjs', import.meta.url));
+      const r = spawnSync(process.execPath, [tsx, 'scripts/playtest.ts', '--level', '23', '--twist', 'lean', '--seeds', '2'], { cwd: fileURLToPath(new URL('../../', import.meta.url)), encoding: 'utf8' });
+      expect(r.stdout).toContain('twist lean lvl 23-23 (1 level(s): 23-23)');
+      expect(r.stdout).toMatch(/^1 level\(s\) x 2 seed\(s\) under lean/m);
+      expect(r.status).toBe(0);
+    }, 60_000);
   });
 
   describe('REV-0k: the runner (scripts/playtest.ts)', () => {

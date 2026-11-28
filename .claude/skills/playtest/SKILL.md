@@ -21,6 +21,7 @@ npm run playtest -- --weekly 2026-09-21 --weeks 26 --seeds 5 # each week's chall
 npm run playtest -- --weekly 2026-09-21 --weeks 26 --no-twist # control for the weekly, as for the daily
 npm run playtest -- --twist lean --seeds 5                   # every pool level under one twist: plain | lean | fastFeet | thinWalls | reinforced
 npm run playtest -- --twist lean --seeds 50 --pool 36-36     # --pool a-b (inclusive, default POOL_FROM–POOL_TO = 9–50): one level, a band, or 1–50
+npm run playtest -- --twist lean --seeds 100 --level 23      # QA-48: one level under one twist (= --pool 23-23, same gate; header `twist lean lvl 23-23`); --daily / --weekly refuse --level
 ```
 Gates (exit 1 on failure): daily — every day's fixed seed won and wins/K ≥ 90 %; weekly — every week's fixed seed won and wins/K ≥ 80 % (the 3★ target is informational: the row's "best / target" and "3* by" columns show the fastest seed and which seed reached `star3` — `fixed`, `seed N` or `NONE`; star3 sits at 0.9 × the bot's median by design, so most weeks show `NONE`); twist — every pool level wins ≥ 80 % of its seeds (4/5 at K = 5, GDD §7.5 item 3). `--weekly` takes only a Monday (UTC) key and errors on anything else; the current week's Monday in bash is `date -u -d "-$(( $(date -u +%u) - 1 )) days" +%F` (GNU `'monday this week'` gives the *next* Monday on Tue–Sun). `--weekly`, `--daily` and `--twist` are separate modes; `--pool` only applies to `--twist`.
 

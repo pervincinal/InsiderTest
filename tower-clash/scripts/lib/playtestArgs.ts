@@ -3,7 +3,7 @@
  * (tests/ai/playtestArgs.test.ts): the script itself runs `main()` on import.
  *
  * Modes: campaign (default; `--level`, `--seed` / `--seeds`, `--upgrades`), `--daily D`, `--weekly M`,
- * `--twist <id>` and `--naive`. `--twist`, `--daily` and `--weekly` exclude each other; `--naive` is a
+ * `--twist <id>` and `--naive`. QA-48: `--twist <id> --level N` is the twist gate on level N alone (= `--pool N-N`); `--daily` / `--weekly` refuse `--level`. `--twist`, `--daily` and `--weekly` exclude each other; `--naive` is a
  * mode of its own on the campaign and a *line switch* on `--daily` / `--weekly` (QA-7: the naive human
  * line on each day's / week's challenge, informational, no gate) — it cannot be combined with `--twist`.
  * `--gate a-b` belongs to the campaign naive run only (the CI gate is defined per level, not per day);
@@ -208,7 +208,12 @@ export function parseArgs(argv: readonly string[]): Args {
   if (!twist && daily === undefined && weekly === undefined) throw new Error('--no-twist only applies to --daily / --weekly (the control run without the twist)');
   const challengeNaive = naive && (daily !== undefined || weekly !== undefined);
   if (challengeNaive && level !== undefined) throw new Error(`--level does not apply to --naive with ${daily !== undefined ? '--daily' : '--weekly'} (the challenge picks the level)`);
-  const pool = poolSpec === undefined ? DEFAULT_POOL : parsePool(poolSpec);
+  // QA-48 (AUD-B17): `--level N` was accepted and ignored by the three challenge modes. `--twist X --level N` is the twist gate on
+  // level N alone (the documented `--level 23 --twist lean --seeds 100`: the pool narrowed to N-N, same gate per level); the day / week
+  // picks the level for `--daily` / `--weekly`, so there it is refused.
+  if (level !== undefined && !naive && (daily !== undefined || weekly !== undefined)) throw new Error(`--level does not apply to ${daily !== undefined ? '--daily' : '--weekly'} (the ${daily !== undefined ? 'day' : 'week'} picks the level); use --twist <id> --level N for one level under a twist`);
+  if (level !== undefined && twistDef && poolSpec !== undefined) throw new Error('--level and --pool both pick the twist sweep\'s levels; use one (--level N is --pool N-N)');
+  const pool = twistDef && level !== undefined ? parsePool(`${level}-${level}`) : poolSpec === undefined ? DEFAULT_POOL : parsePool(poolSpec);
   if (poolSpec !== undefined && !twistDef) throw new Error('--pool only applies to --twist');
   if (!Number.isInteger(reactMs) || reactMs < C.TICK_MS || reactMs % C.TICK_MS !== 0) throw new Error(`bad --react ${String(reactMs)} (ms, a positive multiple of ${C.TICK_MS})`);
   if (reactMs !== NAIVE_REACT_MS && !naive) throw new Error('--react only applies to --naive');
