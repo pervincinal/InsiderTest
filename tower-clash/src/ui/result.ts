@@ -145,7 +145,7 @@ let lastShare: ShareRecord | null = null;
 /** Load the share chunk (idempotent; a failed download is forgotten so the next tap retries). */
 function loadShareChunk(): Promise<ShareChunk> {
   // with the card's English strings (PERF-8, a chunk of their own)
-  shareChunk ??= Promise.all([loadChunk('share', () => import('./share')), loadEnglishMenus()]).then(([m]) => m).catch((err: unknown) => {
+  shareChunk ??= Promise.all([loadChunk('share', () => import('./share'), 'shareText'), loadEnglishMenus()]).then(([m]) => m).catch((err: unknown) => {
     shareChunk = null;
     throw err;
   });

@@ -421,7 +421,7 @@ describe('lazy audio chunks (AUD-F6)', () => {
     const files = readdirSync(SRC, { recursive: true }).map(String).filter((f) => f.endsWith('.ts'));
     const loaders = files.filter((f) => /\bimport\(\s*'\.\/(?:audio\/)?music'\s*\)/.test(readFileSync(join(SRC, f), 'utf8')));
     expect(loaders.map((f) => f.split('\\').join('/'))).toEqual(['audio/index.ts']);
-    expect(readFileSync(join(SRC, 'audio/index.ts'), 'utf8')).toMatch(/loadChunk\('music', \(\) => import\('\.\/music'\)\)/);
+    expect(readFileSync(join(SRC, 'audio/index.ts'), 'utf8')).toMatch(/loadChunk\('music', \(\) => import\('\.\/music'\), 'syncMusic'\)/);
   });
 
   it('reduced motion has no effect on audio: nothing under src/audio reads the motion preference', () => {

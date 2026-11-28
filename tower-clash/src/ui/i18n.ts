@@ -82,7 +82,7 @@ let menusPromise: Promise<void> | null = null;
  */
 export function loadEnglishMenus(): Promise<void> {
   if (menusIn) return Promise.resolve();
-  menusPromise ??= loadChunk(ENGLISH_MENUS_CHUNK, () => import('./locales/enMenus'))
+  menusPromise ??= loadChunk(ENGLISH_MENUS_CHUNK, () => import('./locales/enMenus'), 'enMenus')
     .then((m) => {
       registerEnglish(m.enMenus);
       menusIn = true;

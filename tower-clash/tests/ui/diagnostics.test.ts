@@ -621,7 +621,10 @@ describe('lazy chunk', () => {
     const eager = graph(join(SRC, 'main.ts'));
     expect(eager.has(join(SRC, 'ui/play.ts'))).toBe(true);
     expect(eager.has(join(SRC, 'ui/diagnostics.ts'))).toBe(false);
-    expect(read(join(SRC, 'ui/play.ts'))).toMatch(/if \(this\.app\.save\.settings\.diagnostics\) void loadResultChunk\(\)\.then\(\(m\) => m\.logLevelEnd\(this\.app\.save, info, this\), \(\) => undefined\);/);
+    // QA-49-2: booked at the outcome when the chunk is in, else by `showResult` the moment it lands — never lost to a failed download
+    expect(read(join(SRC, 'ui/play.ts'))).toMatch(/diag: this\.app\.save\.settings\.diagnostics === true && !logResultDiag\(this\.app\.save, info, this\) \};/);
+    expect(read(join(SRC, 'ui/play.ts'))).toMatch(/if \(pending\.diag\) pending\.diag = !logResultDiag\(this\.app\.save, pending\.info, this\);/);
+    expect(read(join(SRC, 'ui/play.ts'))).not.toMatch(/loadResultChunk\(\)\.then\(\(m\) => m\.logLevelEnd/);
     expect(read(join(SRC, 'ui/result.ts'))).toMatch(/export \{ logLevelEnd \} from '\.\/diagnostics';/);
   });
 

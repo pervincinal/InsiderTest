@@ -10,6 +10,19 @@
  * URL under a cache-busting query (`?r=<time>`): a fresh module-map entry, and its relative
  * imports still resolve to the already loaded shared chunks. When the URL is unknown (Safari says
  * only "Importing a module script failed.") the caller can fall back to `reloadOnce`.
+ *
+ * QA-49-2: the URL re-fetch resolves the chunk's RAW namespace, which is not always what `load` resolves.
+ * Where a dynamically imported module is not its chunk's facade (the chunk also exports modules other
+ * chunks import statically — result-*.js, challengeRecord-*.js, store-*.js in the 2026-11-28 build),
+ * Rollup exports the module as a nested namespace and rewrites the import to
+ * `import("./result-*.js").then(e => e.r)`; the retry never ran that `.then`, so after a failed download
+ * the result chunk resolved `{ R, a, l, r }` and `new m.ResultScreen` threw. Every caller therefore names
+ * one export of the module it loads (`expect`), and the re-fetch resolves whichever of the raw namespace
+ * or its nested namespaces carries it — the module itself whenever the module is the chunk's facade.
+ *
+ * QA-49-1: the re-fetch renews the top module only; a static dependency the module map pinned as
+ * failed makes every retry fail without a request. `chunkReachable` tells that case (the chunk's own
+ * bytes arrive) from a network that is still down, so the app shell reloads once only when a reload can help.
  */
 
 interface ChunkFailure {
@@ -20,23 +33,28 @@ interface ChunkFailure {
   at: number;
 }
 
-export interface LoadChunkOptions<T> {
-  /** Maps the raw module namespace of a URL re-fetch to what `load` resolves (default: the module itself). */
-  unwrap?: (module: unknown) => T;
-}
-
 /** Draw-time callers (`chunkBackoff`) wait this long after a failure before another network attempt. */
 export const RETRY_AFTER_MS = 3000;
+/** `chunkReachable` gives up on its probe request after this long (a hanging network is "not reachable"). */
+export const PROBE_TIMEOUT_MS = 10_000;
 const RELOAD_FLAG = 'towerclash.chunkReload';
 
 const failures = new Map<string, ChunkFailure>();
 
-/** Load a chunk through `load`; after a failure that named the URL, re-fetch that URL under a fresh query. */
-export function loadChunk<T>(key: string, load: () => Promise<T>, opts: LoadChunkOptions<T> = {}): Promise<T> {
+type ImportUrl = (url: string) => Promise<unknown>;
+const importUrl: ImportUrl = (url) => import(/* @vite-ignore */ url) as Promise<unknown>;
+let importForRetry: ImportUrl = importUrl;
+
+/**
+ * Load a chunk through `load`; after a failure that named the URL, re-fetch that URL under a fresh query.
+ * `expect` names one export of the module `load` resolves (e.g. `'ResultScreen'` for the result chunk,
+ * `'towers'` for a level): the re-fetch resolves the raw chunk namespace, and `expect` finds the module in
+ * it where Rollup wrapped the dynamic import (QA-49-2, see `unwrapChunk`). Always required, so no caller
+ * can resolve a wrapped namespace by accident.
+ */
+export function loadChunk<T extends object>(key: string, load: () => Promise<T>, expect: keyof T & string): Promise<T> {
   const prev = failures.get(key);
-  const attempt = prev?.url
-    ? (import(/* @vite-ignore */ `${prev.url}?r=${Date.now()}`) as Promise<unknown>).then((m) => (opts.unwrap ? opts.unwrap(m) : (m as T)))
-    : load();
+  const attempt = prev?.url ? importForRetry(`${prev.url}?r=${Date.now()}`).then((m) => unwrapChunk<T>(m, expect, prev.url ?? key)) : load();
   return attempt.then(
     (m) => {
       failures.delete(key);
@@ -52,6 +70,39 @@ export function loadChunk<T>(key: string, load: () => Promise<T>, opts: LoadChun
 /** The module URL named by a failed-import error, or null. */
 export function chunkUrlFromError(err: unknown): string | null {
   return /[a-z]+:\/\/\S+?\.js/.exec(String(err))?.[0] ?? null;
+}
+
+const hasExport = (m: unknown, name: string): boolean => (typeof m === 'object' || typeof m === 'function') && m !== null && name in m;
+
+/**
+ * The module with export `expect` inside the raw namespace of a URL re-fetch: the namespace itself when the
+ * module is the chunk's facade (its exports are the chunk's), else the nested namespace Rollup exported it as
+ * (`export { r }` for a `.then(e => e.r)` import — QA-49-2). Throws a TypeError naming the chunk when neither
+ * carries it (a stale or foreign chunk); the caller's failure path then runs, as for a failed download.
+ */
+export function unwrapChunk<T extends object>(raw: unknown, expect: keyof T & string, chunk: string): T {
+  if (hasExport(raw, expect)) return raw as T;
+  if (typeof raw === 'object' && raw !== null) for (const nested of Object.values(raw)) if (hasExport(nested, expect)) return nested as T;
+  throw new TypeError(`chunk ${chunk} has no export '${expect}' (QA-49-2)`);
+}
+
+/**
+ * QA-49-1: after `key` failed again under a fresh URL — does the chunk itself arrive? True means the network
+ * is fine and the failure is in the chunk's graph (a static dependency the module map pinned as failed),
+ * which only a reload can clear; false means offline / still failing (or no URL known), where a reload
+ * would not help. One `GET <url>?r=<time>` (no cache), bounded by `PROBE_TIMEOUT_MS`; never rejects.
+ */
+export function chunkReachable(key: string, fetchFn: typeof fetch = (...args) => fetch(...args)): Promise<boolean> {
+  const url = failures.get(key)?.url;
+  if (!url) return Promise.resolve(false);
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), PROBE_TIMEOUT_MS);
+  return fetchFn(`${url}?r=${Date.now()}`, { cache: 'no-store', signal: abort.signal })
+    .then(
+      (res) => res.ok,
+      () => false,
+    )
+    .finally(() => clearTimeout(timer));
 }
 
 /** True within `RETRY_AFTER_MS` of a failure: callers that would otherwise retry every frame skip the load. */
@@ -104,4 +155,9 @@ export function reloadOnce(storage: ReloadStorage | null = sessionStorageOrNull(
 /** Test hook: forget every recorded failure. */
 export function resetChunkFailuresForTests(): void {
   failures.clear();
+}
+
+/** Test hook: what the `?r=` re-fetch imports with (default: the browser's `import(url)`); null restores it. */
+export function setChunkImportForTests(fn: ImportUrl | null): void {
+  importForRetry = fn ?? importUrl;
 }

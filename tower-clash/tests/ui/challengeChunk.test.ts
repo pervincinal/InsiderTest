@@ -3,7 +3,6 @@ import type { View } from '../../src/render/view';
 import { getPalette } from '../../src/render/palette';
 import type { HudPlayUi } from '../../src/render/hud';
 import { createAdSession } from '../../src/economy/adsFlow';
-import type { LoadChunkOptions } from '../../src/lazyChunk';
 import { RETRY_AFTER_MS, resetChunkFailuresForTests } from '../../src/lazyChunk';
 import type { DailyChallenge, WeeklyChallenge } from '../../src/daily/challenge';
 import { REWARD, TWISTS, WEEKLY_REWARD } from '../../src/daily/challenge';
@@ -38,12 +37,12 @@ vi.mock('../../src/lazyChunk', async (importOriginal) => {
   const real = await importOriginal<typeof import('../../src/lazyChunk')>();
   return {
     ...real,
-    loadChunk: <T>(key: string, load: () => Promise<T>, opts?: LoadChunkOptions<T>): Promise<T> => {
-      if (key !== 'challenge') return real.loadChunk(key, load, opts);
+    loadChunk: <T extends object>(key: string, load: () => Promise<T>, expect: keyof T & string): Promise<T> => {
+      if (key !== 'challenge') return real.loadChunk(key, load, expect);
       net.loads += 1;
-      if (net.mode === 'offline') return real.loadChunk(key, () => Promise.reject(new TypeError('Failed to fetch dynamically imported module')), opts);
-      if (net.mode === 'hold') return real.loadChunk(key, () => new Promise<void>((r) => (net.release = r)).then(load), opts);
-      return real.loadChunk(key, load, opts);
+      if (net.mode === 'offline') return real.loadChunk(key, () => Promise.reject(new TypeError('Failed to fetch dynamically imported module')), expect);
+      if (net.mode === 'hold') return real.loadChunk(key, () => new Promise<void>((r) => (net.release = r)).then(load), expect);
+      return real.loadChunk(key, load, expect);
     },
   };
 });

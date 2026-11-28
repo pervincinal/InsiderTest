@@ -216,7 +216,7 @@ let economyPromise: Promise<EconomyBursts> | null = null;
 
 /** Load the economy bursts (idempotent; a failed download is forgotten so the next call retries). */
 export function loadEconomyBursts(): Promise<EconomyBursts> {
-  economyPromise ??= loadChunk(ECONOMY_CHUNK, () => import('./particlesEconomy'))
+  economyPromise ??= loadChunk(ECONOMY_CHUNK, () => import('./particlesEconomy'), 'ECONOMY_BURSTS')
     .then((m) => (economy = m.ECONOMY_BURSTS))
     .catch((err: unknown) => {
       economyPromise = null;

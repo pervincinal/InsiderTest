@@ -44,7 +44,7 @@ export function loadLevel(id: number): Promise<LevelDef | undefined> {
   if (!entry) return Promise.resolve(undefined);
   let inFlight = pending.get(id);
   if (!inFlight) {
-    inFlight = loadChunk(levelChunkKey(id), entry.load, { unwrap: (m) => (m as { default: LevelDef }).default })
+    inFlight = loadChunk(levelChunkKey(id), entry.load, 'towers')
       .then((level) => {
         cache.set(id, level);
         return level;

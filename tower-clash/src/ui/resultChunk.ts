@@ -1,5 +1,7 @@
 import { chunkBackoff, chunkFailures, loadChunk } from '../lazyChunk';
+import type { DiagMatch } from './diagnostics';
 import type { ResultInfo, ResultScreen } from './result';
+import type { SaveData } from './save';
 import type { App } from './screens';
 
 /*
@@ -23,7 +25,7 @@ let chunkPromise: Promise<ResultChunk> | null = null;
 /** Load the result screen chunk (idempotent; a failed download is forgotten so the next call retries). */
 export function loadResultChunk(): Promise<ResultChunk> {
   if (chunk) return Promise.resolve(chunk);
-  chunkPromise ??= loadChunk(RESULT_CHUNK, () => import('./result'))
+  chunkPromise ??= loadChunk(RESULT_CHUNK, () => import('./result'), 'ResultScreen')
     .then((m) => (chunk = m))
     .catch((err: unknown) => {
       chunkPromise = null;
@@ -50,6 +52,17 @@ export function resultChunkFailures(): number {
 /** The result screen for `info`, or null while the chunk is not in (warm it and try again next frame). */
 export function makeResultScreen(app: App, info: ResultInfo): ResultScreen | null {
   return chunk ? new chunk.ResultScreen(app, info) : null;
+}
+
+/**
+ * AUD-B6: the opt-in diagnostics row for `info` through the chunk's `logLevelEnd` (src/ui/diagnostics.ts);
+ * false while the chunk is not in — the play screen books it with the result it shows (QA-49-2: a one-shot
+ * `loadResultChunk().then(log)` at the outcome lost the row when that download failed, even once a retry landed).
+ */
+export function logResultDiag(save: SaveData, info: ResultInfo, play: DiagMatch): boolean {
+  if (!chunk) return false;
+  chunk.logLevelEnd(save, info, play);
+  return true;
 }
 
 /** Test hook (tests/setup.ts): the chunk's module, imported directly — tests build result screens synchronously. */

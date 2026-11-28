@@ -822,7 +822,7 @@ let overlaysPromise: Promise<HudOverlayDrawers> | null = null;
 /** Load the pause / result card drawers (idempotent; a failed download is forgotten so the next call retries). */
 export function loadHudOverlays(): Promise<HudOverlayDrawers> {
   // with the card's English strings (PERF-8, a chunk of their own): the card is in once both are
-  overlaysPromise ??= Promise.all([loadChunk(OVERLAY_CHUNK, () => import('./hudOverlays')), loadEnglishMenus()])
+  overlaysPromise ??= Promise.all([loadChunk(OVERLAY_CHUNK, () => import('./hudOverlays'), 'HUD_OVERLAYS'), loadEnglishMenus()])
     .then(([m]) => (overlays = m.HUD_OVERLAYS))
     .catch((err: unknown) => {
       overlaysPromise = null;

@@ -21,7 +21,7 @@ let bubblePromise: Promise<BubbleModule> | null = null;
 
 /** Load the tutorial bubble chunk (idempotent; a failed fetch is forgotten so the next call retries). */
 export function loadTutorialBubble(): Promise<BubbleModule> {
-  bubblePromise ??= loadChunk(TUTORIAL_BUBBLE_CHUNK, () => import('./tutorialBubble'))
+  bubblePromise ??= loadChunk(TUTORIAL_BUBBLE_CHUNK, () => import('./tutorialBubble'), 'TUTORIAL_BUBBLE')
     .then((m) => (bubble = m))
     .catch((err: unknown) => {
       bubblePromise = null;

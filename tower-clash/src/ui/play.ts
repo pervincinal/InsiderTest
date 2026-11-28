@@ -27,7 +27,7 @@ import { starsFor, writeSave } from './save';
 import type { App, Screen, StartOptions } from './screens';
 import { Toast } from './screens';
 import type { ResultInfo, ResultScreen } from './result';
-import { loadResultChunk, makeResultScreen, resultChunkFailures, warmResultChunk } from './resultChunk';
+import { logResultDiag, makeResultScreen, resultChunkFailures, warmResultChunk } from './resultChunk';
 import type { Tutorial, TutorialStep } from './tutorial';
 import { stepTowerId, tutorialFor } from './tutorial';
 import { drawTutorial } from '../render/tutorialDraw';
@@ -248,7 +248,7 @@ export class PlayScreen implements Screen {
    * lazy result chunk when it is not in by then (`failures`: the chunk's download failures already toasted).
    * FEEL-1-8: `screen`, built half way through the beat (`ResultScreen.warm`), is the one shown.
    */
-  private pendingResult: { info: ResultInfo; at: number; failures: number; screen?: ResultScreen | null } | null = null;
+  private pendingResult: { info: ResultInfo; at: number; failures: number; diag: boolean; screen?: ResultScreen | null } | null = null;
   /**
    * PERF-16: a Daily / Weekly outcome waiting for the challenge rules chunk (src/ui/challengeChunk.ts) before it
    * is booked: `at` is the outcome's `nowMs` (the result beat counts from there, so a chunk that lands inside the
@@ -612,7 +612,7 @@ export class PlayScreen implements Screen {
    * (`pendingResult` stays set, input stays ignored), re-request the chunk under the back-off and say
    * so once per failed download. Platform back leaves for the map after a failure (the result is booked).
    */
-  private showResult(pending: { info: ResultInfo; at: number; failures: number; screen?: ResultScreen | null }): boolean {
+  private showResult(pending: { info: ResultInfo; at: number; failures: number; diag: boolean; screen?: ResultScreen | null }): boolean {
     const screen = pending.screen ?? makeResultScreen(this.app, pending.info);
     if (!screen) {
       warmResultChunk();
@@ -621,6 +621,8 @@ export class PlayScreen implements Screen {
       pending.failures = failures;
       return false;
     }
+    // AUD-B6: the diagnostics row, once, through the chunk that is in now (QA-49-2: never lost to a failed download)
+    if (pending.diag) pending.diag = !logResultDiag(this.app.save, pending.info, this);
     this.pendingResult = null;
     this.app.go(screen);
     return true;
@@ -819,11 +821,11 @@ export class PlayScreen implements Screen {
    * PERF-11: either way only once the result chunk is in (`showResult`).
    */
   private present(info: ResultInfo, outcomeAt = this.nowMs): void {
-    // AUD-B6: the opt-in diagnostics row, booked with the result (src/ui/diagnostics.ts through the result chunk,
-    // normally in by now). Off — the default — never touches the chunk loader (PERF-11's back-off stays as it was).
-    if (this.app.save.settings.diagnostics) void loadResultChunk().then((m) => m.logLevelEnd(this.app.save, info, this), () => undefined);
     const now = this.retreated || prefersReducedMotion();
-    const pending = { info, at: now ? this.nowMs - RESULT_BEAT_MS : outcomeAt, failures: 0 };
+    // AUD-B6: the opt-in diagnostics row, booked with the result (src/ui/diagnostics.ts through the result chunk, normally
+    // in by now); when the chunk is not in, `showResult` books it the moment it lands (QA-49-2: a one-shot load here lost the
+    // row when the download failed at the outcome). Off — the default — never touches the chunk loader (PERF-11's back-off).
+    const pending = { info, at: now ? this.nowMs - RESULT_BEAT_MS : outcomeAt, failures: 0, diag: this.app.save.settings.diagnostics === true && !logResultDiag(this.app.save, info, this) };
     if (!now || !this.showResult(pending)) this.pendingResult = pending;
   }
 

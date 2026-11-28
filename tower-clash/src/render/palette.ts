@@ -391,7 +391,7 @@ export function toneSetsLoaded(): boolean {
 
 /** Load the alternative team colours (idempotent; a failed download is forgotten so the next call retries). */
 export function loadToneSets(): Promise<unknown> {
-  tonesPromise ??= loadChunk(TONES_CHUNK, () => import('./teamTones'))
+  tonesPromise ??= loadChunk(TONES_CHUNK, () => import('./teamTones'), 'TONE_PALETTES')
     .then((m) => (tonePalettes = m.TONE_PALETTES))
     .catch((err: unknown) => {
       tonesPromise = null;
@@ -571,7 +571,7 @@ let lazyThemesPromise: Promise<LazyThemes> | null = null;
 
 /** Load the cosmetic themes (idempotent; a failed download is forgotten so the next call retries). */
 export function loadThemes(): Promise<LazyThemes> {
-  lazyThemesPromise ??= loadChunk(THEME_CHUNK, () => import('./themes'))
+  lazyThemesPromise ??= loadChunk(THEME_CHUNK, () => import('./themes'), 'LAZY_THEMES')
     .then((m) => (lazyThemes = m.LAZY_THEMES))
     .catch((err: unknown) => {
       lazyThemesPromise = null;

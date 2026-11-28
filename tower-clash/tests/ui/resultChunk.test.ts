@@ -3,7 +3,6 @@ import type { View } from '../../src/render/view';
 import { getPalette } from '../../src/render/palette';
 import type { HudPlayUi } from '../../src/render/hud';
 import { createAdSession } from '../../src/economy/adsFlow';
-import type { LoadChunkOptions } from '../../src/lazyChunk';
 import { RETRY_AFTER_MS, resetChunkFailuresForTests } from '../../src/lazyChunk';
 import type { SaveData } from '../../src/ui/save';
 import { defaultSave, setSaveStorageForTests } from '../../src/ui/save';
@@ -27,8 +26,8 @@ vi.mock('../../src/lazyChunk', async (importOriginal) => {
   const real = await importOriginal<typeof import('../../src/lazyChunk')>();
   return {
     ...real,
-    loadChunk: <T>(key: string, load: () => Promise<T>, opts?: LoadChunkOptions<T>): Promise<T> =>
-      real.loadChunk(key, key === 'result' && net.offline ? () => Promise.reject(new TypeError('Failed to fetch dynamically imported module')) : load, opts),
+    loadChunk: <T extends object>(key: string, load: () => Promise<T>, expect: keyof T & string): Promise<T> =>
+      real.loadChunk(key, key === 'result' && net.offline ? () => Promise.reject(new TypeError('Failed to fetch dynamically imported module')) : load, expect),
   };
 });
 

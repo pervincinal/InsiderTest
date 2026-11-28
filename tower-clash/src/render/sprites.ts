@@ -149,7 +149,7 @@ export function shapeSkinsLoaded(): boolean {
  * is retried on the next call — src/lazyChunk.ts re-fetches under a fresh URL).
  */
 export function loadShapeSkins(): Promise<ShapeSkinDrawers> {
-  shapeSkinsPromise ??= loadChunk(SKIN_CHUNK, () => import('./skinShapes'))
+  shapeSkinsPromise ??= loadChunk(SKIN_CHUNK, () => import('./skinShapes'), 'SHAPE_SKINS')
     .then((m) => (shapeSkins = m.SHAPE_SKINS))
     .catch((err: unknown) => {
       shapeSkinsPromise = null; // a failed download is forgotten so the next draw / call retries

@@ -80,7 +80,7 @@ describe('frame-time overlay chunk (AUD-Q8)', () => {
   it('main.ts imports it once, behind the switch; nothing else in src/ imports it', () => {
     const main = read(MAIN);
     expect([...main.matchAll(/import\('\.\/ui\/perfOverlay'\)/g)]).toHaveLength(1);
-    expect(main).toMatch(/setPerfOverlay\(on: boolean\): void \{\s*this\.perfOverlayOn = on;\s*if \(!on\) this\.perf = null;\s*else if \(!this\.perf\) void loadChunk\('perfOverlay', \(\) => import\('\.\/ui\/perfOverlay'\)\)/);
+    expect(main).toMatch(/setPerfOverlay\(on: boolean\): void \{\s*this\.perfOverlayOn = on;\s*if \(!on\) this\.perf = null;\s*else if \(!this\.perf\) void loadChunk\('perfOverlay', \(\) => import\('\.\/ui\/perfOverlay'\), 'createPerfOverlay'\)/);
     // the flag: the persisted setting or the URL, read once at boot
     expect(main).toMatch(/this\.setPerfOverlay\(save\.settings\.perfOverlay === true \|\| query\.get\('perf'\) === '1'\);/);
     expect(main).toContain('this.perf?.frame(this, now);');

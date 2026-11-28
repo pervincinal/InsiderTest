@@ -102,7 +102,7 @@ let chunkPromise: Promise<SfxChunk> | null = null;
  * so the next call retries — src/lazyChunk.ts re-fetches under a fresh URL).
  */
 export function loadSfxRecipes(): Promise<SfxChunk> {
-  chunkPromise ??= loadChunk(RECIPES_CHUNK, () => import('./recipes'))
+  chunkPromise ??= loadChunk(RECIPES_CHUNK, () => import('./recipes'), 'playHits')
     .then((m) => (chunk = m))
     .catch((err: unknown) => {
       chunkPromise = null;

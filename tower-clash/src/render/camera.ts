@@ -195,7 +195,7 @@ let cameraPromise: Promise<void> | null = null;
 
 /** Load the perspective camera chunk (idempotent; a failed fetch is forgotten so the next call retries). */
 export function loadCamera(): Promise<void> {
-  cameraPromise ??= loadChunk(CAMERA_CHUNK, () => import('./perspective'))
+  cameraPromise ??= loadChunk(CAMERA_CHUNK, () => import('./perspective'), 'makeCamera')
     .then((m) => {
       makeTilted = m.makeCamera;
     })
@@ -213,7 +213,7 @@ let fitPromise: Promise<void> | null = null;
  * after the level started): from the next level on, so the cached ground layer never goes stale.
  */
 export function loadFit(): Promise<void> {
-  fitPromise ??= loadChunk(FIT_CHUNK, () => import('./fit'))
+  fitPromise ??= loadChunk(FIT_CHUNK, () => import('./fit'), 'fitFor')
     .then((m) => {
       fitFor = m.fitFor;
       copyGround = m.copyLayer;

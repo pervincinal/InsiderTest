@@ -21,7 +21,7 @@ let aiPromise: Promise<AiModule> | null = null;
 
 /** Load the AI chunk (idempotent; a failed fetch is forgotten so the next call retries). */
 export function loadAi(): Promise<AiModule> {
-  aiPromise ??= loadChunk(AI_CHUNK, () => import('../ai/index'))
+  aiPromise ??= loadChunk(AI_CHUNK, () => import('../ai/index'), 'enemyCommands')
     .then((m) => (ai = m))
     .catch((err: unknown) => {
       aiPromise = null;

@@ -988,7 +988,7 @@ describe('PERF-11 lazy chunks: result screen and store boot', () => {
     const defines = (f: string, name: string): boolean => new RegExp(`\\n(?:export )?(?:async )?function ${name}\\(`).test(src(f));
     expect(defines('debug.ts', 'withPlay')).toBe(true);
     expect(src('main.ts')).not.toMatch(/\n {2}(?:withPlay|setFakeAds)\(/);
-    expect(src('main.ts')).toContain("if (query.get('fakeads') === '1') void loadChunk('fakeAds', () => import('./economy/fakeAds'))");
+    expect(src('main.ts')).toContain("if (query.get('fakeads') === '1') void loadChunk('fakeAds', () => import('./economy/fakeAds'), 'setFakeAds')");
     for (const [f, name] of [
       ['economy/adsFlow.ts', 'createFakeAds'],
       ['economy/adsFlow.ts', 'maybeShowInterstitial'],
@@ -1018,7 +1018,7 @@ describe('PERF-11 lazy chunks: result screen and store boot', () => {
   });
 
   it('the store is initialised from an idle import() at boot and on the shop\'s enter, never by a static import', () => {
-    expect(src('main.ts')).toMatch(/whenIdle\(\(\) => void loadChunk\('store', \(\) => import\('\.\/economy\/store'\)\)\.then\(\(m\) => m\.getStore\(\)\.init\(\)/);
+    expect(src('main.ts')).toMatch(/whenIdle\(\(\) => void loadChunk\('store', \(\) => import\('\.\/economy\/store'\), 'getStore'\)\.then\(\(m\) => m\.getStore\(\)\.init\(\)/);
     expect(src('ui/shop.ts')).toMatch(/enter\(\): void \{[\s\S]{0,400}?void getStore\(\)\.init\(\);/);
   });
 
@@ -1033,9 +1033,9 @@ describe('PERF-11 lazy chunks: result screen and store boot', () => {
         .map((f) => f.split(path.sep).join('/'));
     expect(loadersOf(/\bimport\(\s*'\.\/challengeRecord'\s*\)/)).toEqual(['ui/challengeChunk.ts']);
     expect(loadersOf(/\bimport\(\s*'\.\/swWarm'\s*\)/)).toEqual(['main.ts']);
-    // warmed at a challenge's start and by the title idle preload, like the result chunk
+    // warmed at a challenge's start only: the map chunk imports it statically, and QA-49-1 dropped the standalone title idle warm
     expect(src('ui/play.ts')).toMatch(/\n\s*warmResultChunk\(\);[^\n]*\n\s*if \(this\.challenge \|\| this\.weekly\) warmChallengeChunk\(\);/);
-    expect(src('main.ts')).toMatch(/whenIdle\(\(\) => \{[^}]*warmResultChunk\(\);[^\n]*\n\s*warmChallengeChunk\(\);/);
+    expect(src('main.ts'), 'QA-49-1: no standalone idle warm of the challenge chunk').not.toMatch(/warmChallengeChunk/);
   });
 
   it('PERF-16: the controllerchange listener is still registered eagerly, before the worker is registered (it cannot claim earlier)', () => {
@@ -1044,7 +1044,7 @@ describe('PERF-11 lazy chunks: result screen and store boot', () => {
     const listen = body.indexOf("navigator.serviceWorker.addEventListener('controllerchange', () => void swWarm().then((m) => m.warmWorkerCache()");
     expect(listen).toBeGreaterThan(0);
     expect(body.indexOf("navigator.serviceWorker.register('./sw.js')")).toBeGreaterThan(listen);
-    expect(body).toContain("const swWarm = () => loadChunk('swWarm', () => import('./swWarm'));");
+    expect(body).toContain("const swWarm = () => loadChunk('swWarm', () => import('./swWarm'), 'warmWorkerCache');");
   });
 
   it('scripts/checkBundle.mjs keeps the 82 kB budget', () => {
@@ -1080,7 +1080,7 @@ describe('native store build: no source maps, no debug surface (AUD-Q17, AUD-Q18
       .map(String)
       .filter((f) => f.endsWith('.ts') && /\bimport\(\s*'\.{1,2}\/(?:[\w/]*\/)?debug'\s*\)/.test(readFileSync(path.join(SRC, f), 'utf8')));
     expect(loaders).toEqual(['main.ts']);
-    expect(read('src/main.ts')).toMatch(/\n  if \(__DEBUG_SURFACE__\) whenIdle\(\(\) => void loadChunk\('debug', \(\) => import\('\.\/debug'\)\)/);
+    expect(read('src/main.ts')).toMatch(/\n  if \(__DEBUG_SURFACE__\) whenIdle\(\(\) => void loadChunk\('debug', \(\) => import\('\.\/debug'\), 'installDebug'\)/);
   });
 
   it('`npm run build:native` sets VITE_DEBUG_SURFACE=0, strips the maps and fails on a debug chunk or a left map; cap:sync uses it', () => {

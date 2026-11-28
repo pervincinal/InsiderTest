@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { tapRect } from './helpers/tap';
-import { expectToast, recordToasts } from './helpers/toasts';
+import { expectToast, recordToasts, toastMark } from './helpers/toasts';
 import { expectScreen } from './helpers/screenPoll';
 
 /*
@@ -355,6 +355,175 @@ test.describe('lazy chunks under a failing network', () => {
       .poll(() => page.evaluate(() => window.__towerclash.getTutorialHint()), { message: 'the tutorial shows once the chunk is in', timeout: 5_000 })
       .toBe(await text(page, 'tutorial.tapThenGrey'));
     expect(await screen(page)).toBe('play');
+    expect(errors).toEqual([]);
+  });
+});
+
+/*
+ * QA-49 (docs/reviews/2026-11-28-playtest-dry-run-3.md, "Blocked-chunk cases"): two defects in the retry path.
+ *
+ * QA-49-2 — the `?r=` re-fetch resolved the RAW chunk namespace. Rollup wraps the dynamic import of a module that is not
+ * its chunk's facade (`import("./result-*.js").then(e => e.r)`, likewise challengeRecord-*.js and store-*.js), the retry
+ * skipped that `.then`, and after one failed download the campaign result threw `ResultScreen is not a constructor`
+ * (stuck on the beat frame, no diagnostics row) and a daily / weekly win was never booked. Every `loadChunk` caller now
+ * names an export of its module and the re-fetch resolves the module in either shape (src/lazyChunk.ts `unwrapChunk`).
+ *
+ * The real chunk graph can never fail the play screen's own import of a chunk another loaded chunk imports statically
+ * (the module map already has it): the debug surface imports ./result, the level map imports ./challengeRecord. The two
+ * tests therefore give one copy a URL of its own — `aliasImports` rewrites, inside one served chunk, every import of
+ * `./<name>-<hash>.js` to `./<name>-<hash>.js?harness=<tag>` (the dry run's `?harness=debug` / `?harness=app`) — so the
+ * copy under test can be aborted while the other loads. The retry re-fetches the plain URL under `?r=` (the error names
+ * the URL without its query), exactly as it does in production after a real failed download.
+ *
+ * QA-49-1 — one failed fetch of a static dependency of the level-map chunk (challengeRecord-*.js, requested on its own by
+ * the title idle preload) pinned that dependency in the module map; every PLAY then re-fetched `lazyScreens-*.js?r=…`,
+ * failed on the pinned dependency without a request for it, and toasted — the map was unreachable until a reload the
+ * player had to think of. Now the standalone idle warm of challengeRecord is gone (the map's own graph fetches it; a failed
+ * modulepreload link is not pinned, so a single aborted request at idle no longer reaches the map at all), and a second
+ * failure of an idle-screen chunk whose own bytes are reachable (src/lazyChunk.ts `chunkReachable`) reloads the page
+ * once per session (the existing `reloadOnce`), so the player is never more than one tap from the map. The test fails the
+ * dependency for as long as it takes the map's own graph fetch to fail once — the case that still pins it.
+ */
+/** The play screen's import and its `?r=` re-fetches (never the debug surface's aliased `?harness=debug` copy). */
+const RESULT_CHUNK = /\/assets\/result-[^/?]*\.js(\?r=\d+)?$/;
+const CHALLENGE_RECORD_PLAIN = /\/assets\/challengeRecord-[^/?]*\.js$/;
+/** The play screen's aliased copy and its `?r=` re-fetches (never the level map's plain static import). */
+const CHALLENGE_RECORD_APP = /\/assets\/challengeRecord-[^/?]*\.js\?(harness=app|r=\d+)$/;
+const INDEX_CHUNK = /\/assets\/index-[^/?]*\.js$/;
+const DEBUG_CHUNK = /\/assets\/debug-[^/?]*\.js$/;
+// src/render/menuLayout.ts LEVEL_MAP.daily (as e2e/daily.spec.ts)
+const LEVEL_MAP_DAILY = { x: 30, y: 112, w: 660, h: 104 };
+/** A daily the reference player wins at its fixed seed (e2e/daily.spec.ts DAY_A); the card opens once level 16 has a star. */
+const DAY_A = '2026-09-27';
+const UNLOCK_AFTER_LEVEL = 16;
+const RELOAD_FLAG = 'towerclash.chunkReload'; // src/lazyChunk.ts `reloadOnce`
+
+/** Serve the chunk matching `inChunk` with every import of `./<name>-<hash>.js` pointed at `?harness=<tag>` (see above). */
+async function aliasImports(page: Page, inChunk: RegExp, name: string, tag: string): Promise<void> {
+  await page.route(inChunk, async (route) => {
+    const res = await route.fetch();
+    const body = (await res.text()).replace(new RegExp(`(\\./${name}-[A-Za-z0-9_-]+\\.js)"`, 'g'), `$1?harness=${tag}"`);
+    await route.fulfill({ response: res, body, headers: { ...res.headers(), 'content-type': 'text/javascript' } });
+  });
+}
+
+/** The QA debug hooks these tests read (`QaDebugExtras` in src/debug.ts is their source of truth; the spec imports nothing from src/). */
+interface QaWin {
+  __towerclash: Window['__towerclash'] & {
+    stallDump(): { chunkFailures: Record<string, number>; match: { over: boolean } | null };
+    diag: { rows(): { lvl: number; mode: string; outcome: string }[] };
+  };
+}
+
+/** The running match is over (the outcome is decided), whatever screen is up — the beat frame may be holding. */
+const matchOver = (page: Page) => page.evaluate(() => (window as unknown as QaWin).__towerclash.stallDump().match?.over ?? false);
+const diagRows = (page: Page) => page.evaluate(() => (window as unknown as QaWin).__towerclash.diag.rows().map((r) => ({ lvl: r.lvl, mode: r.mode, outcome: r.outcome })));
+
+test.describe('QA-49: lazy chunk retries', () => {
+  test('QA-49-2 result chunk: a download that fails at a campaign outcome recovers — the `?r=` re-fetch opens the result screen and books exactly one diagnostics row', async ({ page }) => {
+    await aliasImports(page, DEBUG_CHUNK, 'result', 'debug'); // the debug surface keeps its own copy; the play screen's import is the one blocked
+    let blocking = true;
+    const requests: string[] = [];
+    await page.route(RESULT_CHUNK, (route) => {
+      requests.push(route.request().url());
+      return blocking ? route.abort('failed') : route.continue();
+    });
+    const errors = await boot(page, { version: 3, settings: { language: 'en', diagnostics: true } });
+    expect(await page.evaluate(() => window.__towerclash.loadLevel(1, 1))).toBe(true);
+    await expectScreen(page, 'play');
+    await page.evaluate(() => window.__towerclash.startMatch()); // AUD-B11: the lesson card holds the match until a first input
+    const mark = await toastMark(page);
+    await page.evaluate(() => {
+      window.__towerclash.setSpeed(10);
+      window.__towerclash.autoplay();
+    });
+    // the outcome: the match is over, the beat frame holds (the chunk is missing), one load-failed toast per failed download
+    await expect.poll(() => matchOver(page), { timeout: 75_000, intervals: [250] }).toBe(true);
+    await expectToast(page, await text(page, 'common.loadFailed'), { since: mark, screen: 'play' });
+    expect(await screen(page)).toBe('play');
+    expect(await diagRows(page), 'no row while the chunk is missing').toEqual([]);
+    expect(requests.length).toBeGreaterThanOrEqual(1);
+
+    // Network back: the next retry (src/lazyChunk.ts back-off, 3 s) re-fetches under `?r=`, the result opens, the row is booked once.
+    blocking = false;
+    await expectScreen(page, 'result', { timeout: 15_000 });
+    expect(requests.filter((u) => u.includes('?r=')).length, 'the recovery was a `?r=` re-fetch').toBeGreaterThanOrEqual(1);
+    expect(await diagRows(page)).toEqual([{ lvl: 1, mode: 'campaign', outcome: 'won' }]);
+    await page.waitForTimeout(500); // ok: a second booking would come from the same frame loop within a frame or two
+    expect(await diagRows(page), 'booked once').toHaveLength(1);
+    expect(errors).toEqual([]);
+  });
+
+  test('QA-49-2 challenge chunk: a daily whose rules chunk fails at the outcome books once after the `?r=` re-fetch — result screen, DONE, one diagnostics row', async ({ page }) => {
+    await aliasImports(page, INDEX_CHUNK, 'challengeRecord', 'app'); // the play screen's own import; the level map's static import keeps the plain URL
+    let blocking = true;
+    const requests: string[] = [];
+    await page.route(CHALLENGE_RECORD_APP, (route) => {
+      requests.push(route.request().url());
+      return blocking ? route.abort('failed') : route.continue();
+    });
+    const stars: Record<string, number> = {};
+    for (let id = 1; id <= UNLOCK_AFTER_LEVEL; id++) stars[String(id)] = 1;
+    const errors = await boot(page, { version: 3, stars, settings: { language: 'en', diagnostics: true } });
+    await page.evaluate((key) => window.__towerclash.setDayKey(key), DAY_A);
+    await tapRect(page, TITLE_PLAY);
+    await expectScreen(page, 'levelSelect');
+    expect(await page.evaluate(() => window.__towerclash.daily.get().done)).toBe(false);
+    await tapRect(page, LEVEL_MAP_DAILY);
+    await expectScreen(page, 'play');
+    const mark = await toastMark(page);
+    await page.evaluate(() => {
+      window.__towerclash.setSpeed(10);
+      window.__towerclash.autoplay();
+    });
+    // the outcome: the beat frame holds while the rules chunk is missing; nothing is booked; one toast per failed download
+    await expect.poll(() => matchOver(page), { timeout: 75_000, intervals: [250] }).toBe(true);
+    await expectToast(page, await text(page, 'common.loadFailed'), { since: mark, screen: 'play' });
+    expect(await screen(page)).toBe('play');
+    expect(await page.evaluate(() => window.__towerclash.daily.get().done), 'nothing booked while the chunk is missing').toBe(false);
+    expect(await diagRows(page)).toEqual([]);
+    expect(requests.length).toBeGreaterThanOrEqual(1);
+
+    // Network back: the retry's `?r=` re-fetch lands, the win is booked once and presented.
+    blocking = false;
+    await expectScreen(page, 'result', { timeout: 15_000 });
+    expect(requests.filter((u) => /\?r=\d+$/.test(u)).length).toBeGreaterThanOrEqual(1);
+    expect((await page.evaluate(() => window.__towerclash.getResult()))?.outcome).toBe('won');
+    expect(await page.evaluate(() => window.__towerclash.daily.get().done)).toBe(true);
+    expect((await diagRows(page)).map((r) => [r.mode, r.outcome])).toEqual([['daily', 'won']]);
+    await page.waitForTimeout(500); // ok: as above
+    expect(await diagRows(page), 'booked once').toHaveLength(1);
+    expect(errors).toEqual([]);
+  });
+
+  test('QA-49-1 a static dependency of the level map that failed once (challengeRecord, during the title idle preload) does not strand the player: the next PLAY reloads the page once and the map opens', async ({ page }) => {
+    await aliasImports(page, DEBUG_CHUNK, 'challengeRecord', 'debug'); // the debug surface imports it statically too: its copy stays loadable
+    let blocking = true;
+    const aborted: string[] = [];
+    const served: string[] = [];
+    await page.route(CHALLENGE_RECORD_PLAIN, (route) => {
+      (blocking ? aborted : served).push(route.request().url());
+      return blocking ? route.abort('failed') : route.continue();
+    });
+    const errors = await boot(page);
+    // the title idle preload of the map chunk fails on the dependency (the map chunk itself was never refused), which pins it
+    await expect.poll(() => page.evaluate(() => (window as unknown as QaWin).__towerclash.stallDump().chunkFailures['lazyScreens'] ?? 0), { timeout: 10_000 }).toBe(1);
+    blocking = false;
+    expect(aborted.length).toBeGreaterThanOrEqual(1);
+    expect(await page.evaluate((k) => sessionStorage.getItem(k), RELOAD_FLAG)).toBeNull();
+    // PLAY: the `?r=` re-fetch of the map chunk fails again on the pinned dependency without a request for it (the network is
+    // back); the chunk itself is reachable → the load-failed toast, then one reload
+    const reloaded = page.waitForEvent('load', { timeout: 15_000 });
+    await tapRect(page, TITLE_PLAY);
+    await reloaded;
+    expect(await page.evaluate(() => performance.getEntriesByType('navigation').map((e) => (e as PerformanceNavigationTiming).type))).toEqual(['reload']);
+    await page.waitForFunction(() => typeof window.__towerclash?.loadLevel === 'function', undefined, { timeout: 10_000 });
+    await expectScreen(page, 'title');
+    expect(await page.evaluate((k) => sessionStorage.getItem(k), RELOAD_FLAG), 'the one reload of this session is spent').toBe('1');
+    // the fresh document fetches the dependency again, and PLAY opens the map
+    await tapRect(page, TITLE_PLAY);
+    await expectScreen(page, 'levelSelect', { timeout: 10_000 });
+    expect(served.length).toBeGreaterThanOrEqual(1);
     expect(errors).toEqual([]);
   });
 });

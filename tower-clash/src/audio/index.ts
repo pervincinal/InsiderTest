@@ -80,7 +80,7 @@ const wantMusic = (): boolean => !!mod.synth.context && !mod.synth.musicOff && !
 function syncMusic(): void {
   if (music) music.syncMusic(mod.synth, wantMusic());
   else if (wantMusic())
-    void loadChunk('music', () => import('./music'))
+    void loadChunk('music', () => import('./music'), 'syncMusic')
       .then((m) => (music = m).syncMusic(mod.synth, wantMusic()))
       .catch(() => undefined);
 }

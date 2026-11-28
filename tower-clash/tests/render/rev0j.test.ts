@@ -5,7 +5,6 @@ import { DEFAULT_PALETTE } from '../../src/render/palette';
 import { ParticleSystem, loadEconomyBursts } from '../../src/render/particles';
 import { drawBadge } from '../../src/render/sprites';
 import { setReducedMotionOverride } from '../../src/ui/motion';
-import type { LoadChunkOptions } from '../../src/lazyChunk';
 import { makeLevel } from '../helpers';
 
 /*
@@ -129,8 +128,8 @@ describe('REV-60: a failed economy-chunk download is retried by later draws, aft
       const real = await importOriginal<typeof import('../../src/lazyChunk')>();
       return {
         ...real,
-        loadChunk: <T>(key: string, load: () => Promise<T>, opts?: LoadChunkOptions<T>): Promise<T> => {
-          if (key !== 'particlesEconomy') return real.loadChunk(key, load, opts);
+        loadChunk: <T extends object>(key: string, load: () => Promise<T>, expect: keyof T & string): Promise<T> => {
+          if (key !== 'particlesEconomy') return real.loadChunk(key, load, expect);
           calls.push(now);
           if (fail) {
             fail = false;

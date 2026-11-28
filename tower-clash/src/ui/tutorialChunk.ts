@@ -28,7 +28,7 @@ export function needsTutorialSteps(levelId: number, stars: number): boolean {
 /** Load the chunk and register its steps and English hints (idempotent; a failed fetch is forgotten so the next call retries). */
 export function loadTutorialSteps(): Promise<void> {
   if (stepsIn) return Promise.resolve();
-  stepsPromise ??= loadChunk(TUTORIAL_CHUNK, () => import('./tutorialSteps'))
+  stepsPromise ??= loadChunk(TUTORIAL_CHUNK, () => import('./tutorialSteps'), 'LATE_STEPS')
     .then((m) => {
       registerEnglish(m.enTutorial);
       registerTutorialSteps(m.LATE_STEPS);

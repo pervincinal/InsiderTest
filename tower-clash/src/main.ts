@@ -1,6 +1,6 @@
 import type { GameState, LevelDef } from './sim/types';
 import { LEVEL_META, getLoadedLevel, levelChunkKey, levelIndex, loadLevel } from './levels/index';
-import { chunkFailures, chunkRecoverable, loadChunk, reloadOnce } from './lazyChunk';
+import { chunkFailures, chunkReachable, chunkRecoverable, loadChunk, reloadOnce } from './lazyChunk';
 import type { Palette } from './render/palette';
 import { settingsPalette } from './render/palette';
 import { setSpritePalette } from './render/spriteCache';
@@ -23,7 +23,6 @@ import { PlayScreen } from './ui/play';
 import { AI_CHUNK, aiLoaded, loadAi } from './ui/ai';
 import { preloadTutorialSteps } from './ui/tutorialChunk';
 import { warmResultChunk } from './ui/resultChunk';
-import { warmChallengeChunk } from './ui/challengeChunk';
 import { preloadCamera } from './render/camera';
 import { preloadTutorialBubble } from './render/tutorialDraw';
 import { applyMotionPref } from './ui/motion';
@@ -344,11 +343,11 @@ export class TowerClashApp implements App {
     // the browser is idle — queued here, ahead of the debug surface's idle hook (boot) — or by the shop's
     // first open (ShopScreen.enter), whichever comes first. Nothing earlier reads it: purchases and
     // restore live in the shop, and "remove ads" is the save's entitlement the interstitial gate reads.
-    whenIdle(() => void loadChunk('store', () => import('./economy/store')).then((m) => m.getStore().init(), () => undefined));
+    whenIdle(() => void loadChunk('store', () => import('./economy/store'), 'getStore').then((m) => m.getStore().init(), () => undefined));
     void getAds().init();
     const query = new URLSearchParams(window.location.search);
     // the dev ads provider is a lazy chunk (PERF-12): installed as soon as it is in, long before any ad can be asked for
-    if (query.get('fakeads') === '1') void loadChunk('fakeAds', () => import('./economy/fakeAds')).then((m) => m.setFakeAds(true, 1000), () => undefined);
+    if (query.get('fakeads') === '1') void loadChunk('fakeAds', () => import('./economy/fakeAds'), 'setFakeAds').then((m) => m.setFakeAds(true, 1000), () => undefined);
     this.setPerfOverlay(save.settings.perfOverlay === true || query.get('perf') === '1'); // AUD-Q8 (TF-13)
     void initNative({ onBack: () => this.onBack(), isTitleScreen: () => this.current.name === 'title' });
 
@@ -450,7 +449,7 @@ export class TowerClashApp implements App {
   private loadLazy(): Promise<LazyScreens> {
     if (!this.lazyPromise) {
       // the screens' English strings are a chunk of their own (PERF-8): the screens count as in once both are
-      this.lazyPromise = Promise.all([loadChunk(LAZY_SCREENS_KEY, () => import('./ui/lazyScreens')), loadEnglishMenus()])
+      this.lazyPromise = Promise.all([loadChunk(LAZY_SCREENS_KEY, () => import('./ui/lazyScreens'), 'LevelSelectScreen'), loadEnglishMenus()])
         .then(([m]) => {
           this.lazy = m;
           return m;
@@ -497,11 +496,24 @@ export class TowerClashApp implements App {
    */
   private chunkFailed(key: string, from: Screen): void {
     const idle = from.name === 'title' || from.name === 'levelSelect';
-    if (idle && chunkFailures(key) > 1 && !chunkRecoverable(key) && navigator.onLine !== false && reloadOnce()) {
+    const again = idle && chunkFailures(key) > 1 && navigator.onLine !== false;
+    if (again && !chunkRecoverable(key) && reloadOnce()) {
       location.reload();
       return;
     }
     from.toast?.show(t('common.loadFailed'), 'error');
+    /*
+     * QA-49-1: the browser named the URL, so this failure came from a `?r=` re-fetch — which renews the
+     * top chunk only. When the chunk itself is reachable, what failed is a static dependency the module
+     * map pinned from an earlier attempt (one aborted fetch of challengeRecord-*.js at title idle made
+     * every PLAY fail without a request for it), and only a reload clears it: once per session, from the
+     * title / map only, after the toast (the probe may take a moment; offline it just says no).
+     */
+    if (again && chunkRecoverable(key)) {
+      void chunkReachable(key).then((reachable) => {
+        if (reachable && this.current === from && reloadOnce()) location.reload();
+      });
+    }
   }
 
   /**
@@ -517,7 +529,9 @@ export class TowerClashApp implements App {
       this.preloadLevel(LEVEL_META[currentLevelIndex(this.save, LEVEL_META)]?.id);
       void loadAi().catch(() => undefined); // PERF-9: the enemy AI, so the first PLAY is instant
       warmResultChunk(); // PERF-11: the result screen, in (and in the worker's cache) before the first outcome
-      warmChallengeChunk(); // PERF-16: the Daily / Weekly result rules, likewise before the first challenge outcome
+      // PERF-16's Daily / Weekly result rules (src/ui/challengeChunk.ts) are NOT warmed on their own here: the level map
+      // chunk above imports them statically, a challenge only starts from the map, and the play screen warms them at a
+      // challenge's start. QA-49-1: a standalone request that failed pinned the module map and made the map unreachable.
       void this.preloadCosmetics(); // equipped skins / theme, so the title and the first PLAY are already skinned
       void preloadCamera(); // PERF-9: the `?tilt=` perspective camera chunk, when one is asked for
     });
@@ -689,7 +703,7 @@ export class TowerClashApp implements App {
   setPerfOverlay(on: boolean): void {
     this.perfOverlayOn = on;
     if (!on) this.perf = null;
-    else if (!this.perf) void loadChunk('perfOverlay', () => import('./ui/perfOverlay')).then((m) => void (this.perfOverlayOn && (this.perf ??= m.createPerfOverlay())), () => undefined);
+    else if (!this.perf) void loadChunk('perfOverlay', () => import('./ui/perfOverlay'), 'createPerfOverlay').then((m) => void (this.perfOverlayOn && (this.perf ??= m.createPerfOverlay())), () => undefined);
   }
 
   /** The shop returns to the screen that opened it (result screens stay alive underneath). */
@@ -737,7 +751,7 @@ function registerServiceWorker(): void {
   // body (src/swWarm.ts) is a lazy chunk, fetched at idle while no worker controls the page (a claim is still to
   // come) and in any case on the claim itself. warmWorkerCache reads Resource Timing (buffered), so the few ms
   // the import takes lose nothing; a failed import only skips the warm-up, as a failed re-request did.
-  const swWarm = () => loadChunk('swWarm', () => import('./swWarm'));
+  const swWarm = () => loadChunk('swWarm', () => import('./swWarm'), 'warmWorkerCache');
   navigator.serviceWorker.addEventListener('controllerchange', () => void swWarm().then((m) => m.warmWorkerCache(), () => undefined));
   if (!navigator.serviceWorker.controller) whenIdle(() => void swWarm().catch(() => undefined));
   const register = () => {
@@ -800,7 +814,7 @@ async function boot(): Promise<void> {
   registerServiceWorker();
   // the Playwright surface is a lazy chunk (PERF-6): installed after the first paint, off the eager bundle;
   // compiled out of the store builds (AUD-Q18: `__DEBUG_SURFACE__` is false under `npm run build:native`)
-  if (__DEBUG_SURFACE__) whenIdle(() => void loadChunk('debug', () => import('./debug')).then((m) => void (window.__towerclash = m.installDebug(app))).catch(() => undefined));
+  if (__DEBUG_SURFACE__) whenIdle(() => void loadChunk('debug', () => import('./debug'), 'installDebug').then((m) => void (window.__towerclash = m.installDebug(app))).catch(() => undefined));
 }
 
 void boot();
